@@ -330,7 +330,7 @@ const heldGroupsList = (el: TillApp) =>
 
 async function toFloor(el: TillApp): Promise<TillFloorScreen> {
   await flush(el);
-  emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
   emit(shell(el), "tab-select", { key: "floor" });
   await flush(el);
@@ -1250,7 +1250,7 @@ describe("till-app: the party on a handheld", () => {
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
     });
     await flush(el);
-    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await flush(el);
     await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
     emit(shell(el), "open-table", { tableId: "t4", seated: true });
@@ -1300,7 +1300,7 @@ describe("till-app: the party on a handheld", () => {
         [method]: command,
       });
       await flush(el);
-      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
       emit(shell(el), "tab-select", { key: "floor" });
       await flush(el);
@@ -1360,7 +1360,7 @@ describe("till-app: the party on a handheld", () => {
     }
     async function openOnPhone(el: TillApp, tableId = "t4"): Promise<TillTableOrderScreen> {
       await flush(el);
-      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
       emit(shell(el), "open-table", { tableId, seated: true });
       await flush(el);
@@ -3388,7 +3388,7 @@ describe("till-app: the bill request", () => {
     async function signOutAndIn(el: TillApp): Promise<void> {
       emit(tableOrder(el)!, "logout");
       await flush(el);
-      emit(lock(el), "logged-in", { personId: "p2", displayName: "Sam", canConfigureTill: false });
+      emit(lock(el), "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
       await flush(el);
     }
 
@@ -4762,7 +4762,7 @@ describe("till-app: the order's groups", () => {
           emit(lock(el), "logged-in", {
             personId: "p1",
             displayName: "Ana",
-            canConfigureTill: false,
+            permissions: [],
           });
           await flush(el);
           emit(shell(el), "open-table", { tableId: "t4", seated: true });
@@ -5546,7 +5546,7 @@ describe("till-app: submitting the draft", () => {
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
     });
     await flush(el);
-    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await flush(el);
     emit(shell(el), "open-table", { tableId: "t4", seated: true });
     await flush(el);

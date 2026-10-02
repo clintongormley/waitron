@@ -13,13 +13,13 @@ import type { ServerStatus } from "../api/server-router.js";
 const lastOperatorKey = (deviceId: string): string => `waitron.lastOperator.${deviceId}`;
 
 /**
- * `canConfigureTill` is the server's answer from `POST /api/session`, so the client never re-derives it
+ * `permissions` is the server's answer from `POST /api/session`, so the client never re-derives it
  * from a role.
  */
 export interface LoggedInDetail {
   personId: string;
   displayName: string;
-  canConfigureTill: boolean;
+  permissions: string[];
   /** `null` when the operator has never set one. */
   locale: string | null;
 }
@@ -235,15 +235,12 @@ export class TillLockScreen extends LitElement {
     const person = this.selected;
     if (person === undefined || this.pin === "" || this.throttleRemaining > 0) return;
     try {
-      const { personId, canConfigureTill, locale } = await this.api.login(
-        person.personId,
-        this.pin,
-      );
+      const { personId, permissions, locale } = await this.api.login(person.personId, this.pin);
       if (!this.isConnected) return;
       this.#remember(personId);
       this.dispatchEvent(
         new CustomEvent<LoggedInDetail>("logged-in", {
-          detail: { personId, displayName: person.displayName, canConfigureTill, locale },
+          detail: { personId, displayName: person.displayName, permissions, locale },
           bubbles: true,
           composed: true,
         }),

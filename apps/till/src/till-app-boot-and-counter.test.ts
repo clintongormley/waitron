@@ -234,7 +234,7 @@ const privateState = <T>(el: TillApp, field: string): T =>
 
 async function toCounter(el: TillApp): Promise<TillCounterScreen> {
   await flush(el);
-  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
   return counter(el)!;
 }

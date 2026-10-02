@@ -4529,12 +4529,11 @@ approved.
     screen's own tests; the floor screen's only mount (`widgets/card-grid.ts`) passes `embedded` and
     `canExitToCounter=false`, so its standalone header, Back button and that property are likewise
     test-only; and in device mode the station screen's `#reload` swallows a `device.unauthorized`,
-    so a device cookie revoked mid-session raises nothing until the next connect. Test NAMES still
-    say `till.configure` where the permission is `venue.configure`, in `apps/till/src/api/client.test.ts`
-    and `till-app.test.ts`. The screens' `css` templates still carry task and spec numbers ("Task
-    7", "KDS-4 §3d"). Unchecked and kept: the allergen screen's legal citation (RD 126/2015 Art.
-    6.5.a.2°). Not restored because nothing confirms it: the table-order screen's `#lineGross` "same
-    arithmetic the server files with" (the server does not call `grossOf`).
+    so a device cookie revoked mid-session raises nothing until the next connect. The screens' `css`
+    templates still carry task and spec numbers ("Task 7", "KDS-4 §3d"). Unchecked and kept: the
+    allergen screen's legal citation (RD 126/2015 Art. 6.5.a.2°). Not restored because nothing
+    confirms it: the table-order screen's `#lineGross` "same arithmetic the server files with" (the
+    server does not call `grossOf`).
   - Found by #613 (`apps/server` `till-*`), outside its files or not fixable in a comments-only
     change. Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`,
     `finalizeSettle`) cite `provider.ts:66-83`; the checker compares tool comments character for

@@ -288,7 +288,7 @@ const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".erro
 
 async function toCounter(el: TillApp): Promise<TillCounterScreen> {
   await flush(el);
-  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
   return counter(el);
 }
@@ -1439,7 +1439,7 @@ describe("a round at phone width", () => {
       });
       const { el } = await mountWidget<TillApp>("till-app", { api: api as unknown as TillApi });
       await flush(el);
-      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
       emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
         tableId: "t2",

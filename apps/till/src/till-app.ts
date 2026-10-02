@@ -976,7 +976,7 @@ export class TillApp extends LitElement {
     diag.record("info", "server-switch", { from, to });
     this.operatorPersonId = "";
     this.operatorName = "";
-    this.canEdit = false;
+    this.permissions = [];
     this.#endOperatorSession();
     this.#dropDraft();
     this.errorKey = "server.switched";
@@ -1299,10 +1299,10 @@ export class TillApp extends LitElement {
   @state() private zones: FloorZone[] = [];
   @state() private tables: TableState[] = [];
   /**
-   * From the session's server-computed `canConfigureTill`, never derived from a role here. Hiding the
-   * editor is convenience only; the server re-checks `venue.configure`. Reset at logout.
+   * The operator's permissions from sign-in, never derived from a role here. Display only: the
+   * server checks each permission itself. Reset at logout.
    */
-  @state() private canEdit = false;
+  @state() private permissions: string[] = [];
   /** Every active status, not only those applied to a table, so an unused status can still be picked. */
   @state() private statuses: TableServiceStatus[] = [];
   /** The working-order id of the tab opened from the floor. */
@@ -1657,9 +1657,8 @@ export class TillApp extends LitElement {
   }
 
   async #onLoggedIn(event: Event): Promise<void> {
-    const { personId, displayName, canConfigureTill, locale } = (
-      event as CustomEvent<LoggedInDetail>
-    ).detail;
+    const { personId, displayName, permissions, locale } = (event as CustomEvent<LoggedInDetail>)
+      .detail;
     setLocale(resolveActiveLocale(locale, this.#venueLocale));
     this.#signIns++;
     // Refresh restores regular destinations only after login; sale context remains local.
@@ -1687,12 +1686,11 @@ export class TillApp extends LitElement {
     this.operatorName = displayName;
     this.operatorPersonId = personId;
     this.#resumeOrderDraft();
-    this.canEdit = canConfigureTill;
+    this.permissions = permissions;
     this.errorKey = offerLoadFailed ? "service_zone.load_error" : undefined;
     this.#configureSessionActivity();
     if (!offerLoadFailed) this.#reconcileBasket();
     this.#menuPoll.start();
-    // Decided by the first tab, not the requested one: history may move to the floor while this loads.
     const firstTab = this.canvas?.tabs[0];
     const landsOnFloor = firstTab !== undefined && this.#tabNeedsFloorData(firstTab);
     if (landsOnFloor) await this.#loadFloorData();
@@ -6222,7 +6220,7 @@ export class TillApp extends LitElement {
     // Lock locally first: a rejecting or hanging `api.logout()` (offline, failover) must never leave
     // the till unlocked. The server logout is best-effort.
     this.operatorName = "";
-    this.canEdit = false;
+    this.permissions = [];
     this.#orderVisit++;
     this.#endOperatorSession();
     // `screen = "lock"` resets neither the drill nor the tab.
@@ -6356,7 +6354,7 @@ export class TillApp extends LitElement {
       .storedLines=${this.#basketStoredLines()}
       .orderInFlight=${this.#counterOrderInFlight()}
       .capabilities=${this.capabilities}
-      .canConfigureTill=${this.canEdit}
+      .permissions=${this.permissions}
       .products=${tableTab ? this.tableProducts : this.products}
       .heldOrders=${this.heldOrders}
       .counterWaiting=${this.counterWaiting}

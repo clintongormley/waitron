@@ -343,7 +343,7 @@ const ticket = (el: TillApp) => el.shadowRoot!.querySelector("till-ticket-view")
 
 async function logIn(el: TillApp): Promise<void> {
   await flush(el);
-  emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
 }
 

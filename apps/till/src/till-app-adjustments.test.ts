@@ -255,7 +255,7 @@ const bottomMessage = (el: TillApp) =>
 
 async function openMesa4(el: TillApp): Promise<TillTableOrderScreen> {
   await flush(el);
-  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
   emit(shell(el), "tab-select", { key: "floor" });
   await flush(el);

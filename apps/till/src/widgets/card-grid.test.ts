@@ -337,7 +337,7 @@ describe("till-card-grid", () => {
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
       tab: editorTab,
       store,
-      canConfigureTill: false,
+      permissions: ["sale.take_payment", "layout.configure"],
     });
     const cell = el.shadowRoot!.querySelector<HTMLElement>(".cell.locked")!;
     expect(cell).not.toBeNull();
@@ -350,7 +350,7 @@ describe("till-card-grid", () => {
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
       tab: editorTab,
       store,
-      canConfigureTill: true,
+      permissions: ["sale.take_payment", "venue.configure"],
     });
     expect(el.shadowRoot!.querySelector(".cell.locked")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();

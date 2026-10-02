@@ -287,7 +287,7 @@ const rows = (el: TillApp) =>
 async function signIn(el: TillApp, personId = "p1", displayName = "Ana"): Promise<void> {
   server.personId = personId;
   server.personName = displayName;
-  emit(lock(el), "logged-in", { personId, displayName, canConfigureTill: false });
+  emit(lock(el), "logged-in", { personId, displayName, permissions: [] });
   await flush(el);
 }
 

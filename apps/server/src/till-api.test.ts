@@ -28,6 +28,7 @@ import {
   hashPin,
   hashSessionToken,
   loginWithPin,
+  permissionsForRole,
   persons,
 } from "@waitron/identity";
 import { DEFAULT_CANVASES, DEFAULT_RECEIPT } from "@waitron/layouts";
@@ -404,14 +405,14 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       body: JSON.stringify({ personId: ana.id, pin: "5555" }),
     });
     expect(res.status).toBe(200);
-    // The response carries the server-computed `canConfigureTill` capability so the till can gate
-    // manager-only affordances client-side; Ana is `staff`, who does NOT hold `venue.configure`, so it is
-    // false. `locale` is the operator's own UI-language preference — Ana has none, so null.
-    expect(await res.json()).toEqual({
+    // `locale` is the operator's own UI-language preference — Ana has none, so null.
+    const body = (await res.json()) as { permissions: string[] };
+    expect(body).toEqual({
       personId: ana.id,
-      canConfigureTill: false,
+      permissions: permissionsForRole("staff"),
       locale: null,
     });
+    expect(body.permissions).not.toContain("venue.configure");
 
     const cookie = res.headers.get("set-cookie")!;
     expect(cookie).toMatch(/waitron_till_session=/);
@@ -436,7 +437,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     expect(rows.rows).toEqual([{ ended: 1 }]);
   });
 
-  it("POST computes canConfigureTill from the operator's ACTUAL role — true for a manager", async () => {
+  it("POST answers the permissions of the operator's ACTUAL role — a manager's hold venue.configure", async () => {
     // A manager holds `venue.configure`; with the staff case above this pins the role, not a constant.
     // Cleaned up so the roster's exact ordering assertions elsewhere stay untouched.
     const app = new Hono();
@@ -455,11 +456,13 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     });
     expect(res.status).toBe(200);
     // Marta carries no locale preference either.
-    expect(await res.json()).toEqual({
+    const body = (await res.json()) as { permissions: string[] };
+    expect(body).toEqual({
       personId: managerId,
-      canConfigureTill: true,
+      permissions: permissionsForRole("manager"),
       locale: null,
     });
+    expect(body.permissions).toContain("venue.configure");
 
     await suite.db.execute(sql`delete from sessions where person_id = ${managerId}`);
     await suite.db.execute(sql`delete from persons where id = ${managerId}`);
@@ -487,7 +490,11 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       body: JSON.stringify({ personId, pin: "7777" }),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ personId, canConfigureTill: false, locale: "en-GB" });
+    expect(await res.json()).toEqual({
+      personId,
+      permissions: permissionsForRole("staff"),
+      locale: "en-GB",
+    });
 
     await suite.db.execute(sql`delete from sessions where person_id = ${personId}`);
     await suite.db.execute(sql`delete from persons where id = ${personId}`);

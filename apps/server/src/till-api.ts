@@ -28,7 +28,7 @@ import {
   listActivePersonsWithPermission,
   listActiveStaff,
   loginWithPin,
-  roleHasPermission,
+  permissionsForRole,
   setPersonLocale,
 } from "@waitron/identity";
 import type { PinAttempts, PinThrottle } from "@waitron/identity";
@@ -908,10 +908,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       pinThrottle.clear(device.deviceId, personId);
       setSessionCookie(c, session.token, deps.secureCookies);
-      // Convenience only: every server gate re-checks the permission via `authorize`, so a tampered
-      // client value grants nothing.
-      const canConfigureTill = roleHasPermission(session.role, "venue.configure");
-      return c.json({ personId: session.personId, canConfigureTill, locale: session.locale });
+      // Display only: every server gate re-checks its permission via `authorize`, so a tampered
+      // client list grants nothing.
+      return c.json({
+        personId: session.personId,
+        permissions: permissionsForRole(session.role),
+        locale: session.locale,
+      });
     }),
   );
 

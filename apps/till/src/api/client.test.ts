@@ -237,10 +237,10 @@ describe("TillApi", () => {
     });
   });
 
-  it("login POSTs the credentials and returns the person id + the till.configure capability", async () => {
+  it("login POSTs the credentials and returns the person id + their permissions", async () => {
     const fetchStub = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ personId: "u1", canConfigureTill: true }));
+      .mockResolvedValue(jsonResponse({ personId: "u1", permissions: ["venue.configure"] }));
     const api = new TillApi("", fetchStub);
 
     const r = await api.login("u1", "1234");
@@ -255,7 +255,7 @@ describe("TillApi", () => {
       }),
     );
     expect(r.personId).toBe("u1");
-    expect(r.canConfigureTill).toBe(true);
+    expect(r.permissions).toEqual(["venue.configure"]);
   });
 
   it("getTill GETs the boot info with no request body or content-type", async () => {
@@ -2394,9 +2394,7 @@ describe("TillApi", () => {
   it("login response carries the operator's per-user locale (or null when unset)", async () => {
     const fetchStub = vi
       .fn()
-      .mockResolvedValue(
-        jsonResponse({ personId: "u1", canConfigureTill: false, locale: "en-GB" }),
-      );
+      .mockResolvedValue(jsonResponse({ personId: "u1", permissions: [], locale: "en-GB" }));
     const r = await new TillApi("", fetchStub).login("u1", "1234");
     expect(r.locale).toBe("en-GB");
   });

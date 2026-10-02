@@ -389,7 +389,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
     getTill: vi.fn().mockResolvedValue(till),
     listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
-    login: vi.fn().mockResolvedValue({ personId: "p1", canConfigureTill: false, locale: "en-GB" }),
+    login: vi.fn().mockResolvedValue({ personId: "p1", permissions: [], locale: "en-GB" }),
     getLocales: vi.fn().mockResolvedValue({
       locales: [
         { code: "es-ES", label: "Español" },
@@ -560,7 +560,7 @@ async function toCounter(el: TillApp): Promise<TillCounterScreen> {
   await flush(el);
   // Log in as a NON-configuring operator by default (the common case) — the capability tests below
   // drive a configuring one explicitly.
-  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
   return counter(el)!;
 }
@@ -1670,7 +1670,7 @@ describe("till-app", () => {
     // A handheld is NOT a KDS display — the kind branch never prefetches the station queue.
     expect(currentApi.getDeviceStation).not.toHaveBeenCalled();
     // After login the waiter lands on the FLOOR, this phone layout's first tab; it has no Counter tab.
-    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await flush(el);
     expect(counter(el)).toBeNull();
     // The floor was LOADED, not just shown.
@@ -1699,7 +1699,7 @@ describe("till-app", () => {
         getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
       });
       await flush(el);
-      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
       return el;
     }
@@ -1782,7 +1782,7 @@ describe("till-app", () => {
         ...overrides,
       });
       await flush(el);
-      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
       return el;
     }
@@ -2031,7 +2031,7 @@ describe("till-app", () => {
           .mockResolvedValue({ deviceId: "d1", formFactor: "till", stationId: null }),
       });
       await flush(el);
-      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
       return el;
     }
@@ -2077,7 +2077,7 @@ describe("till-app", () => {
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
       });
       await flush(el);
-      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
       emit(shell(el)!, "logout");
       await flush(el);
@@ -2131,7 +2131,7 @@ describe("till-app", () => {
     expect(currentApi.getDeviceStation).not.toHaveBeenCalled();
     expect(lock(el)!.deviceName).toBe("Till 1");
     expect(lock(el)!.deviceId).toBe("till-dev");
-    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await flush(el);
     expect(counter(el)).not.toBeNull();
   });
@@ -2765,7 +2765,7 @@ describe("till-app", () => {
     emit(lock(el)!, "logged-in", {
       personId: "p1",
       displayName: "Ana",
-      canConfigureTill: false,
+      permissions: [],
     });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: openTable.id, seated: true });
@@ -4563,7 +4563,7 @@ describe("till-app", () => {
     });
 
     // Login → the same handheld kind + timeout, now logged in (wake lock + idle timer engage).
-    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await flush(el);
     expect(sa.configure.mock.calls.at(-1)![0]).toMatchObject({
       loggedIn: true,
@@ -4626,7 +4626,7 @@ describe("till-app", () => {
     currentApi = api;
     const { el } = await mountWidget<TillApp>("till-app", { api, sessionActivity: sa as never });
     await flush(el);
-    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await flush(el);
     expect(lock(el)).toBeNull(); // on the counter, logged in
 
@@ -4768,53 +4768,53 @@ describe("till-app", () => {
     });
 
     // The on-till floor editor is a permission-locked `table-layout-editor` card, gated at the CELL by
-    // the grid's `canConfigureTill`. So the end-to-end assertion is that the operator's `canConfigureTill`
-    // reaches the floor tab's card grid. (The card's own lock rendering is covered by card-grid's suite.)
-    const gridConfigurable = (el: TillApp) =>
-      (activeTabGrid(el) as unknown as { canConfigureTill: boolean }).canConfigureTill;
+    // the grid's `permissions`. So the end-to-end assertion is that the operator's `permissions`
+    // reach the floor tab's card grid. (The card's own lock rendering is covered by card-grid's suite.)
+    const gridPermissions = (el: TillApp) =>
+      (activeTabGrid(el) as unknown as { permissions: string[] }).permissions;
 
-    it("a login WITH the till.configure capability lights up the on-till floor editor, end-to-end", async () => {
+    it("a login WITH venue.configure lights up the on-till floor editor, end-to-end", async () => {
       const { el } = await mountApp({
         getTablesState: vi.fn().mockResolvedValue([]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
       });
       await flush(el);
-      // The lock screen sends the server-computed capability; a manager holds `venue.configure`.
+      // The lock screen sends the server's permission list; a manager holds `venue.configure`.
       emit(lock(el)!, "logged-in", {
         personId: "p1",
         displayName: "Marta",
-        canConfigureTill: true,
+        permissions: ["venue.configure"],
       });
       await flush(el);
       selectTab(el, "floor");
       await flush(el);
 
-      expect(gridConfigurable(el)).toBe(true);
+      expect(gridPermissions(el)).toEqual(["venue.configure"]);
 
       // Logging out drops the privilege so the next operator starts un-privileged.
       emit(floor(el)!, "back-to-counter");
       await flush(el);
       emit(counter(el)!, "logout");
       await flush(el);
-      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Ana", canConfigureTill: false });
+      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Ana", permissions: [] });
       await flush(el);
       selectTab(el, "floor");
       await flush(el);
-      expect(gridConfigurable(el)).toBe(false);
+      expect(gridPermissions(el)).toEqual([]);
     });
 
-    it("a login WITHOUT the till.configure capability keeps the on-till floor editor hidden, end-to-end", async () => {
+    it("a login WITHOUT venue.configure keeps the on-till floor editor hidden, end-to-end", async () => {
       const { el } = await mountApp({
         getTablesState: vi.fn().mockResolvedValue([]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
       });
       await flush(el);
-      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
       selectTab(el, "floor");
       await flush(el);
 
-      expect(gridConfigurable(el)).toBe(false);
+      expect(gridPermissions(el)).toEqual([]);
     });
 
     it("floor-refresh re-reads the tables but NOT the zones after an on-till placement write (FP-2)", async () => {
@@ -5123,7 +5123,7 @@ describe("till-app", () => {
         emit(lock(el)!, "logged-in", {
           personId: "p1",
           displayName: "Ana",
-          canConfigureTill: false,
+          permissions: [],
         });
         await flush(el);
         emit(floor(el)!, "open-table", { tableId: openTable.id, seated: openTable.hasOpenTab });
@@ -7951,7 +7951,7 @@ describe("till-app", () => {
       });
       await flush(el);
       expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
-      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
       // The shell renders with the FLOOR tab active (the floor surface the
       // waiter lands on), never the counter. The floor screen mounts as that tab's body through the grid
@@ -8021,7 +8021,7 @@ describe("till-app", () => {
       });
       await flush(el);
       expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
-      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
       const s = shell(el)!;
       expect(s).not.toBeNull();
@@ -8139,7 +8139,7 @@ describe("till-app", () => {
         listStatuses: vi.fn().mockResolvedValue([status]),
       });
       await flush(el);
-      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
       return el;
     }
@@ -8189,7 +8189,7 @@ describe("till-app", () => {
         listStatuses: vi.fn().mockResolvedValue([status]),
       });
       await flush(el);
-      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
       emit(shell(el)!, "open-table", { tableId: freeTable.id, seated: false }); // → Order tab card
       await flush(el);
@@ -8235,7 +8235,7 @@ describe("till-app", () => {
         listStatuses: vi.fn().mockResolvedValue([status]),
       });
       await flush(el);
-      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
       emit(shell(el)!, "open-table", { tableId: freeTable.id, seated: false }); // → Order tab card
       await flush(el);
@@ -8528,7 +8528,7 @@ describe("till-app", () => {
       // A `schedule` drill (renders cleanly from the empty roster) standing in for any stale drill.
       app.drill = { kind: "schedule" };
       app.activeTabKey = "floor";
-      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Bea", canConfigureTill: false });
+      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Bea", permissions: [] });
       await flush(el);
       expect(app.drill).toBeUndefined();
       expect(shell(el)!.activeTabKey).toBe("counter");
@@ -8561,7 +8561,7 @@ describe("till-app", () => {
       emit(lock(el)!, "logged-in", {
         personId: "p1",
         displayName: "Ana",
-        canConfigureTill: false,
+        permissions: [],
         locale,
       });
       await flush(el);
@@ -8607,7 +8607,7 @@ describe("till-app", () => {
       emit(lock(el)!, "logged-in", {
         personId: "p1",
         displayName: "Ana",
-        canConfigureTill: false,
+        permissions: [],
         locale: "en-GB",
       });
       await flush(el); // login settles: en-GB applied, operatorPersonId set, screen → counter
@@ -8846,7 +8846,7 @@ describe("till-app", () => {
         emit(lock(el)!, "logged-in", {
           personId,
           displayName: "Operator",
-          canConfigureTill: false,
+          permissions: [],
         });
         await flush(el);
         expect(gridNames(el)).toEqual(["Bocadillo"]);
@@ -9644,7 +9644,7 @@ describe("a failed list refresh after a successful write", () => {
 
   async function toCounterFake(el: TillApp): Promise<TillCounterScreen> {
     await settle(el);
-    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await settle(el);
     return counter(el)!;
   }
@@ -11223,7 +11223,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
       emit(lock(el)!, "logged-in", {
         personId: "p2",
         displayName: "Luis",
-        canConfigureTill: false,
+        permissions: [],
       });
       await flush(el);
       const reads = listCounterWaiting.mock.calls.length;

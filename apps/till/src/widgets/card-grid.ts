@@ -115,7 +115,7 @@ export class TillCardGrid extends LitElement {
   @property() fireControl?: FireControlMode;
   @property({ attribute: false }) zones: FloorZone[] = [];
   @property({ attribute: false }) tables: TableState[] = [];
-  @property({ type: Boolean }) canConfigureTill = false;
+  @property({ attribute: false }) permissions: string[] = [];
   @property() bumpMode: BumpMode = "line";
   /** Whether the embedded station screen (kds-board card) runs as an always-on ENROLLED display (no
    * login, one bound station) rather than the session-gated operator path. */
@@ -177,7 +177,8 @@ export class TillCardGrid extends LitElement {
   }
 
   #locked(card: CardInstance): boolean {
-    return CARD_REQUIRED_PERMISSION[card.type] === "venue.configure" && !this.canConfigureTill;
+    const required = CARD_REQUIRED_PERMISSION[card.type];
+    return required !== undefined && !this.permissions.includes(required);
   }
 
   #cell(card: CardInstance): TemplateResult | typeof nothing {

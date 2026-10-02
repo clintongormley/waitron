@@ -52,7 +52,7 @@ describe.each(["light", "dark"] as const)("till-card-grid a11y (%s theme)", (the
     const store = new WorkingOrderStore();
     const { host } = await mountWidget<TillCardGrid>(
       "till-card-grid",
-      { tab: editorTab, store, canConfigureTill: false, zones: [], tables: [] },
+      { tab: editorTab, store, permissions: [], zones: [], tables: [] },
       theme,
     );
     await expectNoA11yViolations(host);
