@@ -387,6 +387,55 @@ describe("a receipt-language change while orders are open", () => {
       expect(
         rows<{ locale: string }>(sql`select locale from sales where working_order_id = ${id}`),
       ).toEqual([{ locale: "gl-ES" }]);
+      expect(
+        rows<{ descriptions: string }>(
+          sql`select sl.descriptions from sale_lines sl join sales s on s.id = sl.sale_id
+              where s.working_order_id = ${id}`,
+        ).map((line) => JSON.parse(line.descriptions) as unknown),
+      ).toEqual([{ "es-ES": "Paella valenciana" }]);
+    } finally {
+      await withTransaction(venue.db, (tx) =>
+        offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "prepay" }),
+      );
+    }
+  });
+
+  it("accepts a change while an invoice-first order is placed, and collecting it keeps the language it was filed in", async () => {
+    reset();
+    const placing = await withTransaction(venue.db, (tx) =>
+      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
+    );
+    const id = randomUUID();
+    const filed = () => ({
+      sales: rows<Record<string, unknown>>(sql`select * from sales where working_order_id = ${id}`),
+      lines: rows<Record<string, unknown>>(
+        sql`select sl.* from sale_lines sl join sales s on s.id = sl.sale_id
+            where s.working_order_id = ${id} order by sl.line_no`,
+      ),
+    });
+    try {
+      const parked = await till("POST", "/api/working-orders", {
+        id,
+        zoneId: placing.zoneId,
+        lines: [{ menuItemId: placing.offerFor(productId("Paella")), quantity: "1" }],
+      });
+      expect(parked.status).toBe(200);
+      const placed = await till("POST", `/api/working-orders/${id}/place`);
+      expect(placed.status).toBe(200);
+      expect(statusOf(id)).toBe("placed");
+      const before = filed();
+      expect(before.sales).toEqual([expect.objectContaining({ locale: "es-ES" })]);
+      expect(before.lines).toHaveLength(1);
+
+      expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+      expect(language()).toEqual(["gl-ES"]);
+
+      const collected = await till("POST", `/api/working-orders/${id}/collect`, {
+        tender: { method: "cash", amount: "35.00" },
+      });
+      expect(collected.status).toBe(200);
+      expect(statusOf(id)).toBe("settled");
+      expect(filed()).toEqual(before);
     } finally {
       await withTransaction(venue.db, (tx) =>
         offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "prepay" }),
