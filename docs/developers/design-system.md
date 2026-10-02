@@ -1530,7 +1530,8 @@ disabled holding a value, invalid with an error message, and with a help button 
 message, required, disabled holding a value, with its label hidden, and with a help button;
 `wt-price-input` invalid with no message, resting, resting over a hidden currency sign and fixed
 unit, focused, and disabled with a fixed unit; `wt-number-stepper` resting, focused, invalid with no
-message, with a label longer than the box, and with its label hidden; `wt-combobox` closed with a
+message, with a long label its box widens to fit, with a label cut in a row too narrow for it, and
+with its label hidden (the two long-label states verified 2026-10-02); `wt-combobox` closed with a
 value chosen, open with the chosen row ticked, with icons, with groups, with an action row,
 without a search box, with focus back on the trigger, compact, with a hint shown as the
 placeholder, with a help button, disabled with a value chosen, and opened from the keyboard with

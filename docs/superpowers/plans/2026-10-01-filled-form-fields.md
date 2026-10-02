@@ -451,6 +451,7 @@ export const fieldStyles = css`
   vertically centred on it (spec §5.5); the box between them is an ordinary field whose floated
   label is cut with an ellipsis when longer than the box. Add a case for that: a stepper labelled
   with 40 characters keeps its box at `--wt-stepper-field-width` and its label on one line.
+  (2026-10-02: superseded by A178g — the box now widens to its label, and this case was replaced.)
 - [ ] **Step 4: Run, see them pass**, plus `src/tap-target-and-focus.test.ts` and
   `src/no-hardcoded-chrome.test.ts`. Then run the consumers that lay these fields out by their
   parts: `pnpm --filter @waitron/adjustments exec vitest run src/dashboard/reasons-screen` and

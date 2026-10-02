@@ -831,8 +831,8 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   languages; a table with no Add action keeps just the sentence.
 
 **Form fields after A178 (#1010 to #1019).** Done: A178g, a stepper's box widens to fit its
-label, and in a row too narrow for it narrows again to `--wt-stepper-field-width` and cuts the
-label. Queued: A178h ("Each" drawn as a normal choice), in lane A's queue. **Seen while building,
+label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
+cuts the label. Queued: A178h ("Each" drawn as a normal choice), in lane A's queue. **Seen while building,
 not changed:**
 
 - a blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }` — the same parsing is

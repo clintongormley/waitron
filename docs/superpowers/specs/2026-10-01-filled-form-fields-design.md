@@ -542,7 +542,8 @@ passes.
 7. **A173 becomes moot and A175 narrows** to the table's own search box (section 9.6).
 8. **Arrow keys wrap** in an open dropdown, where today they stop at the ends (section 7.2).
 9. **The stepper's − and + sit outside the field box**, and a label longer than the box is cut
-   (section 5.5). Alternative: the box widens to its label.
+   (section 5.5). Alternative: the box widens to its label. (2026-10-02: the owner chose the
+   alternative; A178g.)
 
 ## 13. Not in this change
 
