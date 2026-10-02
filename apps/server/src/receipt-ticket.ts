@@ -8,7 +8,8 @@
  * THE PAPER IS A LEGAL DOCUMENT: a factura simplificada carrying the same mandated core as the
  * on-screen receipt (`apps/till/src/screens/till-ticket-view.ts`) — RD 1619/2012 art. 7.1 plus the
  * Veri*Factu QR and legend (Orden HAC/1177/2024 arts. 20-21), with AEAT's «QR tributario:» caption
- * above the QR and the three at the top of the ticket (its QR specification v0.5.0, §3); sources in
+ * above the QR; when a QR is printed, the caption, the QR and the legend come first, after any
+ * practice warning (its QR specification v0.5.0, §3); sources in
  * `docs/compliance/verifactu-findings.md` §14 and the C115 entry in `docs/backlog.md`. The owner's
  * non-fiscal trim renders around that core and is never read by it.
  *
@@ -54,8 +55,8 @@ export interface ReceiptIssuer {
 }
 
 /**
- * The owner-authored NON-FISCAL trim: a subtitle under the venue name and a message at the end of
- * the ticket. No field here can suppress or reorder a mandated element.
+ * The owner-authored NON-FISCAL trim: a subtitle under the venue name and a message after the
+ * payment lines. No field here can suppress or reorder a mandated element.
  */
 export interface ReceiptTrim {
   headerSubtitle?: string;
@@ -169,7 +170,8 @@ export function formatReceipt({
   }
 
   // AEAT's QR specification v0.5.0 §3 puts the QR at the start of the invoice, the caption above it
-  // and the legend (art. 20.1.b) directly under it.
+  // and the legend (art. 20.1.b) directly under it. The practice warning stays above it because it is
+  // not invoice content.
   if (result.qr !== "") {
     const matrix = qrModules(result.qr);
     const dots = chooseQrDots(
@@ -284,7 +286,7 @@ export function formatReceipt({
   b.line();
 
   // A sale with no cotejo URL (the fiscal backend minted none) prints no QR block, but still the
-  // legend (art. 20.1.b), which keeps its place after the tender (C123 in `docs/backlog.md`).
+  // legend (art. 20.1.b), after the tender (the C115 entry in `docs/backlog.md`).
   if (result.qr === "") b.align("center").line(LEGEND).line().align("left");
 
   if (receipt.footerMessage) text(receipt.footerMessage);

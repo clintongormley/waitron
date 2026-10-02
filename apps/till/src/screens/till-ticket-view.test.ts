@@ -351,7 +351,7 @@ describe("till-ticket-view", () => {
       ]);
     });
 
-    it("leaves a sale with no QR as it was: the issuer first, the legend after the tender", async () => {
+    it("prints a sale with no QR issuer-first, with the legend after the tender", async () => {
       const { el } = await mount({ qr: "" }, { footerMessage: "Gracias" });
       const all = blocks(el);
       expect(all[0]).toBe("issuer");

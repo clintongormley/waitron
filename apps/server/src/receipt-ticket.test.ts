@@ -211,7 +211,7 @@ describe("the QR comes first on an invoice that carries one", () => {
     expect(lines.at(-1)).toBe("PRUEBA - SIN COBRO REAL");
   });
 
-  it("leaves a sale with no QR as it was: the issuer first, the legend after the tender", () => {
+  it("prints a sale with no QR issuer-first, with the legend after the tender", () => {
     const lines = drawn(
       formatReceipt({
         result: { ...FILED_SALE, qr: "" },

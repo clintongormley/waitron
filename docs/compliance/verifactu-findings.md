@@ -936,8 +936,8 @@ ticket-vs-full-invoice by **separate numbering series** (art. 7.1.a), not a prin
 > text «QR tributario:» above the QR; see the C115 entry in `docs/backlog.md`.
 >
 > **Pointer, 2026-10-02 (C123).** The same §3 places the QR at the start of the invoice; Waitron's
-> receipt and on-screen ticket now open with the caption, the QR and the legend. See the C115 entry
-> in `docs/backlog.md`.
+> receipt and on-screen ticket print the caption, the QR and the legend first when a QR is printed,
+> after any practice warning. See the C115 entry in `docs/backlog.md`.
 
 **Provenance caveat (§1).** art. 7.1, 7.2 and Orden arts. 20–21 were read as clean verbatim text from
 the BOE consolidated pages (high confidence). The RD 1007/2023 art. 6.5 / 15 / 16 wording came back
