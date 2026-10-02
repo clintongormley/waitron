@@ -1487,3 +1487,21 @@ it("names each language section with a capital letter in Spanish, where the brow
   expect(new Intl.DisplayNames(["es-ES"], { type: "language" }).of("fr")).toBe("francés");
   expect(legends).toEqual(["Español (Predeterminado)", "Francés"]);
 });
+
+it("clears a failed load's message once the server answers again", async () => {
+  const liveData = new LiveData();
+  const client = Object.assign(api(), { liveData });
+  client.listImages.mockRejectedValue({ code: "connection.failed" });
+  el = document.createElement("dashboard-image-library");
+  el.api = client as unknown as ImageApi;
+  document.body.append(el);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      MEDIA_STRINGS.en["image.load_error"],
+    ),
+  );
+  client.listImages.mockResolvedValue({ images: [image], total: 1 });
+  liveData.refresh();
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-image=one]")).not.toBeNull());
+  expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+});

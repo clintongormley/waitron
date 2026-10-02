@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { codeMessage } from "../i18n/codes.js";
 import { setLocale } from "../i18n/t.js";
 import type { DashboardApi, OrderDetailDto } from "../api/client.js";
 import "./order-detail-dialog.js";
@@ -195,4 +196,24 @@ it("explains payment states and an unnamed party in Spanish", async () => {
   ])
     expect(words).toContain(value);
   expect(words).not.toContain(" · received");
+});
+
+it("clears a failed load's message once the server answers again", async () => {
+  setLocale("en-GB");
+  const liveData = new LiveData();
+  const getOrder = vi.fn().mockRejectedValue({ code: "connection.failed" });
+  const api = { getOrder, liveData } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+    api,
+    orderId: "bill-1",
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+      codeMessage("connection.failed"),
+    ),
+  );
+  getOrder.mockResolvedValue(detail);
+  liveData.refresh();
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
+  expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 });

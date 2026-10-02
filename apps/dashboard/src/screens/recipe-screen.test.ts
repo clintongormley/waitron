@@ -788,3 +788,21 @@ it("refreshes the selected catalogue's products on an external product change", 
   liveData.invalidate([{ type: "products", id: "p1" }]);
   await vi.waitFor(() => expect((el as unknown as { products: unknown[] }).products).toEqual([]));
 });
+
+it("clears a failed load's message once the server answers again", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(
+    stubApi({ listIngredients: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+    { liveData },
+  );
+  const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+      codeMessage("connection.failed"),
+    ),
+  );
+  vi.mocked(api.listIngredients).mockResolvedValue(ingredients);
+  liveData.refresh();
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull());
+  expect(list(el).ingredients).toEqual(ingredients);
+});
