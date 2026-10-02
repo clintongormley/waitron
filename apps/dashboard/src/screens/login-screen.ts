@@ -104,7 +104,8 @@ export class LoginScreen extends LitElement {
         margin-block: var(--wt-space-4);
       }
 
-      .password-toggle svg {
+      .password-toggle svg,
+      .change-account svg {
         display: block;
         width: var(--wt-font-size-lg);
         height: var(--wt-font-size-lg);
@@ -897,6 +898,7 @@ export class LoginScreen extends LitElement {
       ${
         changeable
           ? html`<wt-button
+              class="change-account"
               slot="end"
               variant="ghost"
               data-test="change-account"
@@ -906,14 +908,7 @@ export class LoginScreen extends LitElement {
                 if (!this.busy) this.#cancelLogin();
               }}
             >
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                aria-hidden="true"
-              >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="m16 3 5 5-12 12-6 1 1-6Z M14 5l5 5" />
               </svg>
             </wt-button>`

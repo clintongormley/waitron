@@ -961,8 +961,8 @@ The box carries data attributes its primitive sets, and `fieldStyles` draws each
 - **Read-only** (`wt-input`'s `readonly`, which sets the native input's `readonly`): the value
   cannot be typed over, and no data attribute changes, so the box keeps the editable field's fill,
   line and value colour, and its label floats like any field holding a value — it looks neither
-  empty nor disabled. Use it for a value a step shows but does not change, beside fields that are
-  typed into: the sign-in screen's chosen email, with "Use another account" in its `end` slot.
+  empty nor disabled. Use it for a value a step shows but does not change: the sign-in screen's
+  chosen email, with "Use another account" in its `end` slot.
 - **Compact** (`data-compact`, whenever no label is drawn: `hide-label`, or no `label` at all): the
   box's least height is `--wt-tap-min` instead of `--wt-field-height`, which makes a single-line
   field exactly the tap-target height.
@@ -1201,12 +1201,14 @@ Never use server-side account status or passkey enrolment to select a public scr
 difference would reveal whether the account exists or has a passkey.
 
 On method screens, use **Login with password**, **Login with passkey** or **Login with Google** as the heading. Show the
-address in a read-only `wt-input` labelled Email (owner, 2026-10-02, A189), so its text starts
-where the password field's does, with an accessible change-account icon in its `end` slot. That
+address in a read-only `wt-input` labelled Email (owner, 2026-10-02, A189), so its text lines
+up with any other field on the step, with an accessible change-account icon in its `end` slot. That
 icon clears both the current attempt and the saved email/method, then returns to blank email entry.
-The reset and account-setup page shows the same field without the icon. Keep the hidden semantic
-username input for password managers; the read-only field is named `chosen-email`, so the hidden
-input stays the only field named `email`. Ordinary login has no separate Cancel or Forget button.
+The reset and account-setup page and the passkey offer after sign-in show the same field without
+the icon. The password step, the code step and the reset and account-setup page also keep a hidden
+semantic username input for password managers; the read-only field is named `chosen-email`, so
+that hidden input stays the only field named `email`. Ordinary login has no separate Cancel or
+Forget button.
 
 On password, passkey, Google and code screens, a step's other ways in are ONE persistent bulleted list of links, directly
 after the step's field or hint, and after its refusal when one shows. On the password screen **I've forgotten my password** is its first

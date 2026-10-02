@@ -3315,6 +3315,21 @@ describe("login-screen: the chosen email is a read-only field", () => {
     expect(chosenEmail(el)).toBeNull();
   });
 
+  it("draws the Use another account icon at the size of the password field's reveal icon", async () => {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await openPassword(el, "bea@x.com");
+    await flush(el);
+    const pencil = el.shadowRoot!.querySelector<SVGElement>("[data-test=change-account] svg")!;
+    const reveal = field(el, "password").querySelector<SVGElement>(".password-toggle svg")!;
+    expect(pencil).not.toBeNull();
+    expect(reveal).not.toBeNull();
+    const pencilBox = pencil.getBoundingClientRect();
+    const revealBox = reveal.getBoundingClientRect();
+    expect(revealBox.width).toBeGreaterThan(0);
+    expect(pencilBox.width).toBe(revealBox.width);
+    expect(pencilBox.height).toBe(revealBox.height);
+  });
+
   it("keeps one field named email, the hidden username for password managers", async () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     await openPassword(el, "bea@x.com");

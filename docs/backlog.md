@@ -881,8 +881,8 @@ done page uses.
 **The sign-in screen's chosen email is drawn as a read-only field (A189, owner 2026-10-02) — DONE
 (#PR).** On every sign-in step after the email, on the passkey offer after sign-in, and on the
 reset and account-setup page, the chosen email is a read-only `wt-input` labelled "Email" with the
-address as its value: the same filled box as the password field, so its text starts where the
-password's does. "Use another account" sits in its `end` slot at the box's trailing end, except on
+address as its value: the same filled box as the other fields, so its text lines up with the
+password field's and the new password's. "Use another account" sits in its `end` slot at the box's trailing end, except on
 the passkey offer and the reset and account-setup page, which have no such button. `wt-input`
 gained `readonly`, which keeps the editable field's look (design-system.md → Forms → "The field
 box"). Where a step keeps the hidden username input for password managers, it is still the only
