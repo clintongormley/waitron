@@ -1,6 +1,6 @@
 /**
  * The cause WALK and `sameTarget` — the parts of `./constraint-target.ts` that turn on the shape of
- * an error object rather than on one engine's words. `./constraint-target.refusals.test.ts` asks the
+ * an error object rather than on one engine's words. `./constraint-target.db.test.ts` asks the
  * message-grammar questions against REAL `node:sqlite` refusals; a second copy driven by crafted
  * strings would only prove the parser reads itself.
  *
@@ -77,7 +77,7 @@ describe("constraintTarget's cause walk", () => {
     expect(constraintTarget("dup key")).toBeUndefined();
     // `refusalCode`'s own "nothing in this chain carries a result code" answer, asked through the
     // predicate that reads it. Without this line that branch is the one statement in
-    // `constraint-target.ts` neither this file nor the SQLite suite reaches.
+    // `constraint-target.ts` neither this file nor `constraint-target.db.test.ts` reaches.
     expect(
       isRefusal(new Error("not a refusal", { cause: new Error("nor this") }), UNIQUE_VIOLATION),
     ).toBe(false);

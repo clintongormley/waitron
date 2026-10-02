@@ -4039,8 +4039,7 @@ approved.
     which asserts five; `config.ts`'s "minted once and reused" for the box certificate, which a
     restore re-issues; and `errors.ts` describing `setup.already_provisioning` as a persistent-lease
     refusal, when it mostly comes from the in-memory lock. Test titles carrying history, left
-    because titles are code: "(real Postgres)" describes and "(SP-A.2 §16, device-profile §5)" in
-    `device-session.test.ts`, "never a raw devices_pkey 23505" in `join-requests.test.ts`, and
+    because titles are code: "(SP-A.2 §16, device-profile §5)" in `device-session.test.ts`, and
     "(SP-1b fiscal gate)" and "(unchanged)" in `setup-api.test.ts`. Read, not run: `cookieDomainFor`
     (`device-session.ts`) lowercases the request's host but not the configured tenant domain
     (whether configuration normalises it is unchecked), and `DeviceBinding`'s `deviceProfileId` is
@@ -4091,13 +4090,9 @@ approved.
     (`mirror-bundle-fetch.test.ts`), "(swap S2)" (`mirror-bundle.test.ts`) and "as a file from before
     the field existed" (`recovery-state.test.ts`).
   - Found by #624 (`apps/server` part c1), outside its files or not fixable in a comments-only
-    change. `docs/developers/workflow-guide.md`'s dev migration hint section still describes the
-    PostgreSQL version (PostgreSQL 18, `23P01` on the list, `classifyBootFailure` dropping `22P02`,
-    "the two share no SQLSTATE table", remedies that are opposites); the two lists are now SQLite
-    result codes, `boot-failure.ts`'s codes lead to "retry or restart", and `dev-migration-hint.ts`
-    still names that section as its receipt. Two `health.test.ts` cases, "stays 200 when reconcile
-    has failed runs but nothing parked" and "does not flip health for a failed-only run (parked
-    stays 0)", feed a clean pass, so they check less than their titles say. Test titles #624 could
+    change. Two `health.test.ts` cases, "stays 200 when reconcile has failed runs but nothing
+    parked" and "does not flip health for a failed-only run (parked stays 0)", feed a clean pass,
+    so they check less than their titles say. Test titles #624 could
     not touch: "(T12b)" in `boot-pending-sweep.test.ts`, "(prove-by-deletion)" in
     `boot.reconcile.test.ts`, "(C2)", "(pre-merge review)", "(I1)" and "skipped a tenant" in
     `health.test.ts`, "the new guard" in `config.test.ts`.
@@ -4115,10 +4110,10 @@ approved.
     earliest", which #623 cut from `working-order.ts` because a line sent with `hold: true` is held
     whatever its course, is still in `apps/server/src/kitchen.ts:264` and four
     `packages/db/src/schema` files (`catalogue.ts`, `kitchen-courses.ts`, `ticket-items.ts`,
-    `orders.ts`). Stale test titles: "lists the node's open orders" and "…not a raw 23505" in
-    `working-order.test.ts`; "the 23505 backstop" (twice) and "(Task B1, …)" in
-    `working-order.pay-and-dispatch.test.ts`; "an UNLOCKED read" in `tabs.test.ts`; "recordSale
-    UNCHANGED" in `tabs.filing.test.ts`; many "(KDS-…)" and "(A1)"-style plan tags.
+    `orders.ts`). Stale test titles: "lists the node's open orders" in `working-order.test.ts`;
+    "(Task B1, …)" in `working-order.pay-and-dispatch.test.ts`; "an UNLOCKED read" in
+    `tabs.test.ts`; "recordSale UNCHANGED" in `tabs.filing.test.ts`; many "(KDS-…)" and
+    "(A1)"-style plan tags.
   - Found by #622 (`apps/server` part g), outside its files or not fixable in a comments-only
     change. `working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same
     live-course definition; `fireCourse` calls `requireCourse`. `packages/provisioning/src/venue-apply.ts`
@@ -4133,14 +4128,12 @@ approved.
     save logs `account_email.send_failed` with the caught error's message. The lock-ordering and
     deadlock cases for transfers, merges and split bills went with PostgreSQL and nothing replaced
     them (one write transaction per venue file is what serialises those writers now). Test titles
-    #622 could not touch: "never a 22P02 → 500" and "never a 23503 → 500" in
-    `print-api.printer-wiring.test.ts` (and 22P02 titles in `till-api.receipt.test.ts`,
-    `till-api.tables.test.ts`, `till-api.test.ts`), "regardless of database date display settings"
-    in `print-api.test.ts`, "(the R-D dedupe)" in `kitchen-print.test.ts`, "(SP-B4 rehome)" in
-    `receipt-print.test.ts`, "(SP-A.2 §16.4)" and "SP-C:" in `sale-till-source.receipt.test.ts`,
-    "old per-taxpayer path" and "path tenant" in `webhook.test.ts`, "never a 23514 500" in
-    `me-api.test.ts`, "(FIX 2 cascade / FIX 4 split)" in `transfer-lines.test.ts`, "(the TS-4
-    shape)" in `move-merge.test.ts`, "TS-4's move guards" and "TS-2 status" in `split-bill.test.ts`.
+    #622 could not touch: "regardless of database date display settings" in `print-api.test.ts`,
+    "(the R-D dedupe)" in `kitchen-print.test.ts`, "(SP-B4 rehome)" in `receipt-print.test.ts`,
+    "(SP-A.2 §16.4)" and "SP-C:" in `sale-till-source.receipt.test.ts`, "old per-taxpayer path"
+    and "path tenant" in `webhook.test.ts`, "(FIX 2 cascade / FIX 4 split)" in
+    `transfer-lines.test.ts`, "(the TS-4 shape)" in `move-merge.test.ts`, "TS-4's move guards" and
+    "TS-2 status" in `split-bill.test.ts`.
   - Found by #621 (the rest of `apps/till`), not fixable in a comments-only change.
     **`apps/till/src/till-app.test.ts` has an empty test**, `it("sends a walk-up line's options
     answer without any local price preview", () => {})`, which passes whatever the code does
@@ -4160,9 +4153,8 @@ approved.
     which its `src/**/*.ts` include already leaves out (read only). The adoption-pending entry below
     still gives PostgreSQL's SQLSTATE 23503 on `nodes_location_id_locations_id_fk` as evidence; this
     engine reports `FOREIGN KEY constraint failed` and names no constraint. Test titles #620 could
-    not touch: "never a 23514 500" in `schedule-api.test.ts`, "masks the password in a postgres URL"
-    in `redact-secrets.test.ts`, "(design §3b(2))" in `set-table-status.test.ts`, "(owner decision
-    2026-08-02)" in `workforce-api.test.ts`, "(guard by deletion)" in `seed-sales.test.ts`.
+    not touch: "(design §3b(2))" in `set-table-status.test.ts`, "(owner decision 2026-08-02)" in
+    `workforce-api.test.ts`, "(guard by deletion)" in `seed-sales.test.ts`.
   - Found by #618 (`apps/till` `src/api` + `src/state` + `src/i18n`), not fixable in a
     comments-only change. Test titles repeat claims the branch corrected:
     `apps/till/src/state/working-order.test.ts` "previews the total via priceBasket" (the preview
@@ -4183,10 +4175,9 @@ approved.
     process's lock could be taken over (a belief, not verified). `node-entry.test.ts` fixtures are
     still PostgreSQL-shaped (a `Failed query` wrapper, code `42703`).
     `packages/db/drizzle/0000_baseline.sql` still names an index `tills_tenant_location_name_key`.
-    Test titles #617 could not touch: "(real Postgres)" five times and "(SP-A.2 §16, device-profile
-    §5)" in `device-session.test.ts`; "since Task 7" and "this tenant's devices" in
-    `device-api.test.ts`; "never a raw devices_pkey 23505" in `join-requests.test.ts`; "(R1
-    behaviour preserved)" in `membership-mint.test.ts`.
+    Test titles #617 could not touch: "(SP-A.2 §16, device-profile §5)" in `device-session.test.ts`;
+    "since Task 7" and "this tenant's devices" in `device-api.test.ts`; "(R1 behaviour preserved)"
+    in `membership-mint.test.ts`.
   - Found by #616 (`apps/till/src/widgets`), not fixable in a comments-only change. Test titles
     repeat claims the branch corrected: `apps/till/src/screens/till-allergen-screen.test.ts`
     "(escape/backdrop)" — `wt-dialog` closes on Escape and, measured in Playwright's Chromium 153,
@@ -4247,8 +4238,8 @@ approved.
     a comments-only change. Test titles #613 could not touch: "lost-T2" in
     `till-sale-integrated.db.test.ts` (a captured card payment whose sale was never filed),
     "Tasks 5 & 6", "7b", "FP-1, Task 6", "FP-2, Task 4", "SP-A.2 cutover", "Task 12 cutover",
-    "KDS-2/3", "(Copilot)" and "int4" in the `till-api*` and `till-config` suites, and 29 titles
-    saying "opaque 500", five of them naming `22P02`.
+    "KDS-2/3" and "(Copilot)" in the `till-api*` and `till-config` suites, and 29 titles
+    saying "opaque 500".
   - Found by #612 (the rest of `apps/dashboard`), not fixable in a comments-only change.
     `apps/dashboard/src/dashboard-app.ts` (a comment inside its `css` template, around line 435)
     points at `till-counter-screen.ts:111` for the 48rem breakpoint; that file no longer contains
@@ -4353,9 +4344,8 @@ approved.
     checked. `packages/core/src/errors.ts` names `scripts/errors-reachable.test.ts` without the hedge
     #601 gave reporting's (the guard matches text).
   - Found by #600 (the small packages), not fixable in a comments-only change. `apps/server` test
-    titles still say an unscreened malformed id raises PostgreSQL's 22P02 or becomes an opaque 500,
-    although ids are text columns now (e.g. `till-api.test.ts`'s two "never an opaque 22P02 500"
-    cases). Also found by reading only, not run: nothing the review could find copies
+    titles still say an unscreened malformed id becomes an opaque 500, although ids are text columns
+    now. Also found by reading only, not run: nothing the review could find copies
     `node_membership` from the primary to a standby, so a promoting standby may take
     `nextStandings`' fallback that appends it with an empty `contactUrl` (`packages/membership`),
     which `routableServers` then drops.
@@ -4381,12 +4371,8 @@ approved.
     esbuild collapses "all five" migration descriptors, while
     `grep -rhoE "export const [A-Z_]+_MIGRATIONS\b" packages --include='*.ts' | sort -u` lists 15
     names on `ca01a7fbd`. `sumupClientForTenant` (`packages/payments-sumup/src/card-provider.ts:50`)
-    still carries "tenant" in its name, and `collect.sandbox.test.ts:32` still calls its database
-    `pg`. Two `apps/server` test titles still quote PostgreSQL's 23514 as the failure a range check
-    prevents ("400s an INVERTED date range (absence.invalid), never a 23514 500", in
-    `me-api.test.ts` and `schedule-api.test.ts`). The fake SumUp client leaves its one-shot
-    switches for a lookup or a refund armed when a checkout before them is refused; no test combines
-    the two.
+    still carries "tenant" in its name. The fake SumUp client leaves its one-shot switches for a
+    lookup or a refund armed when a checkout before them is refused; no test combines the two.
   - Found by #592 (`packages/fiscal`), not fixable in a comments-only change or outside the
     package. Two SQL comments inside a `sql` string in `packages/fiscal/src/testing/fake-backend.ts`
     are code, not comments: one points at `packages/fiscal/src/backend.ts:72` for `total: Decimal`
@@ -4516,21 +4502,18 @@ approved.
     print twice. When a large batch to a slow printer outlives the one-minute lease, another agent
     in the venue can re-claim the jobs not yet sent while the first agent still sends every job it
     pulled; the lease comment in `runtime.ts` now says so. Read from the agent's send loop, not
-    run. `printers.test.ts` test names still carry the PostgreSQL codes "(CHECK 23514)" and
-    "(UNIQUE 23505)", and the case named "a driver error that is NEITHER the UNIQUE NOR the CHECK
-    propagates UNCHANGED" uses a value SQLite refuses by the `printers_transport_ck` CHECK.
+    run. In `printers.test.ts`, the case named "a driver error that is NEITHER the UNIQUE NOR the
+    CHECK propagates UNCHANGED" uses a value SQLite refuses by the `printers_transport_ck` CHECK.
     `escpos.ts`'s `qr()` is not what the receipt uses (it is built with `qrRaster`); the legal
     reason for error-correction level M is stated in `apps/server/src/qr-matrix.ts`.
   - Found by #585's review in files outside `packages/db/src/schema`, not changed there:
-    comments and test names in about ten suites (layouts, printing, catalogue, core, `apps/server`;
-    `git grep -l 23505 -- packages apps`) still cite the PostgreSQL code 23505. The shipped migration
-    `packages/db/drizzle/0001_behavioural_triggers.sql:348` says `requireDevice` touches
-    `last_seen_at` "on every authenticated request", which the review found too wide (the migration
-    cannot be edited). Stale line pointer: the shipped migration's line 378 points at history
-    deleted from `device-profiles.trigger.test.ts`. `packages/db/src/schema/columns.test.ts` still
-    imports `../index.js` and `./drawer-opens.js` dynamically; the comment #585 deleted was the only
-    note that this was meant to be temporary, so making them static imports is a small code
-    follow-up.
+    the shipped migration `packages/db/drizzle/0001_behavioural_triggers.sql:348` says
+    `requireDevice` touches `last_seen_at` "on every authenticated request", which the review found
+    too wide (the migration cannot be edited). Stale line pointer: the shipped migration's line 378
+    points at history deleted from `device-profiles.trigger.test.ts`.
+    `packages/db/src/schema/columns.test.ts` still imports `../index.js` and `./drawer-opens.js`
+    dynamically; the comment #585 deleted was the only note that this was meant to be temporary, so
+    making them static imports is a small code follow-up.
   - Found by #589 (`packages/db` outside `src/schema`), not changed. In
     `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES ANYTHING"
     repeats the first case under another name (a test change, not a comment one).
@@ -4556,9 +4539,9 @@ approved.
     `booking_time` as `HH:MM` while the write path stores `HH:MM:SS`. #574 moved the Vitest 3
     `groupOrder` measurement on bookings (CLAUDE.md §4) out of its `vitest.config.ts` into its
     commit message; `docs/developers/testing-guide.md` has no paragraph holding it.
-  - Found by #588 (`packages/layouts`), not fixable in a comments-only change. Two test titles in
-    `packages/layouts/src/canvas-store.db.test.ts` (lines 144 and 249) still quote PostgreSQL's
-    error numbers 23001 and 23505; the stores match SQLite's. `packages/printing/src/errors.test.ts:5`
+  - Found by #588 (`packages/layouts`), not fixable in a comments-only change. One test title in
+    `packages/layouts/src/canvas-store.db.test.ts` (line 144) still quotes PostgreSQL's error number
+    23001; the stores match SQLite's. `packages/printing/src/errors.test.ts:5`
     says the error construction typechecks "ONLY because" of one import — #588's review measured the
     same claim false for printing and layouts. The shipped
     `packages/media/drizzle/0001_image_references.sql` says `canvas-store.ts` tells 787 from 1811; it
@@ -4716,7 +4699,7 @@ approved.
 - **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23; narrowed by A92 and by C127's second pull request, which renamed the `pg` handles to `suite`, dropped five `.sqlite.` infixes and retitled the `bytea` test).**
   Still open: `apps/server/src/working-order-reads.sqlite.test.ts` keeps its `.sqlite.` infix
   because the approved slice 3d plan (`docs/superpowers/plans/2026-10-01-watchers-slice-3d.md`,
-  lane E's PF8, not started) edits it by that name; rename it once PF8 has landed. The `pg` handle
+  lane E's PF8, not started) runs it by that name; rename it once PF8 has landed. The `pg` handle
   stays in `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and `inmutabilidad.test.ts`,
   the fiscal gates no runner edits.
   `generatePassword` has a caller in `apps/server/src/break-glass.ts` and remains exported.
@@ -5563,13 +5546,12 @@ join-request node filter no test fails without (the `requirePending` read before
 another node's row); and the run-it review did not reach three claims within its budget — holders
 torn by a concurrent promotion, credential sealing, and scheduler takeover.
 
-**Task 1b** (#554, session cookies stored only as hashes). (1) Nothing fails when the UUID shape
+**Task 1b** (#554, session cookies stored only as hashes). Nothing fails when the UUID shape
 screens in `requireSession` and the till logout route are deleted — a non-UUID value hashes to no
-row, so the screens now only save a lookup. (2) Test titles still promising "not a 500" from
-PostgreSQL's `22P02` remain in `till-api.courses.test.ts`, `till-api.receipt.test.ts` and
-`till-api.reprint.test.ts`. Also open: now that both ends are `state`, the keys #426 dropped could be
-declared again — `sessions` to `persons` and `tills`, and `management_sessions`, `totp_enrollments`
-and `google_oidc_states` to `persons`. Doing so would change what deleting a person does.
+row, so the screens now only save a lookup. Also open: now that both ends are `state`, the
+keys #426 dropped could be declared again — `sessions` to `persons` and `tills`, and
+`management_sessions`, `totp_enrollments` and `google_oidc_states` to `persons`. Doing so would
+change what deleting a person does.
 
 **Task 2a** (#557, a recovery key that does not need an archive destination). Open:
 - On a box that holds a key while backups are off because its venue failed to open, an apply that

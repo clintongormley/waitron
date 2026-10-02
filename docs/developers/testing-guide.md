@@ -963,8 +963,8 @@ first agent's row and print the job twice. Then the pair became one statement. W
 clause removed from `packages/db/src/job-claim.ts` and nothing else touched,
 `pnpm --filter @waitron/printing test -- runtime.race runtime.reclaim` read **5 passed**, against
 both the first and the shipped version of the one statement: the old proof held for neither. The
-suite that did fail on the shipped version, `packages/db`'s own job-claim suite, was deleted on
-2026-09-22 with the database engine it ran against (read it with
+suite that did fail on the shipped version, `packages/db`'s PostgreSQL-era job-claim suite, was
+deleted on 2026-09-22 with the database engine it ran against (read it with
 `git show aabdde6a8^:packages/db/src/job-claim.pg.test.ts`). Today's `job-claim.ts` has no locking
 clause to delete.
 
