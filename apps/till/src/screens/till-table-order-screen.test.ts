@@ -1801,6 +1801,16 @@ describe("till-table-order-screen", () => {
     expect(captured!.detail).toEqual({ lineNo: 3, courseId: null });
   });
 
+  it("shows the held line's course from the server again when a re-read keeps it", async () => {
+    const { el } = await mount({ lines: [heldLine], courses });
+    await openDrawer(el);
+    const picker = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-line-course="3"]')!;
+    await chooseOption(picker, "entrantes");
+    el.lines = [{ ...heldLine }];
+    await el.updateComplete;
+    expect(picker.value).toBe("postres");
+  });
+
   it("emits set-line-course { lineNo, courseId } when a held tab line is re-pointed", async () => {
     const { el } = await mount({ lines: [heldLine], courses, orderId: "wo-9" });
     await openDrawer(el);

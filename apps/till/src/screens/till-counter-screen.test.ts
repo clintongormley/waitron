@@ -167,6 +167,15 @@ describe("till-counter-screen", () => {
     expect(await shownText(select)).toBe("Deli counter");
   });
 
+  it("shows the zone the till serves again on its next render when the app kept it", async () => {
+    const { el } = await mount({ serviceZones: deliSecond, selectedServiceZoneId: "deli" });
+    const select = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="service-zone"]')!;
+    await chooseOption(select, "downstairs");
+    el.operatorName = "Luis";
+    await el.updateComplete;
+    expect(select.value).toBe("deli");
+  });
+
   it("keeps the service zone fixed while the basket has lines", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "1");
