@@ -1401,15 +1401,15 @@ noted the Products list shows no unit in its price column; A208's spec already h
 each", "€48.00 / kg").
 
 **A product with variants is not offered in an extras list's product dropdown (A223, owner
-2026-10-02) — OPEN.** Today the dropdown (`extra-list-form.ts`, `#itemsSection`) offers every
+2026-10-02) — DECIDED, ready to build.** Today the dropdown (`extra-list-form.ts`, `#itemsSection`) offers every
 top-level product, but saving a list that names one with an Active variant is refused with
 `extras.product_has_variants` (`assertNoParentsWithVariants`, `packages/catalogue/src/extras.ts`),
 because the till never offers such a product as an extra (`readExtraProducts`,
 `packages/catalogue/src/offered-modifiers.ts`). Read, not run. The owner declined offering the
 variants themselves as choices. **Wanted:** such a product is left out of the dropdown, or shown
-greyed and unpickable — the owner asked which; recommended: greyed, with A210's second line
-saying why ("Has variants, so it can't be an extra"), so a search for it does not just come up
-empty. That needs `wt-combobox` to draw a disabled option, which it cannot today. **Also:** a
+greyed and unpickable. **Decided (owner, 2026-10-02):** greyed, with A210's second line saying
+why ("Has variants, so it can't be an extra"; Spanish to match), so a search for it does not just
+come up empty. That needs `wt-combobox` to draw a disabled option, which it cannot today. **Also:** a
 product already on a list that later gains its first Active variant is silently dropped by the
 till; the list form should mark that row.
 
