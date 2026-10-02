@@ -155,7 +155,6 @@ async function addItem(el: ExtraListForm, name: string): Promise<void> {
   if (option === undefined) throw new Error(`the picker offers no product called ${name}`);
   option.click();
   await el.updateComplete;
-  await click(el, "add-item");
 }
 
 function text(el: ExtraListForm, testId: string): string {
@@ -480,12 +479,59 @@ it("offers every product it was given to an empty list, and adds nothing until o
     { value: EGG, label: "Fried egg" },
   ]);
 
-  await click(el, "add-item");
+  const combobox = await openPicker(el);
+  await userEvent.keyboard("{Escape}");
+  await combobox.updateComplete;
   expect(el.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(0);
 
   await addItem(el, "Bacon");
   expect(el.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(1);
   expect(picker(el).value).toBe("");
+});
+
+it.each([
+  ["en", "Add a product", "Bacon added."],
+  ["es", "Añadir un producto", "Bacon añadido."],
+] as const)(
+  "adds a chosen product at once and announces it in %s",
+  async (locale, prompt, announcement) => {
+    setLocale(locale);
+    try {
+      const { el } = await mount();
+      const combobox = await openPicker(el);
+      expect(combobox.placeholder).toBe(prompt);
+      expect(el.shadowRoot!.querySelector('[data-test="add-item"]')).toBeNull();
+
+      const bacon = [...combobox.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+        (row) => row.textContent!.trim() === "Bacon",
+      )!;
+      bacon.click();
+      await el.updateComplete;
+      await combobox.updateComplete;
+
+      expect(text(el, "item-0-product")).toBe("Bacon");
+      expect(combobox.value).toBe("");
+      expect(combobox.shadowRoot!.activeElement).toBe(
+        combobox.shadowRoot!.querySelector("button.trigger"),
+      );
+      expect(text(el, "added-status")).toBe(announcement);
+    } finally {
+      setLocale("en");
+      cleanupWidgets();
+    }
+  },
+);
+
+it("adds nothing when the picker closes without a choice", async () => {
+  const { el } = await mount();
+  const combobox = await openPicker(el);
+
+  await userEvent.keyboard("{Escape}");
+  await combobox.updateComplete;
+  await el.updateComplete;
+
+  expect(el.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(0);
+  expect(combobox.value).toBe("");
 });
 
 it("leaves out of the picker every product a new list already holds", async () => {

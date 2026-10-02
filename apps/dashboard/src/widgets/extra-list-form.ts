@@ -153,8 +153,7 @@ export class ExtraListForm extends LitElement {
   @state() private maxPicks = "";
   @state() private active = true;
   @state() private items: DraftItem[] = [];
-  /** The product the picker is on, "" when it is on its blank entry. */
-  @state() private pick = "";
+  @state() private addedMessage = "";
   @state() private attempted = false;
   /** `serverErrors` keys the operator has since changed the field of, or submitted past. */
   @state() private dismissed = new Set<string>();
@@ -225,7 +224,7 @@ export class ExtraListForm extends LitElement {
       preselected: item.preselected,
       price: item.price ?? "",
     }));
-    this.pick = "";
+    this.addedMessage = "";
     this.attempted = false;
     this.dismissed = new Set();
   }
@@ -366,8 +365,7 @@ export class ExtraListForm extends LitElement {
     );
   }
 
-  #addItem(): void {
-    const productId = this.pick;
+  #addItem(productId: string): void {
     if (!productId) return;
     this.#editItems(() => {
       // An item is given its id HERE, not by the server. `writeItems` deletes every item of the
@@ -382,8 +380,7 @@ export class ExtraListForm extends LitElement {
         price: "",
       };
       this.items = [...this.items, item];
-      // Back to the blank entry, so a second click on Add cannot repeat the last product.
-      this.pick = "";
+      this.addedMessage = t("extras.product_added").replace("{name}", this.#productName(productId));
     });
   }
 
@@ -618,6 +615,9 @@ export class ExtraListForm extends LitElement {
     const listed = new Set(this.items.map((item) => item.productId));
     const offered = this.products.filter((product) => !listed.has(product.id));
     return html`${this.#reorder.liveRegion()}
+      <div data-test="added-status" role="status" aria-live="polite" class="visually-hidden">
+        ${this.addedMessage}
+      </div>
       <div class="table-wrap" tabindex="0" role="region" aria-label=${t("extras.items")}>
         <table>
           <thead>
@@ -658,22 +658,13 @@ export class ExtraListForm extends LitElement {
           }
           .disabled=${this.busy}
           .options=${offered.map((product) => ({ value: product.id, label: product.name }))}
-          .value=${this.pick}
+          .value=${""}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
-            this.pick = event.detail.value;
+            this.#addItem(event.detail.value);
+            (event.currentTarget as HTMLElementTagNameMap["wt-combobox"]).value = "";
           }}
         ></wt-combobox>
-        <wt-button
-          variant="secondary"
-          data-test="add-item"
-          .disabled=${this.busy}
-          @click=${(event: Event) => {
-            event.stopPropagation();
-            this.#addItem();
-          }}
-          >${t("extras.add_item")}</wt-button
-        >
       </div>`;
   }
 

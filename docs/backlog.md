@@ -1136,18 +1136,18 @@ that they're filled in, and we should show a thumbnail of the image too"_. Today
 
 LOOK at it at phone width, where a long English description leaves little room for the Spanish.
 
-**Choosing a product in an extras list adds it at once (A201, owner 2026-10-02) — OPEN.** The
+**Choosing a product in an extras list adds it at once (A201, owner 2026-10-02) — DONE.** The
 owner, on a screenshot of the extras list form's "Choose a product" dropdown beside an "Add
 product" button: _"make the hint text say "Add a product", remove the button. if you select a
 product in the dropdown it gets added automatically. if you close the chooser without selecting
-then nothing happens"_. Today (`apps/dashboard/src/widgets/extra-list-form.ts`) a choice is held in
-`pick` and only the button's `#addItem` adds the row. **Wanted:** the dropdown's prompt reads "Add
-a product" (Spanish to match; `extras.choose_product`), choosing a product adds its row straight
-away and the dropdown goes back to its prompt, and closing it without a choice adds nothing; the
-button and `extras.add_item` go. Focus stays on the dropdown after an add, so a keyboard user can
-add the next product, and the new row is announced (the form's live region). The menu screen's
-members editor (`member-list-editor.ts`) has the same choose-then-Add pattern; ask whether it
-should change too.
+then nothing happens"_. The dropdown's prompt now reads "Add a product" (Spanish to match;
+`extras.choose_product`); choosing a product adds its row straight away and resets the prompt,
+and closing without a choice adds nothing. The button and `extras.add_item` are gone. Focus stays
+on the dropdown after an add, so a keyboard user can
+add the next product, and the new row is announced (the form's live region). The owner extended the
+same behavior to the menu screen's members editor (`member-list-editor.ts`): choosing a product or
+section adds it immediately and announces it; replacing an existing member still requires explicit
+confirmation. Other single-choice add pickers are tracked separately as A201b in Lane E's queue.
 
 **The number field's − and + move inside the field, as pale blue buttons (A202, owner 2026-10-02)
 — DONE.** The owner, on a screenshot of the extras form's Minimum and Maximum choices: _"the +-
