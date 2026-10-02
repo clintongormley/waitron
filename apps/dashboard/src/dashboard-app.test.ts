@@ -837,7 +837,7 @@ describe("dashboard-app", () => {
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: [],
+        permissions: ["sale.take_payment"],
         modules: [],
       }),
     });
@@ -857,7 +857,7 @@ describe("dashboard-app", () => {
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: [],
+        permissions: ["sale.take_payment"],
         modules: [],
       }),
     });
@@ -877,7 +877,7 @@ describe("dashboard-app", () => {
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: [],
+        permissions: ["sale.take_payment"],
         modules: [],
       }),
     });
@@ -897,7 +897,7 @@ describe("dashboard-app", () => {
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
-          permissions: [],
+          permissions: ["sale.take_payment"],
           modules: [],
         }),
     });
@@ -922,7 +922,7 @@ describe("dashboard-app", () => {
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
-          permissions: [],
+          permissions: ["sale.take_payment"],
           modules: [],
         }),
     });
@@ -2453,7 +2453,7 @@ describe("dashboard-app", () => {
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: [],
+        permissions: ["sale.take_payment"],
         modules: [],
       }),
     });
@@ -2470,7 +2470,7 @@ describe("dashboard-app", () => {
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: [],
+        permissions: ["sale.take_payment"],
         modules: [],
       }),
     });
@@ -2743,7 +2743,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         locale: "en-GB",
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: [],
+        permissions: ["sale.take_payment"],
         modules: [],
       }),
       getLocales,
@@ -4025,7 +4025,7 @@ describe("alerts in the shell", () => {
         ...meResponse,
         sessionDefault: "en-GB",
         role: "staff",
-        permissions: [],
+        permissions: ["sale.take_payment"],
       });
     const api = alertsApi({
       getMe,

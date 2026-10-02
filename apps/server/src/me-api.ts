@@ -96,7 +96,8 @@ const run = createErrorBoundary(STATUS, "me.failed");
 /**
  * Staff self-service routes. Every route acts as the person its management session names, never
  * one the request body names. Deliberately role-blind — never `authorizeManager`: a `staff` person
- * holds an empty permission set, so that gate would refuse every staff member.
+ * holds none of the permissions the management routes ask for, so that gate would refuse every
+ * staff member.
  */
 export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   const credentialKeyRing = deps.credentialKeyRing;
