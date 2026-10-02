@@ -1191,6 +1191,150 @@ describe("till-app", () => {
     });
   });
 
+  describe("a handheld whose device profile gives it the counter", () => {
+    const floorTab = phoneCanvasDef.tabs[0]!;
+    const orderTab = phoneCanvasDef.tabs[1]!;
+    const saleCards: CanvasDef["tabs"][number]["cards"] = [
+      { type: "product-grid", colSpan: 12, rowSpan: 4, config: {} },
+      { type: "basket", colSpan: 12, rowSpan: 2, config: {} },
+      { type: "total", colSpan: 12, rowSpan: 1, config: {} },
+      { type: "tender-pay", colSpan: 12, rowSpan: 2, config: {} },
+    ];
+    const withCounterTab: CanvasDef = {
+      formFactor: "phone-portrait",
+      tabs: [floorTab, { key: "counter", title: "Counter", columns: 12, cards: saleCards }],
+    };
+    const withFloorCard = (type: "held-orders" | "prep-queue"): CanvasDef => ({
+      formFactor: "phone-portrait",
+      tabs: [
+        { ...floorTab, cards: [...floorTab.cards, { type, colSpan: 12, rowSpan: 2, config: {} }] },
+        orderTab,
+      ],
+    });
+    /** Sale cards on a tab not keyed `counter`, which the card grid renders without the counter screen. */
+    const withSaleTab: CanvasDef = {
+      formFactor: "phone-portrait",
+      tabs: [floorTab, { key: "sale", title: "Sale", columns: 12, cards: saleCards }],
+    };
+    const readers = [
+      { id: "5b1c3a52-0000-4000-8000-000000000001", name: "Barra", provider: "stripe_terminal" },
+    ];
+
+    async function toHandheld(
+      canvas: CanvasDef,
+      tillOverrides: Record<string, unknown> = {},
+      overrides: Record<string, unknown> = {},
+    ): Promise<TillApp> {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas, ...tillOverrides }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+        ...overrides,
+      });
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      return el;
+    }
+
+    it("loads the counter's lists at login when its canvas has a counter tab, and shows its held orders there", async () => {
+      const el = await toHandheld(
+        withCounterTab,
+        {},
+        { listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]) },
+      );
+      expect(currentApi.listWorkingOrders).toHaveBeenCalled();
+      expect(currentApi.listCounterWaiting).toHaveBeenCalled();
+      expect(currentApi.listUnpaidDepartures).toHaveBeenCalled();
+      selectTab(el, "counter");
+      await flush(el);
+      expect(counter(el)!.heldOrders).toEqual([heldSummary]);
+    });
+
+    it.each(["held-orders", "prep-queue"] as const)(
+      "loads the counter's lists at login when its canvas has a %s card",
+      async (type) => {
+        await toHandheld(withFloorCard(type));
+        expect(currentApi.listWorkingOrders).toHaveBeenCalled();
+        expect(currentApi.listCounterWaiting).toHaveBeenCalled();
+        expect(currentApi.listUnpaidDepartures).toHaveBeenCalled();
+      },
+    );
+
+    it("still loads the counter's lists at login on a till whose canvas shows none of them", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
+      });
+      await toCounter(el);
+      expect(currentApi.listWorkingOrders).toHaveBeenCalled();
+      expect(currentApi.listCounterWaiting).toHaveBeenCalled();
+      expect(currentApi.listUnpaidDepartures).toHaveBeenCalled();
+    });
+
+    const payCard = (el: TillApp, tab: string): TillTenderPay =>
+      tab === "counter"
+        ? tenderPay(el)
+        : activeTabGrid(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+
+    const withReader = ["print-receipt", "integrated-card-payment"];
+    it.each([
+      {
+        tab: "counter",
+        canvas: withCounterTab,
+        capabilities: withReader,
+        offered: "stripe_terminal",
+      },
+      { tab: "counter", canvas: withCounterTab, capabilities: ["print-receipt"], offered: "none" },
+      { tab: "sale", canvas: withSaleTab, capabilities: withReader, offered: "stripe_terminal" },
+      { tab: "sale", canvas: withSaleTab, capabilities: ["print-receipt"], offered: "none" },
+    ])(
+      "on its $tab tab, gives the pay card the reader $offered when its profile's capabilities are $capabilities",
+      async ({ tab, canvas, capabilities, offered }) => {
+        const el = await toHandheld(canvas, {
+          capabilities,
+          cardProvider: "stripe_terminal",
+          activeReaders: readers,
+          defaultReaderId: readers[0]!.id,
+        });
+        selectTab(el, tab);
+        await flush(el);
+        expect(payCard(el, tab).cardProvider).toBe(offered);
+      },
+    );
+  });
+
+  describe("a back-to-counter that arrives on the lock screen", () => {
+    it("leaves a logged-out till on the lock screen", async () => {
+      const { el } = await mountApp();
+      const c = await toCounter(el);
+      emit(c, "logout");
+      await flush(el);
+      emit(lock(el)!, "back-to-counter");
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(shell(el)).toBeNull();
+    });
+
+    it("leaves a logged-out handheld on the lock screen", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+      });
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      emit(shell(el)!, "logout");
+      await flush(el);
+      emit(lock(el)!, "back-to-counter");
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(shell(el)).toBeNull();
+    });
+  });
+
   // ── Device front door ───────────────────────────────────────────────────────
   // One boot decision: dev + no adopted tab device → the chooser; not enrolled (401, not dev) → the join
   // screen; enrolled `kds` → the kiosk shell (the kds-boot test above); enrolled other → the login (lock)

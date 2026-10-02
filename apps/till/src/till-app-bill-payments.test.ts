@@ -2353,6 +2353,95 @@ describe("till-app: a bill payment on the card reader", () => {
     await press(el, "[data-pay-confirm]");
     expect(sent()[0]!.entry).toBe("manual");
   });
+
+  /** A handheld whose profile declares the integrated reader, taking a card on the second reader. */
+  async function takeOnHandheldReader(takeBillPayment: unknown): Promise<TillApp> {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        canvas: {
+          formFactor: "phone-portrait",
+          tabs: [
+            {
+              key: "floor",
+              title: "Floor",
+              columns: 12,
+              cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
+            },
+            {
+              key: "order",
+              title: "Order",
+              columns: 12,
+              cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
+            },
+          ],
+        } satisfies CanvasDef,
+        capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+        cardProvider: "stripe_terminal",
+        activeReaders: readers,
+        defaultReaderId: readers[0]!.id,
+      }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "d1",
+        name: "Móvil",
+        formFactor: "phone-portrait",
+        stationId: null,
+      }),
+      previewBillPayment: vi.fn().mockResolvedValue(cardPreview),
+      takeBillPayment,
+    });
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    await flush(el);
+    emit(floor(el), "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    const grid = el.shadowRoot!.querySelector<HTMLElement>("till-card-grid")!;
+    emit(grid.shadowRoot!.querySelector("till-table-order-screen")!, "bill-pay", {
+      way: "contribution",
+      lines: [],
+    });
+    await flush(el);
+    await type(el, "amount", "40");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    return el;
+  }
+
+  it("charges the card on the reader picked on a handheld whose profile has the reader", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockResolvedValue(
+        onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+      );
+    const el = await takeOnHandheldReader(takeBillPayment);
+
+    expect(sent()).toEqual([
+      {
+        kind: "contribution",
+        amount: "40",
+        method: "card",
+        applied: "40.00",
+        tip: "0.00",
+        entry: "reader",
+        readerId: readers[1]!.id,
+        submissionId: expect.any(String),
+      },
+    ]);
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+  });
+
+  it("tells a handheld the same as a till when the server refuses the device the reader", async () => {
+    const refused = { code: "device.forbidden_action", status: 403, params: { action: "pay" } };
+    const onTill = await takeOnReader(vi.fn().mockRejectedValue(refused));
+    const tillSays = inDialog(onTill, "wt-form-actions")!.error;
+    expect(tillSays).not.toBe("");
+    cleanupWidgets();
+
+    const onHandheld = await takeOnHandheldReader(vi.fn().mockRejectedValue(refused));
+    expect(inDialog(onHandheld, "wt-form-actions")!.error).toBe(tillSays);
+  });
 });
 
 describe("till-app: giving back a bill payment", () => {

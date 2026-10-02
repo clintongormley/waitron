@@ -217,9 +217,6 @@ type Screen =
 /** An overlay over the active canvas tab. Sale context remains local; regular destinations have URLs. */
 type Drill = { kind: "table-order" | "ticket" | TillDestination };
 
-/** A handheld's screens, in order; `#onLoggedIn` lands it on `HANDHELD_FACES[1]`. */
-const HANDHELD_FACES: Screen[] = ["lock", "floor", "table-order"];
-
 type RefreshList = "held" | "station" | "waiting" | "departures";
 
 /** How reading an adjusted order again ended. */
@@ -1631,14 +1628,13 @@ export class TillApp extends LitElement {
     this.#configureSessionActivity();
     if (!offerLoadFailed) this.#reconcileBasket();
     this.#menuPoll.start();
-    const landingFace = this.handheldMode ? HANDHELD_FACES[1] : "counter";
+    const landingFace = this.handheldMode ? "floor" : "counter";
     if (landingFace === "floor") await this.#loadFloorData();
     // History may change while login data loads and the lock screen still owns the page.
     this.#setActiveTab(this.#requestedTab(), true, true);
     this.#setScreen(landingFace);
     this.#restoreDestination();
-    if (landingFace !== "floor") {
-      // Counter-only data: a handheld lands on the floor, which shows neither.
+    if (this.#showsCounterLists()) {
       const departures = this.#refreshDepartures();
       try {
         await this.#refreshHeldOrders();
@@ -3038,7 +3034,7 @@ export class TillApp extends LitElement {
         .refunded=${open.refunded}
         .busy=${open.busy}
         .tipsEnabled=${this.tipsEnabled}
-        .cardReader=${this.handheldMode ? "none" : this.cardProvider}
+        .cardReader=${this.#cardReader()}
         .readers=${this.activeReaders}
         .defaultReaderId=${this.defaultReaderId}
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
@@ -3095,8 +3091,8 @@ export class TillApp extends LitElement {
     this.collectFlow = undefined;
     this.errorKey = undefined;
     this.cardOutcome = undefined;
-    // The home tab is the canvas's first tab (a handheld has no counter tab). After settling a tab the
-    // floor is stale, so a floor home refreshes it.
+    // The home tab is the canvas's first tab. After settling a tab the floor is stale, so a floor home
+    // refreshes it.
     if (this.#inShell()) {
       const home = this.canvas?.tabs[0];
       this.#setActiveTab(home?.key, true);
@@ -3146,6 +3142,24 @@ export class TillApp extends LitElement {
     } catch {
       // Non-fatal: the last-known floor stays.
     }
+  }
+
+  /** A till is offered the reader whatever its profile says; the server's `assertDeviceCapability`
+   * refuses a device whose profile lacks it. */
+  #cardReader(): TillInfo["cardProvider"] {
+    if (this.handheldMode && !this.capabilities.includes("integrated-card-payment")) return "none";
+    return this.cardProvider;
+  }
+
+  #showsCounterLists(): boolean {
+    if (!this.handheldMode) return true;
+    return (
+      this.canvas?.tabs.some(
+        (tab) =>
+          tab.key === "counter" ||
+          tab.cards.some((card) => card.type === "held-orders" || card.type === "prep-queue"),
+      ) === true
+    );
   }
 
   /** Station and expo cards fetch their own data and table-order loads on the open-table drill, so only
@@ -5679,18 +5693,6 @@ export class TillApp extends LitElement {
     await this.#rereadPayingOrder(open, balance);
   }
 
-  /**
-   * Refuses a screen outside {@link HANDHELD_FACES} for a handheld. Only the no-shell arm of
-   * {@link #onBackToCounter} calls it: inside the shell a handheld has no counter tab, and
-   * {@link #pushDrill} refuses its station, expo and schedule drill-ins because
-   * {@link #affordances} gives it none. The no-shell arms of the other counter-side handlers call
-   * {@link #setScreen} unchecked.
-   */
-  #goToScreen(target: Screen): void {
-    if (this.handheldMode && !HANDHELD_FACES.includes(target)) return;
-    this.#setScreen(target);
-  }
-
   /** Every face change goes through here, so the diagnostics trail records it. */
   #setScreen(screen: Screen): void {
     diag.record("info", "nav", { screen });
@@ -5733,15 +5735,13 @@ export class TillApp extends LitElement {
     else if (this.screen !== "lock") this.#setScreen("ticket");
   }
 
-  /** A handheld's canvas has no counter tab, so inside the shell it shows its first tab instead. */
+  /** A canvas with no counter tab shows its first tab instead. */
   #onBackToCounter(): void {
     this.errorKey = undefined;
     if (this.#inShell()) {
       this.#setActiveTab("counter");
       this.#popDrill();
-    } else {
-      this.#goToScreen("counter");
-    }
+    } else if (this.screen !== "lock") this.#setScreen("counter");
   }
 
   /**
@@ -5885,7 +5885,7 @@ export class TillApp extends LitElement {
         .payHeld=${this.#payHeld()}
         .payRest=${this.#basketPaidInPart()?.outstanding ?? null}
         .counterTab=${tab}
-        .cardProvider=${this.cardProvider}
+        .cardProvider=${this.#cardReader()}
         .tipsEnabled=${this.tipsEnabled}
         .cardOutcome=${this.cardOutcome}
         .activeReaders=${this.activeReaders}
@@ -5915,7 +5915,7 @@ export class TillApp extends LitElement {
       .payRest=${this.#basketPaidInPart()?.outstanding ?? null}
       .orderFlow=${this.#basketFlow()}
       .stage=${this.stage}
-      .cardProvider=${this.cardProvider}
+      .cardProvider=${this.#cardReader()}
       .tipsEnabled=${this.tipsEnabled}
       .cardOutcome=${this.cardOutcome}
       .activeReaders=${this.activeReaders}
