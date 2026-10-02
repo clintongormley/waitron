@@ -1,7 +1,9 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { live } from "lit/directives/live.js";
+import { baseStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -32,7 +34,6 @@ const ALLERGEN_DISPLAY_ORDER = [
 export class AllergenPicker extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -52,6 +53,12 @@ export class AllergenPicker extends LitElement {
       .name {
         flex: 1;
         font-size: var(--wt-font-size-sm);
+      }
+      /* One width for every row, with room to spare for "Puede contener", the longest choice in either
+         language. */
+      .row wt-combobox {
+        flex: none;
+        width: calc(var(--wt-space-6) * 5 + var(--wt-space-4));
       }
       .reviewed,
       .grid {
@@ -106,10 +113,10 @@ export class AllergenPicker extends LitElement {
     this.#emit();
   }
 
-  #onPresence(event: Event, code: string): void {
+  #onPresence(event: CustomEvent<{ value: string }>, code: string): void {
     event.stopPropagation();
     if (!this.reviewed) return;
-    const presence = (event.target as HTMLSelectElement).value as AllergenPresence;
+    const presence = event.detail.value as AllergenPresence;
     this.entries = { ...this.entries, [code]: { presence } };
     this.#emit();
   }
@@ -176,17 +183,22 @@ export class AllergenPicker extends LitElement {
           (code) => html`
             <div class="row" role="group" aria-label=${allergenName(code)}>
               <span class="name" id=${`name-${code}`}>${allergenName(code)}</span>
-              <select
+              <wt-combobox
                 name=${`allergen-${code}-presence`}
                 data-test=${`presence-${code}`}
-                aria-labelledby=${`name-${code}`}
-                .value=${this.entries[code]!.presence}
+                label=${allergenName(code)}
+                hide-label
+                search="auto"
+                searchPlaceholder=${t("categories.combobox_search")}
+                noResultsLabel=${t("categories.combobox_no_results")}
+                .options=${[
+                  { value: "contains", label: t("allergen.contains") },
+                  { value: "may_contain", label: t("allergen.may_contain") },
+                ]}
+                .value=${live(this.entries[code]!.presence)}
                 ?disabled=${!this.reviewed}
-                @change=${(event: Event) => this.#onPresence(event, code)}
-              >
-                <option value="contains">${t("allergen.contains")}</option>
-                <option value="may_contain">${t("allergen.may_contain")}</option>
-              </select>
+                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onPresence(event, code)}
+              ></wt-combobox>
               <wt-button
                 variant="secondary"
                 data-test=${`remove-${code}`}

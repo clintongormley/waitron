@@ -2,7 +2,7 @@ import { ReorderController, reorder, type ReorderModel } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { selectStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -17,6 +17,8 @@ interface VariantRow {
 
 type StatusFilter = "active" | "inactive" | "all";
 
+const ADD_UNIT = "__add__";
+
 /**
  * A plain `<table>`, deliberately NOT `wt-data-table`: the rows are a draft being edited in place,
  * not an administrative collection to sort and search.
@@ -29,7 +31,6 @@ type StatusFilter = "active" | "inactive" | "all";
 @customElement("dashboard-variant-table")
 export class VariantTable extends LitElement {
   static override styles = [
-    selectStyles,
     ReorderController.styles,
     css`
       :host {
@@ -82,15 +83,6 @@ export class VariantTable extends LitElement {
         align-items: center;
         gap: var(--wt-space-1);
       }
-      /* As wide as the chosen unit's name, up to the width of its column. */
-      .price-heading select {
-        field-sizing: content;
-        width: auto;
-        min-width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        max-width: 100%;
-        padding-inline: var(--wt-space-1);
-      }
       /* An amount never breaks inside the number. */
       .amount {
         white-space: nowrap;
@@ -100,7 +92,7 @@ export class VariantTable extends LitElement {
         display: none;
       }
       /* On a narrow table the price moves under the name and its own column goes, taking the
-         heading's unit select with it; the price field above the table has a unit button for the
+         heading's unit dropdown with it; the price field above the table has a unit button for the
          same unit. The name column takes what the grip, Available and row menu columns leave, and
          is never narrower than its widest price. An Available heading longer than its cap runs on
          into the row menu's empty heading. Receipt: the --wt-cell-name-max-width entry in
@@ -133,19 +125,11 @@ export class VariantTable extends LitElement {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
       }
+      /* A filter over the rows below, not a field of the product: narrower than the form's fields
+         so it does not read as one more of them. */
       .filter {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2);
+        max-width: calc(var(--wt-space-6) * 7);
         margin-bottom: var(--wt-space-2);
-        color: var(--wt-color-text);
-        font-family: var(--wt-font-family);
-      }
-      /* A filter over the rows below, not a field of the product: sized to its choices so it does
-         not read as one more full-width input in the form. */
-      .filter select {
-        width: auto;
       }
       .muted {
         color: var(--wt-color-text-muted);
@@ -391,26 +375,25 @@ export class VariantTable extends LitElement {
     const visible = this.rows
       .map((row, index) => ({ row, index }))
       .filter(({ row }) => this.#shows(row.variant));
-    return html`<label class="filter"
-        >${t("editor.variants_show")}<select
-          name="variant-status"
-          @change=${(event: Event) => {
-            event.stopPropagation();
-            this.status = (event.target as HTMLSelectElement).value as StatusFilter;
-          }}
-        >
-          ${(
-            [
-              ["active", t("product.active_badge")],
-              ["inactive", t("product.inactive_badge")],
-              ["all", t("product.filter_status_all")],
-            ] as const
-          ).map(
-            ([value, text]) =>
-              html`<option value=${value} .selected=${value === this.status}>${text}</option>`,
-          )}
-        </select></label
-      >
+    const noUnit = this.unitOptions.find((option) => option.value === null)?.label ?? "";
+    return html`<wt-combobox
+        class="filter"
+        name="variant-status"
+        label=${t("editor.variants_show")}
+        search="auto"
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
+        .options=${[
+          { value: "active", label: t("product.active_badge") },
+          { value: "inactive", label: t("product.inactive_badge") },
+          { value: "all", label: t("product.filter_status_all") },
+        ]}
+        .value=${this.status}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.status = event.detail.value as StatusFilter;
+        }}
+      ></wt-combobox>
       <div class="wrap">
         <table>
           <caption class="visually-hidden">
@@ -424,36 +407,35 @@ export class VariantTable extends LitElement {
               <th scope="col">${t("editor.name")}</th>
               <th scope="col">
                 <span class="price-heading"
-                  >${t("product.price")}<select
+                  >${t("product.price")}<wt-combobox
                     name="pricing-unit"
-                    aria-label=${t("product.unit")}
+                    label=${t("product.unit")}
+                    hide-label
+                    search="auto"
+                    searchPlaceholder=${t("categories.combobox_search")}
+                    noResultsLabel=${t("categories.combobox_no_results")}
+                    placeholder=${noUnit}
+                    .options=${[
+                      ...this.unitOptions.map((option) => ({
+                        value: option.value ?? "",
+                        label: option.label,
+                      })),
+                      ...(this.addUnitLabel
+                        ? [{ value: ADD_UNIT, label: this.addUnitLabel, action: true as const }]
+                        : []),
+                    ]}
+                    .value=${this.unitId ?? ""}
                     .disabled=${this.busy}
-                    @change=${(event: Event) => {
+                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
                       event.stopPropagation();
-                      const select = event.target as HTMLSelectElement;
-                      const value = select.value;
-                      if (value === "__add__") {
-                        select.value = this.unitId ?? "";
-                        this.#emit("wt-add-unit", {});
-                      } else this.#emit("wt-unit-change", { unitId: value || null });
+                      this.#emit("wt-unit-change", { unitId: event.detail.value || null });
                     }}
-                  >
-                    ${this.unitOptions.map(
-                      (option) =>
-                        html`<option
-                          value=${option.value ?? ""}
-                          .selected=${option.value === this.unitId}
-                        >
-                          ${option.label}
-                        </option>`,
-                    )}
-                    ${
-                      this.addUnitLabel
-                        ? html`<option value="__add__">${this.addUnitLabel}</option>`
-                        : nothing
-                    }
-                  </select></span
-                >
+                    @wt-combobox-action=${(event: Event) => {
+                      event.stopPropagation();
+                      this.#emit("wt-add-unit", {});
+                    }}
+                  ></wt-combobox
+                ></span>
               </th>
               <th scope="col">${t("editor.available")}</th>
               <th scope="col">

@@ -1,6 +1,8 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-combobox.js";
+import { t } from "../i18n/t.js";
 import type { LocationSummary } from "../api/client.js";
 
 /** Returns "" (no location) when the list is empty. */
@@ -11,10 +13,7 @@ export function resolveLocationSelection(locations: LocationSummary[], current: 
 }
 
 /**
- * The current option is marked via a per-option `.selected` binding — NOT a select-level `.value`,
- * which commits before the `<option>` children exist and would drop a non-first preset.
- *
- * `:host { display: contents }` so the widget adds no box of its own: the `<label>` participates
+ * `:host { display: contents }` so the widget adds no box of its own: the dropdown participates
  * directly in the parent's layout, and when the widget renders nothing it contributes no phantom flex
  * gap.
  */
@@ -22,20 +21,15 @@ export function resolveLocationSelection(locations: LocationSummary[], current: 
 export class LocationPicker extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: contents;
       }
       .picker {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
         /* The gap below the picker (before the table/next control) — the margin the roster/planned screens use
          * their sibling week picker so the two align in their shared flex row. Rendered only when the
-         * select is (nothing renders at one location or none), so a hidden picker leaves no phantom gap. */
+         * dropdown is (nothing renders at one location or none), so a hidden picker leaves no phantom gap. */
         margin-bottom: var(--wt-space-4);
-        color: var(--wt-color-text);
       }
     `,
   ];
@@ -46,9 +40,9 @@ export class LocationPicker extends LitElement {
 
   @property() label = "";
 
-  #onChange(event: Event): void {
+  #onChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    const locationId = (event.target as HTMLSelectElement).value;
+    const locationId = event.detail.value;
     this.dispatchEvent(
       new CustomEvent<{ locationId: string }>("location-changed", {
         detail: { locationId },
@@ -61,15 +55,18 @@ export class LocationPicker extends LitElement {
   override render(): TemplateResult | typeof nothing {
     if (this.locations.length <= 1) return nothing;
     return html`
-      <label class="picker"
-        >${this.label}
-        <select data-test="location-select" @change=${(e: Event) => this.#onChange(e)}>
-          ${this.locations.map(
-            (l) =>
-              html`<option value=${l.id} .selected=${l.id === this.selected}>${l.name}</option>`,
-          )}
-        </select>
-      </label>
+      <wt-combobox
+        class="picker"
+        data-test="location-select"
+        name="location"
+        label=${this.label}
+        search="auto"
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
+        .options=${this.locations.map((l) => ({ value: l.id, label: l.name }))}
+        .value=${this.selected}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onChange(e)}
+      ></wt-combobox>
     `;
   }
 }

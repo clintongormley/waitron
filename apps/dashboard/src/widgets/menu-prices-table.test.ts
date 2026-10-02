@@ -11,7 +11,7 @@ import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { MenuPricesTable, type OfferSave } from "./menu-prices-table.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => {
@@ -234,9 +234,7 @@ async function flip(el: MenuPricesTable, name: string, checked: boolean): Promis
     name === "active"
       ? "offered"
       : `offered-${lemonade.variants[Number(name.split(".")[1])]!.variantId}`;
-  const select = field<HTMLSelectElement>(el, semantic);
-  select.value = String(checked);
-  select.dispatchEvent(new Event("change"));
+  await chooseOption(field(el, semantic), String(checked));
   await el.updateComplete;
 }
 
@@ -584,6 +582,58 @@ it("passes the loading, failed and empty states to the table", async () => {
   expect(text(table(el).shadowRoot.querySelector("[role=status]"))).toBe(t("menu_prices.empty"));
 });
 
+type OfferedBox = HTMLElement & {
+  value: string;
+  label: string;
+  placeholder: string;
+  search: string;
+  options: { value: string; label: string }[];
+  updateComplete: Promise<unknown>;
+};
+
+const offeredBox = (el: MenuPricesTable, name: string): OfferedBox =>
+  modal(el).querySelector<OfferedBox>(`wt-combobox[name="${name}"]`)!;
+
+/** What a closed dropdown shows on its trigger, not what its properties say it holds. */
+async function shownOffer(el: MenuPricesTable, name: string): Promise<string> {
+  const box = offeredBox(el, name);
+  await box.updateComplete;
+  return text(box.shadowRoot!.querySelector(".trigger .value"));
+}
+
+it("picks whether the product and each variant are sold from shared dropdowns that can fall back to the menus it comes from", async () => {
+  const el = await mount({ editing: "mi-lemonade" });
+  const follow = t("menu_prices.follow_offered").replace("{state}", t("menu_prices.sold"));
+  const offered = offeredBox(el, "offered");
+  expect(offered).not.toBeNull();
+  expect(offered.label).toBe(t("menu_prices.active"));
+  expect(offered.search).toBe("auto");
+  expect(offered.placeholder).toBe(follow);
+  expect(offered.options).toEqual([
+    { value: "", label: follow },
+    { value: "true", label: t("menu_prices.sold") },
+    { value: "false", label: t("menu_prices.switched_off") },
+  ]);
+  expect(offered.value).toBe("true");
+  expect(await shownOffer(el, "offered")).toBe(t("menu_prices.sold"));
+  const large = offeredBox(el, "offered-v-large");
+  expect(large.label).toBe(t("menu_prices.variant_offered"));
+  expect(large.value).toBe("false");
+  expect(await shownOffer(el, "offered-v-large")).toBe(t("menu_prices.switched_off"));
+
+  await chooseOption(offered, "");
+  await el.updateComplete;
+  expect(await shownOffer(el, "offered")).toBe(follow);
+  const heard = saves(el);
+  await click(el, "offer-save");
+  expect(heard).toHaveBeenCalledExactlyOnceWith({
+    menuItemId: "mi-lemonade",
+    name: "Lemonade",
+    item: { offered: null },
+    variants: null,
+  });
+});
+
 it("edits the menu price, with the product price as the empty field's placeholder, the menu's switch and each variant", async () => {
   const el = await mount({ editing: "mi-lemonade" });
   expect(modal(el).open).toBe(true);
@@ -597,7 +647,8 @@ it("edits the menu price, with the product price as the empty field's placeholde
     expect(field(el, name).required, name).toBe(false);
     expect(field(el, name).shadowRoot!.querySelector("[data-required]"), name).toBeNull();
   }
-  expect(field<HTMLSelectElement>(el, "offered").value).toBe("true");
+  expect(offeredBox(el, "offered").value).toBe("true");
+  expect(await shownOffer(el, "offered")).toBe(t("menu_prices.sold"));
   const legends = [...modal(el).querySelectorAll("fieldset legend")].map(text);
   expect(legends).toEqual(["Small", "Large"]);
   expect(field(el, "variants.0.price").value).toBe("");
@@ -605,8 +656,10 @@ it("edits the menu price, with the product price as the empty field's placeholde
   expect(field(el, "variants.0.price").placeholder).toBe("2.50");
   expect(field(el, "variants.1.price").value).toBe("3.75");
   expect(field(el, "variants.1.price").placeholder).toBe("3.40");
-  expect(field<HTMLSelectElement>(el, "offered-v-small").value).toBe("true");
-  expect(field<HTMLSelectElement>(el, "offered-v-large").value).toBe("false");
+  expect(offeredBox(el, "offered-v-small").value).toBe("true");
+  expect(await shownOffer(el, "offered-v-small")).toBe(t("menu_prices.sold"));
+  expect(offeredBox(el, "offered-v-large").value).toBe("false");
+  expect(await shownOffer(el, "offered-v-large")).toBe(t("menu_prices.switched_off"));
 
   await type(el, "grossPrice", "2.80");
   expect(field(el, "variants.0.price").placeholder).toBe("2.80");
@@ -1842,14 +1895,13 @@ it("uses the server's variant price and fallback even when the catalogue differs
 });
 it("offers three states for the product and every variant, saving only changed product fields", async () => {
   const el = await mount({ editing: "mi-lemonade" });
-  const offered = modal(el).querySelector<HTMLSelectElement>('select[name="offered"]');
+  const offered = modal(el).querySelector<OfferedBox>('wt-combobox[name="offered"]');
   expect(offered).not.toBeNull();
-  expect([...offered!.options].map((o) => o.value)).toEqual(["", "true", "false"]);
-  offered!.value = "";
-  offered!.dispatchEvent(new Event("change"));
+  expect(offered!.options.map((o) => o.value)).toEqual(["", "true", "false"]);
+  await chooseOption(offered!, "");
   await el.updateComplete;
   for (const id of ["v-small", "v-large"])
-    expect(modal(el).querySelector(`select[name="offered-${id}"]`)).not.toBeNull();
+    expect(modal(el).querySelector(`wt-combobox[name="offered-${id}"]`)).not.toBeNull();
   const heard = saves(el);
   await click(el, "offer-save");
   expect(heard.mock.calls).toEqual([
@@ -1978,9 +2030,9 @@ it.each([true, false])(
         },
       };
       const el = await mount({ rows: [source], editing: source.menuItemId });
-      const select = modal(el).querySelector<HTMLSelectElement>('select[name="offered"]')!;
+      const select = modal(el).querySelector<OfferedBox>('wt-combobox[name="offered"]')!;
       expect(select).not.toBeNull();
-      expect(text(select.options[0])).toBe("As the menus it comes from (they disagree)");
+      expect(select.options[0]!.label).toBe("As the menus it comes from (they disagree)");
       const heard = saves(el);
       const option = [...table(el).shadowRoot.querySelectorAll<HTMLElement>("wt-button")].find(
         (node) => text(node) === (offered ? "Sell it" : "Switch it off"),

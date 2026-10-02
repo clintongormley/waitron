@@ -3816,11 +3816,10 @@ describe("home page", () => {
       >("dashboard-member-list-editor")!;
       list.shadowRoot!.querySelector<HTMLElement>('[data-test="replace-t-chips"]')!.click();
       await list.updateComplete;
-      const select = list.shadowRoot!.querySelector<HTMLSelectElement>(
-        'select[name="member-ref"]',
-      )!;
-      select.value = "section:s-beer";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
+      const select = list.shadowRoot!.querySelector<
+        HTMLElement & { value: string; error: string; updateComplete: Promise<unknown> }
+      >('wt-combobox[name="member-ref"]')!;
+      await chooseOption(select, "section:s-beer");
       await list.updateComplete;
       const replaceButton = list
         .shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!
@@ -3832,15 +3831,15 @@ describe("home page", () => {
       await list.updateComplete;
       expect(list.shadowRoot!.querySelector('[data-test="replace-cancel"]')).not.toBeNull();
       expect(select.value).toBe("section:s-beer");
+      await select.updateComplete;
+      expect(text(select.shadowRoot!.querySelector(".trigger .value"))).toBe("Drinks › Beer");
       const actions =
         list.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
           "wt-form-actions",
         )!;
       expect(actions.error).toBe(field ? t("form.fix_fields") : codeMessage(code));
       if (field) {
-        expect(text(list.shadowRoot!.querySelector('[data-test="add-error"]'))).toBe(
-          codeMessage(code),
-        );
+        expect(select.error).toBe(codeMessage(code));
         expect(list.shadowRoot!.activeElement).toBe(select);
       }
       expect(
@@ -5151,10 +5150,9 @@ it("sends only an offered reset and leaves the replacement variant set untouched
   const client = api();
   const el = await mountPrices(client);
   await openOffer(el, "mi-lemonade");
-  const select = pricesModal(el).querySelector<HTMLSelectElement>('select[name="offered"]');
+  const select = pricesModal(el).querySelector('wt-combobox[name="offered"]');
   expect(select).not.toBeNull();
-  select!.value = "";
-  select!.dispatchEvent(new Event("change"));
+  await chooseOption(select!, "");
   await prices(el).updateComplete;
   await inOffer(el, "offer-save");
   await vi.waitFor(() =>

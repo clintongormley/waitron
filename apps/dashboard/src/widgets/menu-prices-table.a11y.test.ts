@@ -188,7 +188,7 @@ describe.each(["light", "dark"] as const)("price source and clash states (%s)", 
         editing: product.menuItemId,
         rows: [{ ...product, combined: { ...product.combined, offered } }],
       });
-      expect(el.shadowRoot!.querySelector('select[name="offered"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('wt-combobox[name="offered"]')).not.toBeNull();
       await expectNoA11yViolations(host);
       setLocale("es-ES");
     },

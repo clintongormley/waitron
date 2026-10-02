@@ -260,8 +260,14 @@ describe("ingredient-form", () => {
     expect(reviewed.checked).toBe(true);
     const origin = el.shadowRoot!.querySelector("dashboard-dietary-origin-picker")!;
     await (origin as unknown as { updateComplete: Promise<unknown> }).updateComplete;
-    const sel = origin.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=origin]")!;
+    const sel = origin.shadowRoot!.querySelector<
+      HTMLElement & { value: string; updateComplete: Promise<unknown> }
+    >("[data-test=origin]")!;
     expect(sel.value).toBe("dairy");
+    await sel.updateComplete;
+    expect(sel.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim()).toBe(
+      t("origin.dairy", "es-ES"),
+    );
   });
 
   it("emits update-ingredient with the id and a patch of name+active+allergens+dietaryOrigin in edit mode", async () => {

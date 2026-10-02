@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import {
   ProductEditor,
   productEditorField,
@@ -76,13 +76,9 @@ const reduced = [{ id: "reduced" as const, rate: "10.00", label: "Reduced" }];
 
 async function input(el: ProductEditor, name: string, value: string) {
   const field = el.shadowRoot!.querySelector<HTMLElement>(`[name="${name}"]`)!;
-  if (field instanceof HTMLTextAreaElement) {
-    field.value = value;
-    field.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  } else
-    field.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-    );
+  field.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
   await el.updateComplete;
 }
 function save(el: ProductEditor) {
@@ -139,10 +135,8 @@ it("labels a unit option as its name then abbreviation", async () => {
     units: [{ id: "u", name: { en: "Kilogram" }, abbreviation: { en: "kg" } }],
   });
   await openUnits(el);
-  const option = el.shadowRoot!.querySelector<HTMLOptionElement>(
-    'select[name="unit"] option[value="u"]',
-  )!;
-  expect(option.textContent!.trim()).toBe("Kilogram (kg)");
+  const option = combobox(el, "unit")!.options.find((choice) => choice.value === "u")!;
+  expect(option.label).toBe("Kilogram (kg)");
 });
 
 it("labels a unit option as its name alone when it has no abbreviation", async () => {
@@ -152,10 +146,8 @@ it("labels a unit option as its name alone when it has no abbreviation", async (
     units: [{ id: "u", name: { en: "Portion" }, abbreviation: {} }],
   });
   await openUnits(el);
-  const option = el.shadowRoot!.querySelector<HTMLOptionElement>(
-    'select[name="unit"] option[value="u"]',
-  )!;
-  expect(option.textContent!.trim()).toBe("Portion");
+  const option = combobox(el, "unit")!.options.find((choice) => choice.value === "u")!;
+  expect(option.label).toBe("Portion");
 });
 
 it('renders a short unit as "per unit" on the price control', async () => {
@@ -220,7 +212,7 @@ it("uses the shared compact nutritional picker without a reviewed switch", async
 });
 
 /** Runs `body` with the test frame at a desktop width, where the variants table keeps its price
- * column and the unit select in that column's heading. */
+ * column and the unit dropdown in that column's heading. */
 async function atDesktopWidth(body: () => Promise<void>): Promise<void> {
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -244,15 +236,15 @@ it("puts the variant pricing unit chooser in the table header, not below the tab
     });
     const table = variantTable(el)!;
     await table.updateComplete;
-    const select = table.shadowRoot!.querySelector('select[name="pricing-unit"]')!;
+    const select = table.shadowRoot!.querySelector('wt-combobox[name="pricing-unit"]')!;
     expect(select.getClientRects().length).toBeGreaterThan(0);
     expect(el.shadowRoot!.querySelector('[data-test="choose-unit"]')).toBeNull();
   });
 });
 
-// A phone hides the variants table's price column and the unit select in its heading, so the price
-// field's own unit button has to reach everything that select offered.
-it("changes a product's unit from the price field when the table's heading select is hidden", async () => {
+// A phone hides the variants table's price column and the unit dropdown in its heading, so the
+// price field's own unit button has to reach everything that dropdown offered.
+it("changes a product's unit from the price field when the table's heading dropdown is hidden", async () => {
   const litre = { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } };
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -265,15 +257,14 @@ it("changes a product's unit from the price field when the table's heading selec
   table.style.width = "20rem";
   await table.updateComplete;
   await new Promise((resolve) => requestAnimationFrame(resolve));
-  const heading = table.shadowRoot!.querySelector('select[name="pricing-unit"]')!;
+  const heading = table.shadowRoot!.querySelector('wt-combobox[name="pricing-unit"]')!;
   expect(heading.getClientRects()).toHaveLength(0);
   await openUnits(el);
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="unit"]')!;
+  const select = combobox(el, "unit")!;
   expect(select.getClientRects().length).toBeGreaterThan(0);
-  expect([...select.options].map((option) => option.value)).toEqual(["", unit.id, litre.id]);
+  expect(select.options.map((option) => option.value)).toEqual(["", unit.id, litre.id]);
   expect(el.shadowRoot!.querySelector('[data-test="add-unit"]')).not.toBeNull();
-  select.value = litre.id;
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await chooseOption(select, litre.id);
   await el.updateComplete;
   expect(el.currentValue.unitId).toBe(litre.id);
 });
@@ -328,7 +319,7 @@ it("renders the sections in the designed order, with the VAT rate above the pric
   ]);
   const tax = el.shadowRoot!.querySelector("[name=tax]")!;
   const price = el.shadowRoot!.querySelector("[name=unit-price]")!;
-  // DOCUMENT_POSITION_FOLLOWING: the price field comes after the VAT select, never before it.
+  // DOCUMENT_POSITION_FOLLOWING: the price field comes after the VAT dropdown, never before it.
   expect(tax.compareDocumentPosition(price) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   const pricing = section(el, "price");
   expect(pricing.tagName).toBe("FIELDSET");
@@ -558,10 +549,12 @@ it("puts a refusal for a folded field under it, opening its section, until that 
   await section(el, "descriptors").updateComplete;
 
   expect(section(el, "descriptors").open).toBe(true);
-  const description = el.shadowRoot!.querySelector("[name=description-en]")!;
+  // The text box and the sentence describing it both live inside the shared text area.
+  const area = el.shadowRoot!.querySelector("wt-textarea[name=description-en]")!;
+  const description = area.shadowRoot!.querySelector("textarea")!;
   expect(description.getAttribute("aria-invalid")).toBe("true");
   expect(
-    el.shadowRoot!.getElementById(description.getAttribute("aria-describedby")!)!.textContent,
+    area.shadowRoot!.getElementById(description.getAttribute("aria-describedby")!)!.textContent,
   ).toBe(t("editor.field_rejected"));
   await expect
     .poll(() => el.shadowRoot!.activeElement?.getAttribute("name"))
@@ -607,7 +600,7 @@ it("submits past a refusal beside a field or on a variant's row, which then go",
 });
 
 it.each([["product-course", "courseId"]])(
-  "puts a refused %s under its select, opening the kitchen section, until it changes",
+  "puts a refused %s under its dropdown, opening the kitchen section, until it changes",
   async (name) => {
     const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
       open: true,
@@ -621,18 +614,21 @@ it.each([["product-course", "courseId"]])(
     await el.updateComplete;
     await section(el, "kitchen").updateComplete;
     expect(section(el, "kitchen").open).toBe(true);
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>(`[name=${name}]`)!;
+    // The dropdown's own button carries the marking, and the sentence it names is inside it.
+    const box = combobox(el, name)!;
+    await (box as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    const select = box.shadowRoot!.querySelector(".trigger")!;
     expect(select.getAttribute("aria-invalid")).toBe("true");
     expect(
-      el.shadowRoot!.getElementById(select.getAttribute("aria-describedby")!)!.textContent,
+      box.shadowRoot!.getElementById(select.getAttribute("aria-describedby")!)!.textContent,
     ).toBe("That one is gone");
     await expect.poll(() => el.shadowRoot!.activeElement?.getAttribute("name")).toBe(name);
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     expect(saveButton(el).disabled).toBe(false);
 
-    select.value = "";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await chooseOption(box, "");
     await el.updateComplete;
+    await (box as unknown as { updateComplete: Promise<unknown> }).updateComplete;
     expect(select.getAttribute("aria-invalid")).toBe("false");
     expect(await bottomOf(el)).toBe("");
   },
@@ -1164,23 +1160,27 @@ it("offers all six product dietary declarations without changing the saved set",
   expect(el.currentValue.dietaryDeclarations).toEqual(["vegan", "halal"]);
 });
 
-it("associates a server refusal with its native select until the next save", async () => {
+it("associates a server refusal with its dropdown until the next save", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     locales: ["en"],
     fieldErrors: { tax: "Tax is no longer available" },
   });
-  const select = el.shadowRoot!.querySelector(`[name=tax]`)!;
+  // The dropdown's own button carries the marking, and the sentence it names is inside it.
+  const box = el.shadowRoot!.querySelector<
+    HTMLElement & { error: string; updateComplete: Promise<unknown> }
+  >("wt-combobox[name=tax]")!;
+  await box.updateComplete;
+  const select = box.shadowRoot!.querySelector(".trigger")!;
   expect(select.getAttribute("aria-invalid")).toBe("true");
-  expect(el.shadowRoot!.getElementById(select.getAttribute("aria-describedby")!)!.textContent).toBe(
-    "Tax is no longer available",
-  );
-  expect(el.shadowRoot!.getElementById("tax-error")!.textContent).toBe(
-    "Tax is no longer available",
-  );
+  expect(
+    box.shadowRoot!.getElementById(select.getAttribute("aria-describedby")!)!.textContent,
+  ).toBe("Tax is no longer available");
+  expect(box.error).toBe("Tax is no longer available");
   // Submitting again is past the refusal.
   save(el);
   await el.updateComplete;
+  await box.updateComplete;
   expect(select.getAttribute("aria-invalid")).toBe("false");
 });
 
@@ -1250,11 +1250,12 @@ it("names the product's unit in the variants table's price column", async () => 
     });
     const table = variantTable(el)!;
     await table.updateComplete;
-    const select = table.shadowRoot!.querySelector<HTMLSelectElement>(
-      'select[name="pricing-unit"]',
-    )!;
+    const select = table.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >('wt-combobox[name="pricing-unit"]')!;
     expect(select.getClientRects().length).toBeGreaterThan(0);
-    expect(select.selectedOptions[0]!.textContent!.trim()).toBe("ea");
+    await select.updateComplete;
+    expect(triggerText(select)).toBe("ea");
   });
 });
 
@@ -1275,9 +1276,7 @@ it("saves course with a new product, without a separate routing event", async ()
   el.addEventListener("wt-submit", submit);
   await openSection(el, "kitchen");
   await input(el, "name", "Tortilla");
-  const course = el.shadowRoot!.querySelector<HTMLSelectElement>("[name=product-course]")!;
-  course.value = "course-1";
-  course.dispatchEvent(new Event("change"));
+  await chooseOption(combobox(el, "product-course")!, "course-1");
   await el.updateComplete;
   save(el);
   expect(routed).not.toHaveBeenCalled();
@@ -1316,9 +1315,9 @@ it("preselects the saved course", async () => {
     ],
   });
   await openSection(el, "kitchen");
-  expect(el.shadowRoot!.querySelector<HTMLSelectElement>("[name=product-course]")!.value).toBe(
-    "course-1",
-  );
+  const course = combobox(el, "product-course")!;
+  expect(course.value).toBe("course-1");
+  expect(await shownIn(el, "product-course")).toBe("Starters");
 });
 
 it("saves only once and refuses a second press", async () => {
@@ -1794,8 +1793,9 @@ it("defaults a new product to Each (no unit)", async () => {
     t("editor.per_unit").replace("{unit}", t("editor.unit_each")),
   );
   await openUnits(el);
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="unit"]')!;
+  const select = combobox(el, "unit")!;
   expect(select.value).toBe(""); // the Each option
+  expect(await shownIn(el, "unit")).toBe(t("editor.unit_each"));
   expect(el.shadowRoot!.querySelector('[data-test="add-unit"]')).toBeTruthy();
 });
 
@@ -1825,8 +1825,9 @@ it("submits the chosen real unit and marks it selected after load", async () => 
     taxChoices: [{ id: "reduced", rate: "10.00", label: "Reduced" }],
   });
   await openUnits(el);
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="unit"]')!;
+  const select = combobox(el, "unit")!;
   expect(select.value).toBe(kg.id);
+  expect(await shownIn(el, "unit")).toBe("Kilogram (kg)");
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
@@ -1838,20 +1839,17 @@ it("shows each class's rate in force today, and a fractional rate supplied by a 
     open: true,
     locales: ["en"],
   });
-  const options = () =>
-    el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[name=tax] option[value]:not([value=''])");
+  const options = () => combobox(el, "tax")!.options.filter((option) => option.value !== "");
   expect(options()).toHaveLength(4);
   for (const option of options()) {
-    expect(option.textContent).toContain(
+    expect(option.label).toContain(
       `(${Number(vatRateOn(option.value as NonNullable<ProductEditorDraft["vatClass"]>, localToday()))}%)`,
     );
   }
-  expect([...options()].find((option) => option.value === "zero")!.textContent).toBe(
-    "Sin impuestos (0%)",
-  );
+  expect(options().find((option) => option.value === "zero")!.label).toBe("Sin impuestos (0%)");
   el.taxChoices = [{ id: "reduced", rate: "2.50", label: "Fixture rate" }];
   await el.updateComplete;
-  expect(options()[0]!.textContent).toBe("Fixture rate (2.5%)");
+  expect(options()[0]!.label).toBe("Fixture rate (2.5%)");
 });
 
 // Every cell in this table holds ONE line of text or one 44px-tall control, so a row only reads as a
@@ -2187,7 +2185,7 @@ function control<T = HTMLElement>(el: ProductEditor, name: string) {
   return el.shadowRoot!.querySelector(`[name="${name}"]`) as unknown as T;
 }
 function firstOption(el: ProductEditor, name: string) {
-  return control<HTMLSelectElement>(el, name).options[0]!;
+  return combobox(el, name)!.options[0]!;
 }
 function hint(el: ProductEditor, name: string) {
   return el.shadowRoot!.querySelector(`[data-test="${name}"]`)?.textContent?.trim();
@@ -2297,14 +2295,16 @@ it("offers each inherited choice first as 'Same as' the parent's value, with an 
   for (const [name, text] of Object.entries(expected)) {
     const option = firstOption(el, name);
     expect(option.value, name).toBe("");
-    expect(option.textContent!.trim(), name).toBe(text);
-    expect(control<HTMLSelectElement>(el, name).value, name).toBe("");
+    expect(option.label, name).toBe(text);
+    expect(combobox(el, name)!.value, name).toBe("");
   }
   // "Each" stands for NO unit on a product of its own; on a variant no unit means the parent's, so
   // the synthetic Each choice would say one thing and save another.
-  expect([...control<HTMLSelectElement>(el, "unit").options].map((option) => option.value)).toEqual(
-    ["", unit.id, litre.id],
-  );
+  expect(combobox(el, "unit")!.options.map((option) => option.value)).toEqual([
+    "",
+    unit.id,
+    litre.id,
+  ]);
   // The price field's unit button names the unit the variant sells in: the parent's.
   expect(control<{ unit: string }>(el, "unit-price").unit).toBe(
     t("editor.per_unit").replace("{unit}", "l"),
@@ -2317,8 +2317,10 @@ it("marks a variant's own choice selected over the 'Same as' option", async () =
     vatClass: "general",
     courseId: "desserts",
   });
-  expect(control<HTMLSelectElement>(el, "tax").value).toBe("general");
-  expect(control<HTMLSelectElement>(el, "product-course").value).toBe("desserts");
+  expect(combobox(el, "tax")!.value).toBe("general");
+  expect(combobox(el, "product-course")!.value).toBe("desserts");
+  expect(await shownIn(el, "tax")).toBe("General (21%)");
+  expect(await shownIn(el, "product-course")).toBe("Desserts");
 });
 
 it("hints the parent's category, allergens, dietary declarations and photo beside their controls", async () => {
@@ -2375,9 +2377,8 @@ it("saves every field a variant left blank as null, so it keeps reading the pare
 it("saves a value typed into a variant's field, and null once it is cleared again", async () => {
   const el = await mountVariant();
   await input(el, "unit-price", "4.50");
-  const tax = control<HTMLSelectElement>(el, "tax");
-  tax.value = "general";
-  tax.dispatchEvent(new Event("change"));
+  const tax = combobox(el, "tax")!;
+  await chooseOption(tax, "general");
   await el.updateComplete;
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
@@ -2392,8 +2393,7 @@ it("saves a value typed into a variant's field, and null once it is cleared agai
   el.busy = false;
   await el.updateComplete;
   await input(el, "unit-price", "");
-  tax.value = "";
-  tax.dispatchEvent(new Event("change"));
+  await chooseOption(tax, "");
   await el.updateComplete;
   save(el);
   expect(submit.mock.calls[1]![0].detail.value).toMatchObject({ unitPrice: null, vatClass: null });
@@ -2437,7 +2437,9 @@ it("refuses a variant's price that is not a plain amount", async () => {
 it("paints a variant's description hint from the muted-text token", async () => {
   const el = await mountVariant();
   el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
-  const description = control<HTMLTextAreaElement>(el, "description-en");
+  const description = control<HTMLElement>(el, "description-en").shadowRoot!.querySelector(
+    "textarea",
+  )!;
   expect(getComputedStyle(description, "::placeholder").color).toBe("rgb(7, 8, 9)");
 });
 
@@ -2542,9 +2544,9 @@ it.each(
       }
       const available = table.shadowRoot!.querySelectorAll("thead th")[3]!;
       expect(linesOf(available, t("editor.available")), "the Available heading").toBe(1);
-      // The heading's unit select goes with the price column. The unit stays one tap away on the
+      // The heading's unit dropdown goes with the price column. The unit stays one tap away on the
       // price field above the table, whose unit button changes the same unit.
-      const unitSelect = table.shadowRoot!.querySelector('select[name="pricing-unit"]')!;
+      const unitSelect = table.shadowRoot!.querySelector('wt-combobox[name="pricing-unit"]')!;
       expect(unitSelect.getClientRects()).toHaveLength(0);
       const unitButton = el
         .shadowRoot!.querySelector('wt-price-input[name="unit-price"]')!
@@ -2638,4 +2640,172 @@ it("submits the current folder for a new product", async () => {
   expect((submitted.mock.calls[0]![0] as CustomEvent).detail.value.primaryCategoryId).toBe(
     "drinks",
   );
+});
+
+// --- The shared field components ---
+
+type Field = HTMLElement & {
+  label: string;
+  search: string;
+  required: boolean;
+  placeholder: string;
+  options: { value: string; label: string }[];
+  value: string;
+  error: string;
+  updateComplete: Promise<unknown>;
+};
+function sharedField(el: ProductEditor, tag: "wt-combobox" | "wt-textarea", name: string) {
+  return el.shadowRoot!.querySelector<Field>(`${tag}[name="${name}"]`)!;
+}
+/** What a closed dropdown shows on its trigger, not what its properties say it holds. */
+async function shownIn(el: ProductEditor, name: string): Promise<string | undefined> {
+  const box = sharedField(el, "wt-combobox", name);
+  await box.updateComplete;
+  return box.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
+}
+
+it("picks the default course from a shared dropdown, with none as its prompt and a row", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, courseId: "course-2" },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+    courses: [
+      { id: "course-1", name: "Starters" },
+      { id: "course-2", name: "Mains" },
+    ],
+  });
+  await openSection(el, "kitchen");
+  const course = sharedField(el, "wt-combobox", "product-course");
+  expect(course).not.toBeNull();
+  expect(course.label).toBe(t("product.course"));
+  expect(course.search).toBe("auto");
+  expect(course.placeholder).toBe(t("product.no_course"));
+  expect(course.options).toEqual([
+    { value: "", label: t("product.no_course") },
+    { value: "course-1", label: "Starters" },
+    { value: "course-2", label: "Mains" },
+  ]);
+  expect(course.value).toBe("course-2");
+  expect(await shownIn(el, "product-course")).toBe("Mains");
+  await chooseOption(course, "");
+  await el.updateComplete;
+  expect(el.currentValue.courseId).toBeNull();
+  expect(await shownIn(el, "product-course")).toBe(t("product.no_course"));
+  el.fieldErrors = { "product-course": "That one is gone" };
+  await el.updateComplete;
+  expect(course.error).toBe("That one is gone");
+});
+
+it("describes the product in a shared text area per language, the language in its label", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en", "es"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  await openSection(el, "descriptors");
+  const english = sharedField(el, "wt-textarea", "description-en");
+  const spanish = sharedField(el, "wt-textarea", "description-es");
+  expect(english).not.toBeNull();
+  expect(english.label).toBe(`${t("editor.description")} (en)`);
+  expect(spanish.label).toBe(`${t("editor.description")} (es)`);
+  expect(english.value).toBe("Freshly roasted");
+  expect(spanish.value).toBe("");
+  spanish.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "Recién tostado" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  expect(el.currentValue.description).toEqual({ en: "Freshly roasted", es: "Recién tostado" });
+  el.fieldErrors = { "description-es": t("editor.field_rejected") };
+  await el.updateComplete;
+  expect(spanish.error).toBe(t("editor.field_rejected"));
+  expect(english.error).toBe("");
+});
+
+it("picks a product's VAT class from a required shared dropdown, Choose being its prompt alone", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: [
+      { id: "reduced", rate: "10.00", label: "Reduced" },
+      { id: "general", rate: "21.00", label: "General" },
+    ],
+  });
+  const tax = sharedField(el, "wt-combobox", "tax");
+  expect(tax).not.toBeNull();
+  expect(tax.label).toBe(t("product.vat"));
+  expect(tax.required).toBe(true);
+  expect(tax.search).toBe("auto");
+  expect(tax.placeholder).toBe(t("editor.choose"));
+  expect(tax.options).toEqual([
+    { value: "reduced", label: "Reduced (10%)" },
+    { value: "general", label: "General (21%)" },
+  ]);
+  expect(tax.value).toBe("reduced");
+  expect(await shownIn(el, "tax")).toBe("Reduced (10%)");
+  await chooseOption(tax, "general");
+  await el.updateComplete;
+  expect(el.currentValue.vatClass).toBe("general");
+  expect(await shownIn(el, "tax")).toBe("General (21%)");
+  el.fieldErrors = { tax: "Tax is no longer available" };
+  await el.updateComplete;
+  expect(tax.error).toBe("Tax is no longer available");
+});
+
+it("picks the unit from a shared dropdown behind the price field, Each being its prompt and a row", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit, litre],
+    taxChoices: reduced,
+  });
+  await openUnits(el);
+  const box = sharedField(el, "wt-combobox", "unit");
+  expect(box).not.toBeNull();
+  expect(box.label).toBe(t("product.unit"));
+  expect(box.search).toBe("auto");
+  expect(box.placeholder).toBe(t("editor.unit_each"));
+  expect(box.options).toEqual([
+    { value: "", label: t("editor.unit_each") },
+    { value: unit.id, label: "Each (ea)" },
+    { value: litre.id, label: "Litre (l)" },
+  ]);
+  expect(box.value).toBe(unit.id);
+  expect(await shownIn(el, "unit")).toBe("Each (ea)");
+  await chooseOption(box, litre.id);
+  await el.updateComplete;
+  expect(el.currentValue.unitId).toBe(litre.id);
+  // Choosing closes the chooser, leaving the price field's button naming the unit.
+  expect(el.shadowRoot!.querySelector("[name=unit]")).toBeNull();
+  el.fieldErrors = { unit: "That unit is gone" };
+  await el.updateComplete;
+  expect(sharedField(el, "wt-combobox", "unit").error).toBe("That unit is gone");
+});
+
+it("keeps a variant's 'Same as' choice as each inherited dropdown's prompt and first row", async () => {
+  const el = await mountVariant();
+  await openUnits(el);
+  const expected = {
+    tax: sameAs("Reduced (10%)"),
+    unit: sameAs("Litre (l)"),
+    "product-course": sameAs("Mains"),
+  };
+  for (const [name, text] of Object.entries(expected)) {
+    const box = sharedField(el, "wt-combobox", name);
+    expect(box.placeholder, name).toBe(text);
+    expect(box.options[0], name).toEqual({ value: "", label: text });
+    expect(box.value, name).toBe("");
+    expect(box.required, name).toBe(false);
+    expect(await shownIn(el, name), name).toBe(text);
+  }
 });

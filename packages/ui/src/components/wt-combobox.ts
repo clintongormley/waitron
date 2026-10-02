@@ -100,7 +100,9 @@ export class WtCombobox extends LitElement {
         box-shadow: var(--wt-shadow-2);
       }
 
+      /* The panel is as wide as its content, and a text input's own default width would count. */
       .search-area {
+        contain: inline-size;
         padding: var(--wt-space-2);
         box-shadow: var(--wt-shadow-1);
       }
@@ -567,8 +569,11 @@ export class WtCombobox extends LitElement {
   private positionPopup(): void {
     const anchor = this.trigger.getBoundingClientRect();
     // The width is applied before the panel is measured: it changes how the labels wrap, and so the
-    // height the vertical clamp below depends on.
-    this.popup.style.width = `${anchor.width}px`;
+    // height the vertical clamp below depends on. An explicit max-content, because the popover's
+    // default fit-content would measure against the left written by the previous opening.
+    this.popup.style.width = "max-content";
+    this.popup.style.minWidth = `${anchor.width}px`;
+    this.popup.style.maxWidth = `${innerWidth - 16}px`;
     const popup = this.popup.getBoundingClientRect();
     // Left-aligned with the trigger, pulled left only far enough to keep the panel inside the
     // viewport's 8px right gutter.

@@ -138,7 +138,8 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
     const add = el.shadowRoot!.querySelector<AddContentLanguageDialog>(
       "dashboard-add-content-language",
     )!;
-    expect(add.shadowRoot!.querySelectorAll("optgroup")).toHaveLength(2);
+    const language = add.shadowRoot!.querySelector("wt-combobox[name=language]")!;
+    expect(language.shadowRoot!.querySelectorAll('[role="group"]')).toHaveLength(2);
     await expectNoA11yViolations(host);
   });
 
@@ -172,7 +173,11 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
       )!;
       add.shadowRoot!.querySelector<HTMLElement>("[data-test=save-language]")!.click();
       await add.updateComplete;
-      expect(add.shadowRoot!.querySelector("#language-error")).not.toBeNull();
+      expect(
+        add.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+          "wt-combobox[name=language]",
+        )!.error,
+      ).not.toBe("");
     }
     await expectNoA11yViolations(host);
   });

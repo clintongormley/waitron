@@ -1,8 +1,10 @@
 import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, selectStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import type { Unit, UnitInput } from "../api/client.js";
@@ -40,29 +42,10 @@ export function unitRefusalErrors(error: unknown): UnitFormErrors {
 export class UnitForm extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       .field {
         display: block;
         margin-bottom: var(--wt-space-4);
-      }
-      .required,
-      .field-error {
-        color: var(--wt-color-danger);
-      }
-      .required {
-        margin-inline-start: var(--wt-space-1);
-      }
-      .field-help,
-      .field-error {
-        margin: var(--wt-space-1) 0 0;
-        font-size: var(--wt-font-size-sm);
-      }
-      .field-help {
-        color: var(--wt-color-text-muted);
-      }
-      select[aria-invalid="true"] {
-        border-color: var(--wt-color-danger);
       }
     `,
   ];
@@ -166,9 +149,9 @@ export class UnitForm extends LitElement {
     this.#dismiss("abbreviation", `abbreviation-${locale}`);
   }
 
-  #changePrecision(event: Event): void {
+  #changePrecision(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.precision = (event.target as HTMLSelectElement).value;
+    this.precision = event.detail.value;
     this.#dismiss("precision");
   }
 
@@ -254,33 +237,29 @@ export class UnitForm extends LitElement {
             ></wt-input>
           `,
         )}
-        <label class="field"
-          >${t("units.precision")}<span class="required" data-required aria-hidden="true">*</span>
-          <select
-            data-test="precision"
-            name="precision"
-            required
-            ?disabled=${this.busy}
-            aria-invalid=${errors.precision ? "true" : "false"}
-            aria-describedby=${
-              errors.precision ? "precision-help precision-error" : "precision-help"
-            }
-            @change=${this.#changePrecision}
-          >
-            ${[0, 1, 2, 3].map(
-              (precision) =>
-                html`<option value=${precision} .selected=${this.precision === String(precision)}>
-                  ${precision}
-                </option>`,
-            )}
-          </select>
-          <p id="precision-help" class="field-help">${t("units.precision_help")}</p>
-          ${
-            errors.precision
-              ? html`<p id="precision-error" class="field-error">${errors.precision}</p>`
-              : ""
-          }</label
+        <wt-combobox
+          class="field"
+          data-test="precision"
+          name="precision"
+          label=${t("units.precision")}
+          required
+          search="auto"
+          searchPlaceholder=${t("categories.combobox_search")}
+          noResultsLabel=${t("categories.combobox_no_results")}
+          hint=${t("units.precision_help")}
+          .options=${[0, 1, 2, 3].map((precision) => ({
+            value: String(precision),
+            label: String(precision),
+          }))}
+          .value=${this.precision}
+          error=${errors.precision ?? ""}
+          ?disabled=${this.busy}
+          @wt-change=${this.#changePrecision}
         >
+          <wt-help-tooltip slot="help" aria-label=${t("units.precision_help_label")}
+            >${t("units.precision_help")}</wt-help-tooltip
+          >
+        </wt-combobox>
         <wt-form-actions slot="footer" .error=${bottom}>
           <wt-button
             slot="cancel"

@@ -1,4 +1,5 @@
 import { afterEach, describe, it } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { SectionAddProducts } from "./section-add-products.js";
 import type { CategorySummary } from "../api/client.js";
@@ -48,9 +49,7 @@ describe.each(["light", "dark"] as const)("section add products (%s)", (theme) =
     );
     const root = el.shadowRoot!;
     if (state === "filtered" || state === "no-matches") {
-      const select = root.querySelector<HTMLSelectElement>('select[name="category"]')!;
-      select.value = "c-drinks";
-      select.dispatchEvent(new Event("change"));
+      await chooseOption(root.querySelector('wt-combobox[name="category"]')!, "c-drinks");
       await el.updateComplete;
     }
     if (state === "no-matches") {

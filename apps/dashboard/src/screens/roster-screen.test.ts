@@ -1,5 +1,6 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
@@ -52,11 +53,19 @@ function emit(source: Element, type: string, detail: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 const dialog = (el: RosterScreen) => el.shadowRoot!.querySelector("dashboard-shift-dialog")!;
-// The location select is inside `<dashboard-location-picker>`'s shadow root.
+// The location dropdown is inside `<dashboard-location-picker>`'s shadow root.
 const locationSelect = (el: RosterScreen) =>
   el
     .shadowRoot!.querySelector("dashboard-location-picker")!
-    .shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]")!;
+    .shadowRoot!.querySelector<HTMLElement & { value: string; updateComplete: Promise<unknown> }>(
+      "[data-test=location-select]",
+    )!;
+/** What the closed location dropdown shows on its trigger, not what its properties say it holds. */
+async function shownLocation(el: RosterScreen): Promise<string | undefined> {
+  const box = locationSelect(el);
+  await box.updateComplete;
+  return box.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
+}
 const draftSnapshot = (): RosterSnapshot => ({
   version: {
     id: "v1",
@@ -163,8 +172,7 @@ describe("roster-screen", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=breaches]")).not.toBeNull();
     const select = locationSelect(el);
-    select.value = "loc-2";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(select, "loc-2");
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=breaches]")).toBeNull();
   });
@@ -347,8 +355,7 @@ describe("roster-screen", () => {
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
     const select = locationSelect(el);
-    select.value = "loc-2";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(select, "loc-2");
     await flush(el);
     expect(api.getRoster).toHaveBeenLastCalledWith("loc-2", expect.any(String));
     const week = el.shadowRoot!.querySelector<WtInput>("[data-test=week-picker]")!;
@@ -454,8 +461,7 @@ describe("roster-screen — refusals, single-flight and refreshes", () => {
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
     const select = locationSelect(el);
-    select.value = "loc-2";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(select, "loc-2");
     await flush(el);
     expect(errorText(el)).toBe(codeMessage("authorization.not_permitted"));
   });
@@ -604,8 +610,7 @@ describe("roster-screen — refusals, single-flight and refreshes", () => {
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
     const select = locationSelect(el);
-    select.value = "loc-2";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(select, "loc-2");
     await flush(el);
     expect(api.getRoster).toHaveBeenLastCalledWith("loc-2", expect.any(String));
     vi.mocked(api.getLocations).mockResolvedValue([
@@ -617,6 +622,7 @@ describe("roster-screen — refusals, single-flight and refreshes", () => {
       expect(api.getRoster).toHaveBeenLastCalledWith("loc-1", expect.any(String)),
     );
     expect(locationSelect(el).value).toBe("loc-1");
+    expect(await shownLocation(el)).toBe("Main");
   });
 
   it("keeps the selected location's roster when a refresh still lists it", async () => {
@@ -636,6 +642,7 @@ describe("roster-screen — refusals, single-flight and refreshes", () => {
     await flush(el);
     expect(vi.mocked(api.getRoster).mock.calls.length).toBe(rosterLoads);
     expect(locationSelect(el).value).toBe("loc-1");
+    expect(await shownLocation(el)).toBe("Main");
   });
 });
 

@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 import type { WtModal } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import type { SectionMember } from "@waitron/catalogue/src/section-types.js";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 // Value import: pulls the module in for its `@customElement` side effect.
 import { MemberListEditor, sectionParents, sectionsHolding } from "./member-list-editor.js";
@@ -67,11 +68,93 @@ function capture<T>(el: HTMLElement, type: string): T[] {
 }
 
 async function choose(el: MemberListEditor, value: string): Promise<void> {
-  const select = q<HTMLSelectElement>(el, 'select[name="member-ref"]');
-  select.value = value;
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await chooseOption(memberBox(el), value);
   await el.updateComplete;
 }
+
+/** The option headings in the order the dropdown draws them. */
+const headings = (el: MemberListEditor): string[] => [
+  ...new Set(memberBox(el).options.flatMap((option) => (option.group ? [option.group] : []))),
+];
+
+type MemberBox = HTMLElement & {
+  value: string;
+  label: string;
+  placeholder: string;
+  search: string;
+  error: string;
+  required: boolean;
+  disabled: boolean;
+  options: { value: string; label: string; group?: string }[];
+  updateComplete: Promise<unknown>;
+};
+
+const memberBox = (el: MemberListEditor): MemberBox =>
+  q<MemberBox>(el, 'wt-combobox[name="member-ref"]');
+
+/** What the closed dropdown shows on its trigger, not what its properties say it holds. */
+async function shownMember(el: MemberListEditor): Promise<string | undefined> {
+  const box = memberBox(el);
+  await box.updateComplete;
+  return box.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
+}
+
+it("picks what to add from the shared dropdown, products then sections under their headings", async () => {
+  const el = await mount({ sectionChoices: true });
+  const adds = capture<{ ref: unknown }>(el, "wt-member-add");
+  const box = memberBox(el);
+  expect(box).not.toBeNull();
+  expect(box.label).toBe(t("members.add_label"));
+  expect(box.required).toBe(false);
+  expect(box.search).toBe("auto");
+  expect(box.placeholder).toBe(t("members.tile_placeholder"));
+  expect(box.options).toEqual([
+    { value: "", label: t("members.tile_placeholder") },
+    { value: "product:p-chips", label: "Chips", group: t("members.products") },
+    { value: "product:p-salad", label: "Salad", group: t("members.products") },
+    { value: "section:s-beer", label: "Beer", group: t("members.sections") },
+    { value: "section:s-desserts", label: "Desserts", group: t("members.sections") },
+  ]);
+  expect(box.value).toBe("");
+  expect(await shownMember(el)).toBe(t("members.tile_placeholder"));
+  await chooseOption(box, "section:s-beer");
+  await el.updateComplete;
+  expect(await shownMember(el)).toBe("Beer");
+  q(el, '[data-test="add"]').click();
+  expect(adds).toEqual([{ ref: { kind: "section", sectionId: "s-beer" } }]);
+});
+
+it("replaces a missing member through the same dropdown, required and with no empty row", async () => {
+  const el = await mount({
+    members: [
+      ...members(),
+      { id: "m-gone", position: 3, ref: { kind: "missing", name: "Old special" } },
+    ],
+    replaceable: new Set(["m-gone"]),
+  });
+  const replaces = capture<{ memberId: string; ref: unknown }>(el, "wt-member-replace");
+  q(el, '[data-test="replace-m-gone"]').click();
+  await el.updateComplete;
+  const box = memberBox(el);
+  expect(box.label).toBe(t("action.replace"));
+  expect(box.required).toBe(true);
+  expect(box.placeholder).toBe(t("members.add_placeholder"));
+  expect(box.options).toEqual([
+    { value: "product:p-chips", label: "Chips", group: t("members.products") },
+    { value: "product:p-salad", label: "Salad", group: t("members.products") },
+  ]);
+  q(el, '[data-test="add"]').click();
+  await el.updateComplete;
+  expect(box.error).toBe(t("members.tile_choose_first"));
+  await chooseOption(box, "product:p-salad");
+  await el.updateComplete;
+  expect(box.error).toBe("");
+  expect(await shownMember(el)).toBe("Salad");
+  q(el, '[data-test="add"]').click();
+  expect(replaces).toEqual([
+    { memberId: "m-gone", ref: { kind: "product", productId: "p-salad" } },
+  ]);
+});
 
 it("lists members in position order, naming each one's kind in text and a section by its internal name", async () => {
   const shuffled = members().reverse();
@@ -234,10 +317,12 @@ it("reports nothing when the dragged member leaves the list before the drag ends
 
 it("offers only products, leaving out held ones", async () => {
   const el = await mount();
-  const groups = [...el.shadowRoot!.querySelectorAll("optgroup")];
-  expect(groups.map((group) => group.label)).toEqual([t("members.products")]);
-  const texts = (group: HTMLOptGroupElement) =>
-    [...group.querySelectorAll("option")].map((option) => option.textContent!.trim());
+  const groups = headings(el);
+  expect(groups).toEqual([t("members.products")]);
+  const texts = (group: string) =>
+    memberBox(el)
+      .options.filter((option) => option.group === group)
+      .map((option) => option.label);
   // Burger and Lemonade are already held; Drinks is held and Favourites is excluded.
   expect(texts(groups[0]!)).toEqual(["Chips", "Salad"]);
   expect(groups).toHaveLength(1);
@@ -245,8 +330,7 @@ it("offers only products, leaving out held ones", async () => {
 
 it("leaves out a heading with nothing under it", async () => {
   const el = await mount({ excludeSectionIds: ["s-beer", "s-favourites", "s-desserts"] });
-  const groups = [...el.shadowRoot!.querySelectorAll("optgroup")];
-  expect(groups.map((group) => group.label)).toEqual([t("members.products")]);
+  expect(headings(el)).toEqual([t("members.products")]);
 });
 
 it("adds the chosen product and resets the picker", async () => {
@@ -255,7 +339,8 @@ it("adds the chosen product and resets the picker", async () => {
   await choose(el, "product:p-chips");
   q(el, '[data-test="add"]').click();
   await el.updateComplete;
-  expect(q<HTMLSelectElement>(el, 'select[name="member-ref"]').value).toBe("");
+  expect(memberBox(el).value).toBe("");
+  expect(await shownMember(el)).toBe(t("members.add_placeholder"));
   await choose(el, "product:p-salad");
   q(el, '[data-test="add"]').click();
   await el.updateComplete;
@@ -271,13 +356,15 @@ it("explains, rather than adding, when Add is pressed with nothing chosen", asyn
   q(el, '[data-test="add"]').click();
   await el.updateComplete;
   expect(adds).toEqual([]);
-  const error = q(el, '[data-test="add-error"]');
-  expect(error.textContent!.trim()).toBe(t("members.choose_first"));
-  const select = q(el, 'select[name="member-ref"]');
-  expect(select.getAttribute("aria-invalid")).toBe("true");
-  expect(select.getAttribute("aria-describedby")).toBe(error.id);
+  expect(memberBox(el).error).toBe(t("members.choose_first"));
+  const control = memberBox(el).shadowRoot!.querySelector("button.trigger")!;
+  expect(control.getAttribute("aria-invalid")).toBe("true");
+  const describedBy = control.getAttribute("aria-describedby")!;
+  expect(memberBox(el).shadowRoot!.getElementById(describedBy)!.textContent!.trim()).toBe(
+    t("members.choose_first"),
+  );
   await choose(el, "product:p-chips");
-  expect(el.shadowRoot!.querySelector('[data-test="add-error"]')).toBeNull();
+  expect(memberBox(el).error).toBe("");
 });
 
 it("keeps the add row, its Add button and its error within the standard form width in a modal on a wide window", async () => {
@@ -304,7 +391,12 @@ it("keeps the add row, its Add button and its error within the standard form wid
       form + 0.5,
     );
     expect(row.width).toBeCloseTo(form, 0);
-    expect(q(el, '[data-test="add-error"]').getBoundingClientRect().width).toBeCloseTo(form, 0);
+    const error = memberBox(el).shadowRoot!.querySelector("[data-error]")!;
+    // The error is the dropdown's own, under its box, so it is as wide as the dropdown.
+    const box = memberBox(el).shadowRoot!.querySelector(".field")!.getBoundingClientRect();
+    expect(error.getBoundingClientRect().width).toBeCloseTo(box.width, 0);
+    expect(error.getBoundingClientRect().width).toBeLessThanOrEqual(form);
+    expect(q(el, '[data-test="add"]').getBoundingClientRect().bottom).toBeCloseTo(box.bottom, 0);
   } finally {
     await page.viewport(width, height);
   }
@@ -358,7 +450,7 @@ it("while busy, disables every control and reports nothing", async () => {
   const seen: string[] = [];
   for (const type of ["wt-member-add", "wt-member-remove", "wt-member-open", "wt-member-move"])
     el.addEventListener(type, () => seen.push(type));
-  expect(q<HTMLSelectElement>(el, 'select[name="member-ref"]').disabled).toBe(true);
+  expect(memberBox(el).disabled).toBe(true);
   expect(q<HTMLButtonElement>(el, '[data-test="drag-m-burger"]').disabled).toBe(true);
   expect((q(el, '[data-test="add"]') as HTMLElement & { disabled: boolean }).disabled).toBe(true);
   q(el, '[data-test="add"]').click();
@@ -369,16 +461,16 @@ it("while busy, disables every control and reports nothing", async () => {
   );
   await el.updateComplete;
   expect(seen).toEqual([]);
-  expect(el.shadowRoot!.querySelector('[data-test="add-error"]')).toBeNull();
+  expect(memberBox(el).error).toBe("");
 });
 
 it("says the list is empty and still offers everything not excluded", async () => {
   const el = await mount({ members: [] });
   expect(rowIds(el)).toEqual([]);
   expect(q(el, '[data-test="empty"]').textContent!.trim()).toBe(t("members.empty"));
-  const options = [...el.shadowRoot!.querySelectorAll("optgroup option")].map((option) =>
-    option.textContent!.trim(),
-  );
+  const options = memberBox(el)
+    .options.filter((option) => option.group)
+    .map((option) => option.label);
   expect(options).toEqual(["Burger", "Chips", "Lemonade", "Salad"]);
 });
 
@@ -391,11 +483,12 @@ it("drops a chosen product once the list comes to hold it, so Add explains rathe
     { id: "m-chips", position: 3, ref: { kind: "product", productId: "p-chips" } },
   ];
   await el.updateComplete;
-  expect(q<HTMLSelectElement>(el, 'select[name="member-ref"]').value).toBe("");
+  expect(memberBox(el).value).toBe("");
+  expect(await shownMember(el)).toBe(t("members.add_placeholder"));
   q(el, '[data-test="add"]').click();
   await el.updateComplete;
   expect(adds).toEqual([]);
-  expect(q(el, '[data-test="add-error"]')).not.toBeNull();
+  expect(memberBox(el).error).not.toBe("");
 });
 
 it("keeps a choice that is still on offer when the list changes around it", async () => {
@@ -404,7 +497,8 @@ it("keeps a choice that is still on offer when the list changes around it", asyn
   await choose(el, "product:p-salad");
   el.members = members().filter((member) => member.id !== "m-lemonade");
   await el.updateComplete;
-  expect(q<HTMLSelectElement>(el, 'select[name="member-ref"]').value).toBe("product:p-salad");
+  expect(memberBox(el).value).toBe("product:p-salad");
+  expect(await shownMember(el)).toBe("Salad");
   q(el, '[data-test="add"]').click();
   expect(adds).toEqual([{ ref: { kind: "product", productId: "p-salad" } }]);
 });
@@ -481,15 +575,12 @@ it.each(["light", "dark"] as const)(
 
 it("describes both tile choices in the Home mode and products alone in structural mode", async () => {
   const el = await mount({ sectionChoices: true });
-  expect(q(el, 'select[name="member-ref"] option[value=""]').textContent?.trim()).toBe(
-    t("members.tile_placeholder"),
-  );
+  const prompt = () => memberBox(el).options.find((option) => option.value === "")?.label;
+  expect(prompt()).toBe(t("members.tile_placeholder"));
   q(el, '[data-test="add"]').click();
   await el.updateComplete;
-  expect(q(el, '[data-test="add-error"]').textContent?.trim()).toBe(t("members.tile_choose_first"));
+  expect(memberBox(el).error).toBe(t("members.tile_choose_first"));
   el.sectionChoices = false;
   await el.updateComplete;
-  expect(q(el, 'select[name="member-ref"] option[value=""]').textContent?.trim()).toBe(
-    t("members.add_placeholder"),
-  );
+  expect(prompt()).toBe(t("members.add_placeholder"));
 });

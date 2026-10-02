@@ -3,7 +3,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, submitOnEnter } from "@waitron/ui";
 import { resolveContentText } from "@waitron/shared";
 import { DIETARY_LABELS } from "@waitron/catalogue/src/dietary-declarations.js";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
@@ -18,6 +18,7 @@ import "@waitron/ui/src/components/wt-lozenge.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
+import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./allergen-dietary-picker.js";
@@ -199,7 +200,6 @@ function emptyDraft(): ProductEditorDraft {
 export class ProductEditor extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     ReorderController.styles,
     ReorderController.tableStyles,
     css`
@@ -302,20 +302,6 @@ export class ProductEditor extends LitElement {
         margin: 0;
         color: var(--wt-color-text-muted);
       }
-      textarea {
-        box-sizing: border-box;
-        width: 100%;
-        min-height: calc(var(--wt-tap-min) * 2);
-        padding: var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
-      }
-      textarea::placeholder {
-        color: var(--wt-color-text-muted);
-      }
       .nutrition-hints {
         gap: var(--wt-space-1);
         margin-top: var(--wt-space-3);
@@ -324,10 +310,6 @@ export class ProductEditor extends LitElement {
         margin: 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
-      }
-      textarea:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
       }
       .badge {
         padding: var(--wt-space-1) var(--wt-space-2);
@@ -777,7 +759,7 @@ export class ProductEditor extends LitElement {
   }
 
   /** The main category. A variant's empty main category reads as its parent's, which the combobox
-   * names as its empty choice, like a select's "Same as" option. */
+   * names as its empty choice. */
   private renderCategories() {
     const parent = this.inherited;
     const parentCategory = parent?.primaryCategoryId
@@ -838,7 +820,7 @@ export class ProductEditor extends LitElement {
     </wt-disclosure>`;
   }
 
-  /** What a routing select's empty choice means: none, on a product of its own; the parent's
+  /** What a routing dropdown's empty choice means: none, on a product of its own; the parent's
    * choice, on a variant. */
   private blankChoice(
     none: string,
@@ -857,26 +839,24 @@ export class ProductEditor extends LitElement {
     selected: string | null,
     change: (id: string | null) => void,
   ) {
-    const error = this.error(name);
-    return html`<label
-        >${label}<select
-          name=${name}
-          aria-invalid=${error ? "true" : "false"}
-          aria-describedby=${`${name}-error`}
-          @change=${(event: Event) => {
-            event.stopPropagation();
-            change((event.target as HTMLSelectElement).value || null);
-          }}
-        >
-          <option value="" .selected=${selected === null}>${noneLabel}</option>
-          ${choices.map(
-            (choice) =>
-              html`<option value=${choice.id} .selected=${choice.id === selected}>
-                ${choice.name}
-              </option>`,
-          )}
-        </select></label
-      ><span class="error" id=${`${name}-error`}>${error}</span>`;
+    return html`<wt-combobox
+      name=${name}
+      label=${label}
+      search="auto"
+      searchPlaceholder=${t("categories.combobox_search")}
+      noResultsLabel=${t("categories.combobox_no_results")}
+      placeholder=${noneLabel}
+      .options=${[
+        { value: "", label: noneLabel },
+        ...choices.map((choice) => ({ value: choice.id, label: choice.name })),
+      ]}
+      .value=${selected ?? ""}
+      error=${this.error(name)}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        change(event.detail.value || null);
+      }}
+    ></wt-combobox>`;
   }
 
   private renderDescriptors() {
@@ -912,28 +892,20 @@ export class ProductEditor extends LitElement {
           (value) => this.change("customerName", value),
         )}
         ${this.locales.map((locale) => {
-          const error = this.error(`description-${locale}`);
-          return html`<label
-              >${t("editor.description")} (${locale})<textarea
-                name=${`description-${locale}`}
-                aria-invalid=${error ? "true" : "false"}
-                aria-describedby=${error ? `description-${locale}-error` : nothing}
-                placeholder=${descriptionHints?.[locale] ?? ""}
-                .value=${this.draft.description?.[locale] ?? ""}
-                @input=${(event: Event) => {
-                  event.stopPropagation();
-                  this.change("description", {
-                    ...this.draft.description,
-                    [locale]: (event.target as HTMLTextAreaElement).value,
-                  });
-                }}
-              ></textarea>
-            </label>
-            ${
-              error
-                ? html`<span class="error" id=${`description-${locale}-error`}>${error}</span>`
-                : nothing
-            }`;
+          return html`<wt-textarea
+            name=${`description-${locale}`}
+            label=${`${t("editor.description")} (${locale})`}
+            placeholder=${descriptionHints?.[locale] ?? ""}
+            .value=${this.draft.description?.[locale] ?? ""}
+            error=${this.error(`description-${locale}`)}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              this.change("description", {
+                ...this.draft.description,
+                [locale]: event.detail.value,
+              });
+            }}
+          ></wt-textarea>`;
         })}
         ${
           this.api
@@ -1071,33 +1043,28 @@ export class ProductEditor extends LitElement {
   private renderTax() {
     const parent = this.inherited;
     const parentTax = parent && this.taxes.find((tax) => tax.id === parent.vatClass);
-    return html`<label
-        >${t("product.vat")}${parent ? nothing : " *"}<select
-          name="tax"
-          aria-required=${parent ? "false" : "true"}
-          aria-invalid=${this.error("tax") ? "true" : "false"}
-          aria-describedby="tax-error"
-          @change=${(event: Event) => {
-            event.stopPropagation();
-            const value = (event.target as HTMLSelectElement).value;
-            this.change(
-              "vatClass",
-              parent && value === ""
-                ? null
-                : (value as NonNullable<ProductEditorDraft["vatClass"]>),
-            );
-          }}
-        >
-          ${
-            parent
-              ? html`<option value="" .selected=${this.draft.vatClass === null}>
-                  ${this.sameAs(parentTax ? this.taxLabel(parentTax) : null)}
-                </option>`
-              : html`<option value="">${t("editor.choose")}</option>`
-          }
-          ${this.taxes.map((tax) => html`<option value=${tax.id} .selected=${tax.id === this.draft.vatClass}>${this.taxLabel(tax)}</option>`)}
-        </select></label
-      ><span class="error" id="tax-error">${this.error("tax")}</span>`;
+    const sameAs = parent ? this.sameAs(parentTax ? this.taxLabel(parentTax) : null) : null;
+    const taxes = this.taxes.map((tax) => ({ value: tax.id, label: this.taxLabel(tax) }));
+    return html`<wt-combobox
+      name="tax"
+      label=${t("product.vat")}
+      ?required=${!parent}
+      search="auto"
+      searchPlaceholder=${t("categories.combobox_search")}
+      noResultsLabel=${t("categories.combobox_no_results")}
+      placeholder=${sameAs ?? t("editor.choose")}
+      .options=${sameAs === null ? taxes : [{ value: "", label: sameAs }, ...taxes]}
+      .value=${this.draft.vatClass ?? ""}
+      error=${this.error("tax")}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        const value = event.detail.value;
+        this.change(
+          "vatClass",
+          parent && value === "" ? null : (value as NonNullable<ProductEditorDraft["vatClass"]>),
+        );
+      }}
+    ></wt-combobox>`;
   }
 
   /** The unit dropdown behind the price field's button. On a variant its empty choice is the
@@ -1109,21 +1076,25 @@ export class ProductEditor extends LitElement {
     const blank = parent
       ? this.sameAs(parentUnit ? this.unitLabel(parentUnit) : t("editor.unit_each"))
       : t("editor.unit_each");
-    return html`<label
-        >${t("product.unit")}<select
-          name="unit"
-          aria-invalid=${this.error("unit") ? "true" : "false"}
-          aria-describedby="unit-error"
-          @change=${(event: Event) => {
-            event.stopPropagation();
-            this.change("unitId", (event.target as HTMLSelectElement).value || null);
-            this.unitPickerOpen = false;
-          }}
-        >
-          <option value="" .selected=${this.draft.unitId === null}>${blank}</option>
-          ${this.units.map((unit) => html`<option value=${unit.id} .selected=${unit.id === this.draft.unitId}>${this.unitLabel(unit)}</option>`)}
-        </select></label
-      ><span class="error" id="unit-error">${this.error("unit")}</span>
+    return html`<wt-combobox
+        name="unit"
+        label=${t("product.unit")}
+        search="auto"
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
+        placeholder=${blank}
+        .options=${[
+          { value: "", label: blank },
+          ...this.units.map((unit) => ({ value: unit.id, label: this.unitLabel(unit) })),
+        ]}
+        .value=${this.draft.unitId ?? ""}
+        error=${this.error("unit")}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.change("unitId", event.detail.value || null);
+          this.unitPickerOpen = false;
+        }}
+      ></wt-combobox>
       <div class="row">
         <wt-button
           variant="secondary"

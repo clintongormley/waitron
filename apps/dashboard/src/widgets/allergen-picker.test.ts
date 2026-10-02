@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
@@ -13,9 +14,7 @@ async function setReviewed(el: AllergenPicker, checked: boolean): Promise<void> 
 }
 
 async function setPresence(el: AllergenPicker, code: string, presence: string): Promise<void> {
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=presence-${code}]`)!;
-  select.value = presence;
-  select.dispatchEvent(new Event("change"));
+  await chooseOption(el.shadowRoot!.querySelector(`[data-test=presence-${code}]`)!, presence);
   await el.updateComplete;
 }
 
@@ -26,7 +25,64 @@ async function addAllergen(el: AllergenPicker, code: string): Promise<void> {
   await el.updateComplete;
 }
 
+type PresenceBox = HTMLElement & {
+  value: string;
+  label: string;
+  hideLabel: boolean;
+  search: string;
+  disabled: boolean;
+  options: { value: string; label: string }[];
+  updateComplete: Promise<unknown>;
+};
+
+const presenceBox = (el: AllergenPicker, code: string): PresenceBox =>
+  el.shadowRoot!.querySelector<PresenceBox>(`wt-combobox[name="allergen-${code}-presence"]`)!;
+
+/** What the closed dropdown shows on its trigger, not what its properties say it holds. */
+async function shownPresence(el: AllergenPicker, code: string): Promise<string | undefined> {
+  const box = presenceBox(el, code);
+  await box.updateComplete;
+  return box.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
+}
+
 describe("allergen-picker", () => {
+  it("picks each allergen's presence from a shared dropdown named by the allergen", async () => {
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
+      declaration: { milk: { presence: "may_contain" } },
+    });
+    const box = presenceBox(el, "milk");
+    expect(box).not.toBeNull();
+    expect(box.label).toBe(allergenName("milk", "es-ES"));
+    expect(box.hideLabel).toBe(true);
+    expect(box.search).toBe("auto");
+    expect(box.options).toEqual([
+      { value: "contains", label: t("allergen.contains", "es-ES") },
+      { value: "may_contain", label: t("allergen.may_contain", "es-ES") },
+    ]);
+    expect(box.value).toBe("may_contain");
+    expect(await shownPresence(el, "milk")).toBe(t("allergen.may_contain", "es-ES"));
+    const changes: unknown[] = [];
+    el.addEventListener("wt-allergens-change", (event) =>
+      changes.push((event as CustomEvent).detail.value),
+    );
+    await chooseOption(box, "contains");
+    expect(changes).toEqual([{ milk: { presence: "contains" } }]);
+  });
+
+  it("draws every row's dropdown the same width, whichever choice it shows, without cutting the longer one", async () => {
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
+      declaration: { gluten: { presence: "contains" }, milk: { presence: "may_contain" } },
+    });
+    const gluten = presenceBox(el, "gluten");
+    const milk = presenceBox(el, "milk");
+    await Promise.all([gluten.updateComplete, milk.updateComplete]);
+    expect(await shownPresence(el, "milk")).toBe(t("allergen.may_contain", "es-ES"));
+    expect(gluten.getBoundingClientRect().width).toBeGreaterThan(0);
+    expect(gluten.getBoundingClientRect().width).toBeCloseTo(milk.getBoundingClientRect().width, 0);
+    const longer = milk.shadowRoot!.querySelector<HTMLElement>(".trigger .value")!;
+    expect(longer.scrollWidth).toBeLessThanOrEqual(longer.clientWidth);
+  });
+
   it("is null (PENDING) while Revisado is off", async () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {});
     expect(el.value).toBe(null);
@@ -51,7 +107,7 @@ describe("allergen-picker", () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {});
     await setReviewed(el, true);
     await addAllergen(el, "gluten");
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=presence-gluten]")!;
+    const select = presenceBox(el, "gluten");
     expect(select.disabled).toBe(false);
   });
 
@@ -134,8 +190,9 @@ describe("allergen-picker", () => {
       "[data-test=reviewed]",
     )!;
     expect(sw.checked).toBe(true);
-    const gluten = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=presence-gluten]")!;
+    const gluten = presenceBox(el, "gluten");
     expect(gluten.value).toBe("contains");
+    expect(await shownPresence(el, "gluten")).toBe(t("allergen.contains", "es-ES"));
     expect(el.shadowRoot!.querySelector("[data-test=source-gluten]")).toBeNull();
     expect(el.value).toEqual({
       gluten: { presence: "contains" },
@@ -168,12 +225,10 @@ describe("allergen-picker", () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {});
     await setReviewed(el, true);
     await addAllergen(el, "gluten");
-    const options = [
-      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=presence-gluten] option"),
-    ];
+    const options = presenceBox(el, "gluten").options;
     const byValue = (v: string) => options.find((o) => o.value === v)!;
-    expect(byValue("contains").textContent!.trim()).toBe(t("allergen.contains", "es-ES"));
-    expect(byValue("may_contain").textContent!.trim()).toBe(t("allergen.may_contain", "es-ES"));
+    expect(byValue("contains").label).toBe(t("allergen.contains", "es-ES"));
+    expect(byValue("may_contain").label).toBe(t("allergen.may_contain", "es-ES"));
     expect(byValue("contains").value).toBe("contains");
     expect(byValue("may_contain").value).toBe("may_contain");
     expect(options.map((o) => o.value)).toEqual(["contains", "may_contain"]);
@@ -232,6 +287,18 @@ describe("allergen-picker guards", () => {
     expect(changes).toEqual([]);
     await setReviewed(el, true);
     expect(el.value).toEqual({ milk: { presence: "contains" } });
+  });
+
+  it("shows the stored presence again after a change refused while Revisado is off", async () => {
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
+      declaration: { milk: { presence: "contains" } },
+    });
+    await setReviewed(el, false);
+    await setPresence(el, "milk", "may_contain");
+    await setReviewed(el, true);
+    expect(el.value).toEqual({ milk: { presence: "contains" } });
+    expect(presenceBox(el, "milk").value).toBe("contains");
+    expect(await shownPresence(el, "milk")).toBe(t("allergen.contains", "es-ES"));
   });
 
   it("does not open the picker while Revisado is off", async () => {

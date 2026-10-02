@@ -1,8 +1,9 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
-import { baseStyles, focusFirstInvalid, selectStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -19,7 +20,6 @@ const FIELDS: readonly string[] = ["firstNames", "lastNames", "displayName", "em
 export class PersonEdit extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       /* Same field-list shape as the profile screen's "Your details" edit form: one grid gap for
          every field's spacing, rather than each field carrying its own margin. */
@@ -27,34 +27,12 @@ export class PersonEdit extends LitElement {
         display: grid;
         gap: var(--wt-space-4);
       }
-      label {
-        display: grid;
-        gap: var(--wt-space-2);
-      }
-      /* Matches wt-input's own label styling (packages/ui/src/components/wt-input.ts) — role and
-         status are the only two fields here that aren't wt-input, so without this their label text
-         read larger and darker than every field above them (default body text, not the small muted
-         voice wt-input uses). */
-      .field-label {
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-      /* selectStyles (base-styles.ts) is the shared native-select look; this is the documented
-         local extension point, matching wt-input's own height so a role/status select doesn't
-         read shorter than the text fields above it. */
-      select {
-        min-height: var(--wt-tap-min);
-      }
       .actions {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-3);
         padding-top: var(--wt-space-4);
         border-top: 1px solid var(--wt-color-border);
-      }
-      .required {
-        margin-inline-start: var(--wt-space-1);
-        color: var(--wt-color-danger);
       }
     `,
   ];
@@ -263,54 +241,43 @@ export class PersonEdit extends LitElement {
                   )}
                   ${this.#input("edit-email", "email", t("person.email"), "email", errors)}
                   ${this.#input("edit-telephone", "telephone", t("person.telephone"), "telephone", errors)}
-                  <label>
-                    <span class="field-label"
-                      >${t("person.role")}<span class="required" aria-hidden="true">*</span></span
-                    >
-                    <select
-                      data-test="edit-role"
-                      name="role"
-                      required
-                      @change=${(event: Event) =>
-                        (this.details = {
-                          ...this.details,
-                          role: (event.target as HTMLSelectElement).value as PersonRole,
-                        })}
-                    >
-                      ${rolesByName().map(
-                        (role) =>
-                          html`<option value=${role} .selected=${this.details.role === role}>
-                            ${roleName(role)}
-                          </option>`,
-                      )}
-                    </select>
-                  </label>
-                  <label>
-                    <span class="field-label"
-                      >${t("person.status_label")}<span class="required" aria-hidden="true"
-                        >*</span
-                      ></span
-                    >
-                    <select
-                      data-test="edit-status"
-                      name="status"
-                      required
-                      ?disabled=${person.personId === this.currentPersonId}
-                      @change=${(event: Event) =>
-                        (this.details = {
-                          ...this.details,
-                          status: (event.target as HTMLSelectElement)
-                            .value as PersonEditDetails["status"],
-                        })}
-                    >
-                      ${this.#statusOptions(person).map(
-                        (status) =>
-                          html`<option value=${status} .selected=${this.details.status === status}>
-                            ${statusName(status)}
-                          </option>`,
-                      )}
-                    </select>
-                  </label>
+                  <wt-combobox
+                    data-test="edit-role"
+                    name="role"
+                    label=${t("person.role")}
+                    required
+                    search="auto"
+                    searchPlaceholder=${t("categories.combobox_search")}
+                    noResultsLabel=${t("categories.combobox_no_results")}
+                    .options=${rolesByName().map((role) => ({ value: role, label: roleName(role) }))}
+                    .value=${this.details.role}
+                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                      event.stopPropagation();
+                      this.details = { ...this.details, role: event.detail.value as PersonRole };
+                    }}
+                  ></wt-combobox>
+                  <wt-combobox
+                    data-test="edit-status"
+                    name="status"
+                    label=${t("person.status_label")}
+                    required
+                    search="auto"
+                    searchPlaceholder=${t("categories.combobox_search")}
+                    noResultsLabel=${t("categories.combobox_no_results")}
+                    ?disabled=${person.personId === this.currentPersonId}
+                    .options=${this.#statusOptions(person).map((status) => ({
+                      value: status,
+                      label: statusName(status),
+                    }))}
+                    .value=${this.details.status}
+                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                      event.stopPropagation();
+                      this.details = {
+                        ...this.details,
+                        status: event.detail.value as PersonEditDetails["status"],
+                      };
+                    }}
+                  ></wt-combobox>
                 </div>
                 ${
                   person.status === "pending"

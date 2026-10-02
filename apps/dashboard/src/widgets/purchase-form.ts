@@ -1,8 +1,9 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, selectStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-price-input.js";
@@ -105,7 +106,6 @@ function inRange(value: string, min: number, max: number): boolean {
 export class PurchaseForm extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -133,11 +133,11 @@ export class PurchaseForm extends LitElement {
         min-width: 5rem;
       }
       /* A money field's amount box never shrinks below its amount and sign, and the VAT type never
-         below its longest name, so a narrow line wraps them rather than overlapping or cutting. */
+         below the name it shows, so a narrow line wraps them rather than overlapping or cutting. */
       wt-price-input.line-field {
         min-width: min-content;
       }
-      label.line-field {
+      wt-combobox.line-field {
         min-width: max-content;
       }
       .error {
@@ -205,9 +205,9 @@ export class PurchaseForm extends LitElement {
     this.#dismiss(HEADER_KEYS[field]);
   }
 
-  #onRegimeChange(event: Event): void {
+  #onRegimeChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.regime = (event.target as HTMLSelectElement).value as PurchaseRegime;
+    this.regime = event.detail.value as PurchaseRegime;
   }
 
   #onLineFieldChange(
@@ -221,9 +221,9 @@ export class PurchaseForm extends LitElement {
     );
   }
 
-  #onLineKindChange(event: Event, index: number): void {
+  #onLineKindChange(event: CustomEvent<{ value: string }>, index: number): void {
     event.stopPropagation();
-    const kind = (event.target as HTMLSelectElement).value as PurchaseVatKind;
+    const kind = event.detail.value as PurchaseVatKind;
     this.lines = this.lines.map((line, i) => (i === index ? { ...line, kind } : line));
   }
 
@@ -366,18 +366,18 @@ export class PurchaseForm extends LitElement {
         .value=${line.tax}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onLineFieldChange(e, index, "tax")}
       ></wt-price-input>
-      <label class="line-field"
-        >${t("purchase.line_kind")}
-        <select
-          name=${`line-${index}-kind`}
-          data-test=${`line-kind-${index}`}
-          @change=${(e: Event) => this.#onLineKindChange(e, index)}
-        >
-          ${VAT_KINDS.map(
-            (k) => html`<option value=${k} .selected=${k === line.kind}>${vatKindName(k)}</option>`,
-          )}
-        </select>
-      </label>
+      <wt-combobox
+        class="line-field"
+        name=${`line-${index}-kind`}
+        data-test=${`line-kind-${index}`}
+        label=${t("purchase.line_kind")}
+        search="auto"
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
+        .options=${VAT_KINDS.map((k) => ({ value: k, label: vatKindName(k) }))}
+        .value=${line.kind}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onLineKindChange(e, index)}
+      ></wt-combobox>
       <wt-button
         size="sm"
         variant="danger"
@@ -469,15 +469,18 @@ export class PurchaseForm extends LitElement {
           .value=${this.total}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFieldChange(e, "total")}
         ></wt-price-input>
-        <label class="field"
-          >${t("purchase.regime")}
-          <select name="regime" data-test="regime" @change=${(e: Event) => this.#onRegimeChange(e)}>
-            ${REGIMES.map(
-              (r) =>
-                html`<option value=${r} .selected=${r === this.regime}>${regimeName(r)}</option>`,
-            )}
-          </select>
-        </label>
+        <wt-combobox
+          class="field"
+          name="regime"
+          data-test="regime"
+          label=${t("purchase.regime")}
+          search="auto"
+          searchPlaceholder=${t("categories.combobox_search")}
+          noResultsLabel=${t("categories.combobox_no_results")}
+          .options=${REGIMES.map((r) => ({ value: r, label: regimeName(r) }))}
+          .value=${this.regime}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onRegimeChange(e)}
+        ></wt-combobox>
         <wt-input
           class="field"
           name="deductible-proportion"

@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, focusFirstInvalid, submitOnEnter, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -137,23 +138,6 @@ export class MenuPricesTable extends LitElement {
       wt-data-table::part(clash) {
         color: var(--wt-color-danger);
         font-weight: var(--wt-font-weight-bold);
-      }
-      .offered-field {
-        display: grid;
-        gap: var(--wt-space-1);
-      }
-      select {
-        min-height: var(--wt-tap-min);
-        max-width: 100%;
-        padding: var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
-      }
-      select:focus-visible {
-        outline: var(--wt-focus-ring);
       }
       wt-data-table::part(note),
       wt-data-table::part(muted) {
@@ -848,27 +832,27 @@ export class MenuPricesTable extends LitElement {
       inherited.state === "clash"
         ? t("menu_prices.sources_disagree")
         : t(inherited.value ? "menu_prices.sold" : "menu_prices.switched_off");
-    const selected = value === null ? "" : String(value);
-    return html`<label class="offered-field"
-      >${label}<select
-        name=${name}
-        .disabled=${this.busy}
-        @change=${(event: Event) => {
-          event.stopPropagation();
-          const value = (event.target as HTMLSelectElement).value;
-          change(value === "" ? null : value === "true");
-        }}
-      >
-        ${[
-          ["", t("menu_prices.follow_offered").replace("{state}", state)],
-          ["true", t("menu_prices.sold")],
-          ["false", t("menu_prices.switched_off")],
-        ].map(
-          ([value, label]) =>
-            html`<option value=${value!} .selected=${value === selected}>${label}</option>`,
-        )}
-      </select></label
-    >`;
+    const follow = t("menu_prices.follow_offered").replace("{state}", state);
+    return html`<wt-combobox
+      name=${name}
+      label=${label}
+      search="auto"
+      placeholder=${follow}
+      searchPlaceholder=${t("categories.combobox_search")}
+      noResultsLabel=${t("categories.combobox_no_results")}
+      .options=${[
+        { value: "", label: follow },
+        { value: "true", label: t("menu_prices.sold") },
+        { value: "false", label: t("menu_prices.switched_off") },
+      ]}
+      .value=${value === null ? "" : String(value)}
+      .disabled=${this.busy}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        const value = event.detail.value;
+        change(value === "" ? null : value === "true");
+      }}
+    ></wt-combobox>`;
   }
 
   #renderForm(row: MenuPriceRow, draft: Draft, errors: Record<string, string>) {

@@ -247,7 +247,7 @@ a screen does not set its own form width.
 What the cap covers of a field's label, hint and error depends on how the field is written:
 
 - The six custom elements: the label, hint and error are inside the element, so the cap holds them.
-- A native select inside a block, grid or flex `<label>` (the Units form's Precision field is one):
+- A native select inside a block, grid or flex `<label>`:
   the label holds the label text, the select, and any hint or error written inside it, and all of
   them stop at the form width. The select is still `width: 100%` of that label, so it stays on its
   own line below the text.
@@ -270,14 +270,12 @@ still takes the body's whole width.
 A screen that styles its own native controls, or writes a field's label outside its select, reads
 the same variable on the element that wraps each field, so the label text, the control and the
 field's error stop together: the adjustments reasons screen's `.select-field` (each role
-select with its `<label for>` and error, in the reason editor), every `label` in the venue operations
-screen's editor modals (each holds one field's text and control, and its error when it has one), and the
-`.error` line under the content languages Add language dialog's select, whose label and select take
-`selectStyles`. A screen whose own layout
+select with its `<label for>` and error, in the reason editor), and every `label` in the venue operations
+screen's editor modals (each holds one field's text and control, and its error when it has one). A screen whose own layout
 makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
 beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print width ruler"
-button beside the ruler's answer, and the section member list's `.add` row does, for its Add button, along with that row's
-`.error` line (`apps/dashboard/src/widgets/member-list-editor.ts`, in the section editor's modal;
+button beside the ruler's answer, and the section member list's `.add` row does, for its Add button
+(`apps/dashboard/src/widgets/member-list-editor.ts`, in the section editor's modal;
 the Menus screen shows the same editor on a page, where nothing changes). Guards: the form-width
 cases in `packages/ui/src/components/wt-modal.test.ts` (`wt-input`, `wt-textarea`, `wt-combobox`,
 `wt-price-input`, `wt-number-stepper` and `wt-switch`, a native select
@@ -289,8 +287,7 @@ body's width at 390px; each field at its container's width outside a modal); the
 `apps/dashboard/src/widgets/member-list-editor.test.ts` (the editor placed in a `wt-modal`),
 `packages/adjustments/src/dashboard/reasons-screen.test.ts` and
 `packages/venue-service/src/dashboard/venue-operations-screen.test.ts`. A new field primitive that does not read
-`--wt-field-max-width` is seen by none of them, and neither is a screen-styled native control such
-as the product editor's description `<textarea>`.
+`--wt-field-max-width` is seen by none of them, and neither is a new screen-styled native control.
 
 `--wt-cell-name-max-width` is one sizing value for the NAME column of a table a form owns, and it
 is used in **three different directions**, which its name does not say. Grep for the token before
@@ -307,7 +304,7 @@ against 342px without it. It has not been re-measured since the price moved unde
 since `wt-modal`'s phone spacing shrank. At phone width it relies instead on its own rule for a
 table 30rem wide or less: the price column goes, each price moves onto its own line under the
 variant's name, and the name column takes whatever width the grip, Available and row menu
-columns leave. The unit select in the price heading goes with its column; the price field
+columns leave. The unit dropdown in the price heading goes with its column; the price field
 above the table keeps a unit button that changes the same unit. The name is the one column that
 may break inside a word; an amount never breaks, so the name column is never narrower than the
 widest price. The Available heading is capped by `--wt-tap-min` plus a spacing token, and a longer
@@ -335,11 +332,11 @@ means the small size set to `--wt-font-size-lg` and the body size to `--wt-font-
 A179 those cases draw 18px and 22px text where they drew 19px and 24px. They check
 that the table does not scroll, that each row menu ends inside both the table's box and the frame,
 that the price column is hidden and each price sits on one line inside the name's cell, that the
-Available heading sits on one line, that the heading's unit select is hidden, and that the price
+Available heading sits on one line, that the heading's unit dropdown is hidden, and that the price
 field's unit button is a tap target on both axes.
 
 As a **flex basis** it sizes the extras list form's product picker, which is a combobox rather
-than a table cell and sizes its open panel to its trigger.
+than a table cell.
 
 As a **floor** (`min-width`) it is in the options list form's two single-input cells. An input
 alone in a cell has no width of its own, so the automatic table layout shrinks it to `wt-input`'s
@@ -406,7 +403,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-tab-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with; the popup's text starts at the start edge either way); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
 | `wt-data-table` | `rows`, `columns` (each has `cell` — `(row, { ancestorOnly }) => content` — and may carry `sortValue`, `searchValue` and a `filter` — `{ label, allLabel, value, options, initial }`, which draws a dropdown whether or not the table is `searchable`, and whose optional `initial` is the option value it starts on while no choice has been made or restored and the column's options include it; and `choosable` — `"shown"`\|`"hidden"` — which offers the column in the column chooser, starting shown or hidden; and `pinned` — `"end"` — which, set on the last column, keeps it at the trailing edge of the table's box while the others scroll sideways), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `rowToggleLabel` (`(row, expanded) => string` — names each row's toggle in place of the two fixed labels), `initiallyCollapsed`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `rowSelectable` (`(row) => boolean` — leaves a row without a checkbox, for example a variant that moves with its product), `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder` (defaults to `searchLabel`), `noMatchesMessage`, `columnsLabel` (the column chooser's button text and its group's accessible name; defaults to `"Columns"`), `viewKey`, `rowClick` (`(row) => void` — on a plain (non-tree) table, makes each row clickable via a stretched activator button rendered in the first cell; ignored in tree mode), `rowClickLabel` (`(row) => string` — the activator's accessible name; defaults to `"Open row"`) | `wt-selection-change` — `detail: { selected: string[] }`; `wt-filter-change` — `detail: { filters: Record<string, string> }` (reports a filter you change, not one restored from storage); `wt-sort-change` — `detail: { sortKey, sortDirection }`; `wt-columns-change` — `detail: { shown: string[] }` (every shown column's key, in column order); native events from consumer-provided cells |
-| `wt-combobox` | `options` (`{ value, label, icon?, group?, action? }[]`: `icon` is a registered `wt-icon` name drawn before the label and hidden from screen readers; consecutive options with the same `group` render under that heading, inside a `role="group"` the heading names, and the arrow keys step over the heading; an `action` row sends `wt-combobox-action` and never becomes the value or shows as chosen), `multiple`, `value`, `values`, `allowAdd` (`allow-add`), `label`, `name`, `placeholder`, `hint` (shown as the trigger's text while nothing is chosen unless `placeholder` is set, and always the trigger's description, before the error), `required`, `disabled`, `invalid`, `error`, `hide-label` (names the trigger with `label` but draws no label, and makes the field compact), `search` (`"always"`, the default; `"auto"`, which shows the search box only above `SEARCH_THRESHOLD`, 7, options; `"never"`; `allow-add` shows it whatever this says, because the new option is typed into it), `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel`; `help` slot. The one dropdown: the trigger is the control of the filled field box (Forms → "The field box"), showing the chosen option's label (cut with an ellipsis on one line) and a `chevron-down` icon at its trailing end; while nothing is chosen it shows the placeholder or hint, muted and italic, and with neither the label rests. While the list is open the field box drops its focus marking. The list's rows are at least `--wt-dropdown-row-height` tall and a hovered row paints `--wt-color-bg`; a chosen row's label is bold, and in a single choice the row also carries a `check` icon at its trailing end (a multiple choice shows its checkbox picture instead). A click opens the list scrolled so the chosen row (in a multiple choice, the first chosen row) is in view, without making it the active row. The search box sits on `--wt-color-surface` with one `--wt-field-line-width` line of `--wt-color-primary` all round, `--wt-radius-md` corners and no focus ring, in an area that carries `--wt-shadow-1`. The consuming app registers the `chevron-down` and `check` icons, which `DROPDOWN_ICONS` holds. Its keyboard is described under the table | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }`; `wt-combobox-action` — `detail: { value: string }` (an action row was picked: the list closes and the value is left alone) |
+| `wt-combobox` | `options` (`{ value, label, icon?, group?, action? }[]`: `icon` is a registered `wt-icon` name drawn before the label and hidden from screen readers; consecutive options with the same `group` render under that heading, inside a `role="group"` the heading names, and the arrow keys step over the heading; an `action` row sends `wt-combobox-action` and never becomes the value or shows as chosen), `multiple`, `value`, `values`, `allowAdd` (`allow-add`), `label`, `name`, `placeholder`, `hint` (shown as the trigger's text while nothing is chosen unless `placeholder` is set, and always the trigger's description, before the error), `required`, `disabled`, `invalid`, `error`, `hide-label` (names the trigger with `label` but draws no label, and makes the field compact), `search` (`"always"`, the default; `"auto"`, which shows the search box only above `SEARCH_THRESHOLD`, 7, options; `"never"`; `allow-add` shows it whatever this says, because the new option is typed into it), `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel`; `help` slot. The one dropdown: the trigger is the control of the filled field box (Forms → "The field box"), showing the chosen option's label (cut with an ellipsis on one line) and a `chevron-down` icon at its trailing end; while nothing is chosen it shows the placeholder or hint, muted and italic, and with neither the label rests. While the list is open the field box drops its focus marking. The open list is at least as wide as the trigger and otherwise as wide as its longest row, so a row stays on one line; it is never wider than the viewport less 16px unless its trigger is, and is pulled left far enough to leave 8px at the right edge (its left edge stops at the screen's edge); a row too long for that width wraps. The list's rows are at least `--wt-dropdown-row-height` tall and a hovered row paints `--wt-color-bg`; a chosen row's label is bold, and in a single choice the row also carries a `check` icon at its trailing end (a multiple choice shows its checkbox picture instead). A click opens the list scrolled so the chosen row (in a multiple choice, the first chosen row) is in view, without making it the active row. The search box sits on `--wt-color-surface` with one `--wt-field-line-width` line of `--wt-color-primary` all round, `--wt-radius-md` corners and no focus ring, in an area that carries `--wt-shadow-1`. The consuming app registers the `chevron-down` and `check` icons, which `DROPDOWN_ICONS` holds. Its keyboard is described under the table | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }`; `wt-combobox-action` — `detail: { value: string }` (an action row was picked: the list closes and the value is left alone) |
 | `wt-language-footer` | `active` (the code of the page's language; the parent sets it and the component never changes it), `loadLocales` (property; `() => Promise<{ code, label }[]>`, called on the first open and again after a failed load; defaults to `SUPPORTED_LOCALES`; one load at a time; while it is pending, a second press, Escape, or a press or focus outside cancels the opening, and a further press asks for it again). A page footer in the page's flow, never fixed, holding a `wt-button` named with the active language (from the loaded list, then `SUPPORTED_LOCALES`, then the bare code) whose menu of `menuitemradio` options opens upwards over what is above it. Opening focuses the checked option (or the first); ArrowDown and ArrowUp move between options and wrap, Home and End reach the ends; Escape closes it and returns focus to the trigger, and goes no further only when it closed the menu; a press or focus outside closes it without moving focus; `data-test` hooks `lang-trigger` and `lang-<code>` | `wt-locale-selected` — `detail: { code: string }`; a pick closes the menu and returns focus to the trigger |
 
 `wt-combobox` works from the keyboard like a select. On the closed trigger, ArrowDown, ArrowUp,
@@ -975,8 +972,8 @@ required. A translated field inherited as ONE value across its languages (a vari
 shows its placeholder hints only while every language is blank; once any language has text, the
 record's own value applies and its blank languages show no placeholder hint.
 
-- **Text and price fields** (`wt-input`, `wt-price-input`, a `<textarea>`): the fallback value is the
-  field's `placeholder`. Both primitives paint it `--wt-color-text-muted`; a bespoke `<textarea>`
+- **Text and price fields** (`wt-input`, `wt-price-input`, `wt-textarea`): the fallback value is the
+  field's `placeholder`. All three primitives paint it `--wt-color-text-muted`; a bespoke `<textarea>`
   needs its own `::placeholder` rule with that token, because Chromium's default grey measured
   3.70:1 on `wt-input` against the dark theme's field (2026-09-24), under the 4.5:1 text needs. axe does not check placeholder
   contrast, so an a11y test for a new placeholder-hinted field measures the ratio itself
@@ -984,12 +981,13 @@ record's own value applies and its blank languages show no placeholder hint.
 - **A `<select>`**: the FIRST option has an empty value and reads "Same as &lt;fallback value&gt;"
   (`editor.same_as`, e.g. "Same as Reduced (10%)"); when there is nothing to name, "Same as the main
   product" (`editor.same_as_parent`). Mark it chosen with `.selected` while the stored value is null,
-  like every option built from an expression. A choice that means "none" on a record of its own
-  (in the product editor: `editor.unit_each` for the unit and `product.no_course` for the course)
-  is left out where the empty value already means "fall back": offering both would read as one thing and save as another.
-- **A single-choice `wt-combobox`** (the product editor's main category): its first option has an
-  empty value and reads "Same as &lt;fallback value&gt;", and so does its placeholder, which is what
-  it shows while the stored value is null; like a `<select>`, it has no separate hint line.
+  like every option built from an expression.
+- **A single-choice `wt-combobox`** (the product editor's main category, VAT, unit and course): its
+  first option has an empty value and reads "Same as &lt;fallback value&gt;", and so does its
+  placeholder, which is what it shows while the stored value is null; like a `<select>`, it has no
+  separate hint line. A choice that means "none" on a record of its own (`editor.unit_each` for the
+  unit and `product.no_course` for the course) is left out where the empty value already means "fall
+  back": offering both would read as one thing and save as another.
 - **Any other control** (the allergen and dietary picker, an image): a muted
   hint line beside it reads "Same as &lt;fallback value&gt;" while the stored value is empty, and
   goes away once the record sets its own. An image shows the fallback picture itself under the hint
@@ -1048,9 +1046,9 @@ Two notes on the primitives this pattern uses, both in the table above:
   (`apps/dashboard/src/widgets/form-fields.ts`) draws it. Its `locale` draws the euro sign in the amount where that language writes it. A fixed-unit value that is not money, such as a percentage, is `fixed-unit` with `unit="%"` and no `locale`, as the bill discount limit draws it. It emits
   `wt-change` on input and `wt-unit-click` when the button is pressed. The product editor draws its
   price field with that button whether or not the product has variants, and opens the unit dropdown
-  under the field on `wt-unit-click`. A product with variants also has a unit select (`pricing-unit`)
+  under the field on `wt-unit-click`. A product with variants also has a unit dropdown (`pricing-unit`)
   in the variants table's price heading. Both change the same product unit, on purpose. A table
-  30rem wide or less hides its price column and that select with it, so on a phone the price
+  30rem wide or less hides its price column and that dropdown with it, so on a phone the price
   field's button is the only way to the unit. The extras list form's price cells set `fixed-unit`:
   a row shows its product's unit, which is chosen on the product, so a unit button there would be a
   control that does nothing. Where that form is 30rem wide or less, the unit moves under the amount

@@ -98,9 +98,6 @@ export class ExtraListForm extends LitElement {
         align-items: end;
         gap: var(--wt-space-2);
       }
-      /* The picker's trigger fills its own box, and its open panel is sized to that trigger, so a
-         narrow box wraps every product name onto two lines. It takes the row's spare width instead,
-         floored at the same token the translated-name cells use. */
       .picker {
         flex: 1 1 var(--wt-cell-name-max-width);
       }
