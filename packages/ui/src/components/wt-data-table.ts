@@ -221,7 +221,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-2) var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-full);
+        border-radius: var(--wt-radius-md);
         background: var(--wt-color-bg);
         color: var(--wt-color-text);
         font: inherit;
