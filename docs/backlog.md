@@ -1910,12 +1910,12 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       it), and never opens the drawer.
     - **Done (C128, #1031) — who may take a payment.** Every till or handheld payment route now also needs
       `sale.take_payment`, which every role holds; detail in `docs/developers/conventions-ui.md`.
-    - **Open — the counter's pay card stays on "Tap or insert card…" after a refused reader
-      payment.** Seen in a browser test on C129's branch: after `/api/pay` is refused (with
-      `device.forbidden_action`, and the same with `server.internal`), the counter shows the
-      refusal in its banner but the pay card keeps its waiting-for-card text and a Cancel button
-      (`apps/till/src/widgets/tender-pay.ts`, unchanged by C129). Cancel presumably returns it;
-      not measured on a real reader.
+    - **Done (C131) — the counter's pay card goes back to its choices after a reader payment.**
+      Once a reader payment ends with no card outcome to show — refused, failed, or captured — the
+      pay card leaves "Tap or insert card…" for its Cash and Card buttons, with any refusal in the
+      banner; an automatic retry keeps the spinner up until it ends (`cardAttemptsOver`,
+      `apps/till/src/widgets/tender-pay.ts`). A bill's pay dialog already dropped the text when its
+      request settled.
     - The Devices screen's per-device "Receipt printer" is read by nothing that prints.
     - The dashboard's "Test open drawer" calibration
       (`POST /management-api/printers/:id/test-drawer`) opens any active printer's drawer for a
