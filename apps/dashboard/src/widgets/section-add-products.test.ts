@@ -1,5 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { html, render } from "lit";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 // Value import: pulls the module in for its `@customElement` side effect.
 import { SectionAddProducts } from "./section-add-products.js";
@@ -55,10 +56,28 @@ function listed(el: SectionAddProducts): string[] {
 }
 
 async function filterBy(el: SectionAddProducts, categoryId: string): Promise<void> {
-  const select = q<HTMLSelectElement>(el, 'select[name="category"]');
-  select.value = categoryId;
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await chooseOption(q(el, 'wt-combobox[name="category"]'), categoryId);
   await el.updateComplete;
+}
+
+type CategoryBox = HTMLElement & {
+  value: string;
+  label: string;
+  placeholder: string;
+  search: string;
+  disabled: boolean;
+  options: { value: string; label: string }[];
+  updateComplete: Promise<unknown>;
+};
+
+const categoryBox = (el: SectionAddProducts): CategoryBox =>
+  q<CategoryBox>(el, 'wt-combobox[name="category"]');
+
+/** What the closed dropdown shows on its trigger, not what its properties say it holds. */
+async function shownCategory(el: SectionAddProducts): Promise<string | undefined> {
+  const box = categoryBox(el);
+  await box.updateComplete;
+  return box.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
 }
 
 async function search(el: SectionAddProducts, value: string): Promise<void> {
@@ -81,6 +100,27 @@ function capture(el: HTMLElement): { productIds: string[] }[] {
   return seen;
 }
 
+it("filters by category from the shared dropdown, with All categories as its prompt and a row", async () => {
+  const el = await mount();
+  const box = categoryBox(el);
+  expect(box).not.toBeNull();
+  expect(box.label).toBe(t("add_products.category"));
+  expect(box.search).toBe("auto");
+  expect(box.placeholder).toBe(t("add_products.all_categories"));
+  expect(box.options).toEqual([
+    { value: "", label: t("add_products.all_categories") },
+    { value: "c-drinks", label: "Bebidas" },
+    { value: "c-beer", label: "Bebidas / Cerveza" },
+    { value: "c-mains", label: "Principales" },
+  ]);
+  expect(box.value).toBe("");
+  expect(await shownCategory(el)).toBe(t("add_products.all_categories"));
+  await chooseOption(box, "c-mains");
+  await el.updateComplete;
+  expect(listed(el)).toEqual(["p-burger"]);
+  expect(await shownCategory(el)).toBe("Principales");
+});
+
 it("lists every product by name until a filter is chosen", async () => {
   const el = await mount();
   expect(listed(el)).toEqual(["p-burger", "p-ipa", "p-lager", "p-lemonade", "p-water"]);
@@ -88,21 +128,17 @@ it("lists every product by name until a filter is chosen", async () => {
 
 it("offers every reporting category by its path", async () => {
   const el = await mount();
-  const options = [...el.shadowRoot!.querySelectorAll('select[name="category"] option')];
-  expect(options.map((option) => (option as HTMLOptionElement).value)).toEqual([
-    "",
-    "c-drinks",
-    "c-beer",
-    "c-mains",
-  ]);
-  expect(options[2]!.textContent!.trim()).toBe("Bebidas / Cerveza");
+  const options = categoryBox(el).options;
+  expect(options.map((option) => option.value)).toEqual(["", "c-drinks", "c-beer", "c-mains"]);
+  expect(options[2]!.label).toBe("Bebidas / Cerveza");
 });
 
 it("filtering by Drinks also lists what sits under Beer, and not Mains", async () => {
   const el = await mount();
   await filterBy(el, "c-drinks");
   expect(listed(el)).toEqual(["p-ipa", "p-lager", "p-lemonade"]);
-  expect(q<HTMLOptionElement>(el, 'option[value="c-drinks"]').selected).toBe(true);
+  expect(categoryBox(el).value).toBe("c-drinks");
+  expect(await shownCategory(el)).toBe("Bebidas");
   await filterBy(el, "c-beer");
   expect(listed(el)).toEqual(["p-ipa", "p-lager"]);
   await filterBy(el, "");
@@ -213,7 +249,7 @@ it("explains, rather than emitting, when confirmed with nothing chosen", async (
 it("while busy, disables its controls and emits nothing", async () => {
   const el = await mount({ busy: true });
   const adds = capture(el);
-  expect(q<HTMLSelectElement>(el, 'select[name="category"]').disabled).toBe(true);
+  expect(categoryBox(el).disabled).toBe(true);
   expect(q<HTMLInputElement>(el, 'input[value="p-ipa"]').disabled).toBe(true);
   expect((q(el, '[data-test="add"]') as HTMLElement & { disabled: boolean }).disabled).toBe(true);
   q(el, '[data-test="add"]').click();
@@ -248,7 +284,8 @@ it("returns to every category when the chosen one is deleted", async () => {
   await filterBy(el, "c-beer");
   el.categories = categories.filter((item) => item.id !== "c-beer");
   await el.updateComplete;
-  expect(q<HTMLSelectElement>(el, 'select[name="category"]').value).toBe("");
+  expect(categoryBox(el).value).toBe("");
+  expect(await shownCategory(el)).toBe(t("add_products.all_categories"));
   expect(listed(el)).toHaveLength(5);
 });
 
@@ -261,7 +298,9 @@ it("widens the chosen filter when a category is added beneath it", async () => {
   el.categories = [...categories, category("c-cider", "Sidra", "c-drinks")];
   await el.updateComplete;
   expect(listed(el)).toEqual(["p-cider", "p-ipa", "p-lager", "p-lemonade"]);
-  expect(q(el, 'option[value="c-cider"]').textContent!.trim()).toBe("Bebidas / Sidra");
+  expect(categoryBox(el).options.find((option) => option.value === "c-cider")!.label).toBe(
+    "Bebidas / Sidra",
+  );
 });
 
 it("names the categories by their one name whatever language is in force", async () => {
@@ -269,5 +308,7 @@ it("names the categories by their one name whatever language is in force", async
   setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
   setLocale("en");
   await search(el, "a");
-  expect(q(el, 'option[value="c-beer"]').textContent!.trim()).toBe("Bebidas / Cerveza");
+  expect(categoryBox(el).options.find((option) => option.value === "c-beer")!.label).toBe(
+    "Bebidas / Cerveza",
+  );
 });

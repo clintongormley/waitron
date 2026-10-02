@@ -1,8 +1,9 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, disabledStyles, selectStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { byLabel, categoryPath, categoryWithDescendants } from "./category-form.js";
@@ -27,7 +28,6 @@ export interface AddableProduct {
 export class SectionAddProducts extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -38,21 +38,6 @@ export class SectionAddProducts extends LitElement {
         align-items: flex-end;
         gap: var(--wt-space-3);
         margin-bottom: var(--wt-space-3);
-      }
-      .field {
-        display: grid;
-        gap: var(--wt-space-1);
-      }
-      /* Matches wt-input's own label, so a select beside one reads as the same kind of field. */
-      .field-label {
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-      select {
-        min-height: var(--wt-tap-min);
-      }
-      select:disabled {
-        ${disabledStyles}
       }
       .search {
         flex: 1;
@@ -247,27 +232,24 @@ export class SectionAddProducts extends LitElement {
   override render() {
     const count = this.#chosen().length;
     return html`<div class="filters">
-        <label class="field">
-          <span class="field-label">${t("add_products.category")}</span>
-          <select
-            name="category"
-            .disabled=${this.busy}
-            @change=${(event: Event) => {
-              event.stopPropagation();
-              this.categoryId = (event.target as HTMLSelectElement).value;
-            }}
-          >
-            <option value="" .selected=${this.categoryId === ""}>
-              ${t("add_products.all_categories")}
-            </option>
-            ${this.#options.map(
-              (option) =>
-                html`<option value=${option.id} .selected=${option.id === this.categoryId}>
-                  ${option.path}
-                </option>`,
-            )}
-          </select>
-        </label>
+        <wt-combobox
+          name="category"
+          label=${t("add_products.category")}
+          search="auto"
+          placeholder=${t("add_products.all_categories")}
+          searchPlaceholder=${t("categories.combobox_search")}
+          noResultsLabel=${t("categories.combobox_no_results")}
+          .options=${[
+            { value: "", label: t("add_products.all_categories") },
+            ...this.#options.map((option) => ({ value: option.id, label: option.path })),
+          ]}
+          .value=${this.categoryId}
+          .disabled=${this.busy}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.categoryId = event.detail.value;
+          }}
+        ></wt-combobox>
         <wt-input
           class="search"
           name="search"
