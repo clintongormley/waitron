@@ -138,7 +138,9 @@ till, we can specify whether it should control the till or not. So even if the p
 between tills, any till that says it should control it, does."_ (B29). A handheld places, collects
 and cancels like a till; the operator's permissions decide. Placing, and cancelling an order with
 no invoice, check no permission, only a signed-in operator; cancelling an order whose invoice was
-issued needs `sale.rectify` (C126), which staff do not hold; collecting, like every route that takes
+issued needs `sale.rectify` (C126), which staff do not hold, from the operator or from a manager
+who enters their PIN, as an unpaid departure, a bill refund and opening the drawer accept (B33);
+collecting, like every route that takes
 a payment, needs `sale.take_payment` (C128), which every role holds. Guard:
 `apps/server/src/take-payment-permission.test.ts`, weaker than its name — it covers only the four
 routes it names, so a fifth payment route that does not ask for the permission is seen by nothing;
