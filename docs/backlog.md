@@ -3254,8 +3254,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   printed receipt (`apps/server/src/receipt-ticket.ts`) and the till's on-screen ticket
   (`apps/till/src/screens/till-ticket-view.ts`) print the caption, in Spanish whatever the receipt
   language, on its own line directly above the QR. Follow-ups:
-  - **The caption, the QR and the VERI\*FACTU line open the invoice — done (2026-10-02, C123, this
-    branch; owner, 2026-10-01).** AEAT's «Detalle de las especificaciones técnicas del código «QR»
+  - **The caption, the QR and the VERI\*FACTU line open the invoice — done (2026-10-02, C123,
+    #1038; owner, 2026-10-01).** AEAT's «Detalle de las especificaciones técnicas del código «QR»
     de la factura…», version 0.5.0 of 10/12/2025, section 3, says «El código «QR» se situará al
     principio de la factura, antes de que empiece el contenido de ésta generado por el sistema
     informático de facturación, a menos que se justifique la existencia de algún obstáculo para
