@@ -256,6 +256,7 @@ export async function fireGroup(
   groupId: string,
   args: PartyCommandArgs,
 ): Promise<{ revision: number }> {
+  const routing = routingOnce(tx, cfg, new Date());
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
@@ -265,15 +266,7 @@ export async function fireGroup(
     async () => {
       const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
       await requireHeldGroup(tx, partyId, groupId);
-      await releaseGroup(
-        tx,
-        cfg,
-        partyId,
-        groupId,
-        args.operatorId,
-        {},
-        routingOnce(tx, cfg, new Date()),
-      );
+      await releaseGroup(tx, cfg, partyId, groupId, args.operatorId, {}, routing);
       return { revision };
     },
     cfg.madeHereSink,

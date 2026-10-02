@@ -19,7 +19,8 @@ import { requireMakeAtStation } from "./dead-ends.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
-import { stillMovable } from "./station-move.js";
+import { rerouteHeldAtRelease, stillMovable } from "./station-move.js";
+import type { Rerouted } from "./station-move.js";
 import {
   bumpPartyRevision,
   checkAndBumpParty,
@@ -1740,8 +1741,8 @@ export async function fireCourse(
   courseId: string,
   operatorId: string,
 ): Promise<void> {
-  await requireCourse(tx, cfg, courseId);
   const routing = routingOnce(tx, cfg, new Date());
+  await requireCourse(tx, cfg, courseId);
   await fireHeldGroupsOfCourse(tx, cfg, orderId, courseId, operatorId, routing);
   await releaseHeld(
     tx,
@@ -1781,8 +1782,7 @@ export async function fireOrderLines(
 }
 
 /**
- * Stamp `fired_at` on the order's held ticket items `ticketScope` selects and release the no-route
- * lines `noRouteScope` selects, then {@link finishRelease}.
+ * Re-route selected held dishes whose station is not open, stamp `fired_at`, and finish the release.
  */
 async function releaseHeld(
   tx: Transaction,
@@ -1794,6 +1794,7 @@ async function releaseHeld(
   routing = routingOnce(tx, cfg, new Date()),
 ): Promise<void> {
   const firedNow = routing.at.toISOString();
+  const rerouted = await rerouteHeldAtRelease(tx, cfg, orderId, ticketScope, routing);
   const firedItems = await tx
     .update(ticketItems)
     .set({ firedAt: firedNow })
@@ -1816,12 +1817,14 @@ async function releaseHeld(
     await isOpenOrder(tx, orderId),
     mark,
     routing,
+    rerouted,
   );
 }
 
 /**
  * The end of {@link fireCourse} and {@link sendLines}: refuse a sold-out line when
- * `refuseSoldOut`, stamp the released lines sent, print the items that fired now, and count the
+ * `refuseSoldOut`, stamp the released lines sent, print the items that fired now (with the old
+ * station's name for a re-routed dish), and count the
  * write if anything was released. `fired` must be exactly the items this release fired (an
  * update's `RETURNING` over `fired_at IS NULL`), so a re-send prints nothing.
  */
@@ -1835,6 +1838,7 @@ async function finishRelease(
   refuseSoldOut: boolean,
   mark?: "FIRE",
   routing = routingOnce(tx, cfg, new Date(at)),
+  rerouted: Rerouted = new Map(),
 ): Promise<void> {
   const released = [
     ...fired.map((item) => item.workingOrderLineId),
@@ -1855,18 +1859,26 @@ async function finishRelease(
     })),
     routing,
   );
-  await enqueueKitchenTickets(
-    tx,
-    cfg,
-    orderId,
-    [...fired, ...extras.filter((item) => item.firedAt !== null)],
-    { mark },
+  const ordinary = [...fired, ...extras.filter((item) => item.firedAt !== null)].filter(
+    (item) => !rerouted.has(item.workingOrderLineId),
   );
+  await enqueueKitchenTickets(tx, cfg, orderId, ordinary, { mark });
+  const byOldStation = new Map<string, { from: string; items: FiredItem[] }>();
+  for (const item of fired) {
+    const old = rerouted.get(item.workingOrderLineId);
+    if (old === undefined) continue;
+    const bucket = byOldStation.get(old.stationId) ?? { from: old.stationName, items: [] };
+    bucket.items.push(item);
+    byOldStation.set(old.stationId, bucket);
+  }
+  for (const { from, items } of byOldStation.values())
+    await enqueueKitchenTickets(tx, cfg, orderId, items, { from });
   if (released.length > 0) await bumpRevision(tx, [orderId]);
 }
 
 /**
- * Send selected held lines of an open tab, refreshing queued_at when they fire.
+ * Send selected held lines of an open tab, re-routing dishes whose station is not open and
+ * refreshing queued_at when they fire.
  * The caller's transaction includes kitchen writes and their print jobs.
  */
 export async function sendLines(
@@ -1875,6 +1887,7 @@ export async function sendLines(
   tabId: string,
   lineNos: number[],
 ): Promise<void> {
+  const routing = routingOnce(tx, cfg, new Date());
   await assertPartyBillOpen(tx, cfg, tabId);
   const namedLines =
     lineNos.length === 0
@@ -1907,20 +1920,16 @@ export async function sendLines(
   // An empty list fires every HELD line of the tab outside a held group.
   const namedLineIds = namedLines.map((line) => line.id);
   // One clock reading for both stamps: `queued_at` is what every age on the boards is measured from.
-  const firedNow = nowIso();
-  const routing = routingOnce(tx, cfg, new Date(firedNow));
+  const firedNow = routing.at.toISOString();
+  const ticketScope =
+    lineNos.length === 0
+      ? notInArray(ticketItems.workingOrderLineId, heldGroupLineIds)
+      : onDishesOrTheirExtras(tx, namedLineIds);
+  const rerouted = await rerouteHeldAtRelease(tx, cfg, tabId, ticketScope, routing);
   const firedItems = await tx
     .update(ticketItems)
     .set({ firedAt: firedNow, queuedAt: firedNow })
-    .where(
-      and(
-        eq(ticketItems.workingOrderId, tabId),
-        isNull(ticketItems.firedAt),
-        ...(lineNos.length === 0
-          ? [notInArray(ticketItems.workingOrderLineId, heldGroupLineIds)]
-          : [onDishesOrTheirExtras(tx, namedLineIds)]),
-      ),
-    )
+    .where(and(eq(ticketItems.workingOrderId, tabId), isNull(ticketItems.firedAt), ticketScope))
     .returning({
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
@@ -1946,7 +1955,18 @@ export async function sendLines(
     routing,
   );
   noRoute.lines = noRoute.lines.filter((line) => !heldGroupLineIdSet.has(line.id));
-  await finishRelease(tx, cfg, tabId, firedItems, noRoute, firedNow, true, undefined, routing);
+  await finishRelease(
+    tx,
+    cfg,
+    tabId,
+    firedItems,
+    noRoute,
+    firedNow,
+    true,
+    undefined,
+    routing,
+    rerouted,
+  );
 }
 
 /** Of `courseIds` (`null` standing for no course), the ones with no held item left on the order. */

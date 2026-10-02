@@ -298,6 +298,10 @@ export type ExtraMakerOutcome =
  *  transaction it was opened on. Use the resolver only inside that transaction. */
 export interface MakerResolver {
   readonly at: Date;
+  /** Station states from this resolver's rules and moment, including switched-off stations. */
+  stations(): Promise<
+    ReadonlyMap<string, { open: boolean; isDefault: boolean; active: boolean; name: string }>
+  >;
   /** Answers for an order in `zoneId` (null: no service zone). An unknown zone throws
    *  `service_zone.not_found` before an unknown product throws `route.subject_not_found`.
    *  Keys preserve the first caller spelling of each product id. */

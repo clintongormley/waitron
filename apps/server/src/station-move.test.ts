@@ -19,12 +19,17 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
 import {
+  createException,
+  deleteException,
   listStationNotices,
   setStationToday,
+  setStationFallback,
+  replaceStationHours,
   writeEditSentLines,
   writePrintHeldWork,
 } from "@waitron/venue-service";
-import { createStation, deactivateStation } from "./kitchen.js";
+import { createCourse, createStation, deactivateStation, setProductCourse } from "./kitchen.js";
+import { splitBill } from "./bill-actions.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { fireGroup, readCurrentOrders, submitGroups } from "./order-groups.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -48,6 +53,9 @@ import {
   listStationQueue,
   readTabLines,
   updateOrderLine,
+  fireCourse,
+  recallLines,
+  sendLines,
 } from "./working-order.js";
 
 let venue: PartyVenue;
@@ -107,6 +115,47 @@ async function jobs(printerId: string) {
   );
 }
 
+async function heldDish(name: string) {
+  const tableId = await venue.table(`R-${randomUUID().slice(0, 8)}`);
+  const { partyId, tabId } = await seat(venue, tableId);
+  const revision = (
+    await inTx(venue, (tx) =>
+      tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, tabId)),
+    )
+  )[0]!.revision;
+  const submitted = await inTx(venue, (tx) =>
+    submitGroups(tx, venue.cfg, partyId, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: revision,
+      operatorId: OPERATOR,
+      billId: tabId,
+      groups: [{ lines: [{ menuItemId: venue.item(name), quantity: "1" }], release: "hold" }],
+    }),
+  );
+  return {
+    partyId,
+    tabId,
+    groupId: submitted.groups[0]!.id,
+    lineId: submitted.groups[0]!.lineIds[0]!,
+    revision: submitted.revision,
+  };
+}
+
+const heldBurger = () => heldDish("Burger");
+
+async function fireHeldBurger(group: Awaited<ReturnType<typeof heldBurger>>) {
+  return inTx(venue, (tx) =>
+    fireGroup(tx, venue.cfg, group.partyId, group.groupId, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: group.revision,
+      operatorId: OPERATOR,
+    }),
+  );
+}
+
 async function burger() {
   const tableId = await venue.table(`M-${randomUUID().slice(0, 8)}`);
   const { partyId, tabId } = await seat(venue, tableId);
@@ -155,6 +204,860 @@ describe("stillMovable", () => {
   ] as const)("hides an item already started, away, made here, or served %#", (item, served) => {
     expect(stillMovable(item, served)).toBe(false);
   });
+});
+
+describe("release", () => {
+  it("moves held work on a settled bill without writing its frozen line, correcting the HOLD slip", async () => {
+    await inTx(venue, async (tx) => {
+      await tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, bar));
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: true })
+        .where(eq(kitchenStations.id, grill));
+    });
+    await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+    const tableId = await venue.table(`R-${randomUUID().slice(0, 8)}`);
+    const { partyId, tabId } = await seat(venue, tableId);
+    const revision = (
+      await inTx(venue, (tx) =>
+        tx
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, tabId)),
+      )
+    )[0]!.revision;
+    const submitted = await inTx(venue, (tx) =>
+      submitGroups(tx, venue.cfg, partyId, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: revision,
+        operatorId: OPERATOR,
+        billId: tabId,
+        groups: [{ lines: [{ menuItemId: venue.item("Burger"), quantity: "1" }], release: "hold" }],
+      }),
+    );
+    const itemId = submitted.groups[0]!.lineIds[0]!;
+    const [lineBefore] = await inTx(venue, (tx) =>
+      tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, itemId)),
+    );
+    const [heldLine] = await inTx(venue, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, itemId)),
+    );
+    expect(heldLine!.makeAt).toBeNull();
+    const oldBarJobs = (await jobs(barPrinter)).length;
+    const oldGrillJobs = (await jobs(grillPrinter)).length;
+    const at = new Date("2026-10-02T18:45:00.000Z");
+    await inTx(venue, async (tx) => {
+      await setStationFallback(tx, venue.cfg, bar, grill);
+      await setStationToday(tx, venue.cfg, bar, "closed", at);
+      await tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: at.toISOString() })
+        .where(eq(workingOrders.id, tabId));
+      expect((await VENUE_SERVICE.stationStates(tx, venue.cfg, at)).get(bar)?.open).toBe(false);
+      const resolver = await VENUE_SERVICE.routingAt(tx, venue.cfg, at);
+      expect(await resolver.makers(null, [venue.productId("Burger")])).toEqual(
+        new Map([
+          [
+            venue.productId("Burger"),
+            { kind: "made", route: { kind: "station", stationId: grill } },
+          ],
+        ]),
+      );
+    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(at);
+    try {
+      await inTx(venue, (tx) =>
+        fireGroup(tx, venue.cfg, partyId, submitted.groups[0]!.id, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: submitted.revision,
+          operatorId: OPERATOR,
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+      await inTx(venue, async (tx) => {
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: false })
+          .where(eq(kitchenStations.id, grill));
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: true })
+          .where(eq(kitchenStations.id, bar));
+      });
+    }
+    const [item] = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, itemId)),
+    );
+    expect(item).toMatchObject({
+      stationId: grill,
+      queuedAt: at.toISOString(),
+      firedAt: at.toISOString(),
+    });
+    const [lineAfter] = await inTx(venue, (tx) =>
+      tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, itemId)),
+    );
+    expect(lineAfter).toEqual({ ...lineBefore, sentAt: at.toISOString() });
+    expect(decodeTicket((await jobs(barPrinter))[oldBarJobs]!.payload)).toContain("HOLD CANCELLED");
+    const paper = decodeTicket((await jobs(grillPrinter))[oldGrillJobs]!.payload);
+    expect(paper).toContain("From Bar");
+    expect(paper).not.toMatch(/^\s*(?:\*+\s*)?FIRE\b/m);
+    const notices = await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar));
+    expect(notices.at(-1)).toMatchObject({ kind: "rerouted", reroutedTo: "Grill" });
+  });
+
+  it("fires a paid bill's held dish at its closed station when no replacement exists", async () => {
+    const group = await heldBurger();
+    const at = new Date("2026-10-02T18:45:00.000Z");
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: at.toISOString() })
+        .where(eq(workingOrders.id, group.tabId));
+      await tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, bar));
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: true })
+        .where(eq(kitchenStations.id, grill));
+      await setStationFallback(tx, venue.cfg, bar, null);
+      await setStationToday(tx, venue.cfg, bar, "closed", at);
+    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(at);
+    try {
+      await fireHeldBurger(group);
+      const [item] = await inTx(venue, (tx) =>
+        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
+      );
+      expect(item).toMatchObject({ stationId: bar, firedAt: at.toISOString() });
+    } finally {
+      vi.useRealTimers();
+      await inTx(venue, async (tx) => {
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: false })
+          .where(eq(kitchenStations.id, grill));
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: true })
+          .where(eq(kitchenStations.id, bar));
+      });
+    }
+  });
+
+  it("prints FIRE for work kept at its station and From for work rerouted in the same group", async () => {
+    const at = new Date("2026-10-02T18:45:00.000Z");
+    const routeId = await inTx(venue, async (tx) => {
+      await setStationToday(tx, venue.cfg, bar, null, at);
+      await setStationToday(tx, venue.cfg, grill, null, at);
+      await writePrintHeldWork(tx, true);
+      return createException(tx, venue.cfg, {
+        zoneId: null,
+        categoryId: null,
+        productId: venue.productId("Vino"),
+        target: { kind: "station", stationId: grill },
+      });
+    });
+    const tableId = await venue.table(`F-${randomUUID().slice(0, 8)}`);
+    const { partyId, tabId } = await seat(venue, tableId);
+    const revision = (
+      await inTx(venue, (tx) =>
+        tx
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, tabId)),
+      )
+    )[0]!.revision;
+    const submitted = await inTx(venue, (tx) =>
+      submitGroups(tx, venue.cfg, partyId, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: revision,
+        operatorId: OPERATOR,
+        billId: tabId,
+        groups: [
+          {
+            release: "hold",
+            lines: [
+              { menuItemId: venue.item("Burger"), quantity: "1" },
+              { menuItemId: venue.item("Vino"), quantity: "1" },
+            ],
+          },
+        ],
+      }),
+    );
+    await inTx(venue, async (tx) => {
+      await tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, bar));
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: true })
+        .where(eq(kitchenStations.id, grill));
+      await setStationFallback(tx, venue.cfg, bar, grill);
+      await setStationToday(tx, venue.cfg, bar, "closed", at);
+    });
+    const before = (await jobs(grillPrinter)).length;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(at);
+    try {
+      await inTx(venue, (tx) =>
+        fireGroup(tx, venue.cfg, partyId, submitted.groups[0]!.id, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: submitted.revision,
+          operatorId: OPERATOR,
+        }),
+      );
+      const paper = (await jobs(grillPrinter))
+        .slice(before)
+        .map((job) => decodeTicket(job.payload));
+      expect(paper).toHaveLength(2);
+      expect(paper.some((slip) => slip.includes("FIRE") && slip.includes("TINTO"))).toBe(true);
+      expect(
+        paper.some(
+          (slip) =>
+            slip.includes("From Bar") &&
+            slip.includes("BURG") &&
+            !/^\s*(?:\*+\s*)?FIRE\b/m.test(slip),
+        ),
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      await inTx(venue, async (tx) => {
+        await deleteException(tx, venue.cfg, routeId);
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: false })
+          .where(eq(kitchenStations.id, grill));
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: true })
+          .where(eq(kitchenStations.id, bar));
+      });
+    }
+  });
+
+  it("keeps a hand-chosen station while active, even on a paid bill", async () => {
+    const group = await heldBurger();
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: new Date().toISOString() })
+        .where(eq(workingOrders.id, group.tabId)),
+    );
+    await inTx(venue, (tx) =>
+      moveDishesToStation(tx, venue.cfg, group.tabId, {
+        submissionId: randomUUID(),
+        lineIds: [group.lineId],
+        stationId: grill,
+      }),
+    );
+    const at = new Date("2026-10-02T18:45:00.000Z");
+    await inTx(venue, (tx) => setStationToday(tx, venue.cfg, grill, "closed", at));
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(at);
+    try {
+      await fireHeldBurger(group);
+    } finally {
+      vi.useRealTimers();
+    }
+    const [item] = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
+    );
+    expect(item).toMatchObject({
+      stationId: grill,
+      firedAt: at.toISOString(),
+      stationChosenAt: expect.any(String),
+    });
+  });
+
+  it("fires a course at the replacement station without correcting an unprinted HOLD", async () => {
+    await inTx(venue, (tx) => writePrintHeldWork(tx, false));
+    const courseId = await inTx(venue, async (tx) => {
+      const course = await createCourse(tx, venue.cfg, { name: `Course ${randomUUID()}` });
+      await setProductCourse(tx, venue.cfg, venue.productId("Burger"), course.id);
+      return course.id;
+    });
+    const group = await heldBurger();
+    const at = new Date("2026-10-02T18:45:00.000Z");
+    await inTx(venue, async (tx) => {
+      await tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, bar));
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: true })
+        .where(eq(kitchenStations.id, grill));
+      await setStationFallback(tx, venue.cfg, bar, grill);
+      await setStationToday(tx, venue.cfg, bar, "closed", at);
+    });
+    const barJobs = (await jobs(barPrinter)).length;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(at);
+    try {
+      await inTx(venue, (tx) => fireCourse(tx, venue.cfg, group.tabId, courseId, OPERATOR));
+      const [item] = await inTx(venue, (tx) =>
+        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
+      );
+      expect(item!.stationId).toBe(grill);
+      expect((await jobs(barPrinter)).length).toBe(barJobs);
+    } finally {
+      vi.useRealTimers();
+      await inTx(venue, async (tx) => {
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: false })
+          .where(eq(kitchenStations.id, grill));
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: true })
+          .where(eq(kitchenStations.id, bar));
+        await setProductCourse(tx, venue.cfg, venue.productId("Burger"), null);
+      });
+    }
+  });
+
+  it("sends a recalled dish from the rules' current station without another old-station notice", async () => {
+    const { tabId, item } = await burger();
+    const [line] = await inTx(venue, (tx) =>
+      tx
+        .select({ lineNo: workingOrderLines.lineNo })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, item.workingOrderLineId)),
+    );
+    await inTx(venue, (tx) => recallLines(tx, venue.cfg, tabId, [line!.lineNo]));
+    const at = new Date("2026-10-02T18:45:00.000Z");
+    await inTx(venue, async (tx) => {
+      await tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, bar));
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: true })
+        .where(eq(kitchenStations.id, grill));
+      await setStationFallback(tx, venue.cfg, bar, grill);
+      await setStationToday(tx, venue.cfg, bar, "closed", at);
+    });
+    const barJobs = (await jobs(barPrinter)).length;
+    const barNotices = (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar))).length;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(at);
+    try {
+      await inTx(venue, (tx) => sendLines(tx, venue.cfg, tabId, [line!.lineNo]));
+      const [after] = await inTx(venue, (tx) =>
+        tx.select().from(ticketItems).where(eq(ticketItems.id, item.id)),
+      );
+      expect(after).toMatchObject({ stationId: grill, firedAt: at.toISOString() });
+      expect((await jobs(barPrinter)).length).toBe(barJobs);
+      expect((await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar))).length).toBe(
+        barNotices,
+      );
+    } finally {
+      vi.useRealTimers();
+      await inTx(venue, async (tx) => {
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: false })
+          .where(eq(kitchenStations.id, grill));
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: true })
+          .where(eq(kitchenStations.id, bar));
+      });
+    }
+  });
+
+  it("routes a hand-chosen record again when that station is switched off", async () => {
+    const group = await heldBurger();
+    await inTx(venue, (tx) =>
+      moveDishesToStation(tx, venue.cfg, group.tabId, {
+        submissionId: randomUUID(),
+        lineIds: [group.lineId],
+        stationId: grill,
+      }),
+    );
+    await inTx(venue, (tx) =>
+      tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, grill)),
+    );
+    try {
+      await fireHeldBurger(group);
+      const [item] = await inTx(venue, (tx) =>
+        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
+      );
+      expect(item!.stationId).toBe(bar);
+    } finally {
+      await inTx(venue, (tx) =>
+        tx.update(kitchenStations).set({ active: true }).where(eq(kitchenStations.id, grill)),
+      );
+    }
+  });
+
+  it("does not let a stale make-at on the line protect another station's record", async () => {
+    const group = await heldBurger();
+    const at = new Date("2026-10-02T18:45:00.000Z");
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(workingOrderLines)
+        .set({ makeAtStationId: bar })
+        .where(eq(workingOrderLines.id, group.lineId));
+      await tx
+        .update(ticketItems)
+        .set({ stationId: grill })
+        .where(eq(ticketItems.workingOrderLineId, group.lineId));
+      await setStationToday(tx, venue.cfg, grill, "closed", at);
+    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(at);
+    try {
+      await fireHeldBurger(group);
+    } finally {
+      vi.useRealTimers();
+    }
+    const [item] = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
+    );
+    expect(item).toMatchObject({ stationId: bar, firedAt: at.toISOString() });
+  });
+
+  it("keeps held work at an open station after the rules change", async () => {
+    const group = await heldDish("Vino");
+    const routeId = await inTx(venue, (tx) =>
+      createException(tx, venue.cfg, {
+        zoneId: null,
+        categoryId: null,
+        productId: venue.productId("Vino"),
+        target: { kind: "station", stationId: grill },
+      }),
+    );
+    try {
+      await fireHeldBurger(group);
+      const [item] = await inTx(venue, (tx) =>
+        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
+      );
+      expect(item!.stationId).toBe(bar);
+    } finally {
+      await inTx(venue, (tx) => deleteException(tx, venue.cfg, routeId));
+    }
+  });
+
+  it("leaves held work at a closed station when the rules now say no preparation", async () => {
+    const group = await heldDish("Vino");
+    const at = new Date("2026-10-02T18:45:00.000Z");
+    const routeId = await inTx(venue, async (tx) => {
+      const id = await createException(tx, venue.cfg, {
+        zoneId: null,
+        categoryId: null,
+        productId: venue.productId("Vino"),
+        target: { kind: "no_preparation" },
+      });
+      await tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, bar));
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: true })
+        .where(eq(kitchenStations.id, grill));
+      await setStationToday(tx, venue.cfg, bar, "closed", at);
+      return id;
+    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(at);
+    try {
+      await fireHeldBurger(group);
+      const [item] = await inTx(venue, (tx) =>
+        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
+      );
+      expect(item).toMatchObject({ stationId: bar, firedAt: at.toISOString() });
+    } finally {
+      vi.useRealTimers();
+      await inTx(venue, async (tx) => {
+        await deleteException(tx, venue.cfg, routeId);
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: false })
+          .where(eq(kitchenStations.id, grill));
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: true })
+          .where(eq(kitchenStations.id, bar));
+      });
+    }
+  });
+
+  it("does not reroute an anomalous held made-here record", async () => {
+    const group = await heldBurger();
+    const at = new Date("2026-10-02T18:45:00.000Z");
+    await inTx(venue, async (tx) => {
+      await tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, bar));
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: true })
+        .where(eq(kitchenStations.id, grill));
+      await tx
+        .update(ticketItems)
+        .set({ madeHere: true })
+        .where(eq(ticketItems.workingOrderLineId, group.lineId));
+      await setStationFallback(tx, venue.cfg, bar, grill);
+      await setStationToday(tx, venue.cfg, bar, "closed", at);
+    });
+    const grillJobs = (await jobs(grillPrinter)).length;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(at);
+    try {
+      await fireHeldBurger(group);
+      const [item] = await inTx(venue, (tx) =>
+        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
+      );
+      expect(item!.stationId).toBe(bar);
+      expect((await jobs(grillPrinter)).length).toBe(grillJobs);
+    } finally {
+      vi.useRealTimers();
+      await inTx(venue, async (tx) => {
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: false })
+          .where(eq(kitchenStations.id, grill));
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: true })
+          .where(eq(kitchenStations.id, bar));
+      });
+    }
+  });
+
+  it("leaves a made-here drink untouched beside a held dish that reroutes", async () => {
+    const { deviceId, routeId } = await inTx(venue, async (tx) => {
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({ name: `Bar till ${randomUUID()}`, formFactor: "till", capabilities: [] })
+        .returning({ id: deviceProfiles.id });
+      const [device] = await tx
+        .insert(devices)
+        .values({
+          locationId: venue.cfg.locationId,
+          tillId: venue.cfg.tillId,
+          deviceProfileId: profile!.id,
+          label: "Bar till",
+          tokenHash: randomUUID(),
+        })
+        .returning({ id: devices.id });
+      await tx.insert(deviceMadeHereStations).values({ deviceId: device!.id, stationId: bar });
+      await setStationToday(tx, venue.cfg, grill, null, new Date("2026-10-02T18:45:00.000Z"));
+      const routeId = await createException(tx, venue.cfg, {
+        zoneId: null,
+        categoryId: null,
+        productId: venue.productId("Vino"),
+        target: { kind: "station", stationId: grill },
+      });
+      return { deviceId: device!.id, routeId };
+    });
+    const tableId = await venue.table(`M-${randomUUID().slice(0, 8)}`);
+    const { partyId, tabId } = await seat(venue, tableId);
+    const revision = (
+      await inTx(venue, (tx) =>
+        tx
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, tabId)),
+      )
+    )[0]!.revision;
+    const submitted = await inTx(venue, (tx) =>
+      submitGroups(tx, { ...venue.cfg, sendingDeviceId: deviceId }, partyId, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: revision,
+        operatorId: OPERATOR,
+        billId: tabId,
+        groups: [
+          {
+            release: "hold",
+            lines: [
+              { menuItemId: venue.item("Caña"), quantity: "1" },
+              { menuItemId: venue.item("Vino"), quantity: "1" },
+            ],
+          },
+        ],
+      }),
+    );
+    const itemsBefore = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+    );
+    const madeHere = itemsBefore.find((item) => item.madeHere)!;
+    const dishItem = itemsBefore.find((item) => !item.madeHere)!;
+    expect(madeHere).toMatchObject({ stationId: bar, state: "ready", firedAt: expect.any(String) });
+    expect(dishItem).toMatchObject({ stationId: grill, firedAt: null });
+    const at = new Date("2026-10-02T18:45:00.000Z");
+    await inTx(venue, async (tx) => {
+      await setStationFallback(tx, venue.cfg, bar, null);
+      await setStationFallback(tx, venue.cfg, grill, bar);
+      await setStationToday(tx, venue.cfg, grill, "closed", at);
+    });
+    const barJobs = (await jobs(barPrinter)).length;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(at);
+    try {
+      await inTx(venue, (tx) =>
+        fireGroup(tx, venue.cfg, partyId, submitted.groups[0]!.id, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: submitted.revision,
+          operatorId: OPERATOR,
+        }),
+      );
+      const itemsAfter = await inTx(venue, (tx) =>
+        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+      );
+      expect(itemsAfter.find((item) => item.id === madeHere.id)).toEqual(madeHere);
+      expect(itemsAfter.find((item) => item.id === dishItem.id)).toMatchObject({
+        stationId: bar,
+        firedAt: at.toISOString(),
+      });
+      expect(
+        (await jobs(barPrinter))
+          .slice(barJobs)
+          .every((job) => !decodeTicket(job.payload).includes("CAÑA")),
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      await inTx(venue, async (tx) => {
+        await deleteException(tx, venue.cfg, routeId);
+        await setStationFallback(tx, venue.cfg, grill, null);
+      });
+    }
+  });
+
+  it("releases split-off chips at their closed fryer even when it has an open fallback", async () => {
+    useSplitExtrasDb(splitSuite.db);
+    const split = await setupSplitExtrasVenue();
+    const at = new Date("2026-10-02T18:45:00.000Z");
+    await splitTx((tx) =>
+      tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, split.cfg.locationId)),
+    );
+    const revision = (
+      await splitTx((tx) =>
+        tx
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, split.party.tabId)),
+      )
+    )[0]!.revision;
+    const submitted = await splitTx((tx) =>
+      submitGroups(tx, split.cfg, split.party.partyId, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: revision,
+        operatorId: OPERATOR,
+        billId: split.party.tabId,
+        groups: [
+          {
+            release: "hold",
+            lines: [
+              {
+                menuItemId: split.tables.offerFor(split.products.burger),
+                quantity: "1",
+                extras: [
+                  {
+                    listId: split.lists.burger,
+                    picks: [{ productId: split.products.chips, quantity: 1 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const [chips] = await splitTx((tx) =>
+      tx
+        .select({
+          id: ticketItems.id,
+          stationId: ticketItems.stationId,
+          firedAt: ticketItems.firedAt,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.productId, split.products.chips)),
+    );
+    expect(chips).toMatchObject({ stationId: split.stations.fryer, firedAt: null });
+    await splitTx(async (tx) => {
+      await setStationFallback(tx, split.cfg, split.stations.fryer, split.stations.kitchen);
+      await setStationToday(tx, split.cfg, split.stations.fryer, "closed", at);
+    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(at);
+    try {
+      await splitTx((tx) =>
+        fireGroup(tx, split.cfg, split.party.partyId, submitted.groups[0]!.id, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: submitted.revision,
+          operatorId: OPERATOR,
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+    const [after] = await splitTx((tx) =>
+      tx
+        .select({ stationId: ticketItems.stationId, firedAt: ticketItems.firedAt })
+        .from(ticketItems)
+        .where(eq(ticketItems.id, chips!.id)),
+    );
+    expect(after).toEqual({ stationId: split.stations.fryer, firedAt: at.toISOString() });
+  });
+
+  it.each([
+    ["2026-10-02T18:59:59.999Z", false],
+    ["2026-10-02T19:00:00.000Z", true],
+  ] as const)(
+    "uses one clock reading and routing snapshot for two bills at %s",
+    async (instant, closed) => {
+      const tableId = await venue.table(`C-${randomUUID().slice(0, 8)}`);
+      const { partyId, tabId } = await seat(venue, tableId);
+      await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+      const revision = (
+        await inTx(venue, (tx) =>
+          tx
+            .select({ revision: workingOrders.revision })
+            .from(workingOrders)
+            .where(eq(workingOrders.id, tabId)),
+        )
+      )[0]!.revision;
+      const submitted = await inTx(venue, (tx) =>
+        submitGroups(tx, venue.cfg, partyId, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: revision,
+          operatorId: OPERATOR,
+          billId: tabId,
+          groups: [
+            {
+              release: "hold",
+              lines: [
+                { menuItemId: venue.item("Burger"), quantity: "1" },
+                { menuItemId: venue.item("Burger"), quantity: "1" },
+              ],
+            },
+          ],
+        }),
+      );
+      const firstLineId = submitted.groups[0]!.lineIds[0]!;
+      const [firstLine] = await inTx(venue, (tx) =>
+        tx
+          .select({ lineNo: workingOrderLines.lineNo })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.id, firstLineId)),
+      );
+      const { billId: checkId } = await inTx(venue, (tx) =>
+        splitBill(tx, venue.cfg, tabId, [{ lineNo: firstLine!.lineNo }], {
+          expectedPartyRevision: submitted.revision,
+          operatorId: OPERATOR,
+        }),
+      );
+      await inTx(venue, (tx) =>
+        tx
+          .update(workingOrders)
+          .set({ status: "settled", settledAt: new Date().toISOString() })
+          .where(eq(workingOrders.id, checkId)),
+      );
+      const at = new Date(instant);
+      await inTx(venue, async (tx) => {
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: false })
+          .where(eq(kitchenStations.id, bar));
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: true })
+          .where(eq(kitchenStations.id, grill));
+        await setStationToday(tx, venue.cfg, bar, null, at);
+        await replaceStationHours(tx, venue.cfg, bar, [
+          { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
+        ]);
+        await setStationFallback(tx, venue.cfg, bar, grill);
+      });
+      const RealDate = globalThis.Date;
+      const barJobsBefore = (await jobs(barPrinter)).length;
+      const grillJobsBefore = (await jobs(grillPrinter)).length;
+      const start = RealDate.parse(instant);
+      let reads = 0;
+      class MovingDate extends RealDate {
+        constructor();
+        constructor(value: string | number | Date);
+        constructor(value?: string | number | Date) {
+          super(value === undefined ? start + reads++ : value);
+        }
+        static override now() {
+          return start + reads++;
+        }
+      }
+      const routingAt = vi.spyOn(VENUE_SERVICE, "routingAt");
+      const resolveMakers = vi.spyOn(VENUE_SERVICE, "resolveMakers");
+      const stationStates = vi.spyOn(VENUE_SERVICE, "stationStates");
+      try {
+        globalThis.Date = MovingDate as DateConstructor;
+        await inTx(venue, (tx) =>
+          fireGroup(tx, venue.cfg, partyId, submitted.groups[0]!.id, {
+            submissionId: randomUUID(),
+            expectedPartyRevision: submitted.revision + 1,
+            operatorId: OPERATOR,
+          }),
+        );
+        const rows = await inTx(venue, (tx) =>
+          tx
+            .select({ stationId: ticketItems.stationId, firedAt: ticketItems.firedAt })
+            .from(ticketItems)
+            .where(eq(ticketItems.workingOrderLineId, firstLineId)),
+        );
+        expect(rows[0]).toEqual({ stationId: closed ? grill : bar, firedAt: instant });
+        const groupItems = await inTx(venue, (tx) =>
+          tx
+            .select({ stationId: ticketItems.stationId, firedAt: ticketItems.firedAt })
+            .from(ticketItems)
+            .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+            .where(eq(workingOrderLines.groupId, submitted.groups[0]!.id)),
+        );
+        expect(groupItems).toEqual([
+          { stationId: closed ? grill : bar, firedAt: instant },
+          { stationId: closed ? grill : bar, firedAt: instant },
+        ]);
+        const [firedGroup] = await inTx(venue, (tx) =>
+          tx
+            .select({ firedAt: orderGroups.firedAt })
+            .from(orderGroups)
+            .where(eq(orderGroups.id, submitted.groups[0]!.id)),
+        );
+        expect(firedGroup!.firedAt).toBe(instant);
+        expect(routingAt).toHaveBeenCalledTimes(1);
+        expect(resolveMakers).not.toHaveBeenCalled();
+        expect(stationStates).not.toHaveBeenCalled();
+        if (closed) {
+          const oldPaper = (await jobs(barPrinter))
+            .slice(barJobsBefore)
+            .map((job) => decodeTicket(job.payload));
+          const newPaper = (await jobs(grillPrinter))
+            .slice(grillJobsBefore)
+            .map((job) => decodeTicket(job.payload));
+          expect(oldPaper).toHaveLength(2);
+          expect(oldPaper.every((paper) => paper.includes("HOLD CANCELLED"))).toBe(true);
+          expect(newPaper).toHaveLength(2);
+          expect(
+            newPaper.every(
+              (paper) => paper.includes("From Bar") && !/^\s*(?:\*+\s*)?FIRE\b/m.test(paper),
+            ),
+          ).toBe(true);
+        }
+      } finally {
+        globalThis.Date = RealDate;
+        routingAt.mockRestore();
+        resolveMakers.mockRestore();
+        stationStates.mockRestore();
+        await inTx(venue, async (tx) => {
+          await tx
+            .update(kitchenStations)
+            .set({ isDefault: false })
+            .where(eq(kitchenStations.id, grill));
+          await tx
+            .update(kitchenStations)
+            .set({ isDefault: true })
+            .where(eq(kitchenStations.id, bar));
+        });
+      }
+    },
+  );
 });
 
 describe("moveDishesToStation", () => {

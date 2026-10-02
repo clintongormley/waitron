@@ -580,7 +580,10 @@ export async function routingAt(
   at: Date,
 ): Promise<MakerResolver> {
   const moment = await venueMoment(tx, cfg, at);
-  const rules = await loadRoutingRules(tx, cfg, moment?.businessDay ?? null);
+  const { rules, stations } = await snapshot(tx, cfg, moment?.businessDay ?? null);
+  let stationNames:
+    | ReadonlyMap<string, { open: boolean; isDefault: boolean; active: boolean; name: string }>
+    | undefined;
   const productFacts = async (productIds: readonly string[]) => {
     const spellingByUuid = new Map<string, string>();
     for (const id of productIds) {
@@ -615,6 +618,19 @@ export async function routingAt(
   };
   return {
     at,
+    async stations() {
+      return (stationNames ??= new Map(
+        stations.map((station) => [
+          station.id,
+          {
+            name: station.name,
+            isDefault: station.isDefault,
+            active: station.active,
+            open: stationStatus(rules, station.id, moment).open,
+          },
+        ]),
+      ));
+    },
     async makers(zoneId, productIds) {
       const outcomes = new Map<string, MakerOutcome>();
       if (productIds.length === 0) return outcomes;

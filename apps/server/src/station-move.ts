@@ -1,4 +1,5 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import { ticketItems, tills, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -9,7 +10,115 @@ import { printedHeldGroups } from "./order-groups.js";
 import { runServiceCommand } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
 import { bumpRevision, readOrderRevision } from "./working-order.js";
+import type { RoutingOnce } from "./working-order.js";
 import "./errors.js";
+
+export type Rerouted = ReadonlyMap<string, { stationId: string; stationName: string }>;
+
+/** Before release, re-route held dishes whose station is not open against its one routing snapshot.
+ * The ticket item's station moves without writing its line's make-at, including on paid bills. */
+export async function rerouteHeldAtRelease(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  scope: SQL,
+  routing: RoutingOnce,
+): Promise<Rerouted> {
+  const held = await tx
+    .select({
+      id: ticketItems.id,
+      lineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
+      stationChosenAt: ticketItems.stationChosenAt,
+      parentLineId: workingOrderLines.parentLineId,
+      productId: workingOrderLines.productId,
+      makeAtStationId: workingOrderLines.makeAtStationId,
+      groupId: workingOrderLines.groupId,
+      quantity: firedQuantity,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(
+      and(
+        eq(ticketItems.workingOrderId, orderId),
+        scope,
+        isNull(ticketItems.firedAt),
+        eq(ticketItems.state, "queued"),
+        eq(ticketItems.madeHere, false),
+      ),
+    );
+  if (held.length === 0) return new Map();
+  const resolver = await routing();
+  const states = await resolver.stations();
+  const closed = held.filter((row) => {
+    const state = states.get(row.stationId);
+    return !state || !state.active || !state.open;
+  });
+  const unchosen = closed.filter((row) => {
+    const state = states.get(row.stationId);
+    return (
+      !state?.active || (row.stationChosenAt === null && row.makeAtStationId !== row.stationId)
+    );
+  });
+  const dishes = unchosen.filter((row) => row.parentLineId === null && row.productId !== null);
+  const stranded = unchosen.filter((row) => row.parentLineId !== null);
+  if (dishes.length === 0) {
+    void stranded;
+    return new Map();
+  }
+  const zoneId = (await VENUE_SERVICE.findOrderContext(tx, cfg, orderId))?.zoneId ?? null;
+  const routes = await resolver.makers(zoneId, [...new Set(dishes.map((row) => row.productId!))]);
+  const moving = dishes.flatMap((row) => {
+    const outcome = routes.get(row.productId!);
+    if (
+      outcome?.kind !== "made" ||
+      outcome.route.kind !== "station" ||
+      outcome.route.stationId === row.stationId
+    ) {
+      stranded.push(row);
+      return [];
+    }
+    return [{ ...row, toStationId: outcome.route.stationId }];
+  });
+  const printed = await printedHeldGroups(
+    tx,
+    moving.flatMap((row) => (row.groupId === null ? [] : [row.groupId])),
+  );
+  const byDestination = new Map<string, typeof moving>();
+  for (const row of moving)
+    byDestination.set(row.toStationId, [...(byDestination.get(row.toStationId) ?? []), row]);
+  const rerouted = new Map<string, { stationId: string; stationName: string }>();
+  for (const [destinationId, rows] of byDestination) {
+    const destination = states.get(destinationId);
+    if (!destination) throw new Error("re-route destination is absent from the venue snapshot");
+    const corrections: CorrectionItem[] = rows.flatMap((row) => {
+      const group = row.groupId === null ? undefined : printed.get(row.groupId);
+      return group === undefined
+        ? []
+        : [
+            {
+              workingOrderLineId: row.lineId,
+              stationId: row.stationId,
+              quantity: row.quantity,
+              wasStarted: false,
+              group,
+            },
+          ];
+    });
+    await enqueueStationMoved(tx, cfg, orderId, corrections, destination.name);
+    for (const row of rows) {
+      const old = states.get(row.stationId);
+      if (!old) throw new Error("held ticket has no old station in this venue");
+      await tx
+        .update(ticketItems)
+        .set({ stationId: destinationId, queuedAt: routing.at.toISOString() })
+        .where(eq(ticketItems.id, row.id));
+      rerouted.set(row.lineId, { stationId: row.stationId, stationName: old.name });
+    }
+  }
+  void stranded;
+  return rerouted;
+}
 
 /** A held or fired record may move while queued, still at the kitchen, with no part served.
  * Made-here records are always fired and ready, and stay at their sending till's station. */
