@@ -285,7 +285,6 @@ field's label, select, hint and error, and the message at 1280px; the select bel
 at 1280px; wide content and the footer row at full width; each field at the
 body's width at 390px; each field at its container's width outside a modal); the calibration case in
 `apps/dashboard/src/screens/printers-screen.test.ts`; and one 1280px case each in
-`apps/dashboard/src/screens/profile-screen.test.ts`,
 `apps/dashboard/src/widgets/add-content-language.test.ts`,
 `apps/dashboard/src/widgets/member-list-editor.test.ts` (the editor placed in a `wt-modal`),
 `packages/adjustments/src/dashboard/reasons-screen.test.ts` and

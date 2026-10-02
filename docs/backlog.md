@@ -1434,14 +1434,15 @@ of actions scrolls within its own part of the row. The rule is in
 
 **Search fields are pill-shaped; they should only round their corners (A175, owner 2026-10-01:
 "all the search fields have too much rounding they just need the corners rounded, not a
-semicircle") — OPEN.** Two search boxes use `border-radius: var(--wt-radius-full)` (9999px, a
-half-circle at each end): every table's search (`.table-search`,
-`packages/ui/src/components/wt-data-table.ts`) and the search box inside the searchable dropdown
-(`.search`, `packages/ui/src/components/wt-combobox.ts`). The sidebar's "Search pages" and the
-Staff screen's search are `wt-input` since A178b, which draws the filled field's corners, as do the
-Products screen's folder search and the till's menu search. **Wanted:** the two
-take `var(--wt-radius-md)` (8px), the radius every other text field uses, so the focus ring
-follows it too. Small; no guard checks a field's radius.
+semicircle") — OPEN.** One search box still uses `border-radius: var(--wt-radius-full)` (9999px,
+a half-circle at each end): every table's search (`.table-search`,
+`packages/ui/src/components/wt-data-table.ts`). The search box inside the searchable dropdown
+(`.search`, `packages/ui/src/components/wt-combobox.ts`) takes `var(--wt-radius-md)` since #1010.
+The sidebar's "Search pages" and the Staff screen's search are `wt-input` since A178b, which draws
+the filled field's corners, as do the Products screen's folder search and the till's menu search.
+**Wanted:** the table's search takes `var(--wt-radius-md)` (8px), the radius the filled field
+rounds its top corners to (`packages/ui-core/src/field-styles.ts`), so the focus ring follows it
+too. Small; no guard checks a field's radius.
 
 **An empty table shows a proper empty box, with the screen's Add button (A176, owner 2026-10-01)
 — OPEN.** The owner, on the Extras tab with no lists: _"The "No extras lists to show" could be
@@ -2859,9 +2860,7 @@ kit text box, get no red outline — both screens' own styles have no rule for a
 text box (seen in screenshots of the refused state; only the dropdown was in A151's scope). Four
 stylesheets that already include `selectStyles` still carry their own identical
 `select[aria-invalid="true"]` rule — `reasons-screen.ts` (adjustments), `sumup-connect-form.ts`
-(payments-sumup), `member-list-editor.ts` and `unit-form.ts` (dashboard) — and a fifth,
-`apps/dashboard/src/screens/device-profiles-screen.ts` (dashboard), carries the same declaration
-limited to `.home-menu select[aria-invalid="true"]`. They were left because none of their own test
+(payments-sumup), `member-list-editor.ts` and `unit-form.ts` (dashboard). They were left because none of their own test
 files asserts a border colour, so removing them would go unchecked.
 
 The original walkthrough is retained under *Detail → Setup wizard*.
@@ -7364,13 +7363,9 @@ ongoing overhaul listed at the top of Track A.
   marked, and Turn on backups stays disabled before the first press until the folder is filled and
   the key is saved — the same shape as (7) (both seen by running, in the Codex run-it review); and,
   read and not run: the settings editor's Save changes is also disabled before any press while the
-  folder is blank (`#saveSettingsDisabled` in `apps/dashboard/src/screens/backup-screen.ts`); apart
-  from the two retention boxes and the configuration-export passphrases, the form's inputs (the
-  destination folder, the pasted key, the saved-it tick, and the day and time choices) carry no
-  `name`; and the screen does not submit on Enter (`submitOnEnter`, which design-system.md → "Submit
-  ordinary forms with Enter" asks for and `stream-settings-panel.ts` uses); the two retention boxes
-  are hand-built `<input type="number">`s rather than the shared `wt-input` that Forms prefers, left
-  so because switching changes how an older test fills them in; and no test covers only the second
+  folder is blank (`#saveSettingsDisabled` in `apps/dashboard/src/screens/backup-screen.ts`); the
+  destination folder, the saved-it tick and the weekday ticks carry no `name`; and the screen does not submit on Enter (`submitOnEnter`, which design-system.md → "Submit
+  ordinary forms with Enter" asks for and `stream-settings-panel.ts` uses); and no test covers only the second
   box being invalid, or where focus lands after a failed check on the Save form (#860's review);
   (5) **DONE (C64, #893, 2026-09-29):** the setup connect screen no
   longer comes back empty after a refusal that routes back to it. The shell keeps the body it sent,
@@ -7835,8 +7830,7 @@ ongoing overhaul listed at the top of Track A.
   chosen shift or colleague that a reload removes stays chosen (`coverShiftId` and
   `coverColleagueId` are cleared only after a cover request is sent, `:228`-`:229`). **Next
   action:** mark each till option `.selected` and drop the `<select>`'s `.value` binding, the way
-  `apps/dashboard/src/screens/my-schedule-screen.ts` and
-  `apps/till/src/screens/till-counter-screen.ts` do, with tests that reorder a list AND insert an
+  `apps/till/src/screens/till-counter-screen.ts` does, with tests that reorder a list AND insert an
   entry above the chosen one through the till's own triggers (not the dashboard's
   `LiveData.invalidate`) and read `select.selectedOptions[0]`; and fix the three defects above the
   way the dashboard screen now does.
