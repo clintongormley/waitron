@@ -1200,4 +1200,19 @@ describe("recordCorrection — a corrective line names the invoice line it rever
       expect(await countRows("sale_lines")).toBe(4);
     },
   );
+
+  it("answers an unauthorised session with the permission refusal, not what is on the invoice", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+    const { saleId: otherId } = await sell(backend);
+    const elsewhere = (await lineIdsOf(otherId)).get(2)!;
+    const lines = correctionInput(originalId).lines.map((line) => ({
+      ...line,
+      correctsLineId: elsewhere,
+    }));
+
+    await expect(
+      correct(backend, originalId, { lines, authz: { sessionId: staffSessionId } }),
+    ).rejects.toMatchObject({ code: "authorization.not_permitted" });
+  });
 });

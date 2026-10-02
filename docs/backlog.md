@@ -2861,7 +2861,15 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       `sale.correction_line_not_on_invoice`, before a number is allocated. No report reads the link
       yet. Open: neither of `recordCorrection`'s modes requires a line to name one, so a
       whole-invoice credit from a future caller can still leave it null; whether whole-invoice mode
-      should require it is the owner's to decide.
+      should require it is the owner's to decide. Also open: `recordCorrection` checks only that a
+      named line is on the invoice being corrected, not that it is the line being reversed — a
+      whole-invoice credit naming the same invoice line on two of its lines, or two lines' targets
+      swapped, is accepted and stored (on the C132 branch both run-it reviews stored a duplicate,
+      and one also stored a swap). The whole-order cancel builds each link from the stored row it
+      reverses, so it does not write such links. Whether `recordCorrection` should check the named
+      line's identity, and how partial adjustments may share a target, is the owner's to decide.
+      When a report starts reading the link it will want an index on the column, as
+      `sales_corrects_idx` serves `sales.corrects_sale_id`.
     - **A fully credited bill's original invoice can still be reprinted**, from the till and from
       the dashboard; the server allows it. Whether a reprint should say the invoice was credited is
       not decided.

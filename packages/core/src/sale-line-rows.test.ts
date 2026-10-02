@@ -176,4 +176,23 @@ describe("saleLineRows", () => {
       classification,
     });
   });
+
+  it("stores the line a corrective line reverses only when told the sale is corrective", () => {
+    const line: RecordSaleLine = {
+      lineNo: 1,
+      name: "Coffee",
+      descriptions: { "es-ES": "Coffee" },
+      quantity: "-1",
+      unitPrice: "5.00",
+      vatRate: "21.00",
+      lineTotal: "-5.00",
+      correctsLineId: "original-line-1",
+    };
+
+    const [corrective] = saleLineRows("sale-1", [line], { corrective: true });
+    const [ordinary] = saleLineRows("sale-1", [line]);
+
+    expect(corrective!.correctsLineId).toBe("original-line-1");
+    expect(ordinary!.correctsLineId).toBeNull();
+  });
 });

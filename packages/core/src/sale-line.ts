@@ -49,6 +49,7 @@ export interface RecordSaleLine {
   /** The product's reporting chain, as the line recorded it when it was added. */
   classification?: SaleLineClassification | null;
   /** The original invoice line this corrective line reverses or adjusts. Only `recordCorrection`
-   * takes it, and refuses one that is not a line of the invoice it corrects. */
-  correctsLineId?: string;
+   * stores it (`recordSale` and `recordSubstitution` store null), and it refuses one that is not a
+   * line of the invoice it corrects. */
+  correctsLineId?: string | null;
 }

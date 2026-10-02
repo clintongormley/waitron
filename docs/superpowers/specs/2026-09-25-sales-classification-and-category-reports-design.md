@@ -154,7 +154,8 @@ The rules follow what the existing reports already do (`packages/reporting/src/b
   keeps the original classification by construction, even if the category moved in between.
 - **A correction** (factura rectificativa, `recordCorrection`) writes a new sale with caller-supplied
   delta lines. Today nothing links a delta line to the line it corrects, and nothing calls
-  `recordCorrection` from a route.
+  `recordCorrection` from a route. _(2026-10-02: no longer true — see the C126 and C132 pointers
+  below.)_
   - When corrections are wired to a route, a delta line that reverses or adjusts an original line
     MUST name that line and copy its identity and classification.
     _(2026-10-02, C126: the whole-order cancel route is the first route to call
@@ -165,7 +166,9 @@ The rules follow what the existing reports already do (`packages/reporting/src/b
     _(2026-10-02, C132: `sale_lines.corrects_line_id` now names, on a corrective line, the original
     line it reverses; the whole-order cancel fills it on every reversing line, and
     `recordCorrection` refuses a line naming one that is not on the invoice it corrects
-    (`sale.correction_line_not_on_invoice`). Neither mode requires it, and no report reads it yet.)_
+    (`sale.correction_line_not_on_invoice`). Neither mode requires it, nothing checks that the
+    named line is the one reversed (see the C132 entry in `docs/backlog.md`), and no report reads it
+    yet.)_
   - A delta line adding something new is classified when it is recorded.
   - Corrections count on the day they are issued, netting with their signed figures, as every
     existing report does.
