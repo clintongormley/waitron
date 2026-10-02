@@ -51,7 +51,7 @@ export class RosterScreen extends LitElement {
       }
       /* The bottom gap lives on the pickers themselves (not the pickers row) so the week picker here
        * matches the shared dashboard-location-picker widget's own bottom margin and the two align in
-       * the flex row — the location picker moved into that widget, which carries the same margin. */
+       * the flex row. */
       .picker {
         margin-bottom: var(--wt-space-4);
       }
@@ -192,7 +192,7 @@ export class RosterScreen extends LitElement {
   async #onSelectWeek(event: CustomEvent<{ value: string }>): Promise<void> {
     event.stopPropagation();
     const value = event.detail.value;
-    // A cleared date input gives "", on which mondayOf throws a RangeError.
+    // A date field reads "" while cleared or part-typed, on which mondayOf throws a RangeError.
     if (Number.isNaN(Date.parse(`${value}T00:00:00Z`))) return;
     this.weekMonday = mondayOf(value);
     this.errorKey = null;
