@@ -1017,11 +1017,12 @@ form is kept. **First** reproduce it: the dashboard open on a few screens (a tab
 the Backups screen), restart the server, and note which ones stay stuck, and whether the live
 connection's return reaches them.
 
-**The Products screen as a category tree (A208, owner 2026-10-02) — OPEN, spec approved in
-conversation, written.** The owner, on two screenshots: _"this layout is messy, needs tidying"_,
+**The Products screen as a category tree (A208, owner 2026-10-02) — OPEN, spec and plan
+approved, queued in lane A.** The owner, on two screenshots: _"this layout is messy, needs tidying"_,
 with folders that open in place, a clearer drag, adds from each category's ⋮ menu and prices that
 show their unit. Spec:
 [2026-10-02-products-category-tree-design.md](superpowers/specs/2026-10-02-products-category-tree-design.md).
+Plan: [2026-10-02-products-category-tree.md](superpowers/plans/2026-10-02-products-category-tree.md).
 It builds A205 (a product row's click opens it) and replaces A207 (a blue Add product button in the
 header), which the owner cancelled: the header loses that button.
 
