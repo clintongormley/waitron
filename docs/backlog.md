@@ -1276,7 +1276,7 @@ resolution of a variant's reported category (`variant.effective`, which the Prod
 reporting read) becomes "always the product's", and variants holding a category of their own are
 cleared (allowed before go-live, §3). Trace every consumer of a variant's `categoryId` first.
 
-**Standalone ordering becomes one dropdown (A210) — DONE.** The owner: _"Standalone ordering can
+**Standalone ordering becomes one dropdown (A210) — DONE (#1070).** The owner: _"Standalone ordering can
 be reduced to a single dropdown"_. Before this, `renderOrdering` drew three radio buttons, Public, Staff
 only and Not sold separately, each with an explanation under it. **Wanted:** one `wt-combobox`
 with the three choices. The explanations need a new place: the design system's Forms rule makes a
@@ -1294,6 +1294,14 @@ row is named by its label (`aria-labelledby`) and the description is its `aria-d
 long description wraps inside the list rather than widening it. A refusal of `ordering` shows
 under the field as the other dropdowns' do, and the field is disabled while the product saves or
 another of the editor's windows is open, as the radio buttons were.
+**Open, raised while reviewing #1070:** `expectNoA11yViolations` (`packages/ui/src/a11y-helpers.ts`)
+fails only on axe's `violations` list, never its `incomplete` one. On the #1070 branch the
+review set the description's text to exactly the background colour; axe filed it under
+`incomplete` and every a11y test still passed (finish-branch's receipt, 2026-10-03; not re-run
+since). So `docs/developers/design-system.md`'s "zero contrast violations" statement is weaker than
+it reads: a colour axe cannot judge is not checked. Next step: decide whether the helper should
+also fail on `incomplete` contrast results (and measure how many current suites that reddens), or
+narrow the design-system sentence to say so.
 
 **A folded section says what is missing, not only what is filled in (A211) — OPEN.** The owner:
 _"we should show the missing values under kitchen and descriptors and nutritional info when
