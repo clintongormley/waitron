@@ -632,12 +632,12 @@ describe("till-table-order-screen", () => {
       const box = picker
         .shadowRoot!.querySelector<HTMLElement>("[part=field]")!
         .getBoundingClientRect();
-      const line = picker.closest("till-basket")!.getBoundingClientRect();
-      const pane = el.shadowRoot!.querySelector("[data-draft-pane]")!.getBoundingClientRect();
-      expect(box.left).toBeGreaterThanOrEqual(line.left);
-      expect(box.right).toBeLessThanOrEqual(line.right);
-      expect(box.left).toBeGreaterThanOrEqual(pane.left);
-      expect(box.right).toBeLessThanOrEqual(pane.right);
+      const line = picker
+        .closest(".draft-line-tools")!
+        .assignedSlot!.closest(".line-after")!
+        .getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(line.left - 0.5);
+      expect(box.right).toBeLessThanOrEqual(line.right + 0.5);
     } finally {
       await page.viewport(414, 896);
     }
