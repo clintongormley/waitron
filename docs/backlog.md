@@ -4657,8 +4657,9 @@ approved.
   the two weaknesses the new guard states about itself: it reads text, and it judges a file rather
   than a call chain.
 
-- **Comments naming a PostgreSQL SQLSTATE as today's behaviour — DONE (C127).** Still unprobed:
-  the remaining "not a 500" titles across the `apps/server` route suites, which name no engine.
+- **No comment or test title names a PostgreSQL SQLSTATE as today's behaviour — DONE (C127).**
+  Still unprobed: the remaining "not a 500" titles across the `apps/server` route suites, which name
+  no engine.
 
 - **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23; narrowed by A92; the `pg` handles, the `.sqlite.` infix and the `bytea` title are C127's second pull request).**
   Still open: the `.sqlite.` infix in
@@ -4697,7 +4698,7 @@ approved.
   if there is none, say so in the comment and stop calling the case a guard test.
 - *Small:* `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
   output line is read by no consumer.
-- **The topic files still carry PostgreSQL history — DONE (C127).**
+- **The topic files no longer describe PostgreSQL as current — DONE (C127).**
 
 ---
 
@@ -5838,10 +5839,10 @@ real `sh`.
   `packages/db/drizzle/0001_behavioural_triggers.sql`, which still points at `origin/main` for the
   originals): editing a shipped migration, even a comment, changes its hash, and the boot path's
   ahead check would then read an already-migrated box as ahead. For the same reason both files keep
-  their PostgreSQL comparisons, including the false claim that SQLite's `raise` takes only a fixed
-  message: measured 2026-10-02 on `node:sqlite` (Node v26.7.0, SQLite 3.53.4), a trigger's
-  `raise(abort, 'row ' || new.a || ' refused')` refused an insert of 7 with `row 7 refused`,
-  errcode 1811.
+  their PostgreSQL comparisons, including, in both, the false claim that SQLite's `raise` takes only
+  a fixed message: measured 2026-10-02 on `node:sqlite` (Node v26.7.0, SQLite 3.53.4), a trigger's
+  `raise(abort, 'row ' || new.a || ' refused')` refused an insert of 7 with `row 7 refused`, errcode
+  1811.
 - **If a later slice moves `local` tables into `node.db`** (slice 2's design reserved it for slice
   5), that slice decides again how the drain crosses the two files: SQLite refuses a trigger body
   that writes another attached database, so either `change_log` is reclassified to the file its

@@ -1086,7 +1086,8 @@ measures nothing. Compare statements; do not quote a branch delta.
 What a contention suite asserts is that one writer holds the venue file at a time
 (`packages/store/src/write-queue.ts`). `packages/fiscal-verifactu/src/chain.concurrency.test.ts` is
 the worked example, and its header states what one queue costs: every writer waits on the file's one
-queue, whichever node it appends to, so a busy node can stall a quiet one.
+queue, whichever node's chain it appends to, so two nodes' chains in one file are never written in
+parallel.
 
 **Start a writer through `withTransaction`, never through a bare `db.transaction(...)`.** Only the
 former takes the write queue (`packages/db/src/tenancy.ts` → `db.withWriteLock`). Twenty bare
