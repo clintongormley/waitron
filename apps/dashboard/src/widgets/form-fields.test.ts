@@ -273,6 +273,35 @@ describe("optionalTextFields", () => {
     ]);
   });
 
+  it("given the default language, hints every other language with the default's text, else the fallback", async () => {
+    const placeholdersFor = async (value: Record<string, string>) =>
+      (
+        await renderAll<WtInput>(
+          optionalTextFields(
+            context({ locales: ["es", "en", "ca"] }),
+            "customer",
+            "Menu name",
+            value,
+            () => {},
+            "Pan staff",
+            "es",
+          ),
+          "wt-input",
+        )
+      ).map((input) => input.placeholder);
+
+    expect(await placeholdersFor({ es: "Pan de la casa", ca: "Pa" })).toEqual([
+      "Pan staff",
+      "Pan de la casa",
+      "Pan de la casa",
+    ]);
+    expect(await placeholdersFor({ es: "  ", ca: "Pa" })).toEqual([
+      "Pan staff",
+      "Pan staff",
+      "Pan staff",
+    ]);
+  });
+
   it("shows each language's own error and merges an edit into the other languages", async () => {
     const change = vi.fn();
     const inputs = await renderAll<WtInput>(

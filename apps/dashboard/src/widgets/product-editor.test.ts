@@ -2391,10 +2391,44 @@ it("saves a variant's description as null once every language is blanked again",
   expect(submit.mock.calls[0]![0].detail.value.description).toBeNull();
 });
 
+const nameHints = (el: ProductEditor, locales: readonly string[]) =>
+  ["kitchen-name", ...locales.map((locale) => `customer-name-${locale}`)].map(
+    (name) => control<{ placeholder: string }>(el, name).placeholder,
+  );
+
+it("hints a product's blank names with what they fall back to, following the fields they copy", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, customerName: null, kitchenName: null },
+    locales: ["en", "es"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  expect(nameHints(el, ["en", "es"])).toEqual(["Coffee", "Coffee", "Coffee"]);
+  await input(el, "customer-name-en", "House coffee");
+  expect(nameHints(el, ["en", "es"])).toEqual(["Coffee", "Coffee", "House coffee"]);
+  await input(el, "name", "Espresso");
+  expect(nameHints(el, ["en", "es"])).toEqual(["Espresso", "Espresso", "House coffee"]);
+  await input(el, "customer-name-en", " ");
+  expect(nameHints(el, ["en", "es"])).toEqual(["Espresso", "Espresso", "Espresso"]);
+});
+
+it("hints a variant's blank names on its own page with the variant's name", async () => {
+  const el = await mountVariant({ ...glass, customerName: null, kitchenName: null });
+  expect(nameHints(el, ["en"])).toEqual(["Glass of coffee", "Glass of coffee"]);
+  await input(el, "name", "Tall glass");
+  expect(nameHints(el, ["en"])).toEqual(["Tall glass", "Tall glass"]);
+});
+
 it("never hints a variant's names from the parent's", async () => {
   const el = await mountVariant({ ...glass, customerName: null, kitchenName: null });
-  for (const name of ["name", "customer-name-en", "kitchen-name"])
-    expect(control<{ placeholder: string }>(el, name).placeholder, name).toBe("");
+  const expected = {
+    name: "",
+    "customer-name-en": "Glass of coffee",
+    "kitchen-name": "Glass of coffee",
+  };
+  for (const [name, hint] of Object.entries(expected))
+    expect(control<{ placeholder: string }>(el, name).placeholder, name).toBe(hint);
 });
 
 it("offers each inherited choice first as 'Same as' the parent's value, with an empty value", async () => {

@@ -198,9 +198,17 @@ export class VariantForm extends LitElement {
         ${switchField(fields, "available", t("editor.available"), this.available, (available) => {
           this.available = available;
         })}
-        ${textField(fields, "kitchenName", t("editor.kitchen_name"), this.kitchenName, (name) => {
-          this.kitchenName = name;
-        })}
+        ${textField(
+          fields,
+          "kitchenName",
+          t("editor.kitchen_name"),
+          this.kitchenName,
+          (name) => {
+            this.kitchenName = name;
+          },
+          false,
+          this.name,
+        )}
         ${optionalTextFields(
           fields,
           "customerName",
@@ -209,6 +217,8 @@ export class VariantForm extends LitElement {
           (customerName) => {
             this.customerName = customerName;
           },
+          this.name,
+          this.locales[0],
         )}
         ${this.#imageField()}
       </div>

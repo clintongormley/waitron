@@ -203,6 +203,7 @@ export class OptionLabelForm extends LitElement {
               .map((locale) => `label-customer-name-${locale}`),
           ),
         this.name,
+        this.languages.defaultLanguage,
       )}
     </fieldset>`;
   }

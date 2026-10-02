@@ -840,6 +840,22 @@ it.each([
   }
 });
 
+it("hints each blank name with what it falls back to, following the fields it copies as they are typed", async () => {
+  const { el } = await mount({ value: { ...addons, customerName: {}, kitchenName: null } });
+  const hints = () =>
+    ["kitchen-name", "customer-name-en", "customer-name-es"].map(
+      (name) => field<HTMLElementTagNameMap["wt-input"]>(el, name).placeholder,
+    );
+
+  expect(hints()).toEqual(["Add-ons", "Add-ons", "Add-ons"]);
+  await type(el, "customer-name-en", "Make it yours");
+  expect(hints()).toEqual(["Add-ons", "Add-ons", "Make it yours"]);
+  await type(el, "name", "Toppings");
+  expect(hints()).toEqual(["Toppings", "Toppings", "Make it yours"]);
+  await type(el, "customer-name-en", "");
+  expect(hints()).toEqual(["Toppings", "Toppings", "Toppings"]);
+});
+
 it("lists the customer-facing names in the closed section's line, but not the kitchen name", async () => {
   const { el } = await mount({ value: addons });
 

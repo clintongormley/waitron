@@ -382,6 +382,22 @@ it.each([
   }
 });
 
+it("hints each blank name with what it falls back to, following the fields it copies as they are typed", async () => {
+  const { el } = await mount({ value: { ...cooked, customerName: {}, kitchenName: null } });
+  const hints = () =>
+    ["kitchen-name", "customer-name-en", "customer-name-es"].map(
+      (name) => field(el, name).placeholder,
+    );
+
+  expect(hints()).toEqual(["Cooked", "Cooked", "Cooked"]);
+  await type(el, "customer-name-en", "How would you like it?");
+  expect(hints()).toEqual(["Cooked", "Cooked", "How would you like it?"]);
+  await type(el, "name", "Doneness");
+  expect(hints()).toEqual(["Doneness", "Doneness", "How would you like it?"]);
+  await type(el, "customer-name-en", "");
+  expect(hints()).toEqual(["Doneness", "Doneness", "Doneness"]);
+});
+
 it("lists the customer-facing names in the closed section's line, but not the kitchen name", async () => {
   const { el } = await mount({ value: cooked });
 

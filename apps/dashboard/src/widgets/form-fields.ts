@@ -147,7 +147,8 @@ export function nameFields(
 /**
  * Unlike {@link nameFields} no language is required: a customer-facing name left blank falls back to
  * the staff name rather than being a missing value. `placeholder` is what it falls back TO, shown
- * rather than stored.
+ * rather than stored. Given `defaultLanguage`, every other language falls back to the default
+ * language's text first, as `resolveContentText` (`packages/shared/src/content-languages.ts`) does.
  */
 export function optionalTextFields(
   context: FieldContext,
@@ -156,7 +157,9 @@ export function optionalTextFields(
   value: Record<string, string>,
   change: (value: Record<string, string>) => void,
   placeholder = "",
+  defaultLanguage?: string,
 ) {
+  const defaultText = defaultLanguage === undefined ? "" : (value[defaultLanguage]?.trim() ?? "");
   return context.locales.map((locale) =>
     textField(
       context,
@@ -165,7 +168,7 @@ export function optionalTextFields(
       value[locale] ?? "",
       (text) => change({ ...value, [locale]: text }),
       false,
-      placeholder,
+      locale !== defaultLanguage && defaultText ? defaultText : placeholder,
     ),
   );
 }

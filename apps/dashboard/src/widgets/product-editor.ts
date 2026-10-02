@@ -194,7 +194,7 @@ function emptyDraft(): ProductEditorDraft {
  *
  * Opened on a VARIANT (its read carries `inherited`), the same form is the variant's own page: every
  * field the variant may leave blank shows blank, with the parent's value as its hint, and there is
- * no Standalone ordering, Modifiers or Variants section. The names are never hinted.
+ * no Standalone ordering, Modifiers or Variants section.
  */
 @customElement("dashboard-product-editor")
 export class ProductEditor extends LitElement {
@@ -807,6 +807,8 @@ export class ProductEditor extends LitElement {
           t("editor.kitchen_name"),
           this.draft.kitchenName ?? "",
           (value) => this.change("kitchenName", value),
+          false,
+          this.draft.name,
         )}
         ${this.renderRouting(
           "product-course",
@@ -890,6 +892,8 @@ export class ProductEditor extends LitElement {
           t("editor.customer_name"),
           this.draft.customerName ?? {},
           (value) => this.change("customerName", value),
+          this.draft.name,
+          this.language,
         )}
         ${this.locales.map((locale) => {
           return html`<wt-textarea
