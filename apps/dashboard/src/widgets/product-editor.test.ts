@@ -1446,28 +1446,25 @@ it("sends the Available switch as available and leaves active as it was", async 
   expect(el.shadowRoot!.querySelector("[data-test=restore]")).toBeNull();
 });
 
-function orderingChoices(el: ProductEditor): HTMLInputElement[] {
-  return [
-    ...el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="radio"][name="ordering"]'),
-  ];
-}
-/** Each choice's visible name and the line of help that describes it. */
-function orderingTexts(el: ProductEditor): [string, string][] {
-  return orderingChoices(el).map((radio) => [
-    radio.closest("label")!.textContent!.trim(),
-    el
-      .shadowRoot!.getElementById(radio.getAttribute("aria-describedby")!.split(" ")[0]!)!
-      .textContent!.trim(),
+/** Opens the ordering list and reads each row's name and the line under it, as drawn. */
+async function orderingTexts(el: ProductEditor): Promise<[string, string][]> {
+  const field = sharedField(el, "wt-combobox", "ordering");
+  await field.updateComplete;
+  field.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+  await field.updateComplete;
+  const rows = [...field.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
+  for (const row of rows) expect(row.checkVisibility()).toBe(true);
+  return rows.map((row) => [
+    row.querySelector(".option-label")!.textContent!.trim(),
+    row.querySelector(".option-description")?.textContent!.trim() ?? "",
   ]);
 }
 async function pickOrdering(el: ProductEditor, value: string): Promise<void> {
-  orderingChoices(el)
-    .find((radio) => radio.value === value)!
-    .click();
+  await chooseOption(sharedField(el, "wt-combobox", "ordering"), value);
   await el.updateComplete;
 }
 
-it("offers who may order the product on its own as three choices, the saved one chosen, and saves the one picked", async () => {
+it("offers who may order the product on its own as one dropdown of three choices, the saved one chosen, and saves the one picked", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, id: "p1", ordering: "not_sold_separately" },
@@ -1475,47 +1472,41 @@ it("offers who may order the product on its own as three choices, the saved one 
     units: [unit],
     taxChoices: reduced,
   });
-  const group = section(el, "ordering");
-  expect(group.tagName).toBe("FIELDSET");
-  expect(group.querySelector("legend")!.textContent!.trim()).toBe(t("product.ordering"));
-  expect(orderingChoices(el).map((radio) => [radio.value, radio.checked])).toEqual([
-    ["public", false],
-    ["staff_only", false],
-    ["not_sold_separately", true],
+  const field = sharedField(el, "wt-combobox", "ordering");
+  expect(section(el, "ordering").contains(field)).toBe(true);
+  expect(field.label).toBe(t("product.ordering"));
+  expect(field.options.map((option) => option.value)).toEqual([
+    "public",
+    "staff_only",
+    "not_sold_separately",
   ]);
+  expect(field.value).toBe("not_sold_separately");
+  expect(await shownIn(el, "ordering")).toBe(t("product.ordering_not_sold_separately"));
+  expect(el.shadowRoot!.querySelectorAll('input[type="radio"]')).toHaveLength(0);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   await pickOrdering(el, "staff_only");
-  expect(orderingChoices(el).map((radio) => radio.checked)).toEqual([false, true, false]);
+  expect(el.currentValue.ordering).toBe("staff_only");
+  expect(await shownIn(el, "ordering")).toBe(t("product.ordering_staff_only"));
   save(el);
   expect(submit.mock.calls[0]![0].detail.value.ordering).toBe("staff_only");
 });
 
-it("gives each ordering choice a finger-sized row, with its help under the name, clear of the radio", async () => {
+it("shows the chosen ordering's name alone while the dropdown is closed, with no explanation under it", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
-    value: product,
+    value: { ...product, ordering: "staff_only" },
     locales: ["en"],
     units: [unit],
     taxChoices: reduced,
   });
-  const tapMin = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
-  expect(tapMin).toBeGreaterThan(0);
-  for (const radio of orderingChoices(el)) {
-    const row = radio.closest("label")!.getBoundingClientRect();
-    const help = el.shadowRoot!.getElementById(`ordering-${radio.value}-hint`)!;
-    const words = document.createRange();
-    words.selectNodeContents(radio.closest("label")!);
-    words.setStartAfter(radio);
-    expect(row.height, radio.value).toBeGreaterThanOrEqual(tapMin);
-    expect(help.getBoundingClientRect().left, radio.value).toBeCloseTo(
-      words.getBoundingClientRect().left,
-      0,
-    );
-    expect(help.getBoundingClientRect().left, radio.value).toBeGreaterThan(
-      radio.getBoundingClientRect().right,
-    );
-  }
+  expect(await shownIn(el, "ordering")).toBe(t("product.ordering_staff_only"));
+  const field = sharedField(el, "wt-combobox", "ordering");
+  const shown = section(el, "ordering").textContent!;
+  for (const ordering of ["public", "staff_only", "not_sold_separately"] as const)
+    expect(shown).not.toContain(t(`product.ordering_${ordering}_hint`));
+  const lines = [...field.shadowRoot!.querySelectorAll<HTMLElement>(".option-description")];
+  expect(lines.map((line) => line.checkVisibility())).toEqual([false, false, false]);
 });
 
 it("starts a new product Public", async () => {
@@ -1525,7 +1516,8 @@ it("starts a new product Public", async () => {
     units: [unit],
     taxChoices: [{ id: "general", rate: "21.00", label: "General" }],
   });
-  expect(orderingChoices(el).find((radio) => radio.checked)?.value).toBe("public");
+  expect(sharedField(el, "wt-combobox", "ordering").value).toBe("public");
+  expect(await shownIn(el, "ordering")).toBe(t("product.ordering_public"));
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   await input(el, "name", "Water");
@@ -1546,10 +1538,8 @@ it("says what each ordering choice means, Staff only working like Public until g
   setLocale("en-GB");
   try {
     const { el } = await mount();
-    expect(section(el, "ordering").querySelector("legend")!.textContent!.trim()).toBe(
-      "Standalone ordering",
-    );
-    expect(orderingTexts(el)).toEqual([
+    expect(sharedField(el, "wt-combobox", "ordering").label).toBe("Standalone ordering");
+    expect(await orderingTexts(el)).toEqual([
       ["Public", "Can be ordered on its own."],
       [
         "Staff only",
@@ -1560,10 +1550,8 @@ it("says what each ordering choice means, Staff only working like Public until g
     cleanupWidgets();
     setLocale("es-ES");
     const { el: spanish } = await mount();
-    expect(section(spanish, "ordering").querySelector("legend")!.textContent!.trim()).toBe(
-      "Pedido por separado",
-    );
-    expect(orderingTexts(spanish)).toEqual([
+    expect(sharedField(spanish, "wt-combobox", "ordering").label).toBe("Pedido por separado");
+    expect(await orderingTexts(spanish)).toEqual([
       ["Público", "Se puede pedir por sí solo."],
       [
         "Solo personal",
@@ -1576,7 +1564,22 @@ it("says what each ordering choice means, Staff only working like Public until g
   }
 });
 
-it("puts a refusal of the ordering under its choices, focusing the chosen one, until another is picked", async () => {
+it("locks the ordering dropdown while a save is in flight", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+    busy: true,
+  });
+  expect(sharedField(el, "wt-combobox", "ordering").disabled).toBe(true);
+  el.busy = false;
+  await el.updateComplete;
+  expect(sharedField(el, "wt-combobox", "ordering").disabled).toBe(false);
+});
+
+it("puts a refusal of the ordering under its dropdown, focusing it, until another choice is picked", async () => {
   expect(productEditorField("ordering", "es")).toBe("ordering");
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -1587,27 +1590,18 @@ it("puts a refusal of the ordering under its choices, focusing the chosen one, u
   });
   el.fieldErrors = { ordering: t("editor.field_rejected") };
   await el.updateComplete;
-  const radios = orderingChoices(el);
-  expect(radios.map((radio) => radio.getAttribute("aria-invalid"))).toEqual([
-    "true",
-    "true",
-    "true",
-  ]);
-  const describedBy = radios[0]!.getAttribute("aria-describedby")!.split(" ");
-  expect(el.shadowRoot!.getElementById(describedBy.at(-1)!)!.textContent!.trim()).toBe(
+  const field = sharedField(el, "wt-combobox", "ordering");
+  expect(field.error).toBe(t("editor.field_rejected"));
+  await field.updateComplete;
+  expect(field.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe(
     t("editor.field_rejected"),
   );
   await expect.poll(() => el.shadowRoot!.activeElement?.getAttribute("name")).toBe("ordering");
-  expect((el.shadowRoot!.activeElement as HTMLInputElement).value).toBe("staff_only");
+  expect((el.shadowRoot!.activeElement as Field).value).toBe("staff_only");
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 
   await pickOrdering(el, "not_sold_separately");
-  expect(radios.map((radio) => radio.getAttribute("aria-invalid"))).toEqual([
-    "false",
-    "false",
-    "false",
-  ]);
-  expect(el.shadowRoot!.getElementById("ordering-error")!.textContent!.trim()).toBe("");
+  expect(field.error).toBe("");
   expect(await bottomOf(el)).toBe("");
 });
 
@@ -2318,7 +2312,7 @@ it("titles a variant's page as a variant, with no Modifiers and no Variants sect
 it("shows no standalone ordering choice on a variant's page, and keeps the variant's own value", async () => {
   const el = await mountVariant({ ...glass, ordering: "public" });
   expect(section(el, "ordering")).toBeNull();
-  expect(orderingChoices(el)).toEqual([]);
+  expect(combobox(el, "ordering")).toBeNull();
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
@@ -2979,6 +2973,7 @@ type Field = HTMLElement & {
   options: { value: string; label: string }[];
   value: string;
   error: string;
+  disabled: boolean;
   updateComplete: Promise<unknown>;
 };
 function sharedField(el: ProductEditor, tag: "wt-combobox" | "wt-textarea", name: string) {

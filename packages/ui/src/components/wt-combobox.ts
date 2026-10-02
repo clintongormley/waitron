@@ -14,6 +14,9 @@ export interface ComboboxOption {
   group?: string;
   /** A row that sends `wt-combobox-action` and never becomes the value. */
   action?: true;
+  /** A second, muted line under the label in the open list, and the row's accessible description.
+   * The closed field shows the label alone. */
+  description?: string;
 }
 
 /** With `search="auto"`, the search box shows only when there are more options than this. */
@@ -158,9 +161,23 @@ export class WtCombobox extends LitElement {
         cursor: pointer;
       }
 
-      .option-label {
+      .option-label,
+      .option-text {
         flex: 1;
         min-width: 0;
+      }
+
+      .option-text {
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Contained so a description wraps inside the width the labels and the trigger give the
+         panel instead of widening it. */
+      .option-description {
+        contain: inline-size;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
 
       .option[aria-selected="true"] .option-label {
@@ -668,14 +685,32 @@ export class WtCombobox extends LitElement {
     if (this.popup.matches(":popover-open")) this.popup.hidePopover();
   }
 
+  /** A described option is named by its label alone, so the description is read once, as the
+   * description, rather than run into the name. */
+  private renderOptionText(option: ComboboxOption, rowId: string) {
+    if (!option.description) {
+      return html`<span class="option-label">${option.label}</span>`;
+    }
+    return html`<span class="option-text"
+      ><span class="option-label" id=${`${rowId}-label`}>${option.label}</span
+      ><span class="option-description" id=${`${rowId}-description`}
+        >${option.description}</span
+      ></span
+    >`;
+  }
+
   private renderOption(option: ComboboxOption, index: number) {
     const selected = this.isSelected(option);
+    const rowId = `${this.listboxId}-${index}`;
+    const described = Boolean(option.description);
     return html`
       <li
-        id=${`${this.listboxId}-${index}`}
+        id=${rowId}
         class=${index === this.activeIndex ? "option active" : "option"}
         role="option"
         aria-selected=${selected}
+        aria-labelledby=${described ? `${rowId}-label` : nothing}
+        aria-describedby=${described ? `${rowId}-description` : nothing}
         @click=${(event: MouseEvent) => {
           this.activeIndex = index;
           this.activateOption(option, event);
@@ -691,7 +726,7 @@ export class WtCombobox extends LitElement {
             ? html`<wt-icon class="icon" name=${option.icon} aria-hidden="true"></wt-icon>`
             : nothing
         }
-        <span class="option-label">${option.label}</span>
+        ${this.renderOptionText(option, rowId)}
         ${
           selected && !this.multiple
             ? html`<wt-icon class="tick" name="check" aria-hidden="true"></wt-icon>`

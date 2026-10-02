@@ -32,6 +32,12 @@ const TAGS = [
   { value: "vegetarian", label: "Vegetarian" },
 ];
 
+const DESCRIBED: ComboboxOption[] = [
+  { value: "public", label: "Public", description: "Can be ordered on its own." },
+  { value: "staff", label: "Staff only", description: "Only staff can order it." },
+  { value: "plain", label: "Plain" },
+];
+
 describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme) => {
   test("closed, empty", async () => {
     await mountThemed('<wt-combobox label="Dietary tags"></wt-combobox>', theme);
@@ -128,6 +134,48 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
       { value: "vegan", label: "Vegano", icon: "leaf" },
       { value: "halal", label: "Halal", icon: "check" },
     ]);
+    await expectNoA11yViolations(host);
+  });
+
+  test("open, with options described by a second line", async () => {
+    const el = await openThemed(
+      '<wt-combobox label="Standalone ordering" search="never" value="staff"></wt-combobox>',
+      theme,
+      DESCRIBED,
+    );
+    // Without this the scan could pass on a list that drew no descriptions.
+    expect(el.shadowRoot!.querySelectorAll(".option-description")).toHaveLength(2);
+    await expectNoA11yViolations(host);
+  });
+
+  // A hovered row is painted --wt-color-bg, so its description is muted text on a different colour
+  // from the panel's.
+  test("open, with the cursor over a described row", async () => {
+    const el = await openThemed(
+      '<wt-combobox label="Standalone ordering" search="never" value="staff"></wt-combobox>',
+      theme,
+      DESCRIBED,
+    );
+    const row = el.shadowRoot!.querySelector<HTMLElement>('[role="option"]')!;
+    await userEvent.hover(row);
+    expect(row.matches(":hover")).toBe(true);
+    expect(row.querySelector(".option-description")).not.toBeNull();
+    expect(getComputedStyle(row).backgroundColor).toBe(getComputedStyle(host).backgroundColor);
+    await expectNoA11yViolations(host);
+  });
+
+  test("opened from the keyboard, with a described row active", async () => {
+    const el = (await mountThemed(
+      '<wt-combobox label="Standalone ordering" search="never" value="staff"></wt-combobox>',
+      theme,
+    )) as WtCombobox;
+    el.options = DESCRIBED;
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>(".trigger")!.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    const active = el.shadowRoot!.querySelector(".option.active")!;
+    expect(active.getAttribute("aria-selected")).toBe("true");
+    expect(active.querySelector(".option-description")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
