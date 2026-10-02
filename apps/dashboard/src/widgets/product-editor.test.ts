@@ -164,6 +164,73 @@ it('renders a short unit as "per unit" on the price control', async () => {
   );
 });
 
+const kg = { id: "kg", name: { en: "Kilogram" }, abbreviation: { en: "kg" } };
+it.each([
+  { locale: "en-GB", unitId: null, variants: [], label: "Price", button: "Each" },
+  { locale: "es-ES", unitId: null, variants: [], label: "Precio", button: "Unidad" },
+  { locale: "en-GB", unitId: kg.id, variants: [], label: "Price per kg", button: "per kg" },
+  { locale: "es-ES", unitId: kg.id, variants: [], label: "Precio por kg", button: "por kg" },
+  { locale: "en-GB", unitId: null, variants: [small], label: "Base price", button: "Each" },
+  { locale: "es-ES", unitId: null, variants: [small], label: "Precio base", button: "Unidad" },
+  {
+    locale: "en-GB",
+    unitId: kg.id,
+    variants: [small],
+    label: "Base price per kg",
+    button: "per kg",
+  },
+  {
+    locale: "es-ES",
+    unitId: kg.id,
+    variants: [small],
+    label: "Precio base por kg",
+    button: "por kg",
+  },
+])(
+  "labels the price $label with the unit button $button in $locale",
+  async ({ locale, unitId, variants, label, button }) => {
+    setLocale(locale);
+    try {
+      const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+        open: true,
+        value: { ...product, unitId, variants },
+        locales: ["en"],
+        units: [kg],
+        taxChoices: reduced,
+      });
+      const price = control<{ label: string; unit: string }>(el, "unit-price");
+      expect(price.label).toBe(label);
+      expect(price.unit).toBe(button);
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
+it("hands the variant window no unit when the product has none, so its price reads Price", async () => {
+  setLocale("en-GB");
+  try {
+    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: { ...product, unitId: null },
+      locales: ["en"],
+      units: [kg],
+      taxChoices: reduced,
+    });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
+    await el.updateComplete;
+    const form = variantForm(el);
+    await form.updateComplete;
+    expect((form as unknown as { unitLabel: string }).unitLabel).toBe("");
+    const price = form.shadowRoot!.querySelector<HTMLElement & { label: string }>(
+      'wt-price-input[name="unitPrice"]',
+    )!;
+    expect(price.label).toBe("Price");
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
 it.each([
   { locale: "en-GB", side: "before" },
   { locale: "es-ES", side: "after" },
@@ -1807,7 +1874,7 @@ it("defaults a new product to Each (no unit)", async () => {
   // Each is a chosen unit like any other, so the price field's button names it rather than asking
   // the person to choose — which is the only thing on screen until they open the chooser.
   expect(el.shadowRoot!.querySelector("[name=unit-price]")!.getAttribute("unit")).toBe(
-    t("editor.per_unit").replace("{unit}", t("editor.unit_each")),
+    t("editor.unit_each"),
   );
   await openUnits(el);
   const select = combobox(el, "unit")!;
@@ -2356,6 +2423,24 @@ it("offers each inherited choice first as 'Same as' the parent's value, with an 
     t("editor.per_unit").replace("{unit}", "l"),
   );
 });
+
+it.each([
+  { locale: "en-GB", label: "Price", button: "Each" },
+  { locale: "es-ES", label: "Precio", button: "Unidad" },
+])(
+  "labels a variant's price $label with the button $button when the parent has no unit ($locale)",
+  async ({ locale, label, button }) => {
+    setLocale(locale);
+    try {
+      const el = await mountVariant({ ...glass, inherited: { ...parentValues, unitId: null } });
+      const price = control<{ label: string; unit: string }>(el, "unit-price");
+      expect(price.label).toBe(label);
+      expect(price.unit).toBe(button);
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
 
 it("marks a variant's own choice selected over the 'Same as' option", async () => {
   const el = await mountVariant({

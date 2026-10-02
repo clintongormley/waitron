@@ -140,6 +140,24 @@ it("falls back to the plain price label when the product has no unit yet", async
   expect(field(el, "unitPrice").label).toBe(t("editor.price"));
 });
 
+it.each([
+  { locale: "en-GB", unitLabel: "", label: "Price" },
+  { locale: "es-ES", unitLabel: "", label: "Precio" },
+  { locale: "en-GB", unitLabel: "kg", label: "Price per kg" },
+  { locale: "es-ES", unitLabel: "kg", label: "Precio por kg" },
+])(
+  "labels the price $label for unit $unitLabel in $locale",
+  async ({ locale, unitLabel, label }) => {
+    setLocale(locale);
+    try {
+      const el = await mountForm({ unitLabel });
+      expect(field(el, "unitPrice").label).toBe(label);
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
 it("refuses a blank name, explains it beside the field and above Save, and keeps the draft", async () => {
   const el = await mountForm({ value: halfPortion });
   const submit = vi.fn();

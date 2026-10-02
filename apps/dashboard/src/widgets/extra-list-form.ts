@@ -225,8 +225,9 @@ export class ExtraListForm extends LitElement {
     return this.#productById.get(productId)?.unitPrice ?? "";
   }
 
-  /** The rule product-editor.ts's `unitShortLabel` uses: the abbreviation, else the name, and Each
-   * for a product with no unit. A product this form was given no row for claims no unit. */
+  /** The rule product-editor.ts's `unitShortLabel` uses — the abbreviation, else the name — and
+   * Each for a product with no unit, as that editor's price button reads. A product this form was
+   * given no row for claims no unit. */
   #unitLabel(productId: string): string {
     const product = this.#productById.get(productId);
     if (!product) return "";
