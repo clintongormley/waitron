@@ -7,6 +7,7 @@ export * from "./live-data.js";
 export * from "./query-controller.js";
 export * from "./live-connection.js";
 export * from "./date-format.js";
+export * from "./table-strings.js";
 
 export { DraftRows } from "./merge-draft.js";
 export * from "./card-provider-panel.js";

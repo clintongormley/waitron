@@ -365,7 +365,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property() searchLabel = "Search";
   /** Placeholder text for the search box; empty means it repeats `searchLabel`. */
   @property() searchPlaceholder = "";
-  @property() noMatchesMessage = "No matches";
+  @property() noMatchesMessage = "Nothing matches your search or filters.";
   /** The placeholder of a column filter's search box, which a filter shows above seven rows, its all row included. */
   @property() filterSearchPlaceholder = "Search";
   /** What a column filter's open list says when its search matches no option. */
