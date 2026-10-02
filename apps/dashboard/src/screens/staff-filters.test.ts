@@ -4,6 +4,9 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { StaffList } from "../widgets/staff-list.js";
 import { StaffScreen } from "./staff-screen.js";
 import { setLocale } from "../i18n/t.js";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+
+type Combobox = HTMLElement & { value: string; options: { value: string; label: string }[] };
 
 afterEach(() => {
   cleanupWidgets();
@@ -64,21 +67,18 @@ function shown(el: StaffScreen): PersonSummary[] {
 it("searches names, email and phone as the administrator types", async () => {
   const el = await screen();
   expect(shown(el).map((person) => person.displayName)).toEqual(["Ada", "Grace"]);
-  const search = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=search]")!;
-  search.value = "222";
-  search.dispatchEvent(new InputEvent("input"));
+  const search = el.shadowRoot!.querySelector<HTMLElement>("[data-test=search]")!;
+  await chooseOption(search, "222");
   await el.updateComplete;
   expect(shown(el).map((person) => person.displayName)).toEqual(["Grace"]);
 });
 
 it("combines role and status filters and can include inactive users", async () => {
   const el = await screen();
-  const status = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=status-filter]")!;
-  status.value = "all";
-  status.dispatchEvent(new Event("change"));
-  const role = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=role-filter]")!;
-  role.value = "staff";
-  role.dispatchEvent(new Event("change"));
+  const status = el.shadowRoot!.querySelector<HTMLElement>("[data-test=status-filter]")!;
+  await chooseOption(status, "all");
+  const role = el.shadowRoot!.querySelector<HTMLElement>("[data-test=role-filter]")!;
+  await chooseOption(role, "staff");
   await el.updateComplete;
   expect(shown(el).map((person) => person.displayName)).toEqual(["Inactive Alex"]);
 });
@@ -86,8 +86,8 @@ it("combines role and status filters and can include inactive users", async () =
 it("lists the role filter's roles alphabetically in the current language, after All roles", async () => {
   setLocale("en-GB");
   const el = await screen();
-  const role = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=role-filter]")!;
-  expect([...role.options].map((option) => option.value)).toEqual([
+  const role = el.shadowRoot!.querySelector<Combobox>("[data-test=role-filter]")!;
+  expect(role.options.map((option) => option.value)).toEqual([
     "all",
     "admin",
     "manager",
@@ -99,22 +99,21 @@ it("lists the role filter's roles alphabetically in the current language, after 
 it("marks the chosen role's option selected when the options re-render in a different order", async () => {
   setLocale("en-GB");
   const el = await screen();
-  const role = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=role-filter]")!;
-  role.value = "manager";
-  role.dispatchEvent(new Event("change"));
+  const role = el.shadowRoot!.querySelector<Combobox>("[data-test=role-filter]")!;
+  await chooseOption(role, "manager");
   await el.updateComplete;
   setLocale("es-ES");
   el.requestUpdate();
   await el.updateComplete;
   expect(shown(el).map((person) => person.displayName)).toEqual(["Grace"]);
   expect(role.value).toBe("manager");
-  expect(role.selectedOptions[0]!.textContent!.trim()).toBe("Encargado");
+  expect(role.options.find((option) => option.value === role.value)!.label).toBe("Encargado");
 });
 
 it("explains what current users are in a help tooltip beside the status filter", async () => {
   setLocale("en-GB");
   const el = await screen();
-  const status = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=status-filter]")!;
+  const status = el.shadowRoot!.querySelector<HTMLElement>("[data-test=status-filter]")!;
   const help = el.shadowRoot!.querySelector<HTMLElement>("[data-test=status-filter-help]")!;
   expect(help.tagName).toBe("WT-HELP-TOOLTIP");
   expect(help.getAttribute("aria-label")).toBe("About current users");
@@ -123,5 +122,7 @@ it("explains what current users are in a help tooltip beside the status filter",
   );
   // The tooltip sits outside the label, so the dropdown's label text is just "Status".
   expect(help.closest("label")).toBeNull();
-  expect(status.labels?.[0]?.textContent?.trim()).toBe("Status");
+  const trigger = status.shadowRoot!.querySelector("[aria-labelledby]")!;
+  const label = status.shadowRoot!.getElementById(trigger.getAttribute("aria-labelledby")!);
+  expect(label?.textContent?.trim()).toBe("Status");
 });
