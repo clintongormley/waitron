@@ -781,7 +781,9 @@ describe("missing translations", () => {
   });
 
   it("says the dashboard's one no-matches sentence when a search hides every missing name", async () => {
-    const el = await mount(gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })));
+    const el = await mount(
+      gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })),
+    );
     const found = table(el, "ca")!;
     await found.updateComplete;
     const box = found.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;

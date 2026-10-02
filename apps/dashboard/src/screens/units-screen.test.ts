@@ -491,15 +491,13 @@ describe("units-screen", () => {
   it("says the dashboard's one no-matches sentence when the modal's search hides every product", async () => {
     const el = await mount(inUseApi());
     const dialog = await openInUseModal(el);
-    dialog
-      .querySelector("[data-test=in-use-search]")!
-      .dispatchEvent(
-        new CustomEvent("wt-change", {
-          detail: { value: "zzz-nothing" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+    dialog.querySelector("[data-test=in-use-search]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "zzz-nothing" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
     await el.updateComplete;
     const productTable = dialog.querySelector("wt-data-table")!;
     await productTable.updateComplete;
