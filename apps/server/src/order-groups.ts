@@ -42,6 +42,7 @@ import {
   type TabRoundLine,
 } from "./working-order.js";
 import "./errors.js";
+import { stillMovable } from "./station-move.js";
 import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
 
 export type GroupRelease = "fire" | "hold";
@@ -1015,6 +1016,8 @@ export async function readReleaseReminders(
  * records progress leaves `queued` with its fired time. */
 export interface CurrentOrderKitchen {
   state: TicketState;
+  stationId: string;
+  movable: boolean;
   /** Null while the item is held, or since it was recalled. */
   firedAt: string | null;
   /** When the pass sent it away, if it recorded that. */
@@ -1135,6 +1138,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       ticketFiredAt: ticketItems.firedAt,
       ticketMadeHere: ticketItems.madeHere,
       awayAt: ticketItems.awayAt,
+      stationId: ticketItems.stationId,
     })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
@@ -1195,7 +1199,16 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       kitchen:
         line.ticketState === null
           ? null
-          : { state: line.ticketState, firedAt: line.ticketFiredAt, awayAt: line.awayAt },
+          : {
+              state: line.ticketState,
+              firedAt: line.ticketFiredAt,
+              awayAt: line.awayAt,
+              stationId: line.stationId!,
+              movable: stillMovable(
+                { state: line.ticketState, awayAt: line.awayAt, madeHere: line.ticketMadeHere! },
+                line,
+              ),
+            },
       note: line.note,
       extras: extras.get(line.id) ?? [],
     };

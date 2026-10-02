@@ -281,7 +281,8 @@ declare module "@waitron/shared" {
      */
     "working_order.not_settled": { workingOrderId: string };
     /**
-     * `handOver` (through `handOverOrder`) found the order ALREADY collected. Caught before the
+     * `handOver` (through `handOverOrder`) found the order ALREADY collected, or a move to another
+     * station found the order handed over. Caught before the
      * write because `working_orders_enforce_transition` permits the `collected_at` stamp only from
      * NULL, so a second stamp would surface as a raw trigger error.
      */
@@ -636,14 +637,21 @@ declare module "@waitron/shared" {
      */
     "ticket.not_fired": { workingOrderId: string };
     /**
+     * A move named a line with no kitchen record: never sent, or a dish needing no preparation.
+     * Before a send, `make_at_station_id` chooses where a dish will be made.
+     */
+    "ticket.not_sent": { workingOrderId: string; lineId: string };
+    /** A move named a dish made at the sending till, always fired and ready; its station is its maker. */
+    "ticket.made_here": { ticketItemId: string };
+    /**
      * A ticket-item bump was refused because the line is still HELD (`fired_at IS NULL`). Distinct
      * from `ticket.invalid_transition`, an illegal move on a fired line.
      */
     "ticket.item_held": { ticketItemId: string };
     /**
-     * A recall was asked for a line the kitchen has already started (`preparing`/`ready`, not
-     * `queued`). Recalling un-fires a line back to held, which is clean only while nothing is
-     * cooking; the correction for a started line is a cancel.
+     * A recall or station move named a line already preparing or ready. A move also refuses a line
+     * sent out of the kitchen or partly served. Recalling un-fires a line back to held only while
+     * nothing is cooking; the correction for a started line is a cancel.
      */
     "ticket.already_started": { ticketItemId: string };
     /** A kitchen-course name already exists in this venue. `name` is the operator's own text. */

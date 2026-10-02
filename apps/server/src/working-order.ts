@@ -19,6 +19,7 @@ import { requireMakeAtStation } from "./dead-ends.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
+import { stillMovable } from "./station-move.js";
 import {
   bumpPartyRevision,
   checkAndBumpParty,
@@ -3043,6 +3044,8 @@ export interface TabLine {
   firedAt: string | null;
   /** Null when the line has no ticket item. A following extra has none; a split-off extra has its own. */
   state: TicketState | null;
+  stationId: string | null;
+  movable: boolean;
   /** The order group the line is released with; null when it is in none, as on a bill with no party
    * or for a line moved here from another party's bill. */
   groupId: string | null;
@@ -3079,10 +3082,14 @@ export async function readTabLines(
       unitPriceGross: workingOrderLines.unitPriceGross,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       servedAt: workingOrderLines.servedAt,
+      servedQuantity: workingOrderLines.servedQuantity,
       courseId: workingOrderLines.courseId,
       sentAt: workingOrderLines.sentAt,
       firedAt: ticketItems.firedAt,
       state: ticketItems.state,
+      stationId: ticketItems.stationId,
+      awayAt: ticketItems.awayAt,
+      madeHere: ticketItems.madeHere,
       groupId: workingOrderLines.groupId,
       note: workingOrderLines.note,
       listId: workingOrderLines.extraListId,
@@ -3121,6 +3128,10 @@ export async function readTabLines(
       sentAt: row.sentAt,
       firedAt: row.firedAt,
       state: row.state,
+      stationId: row.stationId,
+      movable:
+        row.state !== null &&
+        stillMovable({ state: row.state, awayAt: row.awayAt, madeHere: row.madeHere! }, row),
       groupId: row.groupId,
       note: row.note,
       listId: row.listId,
@@ -4445,7 +4456,12 @@ async function applyLineEdits(
       menuItemId: menuItemOf(parent),
       ...variantOf(parent),
       quantity,
-      makeAt: intent.makeAt === undefined ? parent.makeAtStationId : intent.makeAt,
+      makeAt:
+        intent.makeAt == null && parent.ticket !== null
+          ? parent.makeAtStationId
+          : intent.makeAt === undefined
+            ? parent.makeAtStationId
+            : intent.makeAt,
       ...(intent.note === null ? {} : { note: intent.note }),
       frozenOptions: optionSnapshots,
       extras: picks,
@@ -4462,13 +4478,13 @@ async function applyLineEdits(
               kitchen: kitchenStateOf(parent),
               joins: parent,
               origin: parent,
-              inheritMakeAt: intent.makeAt === undefined,
+              inheritMakeAt: intent.makeAt == null,
             }
           : {
               kind: "line",
               kitchen: "fire",
               origin: parent,
-              inheritMakeAt: intent.makeAt === undefined,
+              inheritMakeAt: intent.makeAt == null,
             },
       );
     }

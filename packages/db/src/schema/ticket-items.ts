@@ -64,6 +64,8 @@ export const ticketItems = table(
     // NULL = HELD: the item cannot advance until it is fired.
     firedAt: tsString("fired_at"),
     awayAt: tsString("away_at"),
+    // Set when a waiter moved this record to its station by hand; a release keeps it there while the station is switched on.
+    stationChosenAt: tsString("station_chosen_at"),
     note: label("note"),
     // The quantity fired. Null where an insert does not state it, and on every row older than
     // `0014_order_edit_columns.sql`.

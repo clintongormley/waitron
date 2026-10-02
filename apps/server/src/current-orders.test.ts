@@ -1061,7 +1061,13 @@ describe("readCurrentOrders (spec §4)", () => {
               name: "croquetas",
               quantity: "2.000",
               servedQuantity: "1.000",
-              kitchen: { state: "queued", firedAt: expect.any(String), awayAt: null },
+              kitchen: {
+                state: "queued",
+                firedAt: expect.any(String),
+                awayAt: null,
+                stationId: expect.any(String),
+                movable: false,
+              },
             }),
             row({
               lineId: named("water", s.tabId).id,
@@ -1072,7 +1078,13 @@ describe("readCurrentOrders (spec §4)", () => {
               lineId: split.id,
               workingOrderId: checkId,
               name: "croquetas",
-              kitchen: { state: "queued", firedAt: expect.any(String), awayAt: null },
+              kitchen: {
+                state: "queued",
+                firedAt: expect.any(String),
+                awayAt: null,
+                stationId: expect.any(String),
+                movable: true,
+              },
             }),
           ],
         },
@@ -1090,7 +1102,13 @@ describe("readCurrentOrders (spec §4)", () => {
               workingOrderId: laterTab,
               name: "steak",
               released: false,
-              kitchen: { state: "queued", firedAt: null, awayAt: null },
+              kitchen: {
+                state: "queued",
+                firedAt: null,
+                awayAt: null,
+                stationId: expect.any(String),
+                movable: true,
+              },
               extras: [{ lineId: sauce.id, name: "sauce", quantity: "1.000" }],
             }),
           ],
@@ -1101,7 +1119,13 @@ describe("readCurrentOrders (spec §4)", () => {
           lineId: flan.id,
           workingOrderId: laterTab,
           name: "flan",
-          kitchen: { state: "queued", firedAt: expect.any(String), awayAt: null },
+          kitchen: {
+            state: "queued",
+            firedAt: expect.any(String),
+            awayAt: null,
+            stationId: expect.any(String),
+            movable: true,
+          },
         }),
       ],
     });
@@ -1120,9 +1144,21 @@ describe("readCurrentOrders (spec §4)", () => {
     const [croq] = read.groups[0]!.rows;
     const [steak] = read.groups[1]!.rows;
     expect(read.groups.map((g) => g.id)).toEqual([starters.id, mains.id]);
-    expect(croq!.kitchen).toEqual({ state: "queued", firedAt: expect.any(String), awayAt: null });
+    expect(croq!.kitchen).toEqual({
+      state: "queued",
+      firedAt: expect.any(String),
+      awayAt: null,
+      stationId: expect.any(String),
+      movable: true,
+    });
     expect(JSON.stringify(read.groups[0])).not.toContain("ready");
-    expect(steak!.kitchen).toEqual({ state: "ready", firedAt: expect.any(String), awayAt: null });
+    expect(steak!.kitchen).toEqual({
+      state: "ready",
+      firedAt: expect.any(String),
+      awayAt: null,
+      stationId: expect.any(String),
+      movable: false,
+    });
   });
 
   it("shows a served row fully served, and a recalled one no longer released", async () => {
@@ -1146,7 +1182,13 @@ describe("readCurrentOrders (spec §4)", () => {
     expect(read.groups[1]!.rows[0]).toMatchObject({
       lineId: steak.id,
       released: false,
-      kitchen: { state: "queued", firedAt: null, awayAt: null },
+      kitchen: {
+        state: "queued",
+        firedAt: null,
+        awayAt: null,
+        stationId: expect.any(String),
+        movable: true,
+      },
     });
   });
 
