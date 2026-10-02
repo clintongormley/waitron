@@ -1011,7 +1011,7 @@ folder's row opens the folder, as its name does today — ask if folder rows wer
 they are. LOOK at 1280 and 390, light and dark.
 
 **The dashboard recovers by itself when the server comes back after a restart (A206, owner
-2026-10-02) — DONE.** Reproduced with the server serving the built dashboard itself, as the box does
+2026-10-02) — DONE (#1052).** Reproduced with the server serving the built dashboard itself, as the box does
 (the dev stack's page server answers `502` instead, so it never shows `connection.failed`): of 34
 screens open across a restart, 20 kept "This browser could not connect…" or "could not be loaded"
 after their data had come back. The live connection already re-reads every watched query when its
@@ -1023,9 +1023,10 @@ message only if it is still the one the failed read set, a yes/no flag always (M
 set by the read in `#openMenuForm`, which a recovery clears too). Profile, Recipe, the two order
 dialogs and the catalogue's placement step, not among the 20, take the same callback. Screens whose
 first load stopped before starting its later reads (Products, Printers, Modifiers, Content
-languages, Approvals, Sales' business day) start them on recovery. Measured before the review's
-fixes of 2026-10-02: all 34 screens recover from a 20 s and a 90 s outage, and 32 of 34 opened
-during the outage; an unsaved form edit is kept. Not covered — below, "Screens that load outside the
+languages, Approvals, Sales' business day) start them on recovery. Measured on the merged head
+(`41f138d45`) with a 20 s outage: all 34 screens recover, and 32 of 34 opened during the outage;
+measured only before the review's fixes: a 90 s outage recovers and an unsaved form edit is kept.
+Not covered — below, "Screens that load outside the
 shared queries never retry".
 
 **Screens that load outside the shared queries never retry (A224, from A206's review, 2026-10-02) —
