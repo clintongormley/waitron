@@ -8150,10 +8150,10 @@ ongoing overhaul listed at the top of Track A.
     - The refusal's count of blocking orders is not shown on the Receipts page: `codeMessage` fills
       in no values.
     - **The payment slip was left alone.** Its words («JUSTIFICANTE DE PAGO», «Importe»,
-      «Cobrado») stay Spanish, and its date and amounts still follow `WAITRON_TILL_LOCALE`
-      (`apps/server/src/payment-slip-print.ts`). It is not the invoice, but art. 128-1.2.a also
-      covers «els altres documents que hi facin referència o que en derivin», so a Catalan venue's
-      slip is arguably covered.
+      «Cobrado») stay Spanish (`apps/server/src/payment-slip.ts`), and its date and amounts still
+      follow `WAITRON_TILL_LOCALE` (`apps/server/src/payment-slip-print.ts`). It is not the
+      invoice, but art. 128-1.2.a also covers «els altres documents que hi facin referència o que
+      en derivin», so a Catalan venue's slip is arguably covered.
     - **The translations need a native or official check before go-live.** Apart from the Catalan
       «Factura» and «Propina», which the Consumer Code and the agency's pages use, no word in the
       table was checked against a terminology source.
@@ -8168,13 +8168,14 @@ ongoing overhaul listed at the top of Track A.
     - The dev and demo seed's English mode stores `en-GB`, which prints the Spanish words beside
       English dish names; the Receipts page shows it as the saved language although it is not
       offered.
-    - Browsers carry no Galician or Basque number and date formats, so the till's on-screen ticket
-      writes a Galician or Basque sale's amounts and date in English style (`€20.00`,
-      `Aug 5, 2026`). Measured 2026-10-02: Playwright's Chromium 153 resolved `gl-ES` and `eu-ES`
-      to `en-US`, Google Chrome 154 on macOS to `en-GB`; `es-ES` and `ca-ES` resolved as
-      themselves. The printed receipt is formatted on the server and is not affected.
-    - The Basque date is the formatter's own pattern, «2026(e)ko urt. 15(a)», and drops to its own
-      line on 58 mm paper.
+    - The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish
+      way (`20,00 €`, `5 ago 2026`), while its words are Galician or Basque. Measured 2026-10-02:
+      Playwright's Chromium 153 resolved `gl-ES` and `eu-ES` number and date formats to `en-US`,
+      and Google Chrome 154 on macOS to `en-GB`, so the screen falls back to the registry's
+      `FALLBACK_RECEIPT_LOCALE` for any language the browser cannot format. The printed receipt is
+      formatted on the server and keeps the language's own pattern.
+    - The printed Basque date is the formatter's own pattern, «2026(e)ko urt. 15(a)», and drops to
+      its own line on 58 mm paper.
     - The sample receipt the preview draws keeps its Spanish content («Mesa 6», «MUESTRA/1»,
       «Café y tostada») in every language; only its fixed words change.
     - Setup still maps `provisioning.invalid_locales` to "Choose 1 or 2 invoice locales"; its own

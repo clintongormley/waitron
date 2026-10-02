@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { formatMoney } from "@waitron/shared";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillTicketView } from "./till-ticket-view.js";
@@ -810,9 +809,13 @@ describe("till-ticket-view: the sale's own language", () => {
         .replace(/\s+/g, " ")
         .trim(),
     );
-  // Browsers carry no Galician or Basque number data and write those amounts their own way, so a
-  // Basque or Galician row's amount is computed the way the view computes it.
-  const eu = (amount: string) => norm(formatMoney(amount, "eu-ES"));
+  // Measured in Playwright's Chromium 153 and Chrome 154: neither formats Galician or Basque
+  // numbers or dates, so those sales are formatted the Spanish way.
+  const spanishDate = norm(
+    new Intl.DateTimeFormat("es-ES", { dateStyle: "medium", timeStyle: "short" }).format(
+      new Date(result.issuedAt),
+    ),
+  );
   const catalan: Partial<TillSaleResult> = {
     locale: "ca-ES",
     lines: [
@@ -834,6 +837,7 @@ describe("till-ticket-view: the sale's own language", () => {
       )}`,
     );
     expect(rows(el, ".order-group")).toEqual(["Mesa 6 · Comanda 41"]);
+    expect(el.shadowRoot!.querySelector("article")!.getAttribute("lang")).toBe("ca-ES");
     expect(rows(el, ".lines > li")).toEqual(["Cafè 2 3,00 €", "Pernil 1 6,40 €"]);
     expect(rows(el, ".vat-row")).toEqual([
       "Base 21.00% 2,48 €",
@@ -861,11 +865,13 @@ describe("till-ticket-view: the sale's own language", () => {
       tender: { method: "card", charged: "9.90", tip: "0.50", reference: "4471" },
     });
 
+    expect(rows(el, ".meta-row")[1]).toBe(`Data ${spanishDate}`);
+    expect(el.shadowRoot!.querySelector("article")!.getAttribute("lang")).toBe("eu-ES");
     expect(rows(el, ".tender .tender-row")).toEqual([
       "Txartela",
       "Erref. 4471",
-      `Eskupekoa ${eu("0.50")}`,
-      `Kobratua ${eu("9.90")}`,
+      "Eskupekoa 0,50 €",
+      "Kobratua 9,90 €",
     ]);
   });
 
@@ -894,12 +900,12 @@ describe("till-ticket-view: the sale's own language", () => {
     });
 
     expect(rows(el, ".tender .tender-row")).toEqual([
-      `Eskudirua ${eu("20.00")}`,
-      `Itzulia ${eu("10.00")}`,
-      `Txartela ${eu("13.00")}`,
+      "Eskudirua 20,00 €",
+      "Itzulia 10,00 €",
+      "Txartela 13,00 €",
       "Erref. OP-9",
-      `Eskupekoa ${eu("1.00")}`,
-      `Itzulketa ${eu("-2.00")}`,
+      "Eskupekoa 1,00 €",
+      "Itzulketa -2,00 €",
     ]);
   });
 
@@ -960,7 +966,7 @@ describe("till-ticket-view: the sale's own language", () => {
       invoiceLocale: "gl-ES",
     });
 
-    expect(rows(el, ".vat-row")).toContain(`IVE 21.00% ${norm(formatMoney("0.52", "gl-ES"))}`);
+    expect(rows(el, ".vat-row")).toContain("IVE 21.00% 0,52 €");
     expect(rows(el, ".tender .tender-row")).toEqual(["Tarxeta"]);
   });
 });

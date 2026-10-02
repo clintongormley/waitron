@@ -11,7 +11,7 @@ import {
   perDishOptionQuantity,
   resolveSnapshotText,
 } from "@waitron/shared";
-import { receiptLabelsFor } from "@waitron/country-packs";
+import { FALLBACK_RECEIPT_LOCALE, receiptLabelsFor } from "@waitron/country-packs";
 import type { ReceiptLabels } from "@waitron/country";
 import { t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
@@ -433,12 +433,18 @@ export class TillTicketView extends LitElement {
   override render() {
     const r = this.result;
     const issuer = r.issuer ?? this.issuer;
-    const locale = r.locale ?? this.invoiceLocale;
-    const labels = receiptLabelsFor(locale);
+    const language = r.locale ?? this.invoiceLocale;
+    const labels = receiptLabelsFor(language);
+    // Browsers ship no number or date formats for some receipt languages (Galician and Basque in
+    // Chromium 153 and Chrome 154), and would write those amounts the English way.
+    const format =
+      Intl.NumberFormat.supportedLocalesOf([language]).length > 0
+        ? language
+        : FALLBACK_RECEIPT_LOCALE;
     const svg = qrSvg(r.qr);
     const orderGroup = `${r.orderLabel === null ? "" : `${r.orderLabel} · `}${labels.order} ${r.orderNumber}`;
     return html`
-      <article class="ticket">
+      <article class="ticket" lang=${language}>
         ${
           this.simulated
             ? html`<p class="simulation-notice" data-test="simulation-notice">
@@ -463,7 +469,7 @@ export class TillTicketView extends LitElement {
           </div>
           <div class="meta-row">
             <span class="meta-label">${labels.date}</span>
-            <span>${issueDate(r.issuedAt, locale)}</span>
+            <span>${issueDate(r.issuedAt, format)}</span>
           </div>
           <div class="meta-row order-group">
             <span>${orderGroup}</span>
@@ -476,17 +482,17 @@ export class TillTicketView extends LitElement {
             // the goods list can never diverge from the invoice.
             (group) => html`
               <li class="line">
-                <span class="line-name">${lineName(group.dish.descriptions, locale)}</span>
+                <span class="line-name">${lineName(group.dish.descriptions, language)}</span>
                 <span class="line-qty"
                   >${group.dish.quantity}${
                     group.dish.unitName == null
                       ? ""
-                      : ` ${resolveSnapshotText(group.dish.unitName, locale, locale)}`
+                      : ` ${resolveSnapshotText(group.dish.unitName, language, language)}`
                   }</span
                 >
-                ${lineGross(group.dish, locale)}
+                ${lineGross(group.dish, format)}
               </li>
-              ${optionAnswers(group.dish.optionSnapshots, { reads: "customer", locale }).map((answer) => html`<li class="line option modifier-answer"><span class="line-name">${answer}</span></li>`)}
+              ${optionAnswers(group.dish.optionSnapshots, { reads: "customer", locale: language }).map((answer) => html`<li class="line option modifier-answer"><span class="line-name">${answer}</span></li>`)}
               ${group.options.map(
                 // The per-dish count is recovered from the filed COMBINED child quantity.
                 (option) => {
@@ -495,22 +501,22 @@ export class TillTicketView extends LitElement {
                   return html`
                     <li class="line option">
                       <span class="line-name"
-                        >${lineName(option.descriptions, locale)}${badge}</span
+                        >${lineName(option.descriptions, language)}${badge}</span
                       >
-                      ${lineGross(option, locale)}
+                      ${lineGross(option, format)}
                     </li>
                   `;
                 },
               )}
               ${[group.dish, ...group.options].flatMap((line) =>
                 (line.adjustments ?? []).map((adjustment) =>
-                  adjustmentRow(adjustment, locale, labels, "adjustment"),
+                  adjustmentRow(adjustment, format, labels, "adjustment"),
                 ),
               )}
             `,
           )}
           ${(r.billAdjustments ?? []).map((adjustment) =>
-            adjustmentRow(adjustment, locale, labels, "bill-adjustment"),
+            adjustmentRow(adjustment, format, labels, "bill-adjustment"),
           )}
         </ul>
 
@@ -519,11 +525,11 @@ export class TillTicketView extends LitElement {
             (v) => html`
               <div class="vat-row">
                 <span class="vat-label">${labels.base} ${v.rate}%</span>
-                <span class="vat-amount">${formatMoney(v.base, locale)}</span>
+                <span class="vat-amount">${formatMoney(v.base, format)}</span>
               </div>
               <div class="vat-row">
                 <span class="vat-label">${labels.vat} ${v.rate}%</span>
-                <span class="vat-amount">${formatMoney(v.tax, locale)}</span>
+                <span class="vat-amount">${formatMoney(v.tax, format)}</span>
               </div>
             `,
           )}
@@ -531,10 +537,10 @@ export class TillTicketView extends LitElement {
 
         <div class="total-row">
           <span>${labels.total}</span>
-          <span>${formatMoney(r.total, locale)}</span>
+          <span>${formatMoney(r.total, format)}</span>
         </div>
 
-        <div class="tender">${renderTender(r, locale, labels)}</div>
+        <div class="tender">${renderTender(r, format, labels)}</div>
 
         ${
           svg
