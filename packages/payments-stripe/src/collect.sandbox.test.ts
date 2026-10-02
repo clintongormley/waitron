@@ -24,7 +24,7 @@ const d = KEY ? describe : describe.skip;
 const MANAGER = "22222222-2222-4222-8222-222222222222";
 
 d("Stripe test-mode sandbox: collect against a simulated reader", () => {
-  const pg = useVenueDb({
+  const suite = useVenueDb({
     migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
     timeoutMs: 120_000,
   });
@@ -67,10 +67,10 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
   });
 
   it("drives a real test-mode PaymentIntent to captured", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
+    const s = await seedWorkingOrder(suite.db, freshNif());
     const provider = new StripeTerminalProvider({
       client: stripeClient(stripe),
-      db: pg.db,
+      db: suite.db,
       nodeId: "11111111-1111-4111-8111-111111111111",
       poll: { maxAttempts: 40, intervalMs: 500 },
     });
@@ -93,11 +93,11 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     // `FakeStripe` mints a fresh `pi_` per call, so only real Stripe can show the key replays the
     // SAME PaymentIntent. The replay is a raw `createPaymentIntent`, not a second collect, because
     // after the first capture the PaymentIntent has already succeeded.
-    const s = await seedWorkingOrder(pg.db, freshNif());
+    const s = await seedWorkingOrder(suite.db, freshNif());
     const client = stripeClient(stripe);
     const provider = new StripeTerminalProvider({
       client,
-      db: pg.db,
+      db: suite.db,
       nodeId: "11111111-1111-4111-8111-111111111111",
       poll: { maxAttempts: 40, intervalMs: 500 },
     });
@@ -111,7 +111,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     await stripe.testHelpers.terminal.readers.presentPaymentMethod(readerId);
     const first = await collecting;
     expect(first.state).toBe("captured");
-    const row = await pg.db.transaction((tx) =>
+    const row = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, {
         provider: "stripe",
         paymentRef: first.paymentRef,
@@ -128,11 +128,11 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
   });
 
   it("resolving an abandoned attempt cancels its unpaid PaymentIntent at real Stripe", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
+    const s = await seedWorkingOrder(suite.db, freshNif());
     const client = stripeClient(stripe);
     const provider = new StripeTerminalProvider({
       client,
-      db: pg.db,
+      db: suite.db,
       nodeId: "11111111-1111-4111-8111-111111111111",
     });
     const intent = await client.createPaymentIntent({
@@ -141,7 +141,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
       idempotencyKey: `sandbox_abandoned_${s.workingOrderId}`,
     });
     const key = { provider: "stripe", paymentRef: `sandbox-${s.workingOrderId}` };
-    await pg.db.transaction(async (tx) => {
+    await suite.db.transaction(async (tx) => {
       await insertAttempting(tx, {
         ...key,
         workingOrderId: s.workingOrderId,

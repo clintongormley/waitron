@@ -27,10 +27,10 @@ import { seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 // The full manifest: `recordVoid` authorizes through identity's persons and sessions.
-const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 const drainDeps = (resolveClient: DrainDeps["resolveClient"]): DrainDeps => ({
-  db: pg.db,
+  db: suite.db,
   resolveClient,
   skipRetryMs: DEFAULT_SKIP_RETRY_MS,
   environment: "production",
@@ -64,7 +64,7 @@ describe("drain — happy path", () => {
 
   beforeEach(async () => {
     aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    seeded = await seedPendingEnvios(pg.db, { count: 3 }); // 3 pending altas on one till/node
+    seeded = await seedPendingEnvios(suite.db, { count: 3 }); // 3 pending altas on one till/node
     deps = drainDeps(staticResolver(aeat.client()));
   });
 
@@ -75,7 +75,7 @@ describe("drain — happy path", () => {
     expect(result.recordsAccepted).toBe(3);
     expect(result.batchesSent).toBe(1);
 
-    const rows = await withTransaction(pg.db, (tx) =>
+    const rows = await withTransaction(suite.db, (tx) =>
       tx.execute<{ estado: string; csv: string | null; confirmado_en: string | null }>(sql`
       select estado, csv, confirmado_en from envios order by registro_id
     `),
@@ -93,7 +93,7 @@ describe("drain — happy path", () => {
 
   it("TEETH: dropping the CSV write leaves a row with no CSV — this test must fail if csv is not persisted", async () => {
     await drain(deps, new Date("2026-07-21T00:01:00Z"));
-    const rows = await withTransaction(pg.db, (tx) =>
+    const rows = await withTransaction(suite.db, (tx) =>
       tx.execute<{ csv: string | null }>(sql`select csv from envios`),
     );
     expect(rows.rows.every((r) => r.csv !== null)).toBe(true);
@@ -106,29 +106,29 @@ describe("drain — happy path", () => {
  */
 describe("drain — happy path, an anulación row", () => {
   it("submits a voided sale's anulación through the same accept-and-persist path as an alta", async () => {
-    const { tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db);
+    const { tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db);
     // `recordVoid` requires `sale.void`, so a manager's session authorizes it. `id` and
     // `created_at` are supplied because their defaults are drizzle `$defaultFn`s, which raw SQL
     // never runs.
-    const { rows: mgr } = await pg.db.execute<{ id: string }>(
+    const { rows: mgr } = await suite.db.execute<{ id: string }>(
       sql`insert into persons (id, created_at, display_name, pin_hash, role)
           values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
     );
-    const voidSession = await withTransaction(pg.db, (tx) =>
+    const voidSession = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { tillId, personId: mgr[0]!.id, pin: "1234" }),
     );
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: steadyClock,
-      db: pg.db,
+      db: suite.db,
       resolveClient: staticResolver(aeat.client()),
     });
 
-    const sale = await withTransaction(pg.db, async (tx) => {
+    const sale = await withTransaction(suite.db, async (tx) => {
       return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
     });
-    await withTransaction(pg.db, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
     });
 
@@ -141,7 +141,7 @@ describe("drain — happy path, an anulación row", () => {
     expect(result.recordsSubmitted).toBe(2);
     expect(result.recordsAccepted).toBe(2);
 
-    const rows = await withTransaction(pg.db, (tx) =>
+    const rows = await withTransaction(suite.db, (tx) =>
       tx.execute<{ estado: string; csv: string | null }>(sql`
         select estado, csv from envios where ${ownChain({ nodeId })}
       `),
@@ -161,9 +161,9 @@ describe("drain — batching (the >cap split)", () => {
   });
 
   it("splits a >cap backlog at the injected cap: a full 3-row chunk now, the <cap tail deferred until t", async () => {
-    const seeded = await seedPendingEnvios(pg.db, { count: 4 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 4 });
     const deps: DrainDeps = {
-      db: pg.db,
+      db: suite.db,
       resolveClient: staticResolver(aeat.client()),
       skipRetryMs: DEFAULT_SKIP_RETRY_MS,
       environment: "production",
@@ -176,7 +176,7 @@ describe("drain — batching (the >cap split)", () => {
     expect(first.recordsSubmitted).toBe(3);
     expect(first.nextDueAt).not.toBeNull();
 
-    const pending = await withTransaction(pg.db, (tx) =>
+    const pending = await withTransaction(suite.db, (tx) =>
       tx.execute<{ count: number }>(sql`
       select count(*) as count from envios where ${ownChain(seeded)} and estado = 'pendiente'
     `),
@@ -197,19 +197,19 @@ describe("drain — flow control (envio_flujo)", () => {
 
   beforeEach(async () => {
     aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    seeded = await seedPendingEnvios(pg.db, { count: 3 }); // 3 pending altas on one till/node
+    seeded = await seedPendingEnvios(suite.db, { count: 3 }); // 3 pending altas on one till/node
     deps = drainDeps(staticResolver(aeat.client()));
   });
 
   afterEach(async () => {
-    await pg.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
-    await pg.db.execute(sql`delete from envio_flujo`);
+    await suite.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
+    await suite.db.execute(sql`delete from envio_flujo`);
   });
 
   it("persists the server's TiempoEsperaEnvio into envio_flujo and sets nextDueAt when a partial batch remains for next time", async () => {
     // 3 records → one envío that drains the whole backlog; the NEXT envío waits t.
     const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
-    const flujo = await withTransaction(pg.db, (tx) =>
+    const flujo = await withTransaction(suite.db, (tx) =>
       tx.execute<{ proximo_envio_en: string; tiempo_espera_seg: number }>(
         sql`select proximo_envio_en, tiempo_espera_seg from envio_flujo`,
       ),
@@ -226,7 +226,7 @@ describe("drain — flow control (envio_flujo)", () => {
     });
     const deps2 = drainDeps(staticResolver(big.client()));
     await drain(deps2, new Date("2026-07-21T00:01:00Z"));
-    const flujo = await withTransaction(pg.db, (tx) =>
+    const flujo = await withTransaction(suite.db, (tx) =>
       tx.execute<{ tiempo_espera_seg: number }>(sql`select tiempo_espera_seg from envio_flujo`),
     );
     expect(flujo.rows[0]?.tiempo_espera_seg).toBe(9999); // fake clamps its initial t to ≤9999 per the schema
@@ -238,7 +238,7 @@ describe("drain — flow control (envio_flujo)", () => {
    */
   it("defers the pass behind a still-open gate, claiming nothing and leaving its backlog pending", async () => {
     const proximoEnvioEn = new Date("2026-07-21T00:05:00Z"); // still in the future relative to `now` below
-    await pg.db.execute(sql`
+    await suite.db.execute(sql`
       insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
       values (1, ${proximoEnvioEn.toISOString()}, 60)
     `);
@@ -251,7 +251,7 @@ describe("drain — flow control (envio_flujo)", () => {
     expect(result.nextDueAt).toEqual(proximoEnvioEn);
 
     // Select only this case's own chain.
-    const rows = await withTransaction(pg.db, (tx) =>
+    const rows = await withTransaction(suite.db, (tx) =>
       tx.execute<{ estado: string }>(sql`select estado from envios where ${ownChain(seeded)}`),
     );
     expect(rows.rows).toHaveLength(3);
@@ -266,9 +266,9 @@ describe("drain — flow control (envio_flujo)", () => {
 describe("drain — stale claim recovery", () => {
   it("recovers a stale enviando row back to pendiente with incidencia set, then resubmits it this same pass", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     // An abandoned claim, stamped well over RECUPERACION_ENVIANDO_MS ago.
-    await withTransaction(pg.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'enviando', enviado_en = ${new Date("2026-07-20T00:00:00Z").toISOString()}
         where ${ownChain(seeded)}
@@ -278,7 +278,7 @@ describe("drain — stale claim recovery", () => {
     await drain(deps, new Date("2026-07-21T00:01:00Z")); // > RECUPERACION_ENVIANDO_MS past enviado_en
 
     const rows = decodeFlags(
-      await withTransaction(pg.db, (tx) =>
+      await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string; incidencia: number }>(sql`
         select estado, incidencia from envios where ${ownChain(seeded)}
       `),
@@ -291,11 +291,11 @@ describe("drain — stale claim recovery", () => {
 
   it("does not recover an enviando row that is not yet past the recovery threshold", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const now = new Date("2026-07-21T00:01:00Z");
     // A slow submission still waiting on AEAT, not an abandoned claim: recovering it would resubmit
     // a record its own persist step may still be about to write a CSV for.
-    await withTransaction(pg.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'enviando', enviado_en = ${new Date(now.getTime() - 60_000).toISOString()}
         where ${ownChain(seeded)}
@@ -306,7 +306,7 @@ describe("drain — stale claim recovery", () => {
 
     expect(result.recordsSubmitted).toBe(0); // untouched — not stale, so not reclaimed
     const rows = decodeFlags(
-      await withTransaction(pg.db, (tx) =>
+      await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string; incidencia: number }>(sql`
         select estado, incidencia from envios where ${ownChain(seeded)}
       `),
@@ -322,7 +322,7 @@ describe("resetInFlightClaims — the restart reset (topology design §5.2)", ()
 
   /** Leaves the seeded rows as a previous run's claim: `enviando`, stamped one second ago. */
   const claimOneSecondAgo = (seeded: SeededDrain) =>
-    withTransaction(pg.db, (tx) =>
+    withTransaction(suite.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'enviando', enviado_en = ${new Date(now.getTime() - 1_000).toISOString()}
         where ${ownChain(seeded)}
@@ -331,7 +331,7 @@ describe("resetInFlightClaims — the restart reset (topology design §5.2)", ()
 
   const stateOf = async (seeded: SeededDrain) =>
     decodeFlags(
-      await withTransaction(pg.db, (tx) =>
+      await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string; incidencia: number; proximo_intento_en: string }>(sql`
           select estado, incidencia, proximo_intento_en from envios where ${ownChain(seeded)}
         `),
@@ -340,10 +340,10 @@ describe("resetInFlightClaims — the restart reset (topology design §5.2)", ()
 
   it("files a claim a previous run left behind on the next pass, with no five-minute wait", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     await claimOneSecondAgo(seeded);
 
-    await resetInFlightClaims(pg.db, now);
+    await resetInFlightClaims(suite.db, now);
     const result = await drain(drainDeps(staticResolver(aeat.client())), now);
 
     expect(result.recordsSubmitted).toBe(1);
@@ -353,10 +353,10 @@ describe("resetInFlightClaims — the restart reset (topology design §5.2)", ()
   });
 
   it("returns the claim to pendiente, due now, with incidencia raised", async () => {
-    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     await claimOneSecondAgo(seeded);
 
-    await resetInFlightClaims(pg.db, now);
+    await resetInFlightClaims(suite.db, now);
 
     expect(await stateOf(seeded)).toEqual([
       { estado: "pendiente", incidencia: true, proximo_intento_en: now.toISOString() },
@@ -364,16 +364,16 @@ describe("resetInFlightClaims — the restart reset (topology design §5.2)", ()
   });
 
   it("leaves pendiente, aceptado and detenido rows alone", async () => {
-    const seeded = await seedPendingEnvios(pg.db, { count: 3 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
     const [, second, third] = seeded.registroIds;
-    await withTransaction(pg.db, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await tx.execute(sql`update envios set estado = 'aceptado' where registro_id = ${second}`);
       await tx.execute(sql`update envios set estado = 'detenido' where registro_id = ${third}`);
     });
     const before = await stateOf(seeded);
     expect(before.map((row) => row.estado).sort()).toEqual(["aceptado", "detenido", "pendiente"]);
 
-    await resetInFlightClaims(pg.db, now);
+    await resetInFlightClaims(suite.db, now);
 
     expect(await stateOf(seeded)).toEqual(before);
   });
@@ -389,12 +389,12 @@ describe("drain — retry backoff on a transient submit failure", () => {
         throw new Error("n/a");
       },
     };
-    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const deps = drainDeps(staticResolver(failing));
     const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
     const rows = decodeFlags(
-      await withTransaction(pg.db, (tx) =>
+      await withTransaction(suite.db, (tx) =>
         tx.execute<{
           estado: string;
           intentos: number;
@@ -436,16 +436,16 @@ describe("drain — nextDueAt is folded as a minimum, never assigned", () => {
    * `seconds` so the tail fold lands at `now + seconds`. Cleans up both tables: the row stays
    * `pendiente` after the backoff, and `envio_flujo` holds ONE row for the whole database. */
   async function passWithGate(seconds: number): Promise<Awaited<ReturnType<typeof drain>>> {
-    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    await pg.db.execute(sql`
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    await suite.db.execute(sql`
       insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
       values (1, ${new Date(NOW.getTime() - 1000).toISOString()}, ${seconds})
     `);
     try {
       return await drain(drainDeps(staticResolver(failing)), NOW);
     } finally {
-      await pg.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
-      await pg.db.execute(sql`delete from envio_flujo`);
+      await suite.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
+      await suite.db.execute(sql`delete from envio_flujo`);
     }
   }
 
@@ -470,13 +470,13 @@ describe("drain — nextDueAt is folded as a minimum, never assigned", () => {
 describe("drain — per-record resolution: rejection, halting, incidents", () => {
   it("halts a chain on a genuine rejection: the record is rechazado, its successors detenido, an error incident is raised", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const seeded = await seedPendingEnvios(pg.db, { count: 3 }); // secuencia 1,2,3 on one SIF
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 }); // secuencia 1,2,3 on one SIF
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente"); // reject the middle record
     const deps = drainDeps(staticResolver(aeat.client()));
     const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
     const rows = decodeFlags(
-      await withTransaction(pg.db, (tx) =>
+      await withTransaction(suite.db, (tx) =>
         tx.execute<{ secuencia: number; estado: string; incidencia: number }>(sql`
         select r.secuencia, e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
         where r.node_id = ${seeded.nodeId}
@@ -492,7 +492,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     expect(result.incidentsRaised).toBeGreaterThanOrEqual(1);
 
     const inc = parseParams(
-      await withTransaction(pg.db, (tx) =>
+      await withTransaction(suite.db, (tx) =>
         tx.execute<{ code: string; severity: string; params: string }>(sql`
         select code, severity, params from incidents
       `),
@@ -507,11 +507,11 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
 
   it("marks aceptado_con_errores and raises a warning incident, but the record still counts as accepted", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const seeded = await seedPendingEnvios(pg.db, { count: 1, futureDated: true }); // triggers 2004 → AceptadoConErrores
+    const seeded = await seedPendingEnvios(suite.db, { count: 1, futureDated: true }); // triggers 2004 → AceptadoConErrores
     const deps = drainDeps(staticResolver(aeat.client()));
     const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
-    const rows = await withTransaction(pg.db, (tx) =>
+    const rows = await withTransaction(suite.db, (tx) =>
       tx.execute<{ estado: string; csv: string | null }>(
         sql`select estado, csv from envios where ${ownChain(seeded)}`,
       ),
@@ -521,7 +521,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     expect(result.recordsAccepted).toBe(1);
     expect(result.recordsHalted).toBe(0);
 
-    const inc = await withTransaction(pg.db, (tx) =>
+    const inc = await withTransaction(suite.db, (tx) =>
       tx.execute<{ severity: string; code: string }>(sql`select severity, code from incidents`),
     );
     expect(inc.rows).toHaveLength(1);
@@ -534,7 +534,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
       serverNow: new Date("2026-07-21T00:00:00Z"),
       tiempoEsperaInicial: 5,
     });
-    const seeded = await seedPendingEnvios(pg.db, { count: 3 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
     const deps = drainDeps(staticResolver(aeat.client()));
     // First pass: secuencia 2 rechazado, secuencia 3 detenido — the chain is left with an OPEN halt.
@@ -542,12 +542,12 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     expect(first.recordsHalted).toBe(2);
 
     // A NEW record lands on the same chain while the halt is still open.
-    await appendPendingAlta(pg.db, seeded, 4);
+    await appendPendingAlta(suite.db, seeded, 4);
 
     const second = await drain(deps, new Date("2026-07-21T00:01:30Z"));
 
     const row4 = decodeFlags(
-      await withTransaction(pg.db, (tx) =>
+      await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string; incidencia: number }>(sql`
         select e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
         where r.node_id = ${seeded.nodeId} and r.secuencia = 4
@@ -573,22 +573,22 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
       serverNow: new Date("2026-07-21T00:00:00Z"),
       tiempoEsperaInicial: 5,
     });
-    const seeded = await seedPendingEnvios(pg.db, { count: 3 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
     const deps = drainDeps(staticResolver(aeat.client()));
     const first = await drain(deps, new Date("2026-07-21T00:01:00Z"));
     expect(first.recordsHalted).toBe(2); // chain A: secuencia 2 rechazado + secuencia 3 detenido
 
     // Chain A (halted) and chain B (healthy) both fall due together, claimed in one batch.
-    const chainA4 = await appendPendingAlta(pg.db, seeded, 4);
+    const chainA4 = await appendPendingAlta(suite.db, seeded, 4);
     // secuencia 5, not 1: `NumSerieFactura` derives from `secuencia`, and invoice identities are
     // unique across chains (`registros_identidad_uq`); chain A already used 1-4.
-    const chainB1 = await seedSecondChain(pg.db, seeded, 5);
+    const chainB1 = await seedSecondChain(suite.db, seeded, 5);
 
     const second = await drain(deps, new Date("2026-07-21T00:01:30Z"));
 
     const rowA = decodeFlags(
-      await withTransaction(pg.db, (tx) =>
+      await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string; incidencia: number }>(
           sql`select estado, incidencia from envios where registro_id = ${chainA4.registroId}`,
         ),
@@ -597,7 +597,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     expect(rowA.rows[0]?.estado).toBe("detenido");
     expect(rowA.rows[0]?.incidencia).toBe(true);
 
-    const rowB = await withTransaction(pg.db, (tx) =>
+    const rowB = await withTransaction(suite.db, (tx) =>
       tx.execute<{ estado: string; csv: string | null }>(
         sql`select estado, csv from envios where registro_id = ${chainB1.registroId}`,
       ),
@@ -627,13 +627,13 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
   });
 
   it("TEETH: a 3000 whose RegistroDuplicado is Correcta resolves to aceptado, not rechazado/detenido", async () => {
-    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const deps = drainDeps(staticResolver(aeat.client()));
     await drain(deps, new Date("2026-07-21T00:01:00Z")); // stores it — AEAT now genuinely holds "Correcta"
 
     // Resubmit our own already-accepted record, as a lost response would: the fake answers error
     // 3000 with `EstadoRegistroDuplicado` "Correcta", which must read as an accept.
-    await withTransaction(pg.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'pendiente', proximo_intento_en = ${new Date("2026-07-21T00:01:00Z").toISOString()}
         where ${ownChain(seeded)}
@@ -641,14 +641,14 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     );
     const result = await drain(deps, new Date("2026-07-21T00:01:30Z")); // gate opens 00:01:05Z
 
-    const rows = await withTransaction(pg.db, (tx) =>
+    const rows = await withTransaction(suite.db, (tx) =>
       tx.execute<{ estado: string }>(sql`select estado from envios where ${ownChain(seeded)}`),
     );
     expect(rows.rows[0]?.estado).toBe("aceptado"); // despite the outer Incorrecto on the 3000 line
     expect(result.recordsAccepted).toBe(1);
     expect(result.recordsHalted).toBe(0);
 
-    const inc = await withTransaction(pg.db, (tx) =>
+    const inc = await withTransaction(suite.db, (tx) =>
       tx.execute<{ code: string }>(sql`select code from incidents`),
     );
     expect(inc.rows).toHaveLength(0);
@@ -660,12 +660,12 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
    * would leave it `aceptado`.
    */
   it("Route A: duplicate_annulled halts detenido, and halts a same-batch successor too, raising a fiscal.duplicado_anulado incident", async () => {
-    const seeded = await seedPendingEnvios(pg.db, { count: 2 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const deps = drainDeps(staticResolver(aeat.client()));
     await drain(deps, new Date("2026-07-21T00:01:00Z")); // stores both — AEAT now genuinely holds both "Correcta"
 
     aeat.annul(seeded.facturaKeys[0]!); // AEAT's own copy of secuencia 1's identity is now Anulada
-    await withTransaction(pg.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'pendiente', proximo_intento_en = ${new Date("2026-07-21T00:01:00Z").toISOString()}
         where ${ownChain(seeded)}
@@ -674,7 +674,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     const result = await drain(deps, new Date("2026-07-21T00:01:30Z")); // resubmit both -> 3000 each
 
     const rows = decodeFlags(
-      await withTransaction(pg.db, (tx) =>
+      await withTransaction(suite.db, (tx) =>
         tx.execute<{ secuencia: number; estado: string; incidencia: number }>(sql`
         select r.secuencia, e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
         where r.node_id = ${seeded.nodeId} order by r.secuencia
@@ -686,7 +686,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     expect(result.recordsHalted).toBe(2); // duplicate_annulled (1) + its halted successor (1)
     expect(result.recordsAccepted).toBe(0); // secuencia 2's own "Correcta" line never wins the halt
 
-    const inc = await withTransaction(pg.db, (tx) =>
+    const inc = await withTransaction(suite.db, (tx) =>
       tx.execute<{ code: string; severity: string }>(sql`select code, severity from incidents`),
     );
     // Exactly ONE incident: the halted successor is flagged, never given one of its own.
@@ -696,14 +696,14 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
   });
 
   it("Route B: duplicate_unknown with a matching huella resolves to aceptado", async () => {
-    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const deps = drainDeps(staticResolver(aeat.client()));
     await drain(deps, new Date("2026-07-21T00:01:00Z")); // AEAT now genuinely stores OUR real huella
 
     // The next response omits `EstadoRegistroDuplicado`, which reads as `duplicate_unknown`, so
     // the resubmit goes through `routeB`'s consulta.
     aeat.dropRegistroDuplicadoDetail(seeded.facturaKeys[0]!);
-    await withTransaction(pg.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'pendiente', proximo_intento_en = ${new Date("2026-07-21T00:01:00Z").toISOString()}
         where ${ownChain(seeded)}
@@ -712,7 +712,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     const result = await drain(deps, new Date("2026-07-21T00:01:30Z"));
 
     const rows = decodeFlags(
-      await withTransaction(pg.db, (tx) =>
+      await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string; incidencia: number }>(
           sql`select estado, incidencia from envios where ${ownChain(seeded)}`,
         ),
@@ -723,7 +723,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     expect(result.recordsHalted).toBe(0);
 
     // No fresh incident on a match — mirrors the plain "accepted" branch, which raises none either.
-    const inc = await withTransaction(pg.db, (tx) =>
+    const inc = await withTransaction(suite.db, (tx) =>
       tx.execute<{ code: string }>(sql`select code from incidents`),
     );
     expect(inc.rows).toHaveLength(0);
@@ -736,7 +736,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
    * proves Route B's mismatch also halts a same-batch successor.
    */
   it("Route B: duplicate_unknown with a differing huella halts the chain (and a same-batch successor), raising a fiscal.huella_divergente incident", async () => {
-    const seeded = await seedPendingEnvios(pg.db, { count: 2 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const [nif, numSerieFactura, fechaExpedicion] = seeded.facturaKeys[0]!.split("|");
 
     const collidingRecord: RegistroAlta = {
@@ -782,7 +782,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
     const rows = decodeFlags(
-      await withTransaction(pg.db, (tx) =>
+      await withTransaction(suite.db, (tx) =>
         tx.execute<{ secuencia: number; estado: string; incidencia: number }>(sql`
         select r.secuencia, e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
         where r.node_id = ${seeded.nodeId} order by r.secuencia
@@ -794,7 +794,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     expect(result.recordsHalted).toBe(2); // huella_divergente (1) + its halted successor (1)
     expect(result.recordsAccepted).toBe(0); // secuencia 2's own "Correcto" line never wins the halt
 
-    const inc = await withTransaction(pg.db, (tx) =>
+    const inc = await withTransaction(suite.db, (tx) =>
       tx.execute<{ code: string; severity: string }>(sql`select code, severity from incidents`),
     );
     expect(inc.rows).toHaveLength(1);
@@ -816,13 +816,13 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
 describe("drain — halted records get a halted ack (the bulk chain-halt paths)", () => {
   it("writes a rejected ack for the rejection and a halted ack for its still-pending successor", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const seeded = await seedPendingEnvios(pg.db, { count: 3 }); // secuencia 1,2,3 on one SIF
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 }); // secuencia 1,2,3 on one SIF
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente"); // reject the middle record
     const deps = drainDeps(staticResolver(aeat.client()));
     await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
     // secuencia 1 accepted, 2 rejected, 3 halted — the successor `haltSuccessors` swept to detenido.
-    const envios = await withTransaction(pg.db, (tx) =>
+    const envios = await withTransaction(suite.db, (tx) =>
       tx.execute<{ registro_id: string; secuencia: number; estado: string }>(sql`
         select e.registro_id, r.secuencia, e.estado from envios e
         join registros_facturacion r on r.id = e.registro_id
@@ -832,7 +832,7 @@ describe("drain — halted records get a halted ack (the bulk chain-halt paths)"
     );
     expect(envios.rows.map((r) => r.estado)).toEqual(["aceptado", "rechazado", "detenido"]);
 
-    const acks = await withTransaction(pg.db, (tx) =>
+    const acks = await withTransaction(suite.db, (tx) =>
       tx.execute<{ registro_id: string; state: string }>(
         sql`select registro_id, state from acks where ${ownChain(seeded)}`,
       ),
@@ -862,7 +862,7 @@ describe("drain — halted records get a halted ack (the bulk chain-halt paths)"
 describe("drain — the deployment-environment guard", () => {
   it("refuses to submit a registro generated for another environment, leaving it pendiente", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const seeded = await seedPendingEnvios(pg.db, { count: 1, entorno: "preproduction" });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1, entorno: "preproduction" });
     try {
       const deps = drainDeps(staticResolver(aeat.client()));
       const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
@@ -870,14 +870,14 @@ describe("drain — the deployment-environment guard", () => {
       expect(result.recordsSubmitted).toBe(0);
       expect(result.incidentsRaised).toBe(1);
 
-      const envio = await withTransaction(pg.db, (tx) =>
+      const envio = await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string }>(sql`select estado from envios where ${ownChain(seeded)}`),
       );
       // Left pendiente, not failed: fixing the host's configuration and restarting must be enough.
       expect(envio.rows[0]!.estado).toBe("pendiente");
 
       const inc = parseParams(
-        await withTransaction(pg.db, (tx) =>
+        await withTransaction(suite.db, (tx) =>
           tx.execute<{ code: string; severity: string; params: string }>(
             sql`select code, severity, params from incidents`,
           ),
@@ -893,26 +893,26 @@ describe("drain — the deployment-environment guard", () => {
         hostEnvironment: "production",
       });
     } finally {
-      await pg.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
+      await suite.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
     }
   });
 
   it("refuses a registro with no recorded environment, distinctly from a mismatch", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const seeded = await seedPendingEnvios(pg.db, { count: 1, entorno: null });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1, entorno: null });
     try {
       const deps = drainDeps(staticResolver(aeat.client()));
       const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
       expect(result.recordsSubmitted).toBe(0);
 
-      const envio = await withTransaction(pg.db, (tx) =>
+      const envio = await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string }>(sql`select estado from envios where ${ownChain(seeded)}`),
       );
       expect(envio.rows[0]!.estado).toBe("pendiente");
 
       const inc = parseParams(
-        await withTransaction(pg.db, (tx) =>
+        await withTransaction(suite.db, (tx) =>
           tx.execute<{ code: string; params: string }>(sql`select code, params from incidents`),
         ),
       );
@@ -924,13 +924,13 @@ describe("drain — the deployment-environment guard", () => {
         hostEnvironment: "production",
       });
     } finally {
-      await pg.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
+      await suite.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
     }
   });
 
   it("submits normally when the environments agree", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const seeded = await seedPendingEnvios(pg.db, { count: 1, entorno: "production" });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1, entorno: "production" });
     try {
       const deps = drainDeps(staticResolver(aeat.client()));
       const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
@@ -938,7 +938,7 @@ describe("drain — the deployment-environment guard", () => {
       expect(result.recordsSubmitted).toBeGreaterThan(0);
       expect(result.recordsAccepted).toBeGreaterThan(0);
     } finally {
-      await pg.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
+      await suite.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
     }
   });
 
@@ -952,10 +952,10 @@ describe("drain — the deployment-environment guard", () => {
     let cleanupNodeId: string | undefined;
     try {
       // secuencia 1 is refused (no entorno); 2 and 3, on the same chain, carry `"production"`.
-      const seeded = await seedPendingEnvios(pg.db, { count: 1, entorno: null });
+      const seeded = await seedPendingEnvios(suite.db, { count: 1, entorno: null });
       cleanupNodeId = seeded.nodeId;
-      await appendPendingAlta(pg.db, seeded, 2);
-      await appendPendingAlta(pg.db, seeded, 3);
+      await appendPendingAlta(suite.db, seeded, 2);
+      await appendPendingAlta(suite.db, seeded, 3);
 
       const deps = drainDeps(staticResolver(aeat.client()));
       const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
@@ -964,7 +964,7 @@ describe("drain — the deployment-environment guard", () => {
       // One incident for the whole chain, not one per row.
       expect(result.incidentsRaised).toBe(1);
 
-      const rows = await withTransaction(pg.db, (tx) =>
+      const rows = await withTransaction(suite.db, (tx) =>
         tx.execute<{ secuencia: number; estado: string; intentos: number }>(sql`
           select r.secuencia, e.estado, e.intentos from envios e
           join registros_facturacion r on r.id = e.registro_id
@@ -977,7 +977,7 @@ describe("drain — the deployment-environment guard", () => {
       expect(rows.rows.map((r) => r.intentos)).toEqual([0, 0, 0]);
 
       const inc = parseParams(
-        await withTransaction(pg.db, (tx) =>
+        await withTransaction(suite.db, (tx) =>
           tx.execute<{ code: string; params: string }>(sql`select code, params from incidents`),
         ),
       );
@@ -990,7 +990,9 @@ describe("drain — the deployment-environment guard", () => {
       expect(stored.some((s) => s.key.startsWith(`${seeded.nif}|`))).toBe(false);
     } finally {
       if (cleanupNodeId !== undefined) {
-        await pg.db.execute(sql`delete from envios where ${ownChain({ nodeId: cleanupNodeId })}`);
+        await suite.db.execute(
+          sql`delete from envios where ${ownChain({ nodeId: cleanupNodeId })}`,
+        );
       }
     }
   }, 20_000);
@@ -1005,16 +1007,16 @@ describe("drain — the deployment-environment guard", () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     let cleanupNodeId: string | undefined;
     try {
-      const seeded = await seedPendingEnvios(pg.db, { count: 3, entorno: null });
+      const seeded = await seedPendingEnvios(suite.db, { count: 3, entorno: null });
       cleanupNodeId = seeded.nodeId;
-      const healthy = await seedIndependentChain(pg.db, seeded, {
+      const healthy = await seedIndependentChain(suite.db, seeded, {
         sifId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
         secuencia: 1,
         entorno: "production",
       });
 
       const deps: DrainDeps = {
-        db: pg.db,
+        db: suite.db,
         resolveClient: staticResolver(aeat.client()),
         skipRetryMs: DEFAULT_SKIP_RETRY_MS,
         environment: "production",
@@ -1027,14 +1029,14 @@ describe("drain — the deployment-environment guard", () => {
       // One incident for the blocked chain, not re-raised by each retried claim.
       expect(result.incidentsRaised).toBe(1);
 
-      const healthyRow = await withTransaction(pg.db, (tx) =>
+      const healthyRow = await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string }>(
           sql`select estado from envios where registro_id = ${healthy.registroId}`,
         ),
       );
       expect(healthyRow.rows[0]?.estado).toBe("aceptado");
 
-      const refused = await withTransaction(pg.db, (tx) =>
+      const refused = await withTransaction(suite.db, (tx) =>
         tx.execute<{ count: number }>(sql`
             select count(*) as count from envios
             where ${ownChain(seeded)} and estado = 'pendiente'
@@ -1042,15 +1044,17 @@ describe("drain — the deployment-environment guard", () => {
       );
       expect(refused.rows[0]!.count).toBe(3);
 
-      const inc = await withTransaction(pg.db, (tx) =>
+      const inc = await withTransaction(suite.db, (tx) =>
         tx.execute<{ code: string }>(sql`select code from incidents`),
       );
       expect(inc.rows).toHaveLength(1);
       expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");
     } finally {
       if (cleanupNodeId !== undefined) {
-        await pg.db.execute(sql`delete from envios where ${ownChain({ nodeId: cleanupNodeId })}`);
-        await pg.db.execute(sql`delete from envios where estado = 'aceptado'`);
+        await suite.db.execute(
+          sql`delete from envios where ${ownChain({ nodeId: cleanupNodeId })}`,
+        );
+        await suite.db.execute(sql`delete from envios where estado = 'aceptado'`);
       }
     }
   });
@@ -1075,7 +1079,7 @@ describe("drain — maxRegistrosPorEnvio validation", () => {
   const NOW = new Date("2026-07-21T00:01:00Z");
   const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
   const depsWith = (cap?: number): DrainDeps => ({
-    db: pg.db,
+    db: suite.db,
     resolveClient: staticResolver(aeat.client()),
     skipRetryMs: DEFAULT_SKIP_RETRY_MS,
     environment: "production",
@@ -1095,21 +1099,21 @@ describe("drain — maxRegistrosPorEnvio validation", () => {
     let capNode: string | undefined;
     let defaultNode: string | undefined;
     try {
-      capNode = (await seedPendingEnvios(pg.db, { count: 1 })).nodeId;
+      capNode = (await seedPendingEnvios(suite.db, { count: 1 })).nodeId;
       const withCap = await drain(depsWith(3), NOW);
       expect(withCap.recordsSubmitted).toBeGreaterThanOrEqual(1);
 
       // The first drain closed the flow-control gate; clear it so the second pass is ungated.
-      await pg.db.execute(sql`delete from envio_flujo`);
-      defaultNode = (await seedPendingEnvios(pg.db, { count: 1 })).nodeId;
+      await suite.db.execute(sql`delete from envio_flujo`);
+      defaultNode = (await seedPendingEnvios(suite.db, { count: 1 })).nodeId;
       const omitted = await drain(depsWith(), NOW);
       expect(omitted.recordsSubmitted).toBeGreaterThanOrEqual(1);
     } finally {
       if (capNode !== undefined) {
-        await pg.db.execute(sql`delete from envios where ${ownChain({ nodeId: capNode })}`);
+        await suite.db.execute(sql`delete from envios where ${ownChain({ nodeId: capNode })}`);
       }
       if (defaultNode !== undefined) {
-        await pg.db.execute(sql`delete from envios where ${ownChain({ nodeId: defaultNode })}`);
+        await suite.db.execute(sql`delete from envios where ${ownChain({ nodeId: defaultNode })}`);
       }
     }
   });

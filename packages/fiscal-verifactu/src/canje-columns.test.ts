@@ -18,7 +18,7 @@ import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
  *
  * The trigger case below is the only thing refusing an UPDATE of `destinatarios`.
  */
-const pg = useVenueDb({
+const suite = useVenueDb({
   migrations: TEST_MIGRATIONS,
   setup: seedTenantTillSif,
   resetPerTest: false,
@@ -79,8 +79,8 @@ async function insertRegistro(exec: Database, fields: RegistroFields = {}): Prom
 
 describe("the destinatarios column is JSON and round-trips", () => {
   it("stores and returns destinatarios verbatim", async () => {
-    await insertRegistro(pg.db, { tipoFactura: "F3", destinatarios: A_DESTINATARIO });
-    const { rows } = await pg.db.execute<{ destinatarios: string }>(
+    await insertRegistro(suite.db, { tipoFactura: "F3", destinatarios: A_DESTINATARIO });
+    const { rows } = await suite.db.execute<{ destinatarios: string }>(
       sql`select destinatarios from registros_facturacion
            where destinatarios is not null order by secuencia desc limit 1`,
     );
@@ -90,7 +90,7 @@ describe("the destinatarios column is JSON and round-trips", () => {
 
   it("accepts a null destinatarios on an ordinary alta", async () => {
     await expect(
-      insertRegistro(pg.db, { tipoFactura: "F2", destinatarios: null }),
+      insertRegistro(suite.db, { tipoFactura: "F2", destinatarios: null }),
     ).resolves.toBeUndefined();
   });
 });
@@ -98,7 +98,7 @@ describe("the destinatarios column is JSON and round-trips", () => {
 describe("registros_facturas_sustituidas_f3_ck — a substitution block only on an F3", () => {
   it("accepts facturas_sustituidas on an F3", async () => {
     await expect(
-      insertRegistro(pg.db, {
+      insertRegistro(suite.db, {
         tipoFactura: "F3",
         facturasSustituidas: A_FACTURA_SUSTITUIDA,
         destinatarios: A_DESTINATARIO,
@@ -108,13 +108,13 @@ describe("registros_facturas_sustituidas_f3_ck — a substitution block only on 
 
   it("accepts a null facturas_sustituidas on a non-F3 (the ordinary case)", async () => {
     await expect(
-      insertRegistro(pg.db, { tipoFactura: "F2", facturasSustituidas: null }),
+      insertRegistro(suite.db, { tipoFactura: "F2", facturasSustituidas: null }),
     ).resolves.toBeUndefined();
   });
 
   it("rejects a facturas_sustituidas sitting on a non-F3 tipo_factura", async () => {
     const error = await captureError(() =>
-      insertRegistro(pg.db, { tipoFactura: "F2", facturasSustituidas: A_FACTURA_SUSTITUIDA }),
+      insertRegistro(suite.db, { tipoFactura: "F2", facturasSustituidas: A_FACTURA_SUSTITUIDA }),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/registros_facturas_sustituidas_f3_ck/);
@@ -124,7 +124,7 @@ describe("registros_facturas_sustituidas_f3_ck — a substitution block only on 
     // A NULL tipo_factura makes `NULL = 'F3'` NULL, which a CHECK treats as passing; the
     // `tipo_factura is not null and` arm is what rejects this.
     const error = await captureError(() =>
-      insertRegistro(pg.db, { tipoFactura: null, facturasSustituidas: A_FACTURA_SUSTITUIDA }),
+      insertRegistro(suite.db, { tipoFactura: null, facturasSustituidas: A_FACTURA_SUSTITUIDA }),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/registros_facturas_sustituidas_f3_ck/);
@@ -133,9 +133,9 @@ describe("registros_facturas_sustituidas_f3_ck — a substitution block only on 
 
 describe("the destinatarios column inherits the table's immutability", () => {
   it("refuses an UPDATE of destinatarios by the append-only trigger", async () => {
-    await insertRegistro(pg.db, { tipoFactura: "F3", destinatarios: A_DESTINATARIO });
+    await insertRegistro(suite.db, { tipoFactura: "F3", destinatarios: A_DESTINATARIO });
     const error = await captureError(async () =>
-      pg.db.execute(sql`update registros_facturacion set destinatarios = '{}'`),
+      suite.db.execute(sql`update registros_facturacion set destinatarios = '{}'`),
     );
     // `triggerRaised` matches the words too, so an `ON DELETE RESTRICT` refusal under the same
     // result code cannot satisfy it.

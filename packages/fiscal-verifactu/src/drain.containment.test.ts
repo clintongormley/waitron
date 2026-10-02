@@ -33,7 +33,7 @@ function recordingResolver(): { resolveClient: () => Promise<VerifactuClient>; a
   return state;
 }
 
-const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 /** A second database, for the one case whose subject is an EMPTY one. */
 const idle = useVenueDb({
@@ -69,11 +69,11 @@ describe("drain resolves a client only when it has work", () => {
   });
 
   it("reports a pass whose client cannot be resolved, rather than throwing out of the sweep", async () => {
-    const failingSeed = await seedPendingEnvios(pg.db, { count: 1 });
+    const failingSeed = await seedPendingEnvios(suite.db, { count: 1 });
 
     const result = await drain(
       {
-        db: pg.db,
+        db: suite.db,
         resolveClient: () =>
           // Any `AppError` this package owns will do: the subject is a structured code being
           // reported, not this particular failure.
@@ -93,11 +93,11 @@ describe("drain resolves a client only when it has work", () => {
     // Without folding in `now + skipRetryMs` a skipped pass would report `null`, and a host
     // sleeping on it stops polling for good. Not `now` either: see `DrainResult.nextDueAt` in
     // `packages/fiscal/src/backend.ts` (fold, never assign).
-    const failingSeed = await seedPendingEnvios(pg.db, { count: 1 });
+    const failingSeed = await seedPendingEnvios(suite.db, { count: 1 });
 
     const result = await drain(
       {
-        db: pg.db,
+        db: suite.db,
         resolveClient: () =>
           Promise.reject(new AppError("sif.not_registered", { nodeId: failingSeed.nodeId })),
         skipRetryMs: SKIP_RETRY_MS,
@@ -113,11 +113,11 @@ describe("drain resolves a client only when it has work", () => {
   // What this case pins is the skip arm's own instant; the minimum over two instants is pinned in
   // `drain.test.ts`'s "drain — nextDueAt is folded as a minimum, never assigned" describe.
   it("honours an explicit skipRetryMs rather than a package constant", async () => {
-    const failingSeed = await seedPendingEnvios(pg.db, { count: 1 });
+    const failingSeed = await seedPendingEnvios(suite.db, { count: 1 });
 
     const result = await drain(
       {
-        db: pg.db,
+        db: suite.db,
         resolveClient: () =>
           Promise.reject(new AppError("sif.not_registered", { nodeId: failingSeed.nodeId })),
         skipRetryMs: 90_000,
@@ -168,15 +168,15 @@ describe("the due-work gate's thresholds", () => {
   it("counts a pendiente row whose next attempt falls exactly on this instant, and not one a millisecond later", async () => {
     // `<=`, not `<`: `claimBatch` makes the same comparison, so `<` here would leave a claimable
     // row sitting for a whole pass.
-    await seedPendingEnvios(pg.db, { count: 1 });
-    await pg.db.execute(sql`
+    await seedPendingEnvios(suite.db, { count: 1 });
+    await suite.db.execute(sql`
       update envios set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
     `);
 
     const early = recordingResolver();
     const notYet = await drain(
       {
-        db: pg.db,
+        db: suite.db,
         resolveClient: early.resolveClient,
         skipRetryMs: SKIP_RETRY_MS,
         environment: "production",
@@ -189,7 +189,7 @@ describe("the due-work gate's thresholds", () => {
     const onTime = recordingResolver();
     const due = await drain(
       {
-        db: pg.db,
+        db: suite.db,
         resolveClient: onTime.resolveClient,
         skipRetryMs: SKIP_RETRY_MS,
         environment: "production",
@@ -203,8 +203,8 @@ describe("the due-work gate's thresholds", () => {
   it("counts a lone enviando row past RECUPERACION_ENVIANDO_MS, and not one exactly at it", async () => {
     // `<`, not `<=`, the same cutoff `recoverStaleClaims` computes. A lone `enviando` row is the
     // only shape in which this disjunct decides the answer on its own.
-    await seedPendingEnvios(pg.db, { count: 1 });
-    await pg.db.execute(sql`
+    await seedPendingEnvios(suite.db, { count: 1 });
+    await suite.db.execute(sql`
       update envios set estado = 'enviando',
         enviado_en = ${new Date(NOW.getTime() - RECUPERACION_ENVIANDO_MS).toISOString()}
     `);
@@ -212,7 +212,7 @@ describe("the due-work gate's thresholds", () => {
     const exact = recordingResolver();
     const notYet = await drain(
       {
-        db: pg.db,
+        db: suite.db,
         resolveClient: exact.resolveClient,
         skipRetryMs: SKIP_RETRY_MS,
         environment: "production",
@@ -222,7 +222,7 @@ describe("the due-work gate's thresholds", () => {
     expect(notYet.tenantsWithWork).toBe(0);
     expect(exact.asked).toBe(0);
 
-    await pg.db.execute(sql`
+    await suite.db.execute(sql`
       update envios set estado = 'enviando',
         enviado_en = ${new Date(NOW.getTime() - RECUPERACION_ENVIANDO_MS - 1).toISOString()}
     `);
@@ -230,7 +230,7 @@ describe("the due-work gate's thresholds", () => {
     const stale = recordingResolver();
     const due = await drain(
       {
-        db: pg.db,
+        db: suite.db,
         resolveClient: stale.resolveClient,
         skipRetryMs: SKIP_RETRY_MS,
         environment: "production",

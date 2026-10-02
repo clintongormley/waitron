@@ -6,7 +6,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
 
-const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 const NOW = new Date("2026-09-15T12:00:00Z");
 const hoursAgo = (h: number): Date => new Date(NOW.getTime() - h * 3_600_000);
@@ -83,17 +83,17 @@ async function seedWaiting(
 
 describe("fiscalSubmissionSource", () => {
   it("is silent when the oldest waiting record is 3 hours old", async () => {
-    const id = await seedIdentity(pg.db);
-    await seedWaiting(pg.db, id, hoursAgo(3), "pendiente");
-    await withTransaction(pg.db, async (tx) => {
+    const id = await seedIdentity(suite.db);
+    await seedWaiting(suite.db, id, hoursAgo(3), "pendiente");
+    await withTransaction(suite.db, async (tx) => {
       expect(await fiscalSubmissionSource.read({ tx, now: NOW })).toEqual([]);
     });
   });
 
   it("warns at 5 hours and errors at 25 hours, with count and hours", async () => {
-    const id = await seedIdentity(pg.db);
-    await seedWaiting(pg.db, id, hoursAgo(5), "enviando");
-    await withTransaction(pg.db, async (tx) => {
+    const id = await seedIdentity(suite.db);
+    await seedWaiting(suite.db, id, hoursAgo(5), "enviando");
+    await withTransaction(suite.db, async (tx) => {
       const [a] = await fiscalSubmissionSource.read({
         tx,
         now: NOW,
@@ -106,8 +106,8 @@ describe("fiscalSubmissionSource", () => {
       });
     });
 
-    await seedWaiting(pg.db, id, hoursAgo(25), "pendiente");
-    await withTransaction(pg.db, async (tx) => {
+    await seedWaiting(suite.db, id, hoursAgo(25), "pendiente");
+    await withTransaction(suite.db, async (tx) => {
       const [a] = await fiscalSubmissionSource.read({
         tx,
         now: NOW,
@@ -122,9 +122,9 @@ describe("fiscalSubmissionSource", () => {
   });
 
   it("errors on a detenido record", async () => {
-    const id = await seedIdentity(pg.db);
-    await seedWaiting(pg.db, id, hoursAgo(1), "detenido");
-    await withTransaction(pg.db, async (tx) => {
+    const id = await seedIdentity(suite.db);
+    await seedWaiting(suite.db, id, hoursAgo(1), "detenido");
+    await withTransaction(suite.db, async (tx) => {
       const alerts = await fiscalSubmissionSource.read({
         tx,
         now: NOW,
@@ -141,9 +141,9 @@ describe("fiscalSubmissionSource", () => {
   // Exactly at each threshold, because the source compares with `>=`: a mutation to `>` would still
   // pass the 3h/5h/25h cases but must fail here — 4h is the warning boundary, 24h the error boundary.
   it("treats exactly 4 hours as a warning and exactly 24 hours as an error", async () => {
-    const warn = await seedIdentity(pg.db);
-    await seedWaiting(pg.db, warn, hoursAgo(4), "pendiente");
-    await withTransaction(pg.db, async (tx) => {
+    const warn = await seedIdentity(suite.db);
+    await seedWaiting(suite.db, warn, hoursAgo(4), "pendiente");
+    await withTransaction(suite.db, async (tx) => {
       const [a] = await fiscalSubmissionSource.read({
         tx,
         now: NOW,
@@ -156,8 +156,8 @@ describe("fiscalSubmissionSource", () => {
     });
 
     // A second, older record: the oldest is now exactly 24 hours, so the alert becomes an error.
-    await seedWaiting(pg.db, warn, hoursAgo(24), "pendiente");
-    await withTransaction(pg.db, async (tx) => {
+    await seedWaiting(suite.db, warn, hoursAgo(24), "pendiente");
+    await withTransaction(suite.db, async (tx) => {
       const [a] = await fiscalSubmissionSource.read({
         tx,
         now: NOW,

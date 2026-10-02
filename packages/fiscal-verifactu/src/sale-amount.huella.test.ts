@@ -21,7 +21,7 @@ import type { RegistroRow } from "./registro-row.js";
  * every filed amount to two places itself, so the cases that change a filed amount are those derived
  * from the lines: a tax computed from a sub-cent base, and a base summed from sub-cent lines.
  */
-const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let backend: VerifactuBackend;
 let tillId: TillId;
@@ -30,11 +30,11 @@ let seriesId: SeriesId;
 
 beforeEach(async () => {
   // A pinned NIF: it is a huella input, and the controls below pin huella literals.
-  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db, { nif: "20009999K" }));
+  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db, { nif: "20009999K" }));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
-    db: pg.db,
+    db: suite.db,
     resolveClient: staticResolver(fakeClient),
   });
 });
@@ -59,7 +59,7 @@ async function sell(
   vatRate = "21.00",
   vatBreakdown?: VatBreakdownLine[],
 ): Promise<SaleId> {
-  const { saleId } = await withTransaction(pg.db, (tx) =>
+  const { saleId } = await withTransaction(suite.db, (tx) =>
     recordSale(
       tx,
       backend,
@@ -79,10 +79,10 @@ async function sell(
 
 /** A full invoice replacing one €14.41 simplified ticket. */
 async function substitute(total: string, lineTotals: string[], vatRate = "21.00") {
-  const { saleId: ticket } = await withTransaction(pg.db, (tx) =>
+  const { saleId: ticket } = await withTransaction(suite.db, (tx) =>
     recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId })),
   );
-  const { saleId } = await withTransaction(pg.db, (tx) =>
+  const { saleId } = await withTransaction(suite.db, (tx) =>
     recordSubstitution(tx, backend, {
       tillId,
       nodeId,
@@ -100,7 +100,7 @@ async function substitute(total: string, lineTotals: string[], vatRate = "21.00"
 }
 
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
-  const { rows } = await pg.db.execute<Record<string, unknown>>(
+  const { rows } = await suite.db.execute<Record<string, unknown>>(
     sql`select * from registros_facturacion where sale_id = ${saleId}`,
   );
   const row = rows[0];
@@ -109,11 +109,11 @@ async function rawRegistro(saleId: string): Promise<RegistroRow> {
 }
 
 async function observe(saleId: SaleId) {
-  const [sale] = await pg.db
+  const [sale] = await suite.db
     .select({ total: sales.total, vatBreakdown: sales.vatBreakdown })
     .from(sales)
     .where(eq(sales.id, saleId));
-  const stored = await pg.db
+  const stored = await suite.db
     .select({ lineTotal: saleLines.lineTotal })
     .from(saleLines)
     .where(eq(saleLines.saleId, saleId));

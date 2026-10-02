@@ -31,7 +31,7 @@ import { timeEntries } from "./schema/time-entries.js";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 
 // Concurrent appenders are ./chain.concurrency.test.ts's subject, not this suite's.
-const pg = useVenueDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 
@@ -40,10 +40,10 @@ let locationId: string;
 let nodeId: string;
 
 beforeEach(async () => {
-  await seedTenant(pg.db);
-  personId = await seedPerson(pg.db);
-  locationId = await seedLocation(pg.db);
-  nodeId = await seedNode(pg.db, brandLocationId(locationId));
+  await seedTenant(suite.db);
+  personId = await seedPerson(suite.db);
+  locationId = await seedLocation(suite.db);
+  nodeId = await seedNode(suite.db, brandLocationId(locationId));
 });
 
 function key(location = locationId, node = nodeId): ChainKey {
@@ -66,7 +66,7 @@ function clockEvent(): TimeEntryAppend {
 
 async function seedTill(location: string): Promise<string> {
   // `id` and `created_at` by hand: their `$defaultFn`s run for a builder insert, not for raw SQL.
-  const { rows } = await pg.db.execute<{ id: string }>(sql`
+  const { rows } = await suite.db.execute<{ id: string }>(sql`
     insert into tills (id, location_id, name, created_at)
     values (${newId()}, ${location}, 'Till 1', ${nowIso()})
     returning id`);
@@ -75,11 +75,11 @@ async function seedTill(location: string): Promise<string> {
 
 describe("appendToChain", () => {
   it("assigns sequence_no 1 and genesis shape to the first entry", async () => {
-    const result = await pg.db.transaction((tx) =>
+    const result = await suite.db.transaction((tx) =>
       appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")),
     );
     expect(result.sequenceNo).toBe(1);
-    const [first] = await readChain(pg.db, key());
+    const [first] = await readChain(suite.db, key());
     expect(first?.isFirstEntry).toBe(true);
     expect(first?.prevEntryHash).toBeNull();
     expect(first?.entryHash).toMatch(/^[0-9A-F]{64}$/);
@@ -87,19 +87,19 @@ describe("appendToChain", () => {
   });
 
   it("chains the second entry to the first via prev_entry_hash", async () => {
-    await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
-    await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T17:00:00Z")));
-    const [first, second] = await readChain(pg.db, key());
+    await suite.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
+    await suite.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T17:00:00Z")));
+    const [first, second] = await readChain(suite.db, key());
     expect(second?.sequenceNo).toBe(2);
     expect(second?.isFirstEntry).toBe(false);
     expect(second?.prevEntryHash).toBe(first?.entryHash);
   });
 
   it("advances the chain head to the entry just written", async () => {
-    const { id, entryHash } = await pg.db.transaction((tx) =>
+    const { id, entryHash } = await suite.db.transaction((tx) =>
       appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")),
     );
-    const { rows } = await pg.db.execute<{
+    const { rows } = await suite.db.execute<{
       sequence_no: number;
       last_entry_id: string;
       last_entry_hash: string;
@@ -116,40 +116,40 @@ describe("appendToChain", () => {
   });
 
   it("keeps a separate, independent chain per (node, location)", async () => {
-    const otherLocation = await seedLocation(pg.db);
-    const otherNode = await seedNode(pg.db, brandLocationId(otherLocation));
-    await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
-    await pg.db.transaction((tx) =>
+    const otherLocation = await seedLocation(suite.db);
+    const otherNode = await seedNode(suite.db, brandLocationId(otherLocation));
+    await suite.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
+    await suite.db.transaction((tx) =>
       appendToChain(tx, key(otherLocation, otherNode), inputAt("2026-01-05T09:00:00Z")),
     );
-    expect((await readChain(pg.db, key())).map((e) => e.sequenceNo)).toEqual([1]);
-    const other = await readChain(pg.db, key(otherLocation, otherNode));
+    expect((await readChain(suite.db, key())).map((e) => e.sequenceNo)).toEqual([1]);
+    const other = await readChain(suite.db, key(otherLocation, otherNode));
     expect(other.map((e) => e.sequenceNo)).toEqual([1]);
     expect(other[0]?.isFirstEntry).toBe(true);
   });
 
   it("keeps one chain per (node, location); two nodes at one location do not collide", async () => {
     // Two nodes write one location across a promotion, taking the same sequence_no values.
-    const nodeB = await seedNode(pg.db, brandLocationId(locationId));
+    const nodeB = await seedNode(suite.db, brandLocationId(locationId));
     const k1 = key(locationId, nodeId);
     const k2 = key(locationId, nodeB);
-    await pg.db.transaction((tx) => appendToChain(tx, k1, clockEvent()));
-    await pg.db.transaction((tx) => appendToChain(tx, k1, clockEvent()));
-    await pg.db.transaction((tx) => appendToChain(tx, k2, clockEvent()));
-    expect((await readChain(pg.db, k1)).map((e) => e.sequenceNo)).toEqual([1, 2]);
-    expect((await readChain(pg.db, k2)).map((e) => e.sequenceNo)).toEqual([1]);
-    expect(verifyChain(await readChain(pg.db, k1))).toEqual({ ok: true });
-    expect(verifyChain(await readChain(pg.db, k2))).toEqual({ ok: true });
+    await suite.db.transaction((tx) => appendToChain(tx, k1, clockEvent()));
+    await suite.db.transaction((tx) => appendToChain(tx, k1, clockEvent()));
+    await suite.db.transaction((tx) => appendToChain(tx, k2, clockEvent()));
+    expect((await readChain(suite.db, k1)).map((e) => e.sequenceNo)).toEqual([1, 2]);
+    expect((await readChain(suite.db, k2)).map((e) => e.sequenceNo)).toEqual([1]);
+    expect(verifyChain(await readChain(suite.db, k1))).toEqual({ ok: true });
+    expect(verifyChain(await readChain(suite.db, k2))).toEqual({ ok: true });
   });
 
   it("keeps recorded_at non-decreasing per chain when the clock steps backward", async () => {
     const k = key();
     let t = Date.parse("2026-09-07T08:00:05.000Z");
     const clock = () => new Date(t);
-    await pg.db.transaction((tx) => appendToChain(tx, k, clockEvent(), clock));
+    await suite.db.transaction((tx) => appendToChain(tx, k, clockEvent(), clock));
     t = Date.parse("2026-09-07T08:00:02.000Z"); // steps BACK
-    await pg.db.transaction((tx) => appendToChain(tx, k, clockEvent(), clock));
-    const rows = await readChain(pg.db, k);
+    await suite.db.transaction((tx) => appendToChain(tx, k, clockEvent(), clock));
+    const rows = await readChain(suite.db, k);
     expect(rows[1]!.recordedAt >= rows[0]!.recordedAt).toBe(true);
     expect(verifyChain(rows)).toEqual({ ok: true });
   });
@@ -157,31 +157,33 @@ describe("appendToChain", () => {
   it("stamps recorded_at as a whole second from the injected clock", async () => {
     // `.000` is how a whole second is spelled; `time_entries_recorded_at_second_ck` admits no other.
     const clock = () => new Date(Date.parse("2026-09-07T08:00:05.678Z"));
-    await pg.db.transaction((tx) => appendToChain(tx, key(), clockEvent(), clock));
-    const [row] = await readChain(pg.db, key());
+    await suite.db.transaction((tx) => appendToChain(tx, key(), clockEvent(), clock));
+    const [row] = await readChain(suite.db, key());
     expect(row?.recordedAt).toBe("2026-09-07T08:00:05.000Z");
-    expect(verifyChain(await readChain(pg.db, key()))).toEqual({ ok: true });
+    expect(verifyChain(await readChain(suite.db, key()))).toEqual({ ok: true });
   });
 
   it("produces a chain that re-verifies end to end", async () => {
     for (const at of ["2026-01-05T09:00:00Z", "2026-01-05T13:00:00Z", "2026-01-05T17:00:00Z"]) {
-      await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt(at)));
+      await suite.db.transaction((tx) => appendToChain(tx, key(), inputAt(at)));
     }
-    expect(verifyChain(await readChain(pg.db, key()))).toEqual({ ok: true });
+    expect(verifyChain(await readChain(suite.db, key()))).toEqual({ ok: true });
   });
 
   it("re-verifies an event_at that carries a sub-second fraction", async () => {
     // Hashing the fractional instant while the column stores whole seconds would be a false
     // hash_mismatch on an untouched row.
-    await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00.123Z")));
-    expect(verifyChain(await readChain(pg.db, key()))).toEqual({ ok: true });
+    await suite.db.transaction((tx) =>
+      appendToChain(tx, key(), inputAt("2026-01-05T09:00:00.123Z")),
+    );
+    expect(verifyChain(await readChain(suite.db, key()))).toEqual({ ok: true });
   });
 
   it("rejects a raw insert whose event_at carries a sub-second fraction (defence-in-depth CHECK)", async () => {
     // Every other column here is a valid genesis row, so the only constraint this can trip is the
     // event_at one.
     const error = await captureError(() =>
-      pg.db.execute(sql`
+      suite.db.execute(sql`
         insert into time_entries (
           id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
@@ -197,7 +199,7 @@ describe("appendToChain", () => {
 
   it("rejects a raw insert whose recorded_at carries a sub-second fraction (defence-in-depth CHECK)", async () => {
     const error = await captureError(() =>
-      pg.db.execute(sql`
+      suite.db.execute(sql`
         insert into time_entries (
           id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
@@ -216,7 +218,7 @@ describe("appendToChain", () => {
    * message names the COLUMNS, not the index, so the refusal is matched by its columns.
    */
   it("rejects a second entry claiming an occupied chain position", async () => {
-    await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
+    await suite.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
     const fork = {
       personId,
       locationId,
@@ -233,7 +235,7 @@ describe("appendToChain", () => {
       isFirstEntry: false,
     };
     const error = await captureError(() =>
-      pg.db.insert(timeEntries).values({ ...fork, sequenceNo: 1 }),
+      suite.db.insert(timeEntries).values({ ...fork, sequenceNo: 1 }),
     );
     expect(
       refusalOn(error, UNIQUE_VIOLATION, {
@@ -244,7 +246,7 @@ describe("appendToChain", () => {
     // The control: the same row at the next free position is accepted, so the refusal above is the
     // POSITION.
     await expect(
-      pg.db.insert(timeEntries).values({ ...fork, sequenceNo: 2 }),
+      suite.db.insert(timeEntries).values({ ...fork, sequenceNo: 2 }),
     ).resolves.toBeDefined();
   });
 
@@ -253,7 +255,7 @@ describe("appendToChain", () => {
     // savepoint in ./chain.ts with a plain `attemptAppend(tx, …)` leaves this case passing, and the
     // stubbed cases below fail under that change only because their stub has nothing but
     // `transaction`.
-    await pg.db.execute(sql`
+    await suite.db.execute(sql`
       insert into time_entries (
         id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
@@ -261,7 +263,7 @@ describe("appendToChain", () => {
         '2026-01-05T08:00:00.000Z', 0,
         ${personId}, '2026-01-05T08:00:00.000Z', ${"1".repeat(64)}, 1, true)`);
 
-    const error = await pg.db
+    const error = await suite.db
       .transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")))
       .catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(AppError);
@@ -307,7 +309,7 @@ describe("appendToChain", () => {
     let calls = 0;
     let firstRefusal: unknown;
 
-    const result = await pg.db.transaction((tx) => {
+    const result = await suite.db.transaction((tx) => {
       const refusedOnce = {
         transaction: <T>(body: (nested: typeof tx) => Promise<T>): Promise<T> => {
           calls += 1;
@@ -346,7 +348,7 @@ describe("appendToChain", () => {
         columns: ["node_id", "location_id", "sequence_no"],
       }),
     ).toBe(true);
-    const rows = await pg.db
+    const rows = await suite.db
       .select({
         id: timeEntries.id,
         sequenceNo: timeEntries.sequenceNo,
@@ -363,8 +365,8 @@ describe("appendToChain", () => {
       },
     ]);
     expect(result.sequenceNo).toBe(1);
-    expect(verifyChain(await readChain(pg.db, key()))).toEqual({ ok: true });
-    const { rows: head } = await pg.db.execute<{
+    expect(verifyChain(await readChain(suite.db, key()))).toEqual({ ok: true });
+    const { rows: head } = await suite.db.execute<{
       sequence_no: number;
       last_entry_id: string;
       last_entry_hash: string;
@@ -382,7 +384,7 @@ describe("appendToChain commits the correction and capture content to the hash",
   // UPDATE that cannot recompute the chain would leave behind.
 
   async function chainWithCorrection(tillId: string) {
-    const base = await pg.db.transaction((tx) =>
+    const base = await suite.db.transaction((tx) =>
       appendToChain(tx, key(), {
         personId,
         entryKind: "in",
@@ -392,7 +394,7 @@ describe("appendToChain commits the correction and capture content to the hash",
         capturedByTillId: tillId,
       }),
     );
-    await pg.db.transaction((tx) =>
+    await suite.db.transaction((tx) =>
       appendToChain(tx, key(), {
         personId,
         entryKind: "correction",
@@ -405,7 +407,7 @@ describe("appendToChain commits the correction and capture content to the hash",
         correctionActorId: personId,
       }),
     );
-    return readChain(pg.db, key());
+    return readChain(suite.db, key());
   }
 
   it("re-verifies a till + reason + actor round-trip untampered (the negative control)", async () => {
@@ -440,27 +442,27 @@ describe("appendToChain commits the correction and capture content to the hash",
 
 describe("readChainHead", () => {
   it("creates the chain head row from scratch when a (node, location) has none yet", async () => {
-    const head = await pg.db.transaction((tx) => readChainHead(tx, key()));
+    const head = await suite.db.transaction((tx) => readChainHead(tx, key()));
     expect(head).toEqual({
       sequenceNo: 0,
       lastEntryId: null,
       lastEntryHash: null,
       lastRecordedAt: null,
     });
-    const { rows } = await pg.db.execute<{ count: number }>(sql`
+    const { rows } = await suite.db.execute<{ count: number }>(sql`
       select count(*) as count from workforce_chains
       where node_id = ${nodeId} and location_id = ${locationId}`);
     expect(rows[0]?.count).toBe(1);
   });
 
   it("reads the existing head rather than creating a second one", async () => {
-    await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
-    const head = await pg.db.transaction((tx) => readChainHead(tx, key()));
+    await suite.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
+    const head = await suite.db.transaction((tx) => readChainHead(tx, key()));
     expect(head.sequenceNo).toBe(1);
     expect(head.lastEntryId).not.toBeNull();
     expect(head.lastEntryHash).not.toBeNull();
     expect(head.lastRecordedAt).not.toBeNull();
-    const { rows } = await pg.db.execute<{ count: number }>(sql`
+    const { rows } = await suite.db.execute<{ count: number }>(sql`
       select count(*) as count from workforce_chains
       where node_id = ${nodeId} and location_id = ${locationId}`);
     expect(rows[0]?.count).toBe(1);

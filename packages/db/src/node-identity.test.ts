@@ -24,31 +24,31 @@ async function seedLocation(db: Database): Promise<ReturnType<typeof brandLocati
 }
 
 describe("membership trust-set accessors", () => {
-  const pg = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   let nodeId: NodeId;
 
   beforeEach(async () => {
-    await pg.db.execute(sql`delete from nodes`);
-    await seedTenant(pg.db);
-    nodeId = await seedNode(pg.db, await seedLocation(pg.db));
+    await suite.db.execute(sql`delete from nodes`);
+    await seedTenant(suite.db);
+    nodeId = await seedNode(suite.db, await seedLocation(suite.db));
   });
 
   it("readMembershipTrustSet omits a node whose public_key is null", async () => {
-    expect(await readMembershipTrustSet(pg.db)).toEqual({});
+    expect(await readMembershipTrustSet(suite.db)).toEqual({});
   });
 
   it("setNodePublicKey stamps the column and readMembershipTrustSet returns { nodeId: key }", async () => {
-    await setNodePublicKey(pg.db, nodeId, "PUBKEY_B64");
-    expect(await readMembershipTrustSet(pg.db)).toEqual({ [nodeId]: "PUBKEY_B64" });
+    await setNodePublicKey(suite.db, nodeId, "PUBKEY_B64");
+    expect(await readMembershipTrustSet(suite.db)).toEqual({ [nodeId]: "PUBKEY_B64" });
   });
 
   it("readMembershipTrustSet returns every keyed node (two-node topology)", async () => {
     // A second node in the SAME database, so both are in the trust set the read returns.
-    const nodeId2 = await seedNode(pg.db, await seedLocation(pg.db));
-    await setNodePublicKey(pg.db, nodeId, "KEY_A");
-    await setNodePublicKey(pg.db, nodeId2, "KEY_B");
-    expect(await readMembershipTrustSet(pg.db)).toEqual({
+    const nodeId2 = await seedNode(suite.db, await seedLocation(suite.db));
+    await setNodePublicKey(suite.db, nodeId, "KEY_A");
+    await setNodePublicKey(suite.db, nodeId2, "KEY_B");
+    expect(await readMembershipTrustSet(suite.db)).toEqual({
       [nodeId]: "KEY_A",
       [nodeId2]: "KEY_B",
     });

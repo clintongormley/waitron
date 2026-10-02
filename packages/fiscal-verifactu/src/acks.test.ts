@@ -31,12 +31,12 @@ const PERIOD = { year: "2026", month: "07" };
 // falls back to when a lost-ack row carries no `enviado_en`.
 const CLOCK_INSTANT = new Date("2026-03-01T13:05:00+01:00");
 
-const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 // Every case sees only its own rows: `useVenueDb` empties every data table between tests.
 
 const drainDeps = (resolveClient: DrainDeps["resolveClient"]): DrainDeps => ({
-  db: pg.db,
+  db: suite.db,
   resolveClient,
   skipRetryMs: DEFAULT_SKIP_RETRY_MS,
   environment: "production",
@@ -44,7 +44,7 @@ const drainDeps = (resolveClient: DrainDeps["resolveClient"]): DrainDeps => ({
 const reconcileDeps = (
   resolveClient: ReconcileDeps["resolveClient"],
   clock: ReconcileDeps["clock"],
-): ReconcileDeps => ({ db: pg.db, resolveClient, clock });
+): ReconcileDeps => ({ db: suite.db, resolveClient, clock });
 
 // A `type`, not an `interface`: `tx.execute<T>` constrains `T` to `Record<string, unknown>`, which
 // an object-literal type alias satisfies but a mergeable interface does not (see reconcile.ts).
@@ -57,7 +57,7 @@ type AckRow = {
 };
 
 async function acksFor(): Promise<AckRow[]> {
-  const { rows } = await withTransaction(pg.db, (tx) =>
+  const { rows } = await withTransaction(suite.db, (tx) =>
     tx.execute<AckRow>(sql`select registro_id, state, csv, submitted_at, delivered_at from acks`),
   );
   return rows;
@@ -66,7 +66,7 @@ async function acksFor(): Promise<AckRow[]> {
 async function envioFor(
   registroId: string,
 ): Promise<{ estado: string; csv: string | null; enviado_en: string | null }> {
-  const { rows } = await withTransaction(pg.db, (tx) =>
+  const { rows } = await withTransaction(suite.db, (tx) =>
     tx.execute<{ estado: string; csv: string | null; enviado_en: string | null }>(
       sql`select estado, csv, enviado_en from envios where registro_id = ${registroId}`,
     ),
@@ -77,7 +77,7 @@ async function envioFor(
 describe("acks — production atomicity (drainer + reconcile)", () => {
   it("writes an ack atomically when the drainer sets a terminal estado", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
-    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
 
     await drain(drainDeps(resolveClient), DRAIN_AT);
@@ -99,19 +99,19 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
 
   it("reconcile writes/updates an ack when it corrects a lostAck (pendiente → accepted)", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
-    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
     await drain(drainDeps(resolveClient), DRAIN_AT); // AEAT now holds it Correcta; ours aceptado; drainer wrote an ack
 
     // Model a genuinely lost acknowledgement: our side never persisted the response, so it still
     // reads `pendiente`, has no CSV, was never claimed (`enviado_en` null), and carries no ack.
-    await withTransaction(pg.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       tx.execute(
         sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null, enviado_en = null `,
       ),
     );
     // No append-only trigger on `acks` refuses the delete.
-    await pg.db.execute(sql`delete from acks`);
+    await suite.db.execute(sql`delete from acks`);
 
     const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
@@ -137,23 +137,23 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
 
   it("INVARIANT: every ack agrees with the committed envios.estado it reflects (drain + reconcile)", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
-    const seeded = await seedPendingEnvios(pg.db, { count: 2 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const resolveClient = staticResolver(aeat.client());
 
     // Producer 1 — the drainer accepts both records, writing two `accepted` acks.
     await drain(drainDeps(resolveClient), DRAIN_AT);
 
     // Producer 2 — force record 0 into a lost-ack state and let reconcile correct + re-ack it.
-    await withTransaction(pg.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       tx.execute(
         sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null where registro_id = ${seeded.registroIds[0]}`,
       ),
     );
-    await pg.db.execute(sql`delete from acks where registro_id = ${seeded.registroIds[0]}`);
+    await suite.db.execute(sql`delete from acks where registro_id = ${seeded.registroIds[0]}`);
     await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     // The load-bearing invariant: for EVERY acked row, acks.state === ackStateOf(envios.estado).
-    const { rows } = await withTransaction(pg.db, (tx) =>
+    const { rows } = await withTransaction(suite.db, (tx) =>
       tx.execute<{ state: string; estado: string }>(sql`
         select a.state, e.estado
         from acks a join envios e on e.registro_id = a.registro_id
@@ -167,14 +167,14 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
 
   it("is idempotent: a second reconcile after a correction finds a clean match and does not double-write", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
-    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
     await drain(drainDeps(resolveClient), DRAIN_AT);
-    await withTransaction(pg.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       tx.execute(sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null `),
     );
     // No append-only trigger on `acks` refuses the delete.
-    await pg.db.execute(sql`delete from acks`);
+    await suite.db.execute(sql`delete from acks`);
 
     const first = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
     expect(first.lostAck).toHaveLength(1); // corrected on the first pass
@@ -195,22 +195,22 @@ describe("acks — submitted_at, both arms of the coalesce", () => {
   // Reaches `writeAck` directly. Both arms are exercised, because a test that only ever hit the
   // column arm would pass whatever the fallback did.
   it("takes the envío's own enviado_en when it has one, and the passed instant when it does not", async () => {
-    const seeded = await seedPendingEnvios(pg.db, { count: 2 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const [claimed, neverClaimed] = seeded.registroIds;
     const claimedAt = new Date("2026-07-21T00:01:00Z");
     const fallback = new Date("2026-07-22T09:30:00Z");
 
     // One row was claimed before its response arrived; the other never was — the lost-ack shape
     // reconcile corrects, where `enviado_en` is null and the column is still NOT NULL.
-    await pg.db.execute(sql`
+    await suite.db.execute(sql`
       update envios set estado = 'aceptado', enviado_en = ${claimedAt.toISOString()}
       where registro_id = ${claimed}
     `);
-    await pg.db.execute(sql`
+    await suite.db.execute(sql`
       update envios set estado = 'aceptado', enviado_en = null where registro_id = ${neverClaimed}
     `);
 
-    await withTransaction(pg.db, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await writeAck(tx, claimed!, fallback);
       await writeAck(tx, neverClaimed!, fallback);
     });
@@ -224,44 +224,44 @@ describe("acks — submitted_at, both arms of the coalesce", () => {
 describe("acks — durable transport (pendingAcks / markDelivered)", () => {
   it("pendingAcks returns undelivered acks; markDelivered clears them", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
-    const seeded = await seedPendingEnvios(pg.db, { count: 2 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const resolveClient = staticResolver(aeat.client());
     await drain(drainDeps(resolveClient), DRAIN_AT); // two accepted records → two acks
 
-    const before = await pendingAcks(pg.db);
+    const before = await pendingAcks(suite.db);
     expect(before).toHaveLength(2);
     expect(before.map((a) => a.recordId).sort()).toEqual([...seeded.registroIds].sort());
     expect(before.every((a) => a.state === "accepted")).toBe(true);
     expect(before.every((a) => a.csv !== null)).toBe(true);
     expect(before.every((a) => a.submittedAt instanceof Date)).toBe(true);
 
-    await markDelivered(pg.db, seeded.registroIds[0]!);
+    await markDelivered(suite.db, seeded.registroIds[0]!);
 
-    const after = await pendingAcks(pg.db);
+    const after = await pendingAcks(suite.db);
     expect(after.map((a) => a.recordId)).toEqual([seeded.registroIds[1]]);
   });
 
   it("writeAck writes nothing for a non-terminal estado (a record with no ack keeps counting)", async () => {
     // Cert-expired at the DB level: the submission never happened, the row is still `pendiente`, so
     // no ack is produced. Mirrors the projection's cert-expired case one layer down.
-    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    await withTransaction(pg.db, (tx) => writeAck(tx, seeded.registroIds[0]!, DRAIN_AT));
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    await withTransaction(suite.db, (tx) => writeAck(tx, seeded.registroIds[0]!, DRAIN_AT));
     expect(await acksFor()).toHaveLength(0);
   });
 
   it("deleteAck removes a record's ack row, and is a no-op when there is none", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
-    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
     await drain(drainDeps(resolveClient), DRAIN_AT); // writes an `accepted` ack
 
     expect(await acksFor()).toHaveLength(1);
 
-    await withTransaction(pg.db, (tx) => deleteAck(tx, seeded.registroIds[0]!));
+    await withTransaction(suite.db, (tx) => deleteAck(tx, seeded.registroIds[0]!));
     expect(await acksFor()).toHaveLength(0);
 
     // Idempotent: deleting an already-absent ack does not throw.
-    await withTransaction(pg.db, (tx) => deleteAck(tx, seeded.registroIds[0]!));
+    await withTransaction(suite.db, (tx) => deleteAck(tx, seeded.registroIds[0]!));
     expect(await acksFor()).toHaveLength(0);
   });
 });

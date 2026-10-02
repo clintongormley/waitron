@@ -25,7 +25,7 @@ import type {
   StripeSettlement,
 } from "./index.js";
 
-const pg = useVenueDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   setup: (db) => FakeFiscalBackend.install(db),
 });
@@ -81,11 +81,11 @@ function buildInput(
 
 describe("stripe collect -> recordSale -> associate (the adapter seam, end to end)", () => {
   it("settles a Stripe tender, chains the sale, and associates the payment atomically", async () => {
-    const backend = new FakeFiscalBackend(pg.db);
-    const s = await seedForSale(pg.db, backend, freshNif());
+    const backend = new FakeFiscalBackend(suite.db);
+    const s = await seedForSale(suite.db, backend, freshNif());
     const provider = new StripeTerminalProvider({
       client: new FakeStripe(),
-      db: pg.db,
+      db: suite.db,
       nodeId: "11111111-1111-4111-8111-111111111111",
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
@@ -100,7 +100,7 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
     expect(paid.state).toBe("captured");
     expect(paid.settledAt).not.toBeNull();
 
-    const saleId = await pg.db.transaction(async (tx) => {
+    const saleId = await suite.db.transaction(async (tx) => {
       const recorded = await recordSale(tx, backend, buildInput(s, paid));
       await associatePaymentWithSale(tx, {
         provider: "stripe",
@@ -110,7 +110,7 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
       return recorded.saleId;
     });
 
-    const row = await pg.db.transaction((tx) =>
+    const row = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, {
         provider: "stripe",
         paymentRef: paid.paymentRef,
@@ -126,12 +126,12 @@ describe("stripe idempotency key is derived from the working order, decoupled fr
   // The key must be stable across retries so a lost-response re-tap re-drives the SAME
   // PaymentIntent. Real Stripe honouring the key is covered by collect.sandbox.test.ts.
   it("passes a stable wo-derived key across two collects for one working order, with distinct payment rows", async () => {
-    const backend = new FakeFiscalBackend(pg.db);
-    const s = await seedForSale(pg.db, backend, freshNif());
+    const backend = new FakeFiscalBackend(suite.db);
+    const s = await seedForSale(suite.db, backend, freshNif());
     const client = new FakeStripe();
     const provider = new StripeTerminalProvider({
       client,
-      db: pg.db,
+      db: suite.db,
       nodeId: "11111111-1111-4111-8111-111111111111",
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });

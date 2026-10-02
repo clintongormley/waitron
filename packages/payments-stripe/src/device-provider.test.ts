@@ -25,7 +25,7 @@ import {
   seedWorkingOrder,
 } from "@waitron/payments/test/seed.js";
 
-const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 const AT = new Date("2026-07-24T10:00:00Z");
 const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";
@@ -33,7 +33,7 @@ const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";
 function providerFor(client: FakeStripeDevice): StripeOnDeviceProvider {
   return new StripeOnDeviceProvider({
     client,
-    db: pg.db,
+    db: suite.db,
     nodeId: TEST_NODE_ID,
   });
 }
@@ -49,8 +49,8 @@ function collectParams(s: { tillId: string; workingOrderId: string }, allowOffli
 
 describe("StripeOnDeviceProvider.collect after a Terminal PaymentIntent of the order was cancelled", () => {
   it("uses the order's next key, because Stripe's replayed response to the old key names the cancelled PaymentIntent", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
-    await withTransaction(pg.db, async (tx) => {
+    const s = await seedWorkingOrder(suite.db, freshNif());
+    await withTransaction(suite.db, async (tx) => {
       const key = { provider: "stripe", paymentRef: "terminal-stuck" };
       await insertAttempting(tx, {
         ...key,
@@ -76,12 +76,12 @@ describe("StripeOnDeviceProvider.collect after a Terminal PaymentIntent of the o
 
 describe("StripeOnDeviceProvider.collect", () => {
   it("online capture writes a captured row with the PI id in external_ref", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
+    const s = await seedWorkingOrder(suite.db, freshNif());
     const provider = providerFor(new FakeStripeDevice());
     const r = await provider.collect(collectParams(s));
     expect(r.state).toBe("captured");
     expect(r.settledAt).not.toBeNull();
-    const row = await pg.db.transaction((tx) =>
+    const row = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, { provider: "stripe", paymentRef: r.paymentRef }),
     );
     expect(row?.state).toBe("captured");
@@ -89,8 +89,8 @@ describe("StripeOnDeviceProvider.collect", () => {
   });
 
   it("accepted_offline (policy allows, consent given, under cap) chains immediately with offline:true", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
-    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
+    const s = await seedWorkingOrder(suite.db, freshNif());
+    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
     const client = new FakeStripeDevice();
     client.nextCollect("offline");
     const provider = providerFor(client);
@@ -101,7 +101,7 @@ describe("StripeOnDeviceProvider.collect", () => {
   });
 
   it("gate refuses offline (no policy) → device yields network_unavailable → nothing persisted", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
+    const s = await seedWorkingOrder(suite.db, freshNif());
     // No policy row → resolveOfflineDecision refuses → offlineAllowed=false is passed to the device →
     // the offline scenario yields network_unavailable.
     const client = new FakeStripeDevice();
@@ -110,7 +110,7 @@ describe("StripeOnDeviceProvider.collect", () => {
     const r = await provider.collect(collectParams(s, true));
     expect(r.state).toBe("network_unavailable");
     expect(r.settledAt).toBeNull();
-    const row = await pg.db.transaction((tx) =>
+    const row = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, { provider: "stripe", paymentRef: r.paymentRef }),
     );
     expect(row).toBeUndefined();
@@ -119,7 +119,7 @@ describe("StripeOnDeviceProvider.collect", () => {
   it("stamps the working order and payment ref into the device PaymentIntent metadata", async () => {
     // This provider collects BEFORE it writes, so a crash in between leaves a captured charge with
     // no local row, and these keys are its only link back to a till.
-    const s = await seedWorkingOrder(pg.db, freshNif());
+    const s = await seedWorkingOrder(suite.db, freshNif());
     const client = new FakeStripeDevice();
     const provider = providerFor(client);
     const r = await provider.collect(collectParams(s));
@@ -130,7 +130,7 @@ describe("StripeOnDeviceProvider.collect", () => {
   });
 
   it("derives a stable wo idempotency key across two collects, decoupled from the random payment_ref (§4)", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
+    const s = await seedWorkingOrder(suite.db, freshNif());
     const client = new FakeStripeDevice();
     const provider = providerFor(client);
 
@@ -153,13 +153,13 @@ describe("StripeOnDeviceProvider.collect", () => {
   });
 
   it("declined writes a failed row", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
+    const s = await seedWorkingOrder(suite.db, freshNif());
     const client = new FakeStripeDevice();
     client.nextCollect("declined");
     const provider = providerFor(client);
     const r = await provider.collect(collectParams(s));
     expect(r.state).toBe("failed");
-    const row = await pg.db.transaction((tx) =>
+    const row = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, { provider: "stripe", paymentRef: r.paymentRef }),
     );
     expect(row?.state).toBe("failed");
@@ -180,8 +180,8 @@ describe("StripeOnDeviceProvider.resolvePending", () => {
 
 describe("StripeOnDeviceProvider.forward", () => {
   it("settles a cleared offline payment and declines a refused one (+ one incident), empty queue = zeros", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
-    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
+    const s = await seedWorkingOrder(suite.db, freshNif());
+    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
     const client = new FakeStripeDevice();
     const provider = providerFor(client);
 
@@ -199,15 +199,15 @@ describe("StripeOnDeviceProvider.forward", () => {
       nextDueAt: null,
     });
 
-    const rowA = await pg.db.transaction((tx) =>
+    const rowA = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, { provider: "stripe", paymentRef: a.paymentRef }),
     );
-    const rowB = await pg.db.transaction((tx) =>
+    const rowB = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, { provider: "stripe", paymentRef: b.paymentRef }),
     );
     expect(rowA?.state).toBe("settled");
     expect(rowB?.state).toBe("declined");
-    const incidents = await pg.db.transaction((tx) => openIncidents(tx, brandTillId(s.tillId)));
+    const incidents = await suite.db.transaction((tx) => openIncidents(tx, brandTillId(s.tillId)));
     expect(incidents).toHaveLength(1);
     expect(incidents[0].code).toBe("payment.offline_forward_declined");
 
@@ -220,8 +220,8 @@ describe("StripeOnDeviceProvider.forward", () => {
   });
 
   it("reports a nextDueAt while a ref is still pending on the device", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
-    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
+    const s = await seedWorkingOrder(suite.db, freshNif());
+    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
     const client = new FakeStripeDevice();
     const provider = providerFor(client);
 
@@ -235,7 +235,7 @@ describe("StripeOnDeviceProvider.forward", () => {
     const result = await provider.forward(AT);
 
     // Precondition: `b` really is still outstanding.
-    const rowB = await pg.db.transaction((tx) =>
+    const rowB = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, { provider: "stripe", paymentRef: b.paymentRef }),
     );
     expect(rowB?.state).toBe("accepted_offline");
@@ -246,8 +246,8 @@ describe("StripeOnDeviceProvider.forward", () => {
   });
 
   it("opens no write when the device resolved none of the pending refs, and asks to come back", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
-    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
+    const s = await seedWorkingOrder(suite.db, freshNif());
+    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
     const client = new FakeStripeDevice();
     const provider = providerFor(client);
     client.nextCollect("offline");
@@ -255,7 +255,7 @@ describe("StripeOnDeviceProvider.forward", () => {
 
     // The same database, counting how many transactions the provider opens on it.
     let transactions = 0;
-    const counted = new Proxy(pg.db, {
+    const counted = new Proxy(suite.db, {
       get(target, prop) {
         const value: unknown = Reflect.get(target, prop, target);
         if (prop === "withWriteLock") {
@@ -280,15 +280,15 @@ describe("StripeOnDeviceProvider.forward", () => {
     });
     // Only the read of the pending payments; nothing to write, so no second transaction.
     expect(transactions).toBe(1);
-    const row = await pg.db.transaction((tx) =>
+    const row = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, { provider: "stripe", paymentRef: a.paymentRef }),
     );
     expect(row?.state).toBe("accepted_offline");
   });
 
   it("counts one incident when two declines on one till share an open incident", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
-    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
+    const s = await seedWorkingOrder(suite.db, freshNif());
+    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
     const client = new FakeStripeDevice();
     const provider = providerFor(client);
     client.nextCollect("offline");
@@ -301,14 +301,14 @@ describe("StripeOnDeviceProvider.forward", () => {
     const result = await provider.forward(AT);
 
     expect(result).toMatchObject({ forwarded: 0, declined: 2, incidentsRaised: 1 });
-    const incidents = await pg.db.transaction((tx) => openIncidents(tx, brandTillId(s.tillId)));
+    const incidents = await suite.db.transaction((tx) => openIncidents(tx, brandTillId(s.tillId)));
     expect(incidents).toHaveLength(1);
   });
 });
 
 describe("StripeOnDeviceProvider reversals", () => {
   it("refunds a captured payment; a Stripe-refused refund leaves state unchanged", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
+    const s = await seedWorkingOrder(suite.db, freshNif());
     const client = new FakeStripeDevice();
     const provider = providerFor(client);
     const paid = await provider.collect(collectParams(s));
@@ -322,7 +322,7 @@ describe("StripeOnDeviceProvider reversals", () => {
   });
 
   it("void: reverses a captured payment to voided", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
+    const s = await seedWorkingOrder(suite.db, freshNif());
     const client = new FakeStripeDevice();
     const provider = providerFor(client);
     const paid = await provider.collect(collectParams(s));
@@ -332,7 +332,7 @@ describe("StripeOnDeviceProvider reversals", () => {
   });
 
   it("partialRefund: reports the refunded amount, not the capture, and sets partially_refunded", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
+    const s = await seedWorkingOrder(suite.db, freshNif());
     const client = new FakeStripeDevice();
     const provider = providerFor(client);
     const paid = await provider.collect(collectParams(s)); // amount 10.00
@@ -362,9 +362,9 @@ describe("StripeOnDeviceProvider.collect for a bill payment", () => {
   ] as const)(
     "keys the PaymentIntent on the bill payment and names it on the %s row",
     async (scenario, state) => {
-      const s = await seedWorkingOrder(pg.db, freshNif());
-      await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
-      const billPaymentId = await seedBillPayment(pg.db, s);
+      const s = await seedWorkingOrder(suite.db, freshNif());
+      await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
+      const billPaymentId = await seedBillPayment(suite.db, s);
       const client = new FakeStripeDevice();
       client.nextCollect(scenario);
 
@@ -375,7 +375,7 @@ describe("StripeOnDeviceProvider.collect for a bill payment", () => {
 
       expect(r.state).toBe(state);
       expect(client.lastCollect?.idempotencyKey).toBe(`bp_${billPaymentId}`);
-      expect(await billPaymentOfRow(pg.db, r.paymentRef)).toBe(billPaymentId);
+      expect(await billPaymentOfRow(suite.db, r.paymentRef)).toBe(billPaymentId);
     },
   );
 });

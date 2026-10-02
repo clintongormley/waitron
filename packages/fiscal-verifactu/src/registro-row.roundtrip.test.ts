@@ -15,12 +15,12 @@ import { seedSale, seedTill, TEST_NIF, TEST_SISTEMA, type SeededTill } from "./t
 
 // Record flattening, storage, rehydration and XML assembly, without concurrency: one writer
 // against one venue database is all these cases need.
-const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;
 
 beforeEach(async () => {
-  till = await seedTill(pg.db);
+  till = await seedTill(suite.db);
 });
 
 // Distinct invoice number per sale, so successive `seedSale` calls in one test never collide on the
@@ -35,7 +35,7 @@ let invoiceSequence = 0;
  */
 async function storeAndReadBack(record: RegistroAlta): Promise<RegistroRow> {
   invoiceSequence += 1;
-  const saleId = await seedSale(pg.db, till, invoiceSequence);
+  const saleId = await seedSale(suite.db, till, invoiceSequence);
   const row = toRegistroRow(record, {
     tillId: till.tillId,
     nodeId: till.nodeId,
@@ -47,8 +47,8 @@ async function storeAndReadBack(record: RegistroAlta): Promise<RegistroRow> {
     offsetMinutes: 120,
     entorno: "production",
   });
-  await pg.db.insert(registrosFacturacion).values(row);
-  const { rows } = await pg.db.execute<Record<string, unknown>>(
+  await suite.db.insert(registrosFacturacion).values(row);
+  const { rows } = await suite.db.execute<Record<string, unknown>>(
     sql`select * from registros_facturacion where sale_id = ${saleId}`,
   );
   const raw = rows[0];
@@ -299,7 +299,7 @@ describe("decodeRegistroRow", () => {
     });
     const decoded = await storeAndReadBack(built);
 
-    const [typed] = await pg.db
+    const [typed] = await suite.db
       .select()
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.id, decoded.id));

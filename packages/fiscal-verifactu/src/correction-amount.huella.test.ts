@@ -21,7 +21,7 @@ import type { RegistroRow } from "./registro-row.js";
  * two places itself, so the cases that change a filed amount are those derived from the lines: a
  * tax computed from a sub-cent base, and a base summed from several sub-cent lines.
  */
-const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let backend: VerifactuBackend;
 let tillId: TillId;
@@ -32,31 +32,31 @@ let rectifySessionId: string;
 
 beforeEach(async () => {
   // A pinned NIF: it is a huella input, and the control below pins a huella literal.
-  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db, { nif: "20009999K" }));
-  const [series] = await pg.db
+  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db, { nif: "20009999K" }));
+  const [series] = await suite.db
     .insert(invoiceSeries)
     .values({ nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })
     .returning({ id: invoiceSeries.id });
   rectSeriesId = brandSeriesId(series!.id);
   // A supervisor holds `sale.rectify`.
-  const { rows } = await pg.db.execute<{ id: string }>(
+  const { rows } = await suite.db.execute<{ id: string }>(
     sql`insert into persons (id, created_at, display_name, pin_hash, role)
         values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'supervisor') returning id`,
   );
-  const session = await withTransaction(pg.db, (tx) =>
+  const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { tillId, personId: rows[0]!.id, pin: "1234" }),
   );
   rectifySessionId = session.id;
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
-    db: pg.db,
+    db: suite.db,
     resolveClient: staticResolver(fakeClient),
   });
 });
 
 async function sell(): Promise<SaleId> {
-  const { saleId } = await withTransaction(pg.db, (tx) =>
+  const { saleId } = await withTransaction(suite.db, (tx) =>
     recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId })),
   );
   return saleId;
@@ -87,12 +87,12 @@ async function correct(
     authz: { sessionId: rectifySessionId },
     clock: steadyClock,
   };
-  const { saleId } = await withTransaction(pg.db, (tx) => recordCorrection(tx, backend, input));
+  const { saleId } = await withTransaction(suite.db, (tx) => recordCorrection(tx, backend, input));
   return saleId;
 }
 
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
-  const { rows } = await pg.db.execute<Record<string, unknown>>(
+  const { rows } = await suite.db.execute<Record<string, unknown>>(
     sql`select * from registros_facturacion where sale_id = ${saleId}`,
   );
   const row = rows[0];
@@ -101,11 +101,11 @@ async function rawRegistro(saleId: string): Promise<RegistroRow> {
 }
 
 async function observe(saleId: SaleId) {
-  const [sale] = await pg.db
+  const [sale] = await suite.db
     .select({ total: sales.total, vatBreakdown: sales.vatBreakdown })
     .from(sales)
     .where(eq(sales.id, saleId));
-  const lines = await pg.db
+  const lines = await suite.db
     .select({ lineTotal: saleLines.lineTotal })
     .from(saleLines)
     .where(eq(saleLines.saleId, saleId));

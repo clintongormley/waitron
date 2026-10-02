@@ -8,19 +8,19 @@ import type { Entorno } from "./registro-row.js";
 import { verifyChain } from "./verify.js";
 import { altaFor, anulacionFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
 
-const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;
 
 beforeEach(async () => {
-  till = await seedTill(pg.db);
+  till = await seedTill(suite.db);
 });
 
 /** Appends `n` altas in generation order. */
 async function appendAltas(n: number): Promise<void> {
   for (let i = 1; i <= n; i++) {
-    const saleId = await seedSale(pg.db, till, i);
-    await pg.db.transaction((tx) =>
+    const saleId = await seedSale(suite.db, till, i);
+    await suite.db.transaction((tx) =>
       appendToChain(tx, till.nodeId, altaFor(till.tillId, saleId, i, i)),
     );
   }
@@ -39,20 +39,20 @@ async function appendAltas(n: number): Promise<void> {
  * dropping nothing; the empty case throws for the same reason.
  */
 async function withoutImmutability(statement: SQL): Promise<void> {
-  const triggers = pg.db.all<{ name: string; sql: string }>(
+  const triggers = suite.db.all<{ name: string; sql: string }>(
     sql`select name, sql from sqlite_master
         where type = 'trigger' and tbl_name = 'registros_facturacion' order by name`,
   );
   if (triggers.length === 0) {
     throw new Error("registros_facturacion carries no append-only trigger to take down");
   }
-  for (const trigger of triggers) pg.db.run(sql.raw(`drop trigger "${trigger.name}"`));
+  for (const trigger of triggers) suite.db.run(sql.raw(`drop trigger "${trigger.name}"`));
   try {
-    await pg.db.execute(statement);
+    await suite.db.execute(statement);
   } finally {
     // Replayed verbatim, never rebuilt: `sqlite_master.sql` is the statement the engine itself
     // kept, so what goes back is what was taken down.
-    for (const trigger of triggers) pg.db.run(sql.raw(trigger.sql));
+    for (const trigger of triggers) suite.db.run(sql.raw(trigger.sql));
   }
 }
 
@@ -69,7 +69,7 @@ const BOGUS = "F".repeat(64);
 describe("verifyChain — normal states", () => {
   it("reports nothing checked on an empty chain", async () => {
     // n is itself the first record: neither check runs, and that is normal.
-    const result = await pg.db.transaction((tx) => verifyChain(tx, till.nodeId));
+    const result = await suite.db.transaction((tx) => verifyChain(tx, till.nodeId));
     expect(result).toEqual({ ok: true, checked: 0, issues: [] });
   });
 
@@ -77,13 +77,13 @@ describe("verifyChain — normal states", () => {
     // There is no n−2, so the link check is vacuously true; only the recomputation applies, and
     // it passes.
     await appendAltas(1);
-    const result = await pg.db.transaction((tx) => verifyChain(tx, till.nodeId));
+    const result = await suite.db.transaction((tx) => verifyChain(tx, till.nodeId));
     expect(result).toEqual({ ok: true, checked: 1, issues: [] });
   });
 
   it("reports two records checked once n−1 and n−2 both exist", async () => {
     await appendAltas(2);
-    const result = await pg.db.transaction((tx) => verifyChain(tx, till.nodeId));
+    const result = await suite.db.transaction((tx) => verifyChain(tx, till.nodeId));
     expect(result).toEqual({ ok: true, checked: 2, issues: [] });
   });
 
@@ -91,18 +91,18 @@ describe("verifyChain — normal states", () => {
     // One chain, both record types, generation order. The recomputation must use the anulación's
     // five-field canonical string, not the alta's eight.
     await appendAltas(1);
-    const saleId = await seedSale(pg.db, till, 2);
-    await pg.db.transaction((tx) =>
+    const saleId = await seedSale(suite.db, till, 2);
+    await suite.db.transaction((tx) =>
       appendToChain(tx, till.nodeId, anulacionFor(till.tillId, saleId, 1, 5)),
     );
-    const result = await pg.db.transaction((tx) => verifyChain(tx, till.nodeId));
+    const result = await suite.db.transaction((tx) => verifyChain(tx, till.nodeId));
     expect(result.ok).toBe(true);
     expect(result.checked).toBe(2);
   });
 
   it("still stores a huella on every record it verified", async () => {
     await appendAltas(3);
-    const { rows } = await pg.db.execute<{ huella: string }>(sql`
+    const { rows } = await suite.db.execute<{ huella: string }>(sql`
       select huella from registros_facturacion where node_id = ${till.nodeId} order by secuencia
     `);
     expect(rows).toHaveLength(3);
@@ -116,7 +116,7 @@ describe("verifyChain — detection", () => {
     // recomputation catches it, which is why we go beyond the letter.
     await appendAltas(2);
     await corrupt(2, "importe_total", "999.99");
-    const result = await pg.db.transaction((tx) => verifyChain(tx, till.nodeId));
+    const result = await suite.db.transaction((tx) => verifyChain(tx, till.nodeId));
     expect(result.ok).toBe(false);
     expect(result.issues.map((i) => i.code)).toEqual(["predecessor-hash-mismatch"]);
   });
@@ -127,7 +127,7 @@ describe("verifyChain — detection", () => {
     // complementary rather than one covering the other.
     await appendAltas(2);
     await corrupt(1, "huella", BOGUS);
-    const result = await pg.db.transaction((tx) => verifyChain(tx, till.nodeId));
+    const result = await suite.db.transaction((tx) => verifyChain(tx, till.nodeId));
     expect(result.ok).toBe(false);
     expect(result.issues.map((i) => i.code)).toEqual(["predecessor-link-mismatch"]);
   });
@@ -138,7 +138,7 @@ describe("verifyChain — detection", () => {
     // after half the story.
     await appendAltas(2);
     await corrupt(2, "anterior_huella", BOGUS);
-    const result = await pg.db.transaction((tx) => verifyChain(tx, till.nodeId));
+    const result = await suite.db.transaction((tx) => verifyChain(tx, till.nodeId));
     expect(result.issues.map((i) => i.code).sort()).toEqual([
       "predecessor-hash-mismatch",
       "predecessor-link-mismatch",
@@ -147,12 +147,12 @@ describe("verifyChain — detection", () => {
 
   it("carries the expected and found values on a link failure", async () => {
     await appendAltas(2);
-    const { rows: predecessorRows } = await pg.db.execute<{ huella: string }>(sql`
+    const { rows: predecessorRows } = await suite.db.execute<{ huella: string }>(sql`
       select huella from registros_facturacion where node_id = ${till.nodeId} and secuencia = 1
     `);
     const predecessor = predecessorRows[0];
     await corrupt(1, "huella", BOGUS);
-    const result = await pg.db.transaction((tx) => verifyChain(tx, till.nodeId));
+    const result = await suite.db.transaction((tx) => verifyChain(tx, till.nodeId));
     const link = result.issues.find((i) => i.code === "predecessor-link-mismatch");
     // expected: n−2's own huella as currently stored (the ground truth this check validates the
     // pointer against) — now BOGUS, since that is what we just corrupted.
@@ -170,7 +170,7 @@ describe("verifyChain — detection", () => {
     await withoutImmutability(
       sql`delete from registros_facturacion where node_id = ${till.nodeId} and secuencia = 1`,
     );
-    const result = await pg.db.transaction((tx) => verifyChain(tx, till.nodeId));
+    const result = await suite.db.transaction((tx) => verifyChain(tx, till.nodeId));
     const missing = result.issues.find((i) => i.code === "predecessor-missing");
     expect(missing).toBeDefined();
     expect(Object.hasOwn(missing!.params, "expected")).toBe(false);
@@ -182,12 +182,12 @@ describe("verifyChain — detection", () => {
     // compare the wrong pair and report a failure on an intact chain — noise indistinguishable
     // from a real incident.
     for (const [i, number] of [500, 44, 7].entries()) {
-      const saleId = await seedSale(pg.db, till, number);
-      await pg.db.transaction((tx) =>
+      const saleId = await seedSale(suite.db, till, number);
+      await suite.db.transaction((tx) =>
         appendToChain(tx, till.nodeId, altaFor(till.tillId, saleId, number, i)),
       );
     }
-    const result = await pg.db.transaction((tx) => verifyChain(tx, till.nodeId));
+    const result = await suite.db.transaction((tx) => verifyChain(tx, till.nodeId));
     expect(result).toEqual({ ok: true, checked: 2, issues: [] });
   });
 });
@@ -240,7 +240,7 @@ describe("verifyChain — never blocks the sale", () => {
     // por este motivo NUNCA debe interrumpirse».
     await appendAltas(2);
     await corrupt(2, "importe_total", "999.99");
-    const result = await pg.db.transaction((tx) => verifyChain(tx, till.nodeId));
+    const result = await suite.db.transaction((tx) => verifyChain(tx, till.nodeId));
     expect(result.ok).toBe(false);
   });
 
@@ -251,8 +251,8 @@ describe("verifyChain — never blocks the sale", () => {
     await appendAltas(2);
     await corrupt(1, "huella", BOGUS);
 
-    const saleId = await seedSale(pg.db, till, 3);
-    const { verification, appended } = await pg.db.transaction(async (tx) => {
+    const saleId = await seedSale(suite.db, till, 3);
+    const { verification, appended } = await suite.db.transaction(async (tx) => {
       const verification = await verifyChain(tx, till.nodeId);
       const appended = await appendToChain(tx, till.nodeId, altaFor(till.tillId, saleId, 3, 3));
       return { verification, appended };
@@ -260,7 +260,7 @@ describe("verifyChain — never blocks the sale", () => {
 
     expect(verification.ok).toBe(false);
     expect(appended.secuencia).toBe(3);
-    const { rows } = await pg.db.execute<{
+    const { rows } = await suite.db.execute<{
       secuencia: number;
       huella: string;
       anterior_huella: string | null;
@@ -280,7 +280,7 @@ describe("verifyChain — never blocks the sale", () => {
     // work unchanged for a TicketBAI backend.
     await appendAltas(2);
     await corrupt(2, "importe_total", "999.99");
-    const result = await pg.db.transaction((tx) => verifyChain(tx, till.nodeId));
+    const result = await suite.db.transaction((tx) => verifyChain(tx, till.nodeId));
     expect(Object.keys(result).sort()).toEqual(["checked", "issues", "ok"]);
     expect(Object.keys(result.issues[0]!).sort()).toEqual(["code", "params", "recordId"]);
   });

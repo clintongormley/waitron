@@ -30,39 +30,41 @@ describe("before any migration set has run", () => {
 });
 
 describe("mirror_config accessors", () => {
-  const pg = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("reads null before any write (a primary/unstamped database)", async () => {
-    expect(await readMirrorConfig(pg.db, NODE)).toBeNull();
+    expect(await readMirrorConfig(suite.db, NODE)).toBeNull();
   });
 
   it("upserts this node's row and reads it back", async () => {
-    await writeMirrorConfig(pg.db, NODE, SAMPLE);
-    expect(await readMirrorConfig(pg.db, NODE)).toEqual(SAMPLE);
+    await writeMirrorConfig(suite.db, NODE, SAMPLE);
+    expect(await readMirrorConfig(suite.db, NODE)).toEqual(SAMPLE);
   });
 
   it("round-trips originNodeId (the mirror's sync origin) through write/read", async () => {
-    await writeMirrorConfig(pg.db, NODE, SAMPLE);
-    const back = await readMirrorConfig(pg.db, NODE);
+    await writeMirrorConfig(suite.db, NODE, SAMPLE);
+    const back = await readMirrorConfig(suite.db, NODE);
     expect(back?.originNodeId).toBe(PRIMARY_NODE);
   });
 
   it("a second write for the same node updates its row in place", async () => {
-    await writeMirrorConfig(pg.db, NODE, {
+    await writeMirrorConfig(suite.db, NODE, {
       relayUrl: "https://relay-one.test:9000/",
       boxHostname: "a",
       boxCaPem: "a",
       originNodeId: PRIMARY_NODE,
     });
-    await writeMirrorConfig(pg.db, NODE, {
+    await writeMirrorConfig(suite.db, NODE, {
       relayUrl: "https://relay-two.test:9000/",
       boxHostname: "b",
       boxCaPem: "b",
       originNodeId: PRIMARY_NODE,
     });
-    const count = await pg.db.execute<{ n: number }>(sql`select count(*) as n from mirror_config`);
+    const count = await suite.db.execute<{ n: number }>(
+      sql`select count(*) as n from mirror_config`,
+    );
     expect(count.rows[0]?.n).toBe(1);
-    expect(await readMirrorConfig(pg.db, NODE)).toEqual({
+    expect(await readMirrorConfig(suite.db, NODE)).toEqual({
       relayUrl: "https://relay-two.test:9000/",
       boxHostname: "b",
       boxCaPem: "b",
@@ -74,10 +76,10 @@ describe("mirror_config accessors", () => {
     // `node_id` is the primary key, so "what is this node's mirror config" can never have two
     // answers. `adopted_at` is stated because it is a `$defaultFn` column Drizzle fills
     // CLIENT-side: a raw insert would otherwise be refused NOT NULL rather than by the key.
-    await writeMirrorConfig(pg.db, NODE, SAMPLE);
+    await writeMirrorConfig(suite.db, NODE, SAMPLE);
     const error = await captureError(() =>
       Promise.resolve(
-        pg.db.run(
+        suite.db.run(
           sql`insert into mirror_config (node_id, relay_url, box_hostname, box_ca_pem, origin_node_id, adopted_at) values (${NODE}, 'x', 'x', 'x', ${PRIMARY_NODE}, ${new Date().toISOString()})`,
         ),
       ),

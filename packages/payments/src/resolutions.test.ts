@@ -23,7 +23,7 @@ import {
 import { getPaymentByRef, insertAttempting } from "./store.js";
 import { freshNif, seedWorkingOrder } from "../test/seed.js";
 
-const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 const MANAGER = "22222222-2222-4222-8222-222222222222";
 const RESOLVED_AT = new Date("2026-09-26T12:00:00Z");
@@ -35,9 +35,9 @@ async function stuckPayment(
   provider = "stripe",
   workingOrderId?: string,
 ): Promise<{ paymentId: string; workingOrderId: string; paymentRef: string }> {
-  const woId = workingOrderId ?? (await seedWorkingOrder(pg.db, freshNif())).workingOrderId;
+  const woId = workingOrderId ?? (await seedWorkingOrder(suite.db, freshNif())).workingOrderId;
   const paymentRef = `stuck-${++refCounter}`;
-  return withTransaction(pg.db, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await insertAttempting(tx, {
       workingOrderId: woId,
       provider,
@@ -53,7 +53,7 @@ function record(
   p: { paymentId: string; workingOrderId: string },
   over: Partial<Parameters<typeof recordResolution>[1]> = {},
 ) {
-  return withTransaction(pg.db, (tx) =>
+  return withTransaction(suite.db, (tx) =>
     recordResolution(tx, {
       paymentId: p.paymentId,
       workingOrderId: p.workingOrderId,
@@ -68,7 +68,7 @@ function record(
 }
 
 function countFor(workingOrderId: string, provider?: string): Promise<number> {
-  return withTransaction(pg.db, (tx) =>
+  return withTransaction(suite.db, (tx) =>
     countProviderCancelledResolutions(tx, {
       workingOrderId,
       ...(provider === undefined ? {} : { provider }),
@@ -80,7 +80,7 @@ describe("recordResolution", () => {
   it("writes one audit row carrying what the manager's resolution decided", async () => {
     const p = await stuckPayment();
     const { id } = await record(p);
-    const { rows } = await pg.db.execute<Record<string, unknown>>(
+    const { rows } = await suite.db.execute<Record<string, unknown>>(
       sql`select payment_id, working_order_id, person_id, outcome, cancelled_at_provider,
                  provider_status, resolved_at
             from payment_resolutions where id = ${id}`,
@@ -105,7 +105,7 @@ describe("recordResolution", () => {
       cancelledAtProvider: false,
       providerStatus: null,
     });
-    const { rows } = await pg.db.execute<{ provider_status: string | null }>(
+    const { rows } = await suite.db.execute<{ provider_status: string | null }>(
       sql`select provider_status from payment_resolutions where id = ${id}`,
     );
     expect(rows).toEqual([{ provider_status: null }]);
@@ -152,11 +152,11 @@ describe("recordResolution", () => {
     const p = await stuckPayment();
     const { id } = await record(p);
     const update = await captureError(() =>
-      pg.db.execute(sql`update payment_resolutions set outcome = 'captured' where id = ${id}`),
+      suite.db.execute(sql`update payment_resolutions set outcome = 'captured' where id = ${id}`),
     );
     expect(triggerRaised(update, "payment_resolutions is append-only")).toBe(true);
     const remove = await captureError(() =>
-      pg.db.execute(sql`delete from payment_resolutions where id = ${id}`),
+      suite.db.execute(sql`delete from payment_resolutions where id = ${id}`),
     );
     expect(triggerRaised(remove, "payment_resolutions is append-only")).toBe(true);
   });
@@ -165,7 +165,7 @@ describe("recordResolution", () => {
 describe("recordAttemptResolution", () => {
   it("records the resolution against the payment the key names and that payment's order", async () => {
     const p = await stuckPayment("stripe");
-    const { id } = await withTransaction(pg.db, (tx) =>
+    const { id } = await withTransaction(suite.db, (tx) =>
       recordAttemptResolution(
         tx,
         { provider: "stripe", paymentRef: p.paymentRef },
@@ -178,7 +178,7 @@ describe("recordAttemptResolution", () => {
         },
       ),
     );
-    const { rows } = await pg.db.execute<Record<string, unknown>>(
+    const { rows } = await suite.db.execute<Record<string, unknown>>(
       sql`select payment_id, working_order_id from payment_resolutions where id = ${id}`,
     );
     expect(rows).toEqual([{ payment_id: p.paymentId, working_order_id: p.workingOrderId }]);
@@ -187,7 +187,7 @@ describe("recordAttemptResolution", () => {
   it("refuses payment.not_found for a key that names no payment", async () => {
     const p = await stuckPayment("stripe");
     const error = await captureError(() =>
-      withTransaction(pg.db, (tx) =>
+      withTransaction(suite.db, (tx) =>
         recordAttemptResolution(
           tx,
           { provider: "sumup", paymentRef: p.paymentRef },

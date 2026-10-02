@@ -10,14 +10,14 @@ import { appendToChain, readChainHead } from "./chain.js";
 import { currentSif } from "./registro-sif.js";
 import { altaFor, anulacionFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
 
-const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;
 
 // This file covers append ordering and error handling; the simultaneously-started cases live in
 // chain.concurrency.test.ts.
 beforeEach(async () => {
-  till = await seedTill(pg.db);
+  till = await seedTill(suite.db);
 });
 
 async function records(): Promise<
@@ -32,7 +32,7 @@ async function records(): Promise<
   // Through the table definition, not raw SQL: `primer_registro` is a flag, which this engine
   // stores as 0 or 1, and only the builder maps it back to a boolean. A raw read returns the
   // number, so `toBe(true)` reads `expected 1 to be true` against a perfectly correct row.
-  return pg.db
+  return suite.db
     .select({
       secuencia: registrosFacturacion.secuencia,
       huella: registrosFacturacion.huella,
@@ -47,8 +47,8 @@ async function records(): Promise<
 
 describe("appendToChain", () => {
   it("assigns secuencia 1 to the first record of a chain", async () => {
-    const saleId = await seedSale(pg.db, till, 1);
-    const result = await pg.db.transaction((tx) =>
+    const saleId = await seedSale(suite.db, till, 1);
+    const result = await suite.db.transaction((tx) =>
       appendToChain(tx, till.nodeId, altaFor(till.tillId, saleId, 1, 1)),
     );
     expect(result.secuencia).toBe(1);
@@ -58,8 +58,8 @@ describe("appendToChain", () => {
     // On the first record the predecessor huella field is present but
     // EMPTY, and the record's own huella is still computed and stored. A start-of-chain is a
     // normal state, not an absence of hashing.
-    const saleId = await seedSale(pg.db, till, 1);
-    await pg.db.transaction((tx) =>
+    const saleId = await seedSale(suite.db, till, 1);
+    await suite.db.transaction((tx) =>
       appendToChain(tx, till.nodeId, altaFor(till.tillId, saleId, 1, 1)),
     );
     const [first] = await records();
@@ -71,10 +71,14 @@ describe("appendToChain", () => {
   });
 
   it("chains the second record to the first via the four-part pointer", async () => {
-    const a = await seedSale(pg.db, till, 1);
-    const b = await seedSale(pg.db, till, 2);
-    await pg.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till.tillId, a, 1, 1)));
-    await pg.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till.tillId, b, 2, 2)));
+    const a = await seedSale(suite.db, till, 1);
+    const b = await seedSale(suite.db, till, 2);
+    await suite.db.transaction((tx) =>
+      appendToChain(tx, till.nodeId, altaFor(till.tillId, a, 1, 1)),
+    );
+    await suite.db.transaction((tx) =>
+      appendToChain(tx, till.nodeId, altaFor(till.tillId, b, 2, 2)),
+    );
     const [first, second] = await records();
     expect(second?.secuencia).toBe(2);
     expect(second?.primer_registro).toBe(false);
@@ -82,11 +86,11 @@ describe("appendToChain", () => {
   });
 
   it("advances the chain head to the record just written", async () => {
-    const a = await seedSale(pg.db, till, 1);
-    const { huella } = await pg.db.transaction((tx) =>
+    const a = await seedSale(suite.db, till, 1);
+    const { huella } = await suite.db.transaction((tx) =>
       appendToChain(tx, till.nodeId, altaFor(till.tillId, a, 1, 1)),
     );
-    const { rows } = await pg.db.execute<{ secuencia: number; ultima_huella: string }>(sql`
+    const { rows } = await suite.db.execute<{ secuencia: number; ultima_huella: string }>(sql`
       select secuencia, ultima_huella from cadenas where node_id = ${till.nodeId}
     `);
     expect(rows[0]?.secuencia).toBe(1);
@@ -96,15 +100,21 @@ describe("appendToChain", () => {
   it("interleaves alta and anulación in one chain in generation order", async () => {
     // It is a RECORD chain, not an invoice chain. A void does not start a second
     // chain and does not jump the queue.
-    const a = await seedSale(pg.db, till, 1);
-    const b = await seedSale(pg.db, till, 2);
-    const c = await seedSale(pg.db, till, 3);
-    await pg.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till.tillId, a, 1, 1)));
-    await pg.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till.tillId, b, 2, 2)));
-    await pg.db.transaction((tx) =>
+    const a = await seedSale(suite.db, till, 1);
+    const b = await seedSale(suite.db, till, 2);
+    const c = await seedSale(suite.db, till, 3);
+    await suite.db.transaction((tx) =>
+      appendToChain(tx, till.nodeId, altaFor(till.tillId, a, 1, 1)),
+    );
+    await suite.db.transaction((tx) =>
+      appendToChain(tx, till.nodeId, altaFor(till.tillId, b, 2, 2)),
+    );
+    await suite.db.transaction((tx) =>
       appendToChain(tx, till.nodeId, anulacionFor(till.tillId, b, 2, 3)),
     );
-    await pg.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till.tillId, c, 3, 4)));
+    await suite.db.transaction((tx) =>
+      appendToChain(tx, till.nodeId, altaFor(till.tillId, c, 3, 4)),
+    );
     const rows = await records();
     expect(rows.map((r) => r.secuencia)).toEqual([1, 2, 3, 4]);
     // The anulación links to the ALTA that preceded it in generation order, not to the record it
@@ -118,14 +128,18 @@ describe("appendToChain", () => {
     // impossible if position tracks the counter. This test fails the moment someone "helpfully"
     // couples them — by ordering on the number, by validating contiguity, or by deriving one from
     // the other.
-    const a = await seedSale(pg.db, till, 500);
-    const b = await seedSale(pg.db, till, 7);
-    const c = await seedSale(pg.db, till, 44);
-    await pg.db.transaction((tx) =>
+    const a = await seedSale(suite.db, till, 500);
+    const b = await seedSale(suite.db, till, 7);
+    const c = await seedSale(suite.db, till, 44);
+    await suite.db.transaction((tx) =>
       appendToChain(tx, till.nodeId, altaFor(till.tillId, a, 500, 1)),
     );
-    await pg.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till.tillId, b, 7, 2)));
-    await pg.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till.tillId, c, 44, 3)));
+    await suite.db.transaction((tx) =>
+      appendToChain(tx, till.nodeId, altaFor(till.tillId, b, 7, 2)),
+    );
+    await suite.db.transaction((tx) =>
+      appendToChain(tx, till.nodeId, altaFor(till.tillId, c, 44, 3)),
+    );
     const rows = await records();
     expect(rows.map((r) => r.secuencia)).toEqual([1, 2, 3]);
     expect(rows.map((r) => r.num_serie_factura)).toEqual(["A/500", "A/7", "A/44"]);
@@ -134,10 +148,14 @@ describe("appendToChain", () => {
   it("keeps chain positions contiguous across a gap in invoice numbers", async () => {
     // Burned invoice numbers are permitted (a crash between allocation and commit). Chain
     // positions are ours and have no gaps.
-    const a = await seedSale(pg.db, till, 1);
-    const b = await seedSale(pg.db, till, 9);
-    await pg.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till.tillId, a, 1, 1)));
-    await pg.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till.tillId, b, 9, 2)));
+    const a = await seedSale(suite.db, till, 1);
+    const b = await seedSale(suite.db, till, 9);
+    await suite.db.transaction((tx) =>
+      appendToChain(tx, till.nodeId, altaFor(till.tillId, a, 1, 1)),
+    );
+    await suite.db.transaction((tx) =>
+      appendToChain(tx, till.nodeId, altaFor(till.tillId, b, 9, 2)),
+    );
     expect((await records()).map((r) => r.secuencia)).toEqual([1, 2]);
   });
 
@@ -147,9 +165,11 @@ describe("appendToChain", () => {
     // literal and hash differently. Checked against a locally rebuilt record rather than a
     // hard-coded digest, so the test still names the property if AEAT's canonical string ever
     // gains a field.
-    const a = await seedSale(pg.db, till, 1);
-    await pg.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till.tillId, a, 1, 1)));
-    const { rows } = await pg.db.execute<{
+    const a = await seedSale(suite.db, till, 1);
+    await suite.db.transaction((tx) =>
+      appendToChain(tx, till.nodeId, altaFor(till.tillId, a, 1, 1)),
+    );
+    const { rows } = await suite.db.execute<{
       importe_total: string;
       cuota_total: string;
       huella: string;
@@ -176,25 +196,27 @@ describe("appendToChain", () => {
   });
 
   it("records the environment the registro was generated for", async () => {
-    const saleId = await seedSale(pg.db, till, 1);
-    const appended = await pg.db.transaction((tx) =>
+    const saleId = await seedSale(suite.db, till, 1);
+    const appended = await suite.db.transaction((tx) =>
       appendToChain(tx, till.nodeId, altaFor(till.tillId, saleId, 1, 1, "preproduction")),
     );
 
-    const { rows } = await pg.db.execute<{ entorno: string }>(
+    const { rows } = await suite.db.execute<{ entorno: string }>(
       sql`select entorno from registros_facturacion where id = ${appended.id}`,
     );
     expect(rows[0]?.entorno).toBe("preproduction");
   });
 
   it("rejects a second record claiming an occupied chain position", async () => {
-    const a = await seedSale(pg.db, till, 1);
-    const b = await seedSale(pg.db, till, 2);
-    await pg.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till.tillId, a, 1, 1)));
+    const a = await seedSale(suite.db, till, 1);
+    const b = await seedSale(suite.db, till, 2);
+    await suite.db.transaction((tx) =>
+      appendToChain(tx, till.nodeId, altaFor(till.tillId, a, 1, 1)),
+    );
     // Bypasses appendToChain entirely: this is the backstop, and it must hold against a writer
     // that never went through it.
     const error = await captureError(() =>
-      pg.db.insert(registrosFacturacion).values({
+      suite.db.insert(registrosFacturacion).values({
         tillId: till.tillId,
         nodeId: till.nodeId,
         sifId: till.sifId,
@@ -231,8 +253,8 @@ describe("appendToChain", () => {
     // `tx.transaction(...)` with a plain `attemptAppend(tx, …)` leaves it passing, and the stubbed
     // cases below fail that deletion only because their stub has nothing but `transaction`. No case
     // in this file holds the savepoint.
-    const occupied = await seedSale(pg.db, till, 1);
-    await pg.db.insert(registrosFacturacion).values({
+    const occupied = await seedSale(suite.db, till, 1);
+    await suite.db.insert(registrosFacturacion).values({
       tillId: till.tillId,
       nodeId: till.nodeId,
       sifId: till.sifId,
@@ -251,8 +273,8 @@ describe("appendToChain", () => {
       huella: "1".repeat(64),
     });
 
-    const saleId = await seedSale(pg.db, till, 2);
-    const error = await pg.db
+    const saleId = await seedSale(suite.db, till, 2);
+    const error = await suite.db
       .transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till.tillId, saleId, 2, 2)))
       .catch((caught: unknown) => caught);
 
@@ -265,7 +287,7 @@ describe("appendToChain", () => {
   });
 
   it("surfaces exhausted retries as a structured AppError, never a bare string", async () => {
-    const saleId = await seedSale(pg.db, till, 1);
+    const saleId = await seedSale(suite.db, till, 1);
     // Every savepoint attempt loses its race. Contention cannot produce three collisions, because
     // one write transaction runs on the venue file at a time. The stub is exactly the one method
     // appendToChain calls on `tx`, so a wider fake cannot hide the retry loop doing something else.
@@ -301,12 +323,12 @@ describe("appendToChain", () => {
     // attempt passes straight through. The only thing wrapped is `transaction`, the one method
     // appendToChain calls on `tx`.
     // The controls that fail it are in the pull request that added it.
-    const decoy = await seedSale(pg.db, till, 1);
-    const saleId = await seedSale(pg.db, till, 2);
+    const decoy = await seedSale(suite.db, till, 1);
+    const saleId = await seedSale(suite.db, till, 2);
     let calls = 0;
     let firstRefusal: unknown;
 
-    const result = await pg.db.transaction((tx) => {
+    const result = await suite.db.transaction((tx) => {
       const refusedOnce = {
         transaction: <T>(body: (nested: typeof tx) => Promise<T>): Promise<T> => {
           calls += 1;
@@ -347,7 +369,7 @@ describe("appendToChain", () => {
       table: "registros_facturacion",
       columns: ["node_id", "secuencia"],
     });
-    const rows = await pg.db
+    const rows = await suite.db
       .select({
         id: registrosFacturacion.id,
         saleId: registrosFacturacion.saleId,
@@ -358,7 +380,7 @@ describe("appendToChain", () => {
       .where(eq(registrosFacturacion.nodeId, till.nodeId));
     expect(rows).toEqual([{ id: result.id, saleId, secuencia: 1, huella: result.huella }]);
     expect(result.secuencia).toBe(1);
-    const { rows: head } = await pg.db.execute<{
+    const { rows: head } = await suite.db.execute<{
       secuencia: number;
       ultimo_registro_id: string;
       ultima_huella: string;
@@ -373,7 +395,7 @@ describe("appendToChain", () => {
   it("does not retry an error that is not a chain collision", async () => {
     // A foreign-key violation retried three times is three identical failures reported as
     // contention, sending whoever reads the incident after a race that never happened.
-    const saleId = await seedSale(pg.db, till, 1);
+    const saleId = await seedSale(suite.db, till, 1);
     const refusal = refusalError({ foreignKey: true });
     let calls = 0;
     const alwaysFk = {
@@ -396,9 +418,9 @@ describe("appendToChain", () => {
 
 describe("appendToChain — pre-fetched SIF", () => {
   it("rejects a SIF that belongs to a different node", async () => {
-    const saleId = await seedSale(pg.db, till, 1);
+    const saleId = await seedSale(suite.db, till, 1);
     await expect(
-      pg.db.transaction(async (tx) => {
+      suite.db.transaction(async (tx) => {
         const sif = await currentSif(tx, till.nodeId);
         // A fabricated UUID stands in for another node.
         const wrongSif = {
@@ -415,12 +437,12 @@ describe("readChainHead", () => {
   it("creates the chain head row from scratch when a till has none yet", async () => {
     // seedTill's registerSif already wrote a cadenas row, so every other test skips readChainHead's
     // create-the-head branch. Deleting that row reproduces the cold start.
-    await pg.db.execute(sql`delete from cadenas where node_id = ${till.nodeId}`);
+    await suite.db.execute(sql`delete from cadenas where node_id = ${till.nodeId}`);
 
-    const head = await pg.db.transaction((tx) => readChainHead(tx, till.nodeId));
+    const head = await suite.db.transaction((tx) => readChainHead(tx, till.nodeId));
     expect(head).toEqual({ secuencia: 0, ultimoRegistroId: null, ultimaHuella: null });
 
-    const { rows } = await pg.db.execute<{ secuencia: number }>(
+    const { rows } = await suite.db.execute<{ secuencia: number }>(
       sql`select secuencia from cadenas where node_id = ${till.nodeId}`,
     );
     expect(rows).toHaveLength(1);
@@ -430,17 +452,17 @@ describe("readChainHead", () => {
   it("locks the existing head row rather than creating a second one", async () => {
     // The common case, exercised directly rather than only through appendToChain: a till that
     // already sold once must have readChainHead read that same row, not silently create a rival.
-    const saleId = await seedSale(pg.db, till, 1);
-    await pg.db.transaction((tx) =>
+    const saleId = await seedSale(suite.db, till, 1);
+    await suite.db.transaction((tx) =>
       appendToChain(tx, till.nodeId, altaFor(till.tillId, saleId, 1, 1)),
     );
 
-    const head = await pg.db.transaction((tx) => readChainHead(tx, till.nodeId));
+    const head = await suite.db.transaction((tx) => readChainHead(tx, till.nodeId));
     expect(head.secuencia).toBe(1);
     expect(head.ultimoRegistroId).not.toBeNull();
     expect(head.ultimaHuella).not.toBeNull();
 
-    const { rows } = await pg.db.execute<{ count: number }>(
+    const { rows } = await suite.db.execute<{ count: number }>(
       sql`select count(*) as count from cadenas where node_id = ${till.nodeId}`,
     );
     expect(rows[0]?.count).toBe(1);

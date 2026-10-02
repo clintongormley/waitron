@@ -14,20 +14,20 @@ const KEY = process.env.STRIPE_SECRET_KEY;
 const d = KEY ? describe : describe.skip;
 
 d("Stripe test-mode sandbox: hosted Checkout Session", () => {
-  const pg = useVenueDb({
+  const suite = useVenueDb({
     migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
     timeoutMs: 120_000,
   });
 
   it("creates a real test-mode Checkout Session and writes an initiated row", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
+    const s = await seedWorkingOrder(suite.db, freshNif());
     const provider = new StripeHostedProvider({
       client: stripeHostedClient(new Stripe(KEY!), {
         successUrl: "https://example.test/ok",
         cancelUrl: "https://example.test/cancel",
         webhookSecret: "whsec_unused_here",
       }),
-      db: pg.db,
+      db: suite.db,
     });
     const paymentRef = randomUUID();
 
@@ -40,7 +40,7 @@ d("Stripe test-mode sandbox: hosted Checkout Session", () => {
     expect(res.externalRef).toMatch(/^cs_/);
     expect(res.url).toMatch(/^https:\/\/checkout\.stripe\.com\//);
 
-    const row = await pg.db.transaction((tx) =>
+    const row = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, { provider: "stripe", paymentRef }),
     );
     expect(row?.state).toBe("initiated");

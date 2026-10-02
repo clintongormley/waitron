@@ -22,7 +22,7 @@ import type { RegistroRow } from "./registro-row.js";
  * the conversion. Computing them instead would run the very arithmetic under test. A failure here
  * after the conversion is a real rounding difference: fix the code, never these literals.
  */
-const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let backend: VerifactuBackend;
 let tillId: TillId;
@@ -30,17 +30,17 @@ let nodeId: NodeId;
 let seriesId: SeriesId;
 
 beforeEach(async () => {
-  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
+  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
-    db: pg.db,
+    db: suite.db,
     resolveClient: staticResolver(fakeClient),
   });
 });
 
 async function sell(overrides: Record<string, unknown> = {}) {
-  return withTransaction(pg.db, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId, ...overrides }));
   });
 }
@@ -48,7 +48,7 @@ async function sell(overrides: Record<string, unknown> = {}) {
 /** The snake_case row the huella is recomputed from, read raw — not interchangeable with
  * drizzle's camelCase select shape. */
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
-  const { rows } = await pg.db.execute<Record<string, unknown>>(
+  const { rows } = await suite.db.execute<Record<string, unknown>>(
     sql`select * from registros_facturacion where sale_id = ${saleId}`,
   );
   const row = rows[0];

@@ -21,14 +21,14 @@ let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
-const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
+  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
-    db: pg.db,
+    db: suite.db,
     resolveClient: staticResolver(fakeClient),
   });
 });
@@ -36,11 +36,11 @@ beforeEach(async () => {
 /** Point the seeded series at a code AEAT's character set forbids. A space is the shape an
  * operator actually types ("Serie A"). */
 async function useSeriesCode(code: string): Promise<void> {
-  await pg.db.execute(sql`update invoice_series set code = ${code} where id = ${seriesId}`);
+  await suite.db.execute(sql`update invoice_series set code = ${code} where id = ${seriesId}`);
 }
 
 function sell() {
-  return withTransaction(pg.db, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
   });
 }
@@ -58,17 +58,17 @@ describe("a record AEAT could not accept never enters the chain", () => {
     await useSeriesCode("Serie A");
     await expect(sell()).rejects.toMatchObject({ code: "fiscal.record_invalid" });
 
-    const registros = await pg.db.select().from(registrosFacturacion);
+    const registros = await suite.db.select().from(registrosFacturacion);
     expect(registros).toEqual([]);
 
     // The sale itself must be gone too — `recordSale` writes the sale and the fiscal record in ONE
     // transaction, so a refusal that left a sale behind would be a sale with no fiscal record.
-    const soldRows = await pg.db.select().from(sales);
+    const soldRows = await suite.db.select().from(sales);
     expect(soldRows).toEqual([]);
 
     // And the chain head must not have advanced: a refused record leaves the node exactly where it
     // was, so the next legitimate sale is still the chain's first record.
-    const heads = await pg.db.execute<{ secuencia: number }>(
+    const heads = await suite.db.execute<{ secuencia: number }>(
       sql`select secuencia from cadenas where node_id = ${nodeId}`,
     );
     expect(heads.rows[0]?.secuencia ?? 0).toBe(0);
@@ -79,7 +79,7 @@ describe("a record AEAT could not accept never enters the chain", () => {
     const { saleId } = await sell();
     expect(saleId).toBeDefined();
 
-    const [registro] = await pg.db.select().from(registrosFacturacion);
+    const [registro] = await suite.db.select().from(registrosFacturacion);
     expect(registro?.numSerieFactura).toBe("FS/1");
   });
 
@@ -95,7 +95,7 @@ describe("a record AEAT could not accept never enters the chain", () => {
     };
 
     await expect(
-      withTransaction(pg.db, (tx) => appendToChain(tx, nodeId, registro)),
+      withTransaction(suite.db, (tx) => appendToChain(tx, nodeId, registro)),
     ).rejects.toMatchObject({
       code: "fiscal.record_invalid",
       params: { fields: ["NumSerieFacturaAnulada"] },
@@ -132,22 +132,22 @@ describe("a record whose totals disagree with themselves is written, filed and f
 
   it("records the sale rather than refusing it", async () => {
     await useSeriesCode("FS");
-    const { saleId } = await withTransaction(pg.db, async (tx) => {
+    const { saleId } = await withTransaction(suite.db, async (tx) => {
       return recordSale(tx, backend, mismatchedSale());
     });
     expect(saleId).toBeDefined();
 
-    const registros = await pg.db.select().from(registrosFacturacion);
+    const registros = await suite.db.select().from(registrosFacturacion);
     expect(registros).toHaveLength(1);
   });
 
   it("raises a warning incident against that sale", async () => {
     await useSeriesCode("FS");
-    const { saleId } = await withTransaction(pg.db, async (tx) => {
+    const { saleId } = await withTransaction(suite.db, async (tx) => {
       return recordSale(tx, backend, mismatchedSale());
     });
 
-    const rows = await pg.db.execute<{ code: string; severity: string; sale_id: string }>(
+    const rows = await suite.db.execute<{ code: string; severity: string; sale_id: string }>(
       sql`select code, severity, sale_id from incidents`,
     );
     expect(rows.rows).toEqual([
@@ -163,7 +163,7 @@ describe("a record whose totals disagree with themselves is written, filed and f
     await useSeriesCode("FS");
     await sell();
 
-    const rows = await pg.db.execute(sql`select 1 from incidents`);
+    const rows = await suite.db.execute(sql`select 1 from incidents`);
     expect(rows.rows).toEqual([]);
   });
 });
@@ -182,7 +182,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
     sequence += 1;
     const saleId = `77777777-7777-4777-8777-7777777770${String(sequence).padStart(2, "0")}`;
     const invoiceNumber = 900 + sequence;
-    return withTransaction(pg.db, async (tx) => {
+    return withTransaction(suite.db, async (tx) => {
       await tx.insert(sales).values({
         id: saleId,
         tillId,
@@ -232,13 +232,13 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
       code: "fiscal.record_invalid",
     });
 
-    const registros = await pg.db.select().from(registrosFacturacion);
+    const registros = await suite.db.select().from(registrosFacturacion);
     expect(registros).toEqual([]);
 
-    const soldRows = await pg.db.select().from(sales);
+    const soldRows = await suite.db.select().from(sales);
     expect(soldRows).toEqual([]);
 
-    const heads = await pg.db.execute<{ secuencia: number }>(
+    const heads = await suite.db.execute<{ secuencia: number }>(
       sql`select secuencia from cadenas where node_id = ${nodeId}`,
     );
     expect(heads.rows[0]?.secuencia ?? 0).toBe(0);
@@ -248,7 +248,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
     await useSeriesCode("FS");
     await sellToNamedRecipient("Cliente SL");
 
-    const [registro] = await pg.db.select().from(registrosFacturacion);
+    const [registro] = await suite.db.select().from(registrosFacturacion);
     expect(registro?.destinatarios).toEqual({
       IDDestinatario: [{ NombreRazon: "Cliente SL", NIF: "B12345678" }],
     });

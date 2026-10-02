@@ -8,18 +8,18 @@ import { getPaymentByRef } from "../store.js";
 import { freshNif, seedWorkingOrder } from "../../test/seed.js";
 import { FakeAsyncProvider } from "./fake-async-provider.js";
 
-const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
   // Child before parent: a `payment_refunds` row points at its payment.
-  await pg.db.execute(sql`delete from payment_refunds`);
-  await pg.db.execute(sql`delete from payments`);
+  await suite.db.execute(sql`delete from payment_refunds`);
+  await suite.db.execute(sql`delete from payments`);
 });
 
 describe("FakeAsyncProvider", () => {
   it("initiate writes an initiated row and returns a url + external ref", async () => {
-    const s = await seedWorkingOrder(pg.db, freshNif());
-    const provider = new FakeAsyncProvider(pg.db);
+    const s = await seedWorkingOrder(suite.db, freshNif());
+    const provider = new FakeAsyncProvider(suite.db);
     const res = await provider.initiate({
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
@@ -28,7 +28,7 @@ describe("FakeAsyncProvider", () => {
     expect(res.ref).toBe("pay-1");
     expect(res.externalRef).toMatch(/^fake-hosted-/);
     expect(res.url).toContain(res.externalRef);
-    const row = await pg.db.transaction((tx) =>
+    const row = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, { provider: "fake", paymentRef: "pay-1" }),
     );
     expect(row?.state).toBe("initiated");
@@ -36,7 +36,7 @@ describe("FakeAsyncProvider", () => {
   });
 
   it("verifyAndParse decodes a settled event built by FakeAsyncProvider.event", () => {
-    const provider = new FakeAsyncProvider(pg.db);
+    const provider = new FakeAsyncProvider(suite.db);
     const at = new Date("2026-07-24T12:00:00Z");
     const payload = FakeAsyncProvider.event({
       externalRef: "fake-hosted-9",
@@ -55,7 +55,7 @@ describe("FakeAsyncProvider", () => {
   });
 
   it("verifyAndParse returns null for an event of another provider", () => {
-    const provider = new FakeAsyncProvider(pg.db);
+    const provider = new FakeAsyncProvider(suite.db);
     const payload = JSON.stringify({
       provider: "other",
       externalRef: "x",

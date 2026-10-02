@@ -18,7 +18,7 @@ import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
  *
  * The trigger case below is the only thing refusing an UPDATE of `tipo_rectificativa`.
  */
-const pg = useVenueDb({
+const suite = useVenueDb({
   migrations: TEST_MIGRATIONS,
   setup: seedTenantTillSif,
   resetPerTest: false,
@@ -77,25 +77,25 @@ async function insertRegistro(exec: Database, fields: RegistroFields = {}): Prom
 describe("registros_tipo_rectificativa_ck — the value domain", () => {
   it("accepts tipo_rectificativa 'I' on a rectificativa", async () => {
     await expect(
-      insertRegistro(pg.db, { tipoFactura: "R5", tipoRectificativa: "I" }),
+      insertRegistro(suite.db, { tipoFactura: "R5", tipoRectificativa: "I" }),
     ).resolves.toBeUndefined();
   });
 
   it("accepts tipo_rectificativa 'S' on a rectificativa", async () => {
     await expect(
-      insertRegistro(pg.db, { tipoFactura: "R5", tipoRectificativa: "S" }),
+      insertRegistro(suite.db, { tipoFactura: "R5", tipoRectificativa: "S" }),
     ).resolves.toBeUndefined();
   });
 
   it("accepts a null tipo_rectificativa on an ordinary alta", async () => {
     await expect(
-      insertRegistro(pg.db, { tipoFactura: "F2", tipoRectificativa: null }),
+      insertRegistro(suite.db, { tipoFactura: "F2", tipoRectificativa: null }),
     ).resolves.toBeUndefined();
   });
 
   it("rejects an unknown tipo_rectificativa", async () => {
     const error = await captureError(() =>
-      insertRegistro(pg.db, { tipoFactura: "R5", tipoRectificativa: "X" }),
+      insertRegistro(suite.db, { tipoFactura: "R5", tipoRectificativa: "X" }),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/registros_tipo_rectificativa_ck/);
@@ -105,7 +105,7 @@ describe("registros_tipo_rectificativa_ck — the value domain", () => {
 describe("registros_tipo_factura_rectificativa_ck — rule 1115 at the DB", () => {
   it("rejects a tipo_rectificativa sitting on a non-rectificativa tipo_factura", async () => {
     const error = await captureError(() =>
-      insertRegistro(pg.db, { tipoFactura: "F2", tipoRectificativa: "I" }),
+      insertRegistro(suite.db, { tipoFactura: "F2", tipoRectificativa: "I" }),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/registros_tipo_factura_rectificativa_ck/);
@@ -113,7 +113,7 @@ describe("registros_tipo_factura_rectificativa_ck — rule 1115 at the DB", () =
 
   it("accepts a tipo_rectificativa on an R1 invoice too", async () => {
     await expect(
-      insertRegistro(pg.db, { tipoFactura: "R1", tipoRectificativa: "I" }),
+      insertRegistro(suite.db, { tipoFactura: "R1", tipoRectificativa: "I" }),
     ).resolves.toBeUndefined();
   });
 
@@ -121,7 +121,7 @@ describe("registros_tipo_factura_rectificativa_ck — rule 1115 at the DB", () =
     // A NULL tipo_factura makes the `glob` arm NULL, which a CHECK treats as passing; the
     // `tipo_factura is not null and` arm is what rejects this.
     const error = await captureError(() =>
-      insertRegistro(pg.db, { tipoFactura: null, tipoRectificativa: "I" }),
+      insertRegistro(suite.db, { tipoFactura: null, tipoRectificativa: "I" }),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/registros_tipo_factura_rectificativa_ck/);
@@ -139,12 +139,12 @@ describe("the rectificativa columns are JSON and round-trip", () => {
         },
       ],
     };
-    await insertRegistro(pg.db, {
+    await insertRegistro(suite.db, {
       tipoFactura: "R5",
       tipoRectificativa: "I",
       facturasRectificadas,
     });
-    const { rows } = await pg.db.execute<{ facturas_rectificadas: string }>(
+    const { rows } = await suite.db.execute<{ facturas_rectificadas: string }>(
       sql`select facturas_rectificadas from registros_facturacion
            where facturas_rectificadas is not null order by secuencia desc limit 1`,
     );
@@ -154,12 +154,12 @@ describe("the rectificativa columns are JSON and round-trip", () => {
 
   it("stores and returns importe_rectificacion verbatim", async () => {
     const importeRectificacion = { BaseRectificada: "-100.00", CuotaRectificada: "-21.00" };
-    await insertRegistro(pg.db, {
+    await insertRegistro(suite.db, {
       tipoFactura: "R5",
       tipoRectificativa: "S",
       importeRectificacion,
     });
-    const { rows } = await pg.db.execute<{ importe_rectificacion: string }>(
+    const { rows } = await suite.db.execute<{ importe_rectificacion: string }>(
       sql`select importe_rectificacion from registros_facturacion
            where importe_rectificacion is not null order by secuencia desc limit 1`,
     );
@@ -169,9 +169,9 @@ describe("the rectificativa columns are JSON and round-trip", () => {
 
 describe("the new columns inherit the table's immutability", () => {
   it("refuses an UPDATE of tipo_rectificativa by the append-only trigger", async () => {
-    await insertRegistro(pg.db, { tipoFactura: "R5", tipoRectificativa: "I" });
+    await insertRegistro(suite.db, { tipoFactura: "R5", tipoRectificativa: "I" });
     const error = await captureError(async () =>
-      pg.db.execute(sql`update registros_facturacion set tipo_rectificativa = 'S'`),
+      suite.db.execute(sql`update registros_facturacion set tipo_rectificativa = 'S'`),
     );
     // `triggerRaised` matches the words too, so an `ON DELETE RESTRICT` refusal under the same
     // result code cannot satisfy it.

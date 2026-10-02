@@ -19,7 +19,7 @@ import { FakePaymentProvider } from "./testing/fake-provider.js";
 import { freshNif, seedForSale, seedPaymentPolicy } from "../test/seed.js";
 import type { SeededForSale } from "../test/seed.js";
 
-const pg = useVenueDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   setup: (db) => FakeFiscalBackend.install(db),
 });
@@ -70,11 +70,11 @@ function buildInput(s: SeededForSale, settledAt: Date): RecordSaleInput {
 
 describe("offline accept -> recordSale -> associate -> forward decline (sale stays chained)", () => {
   it("chains the sale on an offline-accepted tender, then a forward-decline raises an incident without un-chaining it", async () => {
-    const backend = new FakeFiscalBackend(pg.db);
-    const s = await seedForSale(pg.db, backend, freshNif());
-    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
+    const backend = new FakeFiscalBackend(suite.db);
+    const s = await seedForSale(suite.db, backend, freshNif());
+    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
 
-    const provider = new FakePaymentProvider(pg.db);
+    const provider = new FakePaymentProvider(suite.db);
     provider.offlineNextCollect();
     const paid = await provider.collect({
       tillId: brandTillId(s.tillId),
@@ -86,7 +86,7 @@ describe("offline accept -> recordSale -> associate -> forward decline (sale sta
     expect(paid.offline).toBe(true);
     expect(paid.settledAt).not.toBeNull();
 
-    const saleId = await pg.db.transaction(async (tx) => {
+    const saleId = await suite.db.transaction(async (tx) => {
       const recorded = await recordSale(tx, backend, buildInput(s, paid.settledAt as Date));
       await associatePaymentWithSale(tx, {
         provider: "fake",
@@ -100,16 +100,16 @@ describe("offline accept -> recordSale -> associate -> forward decline (sale sta
     const result = await provider.forward(BASE);
     expect(result).toMatchObject({ forwarded: 0, declined: 1, incidentsRaised: 1 });
 
-    const rows = await pg.db.execute<{ state: string; sale_id: string | null }>(sql`
+    const rows = await suite.db.execute<{ state: string; sale_id: string | null }>(sql`
       select state, sale_id from payments where working_order_id = ${s.workingOrderId}`);
     expect(rows.rows[0].state).toBe("declined");
     expect(rows.rows[0].sale_id).toBe(saleId);
-    const sale = await pg.db.execute<{ id: string }>(
+    const sale = await suite.db.execute<{ id: string }>(
       sql`select id from sales where id = ${saleId}`,
     );
     expect(sale.rows).toHaveLength(1);
 
-    const incidents = await pg.db.transaction((tx) => openIncidents(tx, brandTillId(s.tillId)));
+    const incidents = await suite.db.transaction((tx) => openIncidents(tx, brandTillId(s.tillId)));
     expect(incidents).toHaveLength(1);
     expect(incidents[0].code).toBe("payment.offline_forward_declined");
     expect(incidents[0].saleId).toBe(saleId);
