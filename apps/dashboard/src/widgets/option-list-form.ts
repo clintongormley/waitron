@@ -89,6 +89,7 @@ export class OptionListForm extends LitElement {
         margin: 0;
       }
       .open-label {
+        min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
         padding: 0;
         border: 0;
@@ -98,6 +99,9 @@ export class OptionListForm extends LitElement {
         text-align: start;
         overflow-wrap: anywhere;
         cursor: pointer;
+      }
+      .open-label:hover:not(:disabled) {
+        opacity: var(--wt-opacity-hover);
       }
       .label-actions {
         display: flex;

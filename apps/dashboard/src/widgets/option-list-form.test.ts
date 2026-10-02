@@ -1,4 +1,4 @@
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
@@ -425,8 +425,10 @@ it("draws an option's name as a button that says it edits that option", async ()
   expect(button.contains(el.shadowRoot!.querySelector('[data-test="label-0-name"]'))).toBe(true);
 });
 
-it("draws the name button as the name's text, a tap target high, with the keyboard focus ring from tokens", async () => {
-  const { el, host } = await mount({ value: cooked });
+it("draws the name button as the name's text, a full tap target even for a one-letter name, dimming on hover, with the keyboard focus ring from tokens", async () => {
+  const { el, host } = await mount({
+    value: { ...cooked, labels: [{ ...cooked.labels[0]!, name: "S" }, cooked.labels[1]!] },
+  });
   host.style.setProperty("--wt-color-text", "rgb(1, 2, 3)");
   host.style.setProperty("--wt-font-size-md", "17px");
   host.style.setProperty("--wt-focus-ring", "3px solid rgb(4, 5, 6)");
@@ -441,6 +443,14 @@ it("draws the name button as the name's text, a tap target high, with the keyboa
   expect(style.cursor).toBe("pointer");
   host.style.setProperty("--wt-tap-min", "52px");
   expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
+  expect(button.getBoundingClientRect().width).toBeGreaterThanOrEqual(52);
+
+  host.style.setProperty("--wt-opacity-hover", "0.6");
+  expect(getComputedStyle(button).opacity).toBe("1");
+  await userEvent.hover(button);
+  expect(getComputedStyle(button).opacity).toBe("0.6");
+  await commands.parkPointer();
+  expect(getComputedStyle(button).opacity).toBe("1");
 
   await userEvent.keyboard("{Tab}");
   button.focus();

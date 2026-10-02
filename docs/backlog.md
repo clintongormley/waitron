@@ -704,8 +704,8 @@ names" line lists the names themselves (`ES … · EN … · Kitchen …`) inste
 **The option window inside an Options list: two owner fixes (A170, owner 2026-10-01) — DONE (#PR).**
 In the editor for one options list (`apps/dashboard/src/widgets/option-list-form.ts`), an option's
 name in its row is now a button, drawn as the name's text, that opens its "Edit option" window; the
-Default radio button and the row menu keep their own clicks, and closing the window puts focus back
-on the name. The window (`apps/dashboard/src/widgets/option-label-form.ts`) has no folding section:
+Default radio button and the row menu keep their own clicks, and closing a window the name opened
+puts focus back on the name. The window (`apps/dashboard/src/widgets/option-label-form.ts`) has no folding section:
 Name, then Kitchen name (A171's decision for this window), then the customer-facing names under a
 plain "Customer-facing names" heading, then Available, the same on Add and Edit (owner,
 2026-10-01, mockup D2 of [the mockups](https://claude.ai/artifact/8apJ5oRb77Q5KmEfvUZHeZ)).
@@ -980,8 +980,9 @@ languages screen as well (`grep -rln wt-disclosure apps`); LOOK at each, and at 
 OPEN.** The owner: _"clicking on the options rows should open the edit page, like the previous
 screen"_ — the Modifiers screen's table, where a click anywhere on a row opens it (`wt-data-table`'s
 row activation). The options list form (`apps/dashboard/src/widgets/option-list-form.ts`) draws its
-own `<table>`, and an option opens only from its row menu. **Wanted:** a click on the row, or Enter
-on it, opens the option's edit form, while the drag handle, the Default radio and the row menu keep
+own `<table>`. Since A170 a click on an option's name, which is a button, opens it as its row menu's
+Edit does; the rest of the row does not. **Wanted:** a click elsewhere on the row, or Enter on the
+row, opens the option's edit form too, while the drag handle, the Default radio and the row menu keep
 doing their own thing. The extras list form (`extra-list-form.ts`) draws the same kind of table;
 check it and give it the same if its rows open an editor.
 
@@ -1032,8 +1033,8 @@ of `wt-data-table`'s Actions column; one approach for both is welcome.
 "can still be collapsed" no longer applies, because nothing folds. The
 owner, on screenshots of "Add option": _"on the edit/add options page start with the names block
 expanded as there is very little else on this page"_. The single option's form
-(`apps/dashboard/src/widgets/option-label-form.ts`) holds only Name, the "Customer and kitchen names"
-section and Available, and its `wt-disclosure` starts closed. **Wanted:** the section opens
+(`apps/dashboard/src/widgets/option-label-form.ts`) held only Name, the "Customer and kitchen names"
+section and Available, and its `wt-disclosure` started closed. **Wanted:** the section opens
 expanded, on both Add and Edit, and can still be collapsed. Read as the single option's form, which
 the screenshots show; the options LIST form's section is left as it is — ask if both were meant.
 
