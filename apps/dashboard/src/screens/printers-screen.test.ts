@@ -198,8 +198,8 @@ const jobs: PrintJobRow[] = [
 ];
 
 const tills: Till[] = [
-  { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1" },
-  { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: null },
+  { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1", opensDrawer: true },
+  { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: null, opensDrawer: true },
 ];
 
 const pending: JoinRequestRow[] = [

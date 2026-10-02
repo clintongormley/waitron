@@ -120,6 +120,10 @@ open a cash drawer (a table waiter has a pocket float, not a register).
 > built, the sell rows are: **sell via `/api/sales` (cash or manual card) = `till`, `handheld`**;
 > **integrated `/api/pay` = `till`**.
 
+> **Update (2026-10-02, B29, branch `feat/service-handheld-permissions`):** a handheld now places,
+> collects and cancels like a till. Of the refusals for being a handheld, only the Open drawer
+> button's remains; integrated card payment and printing still need the device profile's capability.
+
 `device.forbidden_action` (shipped PR #173) carries over; the new default-deny path needs one code
 (candidate `device.enrolment_required`, 400/401 — grep the `device.*` siblings before minting, never
 renamed once shipped — CLAUDE.md §3). The full `requireSession`-route classification already recorded

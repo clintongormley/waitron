@@ -23,6 +23,23 @@ function printConfig(cfg: TillConfig): PrintConfig {
 export interface ReceiptPrinter extends EscSetting {
   id: string;
   hasCashDrawer: boolean;
+  /** The calling till's own switch: whether it opens this printer's drawer. */
+  tillOpensDrawer: boolean;
+}
+
+/**
+ * The calling till's receipt printer when this request may open its drawer: the request's
+ * configuration allows a drawer, the printer has one, and the till is switched to open it.
+ * Otherwise `undefined`, and the automatic paths open nothing.
+ */
+async function drawerPrinter(
+  tx: Transaction,
+  cfg: TillConfig,
+): Promise<ReceiptPrinter | undefined> {
+  if (cfg.allowCashDrawer === false) return undefined;
+  const printer = await resolveReceiptPrinter(tx, cfg);
+  if (printer === undefined || !printer.hasCashDrawer || !printer.tillOpensDrawer) return undefined;
+  return printer;
 }
 
 /**
@@ -38,6 +55,7 @@ export async function resolveReceiptPrinter(
     .select({
       id: printers.id,
       hasCashDrawer: printers.hasCashDrawer,
+      tillOpensDrawer: tills.opensDrawer,
       paperWidth: printers.paperWidth,
       resolution: printers.resolution,
     })
@@ -186,9 +204,8 @@ async function enqueueBillDrawer(
   reason: "bill_payment" | "bill_refund" | "card_slip",
   authorization: { authorizedBy: string; viaOverride: boolean } | null,
 ): Promise<void> {
-  if (cfg.allowCashDrawer === false) return;
-  const printer = await resolveReceiptPrinter(tx, cfg);
-  if (printer === undefined || !printer.hasCashDrawer) return;
+  const printer = await drawerPrinter(tx, cfg);
+  if (printer === undefined) return;
   await tx.insert(drawerOpens).values({
     tillId: cfg.tillId,
     printerId: printer.id,
@@ -200,7 +217,10 @@ async function enqueueBillDrawer(
   await enqueuePrintJob(tx, printConfig(cfg), printer.id, DRAWER_KICK, "drawer");
 }
 
-/** Cash taken against a bill before its invoice opens the drawer naming the bill payment. */
+/**
+ * Cash taken against a bill before its invoice opens the drawer {@link drawerPrinter} finds, naming
+ * the bill payment.
+ */
 export async function enqueueBillPaymentDrawer(
   tx: Transaction,
   cfg: TillConfig,
@@ -211,8 +231,8 @@ export async function enqueueBillPaymentDrawer(
 }
 
 /**
- * A hand-keyed card taken against a bill opens the drawer for its slip, naming the bill payment, even
- * when the payment issues the invoice.
+ * A hand-keyed card taken against a bill opens the drawer {@link drawerPrinter} finds, for its slip,
+ * naming the bill payment, even when the payment issues the invoice.
  */
 export async function enqueueBillCardSlipDrawer(
   tx: Transaction,
@@ -224,8 +244,8 @@ export async function enqueueBillCardSlipDrawer(
 }
 
 /**
- * Cash given back from a bill payment before the invoice opens the drawer naming that payment, with
- * whoever authorised the refund.
+ * Cash given back from a bill payment before the invoice opens the drawer {@link drawerPrinter}
+ * finds, naming that payment and whoever authorised the refund.
  */
 export async function enqueueBillRefundDrawer(
   tx: Transaction,
@@ -239,7 +259,8 @@ export async function enqueueBillRefundDrawer(
 
 /**
  * A sale paid in cash, or by a card hand-keyed on a machine Waitron does not talk to (whose slip is
- * kept in the drawer), opens the till's attached drawer independently of document printing.
+ * kept in the drawer), opens the drawer {@link drawerPrinter} finds, independently of document
+ * printing.
  */
 export async function enqueueSaleDrawer(
   tx: Transaction,
@@ -248,9 +269,9 @@ export async function enqueueSaleDrawer(
   method: "cash" | "card",
   operatorId?: string,
 ): Promise<void> {
-  if (operatorId === undefined || cfg.allowCashDrawer === false) return;
-  const printer = await resolveReceiptPrinter(tx, cfg);
-  if (printer === undefined || !printer.hasCashDrawer) return;
+  if (operatorId === undefined) return;
+  const printer = await drawerPrinter(tx, cfg);
+  if (printer === undefined) return;
   await tx.insert(drawerOpens).values({
     tillId: cfg.tillId,
     printerId: printer.id,

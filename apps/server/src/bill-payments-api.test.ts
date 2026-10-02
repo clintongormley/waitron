@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -241,14 +241,15 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     loginWithPin(tx, { tillId: cfg.tillId, personId: seeded.personId, pin: "5555" }),
   );
   const device = await enrolDeviceForTest(db, cfg, { name: "Barra", profileId: seeded.profileId });
-  const handheld = await enrolDeviceForTest(db, cfg, {
-    name: "Terraza",
-    profileId: seeded.handheldProfileId,
-    registerId: cfg.tillId,
-  });
   const [deviceRow] = db.all<{ till_id: string }>(
     sql`select till_id from devices where id = ${device.deviceId}`,
   );
+  // On the till device's own till, which opens the drawer, so only the handheld rule keeps it shut.
+  const handheld = await enrolDeviceForTest(db, cfg, {
+    name: "Terraza",
+    profileId: seeded.handheldProfileId,
+    registerId: deviceRow!.till_id,
+  });
   const [admin] = db.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
   // Every till, so the device's own till prints and opens its drawer whichever one it is.
   db.run(sql`update tills set receipt_printer_id = ${seeded.printerId}`);
@@ -1963,6 +1964,32 @@ describe("a cash refund before the invoice (design §6)", () => {
     expect(await saleOf(billId)).toEqual([]);
   });
 
+  it("gives cash back on a handheld at a till that opens the drawer without opening it", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    const before = drawerJobCount();
+
+    const refunded = await request(
+      "POST",
+      `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        reason: "Cobrado de más",
+        override: { personId: venue.adminId, pin: "1234" },
+        appliedAmount: "20.00",
+        tipAmount: "0.00",
+      },
+      venue.handheldCookie,
+    );
+
+    expect(refunded.status).toBe(200);
+    expect(await refundRows(paymentId)).toMatchObject([
+      { state: "completed", tillId: venue.deviceTillId },
+    ]);
+    expect(await refundDrawerOpens(paymentId)).toEqual([]);
+    expect(drawerJobCount()).toBe(before);
+  });
+
   it("refuses an operator without the refund permission and no override, writing nothing", async () => {
     const billId = await bill120();
     const paymentId = paymentIdOf(await contribute(billId, "50.00"));
@@ -3019,6 +3046,68 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
 
     expect(paid.status).toBe(200);
     expect(await opensFor(paymentIdOf(paid))).toEqual([]);
+    expect(drawerJobCount()).toBe(before);
+  });
+});
+
+describe("a till switched off from opening the drawer it prints to", () => {
+  beforeEach(() => {
+    suite.db.run(sql`update tills set opens_drawer = false where id = ${venue.deviceTillId}`);
+  });
+  afterEach(() => {
+    suite.db.run(sql`update tills set opens_drawer = true where id = ${venue.deviceTillId}`);
+  });
+
+  async function opensFor(paymentId: string) {
+    return inTx((tx) =>
+      tx.select().from(drawerOpens).where(eq(drawerOpens.billPaymentId, paymentId)),
+    );
+  }
+
+  it("takes cash against a bill without opening the drawer", async () => {
+    const billId = await bill120();
+    const before = drawerJobCount();
+
+    const paid = await contribute(billId, "10.00");
+
+    expect(paid.status).toBe(200);
+    expect(await opensFor(paymentIdOf(paid))).toEqual([]);
+    expect(drawerJobCount()).toBe(before);
+  });
+
+  it("takes a hand-keyed card against a bill without opening the drawer for its slip", async () => {
+    const billId = await bill120();
+    const before = drawerJobCount();
+
+    const paid = await request("POST", `/api/working-orders/${billId}/payments`, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "40.00",
+      method: "card",
+      entry: "manual",
+      applied: "40.00",
+      tip: "0.00",
+    });
+
+    expect(paid.status).toBe(200);
+    expect(await opensFor(paymentIdOf(paid))).toEqual([]);
+    expect(drawerJobCount()).toBe(before);
+  });
+
+  it("gives cash back from a bill payment without opening the drawer", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    const before = drawerJobCount();
+
+    const refunded = await refund(billId, paymentId, {
+      appliedAmount: "20.00",
+      tipAmount: "0.00",
+      reason: "Cobrado de más",
+    });
+
+    expect(refunded.status).toBe(200);
+    expect(await refundRows(paymentId)).toMatchObject([{ state: "completed" }]);
+    expect(await refundDrawerOpens(paymentId)).toEqual([]);
     expect(drawerJobCount()).toBe(before);
   });
 });

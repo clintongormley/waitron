@@ -755,7 +755,7 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
     expect(await badPolicy.json()).toMatchObject({ error: { code: "management.request_invalid" } });
   });
 
-  it("GET /management-api/tills lists the venue's tills as { id, label, locationId, receiptPrinterId } (printer set + unset)", async () => {
+  it("GET /management-api/tills lists the venue's tills as { id, label, locationId, receiptPrinterId, opensDrawer } (printer set + unset)", async () => {
     const app = mountApp(tenantA);
     const agent = await joinAndAccept(app, "Recibos agent 2");
     const printerId = await createPrinter(app, agent.agentId, "Recibos 2");
@@ -783,12 +783,14 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
       label: withPrinterName,
       locationId: tenantA.locationId,
       receiptPrinterId: printerId,
+      opensDrawer: true,
     });
     expect(rows.find((r) => r.id === tillWithout)).toEqual({
       id: tillWithout,
       label: withoutPrinterName,
       locationId: tenantA.locationId,
       receiptPrinterId: null,
+      opensDrawer: true,
     });
   });
 
@@ -860,6 +862,82 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
         })
       ).status,
     ).toBe(204);
+  });
+
+  it("switches a till's drawer off and on again as a manager, and the till list shows it", async () => {
+    const app = mountApp(tenantA);
+    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
+    const listed = async () => {
+      const res = await send(app, "GET", "/management-api/tills", { cookie: managerCookie });
+      const rows = (await res.json()) as Array<{ id: string; opensDrawer: boolean }>;
+      return rows.find((r) => r.id === tillId)!.opensDrawer;
+    };
+    const route = `/management-api/tills/${tillId}/opens-drawer`;
+    expect(await listed()).toBe(true);
+
+    const off = await send(app, "PATCH", route, {
+      cookie: managerCookie,
+      body: { opensDrawer: false },
+    });
+    expect(off.status).toBe(204);
+    expect(await listed()).toBe(false);
+
+    const on = await send(app, "PATCH", route, {
+      cookie: managerCookie,
+      body: { opensDrawer: true },
+    });
+    expect(on.status).toBe(204);
+    expect(await listed()).toBe(true);
+  });
+
+  it("refuses a drawer switch that is not a boolean, and an unknown till, changing nothing", async () => {
+    const app = mountApp(tenantA);
+    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
+    const route = `/management-api/tills/${tillId}/opens-drawer`;
+
+    for (const body of [{}, { opensDrawer: null }, { opensDrawer: "false" }, { opensDrawer: 0 }]) {
+      const res = await send(app, "PATCH", route, { cookie: managerCookie, body });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "opensDrawer" } },
+      });
+    }
+    const unknown = await send(app, "PATCH", `/management-api/tills/${randomUUID()}/opens-drawer`, {
+      cookie: managerCookie,
+      body: { opensDrawer: false },
+    });
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "tillId" } },
+    });
+
+    const [row] = await suite.db
+      .select({ opensDrawer: tills.opensDrawer })
+      .from(tills)
+      .where(eq(tills.id, tillId));
+    expect(row).toEqual({ opensDrawer: true });
+  });
+
+  it("requires printer.manage to switch a till's drawer — 401 unauth, 403 staff", async () => {
+    const app = mountApp(tenantA);
+    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
+    const route = `/management-api/tills/${tillId}/opens-drawer`;
+
+    const unauth = await send(app, "PATCH", route, { body: { opensDrawer: false } });
+    expect(unauth.status).toBe(401);
+    expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
+    const staff = await send(app, "PATCH", route, {
+      cookie: staffCookie,
+      body: { opensDrawer: false },
+    });
+    expect(staff.status).toBe(403);
+    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+
+    const [row] = await suite.db
+      .select({ opensDrawer: tills.opensDrawer })
+      .from(tills)
+      .where(eq(tills.id, tillId));
+    expect(row).toEqual({ opensDrawer: true });
   });
 });
 

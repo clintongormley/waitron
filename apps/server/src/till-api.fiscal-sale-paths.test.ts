@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   deviceProfiles,
   drawerOpens,
+  orderAmendments,
   printJobs,
   saleLines,
   sales,
@@ -30,7 +31,7 @@ import {
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin, permissionsForRole, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
@@ -1686,9 +1687,6 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
   });
 });
 
-// A handheld can file cash and manual-card sales. Receipt, integrated-payment and drawer actions
-// require their profile capabilities; prep mutations retain the handheld restriction. These cases
-// drive real device lookup and real chained fiscal writes.
 describe("handheld sales and device capability gates", () => {
   /** Enrol a handheld device and return its `waitron_device=<id>.<token>` cookie. */
   async function enrolHandheldCookie(
@@ -1955,13 +1953,63 @@ describe("handheld sales and device capability gates", () => {
     expect((await res.json()).error.code).toBe("device.forbidden_action");
   });
 
-  // The two order-settlement routes a handheld reaches through its order screens file a chained
-  // fiscal record, so they are fenced too: `POST /:id/place` in a Mode-I venue, `POST /:id/collect`
-  // in Mode T or I. The handheld is refused having filed nothing; an enrolled till device then
-  // completes the same order and files exactly one record.
-  it("refuses a handheld PLACE (Mode I) with 403, filing nothing; an ordinary till places and files one record", async () => {
+  /** Park a two-item order with `cookie` and return its id. */
+  async function parkOrder(app: Hono, cookie: string, menuItemId: string): Promise<string> {
+    const id = randomUUID();
+    const park = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ id, lines: [{ menuItemId, quantity: "2" }] }),
+    });
+    expect(park.status).toBe(200);
+    return id;
+  }
+
+  /** The till the sale filed for `workingOrderId` names. */
+  async function saleTillOf(workingOrderId: string): Promise<string> {
+    const [sale] = await withTransaction(suite.db, (tx) =>
+      tx
+        .select({ tillId: sales.tillId })
+        .from(sales)
+        .where(eq(sales.workingOrderId, workingOrderId)),
+    );
+    return sale!.tillId;
+  }
+
+  /** The till an enrolled device rings on. */
+  async function deviceTillOf(deviceCookie: string): Promise<string> {
+    const rows = await suite.db.execute<{ till_id: string }>(
+      sql`select till_id from devices where id = ${deviceIdOf(deviceCookie)}`,
+    );
+    return rows.rows[0]!.till_id;
+  }
+
+  async function amendmentsOf(workingOrderId: string) {
+    return withTransaction(suite.db, (tx) =>
+      tx
+        .select({
+          kind: orderAmendments.kind,
+          actorId: orderAmendments.actorId,
+          reason: orderAmendments.reason,
+        })
+        .from(orderAmendments)
+        .where(eq(orderAmendments.workingOrderId, workingOrderId))
+        .orderBy(orderAmendments.sequenceNo),
+    );
+  }
+
+  async function statusOf(workingOrderId: string): Promise<string> {
+    const [order] = await withTransaction(suite.db, (tx) =>
+      tx
+        .select({ status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, workingOrderId)),
+    );
+    return order!.status;
+  }
+
+  it("a handheld places a Mode-I order for an operator holding no permission, filing one deferred invoice on its register, as a till does", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    // Flip to invoice-first (Mode I), so PLACE files the DEFERRED chained invoice.
     await suite.db.execute(
       sql`update locations set order_flow = 'invoice_first' where id = ${cfg.locationId}`,
     );
@@ -1972,55 +2020,47 @@ describe("handheld sales and device capability gates", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
+    expect(permissionsForRole("staff")).toEqual([]);
 
-    const deviceCookie = await enrolHandheldCookie(cfg);
-    const sessionPair = await loginOperator(app, cfg, operatorId);
-
-    // Park a real order (order-taking IS allowed for a handheld; only settlement is fenced) with the
-    // ordinary-till session, so both actors below operate on a genuine open order.
-    const workingOrderId = randomUUID();
-    const park = await app.request("/api/working-orders", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: sessionPair },
-      body: JSON.stringify({
-        id: workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
-      }),
-    });
-    expect(park.status).toBe(200);
-
-    // The handheld — valid operator session AND a real handheld cookie — is refused 403 BEFORE the id
-    // parse or any fiscal write.
-    const refused = await app.request(`/api/working-orders/${workingOrderId}/place`, {
-      method: "POST",
-      headers: { cookie: `${sessionPair}; ${deviceCookie}` },
-    });
-    expect(refused.status).toBe(403);
-    expect((await refused.json()).error.code).toBe("device.forbidden_action");
-    // Nothing was filed — the unrecoverable chained record the guard protects (CLAUDE.md §5).
-    const afterRefused = await withTransaction(suite.db, async (tx) => {
-      return tx.select().from(registrosFacturacion);
-    });
-    expect(afterRefused.length).toBe(0);
-
-    // An enrolled TILL device places the SAME order and files exactly one deferred invoice.
+    const handheldCookie = await enrolHandheldCookie(cfg);
     const tillDeviceCookie = await enrolTillCookie(cfg);
-    const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {
-      method: "POST",
-      headers: { cookie: `${sessionPair}; ${tillDeviceCookie}` },
-    });
-    expect(placed.status).toBe(200);
-    expect((await placed.json()).invoiceNumber).toMatch(/^A\/\d+$/);
-    const afterPlaced = await withTransaction(suite.db, async (tx) => {
-      return tx.select().from(registrosFacturacion);
-    });
-    expect(afterPlaced.length).toBe(1);
+    const sessionPair = await loginOperator(app, cfg, operatorId);
+    const byHandheld = await parkOrder(app, sessionPair, each.menuItemId);
+    const byTill = await parkOrder(app, sessionPair, each.menuItemId);
+
+    for (const [id, deviceCookie] of [
+      [byHandheld, handheldCookie],
+      [byTill, tillDeviceCookie],
+    ] as const) {
+      const placed = await app.request(`/api/working-orders/${id}/place`, {
+        method: "POST",
+        headers: { cookie: `${sessionPair}; ${deviceCookie}` },
+      });
+      expect(placed.status).toBe(200);
+      expect(await placed.json()).toMatchObject({
+        id,
+        status: "placed",
+        invoiceNumber: expect.stringMatching(/^A\/\d+$/),
+      });
+      expect(await statusOf(id)).toBe("placed");
+      expect(await amendmentsOf(id)).toEqual([
+        { kind: "order_placed", actorId: operatorId, reason: null },
+      ]);
+    }
+
+    const registros = await withTransaction(suite.db, (tx) =>
+      tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia),
+    );
+    expect(registros.map((r) => [r.nodeId, r.secuencia])).toEqual([
+      [cfg.nodeId, 1],
+      [cfg.nodeId, 2],
+    ]);
+    expect(await saleTillOf(byHandheld)).toBe(cfg.tillId);
+    expect(await saleTillOf(byTill)).toBe(await deviceTillOf(tillDeviceCookie));
   });
 
-  it("refuses a handheld COLLECT (Mode T) with 403, filing nothing; an ordinary till collects and files one record", async () => {
+  it("a handheld collects a placed Mode-T order in cash for an operator holding no permission, settling it and filing one record on its register, as a till does", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    // Mode T (ticket_then_pay): COLLECT files `recordSale` immediate — the chained write. PLACE files
-    // nothing under Mode T, so the pre-collect setup writes no fiscal record.
     await suite.db.execute(
       sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
     );
@@ -2028,127 +2068,99 @@ describe("handheld sales and device capability gates", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
+    expect(permissionsForRole("staff")).toEqual([]);
 
-    const deviceCookie = await enrolHandheldCookie(cfg);
-    // A separate TILL device for the place setup and the collect, both sale routes.
+    const handheldCookie = await enrolHandheldCookie(cfg);
     const tillDeviceCookie = await enrolTillCookie(cfg);
     const sessionPair = await loginOperator(app, cfg, operatorId);
+    const byHandheld = await parkOrder(app, sessionPair, each.menuItemId);
+    const byTill = await parkOrder(app, sessionPair, each.menuItemId);
 
-    // Park + place a real order as the ordinary till (Mode T files nothing at placing).
-    const workingOrderId = randomUUID();
-    const park = await app.request("/api/working-orders", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: sessionPair },
-      body: JSON.stringify({
-        id: workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
-      }),
-    });
-    expect(park.status).toBe(200);
-    const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {
-      method: "POST",
-      headers: { cookie: `${sessionPair}; ${tillDeviceCookie}` },
-    });
-    expect(placed.status).toBe(200);
+    for (const [id, deviceCookie] of [
+      [byHandheld, handheldCookie],
+      [byTill, tillDeviceCookie],
+    ] as const) {
+      const both = `${sessionPair}; ${deviceCookie}`;
+      const placed = await app.request(`/api/working-orders/${id}/place`, {
+        method: "POST",
+        headers: { cookie: both },
+      });
+      expect(placed.status).toBe(200);
+      const collect = await app.request(`/api/working-orders/${id}/collect`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: both },
+        body: JSON.stringify({ tender: { method: "cash", amount: "5.00" } }),
+      });
+      expect(collect.status).toBe(200);
+      expect((await collect.json()).invoiceNumber).toMatch(/^A\/\d+$/);
+      expect(await statusOf(id)).toBe("settled");
+    }
 
-    // The handheld is refused 403 BEFORE any fiscal write.
-    const refused = await app.request(`/api/working-orders/${workingOrderId}/collect`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
-      body: JSON.stringify({ tender: { method: "cash", amount: "5.00" } }),
-    });
-    expect(refused.status).toBe(403);
-    expect((await refused.json()).error.code).toBe("device.forbidden_action");
-    const afterRefused = await withTransaction(suite.db, async (tx) => {
-      return tx.select().from(registrosFacturacion);
-    });
-    expect(afterRefused.length).toBe(0);
-
-    // An enrolled till device collects the SAME order and files exactly one chained record.
-    const collect = await app.request(`/api/working-orders/${workingOrderId}/collect`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        cookie: `${sessionPair}; ${tillDeviceCookie}`,
-      },
-      body: JSON.stringify({ tender: { method: "cash", amount: "5.00" } }),
-    });
-    expect(collect.status).toBe(200);
-    expect((await collect.json()).invoiceNumber).toMatch(/^A\/\d+$/);
-    const after = await withTransaction(suite.db, async (tx) => {
-      return {
-        wo: await tx
-          .select({ status: workingOrders.status })
-          .from(workingOrders)
-          .where(eq(workingOrders.id, workingOrderId)),
-        registros: await tx.select().from(registrosFacturacion),
-      };
-    });
-    expect(after.wo).toEqual([{ status: "settled" }]);
-    expect(after.registros.length).toBe(1);
+    const registros = await withTransaction(suite.db, (tx) =>
+      tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia),
+    );
+    expect(registros.map((r) => [r.nodeId, r.secuencia])).toEqual([
+      [cfg.nodeId, 1],
+      [cfg.nodeId, 2],
+    ]);
+    expect(await saleTillOf(byHandheld)).toBe(cfg.tillId);
+    expect(await saleTillOf(byTill)).toBe(await deviceTillOf(tillDeviceCookie));
   });
 
-  // `POST /:id/cancel` appends to the hash-chained amendment log, which a handheld must not do. Cancel
-  // files no fiscal document, so the signal is the transition: refused, the order stays `placed`.
-  it("refuses a handheld CANCEL with 403, leaving the order placed; an ordinary till cancels it", async () => {
-    const { cfg, available, operatorId } = await setupVenue(); // default mode: prepay
+  it("a handheld cancels a placed order for an operator holding no permission, appending the reasoned amendment, as a till does", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
+    expect(permissionsForRole("staff")).toEqual([]);
 
-    const deviceCookie = await enrolHandheldCookie(cfg);
+    const handheldCookie = await enrolHandheldCookie(cfg);
+    const tillDeviceCookie = await enrolTillCookie(cfg);
     const sessionPair = await loginOperator(app, cfg, operatorId);
 
-    // Park + place a real order as the ordinary till, so there is a PLACED order to cancel. Cancel is
-    // not a sale route, so the ordinary till's cancel below carries no device cookie.
-    const tillDeviceCookie = await enrolTillCookie(cfg);
-    const workingOrderId = randomUUID();
-    const park = await app.request("/api/working-orders", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: sessionPair },
-      body: JSON.stringify({
-        id: workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
-      }),
-    });
-    expect(park.status).toBe(200);
-    const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {
-      method: "POST",
-      headers: { cookie: `${sessionPair}; ${tillDeviceCookie}` },
-    });
-    expect(placed.status).toBe(200);
-
-    // The handheld is refused 403 BEFORE any transition or amendment write.
-    const refused = await app.request(`/api/working-orders/${workingOrderId}/cancel`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
-      body: JSON.stringify({ reason: "customer left" }),
-    });
-    expect(refused.status).toBe(403);
-    expect((await refused.json()).error.code).toBe("device.forbidden_action");
-    const stillPlaced = await withTransaction(suite.db, async (tx) => {
-      return tx
-        .select({ status: workingOrders.status })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, workingOrderId));
-    });
-    expect(stillPlaced).toEqual([{ status: "placed" }]); // no transition — the guard held
-
-    // The ordinary till cancels the SAME order (placed → abandoned).
-    const cancelled = await app.request(`/api/working-orders/${workingOrderId}/cancel`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: sessionPair },
-      body: JSON.stringify({ reason: "customer left" }),
-    });
-    expect(cancelled.status).toBe(200);
-    const abandoned = await withTransaction(suite.db, async (tx) => {
-      return tx
-        .select({ status: workingOrders.status })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, workingOrderId));
-    });
-    expect(abandoned).toEqual([{ status: "abandoned" }]);
+    for (const deviceCookie of [handheldCookie, tillDeviceCookie]) {
+      const both = `${sessionPair}; ${deviceCookie}`;
+      const id = await parkOrder(app, sessionPair, each.menuItemId);
+      const placed = await app.request(`/api/working-orders/${id}/place`, {
+        method: "POST",
+        headers: { cookie: both },
+      });
+      expect(placed.status).toBe(200);
+      const cancelled = await app.request(`/api/working-orders/${id}/cancel`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: both },
+        body: JSON.stringify({ reason: "customer left" }),
+      });
+      expect(cancelled.status).toBe(200);
+      expect(await statusOf(id)).toBe("abandoned");
+      expect(await amendmentsOf(id)).toEqual([
+        { kind: "order_placed", actorId: operatorId, reason: null },
+        { kind: "order_cancelled", actorId: operatorId, reason: "customer left" },
+      ]);
+    }
   });
+
+  // Place, collect and cancel check no permission, so the refusal tested here is the missing
+  // session, which a handheld meets with the same answer as a till.
+  it.each(["place", "collect", "cancel"] as const)(
+    "refuses %s without an operator session with the same answer on a handheld as on a till",
+    async (action) => {
+      const { cfg } = await setupVenue();
+      const app = new Hono();
+      mountTillApi(app, apiDeps(cfg), noopLog);
+      const answers = [];
+      for (const deviceCookie of [await enrolHandheldCookie(cfg), await enrolTillCookie(cfg)]) {
+        const res = await app.request(`/api/working-orders/${randomUUID()}/${action}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: deviceCookie },
+          body: JSON.stringify({ tender: { method: "cash", amount: "5.00" }, reason: "x" }),
+        });
+        answers.push({ status: res.status, code: (await res.json()).error.code });
+      }
+      expect(answers[0]).toEqual({ status: 401, code: "session.required" });
+      expect(answers[1]).toEqual(answers[0]);
+    },
+  );
 });
 
 it("files an extras pick and an options answer through cash checkout and reprints their saved facts", async () => {
@@ -2740,6 +2752,50 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
     expect((await jobs()).drawer).toEqual([]);
   });
 
+  it.each(["cash", "card"] as const)(
+    "a handheld on a till that opens the drawer prints a %s sale's receipt there and opens nothing, though its operator and profile may open a drawer",
+    async (method) => {
+      const { cfg, each, app } = await venueWithTill();
+      await receiptPrinterFor(cfg, cfg.tillId, true);
+      const [supervisor] = await suite.db
+        .insert(persons)
+        .values({ displayName: "Responsable", pinHash: hashPin("5555"), role: "supervisor" })
+        .returning({ id: persons.id });
+      expect(permissionsForRole("supervisor")).toContain("cash.drawer");
+      const session = (await loginSession(app, cfg, supervisor!.id)).split(";")[0]!;
+      const profileId = await seedProfileFF("phone-portrait", [
+        "open-cash-drawer",
+        "print-receipt",
+      ]);
+      const handheld = await enrolDeviceForTest(suite.db, cfg, {
+        name: "Waiter phone",
+        profileId,
+        registerId: cfg.tillId,
+      });
+      const cookie = `${session}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`;
+
+      const res = await app.request("/api/sales", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({
+          workingOrderId: randomUUID(),
+          lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
+          tender: { method, amount: "5.00" },
+        }),
+      });
+      const manual = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
+
+      expect(res.status).toBe(200);
+      expect(manual.status).toBe(403);
+      expect(await manual.json()).toMatchObject({ error: { code: "device.forbidden_action" } });
+      expect(await drawerOpenRows()).toEqual([]);
+      const printed = await jobs();
+      expect(printed.drawer).toEqual([]);
+      expect(printed.documents).toHaveLength(1);
+      expect(decodeTicket(new Uint8Array(printed.documents[0]!))).toContain("VERI*FACTU");
+    },
+  );
+
   it("a card sale at a till whose receipt printer has no drawer opens nothing, while the other till's printer has one", async () => {
     const { cfg, each, app, cookie } = await venueWithTill();
     await receiptPrinterFor(cfg, cfg.tillId, true);
@@ -2812,6 +2868,53 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
       expect((await collect()).status).toBe(200);
       expect(await drawerOpenRows()).toHaveLength(1);
       expect((await jobs()).drawer).toHaveLength(1);
+    },
+  );
+
+  it.each([
+    ["ticket_then_pay", "cash"],
+    ["ticket_then_pay", "card"],
+    ["invoice_first", "cash"],
+    ["invoice_first", "card"],
+  ] as const)(
+    "a handheld collecting a placed %s order by %s opens no drawer, although the till it rings on has one",
+    async (orderFlow, method) => {
+      const { cfg, each, app, cookie } = await venueWithTill(orderFlow);
+      await receiptPrinterFor(cfg, cfg.tillId, true);
+      const profileId = await seedProfileFF("phone-portrait");
+      const handheld = await enrolDeviceForTest(suite.db, cfg, {
+        name: "Waiter phone",
+        profileId,
+        registerId: cfg.tillId,
+      });
+      const both = `${cookie}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`;
+
+      const workingOrderId = randomUUID();
+      const park = await app.request("/api/working-orders", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({
+          id: workingOrderId,
+          lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
+        }),
+      });
+      expect(park.status).toBe(200);
+      const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {
+        method: "POST",
+        headers: { cookie: both },
+      });
+      expect(placed.status).toBe(200);
+      expect(await drawerOpenRows()).toEqual([]);
+      const collect = await app.request(`/api/working-orders/${workingOrderId}/collect`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: both },
+        body: JSON.stringify({ tender: { method, amount: "3.00" } }),
+      });
+
+      expect(collect.status).toBe(200);
+      expect(await saleIdOf(workingOrderId)).toBeDefined();
+      expect(await drawerOpenRows()).toEqual([]);
+      expect((await jobs()).drawer).toEqual([]);
     },
   );
 

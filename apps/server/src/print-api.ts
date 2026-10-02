@@ -1177,6 +1177,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             label: tills.name,
             locationId: tills.locationId,
             receiptPrinterId: tills.receiptPrinterId,
+            opensDrawer: tills.opensDrawer,
           })
           .from(tills)
           .orderBy(tills.name),
@@ -1219,6 +1220,29 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
         }
         await tx.update(tills).set({ receiptPrinterId: printerId }).where(eq(tills.id, tillId));
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  app.patch("/management-api/tills/:id/opens-drawer", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const tillId = requireUuidParam(c.req.param("id"), "TillId");
+      const body = await readJsonBody<{ opensDrawer?: unknown }>(c);
+      if (typeof body.opensDrawer !== "boolean") {
+        throw new AppError("management.request_invalid", { field: "opensDrawer" });
+      }
+      const opensDrawer = body.opensDrawer;
+      await gated(sessionId, async (tx) => {
+        const [till] = await tx
+          .update(tills)
+          .set({ opensDrawer })
+          .where(eq(tills.id, tillId))
+          .returning({ id: tills.id });
+        if (till === undefined) {
+          throw new AppError("management.request_invalid", { field: "tillId" });
+        }
       });
       return c.body(null, 204);
     }),

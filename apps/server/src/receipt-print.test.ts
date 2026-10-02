@@ -943,6 +943,159 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   );
 });
 
+describe("every till switched to open its receipt printer's drawer opens it", () => {
+  /** Another till at the venue's location, and the config a sale on it runs under. */
+  async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
+    const id = await withTransaction(suite.db, async (tx) => {
+      const [till] = await tx
+        .insert(tills)
+        .values({ locationId: cfg.locationId, name })
+        .returning({ id: tills.id });
+      return till!.id;
+    });
+    return { ...cfg, tillId: brandTillId(id) };
+  }
+
+  async function setOpensDrawer(cfg: TillConfig, opensDrawer: boolean): Promise<void> {
+    await withTransaction(suite.db, (tx) =>
+      tx.update(tills).set({ opensDrawer }).where(eq(tills.id, cfg.tillId)),
+    );
+  }
+
+  async function sale(
+    cfg: TillConfig,
+    product: { zoneId: string; menuItemId: string },
+    method: "cash" | "card" = "cash",
+  ): Promise<void> {
+    await recordTillSale(
+      deps(),
+      cfg,
+      {
+        zoneId: product.zoneId,
+        lines: [{ menuItemId: product.menuItemId, quantity: "1" }],
+        tender: { method, amount: "1.50" },
+      },
+      OPERATOR,
+    );
+  }
+
+  /** Each job's printer, and whether it is a drawer kick or a document. */
+  async function jobKinds(cfg: TillConfig): Promise<{ printerId: string; kick: boolean }[]> {
+    return (await printJobsFor(cfg)).map((job) => ({
+      printerId: job.printerId,
+      kick: Buffer.from(job.payload).equals(Buffer.from(DRAWER_KICK)),
+    }));
+  }
+
+  /** Two tills at one location, both printing their receipts on one drawer printer. */
+  async function sharedDrawer(orderFlow: OrderFlow = "prepay") {
+    const base = await setupVenue(orderFlow);
+    const cfg: TillConfig = { ...base.cfg, orderFlow };
+    const other = await addTill(cfg, "Caja 2");
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { mode: "auto", printerId });
+    await configureReceipt(other, { printerId });
+    return {
+      ...base,
+      cfg,
+      other,
+      printerId,
+      product: { zoneId: base.zoneId, menuItemId: base.each.menuItemId },
+    };
+  }
+
+  it("a new till is switched on", async () => {
+    const { cfg } = await setupVenue();
+    const [till] = await withTransaction(suite.db, (tx) =>
+      tx.select({ opensDrawer: tills.opensDrawer }).from(tills).where(eq(tills.id, cfg.tillId)),
+    );
+    expect(till).toEqual({ opensDrawer: true });
+  });
+
+  it.each(["cash", "card"] as const)(
+    "two tills sharing one drawer printer, neither switch touched: a %s sale on each opens the drawer, naming that till",
+    async (method) => {
+      const { cfg, other, printerId, product } = await sharedDrawer();
+
+      await sale(cfg, product, method);
+      await sale(other, product, method);
+
+      expect(await registroCount(cfg)).toBe(2);
+      expect((await jobKinds(cfg)).filter((job) => job.kick)).toEqual([
+        { printerId, kick: true },
+        { printerId, kick: true },
+      ]);
+      expect(
+        (await drawerOpensFor(cfg)).map((row) => [row.reason, row.tillId, row.printerId]),
+      ).toEqual([
+        [method === "cash" ? "cash_sale" : "card_slip", cfg.tillId, printerId],
+        [method === "cash" ? "cash_sale" : "card_slip", other.tillId, printerId],
+      ]);
+    },
+  );
+
+  it.each(["cash", "card"] as const)(
+    "with one of them switched off, its %s sale prints its receipt there and opens nothing, while the other's still opens it",
+    async (method) => {
+      const { cfg, other, printerId, product } = await sharedDrawer();
+      await setOpensDrawer(other, false);
+
+      await sale(other, product, method);
+      expect(await jobKinds(cfg)).toEqual([{ printerId, kick: false }]);
+      expect(await drawerOpensFor(cfg)).toEqual([]);
+
+      await sale(cfg, product, method);
+      expect((await jobKinds(cfg)).filter((job) => job.kick)).toEqual([{ printerId, kick: true }]);
+      expect(await drawerOpensFor(cfg)).toEqual([
+        {
+          reason: method === "cash" ? "cash_sale" : "card_slip",
+          saleId: expect.any(String),
+          personId: OPERATOR,
+          tillId: cfg.tillId,
+          printerId,
+        },
+      ]);
+    },
+  );
+
+  it.each(["ticket_then_pay", "invoice_first"] as const)(
+    "collecting a placed %s order in cash opens the drawer only on the till switched on",
+    async (orderFlow) => {
+      const { cfg, other, printerId, zoneId, each } = await sharedDrawer(orderFlow);
+      await withTransaction(suite.db, async (tx) => {
+        await tx.update(locations).set({ orderFlow }).where(eq(locations.id, cfg.locationId));
+      });
+      await setOpensDrawer(other, false);
+
+      const collectOn = async (till: TillConfig): Promise<void> => {
+        const id = randomUUID();
+        await parkOrder({ db: suite.db }, till, {
+          id,
+          zoneId,
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        });
+        await placeOrder(deps(), till, id, OPERATOR, till.tillId);
+        await collectOrder(
+          deps(),
+          till,
+          { id, lines: [], tender: { method: "cash", amount: "2.00" } },
+          OPERATOR,
+        );
+      };
+
+      await collectOn(other);
+      expect((await jobKinds(cfg)).filter((job) => job.kick)).toEqual([]);
+      expect(await drawerOpensFor(cfg)).toEqual([]);
+
+      await collectOn(cfg);
+      expect((await jobKinds(cfg)).filter((job) => job.kick)).toEqual([{ printerId, kick: true }]);
+      expect((await drawerOpensFor(cfg)).map((row) => [row.reason, row.tillId])).toEqual([
+        ["cash_sale", cfg.tillId],
+      ]);
+    },
+  );
+});
+
 describe("a receipt reprint and the printer's alert (A167)", () => {
   /** Every print job, oldest first. */
   async function jobs() {

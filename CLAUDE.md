@@ -975,13 +975,24 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
 
 ## 5. Fiscal invariants — the unrecoverable ones
 
-- **Printing never opens the cash drawer.** A cash payment, or a card hand-keyed on a machine
-  Waitron does not talk to (its slip is kept in the drawer, owner 2026-10-01), at a till whose
-  receipt printer has an attached drawer enqueues a separate audited `drawer` job; receipt jobs are
-  `document` jobs and contain no drawer command. A card on a connected machine opens nothing.
-  Handhelds cannot open the drawer, even with a profile capability, and drawer jobs cannot be
-  manually resent. The receipt review reproduced a resent cash receipt opening the drawer without a
-  new audit row. Pointer: #324; the card slip, B30.
+- **Printing never opens the cash drawer, and a till opens it only while it is set to.** A cash
+  payment, or a card hand-keyed on a machine Waitron does not talk to (its slip is kept in the
+  drawer, owner 2026-10-01), enqueues a separate audited `drawer` job; receipt jobs are `document`
+  jobs and contain no drawer command. A card on a connected machine opens nothing. A till opens its
+  receipt printer's drawer only while its "Opens the cash drawer" setting (`tills.opens_drawer`, on
+  by default, on the Printing rules screen) is on, and several tills sharing one printer may all
+  have it on (owner 2026-10-02). A handheld never opens it, even with `cash.drawer` and a profile
+  capability: the automatic openings read `allowCashDrawer` through `drawerPrinter`
+  (`apps/server/src/receipt-print.ts`), which `deviceTillCfg` (`apps/server/src/device-session.ts`)
+  sets only for a till, and the manual open refuses a handheld through `assertNotHandheld`. A
+  configuration leaving `allowCashDrawer` unset allows a drawer, and nothing guards a new route that
+  builds it another way. The manual open needs an
+  enrolled device. The one exception is the dashboard's "Test open drawer" calibration
+  (`POST /management-api/printers/:id/test-drawer`), which opens any active printer's drawer for a
+  manager holding `printer.manage` and `cash.drawer`. Drawer jobs cannot be manually resent. The
+  receipt review reproduced a resent cash receipt opening the drawer without a new audit row.
+  Pointer: #324; the card slip, B30; the per-till setting, B29;
+  [conventions-ui.md](docs/developers/conventions-ui.md#a-till-opens-its-drawer-only-while-it-is-set-to-a-handheld-does-what-a-till-does).
 
 - **One database per environment.** A pre-production database is never promoted:
   `invoice_series.next_number` carries across and pre-production sales would leave a permanent hole

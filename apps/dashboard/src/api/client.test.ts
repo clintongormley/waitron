@@ -2654,6 +2654,20 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     });
   });
 
+  it("setTillOpensDrawer PATCHes the till's opens-drawer route with { opensDrawer }", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    for (const opensDrawer of [false, true]) {
+      await expect(api.setTillOpensDrawer("t1", opensDrawer)).resolves.toBeUndefined();
+      expect(fetchImpl).toHaveBeenLastCalledWith("/management-api/tills/t1/opens-drawer", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ opensDrawer }),
+      });
+    }
+  });
+
   it("setTillReceiptPrinter rejects with { code } on a non-2xx (printer not in the till's location)", async () => {
     const fetchImpl = vi
       .fn()

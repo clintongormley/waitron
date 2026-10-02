@@ -22,13 +22,7 @@ import {
   listAvailableProducts,
   readReceiptLanguage,
 } from "@waitron/catalogue";
-import {
-  kindOfFormFactor,
-  getReceipt,
-  getCanvas,
-  getCanvasForFormFactor,
-  getDeviceProfile,
-} from "@waitron/layouts";
+import { getReceipt, getCanvas, getCanvasForFormFactor, getDeviceProfile } from "@waitron/layouts";
 import type { CanvasDef, CapabilityFlag } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { CardProviderContribution, PaymentProvider } from "@waitron/payments";
@@ -146,6 +140,7 @@ import {
 import {
   assertDeviceCapability,
   assertNotHandheld,
+  deviceTillCfg,
   requireDevice,
   requireSaleTillId,
   tryReadDevice,
@@ -392,6 +387,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "status.inactive": 409,
   "drawer.no_printer": 400,
   "drawer.not_attached": 400,
+  "drawer.till_switched_off": 400,
   "adjustment_reason.not_found": 404,
   // 403, as `authorization.not_permitted` answers: the request is sound, the person may not alone.
   "adjustment.approval_required": 403,
@@ -829,12 +825,7 @@ async function sendingCfg(
   return { ...deps.cfg, sendingDeviceId: resolved?.deviceId, madeHereSink: madeHereSinkFor(c) };
 }
 
-/**
- * Mount the till routes with the shared error boundary. Handhelds can take orders and settle cash
- * or manual-card sales. Integrated card payment, drawer opening and receipt printing require their
- * corresponding device-profile capabilities. Placement, collection and cancellation retain the
- * handheld restriction because they write the deferred-settlement or amendment workflow.
- */
+/** Mount the till routes with the shared error boundary. */
 export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.use("/api/*", madeHereAnswer(deps.db));
   // Built once per mount so its in-memory state persists across requests.
@@ -1152,9 +1143,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // The device supplies `tillId`; `nodeId`/`seriesId`, the SIF and chain key, stay `deps.cfg`.
       const device = await tryReadDevice(deps, c);
       const saleCfg: TillConfig = {
-        ...deps.cfg,
-        tillId: await requireSaleTillId(deps, c, device),
-        allowCashDrawer: device === null || kindOfFormFactor(device.formFactor) === "till",
+        ...(await deviceTillCfg(deps, c, device)),
         sendingDeviceId: device?.deviceId,
         madeHereSink: madeHereSinkFor(c),
       };
@@ -1330,10 +1319,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/working-orders/:id/place", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Handheld firewall: placing a Mode-I order files a deferred chained invoice, and a handheld
-      // never settles through place.
       const device = await tryReadDevice(deps, c);
-      await assertNotHandheld(deps, c, "place", device);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       // The device's till reaches the fiscal record only; the `order_placed` amendment keeps the
       // box's configured `cfg.tillId`, matching `cancelPlacedOrder`.
@@ -1516,15 +1502,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Audited: records a `drawer_opens('manual')` row beside a kick-only job to the till's receipt
-  // printer. The `drawer_open_policy` gate runs before the printer lookup, so an unpermitted
-  // operator is refused whatever the printer state.
+  // The `drawer_open_policy` gate runs before the printer lookup, so an unpermitted operator is
+  // refused whatever the printer state.
   app.post("/api/drawer/open", (c) =>
     run(c, log, async () => {
       const { personId, sessionId, tillId } = await requireSession(deps, c);
       const device = await tryReadDevice(deps, c);
       await assertNotHandheld(deps, c, "drawer_open", device);
       await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open", device);
+      const drawerCfg = await deviceTillCfg(deps, c, device);
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
       await withTransaction(deps.db, async (tx) => {
         const [loc] = await tx
@@ -1549,16 +1535,19 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                 overridePinAttempts(pinThrottle, tillId),
               );
 
-        const printer = await resolveReceiptPrinter(tx, deps.cfg);
+        const printer = await resolveReceiptPrinter(tx, drawerCfg);
         if (printer === undefined) {
-          throw new AppError("drawer.no_printer", { tillId: deps.cfg.tillId });
+          throw new AppError("drawer.no_printer", { tillId: drawerCfg.tillId });
         }
         if (!printer.hasCashDrawer) {
           throw new AppError("drawer.not_attached", { printerId: printer.id });
         }
+        if (!printer.tillOpensDrawer) {
+          throw new AppError("drawer.till_switched_off", { tillId: drawerCfg.tillId });
+        }
         await enqueueManualDrawerOpen(
           tx,
-          deps.cfg,
+          drawerCfg,
           printer.id,
           personId,
           authorizedBy,
@@ -1574,13 +1563,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/working-orders/:id/collect", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Handheld firewall: collecting settles the order, a chained fiscal write.
-      const device = await tryReadDevice(deps, c);
-      await assertNotHandheld(deps, c, "collect", device);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await readJsonBody<{ tender: TillTender }>(c);
       // The device supplies `tillId`; `nodeId`/`seriesId`, the SIF and chain key, stay `deps.cfg`.
-      const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c, device) };
+      const saleCfg = await deviceTillCfg(deps, c);
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         saleCfg,
@@ -1594,8 +1580,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/working-orders/:id/cancel", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Handheld firewall: cancelling appends to the hash-chained amendment log.
-      await assertNotHandheld(deps, c, "cancel");
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await readJsonBody<{ reason: string }>(c);
       await cancelPlacedOrder(

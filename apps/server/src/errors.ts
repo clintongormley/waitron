@@ -797,6 +797,11 @@ declare module "@waitron/shared" {
     "drawer.no_printer": { tillId: string };
     "drawer.not_attached": { printerId: string };
     /**
+     * A manual open-drawer request came from a till whose "opens the drawer" setting is off;
+     * `tillId` names it.
+     */
+    "drawer.till_switched_off": { tillId: string };
+    /**
      * A promote was requested without the operator attesting that the OLD node is physically
      * neutralised. Software cannot verify a partitioned peer, and two submitters under one NIF is
      * unrecoverable, so the promote refuses before any state change.

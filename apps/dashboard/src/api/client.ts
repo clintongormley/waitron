@@ -892,6 +892,7 @@ export interface Till {
   label: string;
   locationId: string;
   receiptPrinterId: string | null;
+  opensDrawer: boolean;
 }
 
 // ── Reporting (sales & takings) types ────────────────────────────────────────────────────────────
@@ -2537,6 +2538,12 @@ export class DashboardApi {
   setTillReceiptPrinter(tillId: string, printerId: string | null): Promise<void> {
     return this.#request<void>(`/management-api/tills/${tillId}/receipt-printer`, "PATCH", {
       printerId,
+    });
+  }
+
+  setTillOpensDrawer(tillId: string, opensDrawer: boolean): Promise<void> {
+    return this.#request<void>(`/management-api/tills/${tillId}/opens-drawer`, "PATCH", {
+      opensDrawer,
     });
   }
 

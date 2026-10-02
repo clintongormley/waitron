@@ -4,6 +4,7 @@ import {
   count,
   enumCheck,
   enumType,
+  flag,
   id,
   label,
   labelList,
@@ -160,6 +161,9 @@ export const tills = table(
     /* v8 ignore start */
     receiptPrinterId: id("receipt_printer_id").references(() => printers.id),
     /* v8 ignore stop */
+    // On by default, so a till opens its receipt printer's drawer until a manager switches it
+    // off — several tills sharing one printer may all open it.
+    opensDrawer: flag("opens_drawer").notNull().default(true),
     createdAt: ts("created_at").notNull().$defaultFn(now),
   },
   (t) => [

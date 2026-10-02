@@ -11,6 +11,7 @@ import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import { verifySecretAsync } from "@waitron/identity";
 // Side-effect only: keeps `device.unauthorized` (errors.ts) reachable from the file that throws it.
 import "./errors.js";
+import type { TillConfig } from "./till-config.js";
 import { isUuid } from "./till-session.js";
 
 /** The trusted-device cookie: a long-lived DEVICE identity, unlike the session cookies. */
@@ -290,6 +291,24 @@ export async function requireSaleTillId(
   if (resolved === null) throw new AppError("device.unauthorized", {});
   if (resolved.tillId === null) throw new AppError("device.till_required", {});
   return tillId(resolved.tillId);
+}
+
+/**
+ * The configuration a device's request runs under: the device's own till, and a
+ * cash drawer only for a till form factor. Refuses as {@link requireSaleTillId} does. `device` as
+ * there.
+ */
+export async function deviceTillCfg(
+  deps: { db: Database; devMode?: boolean; cfg: TillConfig },
+  c: Context,
+  device?: DeviceBinding | null,
+): Promise<TillConfig> {
+  const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
+  return {
+    ...deps.cfg,
+    tillId: await requireSaleTillId(deps, c, resolved),
+    allowCashDrawer: resolved !== null && kindOfFormFactor(resolved.formFactor) === "till",
+  };
 }
 
 /**
