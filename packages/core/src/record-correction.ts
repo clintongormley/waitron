@@ -17,16 +17,22 @@ import {
   centsToDecimal,
   compareDecimal,
   decimal,
+  negateDecimal,
   rawCentsToDecimal,
   stringToCents,
   sumDecimals,
 } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
-import type { FiscalBackend, FiscalRecordRef, TrustedClock } from "@waitron/fiscal";
+import type { Decimal, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import type {
+  FiscalBackend,
+  FiscalRecordRef,
+  TrustedClock,
+  VatBreakdownLine,
+} from "@waitron/fiscal";
 import { authorize, type AuthzInput } from "@waitron/identity";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
-import { deriveVatBreakdown } from "./record-sale.js";
+import { assertSumsTo, atCents, deriveVatBreakdown } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
 
 const ZERO = decimal("0");
@@ -56,6 +62,14 @@ export interface RecordCorrectionInput {
   total: string;
   /** The already-signed delta lines (negative for a reversal). Same shape as an ordinary sale's. */
   lines: RecordSaleLine[];
+  /**
+   * Credits the whole invoice: the corrective's VAT breakdown is the original's stored one,
+   * negated, instead of one derived from `lines`, whose per-rate tax can differ from the invoice's
+   * by a cent. Refused with `sale.correction_not_whole` unless `total` is minus the original's and
+   * nothing corrects the original yet, and with `sale.correction_lines_mismatch` unless `lines`
+   * carry the copied bases rate by rate.
+   */
+  wholeInvoice?: boolean;
   /** Checked by `recordCorrection` itself against permission `sale.rectify`; the authorizer is
    * recorded on `sales.authorized_by`. */
   authz: AuthzInput;
@@ -69,18 +83,20 @@ export interface RecordCorrectionInput {
  *
  * The authorization gate runs after the sale and series checks, so those still report their own
  * codes, and before the number is allocated, so a refused correction burns no number. A
- * `sale.total_mismatch` refusal comes before all three. A failed integrity check records an
- * incident and the correction proceeds anyway.
+ * derived breakdown's `sale.total_mismatch` refusal comes before all three; a whole-invoice
+ * credit's refusals come after the gate and `sale.correction_exceeds_total`, because they read
+ * what is on the invoice. A failed integrity check records an incident and the correction proceeds
+ * anyway.
  */
 export async function recordCorrection(
   tx: Transaction,
   backend: FiscalBackend,
   input: RecordCorrectionInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
-  // Derived before anything is written; refused when a line total is past the cent and the
-  // breakdown no longer sums to the total (`deriveVatBreakdown`). The stored
-  // `sales.vat_breakdown` and the filed breakdown are this one value.
-  const vatBreakdown = deriveVatBreakdown(input.total, input.lines);
+  // Unless the whole invoice is credited, derived before anything is written; refused when a line
+  // total is past the cent and the breakdown no longer sums to the total (`deriveVatBreakdown`).
+  const derived =
+    input.wholeInvoice === true ? undefined : deriveVatBreakdown(input.total, input.lines);
 
   // The corrective inherits the original's `locale` and `invoiceLocales`.
   // `${sales}.id`, not `${sales.id}`: see the same subquery in `settleSale`.
@@ -89,7 +105,9 @@ export async function recordCorrection(
       locale: sales.locale,
       invoiceLocales: sales.invoiceLocales,
       total: sales.total,
+      vatBreakdown: sales.vatBreakdown,
       corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0) as text)`,
+      correctionCount: sql<number>`(select count(*) from sales c where c.corrects_sale_id = ${sales}.id)`,
     })
     .from(sales)
     .where(eq(sales.id, input.correctsSaleId));
@@ -168,6 +186,10 @@ export async function recordCorrection(
       correction,
     });
   }
+
+  // The stored `sales.vat_breakdown` and the filed breakdown are this one value.
+  const vatBreakdown =
+    derived ?? wholeInvoiceBreakdown(input.correctsSaleId, original, totalCents, input.lines);
 
   // Nothing branches on `verification.ok`: a failed check records one incident carrying every
   // issue, once `saleId` exists, and the correction is chained anyway.
@@ -272,4 +294,53 @@ export async function recordCorrection(
   );
 
   return { saleId, fiscal };
+}
+
+/**
+ * The original's stored breakdown negated, for a credit of the whole invoice. Refused unless the
+ * credit is minus the invoice's total and the first correction of it, so the two net to zero rate
+ * by rate; and unless the copy sums to the credit and the lines carry its bases, so the record
+ * agrees with its own total and with the lines stored beside it.
+ */
+function wholeInvoiceBreakdown(
+  saleId: SaleId,
+  original: {
+    total: number;
+    correctionCount: number;
+    vatBreakdown: { rate: string; base: string; tax: string }[];
+  },
+  totalCents: number,
+  lines: readonly RecordSaleLine[],
+): VatBreakdownLine[] {
+  const correction = centsToDecimal(totalCents);
+  if (totalCents !== -original.total || original.correctionCount > 0) {
+    throw new AppError("sale.correction_not_whole", {
+      saleId,
+      invoiceTotal: centsToDecimal(original.total),
+      corrections: original.correctionCount,
+      correction,
+    });
+  }
+  const breakdown = original.vatBreakdown.map((group) => ({
+    rate: decimal(group.rate),
+    base: negateDecimal(decimal(group.base)),
+    tax: negateDecimal(decimal(group.tax)),
+  }));
+  assertSumsTo(breakdown, correction);
+  for (const rate of [...breakdown.map((g) => g.rate), ...lines.map((l) => decimal(l.vatRate))]) {
+    const atRate = (other: Decimal) => compareDecimal(other, rate) === 0;
+    const linesBase = sumDecimals(
+      lines.filter((l) => atRate(decimal(l.vatRate))).map((l) => atCents(l.lineTotal)),
+    );
+    const breakdownBase = sumDecimals(breakdown.filter((g) => atRate(g.rate)).map((g) => g.base));
+    if (compareDecimal(linesBase, breakdownBase) !== 0) {
+      throw new AppError("sale.correction_lines_mismatch", {
+        saleId,
+        rate,
+        linesBase,
+        breakdownBase,
+      });
+    }
+  }
+  return breakdown;
 }

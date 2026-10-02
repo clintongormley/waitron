@@ -380,8 +380,10 @@ description, its `total`, its VAT breakdown (a list of one entry per VAT rate) a
 `computeHuella`'s input. The money is a different story, and the
 channel is that breakdown, whichever of the two ways it was built. When the caller supplies none,
 `recordSale` derives it from the lines with `deriveVatBreakdown` (`packages/core/src/record-sale.ts`),
-which groups each line's `lineTotal`, rounded to the cent, by its `vatRate`; a correction and a
-substitution always take that path, calling `deriveVatBreakdown` unconditionally. When the caller
+which groups each line's `lineTotal`, rounded to the cent, by its `vatRate`; a substitution always
+takes that path, and so does a correction unless it credits the whole invoice (`wholeInvoice`,
+`packages/core/src/record-correction.ts`), which files the invoice's own stored breakdown negated
+after checking that the lines, summed per rate at the cent, are its bases. When the caller
 supplies its own — which the till's filing routes do — it is filed with each base and tax rounded to
 the cent, but it too was grouped per rate over the priced lines a moment earlier
 (`packages/catalogue/src/pricing.ts`). Either way an extras child line's base and its own VAT rate

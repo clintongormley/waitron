@@ -334,7 +334,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "order.payment_in_flight": 409,
   "working_order.not_placed": 409,
   "series.no_rectificative_for_node": 409,
-  "sale.correction_breakdown_mismatch": 409,
+  "sale.correction_not_whole": 409,
   "sale.correction_exceeds_total": 409,
   "sale.voided": 409,
   "sale.already_settled": 409,

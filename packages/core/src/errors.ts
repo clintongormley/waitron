@@ -40,6 +40,24 @@ declare module "@waitron/shared" {
      * `correction` is the amount the row would store, rounded to the cent. A correction down to
      * exactly zero, and any positive one, is accepted. Refused before a number is allocated. */
     "sale.correction_exceeds_total": { saleId: string; remaining: string; correction: string };
+    /** Thrown by `recordCorrection` for a whole-invoice credit (`wholeInvoice`) whose `correction`,
+     * at the cent, is not minus `invoiceTotal`, or of an invoice that `corrections` corrective
+     * invoices already correct. Refused before a number is allocated. */
+    "sale.correction_not_whole": {
+      saleId: string;
+      invoiceTotal: string;
+      corrections: number;
+      correction: string;
+    };
+    /** Thrown by `recordCorrection` for a whole-invoice credit whose lines, summed at the cent for
+     * `rate`, are not the base the copied breakdown files at that rate (`"0"` when it files none),
+     * so the stored lines would disagree with the record. Refused before a number is allocated. */
+    "sale.correction_lines_mismatch": {
+      saleId: string;
+      rate: string;
+      linesBase: string;
+      breakdownBase: string;
+    };
     /** Registered, but nothing throws it: no path translates a `sales_series_invoice_number_key`
      * violation into this code. */
     "sale.number_reused": { seriesId: string; invoiceNumber: number };
@@ -67,7 +85,8 @@ declare module "@waitron/shared" {
      * chained record that disagrees with its own total cannot be repaired. Thrown before anything
      * is written: by `recordSale` for a supplied breakdown, compared as given and at the cent; and
      * by `recordSale`, `recordSubstitution` and `recordCorrection` for a breakdown derived from
-     * the lines, compared at the cent and only when a line total is past the cent. From an
+     * the lines, compared at the cent and only when a line total is past the cent; and by
+     * `recordCorrection` for a whole-invoice credit's copied breakdown, at the cent. From an
      * at-the-cent comparison, both params are the at-the-cent values. */
     "sale.total_mismatch": { declaredTotal: string; breakdownTotal: string };
     /** Never thrown: the write paths build it from a failed `FiscalBackend.checkIntegrity` and

@@ -1,32 +1,23 @@
 import { eq } from "drizzle-orm";
 import { readLiveSeriesIdTx, saleLines, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { deriveVatBreakdown, recordCorrection, settleSale } from "@waitron/core";
+import { recordCorrection, settleSale } from "@waitron/core";
 import type { RecordSaleLine } from "@waitron/core";
-import type { FiscalBackend, TrustedClock, VatBreakdownLine } from "@waitron/fiscal";
+import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
-  AppError,
   basisPointsToDecimal,
   centsToDecimal,
-  compareDecimal,
-  decimal,
-  negateDecimal,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
-  sumDecimals,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import type { Decimal, SaleId, TillId } from "@waitron/shared";
+import type { SaleId, TillId } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
-import "./errors.js";
-
-type StoredBreakdown = (typeof sales.$inferSelect)["vatBreakdown"];
 
 /** The invoice a working order issued, as {@link creditWholeInvoice} credits it. */
 export interface IssuedInvoice {
   id: SaleId;
   total: number;
-  vatBreakdown: StoredBreakdown;
 }
 
 /** The invoice this working order issued; `sales_working_order_id_key` allows at most one. */
@@ -35,7 +26,7 @@ export async function readOrderInvoice(
   workingOrderId: string,
 ): Promise<IssuedInvoice | undefined> {
   const [row] = await tx
-    .select({ id: sales.id, total: sales.total, vatBreakdown: sales.vatBreakdown })
+    .select({ id: sales.id, total: sales.total })
     .from(sales)
     .where(eq(sales.workingOrderId, workingOrderId));
   return row === undefined ? undefined : { ...row, id: brandSaleId(row.id) };
@@ -43,8 +34,8 @@ export async function readOrderInvoice(
 
 /**
  * Credit the whole of an issued invoice with a corrective invoice in the node's live rectificative
- * series, filed on `saleTillId`, its lines the invoice's with their signs reversed, then settle the
- * invoice owing nothing. `recordCorrection` checks `sale.rectify` against `sessionId`.
+ * series, filed on `saleTillId`, its lines the invoice's with their signs reversed and its VAT
+ * breakdown the invoice's own negated (`wholeInvoice`), then settle the invoice owing nothing. `recordCorrection` checks `sale.rectify` against `sessionId`.
  */
 export async function creditWholeInvoice(
   tx: Transaction,
@@ -63,12 +54,6 @@ export async function creditWholeInvoice(
       .where(eq(saleLines.saleId, invoice.id))
       .orderBy(saleLines.lineNo),
   );
-  refuseUnmirroredBreakdown(
-    invoice.id,
-    invoice.vatBreakdown,
-    deriveVatBreakdown(total, lines),
-    total,
-  );
   await recordCorrection(tx, deps.backend, {
     tillId: saleTillId,
     nodeId: cfg.nodeId,
@@ -76,6 +61,7 @@ export async function creditWholeInvoice(
     correctsSaleId: invoice.id,
     total,
     lines,
+    wholeInvoice: true,
     authz: { sessionId },
     clock: deps.clock,
   });
@@ -111,33 +97,4 @@ function reversedLines(rows: (typeof saleLines.$inferSelect)[]): RecordSaleLine[
         classification: row.classification,
       }) satisfies Required<RecordSaleLine>,
   );
-}
-
-/**
- * `recordCorrection` takes no breakdown: it derives one from the lines, taxing each rate's summed
- * base, while an invoice's breakdown is the catalogue's gross minus base. The two differ at some
- * prices: 0.55 at 21% is invoiced 0.45 + 0.10, and its reversed line derives -0.45 - 0.09
- * (measured 2026-10-02 with `rateLines` and `deriveVatBreakdown`; 2.10 at 21% gives -0.37 for 0.36).
- */
-function refuseUnmirroredBreakdown(
-  saleId: SaleId,
-  invoice: StoredBreakdown,
-  correction: VatBreakdownLine[],
-  total: Decimal,
-): void {
-  const negated = (amount: string) => negateDecimal(decimal(amount));
-  const mirrors =
-    correction.length === invoice.length &&
-    compareDecimal(sumDecimals(correction.flatMap((g) => [g.base, g.tax])), total) === 0 &&
-    invoice.every((group) =>
-      correction.some(
-        (credit) =>
-          compareDecimal(credit.rate, decimal(group.rate)) === 0 &&
-          compareDecimal(credit.base, negated(group.base)) === 0 &&
-          compareDecimal(credit.tax, negated(group.tax)) === 0,
-      ),
-    );
-  if (!mirrors) {
-    throw new AppError("sale.correction_breakdown_mismatch", { saleId, invoice, correction });
-  }
 }

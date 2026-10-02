@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { AppError, seriesId as brandSeriesId } from "@waitron/shared";
+import { AppError, decimal, seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
@@ -460,6 +460,176 @@ describe("recordCorrection — the corrective sale", () => {
     await correct(backend, originalId, credit("1.00", "-1.00"));
 
     expect((await backend.recordsFor(nodeId))[1]?.total).toBe("-1.00");
+  });
+});
+
+describe("recordCorrection — a whole-invoice credit copies the invoice's own VAT split", () => {
+  /** Keeps the VAT breakdown each correction hands the backend. */
+  class FilesBreakdownsBackend extends FakeFiscalBackend {
+    readonly filed: SaleForFiscalRecord["vatBreakdown"][] = [];
+
+    override recordCorrection(
+      tx: Transaction,
+      sale: SaleForFiscalRecord,
+      correction: { correctsSaleId: SaleId },
+    ) {
+      this.filed.push(sale.vatBreakdown);
+      return super.recordCorrection(tx, sale, correction);
+    }
+  }
+
+  const mosto = {
+    lineNo: 1,
+    name: "Mosto",
+    descriptions: { "es-ES": "Mosto" },
+    quantity: "1",
+    unitPrice: "0.45",
+    vatRate: "21.00",
+    lineTotal: "0.45",
+    lineGross: "0.55",
+  };
+
+  /** 0.55 at 21% as the catalogue invoices it, gross minus base: 0.45 + 0.10. Taxing the 0.45 base
+   * instead gives 0.09. */
+  function sellMosto(backend: FiscalBackend) {
+    return sell(backend, {
+      total: "0.55",
+      lines: [mosto],
+      vatBreakdown: [{ rate: decimal("21.00"), base: decimal("0.45"), tax: decimal("0.10") }],
+      settlement: {
+        kind: "immediate",
+        tenders: [{ method: "cash", amount: "0.55", tipAmount: "0.00", settledAt: BASE }],
+      },
+    });
+  }
+
+  function wholeCredit(overrides: Partial<RecordCorrectionInput> = {}) {
+    return {
+      wholeInvoice: true,
+      total: "-0.55",
+      lines: [{ ...mosto, quantity: "-1", lineTotal: "-0.45", lineGross: "-0.55" }],
+      ...overrides,
+    };
+  }
+
+  /** Runs a correction expected to be refused inside a transaction that then commits, so a number
+   * allocated before the refusal would stay allocated. */
+  async function expectRefusedUnwritten(
+    backend: FiscalBackend,
+    originalId: SaleId,
+    overrides: Partial<RecordCorrectionInput>,
+    refusal: { code: string; params?: Record<string, unknown> },
+  ) {
+    const correctives = await countCorrectives(originalId);
+    const next = await rectSeriesNext();
+    await withTransaction(suite.db, async (tx) => {
+      await expect(
+        recordCorrection(tx, backend, correctionInput(originalId, overrides)),
+      ).rejects.toMatchObject(refusal);
+    });
+    expect(await countCorrectives(originalId)).toBe(correctives);
+    expect(await rectSeriesNext()).toBe(next);
+  }
+
+  it("stores and files the invoice's breakdown negated, where the lines would derive another", async () => {
+    const backend = new FilesBreakdownsBackend(suite.db);
+    const { saleId: originalId } = await sellMosto(backend);
+
+    const { saleId: correctiveId } = await correct(backend, originalId, wholeCredit());
+
+    const negated = [{ rate: "21.00", base: "-0.45", tax: "-0.10" }];
+    expect(backend.filed).toEqual([negated]);
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, correctiveId));
+    expect(row?.vatBreakdown).toEqual(negated);
+    expect(row?.total).toBe(-55);
+    expect((await backend.recordsFor(nodeId))[1]?.total).toBe("-0.55");
+  });
+
+  it("still derives the breakdown from the lines when the whole invoice is not asked for", async () => {
+    const backend = new FilesBreakdownsBackend(suite.db);
+    const { saleId: originalId } = await sellMosto(backend);
+
+    await correct(backend, originalId, wholeCredit({ wholeInvoice: false }));
+
+    expect(backend.filed).toEqual([[{ rate: "21.00", base: "-0.45", tax: "-0.09" }]]);
+  });
+
+  it("refuses a total that is not minus the invoice's, writing nothing and using no number", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sellMosto(backend);
+
+    await expectRefusedUnwritten(backend, originalId, wholeCredit({ total: "-0.54" }), {
+      code: "sale.correction_not_whole",
+      params: { saleId: originalId, invoiceTotal: "0.55", corrections: 0, correction: "-0.54" },
+    });
+  });
+
+  it("refuses an invoice something has already corrected, even upwards", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sellMosto(backend);
+    // 0.08 at 21% is 0.10; a raise, so the whole credit would not take the invoice below zero.
+    await correct(backend, originalId, {
+      total: "0.10",
+      lines: [{ ...mosto, unitPrice: "0.08", lineTotal: "0.08", lineGross: "0.10" }],
+    });
+
+    await expectRefusedUnwritten(backend, originalId, wholeCredit(), {
+      code: "sale.correction_not_whole",
+      params: { saleId: originalId, invoiceTotal: "0.55", corrections: 1, correction: "-0.55" },
+    });
+  });
+
+  it("refuses lines whose bases are not the invoice's, rate by rate", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sellMosto(backend);
+    const [reversed] = wholeCredit().lines;
+
+    await expectRefusedUnwritten(
+      backend,
+      originalId,
+      wholeCredit({
+        lines: [
+          { ...reversed!, lineTotal: "-0.40" },
+          { ...reversed!, lineNo: 2, vatRate: "10.00", lineTotal: "-0.05" },
+        ],
+      }),
+      {
+        code: "sale.correction_lines_mismatch",
+        params: { saleId: originalId, rate: "21.00", linesBase: "-0.40", breakdownBase: "-0.45" },
+      },
+    );
+  });
+
+  it("refuses a line at a rate the invoice's breakdown does not carry", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sellMosto(backend);
+    const [reversed] = wholeCredit().lines;
+
+    await expectRefusedUnwritten(
+      backend,
+      originalId,
+      wholeCredit({
+        lines: [reversed!, { ...reversed!, lineNo: 2, vatRate: "10.00", lineTotal: "-0.01" }],
+      }),
+      {
+        code: "sale.correction_lines_mismatch",
+        params: { saleId: originalId, rate: "10.00", linesBase: "-0.01", breakdownBase: "0" },
+      },
+    );
+  });
+
+  it("refuses to copy an invoice breakdown that does not sum to the invoice's total", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const originalId = await seedBareSale(
+      suite.db,
+      { tillId, nodeId, seriesId },
+      { total: "0.55", vatBreakdown: [{ rate: "21.00", base: "0.45", tax: "0.09" }] },
+    );
+
+    await expectRefusedUnwritten(backend, originalId, wholeCredit(), {
+      code: "sale.total_mismatch",
+      params: { declaredTotal: "-0.55", breakdownTotal: "-0.54" },
+    });
   });
 });
 

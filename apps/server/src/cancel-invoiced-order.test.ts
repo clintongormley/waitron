@@ -71,11 +71,13 @@ useVenueDb({
       const [category] = db.all<{ id: string }>(
         sql`select id from categories where name = 'Platos'`,
       );
-      // 0.55 at 21% files 0.45 + 0.10 by the catalogue's gross arithmetic, while the same base
-      // taxed by `deriveVatBreakdown` is 0.09; Café with two 0.50 extras at 10% matches both ways.
+      // 0.55 at 21% is invoiced 0.45 + 0.10 by the catalogue's gross arithmetic and 2.10 is
+      // 1.74 + 0.36, while those bases taxed at 21% are 0.09 and 0.37; Café with two 0.50 extras at
+      // 10% matches both ways.
       const created = new Map<string, string>();
       for (const [name, price, vatClass] of [
         ["Mosto", "0.55", "general"],
+        ["Zumo", "2.10", "general"],
         ["Café", "3.00", "reduced"],
         ["Leche", "1.00", "reduced"],
       ] as const) {
@@ -489,17 +491,39 @@ describe("cancelling a placed order whose invoice was issued", () => {
     }
   });
 
-  it("refuses an invoice whose VAT breakdown a credit of its lines cannot mirror, writing nothing", async () => {
-    const id = await placed([{ name: "Mosto", quantity: "1" }]);
-    expect((await invoiceOf(id)).vatBreakdown).toEqual([
-      { rate: "21.00", base: "0.45", tax: "0.10" },
-    ]);
+  it.each([
+    ["Mosto", "-0.55", { rate: "21.00", base: "0.45", tax: "0.10" }],
+    ["Zumo", "-2.10", { rate: "21.00", base: "1.74", tax: "0.36" }],
+  ])(
+    "credits %s for %s with the invoice's own VAT split negated, where its lines would tax another",
+    async (name, total, invoiced) => {
+      const id = await placed([{ name, quantity: "1" }]);
+      const original = await invoiceOf(id);
+      expect(original.vatBreakdown).toEqual([invoiced]);
 
-    await expectRefusedUnwritten(id, cancel(id), {
-      status: 409,
-      code: "sale.correction_breakdown_mismatch",
-    });
-  });
+      expect((await cancel(id)).status).toBe(200);
+
+      const [credit] = await creditsOf(original.id);
+      expect(credit!.total).toBe(-original.total);
+      const negated = { rate: "21.00", base: negate(invoiced.base), tax: negate(invoiced.tax) };
+      expect(credit!.vatBreakdown).toEqual([negated]);
+      const filed = await registroOf(credit!.id);
+      expect(filed).toMatchObject({
+        tipoFactura: "R5",
+        importeTotal: total,
+        cuotaTotal: negated.tax,
+      });
+      const [rectified] = (await registroOf(original.id)).desglose;
+      expect(filed.desglose).toEqual([
+        {
+          ...rectified,
+          BaseImponibleOimporteNoSujeto: negated.base,
+          CuotaRepercutida: negated.tax,
+        },
+      ]);
+      expect(await statusOf(venue, id)).toBe("abandoned");
+    },
+  );
 
   it("credits and abandons a bill its party left without paying, leaving the departure as recorded", async () => {
     const party = await seatedWith(venue, "Caña");
@@ -602,6 +626,47 @@ describe("cancelling a placed order whose invoice was issued", () => {
     expect(fiscalSnapshot()).toEqual(before);
     expect(await statusOf(venue, id)).toBe("placed");
     expect(await creditsOf(original.id)).toEqual(partial);
+  });
+
+  it("refuses an invoice already credited upwards, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    const series = await activeRectificative();
+    // 0.83 at 21% is 1.00 added to the Caña's 3.00, so a credit of 3.00 would leave it 1.00.
+    await inTx(venue, (tx) =>
+      recordCorrection(tx, venue.backend, {
+        tillId: brandTillId(venue.deviceTillId),
+        nodeId: venue.cfg.nodeId,
+        seriesId: brandSeriesId(series!.id),
+        correctsSaleId: brandSaleId(original.id),
+        total: "1.00",
+        lines: [
+          {
+            lineNo: 1,
+            name: "Caña",
+            descriptions: { [venue.cfg.locale]: "Caña de cerveza" },
+            quantity: "0.333",
+            unitPrice: "2.48",
+            vatRate: "21.00",
+            lineTotal: "0.83",
+          },
+        ],
+        authz: { sessionId: supervisorSessionId },
+        clock: venue.clock,
+      }),
+    );
+    const raised = await creditsOf(original.id);
+    const before = fiscalSnapshot();
+
+    const answer = await cancel(id);
+
+    expect({ status: answer.status, code: answer.json.code }).toEqual({
+      status: 409,
+      code: "sale.correction_not_whole",
+    });
+    expect(fiscalSnapshot()).toEqual(before);
+    expect(await statusOf(venue, id)).toBe("placed");
+    expect(await creditsOf(original.id)).toEqual(raised);
   });
 
   it("files one credit when two cancels of the order arrive together, refusing the second", async () => {

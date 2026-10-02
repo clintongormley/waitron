@@ -89,12 +89,12 @@ export function formatInvoiceNumber(code: string, number: number): string {
 }
 
 /** An amount at the cent, as a money column stores it: "1.005" is "1.01". */
-function atCents(amount: string): Decimal {
+export function atCents(amount: string): Decimal {
   return centsToDecimal(stringToCents(amount));
 }
 
 /** Refuses with `sale.total_mismatch` a breakdown whose bases and taxes do not sum to `total`. */
-function assertSumsTo(breakdown: readonly VatBreakdownLine[], total: Decimal): void {
+export function assertSumsTo(breakdown: readonly VatBreakdownLine[], total: Decimal): void {
   const breakdownTotal = sumDecimals(breakdown.flatMap((g) => [g.base, g.tax]));
   if (compareDecimal(breakdownTotal, total) !== 0) {
     throw new AppError("sale.total_mismatch", { declaredTotal: total, breakdownTotal });

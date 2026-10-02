@@ -1,5 +1,5 @@
 // The entire public surface of @waitron/core. Re-exports only — no logic here.
-export { deriveVatBreakdown, formatInvoiceNumber, recordSale } from "./record-sale.js";
+export { formatInvoiceNumber, recordSale } from "./record-sale.js";
 export type { RecordSaleInput, RecordSaleLine, RecordSaleTender } from "./record-sale.js";
 export { settleSale } from "./settle-sale.js";
 export type { SettleSaleInput, SettleSaleTender } from "./settle-sale.js";

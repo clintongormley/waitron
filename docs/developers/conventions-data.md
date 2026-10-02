@@ -625,6 +625,9 @@ and the breakdown, built from the lines at the cent, does not sum to the total a
 through `buildVatBreakdown`: it has its base and tax each rounded to the cent, and is refused with
 `sale.total_mismatch` if the rounded amounts no longer add up to the total.
 
+_2026-10-02 (C126):_ a correction that credits the whole invoice (`wholeInvoice`) does not reach
+`deriveVatBreakdown`: it files the invoice's stored breakdown negated (`packages/core/src/record-correction.ts`).
+
 **A guard got quietly weaker and had to be shored up.** With `quantity` and `rate` converted, the
 vocabulary stopped importing `numeric` at all — and `scripts/column-vocabulary.test.ts` DERIVES its
 forbidden set from the vocabulary's own import block, so `numeric` would have become legal in every
