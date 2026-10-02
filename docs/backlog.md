@@ -4823,6 +4823,16 @@ hook, which is bespoke code on a fiscal path and a decision rather than a bump.
   the output. A file snapshot would fail with a readable diff; whether this repo wants snapshot
   files at all is an owner decision.
 
+**`node-forge` has a high-severity security alert with no fixed version — OPEN (Dependabot alert
+#20, 2026-10-01).** Every version up to 1.4.0, the one in the lockfile, accepts some RSA signatures
+it should reject when checking them. It is a direct dependency of `packages/server-kit`,
+`apps/server` and `apps/print-agent`. From reading the code on 2026-10-02 (nothing run), product
+code only creates and signs certificates and certificate requests with it
+(`packages/server-kit/src/certificate.ts`, `apps/server/src/self-signed-cert.ts`,
+`apps/server/src/cloud-remote.ts`); it checks signatures with it only in tests. **Next action:**
+bump it when a fixed version is published, and run the certificate suites in those three packages.
+The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
+
 **Left behind by the passkey library upgrade (#453, 2026-09-19).** `@simplewebauthn/server` and
 `@simplewebauthn/browser` moved to 14.
 
