@@ -1781,9 +1781,6 @@ export async function fireOrderLines(
   );
 }
 
-/**
- * Re-route selected held dishes whose station is not open, stamp `fired_at`, and finish the release.
- */
 async function releaseHeld(
   tx: Transaction,
   cfg: TillConfig,
