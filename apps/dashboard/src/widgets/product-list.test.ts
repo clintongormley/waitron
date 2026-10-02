@@ -1,12 +1,12 @@
-import { page } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { WtCombobox } from "@waitron/ui";
 import { chooseOption, expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { allergenStateName, vatClassName } from "../i18n/domain.js";
 import type { Product, Unit } from "../api/client.js";
 import type { ListedVariant } from "@waitron/catalogue/src/product-types.js";
-import { ProductList } from "./product-list.js";
+import { ProductList, ROOT_KEY } from "./product-list.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
@@ -16,6 +16,7 @@ afterEach(() => setLocale("es"));
 beforeEach(() => {
   sessionStorage.clear();
   localStorage.removeItem("waitron.products.table:columns");
+  localStorage.removeItem("waitron.products.table:expanded");
 });
 
 async function tableRoot(el: ProductList): Promise<ShadowRoot> {
@@ -24,10 +25,16 @@ async function tableRoot(el: ProductList): Promise<ShadowRoot> {
   return table.shadowRoot!;
 }
 
+function productRows(root: ShadowRoot): HTMLElement[] {
+  return [
+    ...root.querySelectorAll<HTMLElement>(
+      `tbody tr[data-row-key]:not([data-row-key="${ROOT_KEY}"])`,
+    ),
+  ];
+}
+
 function rowKeys(root: ShadowRoot): string[] {
-  return [...root.querySelectorAll("tr[data-row-key]")].map((row) =>
-    row.getAttribute("data-row-key")!,
-  );
+  return productRows(root).map((row) => row.getAttribute("data-row-key")!);
 }
 
 /** The one cell of `rowKey` under the column whose header starts with `header` — found by header text
@@ -40,6 +47,56 @@ function cellUnder(root: ShadowRoot, rowKey: string, header: string): HTMLElemen
   const row = root.querySelector(`tr[data-row-key="${rowKey}"]`)!;
   return [...row.querySelectorAll("td")][index]!;
 }
+
+const drinks = { id: "d", name: "Drinks", parentId: null };
+const beer = { id: "b", name: "Beer", parentId: "d" };
+const food = { id: "f", name: "Food", parentId: null };
+
+function treeProducts(): Product[] {
+  return [
+    product({ id: "cola", name: "Cola", primaryCategoryId: "d" }),
+    product({ id: "ale", name: "Ale", primaryCategoryId: "d", active: false }),
+    product({ id: "lager", name: "Lager", primaryCategoryId: "b" }),
+    product({ id: "bread", name: "Bread", primaryCategoryId: null }),
+  ];
+}
+
+async function mountTree(props: Partial<ProductList> = {}) {
+  const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+    categories: [drinks, beer, food],
+    products: treeProducts(),
+    ...props,
+  });
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  return { el, table, root: await tableRoot(el) };
+}
+
+/** Clicks a category row's own activator, as a click anywhere on the row does. */
+async function openRow(el: ProductList, key: string): Promise<void> {
+  const root = await tableRoot(el);
+  root.querySelector<HTMLButtonElement>(`tr[data-row-key="${key}"] .row-activate`)!.click();
+  await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+}
+
+const counted = (categories: number, products: number) =>
+  [
+    ...(categories
+      ? [
+          t(categories === 1 ? "folders.count_one" : "folders.count").replace(
+            "{count}",
+            String(categories),
+          ),
+        ]
+      : []),
+    ...(products || !categories
+      ? [
+          t(products === 1 ? "folders.product_count_one" : "folders.product_count").replace(
+            "{count}",
+            String(products),
+          ),
+        ]
+      : []),
+  ].join(", ");
 
 async function choose(el: ProductList, column: string, value: string): Promise<void> {
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -161,7 +218,7 @@ describe("product-list", () => {
   it("renders one shared-table row per product", async () => {
     const products = [product({ id: "a" }), product({ id: "b" }), product({ id: "c" })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
-    const rows = (await tableRoot(el)).querySelectorAll("tbody tr");
+    const rows = productRows(await tableRoot(el));
     expect(rows.length).toBe(3);
   });
 
@@ -174,7 +231,7 @@ describe("product-list", () => {
       }),
     ];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
-    const row = (await tableRoot(el)).querySelector("tbody tr")!;
+    const row = productRows(await tableRoot(el))[0]!;
     expect(row.textContent).toContain("Croquetas");
     expect(row.textContent).not.toContain("Croquetas caseras");
     expect(row.textContent).not.toContain("Ham croquettes");
@@ -260,7 +317,7 @@ describe("product-list", () => {
       }),
     ];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
-    const rows = [...(await tableRoot(el)).querySelectorAll("tbody tr")];
+    const rows = productRows(await tableRoot(el));
     expect(rows[0]!.textContent).toContain(euros("12,50"));
     expect(rows[1]!.textContent).toContain(`${euros("4,00")}–${euros("7,50")}`);
   });
@@ -417,6 +474,7 @@ describe("product-list", () => {
       ],
     });
     const root = await tableRoot(el);
+    await openRow(el, "folder:reporting");
     const headers = [...root.querySelectorAll("thead th")].map((cell) => cell.textContent!.trim());
     expect(headers.some((header) => header.startsWith(t("product.name")))).toBe(true);
     expect(headers).toContain(t("editor.main_category"));
@@ -464,7 +522,7 @@ describe("product-list", () => {
       extraLists: [],
       optionLists: [],
     });
-    const text = (await tableRoot(el)).querySelector("tbody tr")!.textContent!;
+    const text = productRows(await tableRoot(el))[0]!.textContent!;
     expect(text.match(new RegExp(t("editor.missing_choice"), "g"))).toHaveLength(2);
   });
 
@@ -629,10 +687,10 @@ describe("product-list", () => {
     expect(table.searchable).toBe(false);
     expect(table.rowParent).toBeDefined();
     const root = await tableRoot(el);
-    expect(root.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(productRows(root)).toHaveLength(1);
     root.querySelector<HTMLElement>(".tree-toggle")!.click();
     await table.updateComplete;
-    const rows = [...root.querySelectorAll("tbody tr")];
+    const rows = productRows(root);
     expect(rows).toHaveLength(3);
     expect(rows.slice(1).map((row) => row.textContent)).toEqual(
       expect.arrayContaining([expect.stringContaining("Small"), expect.stringContaining("Large")]),
@@ -826,7 +884,8 @@ describe("product-list", () => {
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
-    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    await openRow(el, "folder:food");
+    root.querySelector<HTMLElement>('tr[data-row-key="wine"] .tree-toggle')!.click();
     await table.updateComplete;
     const cell = (header: string) => cellUnder(root, "wine:w175", header);
     expect(cell(t("product.name")).textContent!.trim()).toBe("Wine 175");
@@ -1078,7 +1137,7 @@ describe("product-list", () => {
 
   it("renders no rows for an empty products list", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products: [] });
-    expect((await tableRoot(el)).querySelectorAll("tbody tr").length).toBe(0);
+    expect(productRows(await tableRoot(el)).length).toBe(0);
   });
 
   it.each([
@@ -1395,5 +1454,149 @@ describe("the product list at phone width", () => {
       const price = cellUnder(root, key, t("product.price")).querySelector('[data-test="price"]')!;
       expect(Math.abs(bottom(name) - bottom(price)), key).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe("the product list as a tree", () => {
+  it("puts every category and product under an All products row that has no arrow, cannot be selected, and counts the catalogue", async () => {
+    const { root } = await mountTree({ selecting: true });
+    const top = root.querySelector<HTMLElement>(`tr[data-row-key="${ROOT_KEY}"]`)!;
+    expect(root.querySelector("tbody tr")).toBe(top);
+    expect(top.getAttribute("aria-level")).toBe("1");
+    expect(top.getAttribute("aria-expanded")).toBe("true");
+    expect(top.querySelector(".tree-toggle, .tree-arrow, .row-activate")).toBeNull();
+    expect(top.querySelector('input[type="checkbox"]')).toBeNull();
+    expect(top.textContent).toContain(t("folders.all_products"));
+    expect(top.querySelector('[data-test="count-root"]')!.textContent!.trim()).toBe(counted(3, 3));
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:f", "bread"]);
+    expect(root.querySelector('tr[data-row-key="bread"]')!.getAttribute("aria-level")).toBe("2");
+  });
+
+  it("nests a category's subcategories, then its products, under it, whichever column sorts the table", async () => {
+    const { el, root, table } = await mountTree();
+    await openRow(el, "folder:d");
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
+    expect(root.querySelector('tr[data-row-key="folder:b"]')!.getAttribute("aria-level")).toBe("3");
+    root.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["folder:f", "folder:d", "folder:b", "cola", "bread"]);
+    root.querySelector<HTMLButtonElement>('button[data-sort="price"]')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
+  });
+
+  it("names what a category holds: its subcategories and its Active products", async () => {
+    const { root } = await mountTree();
+    const count = (id: string) =>
+      root.querySelector(`[data-test="count-${id}"]`)!.textContent!.trim();
+    expect(count("d")).toBe(counted(1, 1));
+    expect(count("f")).toBe(counted(0, 0));
+  });
+
+  it("opens and closes a category from a click or Enter on its row, saying which it will do", async () => {
+    const { el, root, table } = await mountTree();
+    const activator = () =>
+      root.querySelector<HTMLButtonElement>('tr[data-row-key="folder:d"] .row-activate')!;
+    expect(activator().getAttribute("aria-label")).toBe(
+      t("folders.open_named").replace("{name}", "Drinks"),
+    );
+    await openRow(el, "folder:d");
+    expect(rowKeys(root)).toContain("cola");
+    expect(activator().getAttribute("aria-label")).toBe(
+      t("folders.close_named").replace("{name}", "Drinks"),
+    );
+    activator().focus();
+    await userEvent.keyboard("{Enter}");
+    await table.updateComplete;
+    expect(rowKeys(root)).not.toContain("cola");
+    expect(root.querySelector('tr[data-row-key="folder:d"] .tree-arrow')!.textContent!.trim()).toBe(
+      "▸",
+    );
+  });
+
+  it("reports a person opening or closing a category, and nothing for a product's variants", async () => {
+    const { el, root, table } = await mountTree({
+      products: [
+        ...treeProducts(),
+        product({ id: "bun", name: "Bun", primaryCategoryId: null, variants: [bunVariant] }),
+      ],
+    });
+    const toggles: unknown[] = [];
+    el.addEventListener("category-toggle", (event) => toggles.push((event as CustomEvent).detail));
+    const raw = vi.fn();
+    el.addEventListener("wt-expand-change", raw);
+    await openRow(el, "folder:d");
+    await openRow(el, "folder:d");
+    root.querySelector<HTMLButtonElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
+    await table.updateComplete;
+    expect(toggles).toEqual([
+      { categoryId: "d", open: true },
+      { categoryId: "d", open: false },
+    ]);
+    expect(raw).not.toHaveBeenCalled();
+  });
+
+  it("remembers which categories are open when the list is drawn again", async () => {
+    const first = await mountTree();
+    await openRow(first.el, "folder:d");
+    cleanupWidgets();
+    const second = await mountTree();
+    expect(rowKeys(second.root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
+  });
+
+  it("lifts nothing for a press on a row's own control, on the All products row, or outside every row", async () => {
+    const { el, root } = await mountTree();
+    const offered: string[][] = [];
+    el.addEventListener("drag-items", (event) =>
+      offered.push((event as CustomEvent<{ keys: string[] }>).detail.keys),
+    );
+    const press = (target: Element, pointerId: number) => {
+      for (const [type, clientY] of [
+        ["pointerdown", 0],
+        ["pointermove", 40],
+        ["pointercancel", 40],
+      ] as const)
+        target.dispatchEvent(
+          new PointerEvent(type, { bubbles: true, composed: true, pointerId, clientY }),
+        );
+    };
+    press(root.querySelector('[data-test="actions-bread"]')!, 1);
+    press(root.querySelector(`tr[data-row-key="${ROOT_KEY}"] [part~="folder-cell"]`)!, 2);
+    press(root.querySelector("thead th")!, 3);
+    expect(offered).toEqual([]);
+    press(root.querySelector('tr[data-row-key="bread"] [part~="product-cell"]')!, 4);
+    expect(offered).toEqual([["bread"], []]);
+  });
+
+  it("opens the category it is asked to reveal, and every category above it", async () => {
+    const { el, root } = await mountTree();
+    await el.revealCategory("b");
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "lager", "cola", "folder:f", "bread"]);
+  });
+
+  it("a search keeps the categories above a match open, finds a product by a variant's name, and clearing it restores what was open", async () => {
+    const { el, root, table } = await mountTree({
+      products: [
+        ...treeProducts(),
+        product({
+          id: "bun",
+          name: "Bun",
+          primaryCategoryId: "b",
+          variants: [{ ...bunVariant, name: "Large cup" }],
+        }),
+      ],
+    });
+    await openRow(el, "folder:d");
+    el.search = "cup";
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "bun"]);
+    root.querySelector<HTMLButtonElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "bun", "bun:small"]);
+    el.search = "";
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
   });
 });

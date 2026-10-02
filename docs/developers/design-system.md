@@ -455,12 +455,9 @@ own Add button, rendered there only while its list is empty, so a screen whose A
 sits above the table shows it twice while empty (owner, A176). A table with no Add action leaves the
 slot empty. A widget that draws a table with an Add button for a screen passes the button through:
 `apps/dashboard/src/widgets/staff-list.ts` forwards the slot
-(`<slot name="empty-action" slot="empty-action">`), while `apps/dashboard/src/widgets/product-list.ts`
-takes an `emptyAction` render function, because the rows it lists are worked out inside
-`apps/dashboard/src/widgets/catalogue-browser.ts`, from the folder and view the screen passes in and
-the browser's own search box, so the screen cannot tell when the list is empty. The browser drops
-`emptyAction` while a search is typed, and passes the no-matches sentence as the list's
-`emptyMessage`, so a catalogue search that matches nothing says so without the button. When the first item made from the slotted button empties the slot,
+(`<slot name="empty-action" slot="empty-action">`), while the Products screen has no Add button in its table: its tree always shows the All products
+row, whose menu holds the screen's adds (spec `docs/superpowers/specs/2026-10-02-products-category-tree-design.md`
+§3), so its box appears only when a search matches nothing, holding the no-matches sentence. When the first item made from the slotted button empties the slot,
 the screen moves focus to its other Add button rather than leaving it on the page. When rows exist
 but the table's own search or filters hide them all, the same box holds `noMatchesMessage` and the
 slot is not drawn.

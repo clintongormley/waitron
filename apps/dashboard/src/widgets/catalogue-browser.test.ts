@@ -1,16 +1,16 @@
-import { html } from "lit";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { registerIcons } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { setLocale, t } from "../i18n/t.js";
+import { setLocale } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
 import type { CategorySummary, DashboardApi, Product } from "../api/client.js";
 import type { CatalogueBrowser } from "./catalogue-browser.js";
 import "./catalogue-browser.js";
+import { ROOT_KEY } from "./product-list.js";
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
 beforeEach(() => {
@@ -90,9 +90,17 @@ export async function tableOf(el: CatalogueBrowser) {
   return table;
 }
 export async function rowKeys(el: CatalogueBrowser) {
-  return [...(await tableOf(el)).shadowRoot!.querySelectorAll<HTMLElement>("tr[data-row-key]")].map(
-    (row) => row.dataset.rowKey,
-  );
+  return [...(await tableOf(el)).shadowRoot!.querySelectorAll<HTMLElement>("tr[data-row-key]")]
+    .map((row) => row.dataset.rowKey)
+    .filter((key) => key !== ROOT_KEY);
+}
+/** Opens or closes a category the way a click on its row does. */
+export async function toggleCategory(el: CatalogueBrowser, id: string) {
+  const table = await tableOf(el);
+  table
+    .shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="folder:${id}"] .row-activate`)!
+    .click();
+  await table.updateComplete;
 }
 
 it("marks only folders without an active own or inherited routing claim and clears the mark when claimed", async () => {
@@ -126,10 +134,8 @@ it("marks only folders without an active own or inherited routing claim and clea
   expect((await marker("f"))?.getAttribute("title")).toBe(
     "No kitchen routing rule covers this category",
   );
-  el.folderId = "d";
-  await el.updateComplete;
+  await toggleCategory(el, "d");
   expect(await marker("b")).toBeNull();
-  el.folderId = null;
   el.routing = {
     ...routing,
     claims: [
@@ -147,8 +153,6 @@ it("marks only folders without an active own or inherited routing claim and clea
   };
   await el.updateComplete;
   expect(await marker("d")).not.toBeNull();
-  el.folderId = "d";
-  await el.updateComplete;
   expect(await marker("b")).not.toBeNull();
   setLocale("es");
   await el.updateComplete;
@@ -252,7 +256,11 @@ it("moves a dragged product into a folder", async () => {
 });
 it("real pointer drag moves a product into a folder", async () => {
   const el = await mountBrowser();
-  await userEvent.dragAndDrop(await nameCell(el, "bread"), await nameCell(el, "folder:f"));
+  await userEvent.dragAndDrop(
+    await nameCell(el, "bread"),
+    (await tableOf(el)).shadowRoot!.querySelector('tr[data-row-key="folder:f"] .row-activate')!,
+    { targetPosition: { x: 4, y: 4 } },
+  );
   await vi.waitFor(() =>
     expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: ["bread"], categoryIds: [] },
@@ -276,31 +284,18 @@ it("finds a folder under a captured touch pointer", async () => {
     ),
   );
 });
-it("finds a breadcrumb under a captured touch pointer", async () => {
-  const el = await mountBrowser({ folderId: "d" });
-  const from = await nameCell(el, "cola");
-  const grip = from.querySelector(".drag-grip")!;
-  const to = el.shadowRoot!.querySelector('[data-test="crumb-0"]')!;
-  capturedTouch(grip, "pointerdown", grip);
-  capturedTouch(grip, "pointermove", to);
-  expect(to.closest("li")!.classList.contains("drop-target")).toBe(true);
-  capturedTouch(grip, "pointerup", to);
-  await vi.waitFor(() =>
-    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
-      { productIds: ["cola"], categoryIds: [] },
-      null,
-    ),
-  );
-});
-it("a folder click still opens it without starting a drag", async () => {
+it("a click on a category's row opens it in place without starting a drag", async () => {
   const el = await mountBrowser();
-  const opened = vi.fn();
-  el.addEventListener("open-folder", opened);
-  await userEvent.click(
-    (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>('[data-test="open-d"]')!,
-  );
-  expect(opened).toHaveBeenCalledOnce();
-  expect((opened.mock.calls[0]![0] as CustomEvent).detail).toEqual({ folderId: "d" });
+  const table = await tableOf(el);
+  const activator = table.shadowRoot!.querySelector<HTMLElement>(
+    'tr[data-row-key="folder:d"] .row-activate',
+  )!;
+  pointerEvent(activator, "pointerdown");
+  pointerEvent(activator, "pointerup");
+  activator.click();
+  await table.updateComplete;
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
 });
 it("a small pointer movement stays a click rather than lifting the row", async () => {
   const el = await mountBrowser();
@@ -330,16 +325,15 @@ it("a cancelled pointer over a valid folder does not move the product", async ()
   pointerEvent(to, "pointercancel");
   expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
 });
-it("a drag ending on a folder's button does not also open it", async () => {
+it("a drag that ends on a category's row does not also open it", async () => {
   const el = await mountBrowser();
-  const opened = vi.fn();
-  el.addEventListener("open-folder", opened);
-  const button = (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(
-    '[data-test="open-d"]',
+  const table = await tableOf(el);
+  const activator = table.shadowRoot!.querySelector<HTMLElement>(
+    'tr[data-row-key="folder:d"] .row-activate',
   )!;
-  const box = button.getBoundingClientRect();
-  pointerEvent(button, "pointerdown");
-  button.dispatchEvent(
+  const box = activator.getBoundingClientRect();
+  pointerEvent(activator, "pointerdown");
+  activator.dispatchEvent(
     new PointerEvent("pointermove", {
       bubbles: true,
       composed: true,
@@ -348,11 +342,12 @@ it("a drag ending on a folder's button does not also open it", async () => {
       clientY: box.y + 8,
     }),
   );
-  pointerEvent(button, "pointerup");
-  button.dispatchEvent(
+  pointerEvent(activator, "pointerup");
+  activator.dispatchEvent(
     new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
   );
-  expect(opened).not.toHaveBeenCalled();
+  await table.updateComplete;
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
 });
 it("drags the whole selected group and clears selection after moving", async () => {
   const el = await mountBrowser();
@@ -384,56 +379,19 @@ it("refuses a folder over itself or its descendants but highlights a sibling", a
   pointerEvent(sibling, "pointermove");
   expect(sibling.getAttribute("part")).not.toContain("drop-target");
 });
-it("moves a product to the top level through the first breadcrumb", async () => {
-  const el = await mountBrowser({ folderId: "d" });
-  drag(await nameCell(el, "cola"), el.shadowRoot!.querySelector('[data-test="crumb-0"]')!);
+it("moves a product to the top level by dropping it on All products", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  const root = (await tableOf(el)).shadowRoot!;
+  drag(
+    await nameCell(el, "cola"),
+    root.querySelector(`tr[data-row-key="${ROOT_KEY}"] [part~="folder-cell"]`)!,
+  );
   await vi.waitFor(() =>
     expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: ["cola"], categoryIds: [] },
       null,
     ),
-  );
-});
-it("refuses a dragged folder's ancestor or current breadcrumb when it is inside that folder", async () => {
-  const el = await mountBrowser({
-    folderId: "b",
-    products: [],
-    categories: [...CATEGORIES, folder("child", "Child", "b")],
-  });
-  const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
-  list.dispatchEvent(
-    new CustomEvent("drag-items", {
-      detail: { keys: ["folder:d"] },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  const crumbs = el.shadowRoot!.querySelectorAll("nav li");
-  for (const target of [crumbs[1]!, crumbs[2]!]) {
-    list.dispatchEvent(
-      new CustomEvent("pointer-drag-move", {
-        detail: { path: [target] },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    expect(target.classList.contains("drop-target")).toBe(false);
-  }
-  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
-  list.dispatchEvent(
-    new CustomEvent("pointer-drag-move", {
-      detail: { path: [crumbs[0]!] },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  expect(crumbs[0]!.classList.contains("drop-target")).toBe(true);
-  list.dispatchEvent(
-    new CustomEvent("pointer-drag-end", {
-      detail: { cancelled: true },
-      bubbles: true,
-      composed: true,
-    }),
   );
 });
 it("shows a refused drop at the bottom and keeps the selection for correction", async () => {
@@ -465,45 +423,93 @@ export async function chooseFilter(el: CatalogueBrowser, column: string, value: 
   await chooseOption(select, value);
   await table.updateComplete;
 }
-const crumbs = (el: CatalogueBrowser) =>
-  [...el.shadowRoot!.querySelectorAll("nav.breadcrumb li")].map((li) =>
-    li.textContent!.replace("›", "").trim(),
-  );
 it("shows top-level folders before unfiled products", async () => {
   expect(await rowKeys(await mountBrowser())).toEqual(["folder:d", "folder:f", "bread"]);
 });
-it("shows only direct children and breadcrumbs inside a folder", async () => {
-  const el = await mountBrowser({ folderId: "d" });
-  expect(await rowKeys(el)).toEqual(["folder:b", "cola"]);
-  expect(crumbs(el)).toEqual(["All products", "Drinks"]);
+it("nests each category's subcategories, then its products, under it once it is opened, and draws no breadcrumb", async () => {
+  const el = await mountBrowser();
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
+  await toggleCategory(el, "d");
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
+  const table = await tableOf(el);
+  const level = (key: string) =>
+    table.shadowRoot!.querySelector(`tr[data-row-key="${key}"]`)!.getAttribute("aria-level");
+  expect([ROOT_KEY, "folder:d", "folder:b", "cola", "bread"].map(level)).toEqual([
+    "1",
+    "2",
+    "3",
+    "3",
+    "2",
+  ]);
+  expect(el.shadowRoot!.querySelector("nav")).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="view-all"]')).toBeNull();
 });
-it("keeps folders through both product filters", async () => {
-  const el = await mountBrowser({ folderId: "d" });
+it("keeps every category through both product filters", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
   await chooseFilter(el, "active", "inactive");
-  expect(await rowKeys(el)).toEqual(["folder:b"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "folder:f"]);
   await chooseFilter(el, "ordering", "staff_only");
-  expect(await rowKeys(el)).toEqual(["folder:b"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "folder:f"]);
 });
 it("sorts a numbered folder before products", async () => {
   expect(
     await rowKeys(await mountBrowser({ categories: [...CATEGORIES, folder("s", "5 Star", null)] })),
   ).toEqual(["folder:s", "folder:d", "folder:f", "bread"]);
 });
-it("falls back to the top level for a missing folder", async () => {
-  const el = await mountBrowser({ folderId: "gone" });
+it("opens nothing when the address names a category that does not exist", async () => {
+  const el = await mountBrowser({ categoryId: "gone" });
   expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
-  expect(crumbs(el)).toEqual(["All products"]);
 });
-it("searches globally and restores the previous folder when cleared", async () => {
-  const el = await mountBrowser({ folderId: "f" });
+
+it("opens the category the address names, and every category above it, and scrolls it into view", async () => {
+  const scrolled = vi.spyOn(Element.prototype, "scrollIntoView");
+  onTestFinished(() => scrolled.mockRestore());
+  const el = await mountBrowser({
+    products: [...PRODUCTS, product("stout", "Stout", "b")],
+    categoryId: "b",
+  });
+  await vi.waitFor(async () =>
+    expect(await rowKeys(el)).toEqual([
+      "folder:d",
+      "folder:b",
+      "stout",
+      "cola",
+      "folder:f",
+      "bread",
+    ]),
+  );
+  expect(scrolled.mock.contexts.at(-1)).toBe(
+    (await tableOf(el)).shadowRoot!.querySelector('tr[data-row-key="folder:b"]'),
+  );
+});
+
+it("writes the category a person opens into the address, and its parent when they close it", async () => {
+  const el = await mountBrowser({ products: [...PRODUCTS, product("stout", "Stout", "b")] });
+  const sent: unknown[] = [];
+  el.addEventListener("open-category", (event) => sent.push((event as CustomEvent).detail));
+  await toggleCategory(el, "d");
+  el.categoryId = "d";
+  await toggleCategory(el, "b");
+  el.categoryId = "b";
+  await toggleCategory(el, "f");
+  el.categoryId = "f";
+  await toggleCategory(el, "b");
+  await toggleCategory(el, "f");
+  expect(sent).toEqual([
+    { categoryId: "d" },
+    { categoryId: "b" },
+    { categoryId: "f" },
+    { categoryId: null },
+  ]);
+});
+it("search keeps the categories above a match open, and clearing it restores what was open", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "f");
   await typeSearch(el, "COL");
-  expect(await rowKeys(el)).toEqual(["cola"]);
-  expect(
-    (await tableOf(el)).shadowRoot!.querySelector('tr[data-row-key="cola"]')!.textContent,
-  ).toContain("Drinks");
-  expect(crumbs(el)).toEqual([]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "cola"]);
   await typeSearch(el, "");
-  expect(await rowKeys(el)).toEqual(["burger"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "burger", "bread"]);
 });
 it("searches folder paths and product variant names", async () => {
   const el = await mountBrowser({
@@ -530,38 +536,27 @@ it("searches folder paths and product variant names", async () => {
     ],
   });
   await typeSearch(el, "drinks");
-  expect(await rowKeys(el)).toEqual(["folder:b", "folder:d", "sized", "cola"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "sized", "cola"]);
   await typeSearch(el, "cup");
-  expect(await rowKeys(el)).toEqual(["sized"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "sized"]);
 });
-it("lists all products with paths and no breadcrumb in all view", async () => {
-  const el = await mountBrowser({ view: "all" });
-  expect((await rowKeys(el)).sort()).toEqual(["bread", "burger", "cola"]);
-  expect(crumbs(el)).toEqual([]);
-});
-it("emits folder navigation once and offers accessible folder actions", async () => {
+it("opens and closes a category from its row, and says which it will do", async () => {
   const el = await mountBrowser();
-  const opened = vi.fn();
-  el.addEventListener("open-folder", opened);
-  const root = (await tableOf(el)).shadowRoot!;
-  root.querySelector<HTMLElement>('[data-test="open-d"]')!.click();
-  expect(opened).toHaveBeenCalledOnce();
-  expect((opened.mock.calls[0]![0] as CustomEvent).detail).toEqual({ folderId: "d" });
-  expect(root.querySelector('wt-icon[name="folder"]')).not.toBeNull();
-});
-it("emits breadcrumb navigation and view changes", async () => {
-  const el = await mountBrowser({ folderId: "b" });
-  const opened = vi.fn();
-  const changed = vi.fn();
-  el.addEventListener("open-folder", opened);
-  el.addEventListener("view-change", changed);
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="crumb-0"]')!.click();
-  expect((opened.mock.calls[0]![0] as CustomEvent).detail).toEqual({ folderId: null });
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="view-all"]')!.click();
-  expect((changed.mock.calls[0]![0] as CustomEvent).detail).toEqual({ view: "all" });
+  const table = await tableOf(el);
+  const activator = () =>
+    table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="folder:d"] .row-activate')!;
+  expect(activator().getAttribute("aria-label")).toBe("Open Drinks");
+  await toggleCategory(el, "d");
+  expect(activator().getAttribute("aria-label")).toBe("Close Drinks");
+  expect(await rowKeys(el)).toContain("cola");
+  await toggleCategory(el, "d");
+  expect(await rowKeys(el)).not.toContain("cola");
+  expect(
+    table.shadowRoot!.querySelector('tr[data-row-key="folder:d"] wt-icon[name="folder"]'),
+  ).not.toBeNull();
 });
 it("creates a folder under the current folder and closes after save", async () => {
-  const el = await mountBrowser({ folderId: "d" });
+  const el = await mountBrowser({ categoryId: "d" });
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-folder"]')!.click();
   await el.updateComplete;
   const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
@@ -577,7 +572,7 @@ it("creates a folder under the current folder and closes after save", async () =
   await vi.waitFor(() => expect(form.open).toBe(false));
 });
 it("renames a root folder without adopting the current folder", async () => {
-  const el = await mountBrowser({ folderId: "b" });
+  const el = await mountBrowser({ categoryId: "b" });
   const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
   list.dispatchEvent(
     new CustomEvent("rename-folder", { detail: { folderId: "d" }, bubbles: true, composed: true }),
@@ -595,7 +590,7 @@ it("renames a root folder without adopting the current folder", async () => {
   );
 });
 it("keeps a refused folder save open with a field error", async () => {
-  const el = await mountBrowser({ folderId: "d" });
+  const el = await mountBrowser({ categoryId: "d" });
   vi.mocked(el.api.createCategory).mockRejectedValueOnce({ code: "category.invalid" });
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-folder"]')!.click();
   await el.updateComplete;
@@ -613,7 +608,7 @@ it("keeps a refused folder save open with a field error", async () => {
 });
 
 it("creates a top-level folder when the addressed folder is missing", async () => {
-  const el = await mountBrowser({ folderId: "gone" });
+  const el = await mountBrowser({ categoryId: "gone" });
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-folder"]')!.click();
   await el.updateComplete;
   const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
@@ -628,19 +623,17 @@ it("creates a top-level folder when the addressed folder is missing", async () =
   );
 });
 
-it("shows the path only in global views and leaves folder product cells empty", async () => {
+it("shows each product's main category, and leaves a category row's other cells empty", async () => {
   const el = await mountBrowser();
-  let table = await tableOf(el);
+  await toggleCategory(el, "d");
+  const table = await tableOf(el);
   expect(table.shadowRoot!.querySelector('input[name="search"]')).toBeNull();
-  expect(table.columns.some((column) => column.key === "reporting-category")).toBe(false);
-  const row = table.shadowRoot!.querySelector('tr[data-row-key="folder:d"]')!;
+  expect(table.columns.some((column) => column.key === "reporting-category")).toBe(true);
+  const row = table.shadowRoot!.querySelector('tr[data-row-key="folder:b"]')!;
   expect(
     [...row.querySelectorAll("td")].slice(1, -1).every((cell) => cell.textContent!.trim() === ""),
   ).toBe(true);
-  await typeSearch(el, "beer");
-  table = await tableOf(el);
-  expect(table.columns.some((column) => column.key === "reporting-category")).toBe(true);
-  expect(table.shadowRoot!.querySelector('tr[data-row-key="folder:b"]')!.textContent).toContain(
+  expect(table.shadowRoot!.querySelector('tr[data-row-key="cola"]')!.textContent).toContain(
     "Drinks",
   );
 });
@@ -668,11 +661,11 @@ it("keeps a variant match on its parent until the manager expands it", async () 
     ],
   });
   await typeSearch(el, "cup");
-  expect(await rowKeys(el)).toEqual(["coffee"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "coffee"]);
   const table = await tableOf(el);
   table.shadowRoot!.querySelector<HTMLElement>(".tree-toggle")!.click();
   await table.updateComplete;
-  expect(await rowKeys(el)).toEqual(["coffee", "coffee:large"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "coffee", "coffee:large"]);
 });
 
 it.each(["en-GB", "es-ES"])(
@@ -724,7 +717,6 @@ export async function destination(el: CatalogueBrowser, value: string) {
 }
 it("selects folders and products but never variants", async () => {
   const el = await mountBrowser({
-    folderId: "d",
     products: [
       {
         ...PRODUCTS[0]!,
@@ -744,6 +736,7 @@ it("selects folders and products but never variants", async () => {
       },
     ],
   });
+  await toggleCategory(el, "d");
   await selectKeys(el, ["folder:b", "cola"]);
   const table = await tableOf(el);
   table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="cola"] .tree-toggle')?.click();
@@ -760,7 +753,7 @@ it("leaves selection mode on Cancel and restores the ordinary toolbar with no se
   await press(el, "cancel-selection");
   expect((await tableOf(el)).selectable).toBe(false);
   expect(count(el)).toBeUndefined();
-  for (const action of ["select", "new-folder", "view-folders", "view-all"])
+  for (const action of ["select", "new-folder"])
     expect(el.shadowRoot!.querySelector(`[data-test="${action}"]`), action).not.toBeNull();
   await press(el, "select");
   expect(count(el)).toBe("0 selected");
@@ -770,47 +763,36 @@ it("leaves selection mode on Cancel and restores the ordinary toolbar with no se
     )!.checked,
   ).toBe(false);
 });
-it("draws its screen's empty action in an empty folder, and not when a search finds nothing", async () => {
-  const el = await mountBrowser({
-    products: [],
-    folderId: "b",
-    emptyAction: () => html`<button slot="empty-action">Add product</button>`,
-  });
-  const button = (await tableOf(el)).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
-  expect(button.assignedSlot).not.toBeNull();
-  await typeSearch(el, "nothing like this");
-  expect((await tableOf(el)).querySelector("[slot=empty-action]")).toBeNull();
-});
 async function tableSentence(el: CatalogueBrowser) {
   return (await tableOf(el)).shadowRoot!.querySelector(".empty .message")!.textContent;
 }
 it.each(["en-GB", "es"])(
-  "says the dashboard's one no-matches sentence when its search finds nothing, and its own sentence in an empty folder (%s)",
+  "says the dashboard's one no-matches sentence when its search finds nothing (%s)",
   async (locale) => {
     setLocale(locale);
-    const el = await mountBrowser({ products: [], folderId: "b" });
-    expect(await tableSentence(el)).toBe(t("catalogue.no_products"));
+    const el = await mountBrowser({ products: [] });
     await typeSearch(el, "nothing like this");
     expect(await rowKeys(el)).toEqual([]);
     expect(await tableSentence(el)).toBe(tableNoMatches(locale));
     await typeSearch(el, "");
-    expect(await tableSentence(el)).toBe(t("catalogue.no_products"));
+    expect((await tableOf(el)).shadowRoot!.querySelector(".empty")).toBeNull();
   },
 );
-it("says the dashboard's one no-matches sentence when a column filter hides every product", async () => {
+it("keeps the All products row and every category when a column filter hides every product", async () => {
   setLocale("es");
-  const el = await mountBrowser({ folderId: "f" });
+  const el = await mountBrowser();
   await chooseFilter(el, "active", "inactive");
-  expect(await rowKeys(el)).toEqual([]);
-  expect(await tableSentence(el)).toBe(tableNoMatches("es"));
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:f"]);
+  expect(
+    (await tableOf(el)).shadowRoot!.querySelector(`tr[data-row-key="${ROOT_KEY}"]`),
+  ).not.toBeNull();
+  expect((await tableOf(el)).shadowRoot!.querySelector(".empty")).toBeNull();
 });
-it.each(["folder", "view", "search", "filter"])(
+it.each(["search", "filter"])(
   "clears selection on %s and keeps selection mode on",
   async (trigger) => {
     const el = await mountBrowser();
     await selectKeys(el, ["bread"]);
-    if (trigger === "folder") el.folderId = "d";
-    if (trigger === "view") el.view = "all";
     if (trigger === "search") await typeSearch(el, "bread");
     if (trigger === "filter") await chooseFilter(el, "active", "inactive");
     await el.updateComplete;
@@ -929,7 +911,8 @@ it("deletes a folder through its own row action", async () => {
   );
 });
 it.each([1, 2])("confirms %i product deletion with inactive and sales wording", async (number) => {
-  const el = await mountBrowser({ view: "all" });
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
   await selectKeys(el, number === 1 ? ["bread"] : ["bread", "cola"]);
   await press(el, "delete");
   expect(dialog(el)!.heading).toBe(number === 1 ? "Delete 1 product?" : "Delete 2 products?");

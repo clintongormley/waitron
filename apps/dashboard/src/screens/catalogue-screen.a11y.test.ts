@@ -137,6 +137,7 @@ async function flush(el: CatalogueScreen): Promise<void> {
 }
 
 afterEach(cleanupWidgets);
+afterEach(() => localStorage.clear());
 
 describe.each(["light", "dark"] as const)("catalogue-screen a11y (%s theme)", (theme) => {
   it("renders accessibly with catalogues loaded", async () => {

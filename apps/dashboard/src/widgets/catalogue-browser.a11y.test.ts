@@ -48,7 +48,7 @@ beforeEach(() => {
   localStorage.clear();
 });
 describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
-  it.each(["top", "folder", "search", "all", "form", "selection", "move", "delete"])(
+  it.each(["top", "open", "search", "form", "selection", "move", "delete"])(
     "renders %s accessibly",
     async (state) => {
       const { el, host } = await mountWidget<CatalogueBrowser>(
@@ -75,8 +75,6 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
             defaultStationId: null,
             stations: [],
           },
-          folderId: state === "folder" ? "b" : null,
-          view: state === "all" ? "all" : "folders",
         },
         theme,
       );
@@ -94,6 +92,13 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
       const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
       await list.updateComplete;
       await list.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+      if (state === "open") {
+        const table = list.shadowRoot!.querySelector("wt-data-table")!;
+        table
+          .shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="folder:d"] .row-activate')!
+          .click();
+        await table.updateComplete;
+      }
       if (["selection", "move", "delete"].includes(state)) {
         el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!.click();
         await el.updateComplete;

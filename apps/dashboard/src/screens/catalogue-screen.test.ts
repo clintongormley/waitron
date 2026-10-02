@@ -283,6 +283,7 @@ function emit(source: Element, type: string, detail: unknown): void {
 }
 
 afterEach(cleanupWidgets);
+afterEach(() => localStorage.clear());
 
 describe("catalogue-screen", () => {
   it("loads all product editor libraries and de-duplicates products from every menu", async () => {
@@ -415,101 +416,6 @@ describe("catalogue-screen", () => {
     await flush(el);
     expect(editor(el).open).toBe(false);
     expect(api.listProducts).toHaveBeenCalledTimes(4);
-  });
-
-  it("puts Add product under the empty product table's sentence, opening the same editor", async () => {
-    const api = stubApi({
-      listCategories: vi.fn().mockResolvedValue([]),
-      listProducts: vi.fn().mockResolvedValue([]),
-    });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-    const table = await productTable(el);
-    const button = table.querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
-    expect(button.assignedSlot).not.toBeNull();
-    expect(button.textContent!.trim()).toBe(t("catalogue.add_product"));
-    button.click();
-    await el.updateComplete;
-    expect(editor(el).open).toBe(true);
-    expect(editor(el).value).toBeNull();
-  });
-
-  it("keeps the empty table's Add product disabled exactly while the header's is", async () => {
-    const api = stubApi({
-      listCategories: vi.fn().mockResolvedValue([]),
-      listProducts: vi.fn().mockResolvedValue([]),
-      listUnits: vi.fn().mockResolvedValue([]),
-    });
-    Object.assign(api, { liveData: new LiveData() });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-    const slotted = async () =>
-      (await productTable(el)).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
-    const header = () => el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-product]")!;
-    expect(header().hasAttribute("disabled")).toBe(true);
-    expect((await slotted()).hasAttribute("disabled")).toBe(true);
-    vi.mocked(api.listUnits).mockResolvedValue(units);
-    api.liveData.invalidate([{ type: "units", id: units[0]!.id }]);
-    await vi.waitFor(() => expect(header().hasAttribute("disabled")).toBe(false));
-    expect((await slotted()).hasAttribute("disabled")).toBe(false);
-  });
-
-  /** Focuses and presses the empty product table's Add product, as a person's click leaves it. */
-  async function pressEmptyAdd(el: CatalogueScreen): Promise<HTMLElement> {
-    const button = (await productTable(el)).querySelector<HTMLElement>(
-      ":scope > [slot=empty-action]",
-    )!;
-    button.focus();
-    button.click();
-    await el.updateComplete;
-    expect(editor(el).open).toBe(true);
-    return button;
-  }
-
-  /** Lets a closing native dialog hand focus back, which it does a task after it closes. */
-  async function afterDialogCloses(el: CatalogueScreen): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-    await el.updateComplete;
-  }
-
-  it("returns focus to the header's Add product after the first product is made from the empty table", async () => {
-    let rows: Product[] = [];
-    const api = stubApi({
-      listCategories: vi.fn().mockResolvedValue([]),
-      listProducts: vi.fn((id: string) => Promise.resolve(id === "cat-a" ? rows : [])),
-      createProductEditor: vi.fn(() => {
-        // Made from the top level of an empty catalogue, so it is filed in no folder.
-        rows = products.map((product) => ({ ...product, primaryCategoryId: null }));
-        return Promise.resolve({ ...value, id: "new" });
-      }),
-    });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-    const button = await pressEmptyAdd(el);
-    emit(editor(el), "wt-submit", { value: value as ProductEditorInput });
-    await vi.waitFor(() => expect(step(el).open).toBe(true));
-    await vi.waitFor(() => expect(button.isConnected).toBe(false));
-    step(el).shadowRoot!.querySelector<HTMLElement>('[data-test="skip"]')!.click();
-    await vi.waitFor(() => expect(step(el).open).toBe(false));
-    await afterDialogCloses(el);
-    expect(el.shadowRoot!.activeElement).toBe(
-      el.shadowRoot!.querySelector(".actions [data-test=add-product]"),
-    );
-  });
-
-  it("returns focus to the empty table's Add product after Cancel", async () => {
-    const api = stubApi({
-      listCategories: vi.fn().mockResolvedValue([]),
-      listProducts: vi.fn().mockResolvedValue([]),
-    });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-    const button = await pressEmptyAdd(el);
-    emit(editor(el), "wt-cancel", {});
-    await vi.waitFor(() => expect(editor(el).open).toBe(false));
-    await afterDialogCloses(el);
-    expect(button.matches(":focus")).toBe(true);
   });
 
   it("draws no Add product button in the product table once it lists something", async () => {
@@ -1826,34 +1732,34 @@ describe("catalogue-screen", () => {
   });
 });
 
-it("reads and writes folder paths and passes the folder to new products", async () => {
-  history.replaceState(null, "", "/manage/catalogue/folder/c1");
+it("reads and writes the opened category in the address, and files a new product there", async () => {
+  history.replaceState(null, "", "/manage/catalogue/category/c1");
   const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
     api: stubApi(),
   });
   await flush(el);
   const browser = el.shadowRoot!.querySelector("dashboard-catalogue-browser")!;
-  expect(browser.folderId).toBe("c1");
-  emit(browser, "open-folder", { folderId: "b" });
+  expect(browser.categoryId).toBe("c1");
+  emit(browser, "open-category", { categoryId: "b" });
   await el.updateComplete;
-  expect(location.pathname).toBe("/manage/catalogue/folder/b");
-  emit(browser, "open-folder", { folderId: "c1" });
+  expect(location.pathname).toBe("/manage/catalogue/category/b");
+  emit(browser, "open-category", { categoryId: "c1" });
   await el.updateComplete;
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-product"]')!.click();
   await el.updateComplete;
   expect(editor(el).newCategoryId).toBe("c1");
   emit(editor(el), "wt-cancel", {});
   await el.updateComplete;
-  emit(browser, "view-change", { view: "all" });
+  emit(browser, "open-category", { categoryId: null });
   await el.updateComplete;
-  expect(location.pathname).toContain("/view/all");
+  expect(location.pathname).toBe("/manage/catalogue");
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-product"]')!.click();
   await el.updateComplete;
   expect(editor(el).newCategoryId).toBeNull();
 });
 
 it("creates an unfiled product when the addressed folder no longer exists", async () => {
-  history.replaceState(null, "", "/manage/catalogue/folder/gone");
+  history.replaceState(null, "", "/manage/catalogue/category/gone");
   const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
     api: stubApi(),
   });

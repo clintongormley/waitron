@@ -1,6 +1,5 @@
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { ifDefined } from "lit/directives/if-defined.js";
 import type { ContentLanguages } from "@waitron/shared";
 import type { RoutingModel } from "@waitron/venue-service/routing";
 import { baseStyles, setContentLanguages, UrlStateController } from "@waitron/ui";
@@ -127,7 +126,6 @@ export class CatalogueScreen extends LitElement {
   @state() private placementBusy = false;
   #editorGeneration = 0;
   #addOpener: HTMLElement | null = null;
-  #emptyAction = () => this.#renderAddProduct("empty-action");
   #linkedProduct: string | null = null;
   /** The parent the last nested category create named, to place a `category.not_found` about it. */
   #submittedParent: string | null = null;
@@ -167,8 +165,7 @@ export class CatalogueScreen extends LitElement {
     this,
     () => {
       if (this.#url.read("dashboard") !== "catalogue") return;
-      this.folderId = this.#url.read("folder");
-      this.view = this.#url.read("view") === "all" ? "all" : "folders";
+      this.categoryId = this.#url.read("category");
       this.#linkedProduct = this.#url.read("product");
       if (this.#linkedProduct === null) this.#closeEditor(false);
       else void this.#openLinkedProduct();
@@ -273,15 +270,13 @@ export class CatalogueScreen extends LitElement {
     return this.shadowRoot?.querySelector<ProductEditor>("dashboard-product-editor") ?? null;
   }
 
-  @state() private folderId: string | null = null;
-  @state() private view: "folders" | "all" = "folders";
+  @state() private categoryId: string | null = null;
   @state() private newCategoryId: string | null = null;
 
-  #renderAddProduct(slot?: "empty-action") {
+  #renderAddProduct() {
     const locales = this.contentLanguages?.languages ?? [];
     return html`<wt-button
       data-test="add-product"
-      slot=${ifDefined(slot)}
       ?disabled=${!locales.length || !this.units.length}
       @click=${(event: Event) => {
         this.#addOpener = event.currentTarget as HTMLElement;
@@ -291,18 +286,10 @@ export class CatalogueScreen extends LitElement {
     >`;
   }
 
-  protected override willUpdate(changed: PropertyValues): void {
-    // The product list draws this button, so a new function, which re-renders that list, is made
-    // only when what the button depends on changes rather than on every render of this screen.
-    if (changed.has("contentLanguages") || changed.has("units"))
-      this.#emptyAction = () => this.#renderAddProduct("empty-action");
-  }
-
   #openCreate(): void {
-    this.newCategoryId =
-      this.view === "folders" && this.categories.some(({ id }) => id === this.folderId)
-        ? this.folderId
-        : null;
+    this.newCategoryId = this.categories.some(({ id }) => id === this.categoryId)
+      ? this.categoryId
+      : null;
     this.#editorGeneration++;
     this.#resetEditorState();
     this.editorValue = null;
@@ -487,8 +474,7 @@ export class CatalogueScreen extends LitElement {
     else this.#closePlacement();
   }
 
-  /** The Add to menus step follows a create, so its closing dialog hands focus back to the Add
-   * product that started it; the empty table's one is gone once the product it made is listed. */
+  /** The Add to menus step follows a create, so its closing dialog hands focus back to the Add product that started it. */
   #refocusAdd(): void {
     if (this.#addOpener?.isConnected === false)
       this.renderRoot.querySelector<HTMLElement>(".actions [data-test=add-product]")?.focus();
@@ -635,18 +621,11 @@ export class CatalogueScreen extends LitElement {
         this.catalogues.length
           ? html`<dashboard-catalogue-browser
               .api=${this.api}
-              .folderId=${this.folderId}
-              .view=${this.view}
-              @open-folder=${(event: CustomEvent<{ folderId: string | null }>) => {
+              .categoryId=${this.categoryId}
+              @open-category=${(event: CustomEvent<{ categoryId: string | null }>) => {
                 event.stopPropagation();
-                this.folderId = event.detail.folderId;
-                this.view = "folders";
-                this.#url.write({ folder: this.folderId, view: null }, false);
-              }}
-              @view-change=${(event: CustomEvent<{ view: "folders" | "all" }>) => {
-                event.stopPropagation();
-                this.view = event.detail.view;
-                this.#url.write({ view: this.view === "all" ? "all" : null }, true);
+                this.categoryId = event.detail.categoryId;
+                this.#url.write({ category: this.categoryId }, true);
               }}
               .products=${this.products}
               .madeAt=${this.madeAt}
@@ -656,7 +635,6 @@ export class CatalogueScreen extends LitElement {
               .optionLists=${this.optionLists}
               .units=${this.units}
               .unitLanguage=${this.contentLanguages?.languages[0] ?? "en"}
-              .emptyAction=${this.#emptyAction}
               @edit-product=${(event: CustomEvent<{ productId: string }>) => {
                 event.stopPropagation();
                 void this.#openProduct(event.detail.productId);

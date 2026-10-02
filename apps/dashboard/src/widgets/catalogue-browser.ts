@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { chooseMaker, type RoutingModel } from "@waitron/venue-service/routing";
@@ -16,21 +16,15 @@ import type {
   Unit,
 } from "../api/client.js";
 import type { ModifierListChoice } from "./product-editor-model.js";
-import {
-  categoryAncestors,
-  categoryPath,
-  categoryRefusalErrors,
-  categoryWithDescendants,
-} from "./category-form.js";
+import { categoryPath, categoryRefusalErrors, categoryWithDescendants } from "./category-form.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { tableNoMatches } from "@waitron/dashboard-kit";
-import { currentLocale, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
-import { acceptsCatalogueDrop } from "./product-list.js";
+import { acceptsCatalogueDrop, type ProductList } from "./product-list.js";
 import "./category-form.js";
 
 @customElement("dashboard-catalogue-browser")
@@ -59,9 +53,6 @@ export class CatalogueBrowser extends LitElement {
         align-items: center;
         gap: var(--wt-space-2);
       }
-      .drop-target {
-        background: var(--wt-color-surface-lifted);
-      }
       fieldset {
         margin: var(--wt-space-4) 0;
         padding: var(--wt-space-3);
@@ -82,39 +73,9 @@ export class CatalogueBrowser extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
-      .views {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
-      }
       wt-input {
         flex: 1 1 calc(var(--wt-tap-min) * 7);
         min-width: min(100%, calc(var(--wt-tap-min) * 7));
-      }
-      .breadcrumb {
-        margin-block-end: var(--wt-space-3);
-      }
-      .breadcrumb ol {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-1);
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .breadcrumb li {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-        overflow-wrap: anywhere;
-      }
-      .breadcrumb [aria-current] {
-        font-weight: var(--wt-font-weight-bold);
-        padding-inline: var(--wt-space-2);
-      }
-      .sep {
-        color: var(--wt-color-text-muted);
       }
     `,
   ];
@@ -127,10 +88,8 @@ export class CatalogueBrowser extends LitElement {
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   @property({ attribute: false }) units: readonly Unit[] = [];
   @property() unitLanguage = "en";
-  @property({ attribute: false }) folderId: string | null = null;
-  @property() view: "folders" | "all" = "folders";
-  /** The screen's Add button, drawn under an empty list's sentence; not while a search is typed. */
-  @property({ attribute: false }) emptyAction?: () => TemplateResult;
+  /** The category the address names; the browser opens it, and every category above it, once. */
+  @property({ attribute: false }) categoryId: string | null = null;
   @state() private search = "";
   @state() private folderForm: { value: CategorySummary | null } | null = null;
   @state() private formBusy = false;
@@ -148,27 +107,9 @@ export class CatalogueBrowser extends LitElement {
   @state() private operationBusy = false;
   @state() private operationError = "";
   @state() private dropError = "";
-  #dragged: string[] = [];
-  #dropTarget: HTMLElement | null = null;
+  #revealed: string | null = null;
 
-  #clearDropTarget(): void {
-    this.#dropTarget?.classList.remove("drop-target");
-    this.#dropTarget = null;
-  }
-  #overCrumb(target: HTMLElement | null, folderId: string | null): void {
-    this.#clearDropTarget();
-    if (
-      !target ||
-      this.operationBusy ||
-      this.summaryLoading ||
-      !acceptsCatalogueDrop(this.#dragged, folderId, this.categories)
-    )
-      return;
-    this.#dropTarget = target;
-    this.#dropTarget.classList.add("drop-target");
-  }
   async #drop(keys: string[], folderId: string | null): Promise<void> {
-    this.#clearDropTarget();
     if (
       this.operationBusy ||
       this.summaryLoading ||
@@ -186,26 +127,55 @@ export class CatalogueBrowser extends LitElement {
       this.operationBusy = false;
     }
   }
-  #dropCrumb(folderId: string | null): void {
-    const keys = this.#dragged;
-    this.#clearDropTarget();
-    if (!acceptsCatalogueDrop(keys, folderId, this.categories)) return;
-    this.#dragged = [];
-    void this.#drop(keys, folderId);
+  override willUpdate(changed: PropertyValues): void {
+    if (changed.has("search")) this.selected = [];
   }
 
-  override willUpdate(changed: PropertyValues): void {
-    if (changed.has("folderId") || changed.has("view") || changed.has("search")) this.selected = [];
+  override updated(changed: PropertyValues): void {
+    if (!changed.has("categoryId") && !changed.has("categories")) return;
+    const id = this.categoryId;
+    if (
+      id === null ||
+      id === this.#revealed ||
+      !this.categories.some((category) => category.id === id)
+    )
+      return;
+    this.#revealed = id;
+    void this.#list()?.revealCategory(id);
+  }
+
+  #list(): ProductList | null {
+    return this.shadowRoot?.querySelector("dashboard-product-list") ?? null;
+  }
+
+  /** The address follows the category a person opens; closing it, or one above it, names its parent. */
+  #categoryToggled(event: CustomEvent<{ categoryId: string; open: boolean }>): void {
+    event.stopPropagation();
+    const { categoryId, open } = event.detail;
+    if (open) {
+      this.#revealed = categoryId;
+      this.#emit("open-category", { categoryId });
+      return;
+    }
+    if (
+      this.categoryId === null ||
+      !categoryWithDescendants(categoryId, this.categories).has(this.categoryId)
+    )
+      return;
+    const parentId = this.categories.find(({ id }) => id === categoryId)?.parentId ?? null;
+    this.#revealed = parentId;
+    this.#emit("open-category", { categoryId: parentId });
+  }
+
+  /** The category the address names, while it exists; New folder creates inside it. */
+  #addressed(): string | null {
+    return this.categories.some(({ id }) => id === this.categoryId) ? this.categoryId : null;
   }
   #selection(keys = this.selected): CatalogueSelection {
     return {
       productIds: keys.filter((key) => !key.startsWith("folder:")),
       categoryIds: keys.filter((key) => key.startsWith("folder:")).map((key) => key.slice(7)),
     };
-  }
-  #navigate(name: string, detail: unknown): void {
-    this.selected = [];
-    this.#emit(name, detail);
   }
   #openMove(): void {
     if (this.operationBusy || this.summaryLoading) return;
@@ -403,35 +373,6 @@ export class CatalogueBrowser extends LitElement {
     </wt-modal>`;
   }
 
-  get #current(): string | null {
-    return this.categories.some(({ id }) => id === this.folderId) ? this.folderId : null;
-  }
-  #visible() {
-    const query = this.search.trim().toLocaleLowerCase(currentLocale());
-    if (query) {
-      const hit = (value: string) => value.toLocaleLowerCase(currentLocale()).includes(query);
-      return {
-        folders: this.categories.filter((category) => hit(categoryPath(category, this.categories))),
-        products: this.products.filter((product) => {
-          const category = this.categories.find(({ id }) => id === product.primaryCategoryId);
-          return (
-            hit(product.name) ||
-            product.variants.some((variant) => hit(variant.name)) ||
-            (category && hit(categoryPath(category, this.categories)))
-          );
-        }),
-        showPath: true,
-      };
-    }
-    if (this.view === "all") return { folders: [], products: this.products, showPath: true };
-    return {
-      folders: this.categories.filter(({ parentId }) => parentId === this.#current),
-      products: this.products.filter(
-        ({ primaryCategoryId }) => primaryCategoryId === this.#current,
-      ),
-      showPath: false,
-    };
-  }
   #unroutedFolderIds(): string[] {
     if (!this.routing) return [];
     const rules = {
@@ -478,46 +419,11 @@ export class CatalogueBrowser extends LitElement {
       this.formBusy = false;
     }
   }
-  #breadcrumb() {
-    const current = this.categories.find(({ id }) => id === this.#current);
-    const crumbs = [
-      { id: null, name: t("folders.all_products") },
-      ...(current ? categoryAncestors(current, this.categories).reverse() : []),
-    ];
-    return html`<nav class="breadcrumb" aria-label=${t("folders.breadcrumb")}>
-      <ol>
-        ${crumbs.map(
-          (crumb, index) =>
-            html`<li data-crumb-drop=${crumb.id ?? ""}>
-              ${index === crumbs.length - 1 ? html`<span aria-current="location">${crumb.name}</span>` : html`<wt-button variant="ghost" data-test=${`crumb-${index}`} @click=${() => this.#navigate("open-folder", { folderId: crumb.id })}>${crumb.name}</wt-button><span class="sep" aria-hidden="true">›</span>`}
-            </li>`,
-        )}
-      </ol>
-    </nav>`;
-  }
   override render() {
-    const visible = this.#visible();
-    return html`${this.view === "folders" && !this.search.trim() ? this.#breadcrumb() : nothing}
-      <div class="toolbar">
-        ${!this.operation && (this.summaryLoading || this.operationBusy) ? html`<wt-spinner></wt-spinner>` : nothing}
+    return html`<div class="toolbar">
         ${
-          !this.selecting
-            ? html`<div class="views">
-                <wt-button
-                  data-test="view-folders"
-                  variant="secondary"
-                  aria-pressed=${String(this.view === "folders")}
-                  @click=${() => this.#navigate("view-change", { view: "folders" })}
-                  >${t("folders.view_folders")}</wt-button
-                >
-                <wt-button
-                  data-test="view-all"
-                  variant="secondary"
-                  aria-pressed=${String(this.view === "all")}
-                  @click=${() => this.#navigate("view-change", { view: "all" })}
-                  >${t("folders.view_all")}</wt-button
-                >
-              </div>`
+          !this.operation && (this.summaryLoading || this.operationBusy)
+            ? html`<wt-spinner></wt-spinner>`
             : nothing
         }
         <wt-input
@@ -572,27 +478,7 @@ export class CatalogueBrowser extends LitElement {
         }
       </div>
       <dashboard-product-list
-        @pointer-drag-move=${(event: CustomEvent<{ path: EventTarget[] }>) => {
-          event.stopPropagation();
-          const target =
-            event.detail.path.find(
-              (item): item is HTMLElement =>
-                item instanceof HTMLElement && item.matches("li[data-crumb-drop]"),
-            ) ?? null;
-          this.#overCrumb(target, target?.dataset.crumbDrop || null);
-        }}
-        @pointer-drag-end=${(event: CustomEvent<{ cancelled: boolean }>) => {
-          event.stopPropagation();
-          if (!event.detail.cancelled && this.#dropTarget)
-            this.#dropCrumb(this.#dropTarget.dataset.crumbDrop || null);
-          this.#clearDropTarget();
-        }}
-        @drag-items=${(event: CustomEvent<{ keys: string[] }>) => {
-          event.stopPropagation();
-          this.#dragged = event.detail.keys;
-          this.#clearDropTarget();
-        }}
-        @drop-items=${(event: CustomEvent<{ keys: string[]; folderId: string }>) => {
+        @drop-items=${(event: CustomEvent<{ keys: string[]; folderId: string | null }>) => {
           event.stopPropagation();
           void this.#drop(event.detail.keys, event.detail.folderId);
         }}
@@ -610,22 +496,16 @@ export class CatalogueBrowser extends LitElement {
           event.stopPropagation();
           void this.#openDelete([`folder:${event.detail.folderId}`]);
         }}
-        .folders=${visible.folders}
-        .products=${visible.products}
+        @category-toggle=${this.#categoryToggled}
+        .categories=${this.categories}
+        .products=${this.products}
+        .search=${this.search}
         .madeAt=${this.madeAt}
         .unroutedFolderIds=${this.#unroutedFolderIds()}
-        .showPath=${visible.showPath}
-        .categories=${this.categories}
         .extraLists=${this.extraLists}
         .optionLists=${this.optionLists}
         .units=${this.units}
         .unitLanguage=${this.unitLanguage}
-        .emptyAction=${this.search.trim() ? undefined : this.emptyAction}
-        .emptyMessage=${this.search.trim() ? tableNoMatches() : t("catalogue.no_products")}
-        @open-folder=${(event: CustomEvent<{ folderId: string }>) => {
-          event.stopPropagation();
-          this.#navigate("open-folder", event.detail);
-        }}
         @rename-folder=${(event: CustomEvent<{ folderId: string }>) => {
           event.stopPropagation();
           const value = this.categories.find(({ id }) => id === event.detail.folderId);
@@ -635,7 +515,7 @@ export class CatalogueBrowser extends LitElement {
       <dashboard-category-form
         .open=${this.folderForm !== null}
         .value=${this.folderForm?.value ?? null}
-        .defaultParentId=${this.#current}
+        .defaultParentId=${this.#addressed()}
         .categories=${this.categories}
         .busy=${this.formBusy}
         .fieldErrors=${this.formErrors}
@@ -645,7 +525,9 @@ export class CatalogueBrowser extends LitElement {
           if (!this.formBusy) this.folderForm = null;
         }}
       ></dashboard-category-form
-      >${this.#operationDialog()}${this.dropError ? html`<p class="error" role="alert">${this.dropError}</p>` : nothing}`;
+      >${this.#operationDialog()}${
+        this.dropError ? html`<p class="error" role="alert">${this.dropError}</p>` : nothing
+      }`;
   }
 }
 declare global {

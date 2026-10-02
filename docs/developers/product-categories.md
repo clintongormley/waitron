@@ -5,11 +5,14 @@ screen at `/manage/catalogue`. Each folder is a reporting category with one inte
 has no translations, image or colour. A product belongs to at most one folder; an unfiled product
 appears at the top level. Labels and the separate Categories screen are retired.
 
-Open Drinks to see its direct subfolders and products. Use the breadcrumb to go back up. Choose
-**All products** to see every product with its folder path, or search by product name, variant
-name or folder path across the catalogue. Status and ordering filters affect products; folders
-remain available for navigation. **New folder** creates a folder at the current level, and a
-folder's row menu offers Rename and Delete.
+The screen is one tree. Its first row, **All products**, holds every category and every product
+filed in none; each category opens in place, with its subcategories above its products. A click or
+Enter on a category's row opens or closes it, and the categories a person opens are remembered in
+that browser. Search finds products by name, variant name or category path and opens every category
+on the way to a match; clearing it restores what was open. Status and ordering filters affect
+products; categories stay. The address names the category last opened, as
+`/manage/catalogue/category/<id>`; closing that category, or one above it, names the closed
+category's parent.
 
 A folder has at most one parent, stored in `category_details.parent_id`. A save that would make
 it its own ancestor is refused with `category.parent_cycle`. A product's folder is
