@@ -760,6 +760,7 @@ export class AdjustmentReportScreen extends LitElement {
           row.of === "guests"
             ? t("adjustment_report.open_guests")
             : tf("adjustment_report.open_person", { name: row.name })}
+        .noMatchesMessage=${tableNoMatches()}
       ></wt-data-table>
     </section>`;
   }
