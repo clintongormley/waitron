@@ -895,7 +895,7 @@ of three mockups):**
 failed state keeps its retry, reset and reload actions. `provision` in
 `apps/setup/src/api/client.ts` reports no intermediate steps.
 
-**The language chooser moves to the top bar, in every app (A187, owner 2026-10-02) — DONE.**
+**The language chooser moves to the top bar, in every app (A187, owner 2026-10-02) — DONE (#1062).**
 `wt-language-chooser` sits at the trailing end of each app's top bar: the setup wizard's card
 header beside the logo, the dashboard's banner before the alerts bell and account menu (signed out
 too), and the till's bar before the operator's name. The till's sign-in and join screens and the
