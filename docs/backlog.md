@@ -655,11 +655,6 @@ its longer side, turned upright, stripped of its metadata and stored as WebP at 
   order a snapshot mixing pre- and post-edit wording; not measured. **Next action:** trace those
   reads — if every one goes through `withTransaction` (the write lock), the entry closes on that
   alone; if any does not, decide deliberately.
-- **A delete-then-insert of rows that REFERENCE another table can deadlock with a delete of the
-  referenced row, and `CLAUDE.md` §3's rule about that shape does not say so** (measured as
-  `40P01` on PostgreSQL; this engine runs one write transaction at a time and cannot produce it).
-  **Next action:** add the third condition to `CLAUDE.md` §3 with its receipt in
-  [conventions-data.md](developers/conventions-data.md), through the normal pull request flow.
 - **A two-transaction concurrency test that starts both sides in sequence is racing itself.**
   Nothing guards the shape; look for it in any new racing test.
 - **A trap not yet in `CLAUDE.md`: `pnpm --filter <pkg> test <file> -t "name"` silently drops the
@@ -2751,12 +2746,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   adjustments module's reasons screen sorts its two role dropdowns the same way with its own copy of
   the `Intl.Collator` options. Its client-side seniority check keeps a separate ordering; the roles
   design still needs to decide where custom roles belong in that check.
-- **`wt-select` in `packages/ui`** (owner decision 2026-09-12): every screen wrote its own raw
-  `<select>`, so a rule alone could not be guarded. Sorts by the label the person reads with
-  `Intl.Collator`; lists in a lifecycle order say so. _2026-10-02: after A178b–e the table's filters,
-  and every other native select in product code, are `wt-combobox`._ Still open: `wt-data-table`'s
-  locale-less `localeCompare`, and the `wt-select`/`wt-combobox` question under the `wt-combobox`
-  entry below.
+- **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
+  says so** (owner decision 2026-09-12). **`wt-select` is retired** (owner, 2026-10-02): `wt-combobox`
+  is the one dropdown, and after A178b–e every native select in product code is one. Still open:
+  `wt-combobox` does not sort its options, and `wt-data-table`'s `localeCompare` takes no locale.
 - **The till's schedule screen still has three defects the dashboard's My Schedule fixed** (C16,
   #751; found 2026-09-27 by reading `apps/till/src/screens/till-schedule-screen.ts`, not run): its
   failed-load catch (`:187`-`:193`) fills the lists with `[]`, so the sections say "none" beside the
@@ -2795,11 +2788,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 - **`wt-combobox`** (#351): a searchable dropdown in `packages/ui` — pick one option or several
   (`multiple`), and optionally offer to add what was typed when nothing matches. Left out on
   purpose, per its design: searching on the server, disabling single options, taking part in a
-  native `<form>`, and showing chosen options as chips (it shows a count instead). **Undecided:** how
-  it relates to the `wt-select` row above. The combobox does not sort its options, and neither its
-  design nor that row mentions the other, so decide whether `wt-select` becomes a non-searchable mode
-  of the combobox or stays a separate element before building either. **Next action:** the owner
-  answers the `wt-select` question.
+  native `<form>`, and showing chosen options as chips (it shows a count instead).
 - **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
   first). 50 per page with a server-enforced maximum; search and sort over the whole dataset; debounce,
   reset on filter change, ignore superseded responses, keep passive live refreshes.
@@ -4207,7 +4196,7 @@ approved.
   than a call chain.
 
 - **Comments naming a PostgreSQL SQLSTATE as today's behaviour — OPEN (split out of the T2 sweep,
-  2026-09-23).** `grep -rn "22P02\|22003\|23505\|23503\|42703\|42P01" apps/server/src`
+  2026-09-23). Owner, 2026-10-02: "Postgres comments should go" — queued as C127.** `grep -rn "22P02\|22003\|23505\|23503\|42703\|42P01" apps/server/src`
   returns lines across many files, some already converted and many not, and the unconverted ones read
   in the present tense — a route comment saying a malformed id "`22P02`s → 500" when the column is
   plain `text` and a malformed id now matches no row. **Why T2 left it:** correcting one honestly
@@ -4254,7 +4243,8 @@ approved.
   if there is none, say so in the comment and stop calling the case a guard test.
 - *Small:* `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
   output line is read by no consumer.
-- **The topic files still carry PostgreSQL history — OPEN, owner's call (2026-09-23, from #496).**
+- **The topic files still carry PostgreSQL history — OPEN (2026-09-23, from #496). Owner, 2026-10-02:
+  "Postgres comments should go" — queued as C127.**
   #496 took it out of `CLAUDE.md` and fixed every topic-file passage that contradicted the new
   `CLAUDE.md`, but did not sweep `docs/developers/conventions-data.md` or `testing-guide.md`. Most
   mentions are dated receipts, which is where history belongs. **Next action, if wanted:** read both
@@ -4791,7 +4781,7 @@ hook, which is bespoke code on a fiscal path and a decision rather than a bump.
 
 1. **Four order paths read `working_orders` by id alone, with nothing narrowing them to the caller's
    location.** The TENANT half is retired — there is no tenant column (`CLAUDE.md` §3) — but the
-   location half is open and is NOT covered by item 3, which names a different set of verbs. All
+   location half is open and is NOT covered by item 2, which names a different set of verbs. All
    four are in `apps/server/src/working-order.ts`: `handOver`, which `POST /api/orders/:id/collect`
    reaches through `handOverOrder`, selects and updates on `eq(workingOrders.id, id)`, using its
    `TillConfig` only to read a placed order's service mode, through `findOrderServiceContext`, which
@@ -4800,12 +4790,10 @@ hook, which is bespoke code on a fiscal path and a decision rather than a bump.
    till and node; `readLockedLines` takes no `cfg` at all, nor does `priceStoredOrder`, which calls
    it to rebuild a filed ticket, nor `priceStoredOrderForIssuance`, which the filing sites in
    `till-sale.ts` and `working-order.ts` call.
-2. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
-   trigger with no `sale.*` code. Give the trigger a SQLSTATE and translate it when reachable.
-3. **Location-scope the by-id verb family together** (`getHeldOrder`/`getPlacedCounterOrder`/
+2. **Location-scope the by-id verb family together** (`getHeldOrder`/`getPlacedCounterOrder`/
    `updateHeldOrder`/`abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands —
    together with the four paths in item 1, which are the same problem in the same file.
-4. **Nothing stops two queries being started at once on one transaction.** The rule and its receipt
+3. **Nothing stops two queries being started at once on one transaction.** The rule and its receipt
    are in `docs/developers/conventions-data.md` under "Multi-table writes share ONE transaction"; no
    test or lint rule enforces it. A guard could fail a test whenever a query is issued on a
    transaction while another is still running.
@@ -4922,9 +4910,7 @@ hook, which is bespoke code on a fiscal path and a decision rather than a bump.
   `Omit<AltaInput,"Encadenamiento">` plus a `buildDesglose`; needs a huella-invariance re-run across
   all three.
 - `mirror-bundle.ts`'s `r.series ?? []` branch is un-exercised; export `ID_SISTEMA_MAX_LENGTH`
-  when either package is next touched; `insertNodeSeriesTx`'s held-code check is SELECT-then-INSERT;
-  the SP-3d restore overlapping a live SIF registration deadlocks (`40P01`) — revisit locking before
-  the hook runs live.
+  when either package is next touched; `insertNodeSeriesTx`'s held-code check is SELECT-then-INSERT.
 
 **Product decisions to take before production:**
 
@@ -4957,10 +4943,8 @@ not get lost.
 
 ### The on-prem mirror
 
-The PostgreSQL logical-replication mechanism was deleted on 2026-09-19 (slice 1, task P8). Read this
-section as requirements the replacement must meet, not as work outstanding on code that exists. The
-membership, promotion and rejoin arc (#197–#272) and the two-node WireGuard fixture (#275) are still
-in the tree. What remains, largest first:
+Read this section as requirements slices 3–5 must meet, not as work outstanding on code that exists.
+The membership, promotion and rejoin arc (#197–#272) is still in the tree. What remains, largest first:
 
 - **Status, alarms and the operator surface for replication.** An operator needs to see whether the
   standby is keeping up, and to be alarmed when it is not.
@@ -5483,7 +5467,7 @@ partial scope; the detail for a live thread is in its track.
 
 | # | Sub-project | State | Remaining |
 | --- | --- | --- | --- |
-| 1 | Design system | `@waitron/ui` token layer + primitives (`--wt-*`); brand assets (#284); the till web-app manifest and its icons; the dashboard shell restyle — collapsible nav, account menu, profile modal (#333) | `wt-select` (A7) |
+| 1 | Design system | `@waitron/ui` token layer + primitives (`--wt-*`); brand assets (#284); the till web-app manifest and its icons; the dashboard shell restyle — collapsible nav, account menu, profile modal (#333) | sorting `wt-combobox` options (A7) |
 | 2 | Sales spine | Immutable hash-chained sales, per-node series, catalogue, the one-taxpayer model | — |
 | 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | F3 asesor/XSD confirmations; AEAT certificate install and renewal after setup (A9); cert distribution to a promoted node; a foreign business customer's identifier type (A1a) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329) | webhook `recordSale` hand-off; reconcile remediation UI; the handheld NFC/QR link (A6) |
@@ -5504,9 +5488,8 @@ partial scope; the detail for a live thread is in its track.
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
 | 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked); AI forecast deferred |
 
-**Cross-cutting infra:** replication (PostgreSQL logical replication, #280 — DELETED 2026-09-19;
-no node replicates to another until slices 3–5 rebuild failover) · membership, promotion and rejoin
-(the arc was completed on PostgreSQL, #197–#272; what the deletion took out of it is under
+**Cross-cutting infra:** replication (none: no node replicates to another until slices 3–5 rebuild failover) ·
+membership, promotion and rejoin (#197–#272; what is left is under
 *Replication, membership & failover — residuals*) · backup and restore (BR-1..BR-4 plus the wizard
 and guided Cloud snapshot restore for test venues) · the bucket stream and cold restore (SQLite
 slice 2) · SIF topology (`#33`, `node_id` re-key) · the module system (#212–#262; country packs
@@ -5674,8 +5657,7 @@ today); generalise archive entry routing off declared source ids when a second n
 
 ### Replication, membership & failover — residuals (Afterwards)
 
-**The PostgreSQL replication code (#280) is no longer in the tree (2026-09-19, slice 1, task P8);
-slices 3 and 4 rebuild failover on a different mechanism**
+**Slices 3 and 4 rebuild failover**
 ([the topology design](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md)). **Until
 slice 3 a venue has ONE node and no failover at all.** The "MVP for go-live" requirement of two boxes
 plus cloud failover is met by slices 3–5, not before, and it is accepted for exactly as long as
@@ -5769,7 +5751,7 @@ that slice 3 has to restore:
 - **Worker-lifecycle manager** (promote Slice 3) — in-process promotion without the restart; the
   node-role collapse decides.
 - **Power-loss durability and the selling gate.** `writeFileAtomic` does NOT fsync while the
-  point-of-no-return is a durable pg commit, so a power cut between the env write and the commit could
+  point-of-no-return is a database commit, so a power cut between the env write and the commit could
   reboot a box `mode=primary` still carrying the primary's series. Fsync the env write or resolve the
   series at boot — and selling must gate on REBOOT COMPLETION.
 - **Getting the AEAT certificate onto a promoted standby needs a new design.** The
@@ -5779,12 +5761,9 @@ that slice 3 has to restore:
   slice 3. Installing or renewing the certificate on the primary does not wait for this (A9).
 - **Still owed after the cert-distribution rebuild:** the restore-onto-cloud re-encrypt; a dashboard
   promote UI; an a11y test for the break-glass panel.
-- **Mirror fidelity** — `adoptVenue` nulled `locations.catalogue_id` and `tills.receipt_printer_id`
-  under the outbox adopt; re-check what the native initial COPY leaves.
 - **Carry-ins, accepted or to be stated in a threat model:** the primary burns an installation number
   per bundle fetch; provision and adopt are assumed mutually exclusive per box; `establishNodeIdentity`
-  must run once per node before any document is signed; the membership private key is decryptable by
-  the `app_user` pool, as `fiscal.aeat` is; on the first boot after returning, a node runs as its
+  must run once per node before any document is signed; on the first boot after returning, a node runs as its
   stale-held-doc primary until the reconciliation restarts it; restart-based fencing leaves a one-tick
   window for one more fiscal pass on the superseded chain.
 - **Split-brain** — the promoted node's side while partitioned spans selling, the fiscal chain,
