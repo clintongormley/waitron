@@ -2942,3 +2942,88 @@ test("lines each tree row's name up with the text beside it, with a toggle or wi
     ).toBeLessThanOrEqual(1);
   }
 });
+
+async function emptyTable(props: Partial<WtDataTable<Row>> = {}): Promise<WtDataTable<Row>> {
+  const el = (await mount(
+    `<wt-data-table aria-label="Users"
+      ><wt-button slot="empty-action" data-test="add">Add user</wt-button></wt-data-table
+    >`,
+  )) as WtDataTable<Row>;
+  Object.assign(el, {
+    rows: [],
+    columns,
+    rowKey: (row: Row) => row.id,
+    emptyMessage: "No users yet.",
+    ...props,
+  });
+  await el.updateComplete;
+  return el;
+}
+
+test("a table with no rows draws its sentence in a padded box with the table's border and corners", async () => {
+  const el = await emptyTable();
+  host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-radius-md", "7px");
+  host.style.setProperty("--wt-space-6", "31px");
+  host.style.setProperty("--wt-color-surface", "rgb(7, 8, 9)");
+  const box = el.shadowRoot!.querySelector(".empty")!;
+  expect(box.querySelector('[role="status"]')!.textContent).toContain("No users yet.");
+  const style = getComputedStyle(box);
+  expect(style.borderTopColor).toBe("rgb(1, 2, 3)");
+  expect(style.borderTopStyle).toBe("solid");
+  expect(style.borderTopWidth).toBe("1px");
+  expect(style.borderBottomLeftRadius).toBe("7px");
+  expect(style.paddingTop).toBe("31px");
+  expect(style.paddingLeft).toBe("31px");
+  expect(style.backgroundColor).toBe("rgb(7, 8, 9)");
+  const sentence = box.querySelector(".message")!.getBoundingClientRect();
+  const frame = box.getBoundingClientRect();
+  expect(sentence.left - frame.left).toBeCloseTo(frame.right - sentence.right, 0);
+});
+
+test("an empty table shows the button its screen puts in the empty-action slot, centred under the sentence", async () => {
+  const el = await emptyTable();
+  const button = el.querySelector<HTMLElement>("[data-test=add]")!;
+  expect(button.assignedSlot).not.toBeNull();
+  const clicked = vi.fn();
+  button.addEventListener("click", clicked);
+  await userEvent.click(button);
+  expect(clicked).toHaveBeenCalledOnce();
+  const box = el.shadowRoot!.querySelector(".empty")!.getBoundingClientRect();
+  const sentence = el.shadowRoot!.querySelector(".empty .message")!.getBoundingClientRect();
+  const action = button.getBoundingClientRect();
+  expect(action.width).toBeGreaterThan(0);
+  expect(action.top).toBeGreaterThanOrEqual(sentence.bottom);
+  expect(action.bottom).toBeLessThanOrEqual(box.bottom);
+  expect(action.left - box.left).toBeCloseTo(box.right - action.right, 0);
+});
+
+test("a table with rows does not show the empty-action button", async () => {
+  const el = await emptyTable({ rows });
+  const button = el.querySelector<HTMLElement>("[data-test=add]")!;
+  expect(button.assignedSlot).toBeNull();
+  expect(button.getBoundingClientRect().width).toBe(0);
+  expect(el.shadowRoot!.querySelector(".empty")).toBeNull();
+});
+
+test("when nothing matches, the same box holds the sentence and no empty-action button", async () => {
+  const el = await emptyTable({
+    rows,
+    searchable: true,
+    noMatchesMessage: "Nothing matches",
+    columns: [
+      { key: "name", label: "Name", cell: (r: Row) => r.name, searchValue: (r: Row) => r.name },
+    ],
+  });
+  host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  input.value = "zzz";
+  input.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  const box = el.shadowRoot!.querySelector(".empty")!;
+  expect(box.querySelector('[role="status"]')!.textContent).toContain("Nothing matches");
+  expect(getComputedStyle(box).borderTopColor).toBe("rgb(1, 2, 3)");
+  const button = el.querySelector<HTMLElement>("[data-test=add]")!;
+  expect(button.assignedSlot).toBeNull();
+  expect(button.getBoundingClientRect().width).toBe(0);
+});
