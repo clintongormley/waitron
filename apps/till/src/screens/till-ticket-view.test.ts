@@ -34,6 +34,7 @@ const result: TillSaleResult = {
   ],
   tender: { method: "cash", change: "0.60" },
   qr: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B12345678&numserie=A%2F1&fecha=05-08-2026&importe=9.40",
+  qrText: { caption: "QR tributario:", legend: "VERI*FACTU" },
 };
 
 const issuer: TicketIssuer = { venueName: "Deli Delicioso SL", nif: "B12345678" };
@@ -303,16 +304,26 @@ describe("till-ticket-view", () => {
     expect(getComputedStyle(caption!).textAlign).toBe("center");
   });
 
-  it("shows no «QR tributario:» caption when no QR is shown", async () => {
+  it("shows neither the caption nor the legend when no QR is shown, even if the words are given", async () => {
     const { el } = await mount({ qr: "" });
     expect(text(el)).not.toContain("QR tributario");
-    expect(text(el)).toContain("VERI*FACTU");
+    expect(text(el)).not.toContain("VERI*FACTU");
   });
 
-  it("prints the legend but no QR when the verification URL is empty", async () => {
-    const { el } = await mount({ qr: "" });
+  it("shows no QR and no legend when the regime minted no verification URL", async () => {
+    const { el } = await mount({ qr: "", qrText: undefined });
     expect(el.shadowRoot!.querySelector("svg")).toBeNull();
-    expect(text(el)).toContain("VERI*FACTU");
+    expect(el.shadowRoot!.querySelector(".legend")).toBeNull();
+    expect(text(el)).not.toContain("VERI*FACTU");
+  });
+
+  it("shows the caption and the legend the sale carries, not words of its own", async () => {
+    const { el } = await mount({ qrText: { caption: "CAP-X", legend: "LEG-Y" } });
+    const top = el.shadowRoot!.querySelector(".qr-block")!;
+    expect(top.querySelector(".qr-caption")!.textContent).toBe("CAP-X");
+    expect(top.querySelector(".legend")!.textContent).toBe("LEG-Y");
+    expect(text(el)).not.toContain("VERI*FACTU");
+    expect(text(el)).not.toContain("QR tributario");
   });
 
   // AEAT's QR specification v0.5.0 §3: the QR goes at the start of the invoice, before the
@@ -351,11 +362,17 @@ describe("till-ticket-view", () => {
       ]);
     });
 
-    it("prints a sale with no QR issuer-first, with the legend after the tender", async () => {
-      const { el } = await mount({ qr: "" }, { footerMessage: "Gracias" });
+    it("shows a QR the regime gives no words for on its own, before the issuer", async () => {
+      const { el } = await mount({ qrText: undefined });
+      expect(blocks(el).slice(0, 2)).toEqual(["qr-block[qr]", "issuer"]);
+    });
+
+    it("prints a sale with no QR issuer-first, and no legend anywhere: the footer follows the tender", async () => {
+      const { el } = await mount({ qr: "", qrText: undefined }, { footerMessage: "Gracias" });
       const all = blocks(el);
       expect(all[0]).toBe("issuer");
-      expect(all.slice(-3)).toEqual(["tender", "legend", "footer-message"]);
+      expect(all.slice(-2)).toEqual(["tender", "footer-message"]);
+      expect(el.shadowRoot!.querySelector(".legend")).toBeNull();
     });
   });
 
@@ -570,7 +587,7 @@ describe("till-ticket-view", () => {
     const following = (a: Element, b: Element) =>
       Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-    it("renders headerSubtitle under the venue name and footerMessage under the legend", async () => {
+    it("renders headerSubtitle under the venue name and footerMessage after the payment lines", async () => {
       const { el } = await mount(
         {},
         { headerSubtitle: "Calle Mayor 1, Madrid", footerMessage: "Gracias por su visita" },
@@ -583,9 +600,8 @@ describe("till-ticket-view", () => {
       const venue = el.shadowRoot!.querySelector(".issuer .venue")!;
       expect(el.shadowRoot!.querySelector(".issuer .header-subtitle")).not.toBeNull();
       expect(following(venue, sub!)).toBe(true);
-      // footer-message follows the legend in document order.
-      const legend = el.shadowRoot!.querySelector(".legend")!;
-      expect(following(legend, foot!)).toBe(true);
+      const tender = el.shadowRoot!.querySelector(".tender")!;
+      expect(following(tender, foot!)).toBe(true);
     });
 
     it("renders neither slot (no empty node) when the receipt config is absent", async () => {
@@ -635,13 +651,13 @@ describe("till-ticket-view", () => {
       expect(el.shadowRoot!.querySelector("svg")).not.toBeNull();
       expect(t).toContain("VERI*FACTU");
       // The trim renders ONLY in its two slots — the core order is untouched: the issuer header still
-      // precedes the meta block, and the legend still precedes the footer trim.
+      // precedes the meta block, and the footer trim follows the payment lines.
       const header = el.shadowRoot!.querySelector(".issuer")!;
       const meta = el.shadowRoot!.querySelector(".meta")!;
-      const legend = el.shadowRoot!.querySelector(".legend")!;
+      const tender = el.shadowRoot!.querySelector(".tender")!;
       const foot = el.shadowRoot!.querySelector(".footer-message")!;
       expect(following(header, meta)).toBe(true);
-      expect(following(legend, foot)).toBe(true);
+      expect(following(tender, foot)).toBe(true);
     });
   });
 });

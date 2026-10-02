@@ -14,9 +14,9 @@ import type { WtInput } from "@waitron/ui";
 
 /** A stand-in for the server's drawing: one text block a line, with the trim marked. */
 function fakePreview(config: ReceiptConfig): ReceiptPreview {
-  const lines = ["Deli Test SL"];
+  const lines = ["VERI*FACTU", "Deli Test SL"];
   const header = config.headerSubtitle === undefined ? null : lines.push(config.headerSubtitle) - 1;
-  lines.push("NIF: B12345678", "1  Café y tostada   5,50 €", "VERI*FACTU");
+  lines.push("NIF: B12345678", "1  Café y tostada   5,50 €");
   const footer = config.footerMessage === undefined ? null : lines.push(config.footerMessage) - 1;
   const blocks: PrintPreviewBlock[] = lines.map((text) => ({ kind: "text", text: `${text}\n` }));
   return {
@@ -174,10 +174,10 @@ describe("the Receipts page's live preview", () => {
   it("shows typed header text on the line under the venue's name before anything is saved", async () => {
     const api = stubApi();
     const { el } = await mount(api);
-    expect(paperLines(el).slice(0, 2)).toEqual(["Deli Test SL", "NIF: B12345678"]);
+    expect(paperLines(el).slice(1, 3)).toEqual(["Deli Test SL", "NIF: B12345678"]);
     edit(el, "headerSubtitle", "Abierto todos los días");
     await vi.waitFor(() =>
-      expect(paperLines(el).slice(0, 3)).toEqual([
+      expect(paperLines(el).slice(1, 4)).toEqual([
         "Deli Test SL",
         "Abierto todos los días",
         "NIF: B12345678",
@@ -323,7 +323,7 @@ describe("the Receipts page's live preview", () => {
     expect(q(el, "[data-test=preview-error]")!.textContent!.trim()).toBe(
       t("receipts.preview_error"),
     );
-    expect(paperLines(el)[0]).toBe("Deli Test SL");
+    expect(paperLines(el)[1]).toBe("Deli Test SL");
     expect(q<WtInput>(el, "wt-input[name=headerSubtitle]")!.error).toBe("");
     edit(el, "headerSubtitle", "ok");
     previewReceipt.mockImplementation(async (config: ReceiptConfig) => fakePreview(config));

@@ -42,12 +42,6 @@ function lineName(descriptions: Record<string, string>, locale: string): string 
   return descriptions[locale] ?? Object.values(descriptions)[0] ?? "";
 }
 
-/** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
-const LEGEND = "VERI*FACTU";
-
-/** AEAT's caption above the QR (its QR specification v0.5.0, §3). Spanish; never translated. */
-const QR_CAPTION = "QR tributario:";
-
 /** The SAME `×` (U+00D7) the printed receipt (`apps/server/src/receipt-ticket.ts`) and the basket use. */
 const QTY_BADGE = "×";
 
@@ -210,9 +204,8 @@ function renderTender(result: TillSaleResult, locale: string, labels: ReceiptLab
 /**
  * The filed ticket the customer receives after payment — a factura simplificada carrying the QR.
  *
- * This is a LEGAL document. It renders the non-removable core required by RD 1619/2012 art. 7.1 plus
- * the RRSIF/Veri*Factu QR + legend (Orden HAC/1177/2024 arts. 20–21), all settled on primary source in
- * `docs/compliance/verifactu-findings.md` §14:
+ * This is a LEGAL document. It renders the non-removable core required by RD 1619/2012 art. 7.1,
+ * settled on primary source in `docs/compliance/verifactu-findings.md` §14:
  *
  *  - issuer venue name + NIF (7.1.d);
  *  - número + serie (7.1.a) and fecha de expedición (7.1.b);
@@ -220,8 +213,8 @@ function renderTender(result: TillSaleResult, locale: string, labels: ReceiptLab
  *  - the tipo(s) impositivo(s) and the base imponible per rate (7.1.f) — per-item VAT is NOT required;
  *    the cuota per rate is shown as an allowed extra;
  *  - contraprestación total (7.1.g);
- *  - «QR tributario:» caption (AEAT QR specification v0.5.0 §3) + QR + VERI*FACTU legend,
- *    first when a QR is shown, after any practice warning.
+ *  - when the sale carries a verification link, its QR first, after any practice warning, with the
+ *    fiscal backend's caption above it and legend under it (`result.qrText`).
  *
  * It renders in the language the sale was filed in (`result.locale`, else {@link invoiceLocale}),
  * INDEPENDENT of the operator's UI language: an English-speaking operator in Barcelona still hands the
@@ -345,7 +338,7 @@ export class TillTicketView extends LitElement {
         margin-bottom: var(--wt-space-3);
       }
 
-      /* AEAT's QR specification v0.5.0 §3: the QR block opens the invoice, set apart from what follows. */
+      /* The QR block opens the invoice, set apart from what follows. */
       .qr-block {
         margin: 0 0 var(--wt-space-3);
         padding: 0 0 var(--wt-space-3);
@@ -461,13 +454,11 @@ export class TillTicketView extends LitElement {
             : nothing
         }
         ${
-          // A practice ticket is not a real invoice, so its warning stays above the QR block (the
-          // C115 entry in `docs/backlog.md`).
           svg
             ? html`<div class="qr-block">
-                <p class="qr-caption">${QR_CAPTION}</p>
+                ${r.qrText ? html`<p class="qr-caption">${r.qrText.caption}</p>` : nothing}
                 <div class="qr">${unsafeHTML(svg)}</div>
-                <p class="legend">${LEGEND}</p>
+                ${r.qrText ? html`<p class="legend">${r.qrText.legend}</p>` : nothing}
               </div>`
             : nothing
         }
@@ -561,10 +552,6 @@ export class TillTicketView extends LitElement {
 
         <div class="tender">${renderTender(r, format, labels)}</div>
 
-        ${
-          // With no QR to show, the legend prints after the tender (the C115 entry in `docs/backlog.md`).
-          svg ? nothing : html`<p class="legend">${LEGEND}</p>`
-        }
         ${
           this.receipt?.footerMessage
             ? html`<p class="footer-message">${this.receipt.footerMessage}</p>`
