@@ -113,6 +113,17 @@ async function seed() {
   return { ids, records, orderId, station };
 }
 
+function replayEmitted(emitted: { sql: string; params: unknown[] }, prefix = "") {
+  const parts = emitted.sql.split("?");
+  expect(parts).toHaveLength(emitted.params.length + 1);
+  const statement = sql.raw(`${prefix}${parts[0]}`);
+  for (let i = 0; i < emitted.params.length; i++) {
+    statement.append(sql`${emitted.params[i]}`);
+    statement.append(sql.raw(parts[i + 1]!));
+  }
+  return statement;
+}
+
 describe("dish kitchen records", () => {
   it("returns own work before extras and a dish served only by an extra", async () => {
     const { ids, records, orderId, station } = await seed();
@@ -187,6 +198,18 @@ describe("dish kitchen records", () => {
     );
   });
 
+  it("binds parameters returned by toSQL when replaying a statement", async () => {
+    await seed();
+    const emitted = db
+      .select({ bound: sql<number>`${42}` })
+      .from(ticketItems)
+      .limit(1)
+      .toSQL();
+    expect(
+      db.execute<Record<string, number>>(replayEmitted(emitted)).rows.map(Object.values),
+    ).toEqual([[42]]);
+  });
+
   it("plans all three emitted reads and updates through the parent index", async () => {
     const a = randomUUID(),
       b = randomUUID();
@@ -215,7 +238,7 @@ describe("dish kitchen records", () => {
           const emitted = query.toSQL();
           expect(emitted.sql).toBeTruthy();
           const result = await db.execute<{ detail: string }>(
-            sql`explain query plan ${query.getSQL()}`,
+            replayEmitted(emitted, "explain query plan "),
           );
           return result.rows.map((row) => row.detail);
         }),
