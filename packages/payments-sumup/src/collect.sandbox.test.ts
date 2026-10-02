@@ -29,7 +29,7 @@ const configured = Boolean(API_KEY && MERCHANT_CODE && READER_ID);
 const d = configured ? describe : describe.skip;
 
 d("SumUp live sandbox: collect against the paired Solo", () => {
-  const pg = useVenueDb({
+  const suite = useVenueDb({
     migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
     timeoutMs: 120_000,
   });
@@ -57,10 +57,10 @@ d("SumUp live sandbox: collect against the paired Solo", () => {
       },
     };
 
-    const s = await seedWorkingOrder(pg.db, freshNif());
+    const s = await seedWorkingOrder(suite.db, freshNif());
     const provider = new SumUpCloudProvider({
       client,
-      db: pg.db,
+      db: suite.db,
       nodeId: "11111111-1111-4111-8111-111111111111",
       incidents: () => Promise.resolve(true),
       // Default poll (120 attempts × 1s = 2 minutes) — the real window a tap needs, not the
@@ -95,7 +95,7 @@ d("SumUp live sandbox: collect against the paired Solo", () => {
 
     // (a2) The capture persists the card facts used by the separate payment slip. Keyed by OUR `payment_ref`
     // under the real `SUMUP_PROVIDER` ("sumup", the string the adapter itself writes).
-    const row = await pg.db.transaction((tx) =>
+    const row = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, {
         provider: SUMUP_PROVIDER,
         paymentRef: result.paymentRef,

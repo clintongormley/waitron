@@ -28,7 +28,7 @@ import type { SeededForSale } from "../test/seed.js";
 // Composes the real pieces as an app-level webhook endpoint would, with no `apps/` layer:
 // verify -> hasPaymentWithExternalRef -> one transaction { settleInitiated + recordSale + associate }.
 
-const pg = useVenueDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   setup: (db) => FakeFiscalBackend.install(db),
 });
@@ -88,8 +88,8 @@ async function orchestrate(
 ): Promise<string | null> {
   const event = provider.verifyAndParse(payload, "signature");
   if (event === null) return null;
-  if (!(await hasPaymentWithExternalRef(pg.db, event.provider, event.externalRef))) return null;
-  return withTransaction(pg.db, async (tx) => {
+  if (!(await hasPaymentWithExternalRef(suite.db, event.provider, event.externalRef))) return null;
+  return withTransaction(suite.db, async (tx) => {
     if (event.outcome === "expired") {
       await expireInitiated(tx, { provider: event.provider, externalRef: event.externalRef });
       return null;
@@ -112,9 +112,9 @@ async function orchestrate(
 
 describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end to end)", () => {
   it("settles the hosted tender, chains the sale, and associates the payment atomically", async () => {
-    const backend = new FakeFiscalBackend(pg.db);
-    const s = await seedForSale(pg.db, backend, freshNif());
-    const provider = new FakeAsyncProvider(pg.db);
+    const backend = new FakeFiscalBackend(suite.db);
+    const s = await seedForSale(suite.db, backend, freshNif());
+    const provider = new FakeAsyncProvider(suite.db);
 
     const minted = await provider.initiate({
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
@@ -131,7 +131,7 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
     const saleId = await orchestrate(provider, backend, s, payload);
     expect(saleId).not.toBeNull();
 
-    const row = await pg.db.transaction((tx) =>
+    const row = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, { provider: "fake", paymentRef: "pay-1" }),
     );
     expect(row?.state).toBe("captured");
@@ -139,9 +139,9 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
   });
 
   it("is idempotent under a redelivered webhook: the second delivery chains no second sale", async () => {
-    const backend = new FakeFiscalBackend(pg.db);
-    const s = await seedForSale(pg.db, backend, freshNif());
-    const provider = new FakeAsyncProvider(pg.db);
+    const backend = new FakeFiscalBackend(suite.db);
+    const s = await seedForSale(suite.db, backend, freshNif());
+    const provider = new FakeAsyncProvider(suite.db);
     const minted = await provider.initiate({
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
@@ -160,16 +160,16 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
     expect(second).toBeNull();
 
     // Exactly one sale: invoice_number 1, never a second.
-    const sales = await pg.db.execute<{ count: string }>(
+    const sales = await suite.db.execute<{ count: string }>(
       sql`select cast(count(*) as text) as count from sales`,
     );
     expect(sales.rows[0].count).toBe("1");
   });
 
   it("an expired hosted payment advances to failed, chains no sale, and leaves the working order open", async () => {
-    const backend = new FakeFiscalBackend(pg.db);
-    const s = await seedForSale(pg.db, backend, freshNif());
-    const provider = new FakeAsyncProvider(pg.db);
+    const backend = new FakeFiscalBackend(suite.db);
+    const s = await seedForSale(suite.db, backend, freshNif());
+    const provider = new FakeAsyncProvider(suite.db);
     const minted = await provider.initiate({
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
@@ -185,12 +185,12 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
     const saleId = await orchestrate(provider, backend, s, payload);
     expect(saleId).toBeNull();
 
-    const row = await pg.db.transaction((tx) =>
+    const row = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, { provider: "fake", paymentRef: "pay-1" }),
     );
     expect(row?.state).toBe("failed");
     expect(row?.saleId).toBeNull();
-    const sales = await pg.db.execute<{ count: string }>(
+    const sales = await suite.db.execute<{ count: string }>(
       sql`select cast(count(*) as text) as count from sales`,
     );
     expect(sales.rows[0].count).toBe("0");

@@ -18,14 +18,14 @@ import { FakeSettlementReport } from "./testing/fake-settlement-report.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
 import type { Seeded } from "../test/seed.js";
 
-const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 // Child before parent: deleting `payments` while a `payment_refunds` row still points at it is
 // refused with `FOREIGN KEY constraint failed`.
 beforeEach(async () => {
-  await pg.db.execute(sql`delete from incidents`);
-  await pg.db.execute(sql`delete from payment_refunds`);
-  await pg.db.execute(sql`delete from payments`);
+  await suite.db.execute(sql`delete from incidents`);
+  await suite.db.execute(sql`delete from payment_refunds`);
+  await suite.db.execute(sql`delete from payments`);
 });
 
 /** A raw `select` skips the json column's read mapping, so `incidents.params` arrives as TEXT. */
@@ -56,7 +56,7 @@ function recordingReverse() {
 
 function deps(report: FakeSettlementReport, reverse = recordingReverse().fn): ReconcileDeps {
   return {
-    db: pg.db,
+    db: suite.db,
     provider: PROVIDER,
     report,
     reverse,
@@ -67,7 +67,7 @@ function deps(report: FakeSettlementReport, reverse = recordingReverse().fn): Re
 }
 
 async function capture(seeded: Seeded, paymentRef: string, externalRef: string, amount = "10.00") {
-  await withTransaction(pg.db, (tx) =>
+  await withTransaction(suite.db, (tx) =>
     insertCapturedPayment(tx, {
       workingOrderId: seeded.workingOrderId,
       provider: PROVIDER,
@@ -83,7 +83,7 @@ async function capture(seeded: Seeded, paymentRef: string, externalRef: string, 
  * tender that a later `forward()` pass cleared. `settled` is auditable (so it reaches the orphan
  * class) but has no reversal path, which is exactly what the claim gate has to respect. */
 async function forwardedOffline(seeded: Seeded, paymentRef: string, externalRef: string) {
-  await withTransaction(pg.db, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await insertAcceptedOffline(tx, {
       workingOrderId: seeded.workingOrderId,
       provider: PROVIDER,
@@ -99,20 +99,20 @@ async function forwardedOffline(seeded: Seeded, paymentRef: string, externalRef:
 /** Seeds a second till, node and open working order at the same location as `seeded`. */
 async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
   const [till] = (
-    await pg.db.execute<{ location_id: string }>(
+    await suite.db.execute<{ location_id: string }>(
       sql`select location_id from tills where id = ${seeded.tillId}`,
     )
   ).rows;
   // A raw insert runs no drizzle `$defaultFn`, so `id` and the timestamps are supplied by hand.
   const stamp = new Date().toISOString();
-  const till2 = await pg.db.execute<{ id: string }>(sql`
+  const till2 = await suite.db.execute<{ id: string }>(sql`
     insert into tills (id, location_id, name, created_at)
     values (${randomUUID()}, ${till.location_id}, 'Till 2', ${stamp}) returning id`);
   const tillId = till2.rows[0].id;
-  const node2 = await pg.db.execute<{ id: string }>(sql`
+  const node2 = await suite.db.execute<{ id: string }>(sql`
     insert into nodes (id, location_id, name, created_at)
     values (${randomUUID()}, ${till.location_id}, 'Node 2', ${stamp}) returning id`);
-  const wo2 = await pg.db.execute<{ id: string }>(sql`
+  const wo2 = await suite.db.execute<{ id: string }>(sql`
     insert into working_orders (id, till_id, order_number, opened_at)
     values (${randomUUID()}, ${tillId}, 1, ${stamp}) returning id`);
   return {
@@ -123,7 +123,7 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
 }
 
 async function openIncidentCodes(): Promise<string[]> {
-  const { rows } = await pg.db.execute<{ code: string }>(
+  const { rows } = await suite.db.execute<{ code: string }>(
     sql`select code from incidents order by code`,
   );
   return rows.map((r) => r.code);
@@ -149,7 +149,7 @@ describe("reconcilePayments", () => {
   });
 
   it("reports a clean, fully-settled period with no incidents", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await associate(seeded, "p1");
     const result = await reconcilePayments(
@@ -163,7 +163,7 @@ describe("reconcilePayments", () => {
   });
 
   it("raises one aggregated unsettled incident covering every stale payment on the till", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await capture(seeded, "p2", "ext-2", "20.00");
     // Not associated with a sale, and the working order stays "open", so these two rows are
@@ -175,7 +175,7 @@ describe("reconcilePayments", () => {
       count: number;
       payments: { paymentRef: string; settledAt: string }[];
     }>(
-      await pg.db.execute<{ params: string }>(
+      await suite.db.execute<{ params: string }>(
         sql`select params from incidents where code = 'payment.reconcile_unsettled'`,
       ),
     );
@@ -189,7 +189,7 @@ describe("reconcilePayments", () => {
 
   it("aggregates per (till, class), not per class alone — two tills stay two incidents", async () => {
     // A single-till fixture cannot tell the `${tillId}|${klass}` grouping key from a bare `klass`.
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     const second = await seedSecondTill(seeded);
     await capture(seeded, "p1", "ext-1");
     await capture(second, "p2", "ext-2", "20.00");
@@ -199,7 +199,7 @@ describe("reconcilePayments", () => {
     // Both type arguments: once one is written TypeScript stops inferring `R`, which would leave
     // `till_id` off the row.
     const { rows } = parseParams<{ count: number }, { till_id: string; params: string }>(
-      await pg.db.execute<{ till_id: string; params: string }>(
+      await suite.db.execute<{ till_id: string; params: string }>(
         sql`select till_id, params from incidents where code = 'payment.reconcile_unsettled' order by till_id`,
       ),
     );
@@ -209,7 +209,7 @@ describe("reconcilePayments", () => {
   });
 
   it("does not re-count an incident a second sweep re-detects", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await associate(seeded, "p1");
     const d = deps(new FakeSettlementReport([]));
@@ -223,7 +223,7 @@ describe("reconcilePayments", () => {
   });
 
   it("classifies a differing settled amount as drift and raises its incident", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await associate(seeded, "p1");
     const result = await reconcilePayments(
@@ -238,7 +238,7 @@ describe("reconcilePayments", () => {
       count: number;
       payments: { paymentRef: string; captured: string; settled: string }[];
     }>(
-      await pg.db.execute<{ params: string }>(
+      await suite.db.execute<{ params: string }>(
         sql`select params from incidents where code = 'payment.reconcile_drift'`,
       ),
     );
@@ -249,8 +249,8 @@ describe("reconcilePayments", () => {
   });
 
   it("classifies an initiated row the report settled as lostSettlement", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
-    await withTransaction(pg.db, (tx) =>
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await withTransaction(suite.db, (tx) =>
       insertInitiated(tx, {
         workingOrderId: seeded.workingOrderId,
         provider: PROVIDER,
@@ -271,7 +271,7 @@ describe("reconcilePayments", () => {
       count: number;
       payments: { paymentRef: string; amount: string; workingOrderId: string }[];
     }>(
-      await pg.db.execute<{ params: string }>(
+      await suite.db.execute<{ params: string }>(
         sql`select params from incidents where code = 'payment.reconcile_lost_settlement'`,
       ),
     );
@@ -294,7 +294,7 @@ describe("reconcilePayments", () => {
   });
 
   it("raises an incident for a missingLocal the processor attributed via a hint", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     const result = await reconcilePayments(
       deps(
         new FakeSettlementReport([
@@ -319,7 +319,7 @@ describe("reconcilePayments", () => {
         paymentRef: string;
       }[];
     }>(
-      await pg.db.execute<{ params: string }>(
+      await suite.db.execute<{ params: string }>(
         sql`select params from incidents where code = 'payment.reconcile_missing_local'`,
       ),
     );
@@ -338,9 +338,9 @@ describe("reconcilePayments", () => {
 
   it("resolves each missingLocal candidate independently — one settlement's existing row must not clear another's", async () => {
     // The existence check is one batched query: a non-empty answer must not clear every candidate.
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     // ext-2's local row settled outside PERIOD; the existence check is unbounded by period.
-    await withTransaction(pg.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       insertCapturedPayment(tx, {
         workingOrderId: seeded.workingOrderId,
         provider: PROVIDER,
@@ -365,7 +365,7 @@ describe("reconcilePayments", () => {
   });
 
   it("does not call a settlement missingLocal when a local row exists outside the period", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     // A period that excludes the payment entirely, while the report still carries its settlement.
     const elsewhere = {
@@ -397,8 +397,8 @@ describe("reconcilePayments", () => {
 
 /** Associates a payment with a freshly-seeded sale, so it is not an orphan. */
 async function associate(seeded: Seeded, paymentRef: string): Promise<void> {
-  const saleId = await seedSale(pg.db, seeded);
-  await pg.db.execute(sql`
+  const saleId = await seedSale(suite.db, seeded);
+  await suite.db.execute(sql`
     update payments set sale_id = ${saleId}
     where payment_ref = ${paymentRef}`);
 }
@@ -406,7 +406,7 @@ async function associate(seeded: Seeded, paymentRef: string): Promise<void> {
 /** `settled` also needs `settled_at` (the biconditional CHECK `working_orders_settled_at_ck`);
  * `abandoned` must leave it null. */
 async function setOrderStatus(seeded: Seeded, status: "settled" | "abandoned"): Promise<void> {
-  await pg.db.execute(sql`
+  await suite.db.execute(sql`
     update working_orders
     set status = ${status}, settled_at = ${status === "settled" ? new Date().toISOString() : null}
     where id = ${seeded.workingOrderId}`);
@@ -414,7 +414,7 @@ async function setOrderStatus(seeded: Seeded, status: "settled" | "abandoned"): 
 
 describe("orphan remediation", () => {
   it("auto-reverses an orphan on an ABANDONED order and stamps the marker", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
     const reverse = recordingReverse();
@@ -426,7 +426,7 @@ describe("orphan remediation", () => {
     expect(result.orphan).toHaveLength(1);
     expect(result.remediated).toBe(1);
     expect(reverse.calls).toEqual(["p1"]);
-    const { rows } = await pg.db.execute<{ reconcile_remediated_at: string | null }>(
+    const { rows } = await suite.db.execute<{ reconcile_remediated_at: string | null }>(
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );
     expect(rows[0].reconcile_remediated_at).not.toBeNull();
@@ -440,7 +440,7 @@ describe("orphan remediation", () => {
         remediation: string;
       }[];
     }>(
-      await pg.db.execute<{ params: string }>(
+      await suite.db.execute<{ params: string }>(
         sql`select params from incidents where code = 'payment.reconcile_orphan'`,
       ),
     );
@@ -459,13 +459,13 @@ describe("orphan remediation", () => {
   });
 
   it("stamps the marker BEFORE calling reverse, never after", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
     // Reads the marker at call time: a stamp moved after the network call would read null here.
     const markersAtCallTime: (string | null)[] = [];
     const reverse = async (paymentRef: string): Promise<void> => {
-      const { rows } = await pg.db.execute<{ reconcile_remediated_at: string | null }>(
+      const { rows } = await suite.db.execute<{ reconcile_remediated_at: string | null }>(
         sql`select reconcile_remediated_at from payments where payment_ref = ${paymentRef}`,
       );
       markersAtCallTime.push(rows[0]?.reconcile_remediated_at ?? null);
@@ -476,7 +476,7 @@ describe("orphan remediation", () => {
   });
 
   it("does NOT reverse an orphan on a SETTLED order — it reports and raises only", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "settled");
     const reverse = recordingReverse();
@@ -489,14 +489,14 @@ describe("orphan remediation", () => {
     expect(result.remediated).toBe(0);
     expect(reverse.calls).toEqual([]);
     expect(await openIncidentCodes()).toEqual(["payment.reconcile_orphan"]);
-    const { rows } = await pg.db.execute<{ reconcile_remediated_at: string | null }>(
+    const { rows } = await suite.db.execute<{ reconcile_remediated_at: string | null }>(
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );
     expect(rows[0].reconcile_remediated_at).toBeNull();
     const incident = parseParams<{
       payments: { workingOrderStatus: string; remediation: string }[];
     }>(
-      await pg.db.execute<{ params: string }>(
+      await suite.db.execute<{ params: string }>(
         sql`select params from incidents where code = 'payment.reconcile_orphan'`,
       ),
     );
@@ -514,7 +514,7 @@ describe("orphan remediation", () => {
   it("does NOT claim a SETTLED-state orphan on an abandoned order — nothing can reverse it", async () => {
     // An offline-accepted tender forwarded to `settled`, on an abandoned order: the working-order
     // gate alone would claim it.
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await forwardedOffline(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
     const reverse = recordingReverse();
@@ -530,19 +530,19 @@ describe("orphan remediation", () => {
     expect(reverse.calls).toEqual([]);
     expect(await openIncidentCodes()).toEqual(["payment.reconcile_orphan"]);
     const incident = parseParams<{ payments: { remediation: string }[] }>(
-      await pg.db.execute<{ params: string }>(
+      await suite.db.execute<{ params: string }>(
         sql`select params from incidents where code = 'payment.reconcile_orphan'`,
       ),
     );
     expect(incident.rows[0].params.payments[0].remediation).toBe("stateNotCaptured");
-    const { rows } = await pg.db.execute<{ reconcile_remediated_at: string | null }>(
+    const { rows } = await suite.db.execute<{ reconcile_remediated_at: string | null }>(
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );
     expect(rows[0].reconcile_remediated_at).toBeNull();
   });
 
   it("reverses each orphan at most once, however many sweeps run", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
     const reverse = recordingReverse();
@@ -556,7 +556,7 @@ describe("orphan remediation", () => {
   });
 
   it("raises a remediation-failed incident when the processor refuses the reversal", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
     const refusing = async (): Promise<void> => {
@@ -581,7 +581,7 @@ describe("orphan remediation", () => {
       count: number;
       payments: { paymentRef: string; amount: string; reason: string }[];
     }>(
-      await pg.db.execute<{ params: string }>(
+      await suite.db.execute<{ params: string }>(
         sql`select params from incidents where code = 'payment.reconcile_remediation_failed'`,
       ),
     );
@@ -591,14 +591,14 @@ describe("orphan remediation", () => {
       payments: [{ paymentRef: "p1", amount: "10.00", reason: "payment.not_refundable" }],
     });
     // The marker is stamped even on failure, so this is not retried every sweep.
-    const marker = await pg.db.execute<{ reconcile_remediated_at: string | null }>(
+    const marker = await suite.db.execute<{ reconcile_remediated_at: string | null }>(
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );
     expect(marker.rows[0].reconcile_remediated_at).not.toBeNull();
   });
 
   it("reports a non-AppError reversal failure with an unknown reason and keeps sweeping", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await capture(seeded, "p2", "ext-2", "20.00");
     await setOrderStatus(seeded, "abandoned");
@@ -628,7 +628,7 @@ describe("orphan remediation", () => {
       count: number;
       payments: { paymentRef: string; amount: string; reason: string }[];
     }>(
-      await pg.db.execute<{ params: string }>(
+      await suite.db.execute<{ params: string }>(
         sql`select params from incidents where code = 'payment.reconcile_remediation_failed'`,
       ),
     );
@@ -640,7 +640,7 @@ describe("orphan remediation", () => {
   });
 
   it("aggregates two failed reversals on the same till into ONE incident, not two racing for one dedup slot", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await capture(seeded, "p2", "ext-2", "20.00");
     await setOrderStatus(seeded, "abandoned");
@@ -666,7 +666,7 @@ describe("orphan remediation", () => {
       count: number;
       payments: { paymentRef: string; amount: string; reason: string }[];
     }>(
-      await pg.db.execute<{ params: string }>(
+      await suite.db.execute<{ params: string }>(
         sql`select params from incidents where code = 'payment.reconcile_remediation_failed'`,
       ),
     );
@@ -684,7 +684,7 @@ describe("orphan remediation", () => {
   });
 
   it("records a failure on the RESULT even when its incident is swallowed by an open one", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
     const refusing = async (paymentRef: string): Promise<void> => {
@@ -713,7 +713,7 @@ describe("orphan remediation", () => {
   });
 
   it("reports alreadyClaimed for an orphan an earlier sweep already stamped", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
     const first = recordingReverse();
@@ -721,7 +721,7 @@ describe("orphan remediation", () => {
     expect(first.calls).toEqual(["p1"]);
 
     // While the first sweep's incident stays open, the second sweep's insert is deduplicated away.
-    await pg.db.execute(sql`
+    await suite.db.execute(sql`
       update incidents set acknowledged_at = ${new Date().toISOString()}
       where code = 'payment.reconcile_orphan'`);
 
@@ -735,7 +735,7 @@ describe("orphan remediation", () => {
     expect(result.remediated).toBe(0);
     expect(second.calls).toEqual([]);
     const incident = parseParams<{ payments: { remediation: string }[] }>(
-      await pg.db.execute<{ params: string }>(sql`
+      await suite.db.execute<{ params: string }>(sql`
       select params from incidents
       where code = 'payment.reconcile_orphan' and acknowledged_at is null`),
     );
@@ -745,7 +745,7 @@ describe("orphan remediation", () => {
 
   it("reports alreadyClaimed, not amountDrifted, for a row that is both already-claimed and drifting", async () => {
     // Pins the gate order: already-claimed precedes drift.
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
     const first = recordingReverse();
@@ -753,7 +753,7 @@ describe("orphan remediation", () => {
     expect(first.calls).toEqual(["p1"]);
 
     // Acknowledged for the same reason as in the test above.
-    await pg.db.execute(sql`
+    await suite.db.execute(sql`
       update incidents set acknowledged_at = ${new Date().toISOString()}
       where code = 'payment.reconcile_orphan'`);
 
@@ -769,7 +769,7 @@ describe("orphan remediation", () => {
     expect(result.remediated).toBe(0);
     expect(second.calls).toEqual([]);
     const incident = parseParams<{ payments: { remediation: string }[] }>(
-      await pg.db.execute<{ params: string }>(sql`
+      await suite.db.execute<{ params: string }>(sql`
       select params from incidents
       where code = 'payment.reconcile_orphan' and acknowledged_at is null`),
     );
@@ -778,7 +778,7 @@ describe("orphan remediation", () => {
   });
 
   it("does NOT claim an orphan whose amount has DRIFTED — it reports both instead", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
     const reverse = recordingReverse();
@@ -795,7 +795,7 @@ describe("orphan remediation", () => {
     expect(result.remediationFailures).toEqual([]);
     expect(reverse.calls).toEqual([]);
     // No marker, unlike a claimed-then-failed reversal: a later sweep can still claim this row.
-    const { rows } = await pg.db.execute<{ reconcile_remediated_at: string | null }>(
+    const { rows } = await suite.db.execute<{ reconcile_remediated_at: string | null }>(
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );
     expect(rows[0].reconcile_remediated_at).toBeNull();
@@ -804,7 +804,7 @@ describe("orphan remediation", () => {
       "payment.reconcile_orphan",
     ]);
     const orphan = parseParams<{ payments: { remediation: string }[] }>(
-      await pg.db.execute<{ params: string }>(
+      await suite.db.execute<{ params: string }>(
         sql`select params from incidents where code = 'payment.reconcile_orphan'`,
       ),
     );
@@ -812,7 +812,7 @@ describe("orphan remediation", () => {
     const drift = parseParams<{
       payments: { paymentRef: string; captured: string; settled: string }[];
     }>(
-      await pg.db.execute<{ params: string }>(
+      await suite.db.execute<{ params: string }>(
         sql`select params from incidents where code = 'payment.reconcile_drift'`,
       ),
     );
@@ -823,7 +823,7 @@ describe("orphan remediation", () => {
 
   it("still claims an orphan whose amount MATCHES — this is a gate, not a disabling", async () => {
     // Guards the test above: a drift set built over every classified row would stop all reversals.
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
     const reverse = recordingReverse();
@@ -841,7 +841,7 @@ describe("orphan remediation", () => {
     // An unmatched row produces no `drift` entry, so the orphan is reversed with no amount
     // comparison. A gate written as `entry.settled === null || driftedRefs.has(ref)` would pass
     // every other test in this file. The row is also `unsettled`: the classes are independent.
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-nomatch");
     await setOrderStatus(seeded, "abandoned");
     const reverse = recordingReverse();
@@ -856,7 +856,7 @@ describe("orphan remediation", () => {
     expect(result.drift).toEqual([]);
     expect(result.remediated).toBe(1);
     expect(reverse.calls).toEqual(["p1"]);
-    const { rows } = await pg.db.execute<{ reconcile_remediated_at: string | null }>(
+    const { rows } = await suite.db.execute<{ reconcile_remediated_at: string | null }>(
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );
     expect(rows[0].reconcile_remediated_at).not.toBeNull();
@@ -865,7 +865,7 @@ describe("orphan remediation", () => {
   it("reports the FIRST gate when a row trips several — not the drift one", async () => {
     // A settled-order orphan whose amount also drifted: the settled working order forbids the
     // reversal whatever the amount says.
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "settled");
     const reverse = recordingReverse();
@@ -877,7 +877,7 @@ describe("orphan remediation", () => {
     expect(result.drift).toHaveLength(1);
     expect(reverse.calls).toEqual([]);
     const orphan = parseParams<{ payments: { remediation: string }[] }>(
-      await pg.db.execute<{ params: string }>(
+      await suite.db.execute<{ params: string }>(
         sql`select params from incidents where code = 'payment.reconcile_orphan'`,
       ),
     );
@@ -886,7 +886,7 @@ describe("orphan remediation", () => {
 
   it("gates only the DRIFTING orphan, not every orphan in the sweep", async () => {
     // The single-payment tests above would all pass a gate of the shape `if (driftedRefs.size > 0)`.
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await capture(seeded, "p2", "ext-2", "20.00");
     await setOrderStatus(seeded, "abandoned");
@@ -907,7 +907,7 @@ describe("orphan remediation", () => {
     expect(reverse.calls).toEqual(["p1"]);
     // One aggregate orphan incident carrying both reasons.
     const orphan = parseParams<{ payments: { paymentRef: string; remediation: string }[] }>(
-      await pg.db.execute<{ params: string }>(
+      await suite.db.execute<{ params: string }>(
         sql`select params from incidents where code = 'payment.reconcile_orphan'`,
       ),
     );

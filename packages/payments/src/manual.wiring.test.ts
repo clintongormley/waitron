@@ -19,7 +19,7 @@ import { MANUAL_PROVIDER, recordManualCardPayment } from "./manual.js";
 import { freshNif, seedForSale } from "../test/seed.js";
 import type { SeededForSale } from "../test/seed.js";
 
-const pg = useVenueDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   setup: (db) => FakeFiscalBackend.install(db),
 });
@@ -71,10 +71,10 @@ function buildInput(s: SeededForSale, settledAt: Date): RecordSaleInput {
 
 describe("manual card tender -> recordSale -> associate (atomic, no provider)", () => {
   it("records the sale, the manual payment, and the association in one transaction", async () => {
-    const backend = new FakeFiscalBackend(pg.db);
-    const s = await seedForSale(pg.db, backend, freshNif());
+    const backend = new FakeFiscalBackend(suite.db);
+    const s = await seedForSale(suite.db, backend, freshNif());
 
-    const saleId = await pg.db.transaction(async (tx) => {
+    const saleId = await suite.db.transaction(async (tx) => {
       const recorded = await recordSale(tx, backend, buildInput(s, BASE));
       const manual = await recordManualCardPayment(tx, {
         workingOrderId: s.workingOrderId,
@@ -90,7 +90,7 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
       return recorded.saleId;
     });
 
-    const rows = await pg.db.execute<{
+    const rows = await suite.db.execute<{
       provider: string;
       state: string;
       sale_id: string | null;
@@ -109,12 +109,12 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
   });
 
   it("rolls the manual payment back with the sale — no orphan row", async () => {
-    const backend = new FakeFiscalBackend(pg.db);
-    const s = await seedForSale(pg.db, backend, freshNif());
+    const backend = new FakeFiscalBackend(suite.db);
+    const s = await seedForSale(suite.db, backend, freshNif());
     const boom = new Error("boom");
 
     await expect(
-      pg.db.transaction(async (tx) => {
+      suite.db.transaction(async (tx) => {
         await recordSale(tx, backend, buildInput(s, BASE));
         await recordManualCardPayment(tx, {
           workingOrderId: s.workingOrderId,
@@ -126,7 +126,7 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
       }),
     ).rejects.toBe(boom);
 
-    const rows = await pg.db.execute<{ count: string }>(
+    const rows = await suite.db.execute<{ count: string }>(
       sql`select cast(count(*) as text) as count from payments where working_order_id = ${s.workingOrderId}`,
     );
     expect(rows.rows[0].count).toBe("0");

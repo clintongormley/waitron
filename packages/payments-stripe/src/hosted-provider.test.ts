@@ -10,22 +10,22 @@ import type { Seeded } from "@waitron/payments/test/seed.js";
 import { FakeStripeHosted } from "./testing/fake-stripe-hosted.js";
 import { StripeHostedProvider } from "./hosted-provider.js";
 
-const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
   // Child before parent: `payment_refunds.payment_id` references `payments(id)` ON DELETE restrict.
-  await pg.db.execute(sql`delete from payment_refunds`);
-  await pg.db.execute(sql`delete from payments`);
+  await suite.db.execute(sql`delete from payment_refunds`);
+  await suite.db.execute(sql`delete from payments`);
 });
 
 async function seed(): Promise<Seeded> {
-  return seedWorkingOrder(pg.db, freshNif());
+  return seedWorkingOrder(suite.db, freshNif());
 }
 
 describe("StripeHostedProvider.initiate", () => {
   it("mints a session and writes an initiated row with external_ref = session id", async () => {
     const s = await seed();
-    const provider = new StripeHostedProvider({ client: new FakeStripeHosted(), db: pg.db });
+    const provider = new StripeHostedProvider({ client: new FakeStripeHosted(), db: suite.db });
     const paymentRef = randomUUID();
 
     const res = await provider.initiate({
@@ -38,7 +38,7 @@ describe("StripeHostedProvider.initiate", () => {
     expect(res.externalRef).toMatch(/^cs_/);
     expect(res.url).toContain(res.externalRef);
 
-    const row = await pg.db.transaction((tx) =>
+    const row = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, { provider: "stripe", paymentRef }),
     );
     expect(row?.state).toBe("initiated");
@@ -51,8 +51,8 @@ describe("StripeHostedProvider.initiate", () => {
     // These are what let a settlement with NO local row be attributed to a till and raise an
     // incident: an `initiate` that crashes after the network call leaves exactly that state.
     const client = new FakeStripeHosted();
-    const provider = new StripeHostedProvider({ client, db: pg.db });
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const provider = new StripeHostedProvider({ client, db: suite.db });
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await provider.initiate({
       workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
       amount: decimal("12.50"),
@@ -66,7 +66,7 @@ describe("StripeHostedProvider.initiate", () => {
 });
 
 describe("StripeHostedProvider.verifyAndParse", () => {
-  const provider = () => new StripeHostedProvider({ client: new FakeStripeHosted(), db: pg.db });
+  const provider = () => new StripeHostedProvider({ client: new FakeStripeHosted(), db: suite.db });
 
   it("maps checkout.session.completed to a settled InboundSettlement", () => {
     const payload = FakeStripeHosted.event({
@@ -100,7 +100,7 @@ describe("StripeHostedProvider.verifyAndParse", () => {
   it("throws on a bad signature (does not swallow it)", () => {
     const client = new FakeStripeHosted();
     client.failSignatureNext();
-    const p = new StripeHostedProvider({ client, db: pg.db });
+    const p = new StripeHostedProvider({ client, db: suite.db });
     const payload = FakeStripeHosted.event({
       sessionId: "cs_9",
       type: "checkout.session.completed",

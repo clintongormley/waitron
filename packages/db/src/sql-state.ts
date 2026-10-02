@@ -12,7 +12,7 @@
  *
  * **Each is a LIST, and that is not decoration.** SQLite splits a key collision — 2067 for a unique
  * index, 1555 for a primary key — and a caller asking "was this key already taken?" must get the
- * same answer for both. `constraint-target.sqlite.test.ts` drives a real refusal for each.
+ * same answer for both. `constraint-target.db.test.ts` drives a real refusal for each.
  *
  * A code is a value SQLite defines, so these are quotations rather than choices — never rename one.
  */
@@ -37,7 +37,7 @@ export const RESTRICT_VIOLATION: RefusalClass = [1811] as const;
  * **The same number as {@link RESTRICT_VIOLATION}**, so the result code cannot tell a deliberate
  * raise from a restricted delete. Only the MESSAGE separates them: a raise arrives with its own
  * text verbatim, a RESTRICT refusal with `FOREIGN KEY constraint failed` (both driven in
- * `constraint-target.sqlite.test.ts`). That is why `./constraint-target.ts`'s `triggerRaised` and
+ * `constraint-target.db.test.ts`). That is why `./constraint-target.ts`'s `triggerRaised` and
  * `restrictRefused` ask for the text as well; `isRefusal` reads the number alone.
  */
 export const TRIGGER_ABORT: RefusalClass = [1811] as const;

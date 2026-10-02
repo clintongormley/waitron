@@ -16,7 +16,7 @@ const FOLDER_A = join(import.meta.dirname, "..", "test", "migrations-a");
 
 /**
  * A coherence check on the package root, not a duplicate of the per-module unit tests.
- * `client.test.ts` and `migrate.sqlite.test.ts` already exercise the behaviour in depth; this file
+ * `client.test.ts` and `migrate.test.ts` already exercise the behaviour in depth; this file
  * only proves that `./index.js` re-exports the right things — that a consumer importing from the
  * package root, rather than reaching into `./client.js`/`./migrate.js` directly, gets a surface
  * that actually works end to end.

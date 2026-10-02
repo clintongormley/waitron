@@ -20,7 +20,7 @@ import type { SeededForSale } from "../test/seed.js";
 
 // Core's sale tables and this package's payment tables are both written here. `setup` installs the
 // fake fiscal backend's own tables, which `registerNode`/`recordSale` need.
-const pg = useVenueDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   setup: (db) => FakeFiscalBackend.install(db),
 });
@@ -83,9 +83,9 @@ function buildInput(
 
 describe("collect -> recordSale -> associate (the payment seam, end to end)", () => {
   it("settles a tender, chains the sale, and associates the payment atomically", async () => {
-    const backend = new FakeFiscalBackend(pg.db);
-    const s = await seedForSale(pg.db, backend, freshNif());
-    const provider = new FakePaymentProvider(pg.db);
+    const backend = new FakeFiscalBackend(suite.db);
+    const s = await seedForSale(suite.db, backend, freshNif());
+    const provider = new FakePaymentProvider(suite.db);
 
     const paid = await provider.collect({
       tillId: brandTillId(s.tillId),
@@ -97,7 +97,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
 
     // The sale and the associate-back happen in ONE transaction, so the linkage is atomic with the
     // sale it points at.
-    const saleId = await pg.db.transaction(async (tx) => {
+    const saleId = await suite.db.transaction(async (tx) => {
       const recorded = await recordSale(tx, backend, buildInput(s, paid));
       await associatePaymentWithSale(tx, {
         provider: "fake",
@@ -107,7 +107,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
       return recorded.saleId;
     });
 
-    const row = await pg.db.transaction((tx) =>
+    const row = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, { provider: "fake", paymentRef: paid.paymentRef }),
     );
     expect(row?.saleId).toBe(saleId);
@@ -115,9 +115,9 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
   });
 
   it("refuses the sale when the payment failed and leaves the tender unsettled", async () => {
-    const backend = new FakeFiscalBackend(pg.db);
-    const s = await seedForSale(pg.db, backend, freshNif());
-    const provider = new FakePaymentProvider(pg.db);
+    const backend = new FakeFiscalBackend(suite.db);
+    const s = await seedForSale(suite.db, backend, freshNif());
+    const provider = new FakePaymentProvider(suite.db);
     provider.failNextCollect();
 
     const paid = await provider.collect({
@@ -129,7 +129,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
     expect(paid.settledAt).toBeNull();
 
     await expect(
-      pg.db.transaction((tx) => recordSale(tx, backend, buildInput(s, paid))),
+      suite.db.transaction((tx) => recordSale(tx, backend, buildInput(s, paid))),
     ).rejects.toMatchObject({ code: "sale.tender_unsettled" });
   });
 });

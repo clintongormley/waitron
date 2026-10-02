@@ -7,20 +7,20 @@ import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { MANUAL_PROVIDER, recordManualCardPayment, recordManualRefund } from "./manual.js";
 import { freshNif, seedWorkingOrder } from "../test/seed.js";
 
-const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
   // Child before parent: a `payment_refunds` row points at its payment.
-  await pg.db.execute(sql`delete from payment_refunds`);
-  await pg.db.execute(sql`delete from payments`);
+  await suite.db.execute(sql`delete from payment_refunds`);
+  await suite.db.execute(sql`delete from payments`);
 });
 
 const SETTLED = new Date("2026-07-23T09:00:00Z");
 
 describe("recordManualCardPayment", () => {
   it("writes a captured row under the manual provider, with external_ref and a minted manual- ref", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
-    const result = await pg.db.transaction((tx) =>
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    const result = await suite.db.transaction((tx) =>
       recordManualCardPayment(tx, {
         workingOrderId: seeded.workingOrderId,
         amount: decimal("12.10"),
@@ -32,7 +32,7 @@ describe("recordManualCardPayment", () => {
     expect(result.paymentRef.startsWith("manual-")).toBe(true);
     expect(result.settledAt).toBe(SETTLED);
 
-    const rows = await pg.db.execute<{
+    const rows = await suite.db.execute<{
       provider: string;
       state: string;
       amount: number;
@@ -54,15 +54,15 @@ describe("recordManualCardPayment", () => {
   });
 
   it("leaves external_ref null when the operation number is not supplied", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
-    const result = await pg.db.transaction((tx) =>
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    const result = await suite.db.transaction((tx) =>
       recordManualCardPayment(tx, {
         workingOrderId: seeded.workingOrderId,
         amount: decimal("5.00"),
         settledAt: SETTLED,
       }),
     );
-    const rows = await pg.db.execute<{ external_ref: string | null }>(
+    const rows = await suite.db.execute<{ external_ref: string | null }>(
       sql`select external_ref from payments where payment_ref = ${result.paymentRef}`,
     );
     expect(rows.rows[0].external_ref).toBeNull();
@@ -71,16 +71,16 @@ describe("recordManualCardPayment", () => {
 
 describe("recordManualRefund", () => {
   it("records a refund under the manual provider and advances the payment to refunded", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     const authorizedBy = "11111111-1111-1111-1111-111111111111";
-    const paid = await pg.db.transaction((tx) =>
+    const paid = await suite.db.transaction((tx) =>
       recordManualCardPayment(tx, {
         workingOrderId: seeded.workingOrderId,
         amount: decimal("20.00"),
         settledAt: SETTLED,
       }),
     );
-    const refunded = await pg.db.transaction((tx) =>
+    const refunded = await suite.db.transaction((tx) =>
       recordManualRefund(tx, {
         paymentRef: paid.paymentRef,
         amount: decimal("20.00"),
@@ -89,7 +89,7 @@ describe("recordManualRefund", () => {
     );
     expect(refunded.state).toBe("refunded");
 
-    const rows = await pg.db.execute<{
+    const rows = await suite.db.execute<{
       provider: string;
       amount: number;
       authorized_by: string | null;
@@ -112,8 +112,8 @@ describe("recordManualRefund", () => {
 
 describe("recordManualCardPayment for a bill payment", () => {
   it("links the captured row to the bill payment it was given", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
-    const [bill] = await pg.db
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    const [bill] = await suite.db
       .insert(billPayments)
       .values({
         workingOrderId: seeded.workingOrderId,
@@ -128,7 +128,7 @@ describe("recordManualCardPayment for a bill payment", () => {
         tillId: seeded.tillId,
       })
       .returning({ id: billPayments.id });
-    const result = await pg.db.transaction((tx) =>
+    const result = await suite.db.transaction((tx) =>
       recordManualCardPayment(tx, {
         workingOrderId: seeded.workingOrderId,
         amount: decimal("12.10"),
@@ -136,7 +136,7 @@ describe("recordManualCardPayment for a bill payment", () => {
         billPaymentId: bill!.id,
       }),
     );
-    const rows = await pg.db.execute<{ bill_payment_id: string | null }>(
+    const rows = await suite.db.execute<{ bill_payment_id: string | null }>(
       sql`select bill_payment_id from payments where payment_ref = ${result.paymentRef}`,
     );
     expect(rows.rows[0]!.bill_payment_id).toBe(bill!.id);

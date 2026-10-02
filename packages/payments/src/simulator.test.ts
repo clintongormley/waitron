@@ -12,17 +12,17 @@ import { findPaymentByRef } from "./store.js";
 import { SimulatorPaymentProvider } from "./simulator.js";
 import { billPaymentOfRow, freshNif, seedBillPayment, seedWorkingOrder } from "../test/seed.js";
 
-const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
   // Child before parent: a `payment_refunds` row points at its payment.
-  await pg.db.execute(sql`delete from payment_refunds`);
-  await pg.db.execute(sql`delete from payments`);
+  await suite.db.execute(sql`delete from payment_refunds`);
+  await suite.db.execute(sql`delete from payments`);
 });
 
 async function setup() {
-  const seeded = await seedWorkingOrder(pg.db, freshNif());
-  const provider = new SimulatorPaymentProvider(pg.db);
+  const seeded = await seedWorkingOrder(suite.db, freshNif());
+  const provider = new SimulatorPaymentProvider(suite.db);
   const params = {
     tillId: brandTillId(seeded.tillId),
     workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
@@ -38,7 +38,7 @@ describe("SimulatorPaymentProvider", () => {
 
     expect(result).toMatchObject({ provider: "simulator", state: "captured", amount: "10.00" });
     expect(result.settledAt).not.toBeNull();
-    const row = await pg.db.transaction((tx) =>
+    const row = await suite.db.transaction((tx) =>
       findPaymentByRef(tx, "simulator", result.paymentRef),
     );
     expect(row).toMatchObject({ state: "captured", amount: "10.00" });
@@ -50,7 +50,7 @@ describe("SimulatorPaymentProvider", () => {
 
     expect(result).toMatchObject({ provider: "simulator", state: "failed", amount: "10.00" });
     expect(result.settledAt).toBeNull();
-    const row = await pg.db.transaction((tx) =>
+    const row = await suite.db.transaction((tx) =>
       findPaymentByRef(tx, "simulator", result.paymentRef),
     );
     expect(row?.state).toBe("failed");
@@ -123,11 +123,11 @@ describe("SimulatorPaymentProvider", () => {
     "names the bill payment it charges for on its %s row",
     async (simulationOutcome) => {
       const { seeded, provider, params } = await setup();
-      const billPaymentId = await seedBillPayment(pg.db, seeded);
+      const billPaymentId = await seedBillPayment(suite.db, seeded);
 
       const result = await provider.collect({ ...params, simulationOutcome, billPaymentId });
 
-      expect(await billPaymentOfRow(pg.db, result.paymentRef)).toBe(billPaymentId);
+      expect(await billPaymentOfRow(suite.db, result.paymentRef)).toBe(billPaymentId);
     },
   );
 
@@ -136,7 +136,7 @@ describe("SimulatorPaymentProvider", () => {
 
     const result = await provider.collect(params);
 
-    expect(await billPaymentOfRow(pg.db, result.paymentRef)).toBeNull();
+    expect(await billPaymentOfRow(suite.db, result.paymentRef)).toBeNull();
   });
 });
 
@@ -153,7 +153,7 @@ describe("SimulatorPaymentProvider refunds", () => {
 
     const answer = await provider.sendRefund(send("r-1"));
     const again = await provider.sendRefund(send("r-1"));
-    const refunds = await pg.db.execute<{ n: number }>(
+    const refunds = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from payment_refunds`,
     );
 

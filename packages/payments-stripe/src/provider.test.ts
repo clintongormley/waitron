@@ -35,7 +35,7 @@ import {
   seedWorkingOrder,
 } from "@waitron/payments/test/seed.js";
 
-const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -54,13 +54,13 @@ const UNUSED_CALLS: Pick<
 function providerFor(client: StripeClient): StripeTerminalProvider {
   return new StripeTerminalProvider({
     client,
-    db: pg.db,
+    db: suite.db,
     nodeId: TEST_NODE_ID,
     poll: { maxAttempts: 3, intervalMs: 0, sleep: noSleep },
   });
 }
 async function collectParams(nif = freshNif()) {
-  const s = await seedWorkingOrder(pg.db, nif);
+  const s = await seedWorkingOrder(suite.db, nif);
   return {
     tillId: brandTillId(s.tillId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
@@ -70,14 +70,14 @@ async function collectParams(nif = freshNif()) {
   };
 }
 function rowFor(paymentRef: string): Promise<PaymentRow | undefined> {
-  return pg.db.transaction((tx) => getPaymentByRef(tx, { provider: "stripe", paymentRef }));
+  return suite.db.transaction((tx) => getPaymentByRef(tx, { provider: "stripe", paymentRef }));
 }
 /** Written directly rather than through `collect`, which mints its own `pi_` id: the resolver tests
  * need to choose the stored `external_ref`. */
 async function capturedPayment(externalRef: string): Promise<{ paymentRef: string }> {
-  const seeded = await seedWorkingOrder(pg.db, freshNif());
+  const seeded = await seedWorkingOrder(suite.db, freshNif());
   const paymentRef = `ref-${externalRef}`;
-  await withTransaction(pg.db, (tx) =>
+  await withTransaction(suite.db, (tx) =>
     insertCapturedPayment(tx, {
       workingOrderId: seeded.workingOrderId,
       provider: "stripe",
@@ -236,7 +236,7 @@ describe("StripeTerminalProvider.collect", () => {
     const p = await collectParams();
     const provider = new StripeTerminalProvider({
       client,
-      db: pg.db,
+      db: suite.db,
       nodeId: TEST_NODE_ID,
       poll: { maxAttempts: 3, intervalMs: 0 },
     });
@@ -334,7 +334,7 @@ describe("reverseViaStripe's processor-ref resolution", () => {
     // The terminal and on-device providers supply no resolver.
     const client = new FakeStripe();
     const { paymentRef } = await capturedPayment("pi_plain");
-    await reverseViaStripe(pg.db, client, "stripe", paymentRef, "refund", undefined, {
+    await reverseViaStripe(suite.db, client, "stripe", paymentRef, "refund", undefined, {
       nodeId: TEST_NODE_ID,
     });
     expect(client.lastRefund?.paymentIntentId).toBe("pi_plain");
@@ -343,7 +343,7 @@ describe("reverseViaStripe's processor-ref resolution", () => {
   it("resolves the external ref through the supplied resolver before refunding", async () => {
     const client = new FakeStripe();
     const { paymentRef } = await capturedPayment("cs_hosted");
-    await reverseViaStripe(pg.db, client, "stripe", paymentRef, "refund", undefined, {
+    await reverseViaStripe(suite.db, client, "stripe", paymentRef, "refund", undefined, {
       nodeId: TEST_NODE_ID,
       resolveProcessorRef: (ref) => Promise.resolve(ref === "cs_hosted" ? "pi_resolved" : ref),
     });
@@ -361,14 +361,14 @@ describe("reverseViaStripe's processor-ref resolution", () => {
       resolved += 1;
       return Promise.resolve(ref);
     };
-    await reverseViaStripe(pg.db, client, "stripe", paymentRef, "void", undefined, {
+    await reverseViaStripe(suite.db, client, "stripe", paymentRef, "void", undefined, {
       nodeId: TEST_NODE_ID,
       resolveProcessorRef: resolve,
     });
     expect(resolved).toBe(1);
     // Second void: `assertReversible` throws on the now-`voided` row before any resolution happens.
     await expect(
-      reverseViaStripe(pg.db, client, "stripe", paymentRef, "void", undefined, {
+      reverseViaStripe(suite.db, client, "stripe", paymentRef, "void", undefined, {
         nodeId: TEST_NODE_ID,
         resolveProcessorRef: resolve,
       }),
@@ -381,7 +381,7 @@ describe("StripeTerminalProvider.forward", () => {
   it("forward is a no-op for the server-driven provider (no device-local offline queue)", async () => {
     const provider = new StripeTerminalProvider({
       client: new FakeStripe(),
-      db: pg.db,
+      db: suite.db,
       nodeId: TEST_NODE_ID,
     });
     expect(await provider.forward(new Date("2026-07-24T10:00:00Z"))).toEqual({
@@ -397,7 +397,7 @@ describe("StripeTerminalProvider.resolvePending", () => {
   it("resolvePending is all-zeros (drive resolves stalls to failed inside collect)", async () => {
     const provider = new StripeTerminalProvider({
       client: new FakeStripe(),
-      db: pg.db,
+      db: suite.db,
       nodeId: TEST_NODE_ID,
     });
     expect(await provider.resolvePending(new Date("2026-07-24T10:00:00Z"))).toEqual({
@@ -411,7 +411,7 @@ describe("StripeTerminalProvider.resolvePending", () => {
 
 /** The one `attempting` stripe row of a working order, as `collect` wrote it. */
 async function attemptingRowOf(workingOrderId: string): Promise<{ paymentRef: string }> {
-  const rows = await pg.db.transaction((tx) => listAttempting(tx, "stripe"));
+  const rows = await suite.db.transaction((tx) => listAttempting(tx, "stripe"));
   const mine = rows.filter((r) => r.workingOrderId === workingOrderId);
   expect(mine).toHaveLength(1);
   return mine[0]!;
@@ -476,7 +476,7 @@ describe("StripeTerminalProvider.collect stamps the PaymentIntent before the rea
     const client: StripeClient = {
       createPaymentIntent: async (params) => {
         const { paymentRef } = await attemptingRowOf(p.workingOrderId);
-        await pg.db.transaction((tx) => failAttempting(tx, { provider: "stripe", paymentRef }));
+        await suite.db.transaction((tx) => failAttempting(tx, { provider: "stripe", paymentRef }));
         return fake.createPaymentIntent(params);
       },
       processPaymentIntent: (readerId, piId) => fake.processPaymentIntent(readerId, piId),
@@ -499,7 +499,7 @@ describe("StripeTerminalProvider.collect stamps the PaymentIntent before the rea
   it("a stamp refused for any reason but a held PaymentIntent: collect rejects, the row stays attempting unstamped, and the reader never processes it", async () => {
     const fake = new FakeStripe();
     const p = await collectParams();
-    await pg.db.execute(
+    await suite.db.execute(
       sql`create trigger refuse_stamp before update of external_ref on payments
           when new.external_ref is not null
           begin select raise(abort, 'probe: stamp refused'); end`,
@@ -507,7 +507,7 @@ describe("StripeTerminalProvider.collect stamps the PaymentIntent before the rea
     try {
       await expect(providerFor(fake).collect(p)).rejects.toThrow(/probe: stamp refused/);
     } finally {
-      await pg.db.execute(sql`drop trigger refuse_stamp`);
+      await suite.db.execute(sql`drop trigger refuse_stamp`);
     }
     const { paymentRef } = await attemptingRowOf(p.workingOrderId);
     const row = await rowFor(paymentRef);
@@ -526,10 +526,10 @@ async function abandonedRow(
   externalRef: string | null,
   workingOrderId?: string,
 ): Promise<{ paymentRef: string; paymentId: string; workingOrderId: string }> {
-  const woId = workingOrderId ?? (await seedWorkingOrder(pg.db, freshNif())).workingOrderId;
+  const woId = workingOrderId ?? (await seedWorkingOrder(suite.db, freshNif())).workingOrderId;
   const paymentRef = `abandoned-${externalRef ?? "unstamped"}-${Math.random()}`;
   const key = { provider: "stripe", paymentRef };
-  return withTransaction(pg.db, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await insertAttempting(tx, { ...key, workingOrderId: woId, amount: decimal("12.10") });
     if (externalRef !== null) await stampAttemptingRef(tx, key, externalRef);
     const row = await getPaymentByRef(tx, key);
@@ -776,7 +776,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
   });
 
   function resolutionsOf(paymentId: string) {
-    return pg.db.execute<Record<string, unknown>>(
+    return suite.db.execute<Record<string, unknown>>(
       sql`select working_order_id, person_id, outcome, cancelled_at_provider, provider_status,
                  resolved_at
             from payment_resolutions where payment_id = ${paymentId}`,
@@ -842,7 +842,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
       const fake = new FakeStripe();
       if (ref !== null && intent !== undefined) fake.setIntent(ref, intent);
       const row = await abandonedRow(ref);
-      await pg.db.execute(
+      await suite.db.execute(
         sql`create trigger refuse_resolutions before insert on payment_resolutions
           begin select raise(abort, 'probe: resolution refused'); end`,
       );
@@ -851,7 +851,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
           providerFor(fake).resolveAbandonedAttempt(row.paymentRef, NOW, AUDIT),
         ).rejects.toThrow(/probe: resolution refused/);
       } finally {
-        await pg.db.execute(sql`drop trigger refuse_resolutions`);
+        await suite.db.execute(sql`drop trigger refuse_resolutions`);
       }
       const after = await rowFor(row.paymentRef);
       expect(after?.state).toBe("attempting");
@@ -881,7 +881,7 @@ describe("the Stripe idempotency key after a PaymentIntent was cancelled at Stri
     row: { paymentId: string; workingOrderId: string },
     cancelledAtProvider: boolean,
   ): Promise<void> {
-    await withTransaction(pg.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       recordResolution(tx, {
         paymentId: row.paymentId,
         workingOrderId: row.workingOrderId,
@@ -925,7 +925,7 @@ describe("the Stripe idempotency key after a PaymentIntent was cancelled at Stri
   it("another provider's cancelled payment on the same order leaves the Stripe key alone", async () => {
     const fake = new FakeStripe();
     const p = await collectParams();
-    const other = await withTransaction(pg.db, async (tx) => {
+    const other = await withTransaction(suite.db, async (tx) => {
       const key = { provider: "sumup", paymentRef: "sumup-ref" };
       await insertAttempting(tx, {
         ...key,
@@ -944,32 +944,32 @@ describe("StripeTerminalProvider.collect for a bill payment", () => {
   it("keys the PaymentIntent on the bill payment and names it on the row", async () => {
     const fake = new FakeStripe();
     const p = await collectParams();
-    const billPaymentId = await seedBillPayment(pg.db, p._seeded);
+    const billPaymentId = await seedBillPayment(suite.db, p._seeded);
 
     const result = await providerFor(fake).collect({ ...p, billPaymentId });
 
     expect(result.state).toBe("captured");
     expect(fake.lastCreateIntent?.idempotencyKey).toBe(`bp_${billPaymentId}`);
-    expect(await billPaymentOfRow(pg.db, result.paymentRef)).toBe(billPaymentId);
+    expect(await billPaymentOfRow(suite.db, result.paymentRef)).toBe(billPaymentId);
   });
 
   it("names the bill payment on a declined row", async () => {
     const fake = new FakeStripe();
     fake.declineNext();
     const p = await collectParams();
-    const billPaymentId = await seedBillPayment(pg.db, p._seeded);
+    const billPaymentId = await seedBillPayment(suite.db, p._seeded);
 
     const result = await providerFor(fake).collect({ ...p, billPaymentId });
 
     expect(result.state).toBe("failed");
-    expect(await billPaymentOfRow(pg.db, result.paymentRef)).toBe(billPaymentId);
+    expect(await billPaymentOfRow(suite.db, result.paymentRef)).toBe(billPaymentId);
   });
 
   it("keeps the bill payment's key when a PaymentIntent of the order was cancelled at Stripe", async () => {
     const fake = new FakeStripe();
     const p = await collectParams();
     const stuck = await abandonedRow("pi_cancelled", p.workingOrderId);
-    await withTransaction(pg.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       recordResolution(tx, {
         paymentId: stuck.paymentId,
         workingOrderId: p.workingOrderId,
@@ -980,7 +980,7 @@ describe("StripeTerminalProvider.collect for a bill payment", () => {
         resolvedAt: NOW,
       }),
     );
-    const billPaymentId = await seedBillPayment(pg.db, p._seeded);
+    const billPaymentId = await seedBillPayment(suite.db, p._seeded);
 
     await providerFor(fake).collect({ ...p, billPaymentId });
 
@@ -1022,7 +1022,7 @@ describe("StripeTerminalProvider.sendRefund and lookupRefund", () => {
       outcome: "completed",
       providerStatus: "succeeded",
     });
-    const refunds = await pg.db.execute<{ n: number }>(
+    const refunds = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from payment_refunds`,
     );
     expect(refunds.rows[0]!.n).toBe(0);

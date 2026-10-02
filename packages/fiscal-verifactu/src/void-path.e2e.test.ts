@@ -37,37 +37,37 @@ let voidSessionId: string;
  * the REAL chain head — none of which a fake backend's own bookkeeping tables can demonstrate.
  */
 // The full manifest: `recordVoid` authorizes through identity's persons and sessions.
-const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
+  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
   // Seed a manager (holds `sale.void`) and open its session.
-  const { rows } = await pg.db.execute<{ id: string }>(
+  const { rows } = await suite.db.execute<{ id: string }>(
     // `id` and `created_at` are supplied here: both come from a `$defaultFn` generator, which
     // drizzle runs for a builder insert and never for raw SQL.
     sql`insert into persons (id, created_at, display_name, pin_hash, role)
         values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
   );
-  const session = await withTransaction(pg.db, (tx) =>
+  const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { tillId, personId: rows[0]!.id, pin: "1234" }),
   );
   voidSessionId = session.id;
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
-    db: pg.db,
+    db: suite.db,
     resolveClient: staticResolver(fakeClient),
   });
 });
 
 async function sell() {
-  return withTransaction(pg.db, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
   });
 }
 
 async function voidSale(saleId: SaleId, reason = "staff error") {
-  return withTransaction(pg.db, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     return recordVoid(tx, backend, saleId, reason, { sessionId: voidSessionId });
   });
 }
@@ -77,7 +77,7 @@ async function voidSale(saleId: SaleId, reason = "staff error") {
  * because a voided sale has TWO rows sharing the same `sale_id`: the anulación's `saleId` is the
  * sale it annuls, not an identity of its own. */
 async function rawAnulacion(saleId: string): Promise<RegistroRow> {
-  const { rows } = await pg.db.execute<Record<string, unknown>>(
+  const { rows } = await suite.db.execute<Record<string, unknown>>(
     sql`select * from registros_facturacion where sale_id = ${saleId} and tipo_registro = 'anulacion'`,
   );
   const row = rows[0];
@@ -95,7 +95,7 @@ describe("alta and anulación interleave in one chain", () => {
     const b = await sell();
     await voidSale(a.saleId);
 
-    const rows = await pg.db
+    const rows = await suite.db
       .select()
       .from(registrosFacturacion)
       .orderBy(asc(registrosFacturacion.secuencia));
@@ -122,7 +122,7 @@ describe("alta and anulación interleave in one chain", () => {
   it("gives the anulación its own pending sidecar row", async () => {
     const a = await sell();
     await voidSale(a.saleId);
-    const rows = await pg.db.select().from(envios);
+    const rows = await suite.db.select().from(envios);
     // Two registros, two sidecars. An anulación that shared the alta's row would be submitted to
     // AEAT never or twice, both unrecoverable.
     expect(rows).toHaveLength(2);
@@ -133,7 +133,7 @@ describe("alta and anulación interleave in one chain", () => {
     const a = await sell();
     await voidSale(a.saleId);
     const row = await rawAnulacion(a.saleId);
-    const [head] = await pg.db.select().from(cadenas).where(eq(cadenas.nodeId, nodeId));
+    const [head] = await suite.db.select().from(cadenas).where(eq(cadenas.nodeId, nodeId));
     expect(head?.secuencia).toBe(2);
     expect(head?.ultimaHuella).toBe(row.huella);
   });

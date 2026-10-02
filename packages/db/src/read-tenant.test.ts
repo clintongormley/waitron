@@ -9,23 +9,23 @@ import { withTransaction } from "./tenancy.js";
 // separately by `schema/tenants.singleton.test.ts`.
 
 describe("readTenant", () => {
-  const pg = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("returns null on a database with no taxpayer row yet", async () => {
-    expect(await withTransaction(pg.db, readTenant)).toBeNull();
+    expect(await withTransaction(suite.db, readTenant)).toBeNull();
   });
 
   it("returns the taxpayer's country, tax id and legal name", async () => {
     // `created_at` is stated because this insert is RAW SQL: the column's default is a `$defaultFn`
     // drizzle evaluates in JavaScript, which a statement that does not go through drizzle's insert
     // builder never reaches.
-    await pg.db.execute(sql`
+    await suite.db.execute(sql`
       insert into tenants (id, country, tax_id, legal_name, created_at)
       values (1, 'ES', 'B12345678', 'Deli SL', ${new Date().toISOString()})`);
 
     // toEqual, not toMatchObject: a key left out of a matcher is never checked at all, and the
     // point of this helper is that every caller gets exactly these three fields.
-    expect(await withTransaction(pg.db, readTenant)).toEqual({
+    expect(await withTransaction(suite.db, readTenant)).toEqual({
       country: "ES",
       taxId: "B12345678",
       legalName: "Deli SL",

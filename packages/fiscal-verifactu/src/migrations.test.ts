@@ -18,14 +18,14 @@ import { FISCAL_MIGRATIONS } from "./migrations.js";
  * names a missing table. The product's order comes from `orderedMigrationSets`
  * (`packages/module/src/module.ts`).
  */
-const pg = useVenueDb({
+const suite = useVenueDb({
   migrations: [],
   setup: async (db) => {
     for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
   },
 });
 afterEach(async () => {
-  await pg.db.execute(sql`delete from envios`);
+  await suite.db.execute(sql`delete from envios`);
 });
 
 /** Every table in the database, drizzle's per-package journals included, SQLite's own excluded. */
@@ -53,7 +53,7 @@ async function nullabilityOf(db: Database, table: string): Promise<Record<string
 
 describe("migration composition across packages", () => {
   it("applies the full manifest (core → … → fiscal) against an empty database", async () => {
-    const db = pg.db;
+    const db = suite.db;
 
     const names = await tableNames(db);
     // Core's tables and the module's tables coexist, created by independent migration sets.
@@ -66,7 +66,7 @@ describe("migration composition across packages", () => {
   });
 
   it("keeps the two journals separate", async () => {
-    const db = pg.db;
+    const db = suite.db;
 
     // Separate journals: drizzle runs only migrations newer than a journal's latest `created_at`.
     expect(await journalCount(db, CORE_MIGRATIONS.migrationsTable)).toBeGreaterThan(0);
@@ -76,7 +76,7 @@ describe("migration composition across packages", () => {
   });
 
   it("is idempotent — running both sets twice is a no-op", async () => {
-    const db = pg.db;
+    const db = suite.db;
 
     const before = [
       await journalCount(db, CORE_MIGRATIONS.migrationsTable),
@@ -97,7 +97,7 @@ describe("migration composition across packages", () => {
 
 describe("envio_flujo migration", () => {
   it("creates envio_flujo as a one-row table with both value columns not-null", async () => {
-    const db = pg.db;
+    const db = suite.db;
     const byName = await nullabilityOf(db, "envio_flujo");
     expect(byName).toMatchObject({
       id: "NO",
@@ -122,7 +122,7 @@ describe("envio_flujo migration", () => {
 
 describe("acks migration", () => {
   it("creates acks with the required state and delivery columns", async () => {
-    const db = pg.db;
+    const db = suite.db;
     const by = await nullabilityOf(db, "acks");
     expect(by).toMatchObject({
       registro_id: "NO",
@@ -136,19 +136,19 @@ describe("acks migration", () => {
 
 describe("envios.reconciled_resubmit_at migration", () => {
   it("adds envios.reconciled_resubmit_at (nullable)", async () => {
-    const db = pg.db;
+    const db = suite.db;
     expect(await nullabilityOf(db, "envios")).toMatchObject({ reconciled_resubmit_at: "YES" });
   });
 });
 
 describe("registros_facturacion.entorno migration", () => {
   it("adds registros_facturacion.entorno (nullable)", async () => {
-    const db = pg.db;
+    const db = suite.db;
     expect(await nullabilityOf(db, "registros_facturacion")).toMatchObject({ entorno: "YES" });
   });
 
   it("rejects any value outside 'production'/'preproduction'", async () => {
-    const db = pg.db;
+    const db = suite.db;
     const error = await captureError(async () =>
       db.execute(sql`
         insert into registros_facturacion (id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,

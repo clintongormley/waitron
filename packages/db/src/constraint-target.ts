@@ -43,7 +43,7 @@ function* causeLayers(error: unknown): Generator<Record<string, unknown>> {
  * SQLite writes `<CLASS> constraint failed: <tail>`, and only these two put `table.column` in the
  * tail. A foreign key's message is `FOREIGN KEY constraint failed` and stops there; a CHECK's tail
  * is the constraint's NAME when it has one and its expression when it does not — neither is a key.
- * Each case is driven in `constraint-target.sqlite.test.ts`.
+ * Each case is driven in `constraint-target.db.test.ts`.
  */
 const KEY_PREFIXES = ["UNIQUE constraint failed: ", "NOT NULL constraint failed: "] as const;
 
@@ -92,7 +92,7 @@ export function refusalCode(error: unknown): number | undefined {
  * `undefined` means "this refusal named no key", never "no violation" — pair it with
  * {@link refusalCode}, or use {@link refusalOn}, when the class matters.
  *
- * **What each class gives you** (each driven in `constraint-target.sqlite.test.ts`):
+ * **What each class gives you** (each driven in `constraint-target.db.test.ts`):
  *  - unique index (2067) and primary key (1555) — the table written and the key that collided,
  *    unless the index is over an EXPRESSION, which reports the index's name instead;
  *  - not null (1299) — the table and the column;

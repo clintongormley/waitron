@@ -25,7 +25,7 @@ import type { SeededForSale } from "@waitron/payments/test/seed.js";
 import { FakeStripeHosted } from "./testing/fake-stripe-hosted.js";
 import { StripeHostedProvider } from "./hosted-provider.js";
 
-const pg = useVenueDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   setup: (db) => FakeFiscalBackend.install(db),
 });
@@ -81,9 +81,9 @@ function buildInput(
 
 describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associate (end to end)", () => {
   it("initiates, settles from the completed webhook, chains the sale, and associates the payment", async () => {
-    const backend = new FakeFiscalBackend(pg.db);
-    const s = await seedForSale(pg.db, backend, freshNif());
-    const provider = new StripeHostedProvider({ client: new FakeStripeHosted(), db: pg.db });
+    const backend = new FakeFiscalBackend(suite.db);
+    const s = await seedForSale(suite.db, backend, freshNif());
+    const provider = new StripeHostedProvider({ client: new FakeStripeHosted(), db: suite.db });
     const paymentRef = randomUUID();
 
     const init = await provider.initiate({
@@ -103,9 +103,11 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
 
     // The app-level orchestrator's part: confirm a local payment carries the session, then settle +
     // chain + associate in one transaction.
-    expect(await hasPaymentWithExternalRef(pg.db, event!.provider, event!.externalRef)).toBe(true);
+    expect(await hasPaymentWithExternalRef(suite.db, event!.provider, event!.externalRef)).toBe(
+      true,
+    );
 
-    const saleId = await withTransaction(pg.db, async (tx) => {
+    const saleId = await withTransaction(suite.db, async (tx) => {
       const row = await settleInitiated(tx, {
         provider: event!.provider,
         externalRef: event!.externalRef,
@@ -125,7 +127,7 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
       return recorded.saleId;
     });
 
-    const finalRow = await pg.db.transaction((tx) =>
+    const finalRow = await suite.db.transaction((tx) =>
       getPaymentByRef(tx, { provider: "stripe", paymentRef }),
     );
     expect(finalRow?.state).toBe("captured");

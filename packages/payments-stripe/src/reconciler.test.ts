@@ -9,13 +9,13 @@ import { StripeReconciler } from "./reconciler.js";
 import { FakeStripeReport } from "./testing/fake-stripe-report.js";
 import { FakeStripe } from "./testing/fake-stripe.js";
 
-const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
   // Child before parent: `payment_refunds.payment_id` references `payments(id)` ON DELETE restrict.
-  await pg.db.execute(sql`delete from payment_refunds`);
-  await pg.db.execute(sql`delete from payments`);
-  await pg.db.execute(sql`delete from incidents`);
+  await suite.db.execute(sql`delete from payment_refunds`);
+  await suite.db.execute(sql`delete from payments`);
+  await suite.db.execute(sql`delete from incidents`);
 });
 
 const NOW = new Date("2026-07-25T12:00:00Z");
@@ -27,7 +27,7 @@ function reconciler(
   refunder: FakeStripe = new FakeStripe(),
 ): StripeReconciler {
   return new StripeReconciler({
-    db: pg.db,
+    db: suite.db,
     nodeId: "11111111-1111-4111-8111-111111111111",
     resolveAccount: () => Promise.resolve({ report: client, refund: refunder }),
   });
@@ -40,7 +40,7 @@ async function abandonedOrphan(params: {
   paymentRef: string;
   externalRef: string;
 }): Promise<void> {
-  await withTransaction(pg.db, (tx) =>
+  await withTransaction(suite.db, (tx) =>
     insertCapturedPayment(tx, {
       workingOrderId: params.workingOrderId,
       provider: "stripe",
@@ -50,7 +50,7 @@ async function abandonedOrphan(params: {
       settledAt: OLD,
     }),
   );
-  await pg.db.execute(
+  await suite.db.execute(
     `update working_orders set status = 'abandoned' where id = '${params.workingOrderId}'`,
   );
 }
@@ -61,9 +61,9 @@ describe("StripeReconciler", () => {
   });
 
   it("matches a terminal row by its payment intent and reports no mismatch", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     // No sale, but the working order is still open, so this is not an orphan — the clean case.
-    await withTransaction(pg.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       insertCapturedPayment(tx, {
         workingOrderId: seeded.workingOrderId,
         provider: "stripe",
@@ -86,8 +86,8 @@ describe("StripeReconciler", () => {
   });
 
   it("matches a HOSTED row by its checkout session id, which the ledger never carries", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
-    await withTransaction(pg.db, (tx) =>
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await withTransaction(suite.db, (tx) =>
       insertInitiated(tx, {
         workingOrderId: seeded.workingOrderId,
         provider: "stripe",
@@ -126,7 +126,7 @@ describe("StripeReconciler", () => {
     const LAG_MS = 2 * 24 * 60 * 60 * 1000;
     const client = new FakeStripeReport();
     const r = new StripeReconciler({
-      db: pg.db,
+      db: suite.db,
       nodeId: "11111111-1111-4111-8111-111111111111",
       resolveAccount: () => Promise.resolve({ report: client, refund: new FakeStripe() }),
       settlementLagMs: LAG_MS,
@@ -147,7 +147,7 @@ describe("StripeReconciler", () => {
     let resolved = 0;
     const client = new FakeStripeReport();
     const r = new StripeReconciler({
-      db: pg.db,
+      db: suite.db,
       nodeId: "11111111-1111-4111-8111-111111111111",
       resolveAccount: () => {
         resolved += 1;
@@ -160,7 +160,7 @@ describe("StripeReconciler", () => {
   });
 
   it("auto-reverses a hosted orphan by resolving its session to a payment intent", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await abandonedOrphan({
       workingOrderId: seeded.workingOrderId,
       paymentRef: "ref-hosted-orphan",
@@ -184,7 +184,7 @@ describe("StripeReconciler", () => {
   it("auto-reverses a terminal orphan against its stored payment intent, unresolved", async () => {
     // This report carries no sessions at all, so a lookup would resolve to null and fail the
     // reversal.
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await abandonedOrphan({
       workingOrderId: seeded.workingOrderId,
       paymentRef: "ref-terminal-orphan",
@@ -209,7 +209,7 @@ describe("StripeReconciler", () => {
 
   it("fails one hosted orphan's reversal when its session was never paid, and never retries it", async () => {
     // The marker is stamped before the attempt, so a failed reversal is never attempted again.
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
     await abandonedOrphan({
       workingOrderId: seeded.workingOrderId,
       paymentRef: "ref-unpaid-orphan",

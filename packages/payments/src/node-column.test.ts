@@ -13,7 +13,7 @@ import { freshNif, seedWorkingOrder } from "../test/seed.js";
  * `pragma foreign_keys = on` (`packages/store/src/index.ts`); SQLite checks no foreign key without
  * it.
  */
-const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 const BOGUS_NODE = "99999999-9999-4999-8999-999999999999";
 
@@ -21,11 +21,11 @@ async function seedOrderWithNode(): Promise<{
   seeded: { workingOrderId: string };
   node: string;
 }> {
-  const seeded = await seedWorkingOrder(pg.db, freshNif());
-  const { rows } = await pg.db.execute<{ location_id: string }>(
+  const seeded = await seedWorkingOrder(suite.db, freshNif());
+  const { rows } = await suite.db.execute<{ location_id: string }>(
     sql`select location_id from tills where id = ${seeded.tillId}`,
   );
-  const node = await seedNode(pg.db, brandLocationId(rows[0]!.location_id));
+  const node = await seedNode(suite.db, brandLocationId(rows[0]!.location_id));
   return { seeded, node };
 }
 
@@ -39,7 +39,7 @@ async function insertPayment(
   nodeId: string | null,
 ): Promise<{ node_id: string | null }[]> {
   const stamp = new Date().toISOString();
-  const { rows } = await pg.db.execute<{ node_id: string | null }>(sql`
+  const { rows } = await suite.db.execute<{ node_id: string | null }>(sql`
     insert into payments (id, working_order_id, node_id, provider, payment_ref, amount, state, created_at, updated_at)
     values (${randomUUID()}, ${seeded.workingOrderId}, ${nodeId}, 'fake', ${paymentRef}, 1000, 'captured', ${stamp}, ${stamp})
     returning node_id`);
@@ -50,7 +50,7 @@ describe("payments.node_id (node rekey scaffolding, Task 3)", () => {
   it("is a nullable column — a payment inserts without it", async () => {
     const { seeded } = await seedOrderWithNode();
     // Compared whole, so a column that vanished returns `[]` and fails rather than matching nothing.
-    const meta = await pg.db.execute<{ notnull: number }>(
+    const meta = await suite.db.execute<{ notnull: number }>(
       sql`select "notnull" from pragma_table_info('payments') where name = 'node_id'`,
     );
     expect(meta.rows).toEqual([{ notnull: 0 }]);

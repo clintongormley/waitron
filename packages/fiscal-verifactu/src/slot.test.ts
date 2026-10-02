@@ -43,7 +43,7 @@ describe("FISCAL_SLOT", () => {
 });
 
 describe("FISCAL_SLOT.drain", () => {
-  const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
+  const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
   const ring = loadKeyRing({
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -51,7 +51,7 @@ describe("FISCAL_SLOT.drain", () => {
 
   it("returns the empty result when nothing is due", async () => {
     const result = await FISCAL_SLOT.drain(
-      { db: pg.db, ring, environment: "preproduction", skipRetryMs: 300_000 },
+      { db: suite.db, ring, environment: "preproduction", skipRetryMs: 300_000 },
       new Date(),
     );
     expect(result.batchesSent).toBe(0);
@@ -61,22 +61,22 @@ describe("FISCAL_SLOT.drain", () => {
 });
 
 describe("FISCAL_SLOT.resetInFlight", () => {
-  const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
+  const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
   it("returns a fresh enviando claim to pendiente", async () => {
     const now = new Date("2026-07-21T00:01:00Z");
-    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const [registroId] = seeded.registroIds;
-    await withTransaction(pg.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'enviando', enviado_en = ${new Date(now.getTime() - 1_000).toISOString()}
         where registro_id = ${registroId}
       `),
     );
 
-    await FISCAL_SLOT.resetInFlight({ db: pg.db }, now);
+    await FISCAL_SLOT.resetInFlight({ db: suite.db }, now);
 
-    const rows = await pg.db.execute<{ estado: string }>(
+    const rows = await suite.db.execute<{ estado: string }>(
       sql`select estado from envios where registro_id = ${registroId}`,
     );
     expect(rows.rows).toEqual([{ estado: "pendiente" }]);
@@ -86,7 +86,7 @@ describe("FISCAL_SLOT.resetInFlight", () => {
 // The seat WIRING only; the validator and seal have their own suite in provisioning-secret.test.ts.
 describe("FISCAL_SLOT.provisioningSecret", () => {
   const secret = FISCAL_SLOT.provisioningSecret!;
-  const pg = useVenueDb({
+  const suite = useVenueDb({
     migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
     timeoutMs: 120_000,
   });
@@ -118,9 +118,9 @@ describe("FISCAL_SLOT.provisioningSecret", () => {
   });
 
   it("seal writes the cert into the venue's fiscal.aeat vault", async () => {
-    await seedTenant(pg.db);
-    await secret.seal({ db: pg.db, ring }, goodCert);
-    const readBack = await withTransaction(pg.db, (tx) =>
+    await seedTenant(suite.db);
+    await secret.seal({ db: suite.db, ring }, goodCert);
+    const readBack = await withTransaction(suite.db, (tx) =>
       getCredential(tx, ring, { purpose: "fiscal.aeat" }),
     );
     expect(readBack.certKind).toBe("sello");

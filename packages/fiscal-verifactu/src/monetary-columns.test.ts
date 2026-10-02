@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
 
-const pg = useVenueDb({
+const suite = useVenueDb({
   migrations: TEST_MIGRATIONS,
   setup: seedTenantTillSif,
 });
@@ -25,7 +25,7 @@ describe("cuota_total / importe_total round-trip the huella's literal hash input
     const importeTotal = "999999999999.99";
     const cuotaTotal = "173913043.47";
 
-    const result = await pg.db.execute<{ cuota_total: string; importe_total: string }>(sql`
+    const result = await suite.db.execute<{ cuota_total: string; importe_total: string }>(sql`
       insert into registros_facturacion (
         id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
         id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,

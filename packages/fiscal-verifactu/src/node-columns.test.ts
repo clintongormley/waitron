@@ -17,7 +17,7 @@ import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
  * `node_id` is the NOT NULL chain key on `registro_sif`, `cadenas` and `registros_facturacion`.
  * Only `registros_facturacion`'s foreign key onto `nodes` is exercised here.
  */
-const pg = useVenueDb({
+const suite = useVenueDb({
   migrations: TEST_MIGRATIONS,
   setup: seedTenantTillSif,
   resetPerTest: false,
@@ -35,11 +35,11 @@ const BOGUS_NODE = "99999999-9999-4999-8999-999999999999";
 
 /** A fresh node under TENANT_A's seeded location. */
 async function seedNodeForA(): Promise<string> {
-  return seedNode(pg.db, brandLocationId(TENANT_A.locationId));
+  return seedNode(suite.db, brandLocationId(TENANT_A.locationId));
 }
 
 async function nodeIdNullability(table: string): Promise<{ is_nullable: string }[]> {
-  const { rows } = await pg.db.execute<{ notnull: number }>(
+  const { rows } = await suite.db.execute<{ notnull: number }>(
     sql`select "notnull" from pragma_table_info(${table}) where name = 'node_id'`,
   );
   return rows.map((row) => ({ is_nullable: row.notnull === 1 ? "NO" : "YES" }));
@@ -48,7 +48,7 @@ async function nodeIdNullability(table: string): Promise<{ is_nullable: string }
 describe("registro_sif.node_id", () => {
   it("is NOT NULL, populated on the seeded row with a real node", async () => {
     expect(await nodeIdNullability("registro_sif")).toEqual([{ is_nullable: "NO" }]);
-    const row = await pg.db.execute<{ node_id: string | null }>(
+    const row = await suite.db.execute<{ node_id: string | null }>(
       sql`select node_id from registro_sif where id = ${TENANT_A.sifId}`,
     );
     expect(row.rows[0]?.node_id).toBe(TENANT_A.nodeId);
@@ -60,7 +60,7 @@ describe("cadenas.node_id", () => {
     expect(await nodeIdNullability("cadenas")).toEqual([{ is_nullable: "NO" }]);
     const node = await seedNodeForA();
     // `actualizado_en` is stated because only the insert BUILDER fills its default.
-    const inserted = await pg.db.execute<{ node_id: string | null }>(
+    const inserted = await suite.db.execute<{ node_id: string | null }>(
       sql`insert into cadenas (node_id, actualizado_en)
            values (${node}, '2026-07-20T18:20:30.000Z') returning node_id`,
     );
@@ -69,7 +69,7 @@ describe("cadenas.node_id", () => {
 
   it("rejects a null node_id (the chain key is required)", async () => {
     const error = await captureError(async () =>
-      pg.db.execute(
+      suite.db.execute(
         sql`insert into cadenas (node_id, actualizado_en) values (null, '2026-07-20T18:20:30.000Z')`,
       ),
     );
@@ -82,7 +82,7 @@ describe("registros_facturacion.node_id", () => {
    * refused NOT NULL on the WRONG column, so the null-node_id case would pass for the wrong reason. */
   async function insertRegistro(nodeId: string | null): Promise<{ node_id: string | null }[]> {
     const secuencia = nextSecuencia();
-    const { rows } = await pg.db.execute<{ node_id: string | null }>(sql`
+    const { rows } = await suite.db.execute<{ node_id: string | null }>(sql`
       insert into registros_facturacion (
         id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
         id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,

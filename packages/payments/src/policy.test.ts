@@ -33,19 +33,19 @@ describe("resolveOfflineDecision (the pure gate)", () => {
 });
 
 describe("getPaymentPolicy", () => {
-  const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
   beforeEach(async () => {
-    await pg.db.execute(sql`delete from payment_policy`);
+    await suite.db.execute(sql`delete from payment_policy`);
   });
 
   it("returns undefined when no policy row exists", async () => {
-    const row = await pg.db.transaction((tx) => getPaymentPolicy(tx));
+    const row = await suite.db.transaction((tx) => getPaymentPolicy(tx));
     expect(row).toBeUndefined();
   });
 
   it("reads back the venue's policy row", async () => {
-    await seedPaymentPolicy(pg.db, "accept_offline", "75.00");
-    const row = await pg.db.transaction((tx) => getPaymentPolicy(tx));
+    await seedPaymentPolicy(suite.db, "accept_offline", "75.00");
+    const row = await suite.db.transaction((tx) => getPaymentPolicy(tx));
     expect(row).toEqual({ offlineMode: "accept_offline", offlineAmountCap: "75.00" });
   });
 });
