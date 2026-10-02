@@ -1481,7 +1481,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   languages; a table with no Add action keeps just the sentence.
 
 **Form fields in the "filled" style, with the label inside the field (A178, owner 2026-10-01) —
-IN PROGRESS: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, A178c (the dashboard widgets) as #1015, A178d (setup and the till) as #1016, and A178e (the module screens, the table filter and the floor-plan zone name) as #TBD; A178f to come.** The owner, showing Home Assistant's device dialog, likes:
+IN PROGRESS: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, A178c (the dashboard widgets) as #1015, A178d (setup and the till) as #1016, and A178e (the module screens, the table filter and the floor-plan zone name) as #1017; A178f to come.** The owner, showing Home Assistant's device dialog, likes:
 
 1. the field is marked out by a background fill with a subtle line along its bottom, not a border
    all round;
@@ -1677,7 +1677,7 @@ a product with no `unit` (`productUnit`, `apps/till/src/widgets/product-name.ts`
 English only, so a Spanish till drawing such a product shows the unit's id — seen only with test
 products; whether the server ever sends a product without a unit was not checked.
 
-**A178e — DONE (#TBD).** Every field spec §9.5 lists for the module screens
+**A178e — DONE (#1017).** Every field spec §9.5 lists for the module screens
 (`packages/*/src/dashboard/`) and §9.6 lists inside the primitives is drawn by a primitive: the
 native selects are `wt-combobox` (`search="auto"`), the adjustment report's two days are date
 `wt-input`s, and the venue operations screen's names and times are `wt-input` and its display
