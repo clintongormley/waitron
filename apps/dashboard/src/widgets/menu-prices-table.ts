@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import { baseStyles, focusFirstInvalid, submitOnEnter, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -1032,6 +1033,7 @@ export class MenuPricesTable extends LitElement {
 
   override render() {
     return html`${this.#summary()}<wt-data-table
+        noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}
         aria-label=${t("menu_prices.label").replace("{menu}", this.menuName)}
@@ -1051,7 +1053,6 @@ export class MenuPricesTable extends LitElement {
         loadingMessage=${t("menu_prices.loading")}
         errorMessage=${this.failed ? t("menu_prices.error") : ""}
         emptyMessage=${t("menu_prices.empty")}
-        noMatchesMessage=${t("menu_prices.no_matches")}
       ></wt-data-table>
       ${this.#renderModal()}`;
   }

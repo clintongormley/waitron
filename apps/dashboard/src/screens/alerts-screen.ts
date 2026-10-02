@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import { UrlStateController, baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -244,6 +245,7 @@ export class AlertsScreen extends LitElement {
       >
         <div slot="open">
           <wt-data-table
+            noMatchesMessage=${tableNoMatches()}
             data-test="open-alerts-table"
             viewKey="waitron.alerts.open.table"
             columnsLabel=${t("table.columns")}
@@ -258,6 +260,7 @@ export class AlertsScreen extends LitElement {
         </div>
         <div slot="handled">
           <wt-data-table
+            noMatchesMessage=${tableNoMatches()}
             data-test="handled-alerts-table"
             viewKey="waitron.alerts.handled.table"
             columnsLabel=${t("table.columns")}

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { LiveData } from "@waitron/dashboard-kit";
+import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import {
   chooseOption,
@@ -1155,7 +1155,7 @@ it("lists only products in an options list's Used by table, with no Type column"
     { id: "p2", name: "Entrecot", type: "product" },
   ]);
   expect(usage.searchLabel).toBe(t("modifiers.search_products"));
-  expect(usage.noMatchesMessage).toBe(t("modifiers.products_no_matches"));
+  expect(usage.noMatchesMessage).toBe(tableNoMatches());
   expect(usage.emptyMessage).toBe(t("modifiers.no_product_usage"));
   expect(usage.getAttribute("aria-label")).toBe(heading);
 });
@@ -1226,7 +1226,7 @@ it("previews the products a deleted extras list would touch, and NO order count"
   const deleteProducts = table(el, "list-delete-products");
   await vi.waitFor(() => expect(deleteProducts.shadowRoot.textContent).toContain("Café"));
   expect(deleteProducts.searchLabel).toBe(t("modifiers.search_products"));
-  expect(deleteProducts.noMatchesMessage).toBe(t("modifiers.products_no_matches"));
+  expect(deleteProducts.noMatchesMessage).toBe(tableNoMatches());
   expect(dialog.querySelector('[data-test="orders-block"]')).toBeNull();
   expect(confirmDelete(el).disabled).toBe(false);
 });
@@ -1491,6 +1491,42 @@ it("finds a detail-modal product row by its name", async () => {
   const byName = await search(usage, "Hamburguesa");
   expect(byName).toContain("Hamburguesa");
   expect(byName).not.toContain("Menú del día");
+});
+
+/** Types into a table's search box and returns the sentence it shows once no row is left. */
+async function searchToNothing(found: Table): Promise<string> {
+  await found.updateComplete;
+  const box = found.shadowRoot.querySelector<HTMLInputElement>('input[name="search"]')!;
+  box.value = "zzz-nothing";
+  box.dispatchEvent(new Event("input", { bubbles: true }));
+  await found.updateComplete;
+  expect(found.shadowRoot.querySelector("tbody")).toBeNull();
+  return found.shadowRoot.querySelector(".empty .message")!.textContent!;
+}
+
+it.each([
+  ["extras", "extra-lists"],
+  ["options", "option-lists"],
+])(
+  "says the dashboard's one no-matches sentence when a search hides every %s list",
+  async (kind, testId) => {
+    const el = await mount();
+    await selectTab(el, kind);
+    expect(await searchToNothing(table(el, testId))).toBe(tableNoMatches());
+  },
+);
+
+it("says the dashboard's one no-matches sentence when a search hides every product in Used by", async () => {
+  const client = api({
+    getExtraListDependants: vi.fn().mockResolvedValue({
+      products: [{ id: "p1", name: "Hamburguesa" }],
+    }),
+  });
+  const el = await mount(client);
+  await clickInTable(el, "extra-lists", "used-by-extra-e1");
+  const usage = table(el, "list-usage");
+  await vi.waitFor(() => expect(usage.shadowRoot.textContent).toContain("Hamburguesa"));
+  expect(await searchToNothing(usage)).toBe(tableNoMatches());
 });
 
 it("switches back to the Extras tab from Options", async () => {

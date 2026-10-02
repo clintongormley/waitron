@@ -1,6 +1,7 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -329,6 +330,7 @@ export class ServersScreen extends LitElement {
           : html`<p class="note" data-test="not-primary">${t("servers.not_primary")}</p>`
       }
       <wt-data-table
+        noMatchesMessage=${tableNoMatches()}
         aria-label=${t("servers.title")}
         .rows=${this.servers}
         .columns=${this.#columns()}

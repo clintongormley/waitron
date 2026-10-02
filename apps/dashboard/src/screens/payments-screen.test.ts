@@ -2,7 +2,7 @@ import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
 import type { CardProviderPanel } from "@waitron/dashboard-kit";
-import { registerCatalogue } from "@waitron/dashboard-kit";
+import { registerCatalogue, tableNoMatches } from "@waitron/dashboard-kit";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
@@ -309,6 +309,22 @@ describe("payments-screen", () => {
     await flush(el);
     expect(qCell(el, "[data-test=reader-status-r-1]")!.textContent).toBe("Disabled");
     expect(qCell(el, "[data-test=enable-r-1]")).toBeNull();
+  });
+
+  it("says the dashboard's one no-matches sentence when the status filter hides every reader, and its own sentence when there are none", async () => {
+    const sentence = async (el: PaymentsScreen) => {
+      const table = q(el, "wt-data-table") as HTMLElement & { updateComplete: Promise<unknown> };
+      await table.updateComplete;
+      return table.shadowRoot!.querySelector(".empty .message")!.textContent;
+    };
+    const { el } = await mount();
+    await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "disabled");
+    await flush(el);
+    expect(qCell(el, "tbody")).toBeNull();
+    expect(await sentence(el)).toBe(tableNoMatches());
+
+    const none = await mount(stubApi({ listReaders: vi.fn().mockResolvedValue([]) }));
+    expect(await sentence(none.el)).toBe(t("payments.readers_empty"));
   });
 
   it("shows the simulator banner in demo mode", async () => {

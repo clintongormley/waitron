@@ -1,4 +1,4 @@
-import { LiveData } from "@waitron/dashboard-kit";
+import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -274,6 +274,29 @@ describe("staff-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
     await el.updateComplete;
     expect(form(el).open).toBe(true);
+  });
+
+  it("says the dashboard's one no-matches sentence when the search hides every person, and its own sentence when there are none", async () => {
+    const sentence = async (el: StaffScreen) => {
+      await list(el).updateComplete;
+      const table = list(el).shadowRoot!.querySelector("wt-data-table")!;
+      await table.updateComplete;
+      return table.shadowRoot!.querySelector(".empty .message")!.textContent;
+    };
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+    await flush(el);
+    el.shadowRoot!.querySelector("[data-test=search]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "zzz" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+    expect(list(el).people).toEqual([]);
+    expect(await sentence(el)).toBe(tableNoMatches());
+
+    const none = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(none.el);
+    expect(await sentence(none.el)).toBe(t("staff.empty"));
   });
 
   it("puts the add button under the empty staff table's sentence, opening the same form", async () => {

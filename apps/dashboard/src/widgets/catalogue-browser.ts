@@ -22,6 +22,7 @@ import {
   categoryWithDescendants,
 } from "./category-form.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -615,6 +616,7 @@ export class CatalogueBrowser extends LitElement {
         .extraLists=${this.extraLists}
         .optionLists=${this.optionLists}
         .emptyAction=${this.search.trim() ? undefined : this.emptyAction}
+        .emptyMessage=${this.search.trim() ? tableNoMatches() : t("catalogue.no_products")}
         @open-folder=${(event: CustomEvent<{ folderId: string }>) => {
           event.stopPropagation();
           this.#navigate("open-folder", event.detail);

@@ -24,7 +24,7 @@ import {
   SCAN_LISTEN_MS,
   SCAN_POLL_MS,
 } from "./printers-screen.js";
-import { LiveData } from "@waitron/dashboard-kit";
+import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 
 beforeEach(() => {
   localStorage.removeItem("printers:agents:columns");
@@ -841,6 +841,26 @@ describe("printer configuration tabs", () => {
     expect(tabs.querySelector('[slot="agents"] [data-test="open-add-agent"]')).toBeNull();
     expect(q(el, '[data-test="open-add-agent"]')!.checkVisibility()).toBe(true);
     expect(q(el, '[data-test="open-add-printer"]')!.checkVisibility()).toBe(false);
+  });
+
+  it("says the dashboard's one no-matches sentence when the status filter hides every printer and agent", async () => {
+    const api = stubApi({
+      listPrinters: vi.fn().mockResolvedValue([{ ...printers[0]!, active: false }]),
+      listAgents: vi.fn().mockResolvedValue([{ ...agents[0]!, active: false }]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    for (const [tab, id] of [
+      ["printers", "printers-table"],
+      ["agents", "agents-table"],
+    ] as const) {
+      await selectTab(el, tab);
+      const table = q(el, `[data-test="${id}"]`)!;
+      expect(table.shadowRoot!.querySelector("tbody"), id).toBeNull();
+      expect(table.shadowRoot!.querySelector(".empty .message")!.textContent, id).toBe(
+        tableNoMatches(),
+      );
+    }
   });
 
   it("puts Add printer under the empty printer table's sentence, opening the same search", async () => {

@@ -1,4 +1,4 @@
-import { LiveData } from "@waitron/dashboard-kit";
+import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi, ProductUsingUnit, Unit } from "../api/client.js";
@@ -205,6 +205,20 @@ describe("units-screen", () => {
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(el.shadowRoot!.activeElement).toBe(button);
   });
+
+  it.each(["es-ES", "en"])(
+    "says the dashboard's one no-matches sentence when a search hides every unit (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mount();
+      await typeTableSearch(el, "zzz-nothing");
+      expect(listedKeys(el)).toEqual([]);
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      expect(table.shadowRoot!.querySelector(".empty .message")!.textContent).toBe(
+        tableNoMatches(locale),
+      );
+    },
+  );
 
   it("makes the units table searchable", async () => {
     const el = await mount();
@@ -472,6 +486,27 @@ describe("units-screen", () => {
     await el.updateComplete;
     const productTable = dialog.querySelector("wt-data-table")!;
     expect((productTable.rows as ProductUsingUnit[]).map((product) => product.id)).toEqual(["p2"]);
+  });
+
+  it("says the dashboard's one no-matches sentence when the modal's search hides every product", async () => {
+    const el = await mount(inUseApi());
+    const dialog = await openInUseModal(el);
+    dialog
+      .querySelector("[data-test=in-use-search]")!
+      .dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: "zzz-nothing" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    await el.updateComplete;
+    const productTable = dialog.querySelector("wt-data-table")!;
+    await productTable.updateComplete;
+    expect(productTable.rows).toEqual([]);
+    expect(productTable.shadowRoot!.querySelector(".empty .message")!.textContent).toBe(
+      tableNoMatches(),
+    );
   });
 
   it("emits an edit-product event to open the product's editor", async () => {

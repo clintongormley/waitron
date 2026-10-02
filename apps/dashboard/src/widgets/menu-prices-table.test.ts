@@ -8,6 +8,7 @@ import type {
   MenuVariantWrite,
   Product,
 } from "../api/client.js";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { MenuPricesTable, type OfferSave } from "./menu-prices-table.js";
@@ -601,6 +602,26 @@ it("passes the loading, failed and empty states to the table", async () => {
   await table(el).updateComplete;
   expect(text(table(el).shadowRoot.querySelector("[role=status]"))).toBe(t("menu_prices.empty"));
 });
+
+it.each(["es-ES", "en"])(
+  "says the dashboard's one no-matches sentence when a search hides every product (%s)",
+  async (locale) => {
+    setLocale(locale);
+    try {
+      const el = await mount();
+      const box = table(el).shadowRoot.querySelector<HTMLInputElement>(".table-search")!;
+      box.value = "zzz-nothing";
+      box.dispatchEvent(new Event("input"));
+      await table(el).updateComplete;
+      expect(shown(el)).toEqual([]);
+      expect(text(table(el).shadowRoot.querySelector(".empty .message"))).toBe(
+        tableNoMatches(locale),
+      );
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
 
 type OfferedBox = HTMLElement & {
   value: string;

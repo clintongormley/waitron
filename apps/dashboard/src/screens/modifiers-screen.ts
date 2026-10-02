@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import { ifDefined } from "lit/directives/if-defined.js";
 import {
   UrlStateController,
@@ -480,15 +481,14 @@ export class ModifiersScreen extends LitElement {
     label: string;
     viewKey: string;
     searchLabel: string;
-    noMatchesMessage: string;
     rows: Dependant[];
   }) {
     return html`<wt-data-table
+      noMatchesMessage=${tableNoMatches()}
       data-test=${options.testId}
       aria-label=${options.label}
       searchable
       searchLabel=${options.searchLabel}
-      noMatchesMessage=${options.noMatchesMessage}
       viewKey=${options.viewKey}
       .rows=${options.rows}
       .columns=${[this.#nameColumn<Dependant>()]}
@@ -507,11 +507,11 @@ export class ModifiersScreen extends LitElement {
       ...usage.products.map((entry) => ({ ...entry, type: "product" as const })),
     ];
     return html`<wt-data-table
+      noMatchesMessage=${tableNoMatches()}
       data-test="list-usage"
       aria-label=${this.#usedByHeading(viewing)}
       searchable
       searchLabel=${t("modifiers.search_products")}
-      noMatchesMessage=${t("modifiers.products_no_matches")}
       viewKey=${`waitron.modifiers.${viewing.kind}.usage.table`}
       sortKey="name"
       sortDirection="ascending"
@@ -556,7 +556,6 @@ export class ModifiersScreen extends LitElement {
             label: t("modifiers.affected_products"),
             viewKey: "waitron.modifiers.delete.products.table",
             searchLabel: t("modifiers.search_products"),
-            noMatchesMessage: t("modifiers.products_no_matches"),
             rows: dependants.products,
           })
         : nothing
@@ -580,13 +579,13 @@ export class ModifiersScreen extends LitElement {
   #renderTab(kind: Kind) {
     const row = kind === "extras" ? "extra" : "option";
     return html`<wt-data-table
+      noMatchesMessage=${tableNoMatches()}
       filterSearchPlaceholder=${t("categories.combobox_search")}
       filterNoResultsLabel=${t("categories.combobox_no_results")}
       data-test=${`${row}-lists`}
       aria-label=${t(`${kind}.title`)}
       searchable
       searchLabel=${t(`${kind}.search`)}
-      noMatchesMessage=${t(`${kind}.no_matches`)}
       viewKey=${`waitron.modifiers.${kind}.table`}
       columnsLabel=${t("table.columns")}
       sortKey="name"

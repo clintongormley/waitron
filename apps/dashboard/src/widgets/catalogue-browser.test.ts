@@ -1,11 +1,12 @@
 import { html } from "lit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import { registerIcons } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import type { CategorySummary, DashboardApi, Product } from "../api/client.js";
 import type { CatalogueBrowser } from "./catalogue-browser.js";
 import "./catalogue-browser.js";
@@ -778,6 +779,29 @@ it("draws its screen's empty action in an empty folder, and not when a search fi
   expect(button.assignedSlot).not.toBeNull();
   await typeSearch(el, "nothing like this");
   expect((await tableOf(el)).querySelector("[slot=empty-action]")).toBeNull();
+});
+async function tableSentence(el: CatalogueBrowser) {
+  return (await tableOf(el)).shadowRoot!.querySelector(".empty .message")!.textContent;
+}
+it.each(["en-GB", "es"])(
+  "says the dashboard's one no-matches sentence when its search finds nothing, and its own sentence in an empty folder (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const el = await mountBrowser({ products: [], folderId: "b" });
+    expect(await tableSentence(el)).toBe(t("catalogue.no_products"));
+    await typeSearch(el, "nothing like this");
+    expect(await rowKeys(el)).toEqual([]);
+    expect(await tableSentence(el)).toBe(tableNoMatches(locale));
+    await typeSearch(el, "");
+    expect(await tableSentence(el)).toBe(t("catalogue.no_products"));
+  },
+);
+it("says the dashboard's one no-matches sentence when a column filter hides every product", async () => {
+  setLocale("es");
+  const el = await mountBrowser({ folderId: "f" });
+  await chooseFilter(el, "active", "inactive");
+  expect(await rowKeys(el)).toEqual([]);
+  expect(await tableSentence(el)).toBe(tableNoMatches("es"));
 });
 it.each(["folder", "view", "search", "filter"])(
   "clears selection on %s and keeps selection mode on",
