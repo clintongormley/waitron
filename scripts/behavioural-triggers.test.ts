@@ -1309,7 +1309,7 @@ describe("working_order_lines_check_variant_locales", () => {
   });
 });
 
-describe("the locale triggers once a venue's invoice locales changed", () => {
+describe("working_order_lines_check_locales_update and its variant twin once a venue's invoice locales changed", () => {
   it("accepts a served mark, its undo and a first sent stamp on a paid line", () => {
     expect(
       refusalFor(

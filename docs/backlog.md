@@ -2875,14 +2875,23 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
       database refuses both once the language differs. Measured by the till's own routes
       (`apps/server/src/location-settings-api.orders-open.test.ts`): placed orders, paid bills whose
       party is still seated, a paid order with a dish no station took, and an open bill with no line
-      no longer block, and each can still be served, unserved, sent or collected after the change.
-      If a language is changed underneath an open bill by another road (the configuration import
-      writes `invoice_locales` directly), the bill's next split answers an unmapped 500
-      `server.internal`; that case is pinned in the same test file.
+      no longer block. After the change, the tests serve a seated party's paid dish, take back a
+      serve on one, send a paid sale's unsent dish and collect a placed order. If a language is
+      changed underneath an open bill by another road (the configuration import writes
+      `invoice_locales` directly), the bill's next split answers an unmapped 500
+      `server.internal`; the same test file pins it, changing the language by direct SQL.
     - After a change, a paid counter sale with one dish a station took and one it did not is not
       blocked, and its send-to-prep route (`/prep`) then answers 409 `ticket.already_fired`, as it
       did before the change, and leaves the order's lines unchanged. No till screen calls that
       route.
+    - A placed order collected after a language change is filed in the new language
+      (`sales.locale`) with its dish names as saved when its lines were added; when the new language
+      is not among the languages those names were saved in, its receipt prints the new language's
+      fixed words with a dish name in an old language (`lineName`'s fallback,
+      `apps/server/src/receipt-ticket.ts`; read in the code: the test checks what is filed, not a
+      printed receipt). An invoice-first order is filed at placing and keeps
+      the language it was filed in (the case "accepts a change while an invoice-first order is
+      placed, and collecting it keeps the language it was filed in" in the same test file).
     - The refusal's count of blocking orders is not shown on the Receipts page: `codeMessage` fills
       in no values.
     - **The payment slip was left alone.** Its words («JUSTIFICANTE DE PAGO», «Importe»,

@@ -210,7 +210,7 @@ describe("a receipt-language change while orders are open", () => {
     expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
   });
 
-  it("accepts a change once every counter sale is paid and sent, as nothing can write their lines", async () => {
+  it("accepts a change once every counter sale is paid and sent", async () => {
     reset();
     const id = await counterSale();
     expect(dishLines(id).every((line) => line.sent_at !== null && line.served_at === null)).toBe(
@@ -443,7 +443,7 @@ describe("a receipt-language change while orders are open", () => {
     }
   });
 
-  it("does not count a seated party's abandoned bill, which no route serves", async () => {
+  it("does not count a seated party's abandoned bill, which is no longer open", async () => {
     reset();
     const party = await seatedWith(venue, "Paella", "Tarta");
     const split = await till("POST", `/api/bills/${party.tabId}/split`, {
@@ -478,7 +478,7 @@ describe("a receipt-language change while orders are open", () => {
   // Why an open order holding a line still blocks. A language changed underneath one by direct SQL
   // leaves its split refused by the line triggers, and that surfaces as an unmapped 500 rather than
   // a named refusal: a known gap, kept here so a change to it is seen.
-  it("a split on an open bill fails once the language is changed underneath it", async () => {
+  it("a split of a bill holding a line fails once the language is changed underneath it, which is why such a bill blocks a change", async () => {
     reset();
     const party = await seatedWith(venue, "Paella", "Tarta");
     const before = dishLines(party.tabId);

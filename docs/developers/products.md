@@ -61,7 +61,13 @@ comes from the published menu, and the rate from the day the invoice is issued, 
 - `descriptions` — the customer-facing text, already resolved through `customerPresentationText` and
   then narrowed to exactly the location's saved receipt languages (`locations.invoice_locales`) by
   `toInvoiceLineDescriptions`. A receipt prints the entry for the sale's language (`sales.locale`),
-  which is the first of that list when the sale is filed.
+  which is the first of that list when the sale is filed. An order placed before the location's
+  receipt languages change and collected after is filed with `sales.locale` in the new language
+  while its lines' `descriptions` hold entries only for the languages saved when they were added
+  (the case "accepts a change while an order is placed, and the order can still be collected" in
+  `apps/server/src/location-settings-api.orders-open.test.ts`); when the new language is not among
+  them, `lineName` (`apps/server/src/receipt-ticket.ts`) prints the line's first stored name
+  instead.
 - `variant_name`, `variant_descriptions`, `variant_kitchen_name`, `kitchen_name` — the chosen
   variant's own three names (`variant_name` and `variant_kitchen_name` as the variant row holds
   them, `variant_descriptions` resolved and narrowed like `descriptions` above), plus the product's
