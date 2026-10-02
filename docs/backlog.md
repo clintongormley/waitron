@@ -1055,6 +1055,33 @@ add the next product, and the new row is announced (the form's live region). The
 members editor (`member-list-editor.ts`) has the same choose-then-Add pattern; ask whether it
 should change too.
 
+**The number field's − and + move inside the field, as pale blue buttons (A202, owner 2026-10-02)
+— OPEN.** The owner, on a screenshot of the extras form's Minimum and Maximum choices: _"the +-
+fields are very bulky and become difficult to read"_. Their first idea, up and down arrows stacked
+inside the field, made each arrow 28px tall, below `--wt-tap-min`; from mockups (today, A, B, C,
+D1, D2, E1–E3) the owner chose **E3**. **Decided:** in `wt-number-stepper`
+(`packages/ui/src/components/wt-number-stepper.ts`):
+
+- − then + sit INSIDE the filled field box, at its trailing end, instead of bordered squares
+  outside it; each is `--wt-tap-min` wide and the box's full height, so the tap size holds;
+- each button has a pale blue fill with its symbol in the primary blue, and a 1px line before it
+  in the surface colour, separating it from the value and from the other button; the + button
+  takes the box's top-trailing corner radius; a hover darkens the fill a step;
+- a disabled button keeps its fill and only its symbol fades — this replaces the design-system
+  rule that a disabled stepper button dims as a whole through `--wt-opacity-disabled`;
+- the value and its label sit at the box's start like any other field (the mockup's choice; today
+  the number is centred), and "No limit" stays the grey italic prompt.
+
+The pale blue and its hover step are new colour tokens with dark-theme values, as `--wt-*` tokens
+(`packages/ui-core/src/tokens/colors.css` has only `--wt-color-primary` and `--wt-color-on-primary`
+today); their contrast with the symbol must pass the axe test in both themes. What changes with
+the layout: the box widths (`--wt-stepper-field-width`, `-wide`) now include the buttons, the
+compact `hide-label` box, the width-matching between two steppers side by side, the
+`wt-number-stepper` row and the tap-target paragraph in
+[design-system.md](developers/design-system.md), and the primitive's token-painting and axe tests.
+Name every test changed in the PR. LOOK at every screen that uses it
+(`grep -rln wt-number-stepper apps`), in both themes and at phone width.
+
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
