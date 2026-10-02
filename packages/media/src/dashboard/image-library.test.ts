@@ -68,7 +68,12 @@ it("falls back to the default-language name for a thumbnail's alt text when the 
 
 it("offers no label filter, no labels field and no alt-text field", async () => {
   await mount();
-  expect(el.shadowRoot!.querySelector("select[name=image-label]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[name=image-label]")).toBeNull();
+  expect(
+    [...el.shadowRoot!.querySelectorAll(".filters wt-combobox, .filters select")].map((field) =>
+      field.getAttribute("name"),
+    ),
+  ).toEqual(["image-sort"]);
   click("[data-test=edit-one]");
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("wt-input[name=name-es]")).not.toBeNull();
