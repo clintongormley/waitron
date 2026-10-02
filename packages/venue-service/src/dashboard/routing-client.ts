@@ -1,6 +1,18 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { RouteTarget, RoutingModel, ExceptionInput, RouteExplanation } from "../routing.js";
 import type { RoutingChange, RoutingMove } from "../routing-types.js";
+import type { WeeklyInterval } from "../routing.js";
+
+export interface OutputsDown {
+  printersDown: {
+    stationId: string;
+    stationName: string;
+    printerId: string;
+    printerName: string;
+    since: string;
+  }[];
+  screensDark: { stationId: string; stationName: string; lastSeenAt: string | null }[];
+}
 
 export interface PrepStation {
   id: string;
@@ -111,6 +123,25 @@ export class PrepStationsApi {
   }
   deactivateStation(id: string): Promise<void> {
     return this.request(`/management-api/stations/${id}`, "DELETE");
+  }
+  activateStation(id: string): Promise<void> {
+    return this.request(`/management-api/stations/${id}`, "PATCH", { active: true });
+  }
+  setStationHours(id: string, hours: readonly WeeklyInterval[]): Promise<void> {
+    return this.request(`/management-api/venue-service/stations/${id}/hours`, "PUT", { hours });
+  }
+  setStationFallback(id: string, fallbackStationId: string | null): Promise<void> {
+    return this.request(`/management-api/venue-service/stations/${id}/fallback`, "PUT", {
+      fallbackStationId,
+    });
+  }
+  setStationToday(id: string, state: "open" | "closed" | null): Promise<void> {
+    return this.request(`/management-api/venue-service/stations/${id}/today`, "PUT", { state });
+  }
+  listOutputsDown(): Promise<OutputsDown> {
+    return this.request<OutputsDown>("/management-api/stations/outputs-down", "GET", undefined, {
+      passive: true,
+    });
   }
   setDefaultStation(id: string): Promise<void> {
     return this.request(`/management-api/stations/${id}/default`, "POST");

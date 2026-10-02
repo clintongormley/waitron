@@ -13,6 +13,9 @@ const empty = {
     unassigned: { folders: [], products: [] },
     defaultStationId: null,
     stations: [],
+    stationTimes: [],
+    todayEnds: { timeOfDay: "06:00", tomorrow: true },
+    clockReadable: true,
   },
   stations: [],
   categories: [],
@@ -60,6 +63,16 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
                       },
                     ],
                     stations: [{ id: "bar", name: "Bar", active: true }],
+                    stationTimes: [
+                      {
+                        stationId: "bar",
+                        status: { open: true, why: "default" },
+                        hours: [],
+                        fallbackStationId: null,
+                        today: null,
+                        closedSendsTo: "bar",
+                      },
+                    ],
                   }
                 : empty.routing,
               zones: [{ id: "terrace", name: "Terrace" }],
@@ -112,6 +125,166 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
       await el.updateComplete;
     }
     expect(el.shadowRoot!.querySelector("h1")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+});
+
+describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (theme) => {
+  it.each([
+    "closed",
+    "warnings",
+    "hours",
+    "invalid-hours",
+    "fallback",
+    "fallback-confirmation",
+    "close-confirmation",
+    "switch-off",
+    "inactive",
+    "clock-unreadable",
+    "opened-by-hand",
+    "closed-by-hand",
+    "no-replacement",
+    "refused-close",
+    "refused-fallback",
+    "refused-switch-off",
+    "refused-hours",
+  ] as const)("checks %s", async (state) => {
+    setLocale("en");
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
+    const stations = [
+      {
+        id: "kitchen",
+        name: "Kitchen",
+        active: true,
+        isDefault: true,
+        displayOrder: 0,
+        warmAfterMinutes: 5,
+        overdueAfterMinutes: 10,
+        forgottenAfterMinutes: 15,
+      },
+      {
+        id: "bar",
+        name: "Upstairs bar",
+        active: state !== "inactive",
+        isDefault: false,
+        displayOrder: 1,
+        warmAfterMinutes: 5,
+        overdueAfterMinutes: 10,
+        forgottenAfterMinutes: 15,
+      },
+    ];
+    el.api = {
+      load: vi.fn().mockResolvedValue({
+        ...empty,
+        stations,
+        routing: {
+          ...empty.routing,
+          defaultStationId: "kitchen",
+          clockReadable: state !== "clock-unreadable",
+          stations,
+          stationTimes: [
+            {
+              stationId: "kitchen",
+              status: { open: true, why: "default" },
+              hours: [],
+              fallbackStationId: null,
+              today: null,
+              closedSendsTo: "kitchen",
+            },
+            {
+              stationId: "bar",
+              status: {
+                open: ["close-confirmation", "refused-close", "opened-by-hand"].includes(state),
+                why:
+                  state === "opened-by-hand"
+                    ? "opened_by_hand"
+                    : state === "closed-by-hand"
+                      ? "closed_by_hand"
+                      : ["close-confirmation", "refused-close"].includes(state)
+                        ? "in_hours"
+                        : "out_of_hours",
+              },
+              hours: [
+                {
+                  weekday: 5,
+                  opensAt: "22:00",
+                  closesAt: state === "invalid-hours" ? "22:00" : "02:00",
+                },
+              ],
+              fallbackStationId: "kitchen",
+              today:
+                state === "opened-by-hand" ? "open" : state === "closed-by-hand" ? "closed" : null,
+              closedSendsTo: state === "no-replacement" ? null : "kitchen",
+            },
+          ],
+        },
+      }),
+      setStationToday: vi.fn().mockRejectedValue({ code: "time_zone.unreadable" }),
+      setStationFallback: vi.fn().mockRejectedValue({ code: "station.fallback_loop" }),
+      deactivateStation: vi.fn().mockRejectedValue({ code: "station.not_found" }),
+      setStationHours: vi
+        .fn()
+        .mockRejectedValue({ code: "station.invalid", params: { field: "hours.0" } }),
+      listOutputsDown: vi.fn().mockResolvedValue({
+        printersDown: [
+          {
+            stationId: "bar",
+            stationName: "Upstairs bar",
+            printerId: "epson",
+            printerName: "Epson",
+            since: "2026-10-01T20:14:00",
+          },
+        ],
+        screensDark: [{ stationId: "bar", stationName: "Upstairs bar", lastSeenAt: null }],
+      }),
+    } as unknown as PrepStationsApi;
+    host.append(el);
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+    const action = state.includes("hours")
+      ? "edit-hours"
+      : state.includes("fallback")
+        ? "change-fallback"
+        : state === "close-confirmation" || state === "refused-close"
+          ? "close-today"
+          : state === "switch-off" || state === "refused-switch-off"
+            ? "switch-off"
+            : null;
+    if (action) {
+      el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${action}-bar"]`)!.click();
+      await el.updateComplete;
+      if (state === "fallback-confirmation") {
+        el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-station-action"]')!.click();
+        await el.updateComplete;
+      }
+      if (state === "invalid-hours" || state === "refused-hours") {
+        const form = el.shadowRoot!.querySelector("station-hours-form")!;
+        await (form as unknown as { updateComplete: Promise<boolean> }).updateComplete;
+        form.shadowRoot!.querySelector<HTMLElement>('[data-test="save-hours"]')!.click();
+        await (form as unknown as { updateComplete: Promise<boolean> }).updateComplete;
+      }
+    }
+    if (state.startsWith("refused-")) {
+      if (state === "refused-fallback") {
+        el.shadowRoot!.querySelector('[data-test="station-fallback"]')!.dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value: "" } }),
+        );
+        await el.updateComplete;
+      }
+      if (state !== "refused-hours") {
+        el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-station-action"]')!.click();
+        await el.updateComplete;
+        if (state === "refused-fallback" || state === "refused-switch-off")
+          el.shadowRoot!.querySelector<HTMLElement>(
+            '[data-test="confirm-station-action"]',
+          )!.click();
+      }
+      await new Promise((r) => setTimeout(r, 0));
+      await el.updateComplete;
+      const form = el.shadowRoot!.querySelector("station-hours-form");
+      expect((form?.shadowRoot ?? el.shadowRoot)!.querySelector('[role="alert"]')).not.toBeNull();
+    }
     await expectNoA11yViolations(host);
   });
 });

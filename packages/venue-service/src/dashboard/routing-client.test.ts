@@ -2,6 +2,22 @@ import { expect, it, vi } from "vitest";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 import { PrepStationsApi } from "./routing-client.js";
 
+it("writes station hours, fallback and today to venue service, and reads output failures passively", async () => {
+  const request = vi.fn(async () => ({ printersDown: [], screensDark: [] }));
+  const api = new PrepStationsApi(request as DashboardRequest);
+  const hours = [{ weekday: 5, opensAt: "22:00", closesAt: "02:00" }];
+  await api.setStationHours("bar", hours);
+  await api.setStationFallback("bar", null);
+  await api.setStationToday("bar", "closed");
+  await api.listOutputsDown();
+  expect(request.mock.calls).toEqual([
+    ["/management-api/venue-service/stations/bar/hours", "PUT", { hours }],
+    ["/management-api/venue-service/stations/bar/fallback", "PUT", { fallbackStationId: null }],
+    ["/management-api/venue-service/stations/bar/today", "PUT", { state: "closed" }],
+    ["/management-api/stations/outputs-down", "GET", undefined, { passive: true }],
+  ]);
+});
+
 it("loads the routing and station context, including each station printer assignment", async () => {
   const responses: Record<string, unknown> = {
     "/management-api/venue-service/routing": {
@@ -338,4 +354,10 @@ it("writes station targets for a claim and an edited exception", async () => {
       },
     ],
   ]);
+});
+
+it("switches a station on through the core station PATCH", async () => {
+  const request = vi.fn(async () => undefined);
+  await new PrepStationsApi(request as DashboardRequest).activateStation("bar");
+  expect(request).toHaveBeenCalledWith("/management-api/stations/bar", "PATCH", { active: true });
 });

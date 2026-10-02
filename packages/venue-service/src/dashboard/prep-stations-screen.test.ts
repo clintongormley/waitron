@@ -99,6 +99,92 @@ async function settle(el: PrepStationsScreen) {
   await el.updateComplete;
 }
 const q = (el: PrepStationsScreen, s: string) => el.shadowRoot!.querySelector<HTMLElement>(s);
+const upstairs = {
+  ...view.stations[0]!,
+  id: "upstairs",
+  name: "Upstairs bar",
+  isDefault: false,
+  displayOrder: 2,
+};
+function withUpstairs(
+  status: (typeof view.routing.stationTimes)[number]["status"],
+  overrides: Partial<(typeof view.routing.stationTimes)[number]> = {},
+): PrepStationsView {
+  return {
+    ...view,
+    stations: [...view.stations.map((row) => ({ ...row })), { ...upstairs }],
+    routing: {
+      ...view.routing,
+      stations: [...view.routing.stations, { id: "upstairs", name: "Upstairs bar", active: true }],
+      stationTimes: [
+        ...view.routing.stationTimes,
+        {
+          stationId: "upstairs",
+          status,
+          hours: [],
+          fallbackStationId: "bar",
+          today: null,
+          closedSendsTo: "bar",
+          ...overrides,
+        },
+      ],
+    },
+  };
+}
+it.each([
+  [{ open: true, why: "in_hours" }, "Open now"],
+  [{ open: true, why: "opened_by_hand" }, "Open now, opened by hand until 06:00 tomorrow"],
+  [
+    { open: false, why: "out_of_hours" },
+    "Closed now: outside its opening hours. Its work goes to Bar.",
+  ],
+  [
+    { open: false, why: "closed_by_hand" },
+    "Closed now, closed by hand until 06:00 tomorrow. Its work goes to Bar.",
+  ],
+] as const)("shows station status %j", async (status, expected) => {
+  setLocale("en");
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(withUpstairs(status)) }));
+  expect(q(el, '[data-test="station-upstairs"]')?.textContent).toContain(expected);
+  expect(q(el, '[data-test="station-bar"]')?.textContent).toContain(
+    "Always open: this is the default station",
+  );
+  expect(q(el, '[data-test="edit-hours-bar"]')).toBeNull();
+  expect(q(el, '[data-test="close-today-bar"]')).toBeNull();
+});
+
+it("confirms a by-hand closure and clears it back to the schedule", async () => {
+  setLocale("en");
+  const a = api({
+    load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
+    setStationToday: vi.fn(),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="close-today-upstairs"]')!.click();
+  await settle(el);
+  expect(q(el, '[data-test="station-action-modal"]')?.textContent).toContain(
+    "Upstairs bar's work goes to Bar until 06:00 tomorrow.",
+  );
+  expect(a.setStationToday).not.toHaveBeenCalled();
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  expect(a.setStationToday).toHaveBeenCalledWith("upstairs", "closed");
+});
+
+it("shows no replacement in the confirmation when a closed station has no fallback", async () => {
+  setLocale("en");
+  const next = withUpstairs(
+    { open: true, why: "in_hours" },
+    { fallbackStationId: null, closedSendsTo: null },
+  );
+  next.routing.todayEnds = { timeOfDay: "06:00", tomorrow: false };
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
+  q(el, '[data-test="close-today-upstairs"]')!.click();
+  await settle(el);
+  expect(q(el, '[data-test="station-action-modal"]')?.textContent).toContain(
+    "the till will ask where to send its dishes, until 06:00 today.",
+  );
+});
 it("explains exceptions, claims, defaults and an unroutable product", async () => {
   setLocale("en");
   const a = api({
@@ -412,6 +498,8 @@ it("moves station actions into this screen and rejects unordered thresholds besi
   expect(a.updateStation).not.toHaveBeenCalled();
   q(el, '[data-test="switch-off-bar"]')!.click();
   await settle(el);
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
   expect(a.deactivateStation).toHaveBeenCalledWith("bar");
 });
 
@@ -479,7 +567,7 @@ it("keeps No preparation available and names claims on switched-off stations", a
   expect(q(el, '[data-test="no-preparation"]')).not.toBeNull();
   expect(q(el, '[data-test="station-old"]')).toBeNull();
   expect(el.shadowRoot!.textContent).toContain("Old pass");
-  expect(el.shadowRoot!.textContent).toContain("Switched off: its work goes to the next rule");
+  expect(el.shadowRoot!.textContent).toContain("Switched off: no replacement, the till asks");
 });
 it("creates a station from the modal with the chosen thresholds", async () => {
   const a = api();
@@ -578,6 +666,8 @@ it("reports rejected station actions without exposing a code", async () => {
   const a = api({ deactivateStation: vi.fn().mockRejectedValue({ code: "station.not_found" }) });
   const el = await mount(a);
   q(el, '[data-test="switch-off-bar"]')!.click();
+  await settle(el);
+  q(el, '[data-test="confirm-station-action"]')!.click();
   await settle(el);
   expect(q(el, '[role="alert"]')?.textContent).toContain("could not be saved");
   expect(q(el, '[role="alert"]')?.textContent).not.toContain("station.not_found");
@@ -1326,4 +1416,431 @@ it.each([
   await settle(el);
   const target = q(el, '[data-test="exception-target"]')!;
   expect(target.shadowRoot!.querySelector(".trigger .value")!.textContent?.trim()).toBe(expected);
+});
+
+it("retains a switched-off fallback in its editor but clears it for Switch off", async () => {
+  const next = withUpstairs(
+    { open: false, why: "out_of_hours" },
+    { fallbackStationId: "old", closedSendsTo: null },
+  );
+  next.routing.stations.push({ id: "old", name: "Old bar", active: false });
+  const calls: string[] = [];
+  const a = api({
+    load: vi.fn().mockResolvedValue(next),
+    setStationFallback: vi.fn(async (id, choice) => {
+      calls.push(`fallback:${id}:${choice}`);
+    }),
+    deactivateStation: vi.fn(async (id) => {
+      calls.push(`off:${id}`);
+    }),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="change-fallback-upstairs"]')!.click();
+  await settle(el);
+  const combo = q(el, '[data-test="station-fallback"]') as HTMLElement & {
+    value: string;
+    options: { value: string; label: string }[];
+  };
+  expect(combo.options).toContainEqual({ value: "old", label: "Old bar (switched off)" });
+  expect(combo.value).toBe("old");
+  q(el, '[data-test="station-action-modal"]')!.dispatchEvent(new CustomEvent("wt-close"));
+  await settle(el);
+  q(el, '[data-test="switch-off-upstairs"]')!.click();
+  await settle(el);
+  expect((q(el, '[data-test="station-fallback"]') as typeof combo).value).toBe("");
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  expect(calls).toEqual(["fallback:upstairs:null", "off:upstairs"]);
+});
+
+it.each(["opened_by_hand", "closed_by_hand"] as const)(
+  "uses today before cutover for %s",
+  async (why) => {
+    const next = withUpstairs(
+      why === "opened_by_hand" ? { open: true, why } : { open: false, why },
+      { closedSendsTo: null },
+    );
+    next.routing.todayEnds = { timeOfDay: "06:00", tomorrow: false };
+    const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
+    expect(q(el, '[data-test="station-upstairs"]')!.textContent).toContain("until 06:00 today");
+    if (why === "closed_by_hand")
+      expect(q(el, '[data-test="station-upstairs"]')!.textContent).toContain(
+        "No replacement: the till will ask where to send its dishes.",
+      );
+    expect(q(el, '[data-test="change-fallback-bar"]')).toBeNull();
+  },
+);
+it("reports unreadable venue time on every station card", async () => {
+  const next = withUpstairs({ open: true, why: "in_hours" });
+  next.routing.clockReadable = false;
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
+  for (const id of ["bar", "upstairs"])
+    expect(q(el, `[data-test="station-${id}"]`)!.textContent).toContain(
+      "Opening hours are not applied: the venue's time zone or day cutover cannot be read.",
+    );
+});
+it.each(["open", null] as const)("saves the by-hand action %s", async (state) => {
+  const a = api({
+    load: vi
+      .fn()
+      .mockResolvedValue(withUpstairs({ open: false, why: "closed_by_hand" }, { today: "closed" })),
+    setStationToday: vi.fn(),
+  });
+  const el = await mount(a);
+  q(el, `[data-test="${state ? "open-today" : "schedule"}-upstairs"]`)!.click();
+  await settle(el);
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  expect(a.setStationToday).toHaveBeenCalledWith("upstairs", state);
+});
+it("shows a refused by-hand closure at the end of the dialog body and allows retry", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
+    setStationToday: vi.fn().mockRejectedValue({ code: "time_zone.unreadable" }),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="close-today-upstairs"]')!.click();
+  await settle(el);
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  const dialog = q(el, '[data-test="station-action-modal"]')!;
+  expect(dialog.querySelector('[role="alert"]')!.textContent).toContain("time zone");
+  expect(dialog.querySelector('[role="alert"]')!.nextElementSibling?.localName).toBe(
+    "wt-form-actions",
+  );
+  expect(
+    (q(el, '[data-test="confirm-station-action"]') as HTMLElement & { disabled: boolean }).disabled,
+  ).toBe(false);
+});
+it.each([
+  [true, true, "bar", "", "While Upstairs bar is closed, its work will go to Bar."],
+  [false, true, "bar", "", "That starts now."],
+  [
+    false,
+    false,
+    "bar",
+    "upstairs",
+    "Bar is closed now as well, so for now it goes to Upstairs bar.",
+  ],
+  [
+    false,
+    false,
+    "bar",
+    null,
+    "Bar is closed now as well and has no replacement, so for now the till will ask.",
+  ],
+  [
+    true,
+    true,
+    "",
+    null,
+    "While Upstairs bar is closed, the till will ask where to send its dishes.",
+  ],
+] as const)(
+  "confirms fallback with source open=%s target open=%s choice=%s",
+  async (sourceOpen, targetOpen, choice, destination, expected) => {
+    const next = withUpstairs(
+      sourceOpen ? { open: true, why: "in_hours" } : { open: false, why: "out_of_hours" },
+      { fallbackStationId: null },
+    );
+    next.routing.stationTimes[0] = {
+      ...next.routing.stationTimes[0]!,
+      status: targetOpen ? { open: true, why: "in_hours" } : { open: false, why: "out_of_hours" },
+      closedSendsTo: destination || null,
+    };
+    const a = api({ load: vi.fn().mockResolvedValue(next), setStationFallback: vi.fn() });
+    const el = await mount(a);
+    q(el, '[data-test="change-fallback-upstairs"]')!.click();
+    await settle(el);
+    const combo = q(el, '[data-test="station-fallback"]') as HTMLElement & {
+      options: { value: string; label: string }[];
+      placeholder: string;
+    };
+    expect(combo.options[0]).toEqual({ value: "", label: "No replacement (the till asks)" });
+    expect(combo.placeholder).toBe("No replacement (the till asks)");
+    expect(combo.options.filter((o) => o.value === "bar")).toEqual([
+      { value: "bar", label: "Bar" },
+    ]);
+    combo.dispatchEvent(new CustomEvent("wt-change", { detail: { value: choice } }));
+    await settle(el);
+    q(el, '[data-test="confirm-station-action"]')!.click();
+    await settle(el);
+    expect(q(el, '[data-test="fallback-confirmation"]')!.textContent).toContain(expected);
+    if (sourceOpen)
+      expect(q(el, '[data-test="fallback-confirmation"]')!.textContent).not.toContain(
+        "That starts now.",
+      );
+    expect(a.setStationFallback).not.toHaveBeenCalled();
+    q(el, '[data-test="confirm-station-action"]')!.click();
+    await settle(el);
+    if (choice) expect(a.setStationFallback).toHaveBeenCalledWith("upstairs", choice);
+  },
+);
+it("saves no replacement as null", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
+    setStationFallback: vi.fn(),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="change-fallback-upstairs"]')!.click();
+  await settle(el);
+  q(el, '[data-test="station-fallback"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  expect(a.setStationFallback).toHaveBeenCalledWith("upstairs", null);
+});
+it.each(["station.fallback_loop", "route.station_inactive"])(
+  "puts %s beside the fallback",
+  async (code) => {
+    const a = api({
+      load: vi
+        .fn()
+        .mockResolvedValue(
+          withUpstairs({ open: false, why: "out_of_hours" }, { fallbackStationId: null }),
+        ),
+      setStationFallback: vi.fn().mockRejectedValue({ code }),
+    });
+    const el = await mount(a);
+    q(el, '[data-test="change-fallback-upstairs"]')!.click();
+    await settle(el);
+    q(el, '[data-test="station-fallback"]')!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "bar" } }),
+    );
+    await settle(el);
+    q(el, '[data-test="confirm-station-action"]')!.click();
+    await settle(el);
+    q(el, '[data-test="confirm-station-action"]')!.click();
+    await settle(el);
+    expect(q(el, '[data-field-error="fallback"]')?.textContent).toContain(
+      code === "station.fallback_loop" ? "loop" : "switched off",
+    );
+  },
+);
+it("keeps the new fallback after a failed switch-off and reports the failure in the body", async () => {
+  const calls: string[] = [];
+  const next = withUpstairs({ open: true, why: "in_hours" }, { fallbackStationId: null });
+  const a = api({
+    load: vi.fn().mockResolvedValue(next),
+    setStationFallback: vi.fn(async () => {
+      calls.push("fallback");
+    }),
+    deactivateStation: vi.fn(async () => {
+      calls.push("off");
+      throw new Error("offline");
+    }),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="switch-off-upstairs"]')!.click();
+  await settle(el);
+  q(el, '[data-test="station-fallback"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bar" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  expect(calls).toEqual(["fallback", "off"]);
+  expect(q(el, '[data-test="station-upstairs"]')).not.toBeNull();
+  const alert = q(el, '[data-test="station-action-modal"]')!.querySelector('[role="alert"]')!;
+  expect(alert.textContent).toContain("could not be saved");
+  expect(alert.nextElementSibling?.localName).toBe("wt-form-actions");
+});
+it("switches an inactive station on and keeps its dark-screen warning in that card", async () => {
+  const next = withUpstairs({ open: false, why: "switched_off" }, { closedSendsTo: null });
+  next.stations[1]!.active = false;
+  next.routing.stations[1]!.active = false;
+  const a = api({
+    load: vi.fn().mockResolvedValue(next),
+    activateStation: vi.fn(),
+    listOutputsDown: vi.fn().mockResolvedValue({
+      printersDown: [],
+      screensDark: [{ stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: null }],
+    }),
+  });
+  const el = await mount(a);
+  expect(q(el, '[data-test="inactive-upstairs"]')!.textContent).toContain(
+    "No replacement: the till asks.",
+  );
+  expect(q(el, '[data-test="inactive-upstairs"]')!.textContent).toContain("has ever checked in");
+  expect(q(el, '[data-test="station-bar"]')!.textContent).not.toContain("has ever checked in");
+  q(el, '[data-test="switch-on-upstairs"]')!.click();
+  await settle(el);
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  expect(a.activateStation).toHaveBeenCalledWith("upstairs");
+});
+it("shows each output warning only on its station", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
+    listOutputsDown: vi.fn().mockResolvedValue({
+      printersDown: [
+        {
+          stationId: "upstairs",
+          stationName: "Upstairs bar",
+          printerId: "epson",
+          printerName: "Epson",
+          since: "2026-10-01T20:14:00",
+        },
+      ],
+      screensDark: [
+        { stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: "2026-10-01T20:10:00" },
+      ],
+    }),
+  });
+  const el = await mount(a);
+  const card = q(el, '[data-test="station-upstairs"]')!;
+  expect(card.textContent).toContain(
+    "Printer Epson has printed nothing since something sent to it at 20:14 got stuck.",
+  );
+  expect(card.textContent).toContain(
+    "Dishes are waiting, and no kitchen screen here has checked in since 20:10.",
+  );
+  expect(q(el, '[data-test="station-bar"]')!.textContent).not.toContain("got stuck");
+  expect(q(el, '[data-test="station-bar"]')!.textContent).not.toContain("Dishes are waiting");
+});
+it("saves the whole hours list and places a server row refusal beside that row", async () => {
+  const a = api({
+    load: vi
+      .fn()
+      .mockResolvedValue(
+        withUpstairs(
+          { open: true, why: "in_hours" },
+          { hours: [{ weekday: 5, opensAt: "22:00", closesAt: "02:00" }] },
+        ),
+      ),
+    setStationHours: vi
+      .fn()
+      .mockRejectedValue({ code: "station.invalid", params: { field: "hours.0" } }),
+  });
+  const el = await mount(a);
+  expect(q(el, '[data-test="station-upstairs"]')!.textContent).toContain(
+    "Friday 22:00–02:00 (next day)",
+  );
+  q(el, '[data-test="edit-hours-upstairs"]')!.click();
+  await settle(el);
+  const form = q(el, "station-hours-form")!;
+  form.shadowRoot!.querySelector<HTMLElement>('[data-test="save-hours"]')!.click();
+  await settle(el);
+  expect(a.setStationHours).toHaveBeenCalledWith("upstairs", [
+    { weekday: 5, opensAt: "22:00", closesAt: "02:00" },
+  ]);
+  expect(form.shadowRoot!.querySelectorAll('[data-field-error="hours.0"]')).toHaveLength(2);
+});
+
+it("refreshes output warnings every minute and clears the timer when removed", async () => {
+  const timers = new Map<ReturnType<typeof setInterval>, TimerHandler>();
+  const original = window.setInterval.bind(window);
+  const interval = vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
+    const id = original(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
+    if (delay === 60_000) timers.set(id, handler);
+    return id;
+  });
+  const clear = vi.spyOn(window, "clearInterval");
+  try {
+    const a = api({
+      load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
+      listOutputsDown: vi
+        .fn()
+        .mockResolvedValueOnce({ printersDown: [], screensDark: [] })
+        .mockResolvedValue({
+          printersDown: [],
+          screensDark: [{ stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: null }],
+        }),
+    });
+    const el = await mount(a);
+    expect(q(el, '[data-test="station-upstairs"]')!.textContent).not.toContain(
+      "has ever checked in",
+    );
+    for (const handler of timers.values()) if (typeof handler === "function") handler();
+    await settle(el);
+    expect(q(el, '[data-test="station-upstairs"]')!.textContent).toContain("has ever checked in");
+    el.remove();
+    expect(
+      [...timers.keys()].some((id) => clear.mock.calls.some(([cleared]) => cleared === id)),
+    ).toBe(true);
+  } finally {
+    interval.mockRestore();
+    clear.mockRestore();
+  }
+});
+
+it("offers the fallback directly on the active station card and confirms a changed selection", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue(withUpstairs({ open: false, why: "out_of_hours" })),
+    setStationFallback: vi.fn(),
+  });
+  const el = await mount(a);
+  const combo = q(el, '[data-test="fallback-upstairs"]') as HTMLElement & {
+    value: string;
+    options: { value: string; label: string }[];
+  };
+  expect(combo).not.toBeNull();
+  expect(combo.value).toBe("bar");
+  expect(combo.options[0]).toEqual({ value: "", label: "No replacement (the till asks)" });
+  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "" } }));
+  await settle(el);
+  expect(q(el, '[data-test="fallback-confirmation"]')!.textContent).toContain(
+    "While Upstairs bar is closed, the till will ask where to send its dishes.",
+  );
+  expect(a.setStationFallback).not.toHaveBeenCalled();
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  expect(a.setStationFallback).toHaveBeenCalledWith("upstairs", null);
+});
+
+it("refreshes the saved fallback when the following switch-off fails", async () => {
+  const server = withUpstairs(
+    { open: false, why: "out_of_hours" },
+    { fallbackStationId: null, closedSendsTo: null },
+  );
+  const a = api({
+    load: vi.fn(async () => structuredClone(server)),
+    setStationFallback: vi.fn(async () => {
+      server.routing.stationTimes[1] = {
+        ...server.routing.stationTimes[1]!,
+        fallbackStationId: "bar",
+        closedSendsTo: "bar",
+      };
+    }),
+    deactivateStation: vi.fn().mockRejectedValue(new Error("offline")),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="switch-off-upstairs"]')!.click();
+  await settle(el);
+  q(el, '[data-test="station-fallback"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bar" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  expect((q(el, '[data-test="fallback-upstairs"]') as HTMLElement & { value: string }).value).toBe(
+    "bar",
+  );
+  expect(q(el, '[data-test="station-upstairs"]')!.textContent).toContain("Its work goes to Bar.");
+  expect(
+    q(el, '[data-test="station-action-modal"]')!.querySelector('[role="alert"]')!.textContent,
+  ).toContain("could not be saved");
+});
+
+it("localizes the fallback search field in Spanish", async () => {
+  setLocale("es-ES");
+  const el = await mount(
+    api({ load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })) }),
+  );
+  const combo = q(el, '[data-test="fallback-upstairs"]')!;
+  combo.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+  await settle(el);
+  expect(combo.shadowRoot!.querySelector<HTMLInputElement>("input")!.placeholder).toBe(
+    "Buscar estaciones",
+  );
 });

@@ -27,7 +27,8 @@ import type {
   RoutingDecision,
   RouteExplanation,
 } from "../routing.js";
-import type { RoutingChange, RoutingMove } from "../routing-types.js";
+import type { RoutingChange, RoutingMove, StationTimes } from "../routing-types.js";
+import type { WeeklyInterval } from "../routing.js";
 import { exceptionSentence } from "./exception-sentence.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import type {
@@ -35,8 +36,21 @@ import type {
   PrepStationsApi,
   PrepStationsView,
   StationInput,
+  OutputsDown,
 } from "./routing-client.js";
 import { t } from "./strings.js";
+import "./station-hours-form.js";
+
+type StationAction =
+  | { kind: "today"; stationId: string; state: "open" | "closed" | null }
+  | { kind: "hours"; stationId: string }
+  | { kind: "fallback" | "switch_off"; stationId: string; choice: string; confirming: boolean }
+  | { kind: "switch_on"; stationId: string };
+const format = (key: Parameters<typeof t>[0], values: Record<string, string> = {}) =>
+  Object.entries(values).reduce(
+    (value, [name, replacement]) => value.replaceAll(`{${name}}`, replacement),
+    t(key) as string,
+  );
 
 type Editor =
   | { kind: "station"; id?: string }
@@ -139,6 +153,9 @@ export class PrepStationsScreen extends LitElement {
         gap: var(--wt-space-1);
         margin-top: var(--wt-space-1);
       }
+      .warning {
+        color: var(--wt-color-warning);
+      }
     `,
   ];
   @property({ attribute: false }) api!: PrepStationsApi;
@@ -172,6 +189,12 @@ export class PrepStationsScreen extends LitElement {
   @state() private testZone = "";
   @state() private explanation?: RouteExplanation;
   @state() private testError = "";
+  @state() private stationAction?: StationAction;
+  @state() private stationActionError = "";
+  @state() private stationFieldError = "";
+  @state() private hoursServerErrors: Record<number, string> = {};
+  @state() private outputsDown: OutputsDown = { printersDown: [], screensDark: [] };
+  #outputsTimer?: ReturnType<typeof setInterval>;
   #testRequest = 0;
   readonly #url = new UrlStateController(
     this,
@@ -220,6 +243,19 @@ export class PrepStationsScreen extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     void this.#load();
+    void this.#loadOutputs();
+    this.#outputsTimer = setInterval(() => void this.#loadOutputs(), 60_000);
+  }
+  override disconnectedCallback() {
+    if (this.#outputsTimer) clearInterval(this.#outputsTimer);
+    super.disconnectedCallback();
+  }
+  async #loadOutputs() {
+    try {
+      this.outputsDown = await this.api.listOutputsDown();
+    } catch {
+      // The card's last observed output status remains until a later passive read succeeds.
+    }
   }
   async #load() {
     try {
@@ -697,6 +733,138 @@ export class PrepStationsScreen extends LitElement {
         ${this.#claims(stationId).map((c) => html`<span class="chip">${this.#path(c.categoryId)} <wt-button size="sm" variant="secondary" data-test=${`remove-${c.categoryId}`} aria-label=${`${t("prep.remove_claim")} ${this.#path(c.categoryId)}`} @click=${() => void this.#preview({ kind: "claim", categoryId: c.categoryId, target: null }, () => this.api.removeClaim(c.categoryId))}>×</wt-button></span>`)}
       </div>`;
   }
+  #times(id: string): StationTimes | undefined {
+    return this.view?.routing.stationTimes.find((row) => row.stationId === id);
+  }
+  #destination(id: string | null): string {
+    return id
+      ? format("prep.work_goes_to", { station: this.#stationName(id) })
+      : t("prep.no_replacement_ask");
+  }
+  #todayEnd() {
+    const end = this.view?.routing.todayEnds;
+    return { time: end?.timeOfDay ?? "", day: t(end?.tomorrow ? "prep.tomorrow" : "prep.today") };
+  }
+  #stationStatus(s: PrepStation) {
+    const row = this.#times(s.id);
+    if (!row) return nothing;
+    if (!this.view?.routing.clockReadable) return t("prep.clock_unreadable");
+    if (s.isDefault) return t("prep.always_open_default");
+    const destination = this.#destination(row.closedSendsTo);
+    const end = this.#todayEnd();
+    if (row.status.why === "opened_by_hand") return format("prep.opened_by_hand", end);
+    if (row.status.why === "closed_by_hand")
+      return format("prep.closed_by_hand", { ...end, destination });
+    if (row.status.open) return t("prep.open_now");
+    return format("prep.closed_hours", { destination });
+  }
+  #hoursSummary(hours: readonly WeeklyInterval[]) {
+    if (!hours.length) return t("prep.always_open");
+    return hours
+      .map(
+        (row) =>
+          `${t(`venue.day.${row.weekday}` as "venue.day.0")} ${row.opensAt}–${row.closesAt}${row.closesAt < row.opensAt ? ` ${t("prep.next_day")}` : ""}`,
+      )
+      .join(", ");
+  }
+  #fallbackOptions(id: string) {
+    const stored = this.#times(id)?.fallbackStationId;
+    const stations = this.view?.routing.stations ?? [];
+    return [
+      { value: "", label: t("prep.no_replacement_choice") },
+      ...stations
+        .filter((row) => row.id !== id && (row.active || row.id === stored))
+        .map((row) => ({
+          value: row.id,
+          label: row.active ? row.name : `${row.name} ${t("prep.switched_off_option")}`,
+        })),
+    ];
+  }
+  #openStationAction(action: StationAction) {
+    this.stationAction = action;
+    this.stationActionError = "";
+    this.stationFieldError = "";
+    this.hoursServerErrors = {};
+  }
+  #openFallback(id: string, kind: "fallback" | "switch_off") {
+    const fallback = this.#times(id)?.fallbackStationId;
+    const active = this.view?.routing.stations.find((row) => row.id === fallback)?.active;
+    this.#openStationAction({
+      kind,
+      stationId: id,
+      choice: fallback && (active || kind === "fallback") ? fallback : "",
+      confirming: false,
+    });
+  }
+  #fallbackConfirmation(action: Extract<StationAction, { kind: "fallback" | "switch_off" }>) {
+    const station = this.#stationName(action.stationId);
+    const choice = action.choice;
+    const sentence = choice
+      ? format("prep.fallback_confirm", { station, destination: this.#stationName(choice) })
+      : format("prep.fallback_confirm_ask", { station });
+    const source = this.#times(action.stationId);
+    if (source?.status.open && action.kind === "fallback") return sentence;
+    if (!choice) return `${sentence} ${t("prep.starts_now")}`;
+    const target = this.#times(choice);
+    if (target?.status.open) return `${sentence} ${t("prep.starts_now")}`;
+    return `${sentence} ${
+      target?.closedSendsTo
+        ? format("prep.fallback_closed_too", {
+            station: this.#stationName(choice),
+            destination: this.#stationName(target.closedSendsTo),
+          })
+        : format("prep.fallback_closed_ask", { station: this.#stationName(choice) })
+    }`;
+  }
+  async #saveStationAction(hours?: readonly WeeklyInterval[]) {
+    const action = this.stationAction;
+    if (!action || this.busy) return;
+    this.busy = true;
+    this.stationActionError = "";
+    this.stationFieldError = "";
+    let fallbackSaved = false;
+    try {
+      if (action.kind === "today") await this.api.setStationToday(action.stationId, action.state);
+      if (action.kind === "hours") await this.api.setStationHours(action.stationId, hours ?? []);
+      if (action.kind === "fallback" || action.kind === "switch_off") {
+        const choice = action.choice || null;
+        if (choice !== this.#times(action.stationId)?.fallbackStationId) {
+          await this.api.setStationFallback(action.stationId, choice);
+          fallbackSaved = true;
+        }
+        if (action.kind === "switch_off") await this.api.deactivateStation(action.stationId);
+      }
+      if (action.kind === "switch_on") await this.api.activateStation(action.stationId);
+      this.stationAction = undefined;
+      await this.#load();
+    } catch (e) {
+      if (fallbackSaved) await this.#load();
+      const code = codeOf(e);
+      const field = (e as { params?: { field?: string } } | undefined)?.params?.field;
+      if (action.kind === "hours" && field?.startsWith("hours.")) {
+        const index = Number(field.slice(6));
+        if (Number.isInteger(index)) this.hoursServerErrors = { [index]: t("venue.time_distinct") };
+      } else if (code === "station.fallback_loop" || code === "route.station_inactive")
+        this.stationFieldError = t(
+          code === "station.fallback_loop" ? "prep.fallback_loop" : "prep.station_inactive",
+        );
+      else
+        this.stationActionError =
+          code === "station.not_found"
+            ? `${t("prep.save_error")} ${t("prep.station_not_found")}`
+            : t(code === "time_zone.unreadable" ? "prep.time_zone_unreadable" : "prep.save_error");
+    } finally {
+      this.busy = false;
+    }
+  }
+  #warnings(id: string) {
+    const printers = this.outputsDown.printersDown.filter((row) => row.stationId === id);
+    const screens = this.outputsDown.screensDark.filter((row) => row.stationId === id);
+    return html`<div class="station-warnings">
+      ${printers.map((row) => html`<p class="warning">${format("prep.printer_down", { printer: row.printerName, time: new Date(row.since).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false }) })}</p>`)}
+      ${screens.map((row) => html`<p class="warning">${row.lastSeenAt ? format("prep.screen_dark", { time: new Date(row.lastSeenAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false }) }) : t("prep.screen_never")}</p>`)}
+    </div>`;
+  }
   #stationCard(s: PrepStation) {
     const printers = this.view?.stationPrinters
       .filter((p) => p.stationId === s.id)
@@ -711,6 +879,48 @@ export class PrepStationsScreen extends LitElement {
       ><h2>
         ${s.name} ${s.isDefault ? html`<span class="muted">${t("prep.default")}</span>` : nothing}
       </h2>
+      <div class="status">
+        <p data-test=${`status-${s.id}`}>${this.#stationStatus(s)}</p>
+        ${this.#warnings(s.id)}
+      </div>
+      ${
+        s.isDefault
+          ? nothing
+          : html`
+              <div class="actions">
+                <wt-button
+                  variant="secondary"
+                  data-test=${`${this.#times(s.id)?.status.open ? "close" : "open"}-today-${s.id}`}
+                  @click=${() => this.#openStationAction({ kind: "today", stationId: s.id, state: this.#times(s.id)?.status.open ? "closed" : "open" })}
+                  >${t(this.#times(s.id)?.status.open ? "prep.close_today" : "prep.open_today")}</wt-button
+                >
+                ${this.#times(s.id)?.today ? html`<wt-button variant="secondary" data-test=${`schedule-${s.id}`} @click=${() => this.#openStationAction({ kind: "today", stationId: s.id, state: null })}>${t("prep.back_to_schedule")}</wt-button>` : nothing}
+              </div>
+              <p>${t("venue.hours")}: ${this.#hoursSummary(this.#times(s.id)?.hours ?? [])}</p>
+              <wt-button
+                variant="secondary"
+                data-test=${`edit-hours-${s.id}`}
+                @click=${() => this.#openStationAction({ kind: "hours", stationId: s.id })}
+                >${t("prep.edit_hours")}</wt-button
+              >
+              <wt-combobox
+                data-test=${`fallback-${s.id}`}
+                name=${`fallback-${s.id}`}
+                label=${t("prep.when_closed")}
+                placeholder=${t("prep.no_replacement_choice")}
+                .searchPlaceholder=${t("prep.search_stations")}
+                .options=${this.#fallbackOptions(s.id)}
+                .value=${live(this.#times(s.id)?.fallbackStationId ?? "")}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#openStationAction({ kind: "fallback", stationId: s.id, choice: event.detail.value, confirming: true })}
+              ></wt-combobox>
+              <wt-button
+                variant="secondary"
+                data-test=${`change-fallback-${s.id}`}
+                @click=${() => this.#openFallback(s.id, "fallback")}
+                >${t("prep.change_fallback")}</wt-button
+              >
+            `
+      }
       <p>
         ${t("prep.thresholds").replace("{warm}", String(s.warmAfterMinutes)).replace("{overdue}", String(s.overdueAfterMinutes)).replace("{forgotten}", String(s.forgottenAfterMinutes))}
       </p>
@@ -752,7 +962,7 @@ export class PrepStationsScreen extends LitElement {
         >${s.isDefault ? nothing : html`<wt-button data-test=${`default-${s.id}`} variant="secondary" @click=${() => void this.#act(() => this.api.setDefaultStation(s.id))}>${t("prep.make_default")}</wt-button>`}<wt-button
           data-test=${`switch-off-${s.id}`}
           variant="danger"
-          @click=${() => void this.#act(() => this.api.deactivateStation(s.id))}
+          @click=${() => this.#openFallback(s.id, "switch_off")}
           >${t("prep.switch_off")}</wt-button
         >
       </div>
@@ -996,6 +1206,110 @@ export class PrepStationsScreen extends LitElement {
       >
     </wt-modal>`;
   }
+  #stationActionDialog() {
+    const action = this.stationAction;
+    if (!action) return nothing;
+    const station = this.view?.stations.find((row) => row.id === action.stationId);
+    const times = this.#times(action.stationId);
+    if (action.kind === "hours")
+      return html`<station-hours-form
+        data-test="station-action-modal"
+        .inDialog=${true}
+        .hours=${times?.hours ?? []}
+        .serverErrors=${this.hoursServerErrors}
+        .saveError=${this.stationActionError}
+        .busy=${this.busy}
+        @hours-save=${(event: CustomEvent<{ hours: WeeklyInterval[] }>) => void this.#saveStationAction(event.detail.hours)}
+        @hours-cancel=${() => {
+          this.stationAction = undefined;
+        }}
+      ></station-hours-form>`;
+    const end = this.#todayEnd();
+    const isFallback = action.kind === "fallback" || action.kind === "switch_off";
+    const heading =
+      action.kind === "switch_off"
+        ? t("prep.switch_off")
+        : action.kind === "fallback"
+          ? t("prep.when_closed")
+          : action.kind === "switch_on"
+            ? t("prep.switch_on")
+            : action.kind === "today" && action.state === "closed"
+              ? t("prep.close_today")
+              : action.kind === "today" && action.state === "open"
+                ? t("prep.open_today")
+                : t("prep.back_to_schedule");
+    const todaySentence =
+      action.kind === "today" && action.state === "closed"
+        ? times?.closedSendsTo
+          ? format("prep.close_confirm", {
+              station: station?.name ?? action.stationId,
+              destination: this.#stationName(times.closedSendsTo),
+              ...end,
+            })
+          : format("prep.close_confirm_ask", { station: station?.name ?? action.stationId, ...end })
+        : "";
+    return html`<wt-modal
+      open
+      data-test="station-action-modal"
+      heading=${heading}
+      .dismissible=${!this.busy}
+      @wt-close=${() => {
+        this.stationAction = undefined;
+      }}
+    >
+      ${todaySentence ? html`<p>${todaySentence}</p>` : nothing}
+      ${
+        isFallback
+          ? html`
+              ${action.kind === "switch_off" ? html`<p>${format("prep.switch_off_confirm", { station: station?.name ?? action.stationId })}</p>` : nothing}
+              ${
+                station?.isDefault
+                  ? nothing
+                  : html`<wt-combobox
+                        data-test="station-fallback"
+                        name="station-fallback"
+                        label=${t("prep.when_closed")}
+                        placeholder=${t("prep.no_replacement_choice")}
+                        .searchPlaceholder=${t("prep.search_stations")}
+                        .options=${this.#fallbackOptions(action.stationId)}
+                        .value=${action.choice}
+                        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                          this.stationAction = {
+                            ...action,
+                            choice: event.detail.value,
+                            confirming: false,
+                          };
+                          this.stationFieldError = "";
+                        }}
+                      ></wt-combobox>
+                      ${this.stationFieldError ? html`<p class="error" role="alert" data-field-error="fallback">${this.stationFieldError}</p>` : nothing}`
+              }
+              ${action.confirming ? html`<p data-test="fallback-confirmation">${this.#fallbackConfirmation(action)}</p>` : nothing}
+            `
+          : nothing
+      }
+      ${this.stationActionError ? html`<p class="error" role="alert">${this.stationActionError}</p>` : nothing}
+      ${html`<wt-form-actions slot="footer"
+        ><wt-button
+          slot="cancel"
+          variant="secondary"
+          @click=${() => {
+            this.stationAction = undefined;
+          }}
+          >${t("prep.cancel")}</wt-button
+        ><wt-button
+          data-test="confirm-station-action"
+          ?disabled=${this.busy}
+          @click=${() => {
+            if (isFallback && !action.confirming && !station?.isDefault)
+              this.stationAction = { ...action, confirming: true };
+            else void this.#saveStationAction();
+          }}
+          >${t("prep.confirm")}</wt-button
+        ></wt-form-actions
+      >`}
+    </wt-modal>`;
+  }
   override render() {
     const view = this.view;
     const active =
@@ -1003,6 +1317,7 @@ export class PrepStationsScreen extends LitElement {
         .filter((s) => s.active)
         .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name)) ?? [];
     const off = view?.routing.claims.filter((c) => c.stationOff) ?? [];
+    const inactive = view?.stations.filter((station) => !station.active) ?? [];
     return html`<div class="toolbar">
         <h1>${t("prep.title")}</h1>
         <wt-button @click=${() => this.#openStation()} data-test="new-station"
@@ -1025,8 +1340,40 @@ export class PrepStationsScreen extends LitElement {
                   ></wt-card
                 >${this.#unassigned()}
               </div>
-              ${off.length ? html`<p>${t("prep.switched_off")}: ${off.map((c) => html`${this.#path(c.categoryId)} — ${this.#targetName(c.target)}. ${t("prep.switched_off_hint")}`)}</p>` : nothing}`
+              ${
+                inactive.length
+                  ? html`<section>
+                      <h2>${t("prep.switched_off")}</h2>
+                      ${inactive.map(
+                        (station) =>
+                          html`<wt-card data-test=${`inactive-${station.id}`}
+                            ><h3>${station.name}</h3>
+                            <p>
+                              ${this.#times(station.id)?.closedSendsTo ? format("prep.off_goes_to", { station: this.#stationName(this.#times(station.id)!.closedSendsTo!) }) : t("prep.off_asks")}
+                            </p>
+                            <p>
+                              ${this.#times(station.id)?.closedSendsTo ? t("prep.switched_off_hint") : t("prep.switched_off_no_replacement")}
+                            </p>
+                            ${this.#warnings(station.id)}
+                            <div class="actions">
+                              <wt-button
+                                variant="secondary"
+                                data-test=${`change-fallback-${station.id}`}
+                                @click=${() => this.#openFallback(station.id, "fallback")}
+                                >${t("prep.change_fallback")}</wt-button
+                              ><wt-button
+                                data-test=${`switch-on-${station.id}`}
+                                @click=${() => this.#openStationAction({ kind: "switch_on", stationId: station.id })}
+                                >${t("prep.switch_on")}</wt-button
+                              >
+                            </div></wt-card
+                          >`,
+                      )}
+                    </section>`
+                  : nothing
+              }
+              ${off.length ? html`<p>${t("prep.switched_off")}: ${off.map((c) => html`${this.#path(c.categoryId)} — ${this.#targetName(c.target)}. ${this.#times(c.target.kind === "station" ? c.target.stationId : "")?.closedSendsTo ? t("prep.switched_off_hint") : t("prep.switched_off_no_replacement")}`)}</p>` : nothing}`
           : nothing
-      }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.#dialog()}${this.#previewDialog()}`;
+      }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}`;
   }
 }
