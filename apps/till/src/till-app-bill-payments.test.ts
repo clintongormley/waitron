@@ -1371,6 +1371,46 @@ describe("till-app: a single payment refused because money is already on the bil
 });
 
 describe("till-app: a partly paid order at the counter", () => {
+  it("clears an inactive Make at choice before retrying the bill edit", async () => {
+    const updateWorkingOrder = vi.fn(
+      async (_id: string, request: { lines: { makeAt: string | null }[] }) => {
+        if (request.lines[0]?.makeAt === "retired") throw { code: "route.station_inactive" };
+        return { revision: 4 };
+      },
+    );
+    const askSaleDeadEnds = vi.fn().mockResolvedValue({
+      sends: true,
+      deadEnds: [],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    });
+    const el = await retrieved({ updateWorkingOrder, askSaleDeadEnds });
+    const c = counter(el);
+    c.store.addProduct(
+      {
+        id: "beer",
+        menuItemId: "offer-beer",
+        name: "Beer",
+        pricingUnit: "each",
+        unitPrice: "5.00",
+        vatClass: "general",
+        category: null,
+        allergens: null,
+      },
+      "2",
+    );
+    c.store.splitLine(0);
+    c.store.setLineMakeAt(0, "retired");
+    c.store.setLineMakeAt(1, "kitchen");
+    emit(c, "counter-bill-pay", { amount: "70.00" });
+    await flush(el);
+    expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
+    expect(updateWorkingOrder.mock.calls[1]![1].lines.map((line) => line.makeAt)).toEqual([
+      null,
+      "kitchen",
+    ]);
+    expect(dialog(el)).not.toBeNull();
+  });
+
   it("rechecks a saved bill edit refused for a dead-end dish before opening payment", async () => {
     const updateWorkingOrder = vi
       .fn()

@@ -2278,6 +2278,7 @@ export class TillApp extends LitElement {
     let paidMeanwhile = false;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
     let recheck = false;
+    let inactiveChoice = false;
     try {
       // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
       // after retrieving must be saved first or it is silently dropped from the charge and the record.
@@ -2299,9 +2300,10 @@ export class TillApp extends LitElement {
         ["station.no_replacement", "route.station_inactive"].includes(
           (error as { code?: string }).code ?? "",
         )
-      )
+      ) {
         recheck = true;
-      else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
+        inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
+      } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
       else
         this.errorKey = isPermanentSaleRefusal(error)
           ? "sale.refused"
@@ -2317,7 +2319,7 @@ export class TillApp extends LitElement {
       await this.#afterVersionRefusal(refreshed, retried, () =>
         this.#onConfirmPayment(event, true),
       );
-    if (recheck && (await this.#askCounterDeadEnds("pay")))
+    if (recheck && (await this.#askCounterDeadEnds("pay", true, inactiveChoice)))
       await this.#onConfirmPayment(event, true);
   }
 
@@ -2349,6 +2351,7 @@ export class TillApp extends LitElement {
     let paidMeanwhile = false;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
     let recheck = false;
+    let inactiveChoice = false;
     try {
       if (!(await this.#syncIfDirty(id, lines, label))) return;
       reachedFiscal = true;
@@ -2381,9 +2384,10 @@ export class TillApp extends LitElement {
         ["station.no_replacement", "route.station_inactive"].includes(
           (error as { code?: string }).code ?? "",
         )
-      )
+      ) {
         recheck = true;
-      else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
+        inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
+      } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
       else
         this.errorKey = isPermanentSaleRefusal(error)
           ? "sale.refused"
@@ -2399,7 +2403,8 @@ export class TillApp extends LitElement {
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () => this.#onCollectCard(event, true));
-    if (recheck && (await this.#askCounterDeadEnds("pay"))) await this.#onCollectCard(event, true);
+    if (recheck && (await this.#askCounterDeadEnds("pay", true, inactiveChoice)))
+      await this.#onCollectCard(event, true);
   }
 
   #basketPaidInPartFor?: {
@@ -2470,7 +2475,11 @@ export class TillApp extends LitElement {
     resolve?.(decision);
   }
 
-  async #askCounterDeadEnds(step: "pay" | "place", proceedWithoutAnswer = true): Promise<boolean> {
+  async #askCounterDeadEnds(
+    step: "pay" | "place",
+    proceedWithoutAnswer = true,
+    clearInactiveChoices = false,
+  ): Promise<boolean> {
     const id = this.#store.id;
     const question = limited(3_000);
     let answer: DeadEndAnswer | undefined;
@@ -2492,6 +2501,14 @@ export class TillApp extends LitElement {
     }
     if (this.#store.id !== id) return false;
     if (answer === undefined) return proceedWithoutAnswer;
+    if (clearInactiveChoices) {
+      // The question lists only unresolved routes, so an invalid explicit choice can have no row.
+      const available = new Set(answer.stations.map((station) => station.id));
+      this.#store.lines.forEach((line, index) => {
+        if (line.makeAt !== undefined && !available.has(line.makeAt))
+          this.#store.setLineMakeAt(index, undefined);
+      });
+    }
     if (!answer.sends || answer.deadEnds.length === 0) return true;
     const decision = await this.#openDeadEnds(answer, true);
     if (decision === null || this.#store.id !== id) return false;
@@ -2570,7 +2587,11 @@ export class TillApp extends LitElement {
    * saved only if edited (see {@link #syncIfDirty}); re-parking a retrieved order would replay it
    * server-side and drop the edit. On success the SAME order moves to the `"collect"` stage.
    */
-  async #onPlaceOrder(retried = false, refusalRetry = false): Promise<void> {
+  async #onPlaceOrder(
+    retried = false,
+    refusalRetry = false,
+    clearInactiveChoices = false,
+  ): Promise<void> {
     if (this.placing) return;
     this.placing = true;
     this.#counterSends++;
@@ -2580,8 +2601,9 @@ export class TillApp extends LitElement {
     let reachedFiscal = false;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
     let recheck = false;
+    let inactiveChoice = false;
     try {
-      if (!(await this.#askCounterDeadEnds("place", !refusalRetry))) return;
+      if (!(await this.#askCounterDeadEnds("place", !refusalRetry, clearInactiveChoices))) return;
       const lines = this.#currentSaleLines();
       const label = this.#store.label;
       if (this.#store.persisted) {
@@ -2603,9 +2625,10 @@ export class TillApp extends LitElement {
         ["station.no_replacement", "route.station_inactive"].includes(
           (error as { code?: string }).code ?? "",
         )
-      )
+      ) {
         recheck = true;
-      else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
+        inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
+      } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
       else
         this.errorKey = isPermanentSaleRefusal(error)
           ? "place.refused"
@@ -2619,7 +2642,7 @@ export class TillApp extends LitElement {
       await this.#afterVersionRefusal(refreshed, retried, () => this.#onPlaceOrder(true));
     if (recheck) {
       this.errorKey = "place.refused";
-      await this.#onPlaceOrder(retried, true);
+      await this.#onPlaceOrder(retried, true, inactiveChoice);
     }
   }
 
@@ -2838,6 +2861,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
     let recheck = false;
+    let inactiveChoice = false;
     try {
       if (this.#store.persisted) {
         // The Hold field opens blank, so fall back to the stored label rather than wipe it. A typed
@@ -2855,9 +2879,10 @@ export class TillApp extends LitElement {
         ["station.no_replacement", "route.station_inactive"].includes(
           (error as { code?: string }).code ?? "",
         )
-      )
+      ) {
         recheck = true;
-      else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
+        inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
+      } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
       else this.errorKey = counterError(error, "held.park_error");
     } finally {
       this.parking = false;
@@ -2866,7 +2891,8 @@ export class TillApp extends LitElement {
       await this.#afterVersionRefusal(refreshed, retried, () => this.#onParkOrder(event, true));
     if (recheck) {
       this.errorKey = "held.park_error";
-      if (await this.#askCounterDeadEnds("place", false)) await this.#onParkOrder(event, true);
+      if (await this.#askCounterDeadEnds("place", false, inactiveChoice))
+        await this.#onParkOrder(event, true);
     }
   }
 
@@ -5614,7 +5640,11 @@ export class TillApp extends LitElement {
         ["station.no_replacement", "route.station_inactive"].includes(
           (error as { code?: string }).code ?? "",
         ) &&
-        (await this.#askCounterDeadEnds("place", false))
+        (await this.#askCounterDeadEnds(
+          "place",
+          false,
+          (error as { code?: string }).code === "route.station_inactive",
+        ))
       ) {
         this.errorKey = undefined;
         await this.#onCounterBillPay(event, true);
