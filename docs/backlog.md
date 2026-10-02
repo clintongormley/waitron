@@ -2272,7 +2272,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     save on each form tried only with a hand-built event or not at all, and move the ones that close
     to `dismissible`.
   - **C126 (cancelling an order whose invoice was issued credits it; owner, 2026-10-02, option b,
-    decided without the asesor).** `POST /api/working-orders/:id/cancel` (`cancelPlacedOrder`,
+    decided without the asesor) — landed as #1030.** `POST /api/working-orders/:id/cancel` (`cancelPlacedOrder`,
     `apps/server/src/working-order.ts`; the credit in `apps/server/src/cancel-credit.ts`) now issues
     an R5 corrective invoice, by differences, for the whole invoice in the same transaction, settles
     the original at nothing owed and abandons the order; an order with no invoice is abandoned with
@@ -2286,11 +2286,25 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     `apps/server/src/orders-list.ts` and its cases in `apps/server/src/orders-list.test.ts`; C126,
     landing second, removes them and updates those cases (owner-approved), and checks an
     abandoned bill before Paid in `BILL_STATUS`, since the cancel settles the invoice. Open:
-    - **Whether the cancel should accept a manager-PIN override is a question for the owner, not
-      a decision.** As built it takes none, so a waiter cancelling an invoiced order is refused 403
-      with no way round it, while the sibling till actions accept one: an unpaid departure
-      (`apps/server/src/unpaid-departure.ts`), a bill refund (`apps/server/src/bill-refunds.ts`)
-      and opening the drawer (`POST /api/drawer/open`, `apps/server/src/till-api.ts`).
+    - **A manager's PIN does not yet let someone without `sale.rectify` cancel.** As built a
+      waiter cancelling an invoiced order is refused 403 with no way round it, while the sibling
+      till actions accept one: an unpaid departure (`apps/server/src/unpaid-departure.ts`), a bill
+      refund (`apps/server/src/bill-refunds.ts`) and opening the drawer (`POST /api/drawer/open`,
+      `apps/server/src/till-api.ts`). The owner asked for it (2026-10-02 ~12:40): queued as lane B's
+      B33.
+    - **No till screen offers the cancel yet.** A "Cancel and credit" action on an invoiced, unpaid
+      bill, shown only to someone allowed to correct a sale, is queued as lane B's B32 (owner,
+      2026-10-02 ~12:05).
+    - **The credit note's line is shown as a credit line, not as the reversed dish line** — changing
+      that is queued as lane C's C132 (owner, 2026-10-02).
+    - **A fully credited bill's original invoice can still be reprinted**, from the till and from
+      the dashboard; the server allows it. Whether a reprint should say the invoice was credited is
+      not decided.
+    - **Left in the dashboard Orders plan and spec after #1034 landed beside C126:** their banners
+      still say C126 "is to" credit the bill (it is built); the plan's owner-answers row 7 still says
+      "Task 2, as written" for the dropped mark; its Task 1 voided-bill case still lists
+      `invoiceNotCredited: false` with no pointer to the drop; and #1034 did not write its planned
+      test that a cancelled bill with an invoice shows its credit note.
     - **Decided (owner, 2026-10-02): a whole-invoice credit copies the invoice's own VAT split,
       negated** (`recordCorrection`'s `wholeInvoice`, `packages/core/src/record-correction.ts`).
       Worked out from the lines, as a partial correction still is, a 0.55 dish at 21% invoiced
