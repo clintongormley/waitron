@@ -1479,7 +1479,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   languages; a table with no Add action keeps just the sentence.
 
 **Form fields in the "filled" style, with the label inside the field (A178, owner 2026-10-01) —
-IN PROGRESS: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, and A178c (the dashboard widgets) as #1015; A178d–f to come.** The owner, showing Home Assistant's device dialog, likes:
+IN PROGRESS: A178a (the primitives) landed as #1010, A178b (the dashboard screens) as #1012, A178c (the dashboard widgets) as #1015, and A178d (setup and the till) as #TBD; A178e–f to come.** The owner, showing Home Assistant's device dialog, likes:
 
 1. the field is marked out by a background fill with a subtle line along its bottom, not a border
    all round;
@@ -1656,6 +1656,24 @@ as wide as its field and otherwise as wide as its longest row, never wider than 
 variants table's narrow unit dropdown no longer wraps "Add unit". **Seen, not changed:** once other
 fields in a purchase line show errors, its VAT-kind dropdown sits lower than its neighbours —
 `.line { align-items: flex-end }` in `purchase-form.ts`, from commit `6b299998ba` (2026-08-16).
+
+**A178d — DONE (#TBD).** Every field spec §9.3 and §9.4 list for setup and the till is drawn by a
+primitive: the native selects are `wt-combobox` (`search="auto"`; the table order screen's two
+course boxes `hide-label`, at least `--wt-tap-min` tall), setup's recovery key is a password
+`wt-input` with its reveal button in the `end` slot as on the certificate screen, and the recovery
+kit and the till's kitchen note are `wt-textarea`. Setup's file inputs and tick boxes, and the
+table order screen's bill radio buttons, stay. `apps/till/src/select-styles.ts` is deleted, so the
+mentions of it above describe the till before A178d. Setup's help buttons sit in each field's
+`help` slot; the province is required, so its empty first row is now the placeholder. The kit keeps
+its smaller monospace text. The till schedule's shift and colleague dropdowns take the dashboard
+schedule screen's flex basis, so an empty one no longer cuts its own label. **Existing tests
+changed** are the three approved kinds, each listed in the pull request, and the tick-box cases
+that checked no field on the bucket restore screen was marked invalid now also check the kit and
+environment fields, whose marking moved inside the primitives. **Seen, not changed:** the recovery
+kit lost `autocomplete="off"`, which `wt-textarea` does not offer; and the till's fallback unit for
+a product with no `unit` (`productUnit`, `apps/till/src/widgets/product-name.ts`) names itself in
+English only, so a Spanish till drawing such a product shows the unit's id — seen only with test
+products; whether the server ever sends a product without a unit was not checked.
 
 **Smaller text: the system font at 14px (A179, owner 2026-10-01) — DONE 2026-10-01, #988.** The owner:
 _"i find our text to be too big"_. Body text was `--wt-font-size-md`, 15px, with
