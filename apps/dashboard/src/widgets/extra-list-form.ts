@@ -512,6 +512,7 @@ export class ExtraListForm extends LitElement {
                 .map((locale) => `customer-name-${locale}`),
             ),
           this.name,
+          this.languages.defaultLanguage,
         )}
       </div>
     </wt-disclosure>`;

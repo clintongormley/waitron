@@ -96,6 +96,43 @@ describe("customerOptionSnapshotLabels", () => {
     ).toEqual(["Punto customer: Poco hecho customer"]);
   });
 
+  describe("a venue whose default content language is the staff map's key", () => {
+    // Default Spanish (the staff maps are keyed `es`), with Catalan sorting before it. A reader
+    // that skipped the default and took the first stored language would print the Catalan text.
+    const twoLanguages = snapshot({
+      listName: { es: "Punto staff" },
+      listCustomerName: { es: "Punto customer", ca: "Punt client" },
+      labelName: { es: "Staff grande" },
+      labelCustomerName: { es: "Grande", ca: "Gran" },
+    });
+
+    it("prints the default language's text when the asked-for language has none", () => {
+      expect(customerOptionSnapshotLabels([twoLanguages], "en-GB")).toEqual([
+        "Punto customer: Grande",
+      ]);
+    });
+
+    it("prints the asked-for language's text when it has some", () => {
+      expect(customerOptionSnapshotLabels([twoLanguages], "ca-ES")).toEqual(["Punt client: Gran"]);
+    });
+
+    it("prints the staff name when no language has text", () => {
+      expect(
+        customerOptionSnapshotLabels(
+          [
+            snapshot({
+              listName: { es: "Punto staff" },
+              listCustomerName: { es: "", ca: " " },
+              labelName: { es: "Staff grande" },
+              labelCustomerName: { es: " ", ca: "" },
+            }),
+          ],
+          "en-GB",
+        ),
+      ).toEqual(["Punto staff: Staff grande"]);
+    });
+  });
+
   it("prints a staff map's one entry whatever language the receipt asks for", () => {
     // The staff fallback holds a single entry under the venue's default content language, which is
     // not necessarily the language of the receipt; that entry is the only text the answer has.
@@ -136,5 +173,15 @@ describe("a snapshot whose staff map holds no entry", () => {
     });
     expect(staffOptionSnapshotLabels([empty])).toEqual([": "]);
     expect(optionSnapshotLabels([empty])).toEqual([": "]);
+  });
+
+  it("prints empty customer text for each side when it has no customer name either", () => {
+    const empty = snapshot({
+      listName: {},
+      listCustomerName: null,
+      labelName: {},
+      labelCustomerName: null,
+    });
+    expect(customerOptionSnapshotLabels([empty], "es-ES")).toEqual([": "]);
   });
 });

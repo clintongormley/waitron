@@ -20,12 +20,17 @@ A variant is itself a `products` row whose `parent_id` names its parent, so it c
 three in the same three columns.
 
 Two rules govern how those six fields become one displayed string, and both of them live in
-`packages/catalogue/src/product-presentation.ts`. Nothing else re-implements either one, with one
-exception named under _What a sold line freezes_ below.
+`packages/catalogue/src/product-presentation.ts`, apart from the per-language step named below.
+Nothing else re-implements either one, with one exception named under _What a sold line freezes_
+below.
 
 **Each name falls back on its own.** A blank customer-facing name falls back to Name; a blank kitchen
-name falls back to Name. They do not fall back to each other, and a product with a customer-facing
-name but no kitchen name still prints its staff Name to the kitchen.
+name falls back to Name. A customer-facing name blank in one language but not in the default
+language takes the default language's text in the text frozen for the receipt
+(`toInvoiceLineDescriptions`, below), not Name; that per-language step is `resolveContentText`
+(`packages/shared/src/content-languages.ts`), not `product-presentation.ts`. They do not fall back
+to each other, and a product with a customer-facing name but no kitchen name still prints its staff
+Name to the kitchen.
 
 **A variant is named in full and shown under its own names alone.** "Wine by the glass" has the
 variants "Wine 125" and "Wine 175", and a line sold as Wine 125 reads `Wine 125` on the till, the
@@ -131,9 +136,12 @@ one-entry map under the venue's default content language. Nothing has fallen bac
 row is written, so the customer-to-staff fallback for an answer runs at RENDER time instead, in
 `customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`): it takes the customer
 map when `nonBlankTranslations` says that map holds text in some language and the staff map
-otherwise, then resolves whichever it picked against the locale it was asked for. The kitchen half
-does the same thing a function along, through `kitchenPresentationName`
-(`optionSnapshotLabels`, same file).
+otherwise, then resolves whichever it picked against the locale it was asked for, then the venue's
+default content language — read from the staff map's one key, which both builders write under that
+language (`buildLineExtras`, and `optionSnapshotOf` in `apps/till/src/state/held-options.ts`) — then
+any language the map holds. The kitchen half
+(`optionSnapshotLabels`, same file) takes no language step: through `kitchenPresentationName` it
+prints the kitchen name and falls back to the staff map's one value.
 
 That customer-to-staff step is the exception the top of this file points at — the one place the
 rule is spelled out away from `product-presentation.ts`. A list and a label carry no variant, so
@@ -465,7 +473,8 @@ validation error opens itself and cannot be collapsed until the error is fixed �
 
 The main category is chosen in the editor itself, through the single-choice picker in
 `apps/dashboard/src/widgets/classification-fields.ts`.
-A variant shows its parent's main category as "Same as …". See
+A variant with no main category of its own shows its parent's as the dropdown's empty choice, in
+grey italic, or "Uncategorised" when the parent has none. See
 [Product categories](product-categories.md).
 
 ## One save, one transaction

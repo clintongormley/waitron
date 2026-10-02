@@ -193,8 +193,9 @@ function emptyDraft(): ProductEditorDraft {
  * in this form's own submitted value.
  *
  * Opened on a VARIANT (its read carries `inherited`), the same form is the variant's own page: every
- * field the variant may leave blank shows blank, with the parent's value as its hint, and there is
- * no Standalone ordering, Modifiers or Variants section. The names are never hinted.
+ * field the variant may leave blank shows blank, with the parent's value as its hint except the
+ * kitchen and customer-facing names, which hint the variant's own names, never the parent's; and
+ * there is no Standalone ordering, Modifiers or Variants section.
  */
 @customElement("dashboard-product-editor")
 export class ProductEditor extends LitElement {
@@ -310,6 +311,9 @@ export class ProductEditor extends LitElement {
         margin: 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+      .nutrition-hints .hint {
+        font-style: italic;
       }
       .badge {
         padding: var(--wt-space-1) var(--wt-space-2);
@@ -593,11 +597,6 @@ export class ProductEditor extends LitElement {
   private get inherited() {
     return this.value?.inherited ?? null;
   }
-  /** A variant's hint for a field it leaves blank. A parent with nothing to name there still says
-   * where the value comes from, rather than showing a blank that reads as "none". */
-  private sameAs(value: string | null | undefined): string {
-    return value ? t("editor.same_as").replace("{value}", value) : t("editor.same_as_parent");
-  }
   private hint(test: string, text: string) {
     return html`<p class="hint" data-test=${test}>${text}</p>`;
   }
@@ -619,8 +618,9 @@ export class ProductEditor extends LitElement {
   /** Empty for a product with no unit; callers choose the no-unit wording from the empty string. */
   private get unitShortLabel(): string {
     const unitId = this.draft.unitId ?? this.inherited?.unitId ?? null;
+    if (!unitId) return "";
     const unit = this.units.find((unit) => unit.id === unitId);
-    if (!unit) return "";
+    if (!unit) return t("editor.missing_choice");
     return this.text(unit.abbreviation) || this.text(unit.name);
   }
   /** The unit dropdown is a chooser behind the price field's button. It also has to be on screen
@@ -772,7 +772,7 @@ export class ProductEditor extends LitElement {
         label: t("editor.main_category"),
         categories: this.categories,
         value: this.draft.primaryCategoryId,
-        noneLabel: parent ? this.sameAs(parentCategory) : t("categories.uncategorised"),
+        noneLabel: parentCategory ?? t("categories.uncategorised"),
         error: this.error("primary"),
         disabled: this.suspended,
         change: (id) => this.change("primaryCategoryId", id),
@@ -807,6 +807,8 @@ export class ProductEditor extends LitElement {
           t("editor.kitchen_name"),
           this.draft.kitchenName ?? "",
           (value) => this.change("kitchenName", value),
+          false,
+          this.draft.name,
         )}
         ${this.renderRouting(
           "product-course",
@@ -827,8 +829,8 @@ export class ProductEditor extends LitElement {
     choices: ProductRoutingChoice[],
     parentId: string | null | undefined,
   ): string {
-    if (this.inherited === null) return none;
-    return this.sameAs(choices.find(({ id }) => id === parentId)?.name);
+    if (this.inherited === null || !parentId) return none;
+    return choices.find(({ id }) => id === parentId)?.name ?? t("editor.missing_choice");
   }
 
   private renderRouting(
@@ -890,6 +892,8 @@ export class ProductEditor extends LitElement {
           t("editor.customer_name"),
           this.draft.customerName ?? {},
           (value) => this.change("customerName", value),
+          this.draft.name,
+          this.language,
         )}
         ${this.locales.map((locale) => {
           return html`<wt-textarea
@@ -943,20 +947,23 @@ export class ProductEditor extends LitElement {
         this.draft.allergens === null
           ? this.hint(
               "allergens-hint",
-              `${t("modifiers.allergens")}: ${this.sameAs(
-                Object.keys(parent.allergens ?? {})
-                  .map((code) => allergenName(code))
-                  .join(", "),
-              )}`,
+              `${t("modifiers.allergens")}: ${
+                parent.allergens === null
+                  ? t("editor.allergens_unreviewed")
+                  : Object.keys(parent.allergens)
+                      .map((code) => allergenName(code))
+                      .join(", ") || t("editor.allergens_none")
+              }`,
             )
           : nothing
       }${
         this.draft.dietaryDeclarations === null
           ? this.hint(
               "dietary-hint",
-              `${t("modifiers.dietary_preferences")}: ${this.sameAs(
-                parent.dietaryDeclarations.map((label) => t(`editor.diet.${label}`)).join(", "),
-              )}`,
+              `${t("modifiers.dietary_preferences")}: ${
+                parent.dietaryDeclarations.map((label) => t(`editor.diet.${label}`)).join(", ") ||
+                t("editor.diet_none")
+              }`,
             )
           : nothing
       }
@@ -1043,7 +1050,7 @@ export class ProductEditor extends LitElement {
   private renderTax() {
     const parent = this.inherited;
     const parentTax = parent && this.taxes.find((tax) => tax.id === parent.vatClass);
-    const sameAs = parent ? this.sameAs(parentTax ? this.taxLabel(parentTax) : null) : null;
+    const inheritedTax = parent ? (parentTax ? this.taxLabel(parentTax) : parent.vatClass) : null;
     const taxes = this.taxes.map((tax) => ({ value: tax.id, label: this.taxLabel(tax) }));
     return html`<wt-combobox
       name="tax"
@@ -1052,8 +1059,8 @@ export class ProductEditor extends LitElement {
       search="auto"
       searchPlaceholder=${t("categories.combobox_search")}
       noResultsLabel=${t("categories.combobox_no_results")}
-      placeholder=${sameAs ?? t("editor.choose")}
-      .options=${sameAs === null ? taxes : [{ value: "", label: sameAs }, ...taxes]}
+      placeholder=${inheritedTax ?? t("editor.choose")}
+      .options=${inheritedTax === null ? taxes : [{ value: "", label: inheritedTax }, ...taxes]}
       .value=${this.draft.vatClass ?? ""}
       error=${this.error("tax")}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
@@ -1072,10 +1079,12 @@ export class ProductEditor extends LitElement {
    * offered: it would read as one thing and save as another. */
   private renderUnit() {
     const parent = this.inherited;
-    const parentUnit = parent && this.units.find((unit) => unit.id === parent.unitId);
-    const blank = parent
-      ? this.sameAs(parentUnit ? this.unitLabel(parentUnit) : t("editor.unit_each"))
-      : t("editor.unit_each");
+    const parentUnit = this.units.find((unit) => unit.id === parent?.unitId);
+    const blank = !parent?.unitId
+      ? t("editor.unit_each")
+      : parentUnit
+        ? this.unitLabel(parentUnit)
+        : t("editor.missing_choice");
     const none = parent ? "" : EACH_CHOICE;
     return html`<wt-combobox
         name="unit"

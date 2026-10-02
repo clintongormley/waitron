@@ -88,6 +88,36 @@ it("opens with every field of the variant it was given", async () => {
   expect(el.shadowRoot!.querySelector("dashboard-image-upload")!.image).toBe("half.png");
 });
 
+const nameHints = (el: VariantForm) =>
+  ["kitchenName", "customerName-es", "customerName-en"].map(
+    (name) => (field(el, name) as unknown as { placeholder: string }).placeholder,
+  );
+
+it("hints a new variant's blank names with what they fall back to, as its name is typed", async () => {
+  const el = await mountForm();
+  expect(nameHints(el)).toEqual(["", "", ""]);
+  await change(el, "name", "Grande");
+  expect(nameHints(el)).toEqual(["Grande", "Grande", "Grande"]);
+  await change(el, "customerName-es", "Ración grande");
+  expect(nameHints(el)).toEqual(["Grande", "Grande", "Ración grande"]);
+});
+
+it("hints an existing variant's blank names with its own name", async () => {
+  const el = await mountForm({ value: { ...halfPortion, customerName: null, kitchenName: null } });
+  expect(nameHints(el)).toEqual(["Media", "Media", "Media"]);
+});
+
+it("never hints a customer-facing name with the kitchen name, which keeps its own text", async () => {
+  const el = await mountForm({ value: { ...halfPortion, customerName: null } });
+  expect(field(el, "kitchenName").value).toBe("1/2 RAC");
+  expect(nameHints(el).slice(1)).toEqual(["Media", "Media"]);
+  await change(el, "customerName-es", "Media ración");
+  expect(nameHints(el).slice(1)).toEqual(["Media", "Media ración"]);
+  await change(el, "kitchenName", "MEDIA");
+  expect(field(el, "kitchenName").value).toBe("MEDIA");
+  expect(nameHints(el).slice(1)).toEqual(["Media", "Media ración"]);
+});
+
 it("marks the name as required and leaves the price and the optional names unmarked", async () => {
   const el = await mountForm();
   expect(field(el, "name").required).toBe(true);

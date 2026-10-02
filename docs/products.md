@@ -27,14 +27,16 @@ line list, a retrieved order and your sales reports. Use whatever the venue actu
 Two optional names sit beside it, each in its own folded section:
 
 - A **customer-facing name**, under **Descriptors**, with one field per content language. This is
-  what a diner reads: the receipt, the invoice, and the printed allergen sheet. Leave it blank and
-  the receipt shows the staff name instead.
+  what a diner reads: the receipt, the invoice, and the printed allergen sheet. Leave it blank in
+  every language and the receipt shows the staff name instead. Leave it blank in a language other
+  than the default and a receipt in that language shows the default language's customer-facing name.
 - A **kitchen name**, under **Kitchen**. This is what the kitchen ticket prints and what the kitchen
   screens show. It is useful when the short label a cook needs differs from the name you sell under.
   Leave it blank and the kitchen sees the staff name instead.
 
 The two fall back separately. Filling in a customer-facing name does not change what the kitchen
-sees, and filling in a kitchen name does not change what the diner reads.
+sees, and filling in a kitchen name does not change what the diner reads. While either name is
+blank, its field shows the name that will be used instead.
 
 You can also add a customer-facing description and a picture, both under **Descriptors**.
 
@@ -79,7 +81,9 @@ the product.
 
 **Open** takes you to the variant's own page, where it can have its own VAT, main category,
 allergens and the other product details. Apart from the names, each detail you leave blank there
-shows the product's value greyed out as a hint, and the variant uses the product's value. The
+shows the product's value greyed out as a hint or, where the product has none, what will be used
+("None", "Uncategorised", "Each"; "Not yet reviewed" for allergens nobody has reviewed), and the variant
+uses the product's value. The
 description works as one value across all languages: to use the product's description, leave every
 language of the description blank. Once you write the description in one language, the variant uses
 only its own description, and the languages you left blank stay blank. The page has no Modifiers

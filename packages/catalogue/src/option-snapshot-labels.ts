@@ -31,12 +31,14 @@ export function optionSnapshotLabels(snapshots: readonly OptionSnapshot[]): stri
 }
 
 /**
- * The DINER's wording. Each side takes its customer text and falls back to the STAFF name, never to
- * the kitchen name, which is a cook's shorthand and identifies the goods to nobody else.
+ * The DINER's wording. Each side takes its customer text in `locale`, then in the venue's default
+ * content language, then in any other stored language, and falls back to the STAFF name only when
+ * it has no customer text at all, never to the kitchen name, which is a cook's shorthand and
+ * identifies the goods to nobody else.
  *
- * `resolveSnapshotText` rather than an exact-key lookup, because `locale` is normally a full tag
- * ("es-ES") while both maps are keyed by bare language codes, and because a map blank in the
- * requested language must still print a name on a legal receipt.
+ * The default is read from the staff map's one key: both builders key it by the default content
+ * language at the time the answer was frozen (`apps/server/src/modifier-selection.ts`,
+ * `apps/till/src/state/held-options.ts`).
  */
 export function customerOptionSnapshotLabels(
   snapshots: readonly OptionSnapshot[],
@@ -47,7 +49,7 @@ export function customerOptionSnapshotLabels(
     staffNames: Record<string, string>,
   ) => {
     const names = nonBlankTranslations(customerNames) ?? staffNames;
-    return resolveSnapshotText(names, locale, locale);
+    return resolveSnapshotText(names, locale, Object.keys(staffNames)[0] ?? locale);
   };
   return snapshots.map(
     (snapshot) =>

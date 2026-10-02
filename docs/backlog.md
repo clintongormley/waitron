@@ -745,7 +745,30 @@ the section. The option window (`option-label-form.ts`, A170), the product edito
 (`product-editor.ts`) and the variant form (`variant-form.ts`) already kept the two apart and are
 unchanged.
 
-**A name field's hint shows what a blank field will actually use (A172, owner 2026-10-01) — OPEN.**
+**A name field's hint shows what a blank field will actually use (A172, owner 2026-10-01) — DONE (#1053).**
+Built in all five editors as the three bullets below ask, each hint following the field it copies
+as it is typed (`optionalTextFields`, `apps/dashboard/src/widgets/form-fields.ts`). Products and
+variants already fell back requested language → default language → Name (`resolveContentText`,
+`packages/shared/src/content-languages.ts`, through `toInvoiceLineDescriptions`), so the text frozen
+for their receipt and the translation gap report are unchanged; one variant reader,
+`joinCustomerPresentationText` (`packages/catalogue/src/product-presentation.ts`), does not follow
+that order (whether any surface shows the difference is not known; the OPEN entry
+"`joinCustomerPresentationText` passes the requested language where the default belongs", under
+A9). An options list's and an option's names did not (an extras list's own name reaches no
+receipt): with default Spanish and an option named
+`{ es: "Grande", ca: "Gran" }`, a direct call to `customerOptionSnapshotLabels` for English returned
+"Gran", because it skipped the default and took the first stored language alphabetically. It now
+tries the default language, read from the frozen staff name's key, before any other (cases in
+`packages/catalogue/src/option-snapshot-labels.test.ts`); the receipt and the till's settled ticket
+both read through it.
+On the owner's answer on #1053 (2026-10-02: _"I don't think we want 'same as', we just want to show
+the value. The same everywhere."_), a variant's values taken from its parent drop "Same as" too:
+the product editor's category, VAT, unit and course dropdowns and the allergen and dietary lines
+show the parent's value itself, and the variant table shows the product's price, all in grey
+italic; where the parent names nothing they show what will be used ("Uncategorised", the course's
+"— none —", "Each" for the unit, "None", or "Not yet reviewed" for allergens the parent has not had reviewed). The
+photo caption ("Same as the main product's photo") stays: it is the only sign a photo is
+inherited.
 The owner: _"the kitchen name hint should be the name field, unless it has its own value. The main
 language name hint should be the name field, and the secondary languages should be the main
 language name"_. A field's hint is its placeholder (CLAUDE.md §3, Forms), so it shows only while
@@ -761,15 +784,16 @@ lists, options and extras lists:
   name (and Name, if that is blank too). **This does NOT match what happens today**, where a
   blank name in any language falls back straight to Name, never to the main language's name
   (`customerPresentationText`, `packages/catalogue/src/product-presentation.ts`; for options,
-  `customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts`). A hint
-  must not show text the customer will never see, so this part needs the fallback itself to
-  change to blank → main language's customer-facing name → Name, for every surface that
+  `customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts`).
+  _(Wrong when written: see the C122 correction below; A172 has since changed the options
+  reader.)_ A hint must not show text the customer will never see, so this part needs the fallback
+  itself to change to blank → main language's customer-facing name → Name, for every surface that
   reads these names (receipt, till, menus), plus `docs/developers/products.md`. The translation
   gap report (`listContentTranslationGaps`, `packages/catalogue/src/content-languages.ts`) counts
   "Spanish filled, English blank" as a gap today because English would show the staff name;
   whether it is still a gap once English falls back to the Spanish name is a decision to make
-  with the owner before building. "Main language" here means the venue's default content
-  language.
+  with the owner before building (A172 left the report unchanged; see above). "Main language"
+  here means the venue's default content language.
   _(Correction 2026-10-01, C122: measured, the receipt already falls back to the main language's
   customer-facing name, so "a blank name in any language falls back straight to Name" and "English
   would show the staff name" above are wrong for it. Default
@@ -782,7 +806,7 @@ lists, options and extras lists:
   prints a blank goods line", under A9). The till's buttons and basket show Name in every case.
   Receipts: the C122 entry under A9.)_
 
-Today the options list, option and extras list editors (`option-list-form.ts`,
+Before A172, the options list, option and extras list editors (`option-list-form.ts`,
 `option-label-form.ts`, `extra-list-form.ts`) already hint Name in the kitchen name AND in every
 language's customer-facing name; the product editor (`product-editor.ts`) and the variant form
 (`variant-form.ts`) hint neither. So the first two bullets are new work only in those two, and the
@@ -1227,8 +1251,8 @@ kg)". All eleven are in `apps/dashboard/src/widgets/product-editor.ts` unless an
 named. All eleven were settled from mockups on 2026-10-02 (A216 on the reading its entry
 records); the decisions follow each entry. A214, A217 and A219 all reshape the Pricing section:
 build them together.
-LOOK at each on a product AND on a variant's page (the editor shows a variant with "Same as …"
-choices), at 1280 and 390, light and dark.
+LOOK at each on a product AND on a variant's page (the editor shows a variant with its parent's
+values as the blank choices), at 1280 and 390, light and dark.
 
 **No Add category button, and the category shown as a path (A209) — DECIDED, ready to build.**
 The owner: _"we no longer need the add category button. i'm questioning whether we need the
@@ -1277,8 +1301,8 @@ every field is named on the line whether or not it has a value, e.g. "**Kitchen 
 **Course:** none", "**Allergens:** none specified · **Dietary preferences:** none specified". Build
 it with A200's product-editor decision above (each value after its bold field name, the
 Descriptors line one row per field), which this extends to the empty case. Choose the wording for
-"nothing set" once, in both languages; on a variant's page an empty value means "same as the
-parent" and must say so, as the fields themselves do.
+"nothing set" once, in both languages; on a variant's page an empty value shows the parent's
+value, as the fields themselves do (A172).
 
 **An Add course button beside the course dropdown (A212) — DECIDED, ready to build.** The owner:
 _"perhaps we should add an "Add course" button under Courses, which would open a modal to edit
@@ -1307,7 +1331,7 @@ pressing Enter on a line turns it into a `wt-combobox` with `multiple` set, and 
 back into the line. Each line is a button for a keyboard and a screen reader ("Allergens: Nuts,
 Seeds, edit"). The product picker offers no "may contain" today (only the ingredient form's
 `allergen-picker.ts` does), and the draft keeps each allergen's stored presence when the list
-changes; keep that. A variant's "Same as …" hints (`nutritionHints`) stay meaningful.
+changes; keep that. A variant's hints of its parent's values (`nutritionHints`) stay meaningful.
 
 **No box around Pricing (A214) — OPEN.** The owner: _"Pricing also doesn't need the box around
 it"_. `renderPrice` draws a `fieldset class="bordered-group"` with a "Pricing" legend. **Wanted:**
@@ -1388,16 +1412,19 @@ name as the default value, at least when I add a variant and fill in the interna
 time"_. A blank kitchen name or customer name falls back to the staff name
 (`kitchenPresentationName` and `customerPresentationText`,
 `packages/catalogue/src/product-presentation.ts`), but no field says so: the product editor's
-header comment states "The names are never hinted", and the variant window
-(`apps/dashboard/src/widgets/variant-form.ts`) sets no hint on them either. **Wanted:** while a
-kitchen or customer name is blank, its field shows what will be used instead, as a placeholder
-that follows the staff name as it is typed — on a product, on a variant's page and in the variant
-window. The placeholder must say what `product-presentation.ts` would print, not a second rule: a
-variant falls back to its OWN name, never its parent's kitchen or customer name; and the customer
-name falls back only in the venue's default language, so decide with the owner what the other
-languages' fields show (blank, or the default-language name the reader falls back to). Read, not
-reproduced: "the first time" may mean the hint is missing only on a new variant; check an
-existing one too.
+header comment stated "The names are never hinted", and the variant window
+(`apps/dashboard/src/widgets/variant-form.ts`) set no hint on them either (both fixed by A172).
+**Wanted:** while a kitchen or customer name is blank, its field shows what will be used instead,
+as a placeholder that follows the staff name as it is typed — on a product, on a variant's page and
+in the variant window. The placeholder must say what `product-presentation.ts` would print, not a
+second rule: a variant falls back to its OWN name, never its parent's kitchen or customer name; and
+the customer name falls back only in the venue's default language (wrong: see the C122 correction
+in A172's entry above), so decide with the owner what the other languages' fields show (blank, or
+the default-language name the reader falls back to). Read, not reproduced: "the first time" may
+mean the hint is missing only on a new variant; check an existing one too.
+A172 has since built the name hints — the kitchen and customer-facing names, in all five editors,
+on a new variant and an existing one — so what is left of A220 is the description hints and their
+checks.
 **Decided (owner, 2026-10-02):** a customer-name field in another language shows the
 default-language name as its hint, _"which is what we'd show on the menu anyway if it is missing"_
 (the owner's account of the menu; check it against the reader before relying on it). The kitchen
@@ -1426,7 +1453,7 @@ was not saved yet or the list misses it; reproduce before assuming either.
 **A variant always has its product's unit (A222, owner 2026-10-02) — OPEN.** The owner:
 _"currently variants can have different units from their parents. i think that's a bad idea"_.
 A variant's page offers its own unit today (`renderUnit` in `product-editor.ts`, whose blank
-choice is "Same as …"). **Wanted:** a variant takes its product's unit and cannot set one; the
+choice is the parent's unit). **Wanted:** a variant takes its product's unit and cannot set one; the
 field goes from the variant's page and the variant window, the server refuses or ignores a
 variant's unit, and variants holding a unit of their own are cleared (allowed before go-live,
 §3). The unit decides how a line's quantity and price are worked out, which reaches a sale
@@ -1453,7 +1480,8 @@ till; the list form should mark that row.
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
 a chosen value rather than the grey prompt (the dropdown gives it the stand-in value `__each__`, and
-a save still stores no unit); a variant's "Same as …" keeps the grey look. **Seen while building,
+a save still stores no unit); a variant's "Same as …" keeps the grey look (since A172, #1053, 2026-10-02: the parent's
+value itself, still grey). **Seen while building,
 not changed:**
 
 - on a product of its own, the main category's "Uncategorised" and the course's "No course"
@@ -1493,8 +1521,8 @@ zoom the page in when a field whose text is under 16px is focused — not yet tr
 the usual remedy is to keep field text at 16px on small screens only.
 
 **Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178, A175 (#1029),
-A169 (#1026), A176 (#1033), A177 (#1037), A170 (#1040) and A171 (#1044) are done; next A172, built
-in the new style rather than restyled twice.
+A169 (#1026), A176 (#1033), A177 (#1037), A170 (#1040), A171 (#1044) and A172 (#1053) are done,
+A172 built in the new style rather than restyled twice.
 
 **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
 reorder list (`ReorderController`, `apps/dashboard/src/widgets/reorder-table.ts`) shows a faint line
@@ -3758,6 +3786,24 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `apps/server/src/receipt-ticket.ts`). No save path writes such a row today (product and variant
   saves refuse it), only a direct write. It shows under the default language in the Missing
   translations list.
+- **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
+  (found 2026-10-02 by A172, not measured).** It calls `resolveSnapshotText(variant, locale,
+  locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixed in
+  `customerOptionSnapshotLabels`, so a locale blank in a variant's map takes the first stored
+  language alphabetically rather than the default. The receipt fills the variant's text per
+  receipt language before it gets there (`apps/server/src/working-order.ts`), so whether any
+  surface shows the difference is unknown; reproduce before fixing.
+- **The menu section form's customer-name hints skip the default language — OPEN (found
+  2026-10-02 during A172, not measured).** Every language's customer-name field in
+  `apps/dashboard/src/widgets/section-details-form.ts` hints the section's internal name, while the
+  till's section reader (`descriptionFor` in `apps/till/src/widgets/dish-format.ts`, called from
+  `apps/till/src/widgets/menu-browser.ts`, through `resolveEnabledContentText`) falls back to the
+  default language's name before the internal name, so in another language the hint can show text
+  the till will not. The same form is the menu's Create and Rename form (`#renderMenuForm`,
+  `apps/dashboard/src/screens/menus-screen.ts`), so a menu's own customer-facing names are hinted
+  the same way. A172 covered only the product, variant, options list, option and extras list
+  editors. Likely fix, not done, covering both: pass the form's default language to
+  `optionalTextFields`, as those editors do.
 - **The default-change check counts deleted and switched-off things — OPEN (noted 2026-10-01 by
   C122; I believe this predates the branch).** `listContentTranslationGaps`
   (`packages/catalogue/src/content-languages.ts`) has no `active` filter on top-level products,
