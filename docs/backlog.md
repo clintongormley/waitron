@@ -365,8 +365,9 @@ the 2026-09-30 folders design; what remains:
   provisioning's `beforeCommit`) deletes every `catalogues` row, so a provisioning or demo-seed
   path that publishes a menu BEFORE the import runs fails the import's commit on the append-only
   `menu_versions` → `catalogues` key. `apps/dashboard/src/widgets/variant-form.test.ts` failed once
-  in a local dashboard coverage run and passed three times alone: an intermittent failure whose
-  cause needs finding.
+  in a local dashboard coverage run; which of its tests failed was not recorded. The one
+  intermittent failure in that file whose cause is known, the Escape test, is fixed (A220f; see the
+  flaky-test entry); whether it was this one is not known.
 - **Changing sent lines and the kitchen screen (Task 7c, #710, and the kitchen fixes after it).**
   The counter's prep-queue card shows no notices and does not refresh. The till's API client has no
   general request timeout (only the kitchen refresh and menu-state reads are bounded, at 25 seconds,
@@ -2514,11 +2515,13 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       transferring items and moving part of a dish to another group still refuse a partial move
       of a dish with extras (`tab.transfer_modifier_line`). A whole dish moves with its extras.
       **Next action:** decide whether those partial moves should split extras too.
-    - **Two dashboard tests have the Escape flake fixed in Task 11** (a check made before the
-      browser's close report arrives with the next animation frame): "saves on Enter and cancels on
-      Escape from a focused field" in `apps/dashboard/src/widgets/variant-form.test.ts`, and
-      `pressEscape`'s fixed 50 ms wait in `packages/ui/src/components/wt-dialog.test.ts`. **Next
-      action:** wait for the close event there too.
+    - **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after
+      each Escape.** That is deliberate, as its comment says: with `closeReportsDelivered` between
+      presses, Chromium 153 let every Escape be refused, and a dialog without `closedby` passed the
+      repeated-Escape tests. The variant form's "saves on Enter and cancels on Escape from a focused field",
+      once listed here with it, is fixed (A220f; see the flaky-test entry). **Next action:** decide
+      whether "closes on a real Escape press" should wait for its `wt-close` instead, keeping the
+      timer for the stays-open tests.
     - The till's "Amount off (€)" writes the euro sign into the label rather than taking the
       venue's currency. How a comp or discount appears on the invoice is still asesor Q29.
   - **Eight till tests wait a fixed real time for a round's retries** (found 2026-09-30, B13). They
@@ -5144,29 +5147,22 @@ approved.
   Playwright's "Frame was detached" during a whole-workspace run, and then passed on its own with no
   code change. The original log and screenshot were kept; the cause is unexplained, so retain them
   again on the next sighting rather than re-running to green.
-- **A sixth, seen in CI 2026-09-20 on #469, a branch that touches no browser package at all, and
-  reproduced locally 2026-10-02.**
-  `test-dashboard` failed `apps/dashboard/src/widgets/variant-form.test.ts` → "saves on Enter and
-  cancels on Escape from a focused field", at `expect(cancel).toHaveBeenCalledTimes(1)`; the Enter half
-  of the same test passed. It did not reproduce locally at the time. The cause is NOT established —
-  two hypotheses were traced through the code but neither was run (the likelier is a re-render
-  provoked by the submit taking focus off the field between the back-to-back `{Enter}` and
-  `{Escape}`).
-  **Reproduced locally 2026-10-02 (A220 branch), with a likely cause.** Running that file beside
-  `product-editor.test.ts` and two of the dashboard's a11y suites (the run's command was not
-  recorded), it failed 2 times in 14 (and 0 in 8 on main's code, too few runs to tell the two
-  apart). A throwaway probe pressed Escape in a fresh variant window 40 times beside
-  `product-editor.test.ts`, run twice: each time 38 `wt-cancel`s had arrived when
-  `userEvent.keyboard("{Escape}")` resolved, 2 arrived only after a 50 ms wait, and none failed to
-  arrive. The probe did not press Enter first, so it did not reproduce the failing test's sequence.
-  `wt-dialog` sends `wt-close` from the dialog's `close` event, which the browser delivers later,
-  and the test checks the spy straight after the key press (read, not run:
-  `packages/ui/src/components/wt-dialog.ts`, re-sent as `wt-cancel` by
-  `apps/dashboard/src/widgets/variant-form.ts`).
-  **Next action:** on a sighting keep the job log and the screenshot. The two candidate fixes are
-  awaiting the component's `updateComplete` between the two key presses (the older focus
-  hypothesis, untested) and waiting for the call with `expect.poll` (the timing finding above); both
-  change the test, so either waits for an owner-approved change.
+- **A sixth: `apps/dashboard/src/widgets/variant-form.test.ts` → "saves on Enter and cancels on
+  Escape from a focused field" — FIXED (A220f).** Seen in CI 2026-09-20 on #469, failing at
+  `expect(cancel).toHaveBeenCalledTimes(1)`. Cause, measured 2026-10-03 with a throwaway probe that
+  repeated the test's own Enter-then-Escape sequence 150 times: when `userEvent.keyboard("{Escape}")`
+  resolved, the native dialog was already shut every time, but in 13 of 150 its `close` event — which
+  `wt-dialog` re-sends as `wt-close`, and the variant window as `wt-cancel` — had not yet been
+  delivered; it arrived within 50 ms each time. Focus stayed on the field after Enter in all 150, so
+  the older idea that the save moves focus did not happen in those runs. The test now awaits `closeReportsDelivered()`
+  before counting the cancel, the helper its sibling tests use for the same wait. Measured on that
+  one test, run alone 40 times without the new line and 40 times with it, from `apps/dashboard`:
+  `pass=0; fail=0; for i in $(seq 1 40); do if gtimeout 120 pnpm exec vitest run src/widgets/variant-form.test.ts -t "saves on Enter and cancels on Escape" > /tmp/a220f/before-$i.log 2>&1; then pass=$((pass+1)); else fail=$((fail+1)); fi; done; echo "before: pass=$pass fail=$fail"`
+  (the second loop wrote `after-$i.log`): 10 of 40 failed before, 0 of 40 after; the probe with the same wait, 400 repeats: 41 late cancels,
+  all delivered once the wait returned, none missing. Control: with the window's `@wt-close` handler
+  deleted, the fixed test fails at the same assertion. An independent review re-measured on 2026-10-03:
+  5 of 40 failed without the wait and 0 of 40 with it; its 400-repeat probe saw 23 late cancels,
+  every one delivered once the wait returned.
 - **A fifth: a stray `:hover` state in `test-dashboard`'s browser a11y suite — FIXED in #350; two
   pieces still open.** The `dashboard-app.a11y.test.ts` heading-order sighting is a different rule
   with no colour evidence, so nothing here explains it — treat it as still unexplained. And
