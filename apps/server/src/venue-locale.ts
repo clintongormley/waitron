@@ -20,6 +20,14 @@ import {
   type SupportedLocale,
 } from "@waitron/shared";
 
+/** The venue's geography from its taxpayer and location rows, for a caller that has read them. */
+export function geographyOf(
+  taxpayer: { country: string | null } | null | undefined,
+  location: { province: string | null } | null | undefined,
+): { country: string | null; area: string | null } {
+  return { country: taxpayer?.country ?? null, area: location?.province ?? null };
+}
+
 async function geographyIn(
   tx: Transaction,
   locationId: string,
@@ -29,7 +37,7 @@ async function geographyIn(
     .select({ province: locations.province })
     .from(locations)
     .where(eq(locations.id, locationId));
-  return { country: t?.country ?? null, area: loc?.province ?? null };
+  return geographyOf(t, loc);
 }
 
 function readVenueGeography(

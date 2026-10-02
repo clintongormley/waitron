@@ -112,6 +112,8 @@ import {
   type Submission,
 } from "./state/bill-payment.js";
 import "./widgets/basket-refresh-dialog.js";
+import "./widgets/reprint-language-dialog.js";
+import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/tab-shell.js";
 import "./widgets/card-grid.js";
@@ -1361,11 +1363,13 @@ export class TillApp extends LitElement {
   @state() private originalReceiptAvailable = false;
   /** The working order that produced the ticket currently shown, a bill split off another included. */
   private ticketWorkingOrderId?: string;
-  /**
-   * The location's receipt language: the on-screen ticket's language for a result that names none, and
-   * the printed allergen sheet's. NEVER the operator-UI `currentLocale()`.
-   */
+  /** The location's receipt language, never the operator-UI `currentLocale()`. */
   @state() private invoiceLocale = "es-ES";
+  /** The receipt languages a copy may be reprinted in; with more than one, a reprint asks which. */
+  @state() private receiptLanguages: string[] = [];
+  /** The sale whose receipt copy is waiting for its language to be chosen, and the language it was
+   * filed in. */
+  @state() private reprintAsking: { workingOrderId: string; filedLanguage?: string } | null = null;
   /**
    * The server resolves a canvas for every boot, so this is `undefined` only after a boot failure, where
    * {@link render} shows the lock screen rather than an empty shell.
@@ -1557,6 +1561,7 @@ export class TillApp extends LitElement {
       // A separate field: the UI default drops UI-unsupported codes, which must never change the
       // printed ticket's language.
       this.invoiceLocale = till.invoiceLocale;
+      this.receiptLanguages = till.receiptLanguages ?? [];
       this.onboardingIntent = till.onboardingIntent;
       this.issuer = { venueName: till.venueName, nif: till.nif };
       this.orderFlow = till.orderFlow;
@@ -3116,12 +3121,32 @@ export class TillApp extends LitElement {
    */
   async #onReprint(): Promise<void> {
     if (this.ticketWorkingOrderId === undefined) return;
+    await this.#reprint(this.ticketWorkingOrderId, this.result?.locale);
+  }
+
+  /** A copy of a filed sale's receipt: with several receipt languages the dialog asks which first. */
+  async #reprint(workingOrderId: string, filedLanguage: string | undefined): Promise<void> {
     this.errorKey = undefined;
+    if (this.receiptLanguages.length > 1) {
+      this.reprintAsking = { workingOrderId, filedLanguage };
+      return;
+    }
+    await this.#sendReprint(workingOrderId);
+  }
+
+  async #sendReprint(workingOrderId: string, language?: string): Promise<void> {
     try {
-      await this.api.reprint(this.ticketWorkingOrderId);
+      if (language === undefined) await this.api.reprint(workingOrderId);
+      else await this.api.reprint(workingOrderId, language);
     } catch {
       this.errorKey = "reprint.error";
     }
+  }
+
+  async #onReprintLanguage(event: CustomEvent<ReprintLanguageDetail>): Promise<void> {
+    const asking = this.reprintAsking;
+    this.reprintAsking = null;
+    if (asking !== null) await this.#sendReprint(asking.workingOrderId, event.detail.language);
   }
 
   /** Enqueue the issuance-time ORIGINAL. Only a successful enqueue retires the original action; a
@@ -5548,12 +5573,8 @@ export class TillApp extends LitElement {
 
   async #onReprintBill(event: Event): Promise<void> {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
-    this.errorKey = undefined;
-    try {
-      await this.api.reprint(workingOrderId);
-    } catch {
-      this.errorKey = "reprint.error";
-    }
+    const bill = this.partyBills.find((b) => b.workingOrderId === workingOrderId);
+    await this.#reprint(workingOrderId, bill?.receiptLanguage);
   }
 
   async #onMarkCleared(event: Event): Promise<void> {
@@ -5574,6 +5595,7 @@ export class TillApp extends LitElement {
     this.#markedRounds.clear();
     // The basket stays as it was, as a cancel leaves it; the next sign-in's offers load checks it.
     this.basketRefresh = undefined;
+    this.reprintAsking = null;
     this.#closeAdjust();
     this.#closeBillPaying();
     this.#closeDeparting();
@@ -6587,6 +6609,22 @@ export class TillApp extends LitElement {
                 @dead-ends-continue=${(event: CustomEvent<DeadEndsDecision>) => this.#answerDeadEnds(event.detail)}
                 @dead-ends-cancel=${() => this.#answerDeadEnds(null)}
               ></till-dead-ends-dialog>`
+        }
+        ${
+          this.reprintAsking === null
+            ? nothing
+            : html`<till-reprint-language-dialog
+                .languages=${this.receiptLanguages}
+                .defaultLanguage=${
+                  [this.reprintAsking.filedLanguage, this.invoiceLocale].find(
+                    (language) =>
+                      language !== undefined && this.receiptLanguages.includes(language),
+                  ) ?? ""
+                }
+                @reprint-language-confirm=${(event: CustomEvent<ReprintLanguageDetail>) =>
+                  void this.#onReprintLanguage(event)}
+                @reprint-language-cancel=${() => (this.reprintAsking = null)}
+              ></till-reprint-language-dialog>`
         }
         ${
           this.basketRefresh === undefined

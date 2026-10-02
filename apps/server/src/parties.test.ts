@@ -8,6 +8,8 @@ import {
   billPayments,
   captureError,
   diningTables,
+  locations,
+  sales,
   serviceCommands,
   tableServiceStatuses,
   parties,
@@ -198,6 +200,36 @@ describe("seating", () => {
 });
 
 describe("related bills", () => {
+  it("names the language a paid bill's sale was filed in, not the location's current one", async () => {
+    const venue = await setupPartyVenue(suite.db);
+    const { partyId, tabId } = await seat(venue, await venue.table("Mesa 4"));
+    await order(venue, tabId, "Vino");
+    await pay(venue, tabId, "30.00");
+    const [filed] = await suite.db
+      .select({ locale: sales.locale })
+      .from(sales)
+      .where(eq(sales.workingOrderId, tabId));
+    const other = filed!.locale === "ca-ES" ? "es-ES" : "ca-ES";
+    await suite.db
+      .update(locations)
+      .set({ invoiceLocales: [other] })
+      .where(eq(locations.id, venue.cfg.locationId));
+
+    const bills = await inTx(suite, (tx) => readPartyBills(tx, partyId));
+
+    expect(bills.find((b) => b.workingOrderId === tabId)!.receiptLanguage).toBe(filed!.locale);
+  });
+
+  it("names no receipt language for a bill with no filed sale", async () => {
+    const venue = await setupPartyVenue(suite.db);
+    const { partyId, tabId } = await seat(venue, await venue.table("Mesa 4"));
+    await order(venue, tabId, "Vino");
+
+    const [bill] = await inTx(suite, (tx) => readPartyBills(tx, partyId));
+
+    expect(bill).not.toHaveProperty("receiptLanguage");
+  });
+
   it("lists the tab and a check split from it, with what each still owes", async () => {
     const venue = await setupPartyVenue(suite.db);
     const mesa4 = await venue.table("Mesa 4");

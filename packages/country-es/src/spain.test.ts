@@ -213,6 +213,16 @@ describe("receipt language", () => {
     },
   );
 
+  it("says, in English and Spanish, that a copy can be printed in another language", () => {
+    const { reason } = receiptLanguageRules(SPAIN, "08").fixed!;
+    expect(reason.en).toMatch(
+      /Receipts here are printed in Catalan; a copy can be printed in another language\.$/,
+    );
+    expect(reason.es).toMatch(
+      /Aquí los tiques se imprimen en catalán; una copia se puede imprimir en otro idioma\.$/,
+    );
+  });
+
   it.each(["03", "12", "46", "15", "27", "32", "36", "01", "20", "48", "07", "31", "28"])(
     "leaves %s free to choose, with Spanish the default",
     (code) => {

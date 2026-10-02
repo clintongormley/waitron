@@ -1725,3 +1725,91 @@ describe("the receipt's fixed words follow its language", () => {
     }
   });
 });
+
+describe("a receipt's goods names can be looked up in another language than its fixed words", () => {
+  // A reprint in another language keeps the names the sale was filed with: every translated name below
+  // differs between the two languages, and each option name between its staff, customer and kitchen
+  // wording, so a lookup in the wrong language or the wrong wording prints a name the assertions
+  // refuse.
+  const BILINGUAL: TillSaleResult = {
+    ...FILED_SALE,
+    total: "4.00",
+    vatBreakdown: [{ rate: "10", base: "3.64", tax: "0.36" }],
+    lines: [
+      {
+        descriptions: { "ca-ES": "Pa amb tomàquet", "es-ES": "Pan con tomate" },
+        quantity: "2",
+        gross: "3.50",
+        parentLineNo: null,
+        unitName: { ca: "unit.", es: "ud" },
+        unitPrecision: 0,
+        optionSnapshots: [
+          {
+            listName: { "ca-ES": "Pa", "es-ES": "Pan" },
+            listCustomerName: { "ca-ES": "Tipus de pa", "es-ES": "Tipo de pan" },
+            listKitchenName: "Cocina pan",
+            labelName: { "ca-ES": "Integral de sègol", "es-ES": "Integral de centeno" },
+            labelCustomerName: { "ca-ES": "Sègol sencer", "es-ES": "Centeno entero" },
+            labelKitchenName: "Cocina centeno",
+          },
+        ],
+      },
+      {
+        descriptions: { "ca-ES": "Pernil extra", "es-ES": "Jamón extra" },
+        quantity: "2",
+        gross: "0.50",
+        parentLineNo: 1,
+      },
+    ],
+    tender: { method: "cash", change: "0.00" },
+  };
+
+  it("prints Catalan fixed words with the Spanish names when the names' language is Spanish", () => {
+    const text = printedLines(
+      formatReceipt({
+        result: BILINGUAL,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "ca-ES",
+        namesLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    )
+      .map((line) => line.trim().replace(/\s+/g, " "))
+      .join("\n");
+    expect(text).toContain("Data ");
+    expect(text).toContain("Efectiu 4,00 €");
+    expect(text).toMatch(/2 ud Pan con tomate 3,50 €/u);
+    expect(text).toContain("Tipo de pan: Centeno entero");
+    expect(text).toContain("Jamón extra 0,50 €");
+    for (const other of [
+      "Pa amb tomàquet",
+      "unit.",
+      "Tipus de pa",
+      "Sègol sencer",
+      "Integral",
+      "Cocina",
+      "Pernil extra",
+    ]) {
+      expect(text).not.toContain(other);
+    }
+    expect(text).not.toContain("Fecha");
+  });
+
+  it("looks the names up in the fixed words' language when no names' language is given", () => {
+    const text = printedLines(
+      formatReceipt({
+        result: BILINGUAL,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "ca-ES",
+        printer: PRINTER_80,
+      }),
+    )
+      .map((line) => line.trim().replace(/\s+/g, " "))
+      .join("\n");
+    expect(text).toMatch(/2 unit\. Pa amb tomàquet 3,50 €/u);
+    expect(text).toContain("Tipus de pa: Sègol sencer");
+    expect(text).toContain("Pernil extra 0,50 €");
+  });
+});

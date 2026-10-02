@@ -64,6 +64,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import type { TillConfig } from "./till-config.js";
+import { readVenueReceiptLanguageRules } from "./venue-locale.js";
 import {
   enqueueSaleDrawer,
   enqueueOriginalReceipt,
@@ -184,7 +185,7 @@ export interface BillTenderRefund {
 
 export interface TillSaleResult {
   issuer?: { venueName: string; nif: string };
-  /** The language the sale was filed in (`sales.locale`), which its receipt prints in. */
+  /** The language the sale was filed in (`sales.locale`). */
   locale: string;
   orderLabel: string | null;
   orderNumber: number;
@@ -635,8 +636,18 @@ export async function printSaleReceipt(
   cfg: TillConfig,
   workingOrderId: string,
   duplicate: boolean,
+  language?: string,
 ): Promise<void> {
   await withTransaction(deps.db, async (tx) => {
+    if (language !== undefined) {
+      // Any of the pack's languages, even where the region fixes one (`fixed`), is a product
+      // choice (docs/backlog.md, C114); it includes Spanish, which a customer there may ask for
+      // (TC 88/2017).
+      const { choices } = await readVenueReceiptLanguageRules(tx, { locationId: cfg.locationId });
+      if (!choices.includes(language)) {
+        throw new AppError("management.request_invalid", { field: "language" });
+      }
+    }
     // No filed sale → nothing to print. This keeps `readSettledTicket`'s "no sale" throw unreachable.
     const [existing] = await tx
       .select({ id: sales.id })
@@ -644,7 +655,7 @@ export async function printSaleReceipt(
       .where(eq(sales.workingOrderId, workingOrderId));
     if (existing === undefined) return;
     const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
-    if (duplicate) await enqueueReceiptReprint(tx, cfg, ticket, existing.id);
+    if (duplicate) await enqueueReceiptReprint(tx, cfg, ticket, existing.id, language);
     else await enqueueOriginalReceipt(tx, cfg, ticket, existing.id);
   });
 }
@@ -1746,6 +1757,7 @@ export async function reprintSale(
   deps: { db: Database; backend: FiscalBackend },
   cfg: TillConfig,
   workingOrderId: string,
+  language?: string,
 ): Promise<void> {
-  await printSaleReceipt(deps, cfg, workingOrderId, true);
+  await printSaleReceipt(deps, cfg, workingOrderId, true, language);
 }

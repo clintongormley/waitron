@@ -22,13 +22,24 @@ export interface ContentLanguageRules {
 
 const languageNames = new Intl.DisplayNames(["en"], { type: "language", fallback: "none" });
 
+const displayNamesByLocale = new Map<string, Intl.DisplayNames>();
+
+function languageNamesFor(locale: string): Intl.DisplayNames {
+  let names = displayNamesByLocale.get(locale);
+  if (!names) {
+    names = new Intl.DisplayNames([locale], { type: "language", fallback: "none" });
+    displayNamesByLocale.set(locale, names);
+  }
+  return names;
+}
+
 const choicesByLocale = new Map<string, readonly { code: string; name: string }[]>();
 
 /** The picker uses the runtime's named canonical language codes, including three-letter codes. */
 export function contentLanguageChoices(displayLocale: string): { code: string; name: string }[] {
   const cached = choicesByLocale.get(displayLocale);
   if (cached) return cached.map((choice) => ({ ...choice }));
-  const names = new Intl.DisplayNames([displayLocale], { type: "language", fallback: "none" });
+  const names = languageNamesFor(displayLocale);
   const choices: { code: string; name: string }[] = [];
   const add = (code: string): void => {
     if (["und", "mul", "zxx"].includes(code)) return;
@@ -60,6 +71,20 @@ export function contentLanguageCode(value: string): string {
     throw new AppError("content.language_invalid", {});
   }
   return language;
+}
+
+/** A tag's language named in `locale`, capitalised when it stands alone rather than inside a
+ * sentence. A tag that is not a language, or that `locale` has no name for, comes back as it is. */
+export function languageDisplayName(tag: string, locale: string, standalone = true): string {
+  let code: string;
+  try {
+    code = contentLanguageCode(tag);
+  } catch {
+    return tag;
+  }
+  const name = languageNamesFor(locale).of(code);
+  if (name === undefined) return tag;
+  return standalone ? capitaliseFirst(name, locale) : name;
 }
 
 /** Empty translations fall back to the configured default without manufacturing a translation. */

@@ -85,6 +85,7 @@ export type { SupportedLocale } from "./locales.js";
 export {
   contentLanguageCode,
   contentLanguageChoices,
+  languageDisplayName,
   resolveContentText,
   resolveEnabledContentText,
   resolveSnapshotText,
