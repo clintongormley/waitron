@@ -46,6 +46,13 @@ export class SectionDetailsForm extends LitElement {
       }
       legend {
         margin-bottom: var(--wt-space-2);
+        padding: 0;
+      }
+      .group-label {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        text-transform: uppercase;
       }
     `,
   ];
@@ -195,7 +202,9 @@ export class SectionDetailsForm extends LitElement {
           t("sections.internal_name_help"),
         )}
         <fieldset class="names">
-          <legend>${t("sections.customer_names")}</legend>
+          <legend class="group-label" data-test="customer-names-heading">
+            ${t("sections.customer_names")}
+          </legend>
           ${optionalTextFields(
             context,
             "names",

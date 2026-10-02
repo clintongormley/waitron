@@ -72,8 +72,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Revisa los datos de la sección o la posición elegida y vuelve a intentarlo.",
   },
   "menu_section.translation_required": {
-    en: "Add the section's customer name in the default content language, or remove the customer names.",
-    es: "Añade el nombre de la sección para clientes en el idioma de contenido predeterminado, o quita los nombres para clientes.",
+    en: "Add the section's customer-facing name in the default content language, or remove the customer-facing names.",
+    es: "Añade el nombre de la sección para el cliente en el idioma de contenido predeterminado, o quita los nombres para el cliente.",
   },
   "menu_section.member_cycle": {
     en: "A section cannot contain itself, directly or through another section.",
@@ -544,7 +544,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "options.translation_required": {
     en: "Enter the customer-facing name in the site's default language.",
-    es: "Introduce el nombre para clientes en el idioma predeterminado del sitio.",
+    es: "Introduce el nombre para el cliente en el idioma predeterminado del sitio.",
   },
   "extras.invalid": {
     en: "Check the extras list's name, its products, the selection limits and the prices.",
@@ -556,7 +556,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "extras.translation_required": {
     en: "Enter the customer-facing name in the site's default language.",
-    es: "Introduce el nombre para clientes en el idioma predeterminado del sitio.",
+    es: "Introduce el nombre para el cliente en el idioma predeterminado del sitio.",
   },
   "extras.product_has_variants": {
     en: "This product has active variants, so it can't be offered as an extra.",

@@ -31,7 +31,7 @@ option when you open a list that has none).
 Each option is a row of text in the list: its name, an **Unavailable** marker when it is switched
 off, a **Default** radio button (an unavailable option cannot take it), and a menu with **Edit** and
 **Delete**. Drag a row by the handle at its start to move it. **Edit** opens the option in its own
-window over the list; **Add option**, under the rows, opens an empty one. Saving that window changes the list
+window over the list, and so does clicking the option's name (or pressing Enter or Space on it); **Add option**, under the rows, opens an empty one. Saving that window changes the list
 you are editing, not what is stored: nothing is sent until you save the list itself.
 
 ## Name a list and decide whether it is active
@@ -41,7 +41,8 @@ name**, with one field per content language, and a **Kitchen name** are both opt
 to the staff name when you leave them blank. They sit in a **Customer and kitchen names** section
 that stays folded until you open it; while it is folded, the names you have filled in show under
 its heading, and it opens by itself when one of them needs correcting. An option carries the same
-three names, in the same folded section of its own window. See
+three names, shown in its own window with nothing folded: **Name**, then **Kitchen name**, then the
+customer-facing names under their own heading. See
 [content languages](content-and-images.md).
 
 Each list has an **Active** switch, and the list's **Status** column reads **Active** or

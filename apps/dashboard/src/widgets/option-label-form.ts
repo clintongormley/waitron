@@ -3,18 +3,11 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
-import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import {
-  namesLine,
-  optionalTextFields,
-  switchField,
-  textField,
-  type FieldContext,
-} from "./form-fields.js";
+import { optionalTextFields, switchField, textField, type FieldContext } from "./form-fields.js";
 import { sameValue } from "./product-editor-model.js";
 import { t } from "../i18n/t.js";
 
@@ -43,6 +36,20 @@ export class OptionLabelForm extends LitElement {
       }
       .names {
         gap: var(--wt-space-3);
+        min-width: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+      legend {
+        margin-bottom: var(--wt-space-2);
+        padding: 0;
+      }
+      .group-label {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        text-transform: uppercase;
       }
     `,
   ];
@@ -177,43 +184,27 @@ export class OptionLabelForm extends LitElement {
     };
   }
 
-  #namesSection(errors: Record<string, string>) {
+  #customerNames(errors: Record<string, string>) {
     const locales = this.languages.languages;
-    const hasError =
-      !!errors["label-kitchen-name"] ||
-      locales.some((locale) => !!errors[`label-customer-name-${locale}`]);
-    return html`<wt-disclosure
-      data-test="names-section"
-      heading=${t("options.names_section")}
-      summary=${namesLine(locales, this.customerName, this.kitchenName)}
-      .hasError=${hasError}
-    >
-      <div class="names">
-        ${optionalTextFields(
-          this.#fields(errors),
-          "label-customer-name",
-          t("options.customer_name"),
-          this.customerName,
-          (customerName) =>
-            this.#edit(
-              () => (this.customerName = customerName),
-              ...locales
-                .filter((locale) => customerName[locale] !== this.customerName[locale])
-                .map((locale) => `label-customer-name-${locale}`),
-            ),
-          this.name,
-        )}
-        ${textField(
-          this.#fields(errors),
-          "label-kitchen-name",
-          t("options.kitchen_name"),
-          this.kitchenName,
-          (kitchenName) => this.#edit(() => (this.kitchenName = kitchenName), "label-kitchen-name"),
-          false,
-          this.name,
-        )}
-      </div>
-    </wt-disclosure>`;
+    return html`<fieldset class="names">
+      <legend class="group-label" data-test="customer-names-heading">
+        ${t("options.customer_names")}
+      </legend>
+      ${optionalTextFields(
+        this.#fields(errors),
+        "label-customer-name",
+        t("options.customer_name"),
+        this.customerName,
+        (customerName) =>
+          this.#edit(
+            () => (this.customerName = customerName),
+            ...locales
+              .filter((locale) => customerName[locale] !== this.customerName[locale])
+              .map((locale) => `label-customer-name-${locale}`),
+          ),
+        this.name,
+      )}
+    </fieldset>`;
   }
 
   override render() {
@@ -249,7 +240,16 @@ export class OptionLabelForm extends LitElement {
           (name) => this.#edit(() => (this.name = name), "label-name"),
           true,
         )}
-        ${this.#namesSection(errors)}
+        ${textField(
+          fields,
+          "label-kitchen-name",
+          t("options.kitchen_name"),
+          this.kitchenName,
+          (kitchenName) => this.#edit(() => (this.kitchenName = kitchenName), "label-kitchen-name"),
+          false,
+          this.name,
+        )}
+        ${this.#customerNames(errors)}
         ${switchField(
           fields,
           "label-available",

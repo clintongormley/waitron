@@ -59,12 +59,6 @@ async function click(el: OptionLabelForm, testId: string): Promise<void> {
   await el.updateComplete;
 }
 
-function disclosure(el: OptionLabelForm): HTMLElementTagNameMap["wt-disclosure"] {
-  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-    '[data-test="names-section"]',
-  )!;
-}
-
 async function bottomOf(el: OptionLabelForm): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
   return (await formMessageOf(actions))?.textContent?.trim() ?? "";
@@ -91,32 +85,56 @@ function heading(el: OptionLabelForm): string {
   return el.shadowRoot!.querySelector("wt-modal")!.heading;
 }
 
-it("opens an option with its name, a closed section holding its other names, and its availability", async () => {
+it("opens an option with its name, its other names and its availability", async () => {
   const { el } = await mount({ value: { ...rare, customerName: { es: "Poco hecho" } } });
 
   expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
   expect(heading(el)).toBe(t("options.edit_option"));
   expect(field(el, "label-name").value).toBe("Rare");
   expect(field(el, "label-name").closest("wt-disclosure")).toBeNull();
-  const section = disclosure(el);
-  expect(section.open).toBe(false);
-  expect(section.heading).toBe(t("options.names_section"));
-  expect(section.summary).toBe(`ES Poco hecho · ${t("editor.section_kitchen")} R`);
-  for (const name of ["label-customer-name-en", "label-customer-name-es", "label-kitchen-name"])
-    expect(field(el, name).closest("wt-disclosure"), name).toBe(section);
   expect(field(el, "label-customer-name-en").value).toBe("");
   expect(field(el, "label-customer-name-es").value).toBe("Poco hecho");
   expect(field(el, "label-kitchen-name").value).toBe("R");
   expect(field(el, "label-kitchen-name").placeholder).toBe("Rare");
   expect(field<HTMLElementTagNameMap["wt-switch"]>(el, "label-available").checked).toBe(true);
-
-  await type(el, "label-customer-name-en", "Barely cooked");
-  expect(section.summary).toBe(
-    `EN Barely cooked · ES Poco hecho · ${t("editor.section_kitchen")} R`,
-  );
-  await type(el, "label-kitchen-name", " ");
-  expect(section.summary).toBe("EN Barely cooked · ES Poco hecho");
 });
+
+it.each([
+  ["Edit option", rare],
+  ["Add option", null],
+])(
+  "%s shows every name with no fold: Name, Kitchen name, the customer-facing names under their heading, then Available",
+  async (_, value) => {
+    const { el } = await mount({ value });
+    await el.updateComplete;
+
+    expect(el.shadowRoot!.querySelector("wt-disclosure")).toBeNull();
+    const heading = el.shadowRoot!.querySelector<HTMLElement>(
+      '[data-test="customer-names-heading"]',
+    )!;
+    expect(heading.textContent!.trim()).toBe(t("options.customer_names"));
+    const order = [
+      ...el.shadowRoot!.querySelectorAll<HTMLElement>(
+        '.fields [name], .fields [data-test="customer-names-heading"]',
+      ),
+    ].map((node) => node.getAttribute("name") ?? node.dataset.test);
+    expect(order).toEqual([
+      "label-name",
+      "label-kitchen-name",
+      "customer-names-heading",
+      "label-customer-name-en",
+      "label-customer-name-es",
+      "label-available",
+    ]);
+    for (const node of [
+      heading,
+      field(el, "label-kitchen-name"),
+      field(el, "label-customer-name-en"),
+      field(el, "label-customer-name-es"),
+    ])
+      expect(node.checkVisibility(), node.getAttribute("name") ?? "heading").toBe(true);
+  },
+);
 
 it("opens empty and headed Add option when it is given no option", async () => {
   const { el } = await mount({ value: null });
@@ -225,22 +243,18 @@ it("reports a cancel when its own dialog is dismissed", async () => {
   expect(cancels).toBe(1);
 });
 
-it.each([
-  ["label-customer-name-en", true],
-  ["label-kitchen-name", true],
-  ["label-name", false],
-])("shows an error given for %s beside it, opening the names section: %s", async (key, opened) => {
-  const { el } = await mount({ value: rare, errors: { [key]: "Refused." } });
-  await disclosure(el).updateComplete;
+it.each(["label-customer-name-en", "label-kitchen-name", "label-name"])(
+  "shows an error given for %s beside it, in sight",
+  async (key) => {
+    const { el } = await mount({ value: rare, errors: { [key]: "Refused." } });
 
-  expect(field(el, key).error).toBe("Refused.");
-  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-  expect(saveOf(el).disabled).toBe(false);
-  expect({ hasError: disclosure(el).hasError, open: disclosure(el).open }).toEqual({
-    hasError: opened,
-    open: opened,
-  });
-});
+    expect(field(el, key).error).toBe("Refused.");
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(saveOf(el).disabled).toBe(false);
+    expect(field(el, key).invalid).toBe(true);
+    expect(field(el, key).checkVisibility()).toBe(true);
+  },
+);
 
 it("reseeds from a new option each time it opens", async () => {
   const { el } = await mount({ value: rare });
@@ -363,13 +377,12 @@ it("keeps a dismissed refusal dismissed when handed the same messages as a new o
   expect(field(el, "label-kitchen-name").error).toBe("Still too long.");
 });
 
-it("focuses the field a refusal names when the refusal arrives, opening its folded section", async () => {
+it("focuses the field a refusal names when the refusal arrives", async () => {
   const { el } = await mount({ value: rare });
   el.errors = { "label-kitchen-name": "Too long." };
   await el.updateComplete;
   await new Promise((resolve) => setTimeout(resolve));
 
-  expect(disclosure(el).open).toBe(true);
   expect(field(el, "label-kitchen-name").shadowRoot!.activeElement).toBe(
     inputOf(el, "label-kitchen-name"),
   );
