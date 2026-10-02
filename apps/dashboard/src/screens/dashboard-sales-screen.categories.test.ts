@@ -1,6 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type {
   CategorySalesDto,
   CategoryTotalDto,
@@ -8,7 +9,7 @@ import type {
   DashboardApi,
   SalesPeriodDto,
 } from "../api/client.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { today } from "../date-utils.js";
 import type { SalesScreen } from "./dashboard-sales-screen.js";
@@ -195,10 +196,18 @@ function q<T extends Element = HTMLElement>(el: SalesScreen, test: string): T | 
   return el.shadowRoot!.querySelector<T>(`[data-test="${test}"]`);
 }
 
+type PrinterField = HTMLElement & {
+  name: string;
+  value: string;
+  options: { value: string; label: string }[];
+};
+
 function setDate(el: SalesScreen, test: string, value: string): void {
   const input = q<HTMLInputElement>(el, test)!;
   input.value = value;
-  input.dispatchEvent(new Event("change"));
+  input.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
 }
 
 function pickMode(el: SalesScreen, mode: "at_time_of_sale" | "current"): void {
@@ -519,17 +528,16 @@ describe("dashboard-sales-screen — printing the category report", () => {
     setLocale("en");
     const api = stubApi();
     const el = await mount(api);
-    const select = q<HTMLSelectElement>(el, "print-printer")!;
+    const select = q<PrinterField>(el, "print-printer")!;
     expect(select.name).toBe("printerId");
-    expect([...select.options].map((o) => [o.value, o.textContent!.trim()])).toEqual([
+    expect(select.options.map((o) => [o.value, o.label])).toEqual([
       ["p-bar", "Barra Casa"],
       ["p-kitchen", "Cocina Impresora"],
     ]);
     expect(select.value).toBe("p-bar");
     q<HTMLInputElement>(el, "extras-into-dish")!.click();
     await flush(el);
-    select.value = "p-kitchen";
-    select.dispatchEvent(new Event("change"));
+    await chooseOption(select, "p-kitchen");
     q(el, "print-categories")!.click();
     await flush(el);
     expect(api.printCategorySales).toHaveBeenCalledWith({
@@ -650,22 +658,19 @@ describe("dashboard-sales-screen — printing the category report", () => {
     const api = Object.assign(stubApi(), { liveData });
     const el = await mount(api);
     await vi.waitFor(() => expect(q(el, "print-printer")).not.toBeNull());
-    const select = q<HTMLSelectElement>(el, "print-printer")!;
-    select.value = "p-kitchen";
-    select.dispatchEvent(new Event("change"));
+    const select = q<PrinterField>(el, "print-printer")!;
+    await chooseOption(select, "p-kitchen");
     // A refresh that still holds the chosen printer keeps it.
     vi.mocked(api.getReportPrinters).mockResolvedValue([
       { id: "p-new", name: "Terraza Casa" },
       ...printers,
     ]);
     liveData.invalidate([{ type: "printers", id: "p-new" }]);
-    await vi.waitFor(() =>
-      expect(q<HTMLSelectElement>(el, "print-printer")!.options).toHaveLength(3),
-    );
-    expect(q<HTMLSelectElement>(el, "print-printer")!.value).toBe("p-kitchen");
+    await vi.waitFor(() => expect(q<PrinterField>(el, "print-printer")!.options).toHaveLength(3));
+    expect(q<PrinterField>(el, "print-printer")!.value).toBe("p-kitchen");
     vi.mocked(api.getReportPrinters).mockResolvedValue([{ id: "p-new", name: "Terraza Casa" }]);
     liveData.invalidate([{ type: "printers", id: "p-kitchen" }]);
-    await vi.waitFor(() => expect(q<HTMLSelectElement>(el, "print-printer")!.value).toBe("p-new"));
+    await vi.waitFor(() => expect(q<PrinterField>(el, "print-printer")!.value).toBe("p-new"));
     q(el, "print-categories")!.click();
     await flush(el);
     expect(api.printCategorySales).toHaveBeenCalledWith(
@@ -701,5 +706,35 @@ describe("dashboard-sales-screen — printing the category report", () => {
     pickMode(el, "current");
     await flush(el);
     expect(q(el, "printers-error")).not.toBeNull();
+  });
+});
+
+describe("dashboard-sales-screen — the report printer field", () => {
+  it("picks the printer from a labelled dropdown starting on the first, and prints to the one chosen", async () => {
+    const api = stubApi();
+    const el = await mount(api);
+    const printer = el.shadowRoot!.querySelector("wt-combobox[data-test=print-printer]") as
+      | (HTMLElement & {
+          name: string;
+          label: string;
+          search: string;
+          value: string;
+          options: { value: string; label: string }[];
+        })
+      | null;
+    expect(printer!.name).toBe("printerId");
+    expect(printer!.label).toBe(t("sales.printer"));
+    expect(printer!.search).toBe("auto");
+    expect(printer!.options).toEqual([
+      { value: "p-bar", label: "Barra Casa" },
+      { value: "p-kitchen", label: "Cocina Impresora" },
+    ]);
+    expect(printer!.value).toBe("p-bar");
+    await chooseOption(printer!, "p-kitchen");
+    q(el, "print-categories")!.click();
+    await flush(el);
+    expect(api.printCategorySales).toHaveBeenCalledWith(
+      expect.objectContaining({ printerId: "p-kitchen" }),
+    );
   });
 });

@@ -174,7 +174,13 @@ describe.each(["light", "dark"] as const)("dashboard-sales-screen a11y (%s theme
     await flush(el);
     const to = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=to-picker]")!;
     to.value = "2030-06-15";
-    to.dispatchEvent(new Event("change"));
+    to.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "2030-06-15" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
     await flush(el);
     await expectNoA11yViolations(host);
   });
