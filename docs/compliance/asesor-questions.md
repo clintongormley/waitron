@@ -782,7 +782,7 @@ simplified invoice is issued for the full amount at that moment and filed like a
 a later payment is recorded against that invoice. Nothing is held back from the fiscal chain until
 the money is collected. Recovering the VAT on a debt never collected (art. 80.Cuatro) is the
 venue's own business and is not built. *(2026-10-02, C126: cancelling such a bill, by a person
-holding `sale.rectify`, now credits its whole invoice, VAT included, with a corrective invoice,
+holding `sale.rectify` or on the PIN of one who does (B33, 2026-10-02), now credits its whole invoice, VAT included, with a corrective invoice,
 unless the cancel is refused (see Q32), and leaves the departure as recorded — see Q32, part (c).)* The basis, quoted from the BOE
 consolidated texts fetched 2026-10-01:
 

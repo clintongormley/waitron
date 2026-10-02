@@ -1733,12 +1733,23 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  // Like the refund's list: any operator may see who could approve their cancel and credit.
+  app.get("/api/cancel-credit-authorizers", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      return c.json(
+        await withTransaction(deps.db, (tx) => listActivePersonsWithPermission(tx, "sale.rectify")),
+      );
+    }),
+  );
+
   app.post("/api/working-orders/:id/cancel", (c) =>
     run(c, log, async () => {
-      const { personId, sessionId } = await requireSession(deps, c);
+      const { personId, sessionId, tillId } = await requireSession(deps, c);
       const device = await tryReadDevice(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
-      const body = await readJsonBody<{ reason: string }>(c);
+      const body = await readJsonBody<{ reason: string; override?: unknown }>(c);
+      const override = parseOverrideField(body.override);
       // The device's till reaches the credit note only, as placing's reaches its invoice; the
       // `order_cancelled` amendment keeps `cfg.tillId`.
       await cancelPlacedOrder(
@@ -1746,9 +1757,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         deps.cfg,
         id,
         body.reason,
-        personId,
-        sessionId,
+        { personId, sessionId, attempts: overridePinAttempts(pinThrottle, tillId) },
         () => requireSaleTillId(deps, c, device),
+        override,
       );
       return c.body(null, 200);
     }),

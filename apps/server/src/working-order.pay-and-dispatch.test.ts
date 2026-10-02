@@ -14,7 +14,7 @@ import {
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { createPinThrottle, hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
@@ -74,6 +74,7 @@ import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { collectOrder, payWorkingOrder } from "./till-sale.js";
+import { overridePinAttempts } from "./till-api.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 
@@ -1233,7 +1234,11 @@ describe("cross-till end-to-end", () => {
 });
 
 /** A cancel of an order with no invoice files nothing, so it reads neither a session nor a till. */
-const UNUSED_SESSION = "unused";
+const UNUSED_SESSION_OPERATOR = {
+  personId: OPERATOR,
+  sessionId: "unused",
+  attempts: overridePinAttempts(createPinThrottle(), "unused"),
+};
 const noSaleTill = () => Promise.reject(new Error("a cancel with no invoice resolves no till"));
 
 // Placing (open → placed) opens the art. 29.2.j amendment log with its `order_placed` genesis and
@@ -1330,8 +1335,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       cfg,
       id,
       "customer left",
-      OPERATOR,
-      UNUSED_SESSION,
+      UNUSED_SESSION_OPERATOR,
       noSaleTill,
     );
 
@@ -1372,8 +1376,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
           cfg,
           id,
           reason,
-          OPERATOR,
-          UNUSED_SESSION,
+          UNUSED_SESSION_OPERATOR,
           noSaleTill,
         ),
       ).rejects.toMatchObject({
@@ -1406,8 +1409,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
         cfg,
         openId,
         "changed mind",
-        OPERATOR,
-        UNUSED_SESSION,
+        UNUSED_SESSION_OPERATOR,
         noSaleTill,
       ),
     ).rejects.toMatchObject({
@@ -1430,8 +1432,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
         cfg,
         settledId,
         "changed mind",
-        OPERATOR,
-        UNUSED_SESSION,
+        UNUSED_SESSION_OPERATOR,
         noSaleTill,
       ),
     ).rejects.toMatchObject({
@@ -1447,8 +1448,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
         cfg,
         missing,
         "changed mind",
-        OPERATOR,
-        UNUSED_SESSION,
+        UNUSED_SESSION_OPERATOR,
         noSaleTill,
       ),
     ).rejects.toMatchObject({
@@ -2119,8 +2119,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       cfg,
       id2,
       "customer left",
-      OPERATOR,
-      UNUSED_SESSION,
+      UNUSED_SESSION_OPERATOR,
       noSaleTill,
     );
     expect(await ticketStateOf(id2)).toBe("queued"); // the ticket item itself is untouched by cancel
