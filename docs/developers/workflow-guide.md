@@ -186,8 +186,7 @@ two rules were manual. Detail: `docs/ui-review.md` → _Running the stack from a
 
 Writing to that database from outside the server — a seeding script, or any other process that
 opens the venue directory — no longer puts your change on an open dashboard at the moment you write
-it. (`psql` is not one of the ways: it speaks the PostgreSQL wire protocol and cannot open a SQLite
-file.) The change trigger writes a row into
+it. The change trigger writes a row into
 `change_log`, and the transaction that caused the change takes that row out again and hands it to
 the dashboard once it has committed. What decides delivery is therefore `withTransaction` in the
 process serving the dashboard, not "the server": promotion and deployment stamping write in a bare
@@ -210,48 +209,35 @@ nothing: `#probeSession` (`apps/dashboard/src/dashboard-app.ts`) catches the rej
 the login screen without a banner. The failure only becomes words at sign-in, where no code comes
 back and the dashboard falls back to `server.internal` — "Something went wrong, try again"
 (`apps/dashboard/src/screens/login-screen.ts`, `apps/dashboard/src/i18n/codes.ts`; the fallback is
-carried both by the request primitive and by `codeOf`).
-The core set's migration 0020_category_names did exactly this on 2026-09-13: it dropped the old text
-`categories.name` and recreated it as `jsonb NOT NULL`, which the seeded demo categories cannot
-satisfy — SQLSTATE `23502`. `wa-wt reset demo <name>` rebuilds the database. (That file was deleted by
-the SQLite flip on 2026-09-21, which regenerated every set as one baseline; it is named here without a
-backticked path because `scripts/claude-md-pointers.test.ts` would read one as a live pointer. The
-trap it illustrates is unchanged — a migration a shared seeded database cannot satisfy.)
+carried both by the request primitive and by `codeOf`). `wa-wt reset demo <name>` rebuilds the
+database.
 
 Boot now says so rather than leaving a driver stack trace to read: `apps/server/src/dev-migration-hint.ts`
 logs `migrations.dev_constraint_violation` with the engine's result code and that command, then
 re-throws the original error untouched — including when the log sink itself throws. It fires only when
 `WAITRON_ENV=dev` (`isDevMode`, `apps/server/src/config.ts`), which both `dev-setup` and
 `dev-onboard` write, though a `.env` copied from `.env.example` does not; and only for a pinned list
-of result codes where a constraint met row data. (It read a PostgreSQL SQLSTATE until the storage
-switch; `23502` in the example above is what the old engine reported, and this one reports
-`NOT NULL constraint failed: <table>.<column>`, errcode 1299.)
+of result codes where a constraint met row data (`MIGRATION_CONSTRAINT_RESULT_CODES`). A null in a
+`not null` column, for instance, is `NOT NULL constraint failed: <table>.<column>`, errcode 1299
+(measured 2026-10-02 on `node:sqlite`, Node v26.7.0); the case `names the remedy for a real refusal
+from the engine` in `apps/server/src/dev-migration-hint.test.ts` drives that refusal through the
+line.
 
 **What that line may and may not claim.** A constraint violation says a rule was broken. It does not
 say whether the offending rows were already in the table or were inserted by the same migration —
 and a migration free to write rows can produce any state on the list against a database that was
-empty a moment earlier, which a wipe would not fix and a second wipe would not fix either. The
-review put each listed state through the real migration runner on PostgreSQL 18 on 2026-09-13,
-using SQL written for the experiment, and got the same SQLSTATE both when the offending rows were
-already in the table and when the migration inserted them itself. Only `23502` was also reproduced
-against this repository's own migrations (below); no migration here declares an exclusion constraint
-at all, so `23P01` is on the list from that experiment and from what the state means, not from a
-case seen in this tree. So the
+empty a moment earlier, which a wipe would not fix and a second wipe would not fix either. So the
 line reports the failure as fact and offers the reset as a CONDITIONAL remedy; naming it outright
 would send a developer to wipe a healthy database over a broken migration, twice.
-`classifyBootFailure` (`apps/server/src/boot-failure.ts`) answered the same problem the other way,
-by DROPPING the ambiguous `22P02` from its table so the ambiguous case gets no advice at all — same
-principle, opposite move, because a dev database is cheap to rebuild and a box's is not. That is also
-why the two share no SQLSTATE table, which a test pins rather than a comment asserting it: their
-remedies are opposites. The other version-mismatch failure — a database NEWER than the image, not
-older — does not reach this line at all: it throws `provisioning.database_ahead`, an `AppError` with no
-SQLSTATE, and its operator text deliberately never suggests wiping anything ("Restore it from a
-backup, or reinstall", `apps/server/src/recovery-surface.ts` — owner decision 2026-09-10, because a
-real venue's fiscal records cannot be re-created).
-
-Reproduced end to end before the line was written: the pre-#340 migration root migrated into a
-scratch database, one category row seeded, then this branch's root applied over it — the hint printed
-and the original error still arrived intact.
+`classifyBootFailure` (`apps/server/src/boot-failure.ts`) classifies a box's boot failures, and a
+dev database is cheap to rebuild where a box's is not. The two share no result code, which a test
+pins rather than a comment asserting it (``never names a code `boot-failure.ts` classifies``, in
+`apps/server/src/dev-migration-hint.test.ts`): their remedies are opposites. The other
+version-mismatch failure — a database NEWER than the image, not older — does not reach this line at
+all: it throws `provisioning.database_ahead`, an `AppError` with no engine result code, and its
+operator text deliberately never suggests wiping anything ("Restore it from a backup, or
+reinstall", `apps/server/src/recovery-surface.ts` — owner decision 2026-09-10, because a real
+venue's fiscal records cannot be re-created).
 
 The print agent's dev launcher treats the inherited `WAITRON_STATE_DIR` as the server's box state
 and nests its own state under `print-agent/`, so worktree switches retain its token and target

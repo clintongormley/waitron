@@ -12,9 +12,8 @@ a test, especially one that touches a venue database or runs in browser mode.
 
 A suite that needs a database calls `useVenueDb` (`@waitron/db/testing/venue-db.js`). It makes a
 temporary directory, opens it with the product's own opener, applies in order the migration sets it
-is handed, and installs the append-only triggers those sets declare. There is nothing to choose
-between: PGlite, the Testcontainers PostgreSQL tier, the helper that ran a suite against both, and
-the `*.pg.test.ts` suffix all went with the storage switch on 2026-09-22.
+is handed, and installs the append-only triggers those sets declare. There is no other target to
+choose.
 
 Contention is a separate question and has its own section further down, "A contention test proves
 the write queue serialises writers, not that a lock blocked".
@@ -34,10 +33,9 @@ rejected. Suites sharing a database clean up in a `finally`, order-independent.
 
 The rule is in `CLAUDE.md` §4 and the guard is `scripts/venue-db-helper.test.ts`: no `.ts` file
 under `packages/` or `apps/` may NAME `usePgliteDb` — not call it, name it. Nothing defines that
-function any more, so all the guard holds today is that a reintroduced PGlite helper, or a comment
-pointing a reader at one, is reported rather than quietly accumulating. It says so in its own
-header, at some length, so nobody mistakes it for a check on how suites open databases. The
-whole-package exemption `packages/db` held while it defined both helpers is gone.
+function any more, so all the guard holds today is that a reintroduced helper of that name, or a
+comment pointing a reader at one, is reported rather than quietly accumulating. It says so in its
+own header, at some length, so nobody mistakes it for a check on how suites open databases.
 
 **It forbids the NAME and not just the call**, and that is the part worth carrying: the dead
 pointers this sweep kept finding were in comments — seven stood when the guard was written, five
@@ -169,7 +167,7 @@ and mutates it. What that cost, with the figures, is in [ci-and-gates.md](ci-and
 ## A container port-binding timeout needs Docker state as well as the container's own logs.
 
 Save `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the
-failed test fixture. Measured on a PostgreSQL container in September 2026: the reader-adoption gate
+failed test fixture. Measured in September 2026: the reader-adoption gate
 found a healthy container with a requested TCP binding but an empty published-port list, and a
 focused rerun passed without explaining the first failure. During #329's full gate `docker inspect`
 showed `HostConfig.PortBindings["5432/tcp"] = [{ HostIp: "", HostPort: "0" }]` beside
@@ -386,9 +384,8 @@ option counts as a wait, not only `spawnSync`'s: `expect.poll` and `vi.waitFor` 
 same clock.
 
 **Nothing under `packages/` or `apps/` is scanned, and that is a hole with no guard in it.** That
-half was retired on 2026-09-22 together with the real-PostgreSQL test harness, which owned every long
-wait those two roots declared. With the harness gone, `grep -rnE "timeout: *[0-9_]+" packages apps
---include="*.test.ts"` answers nowhere at all, so the half's two non-vacuity cases — which exist to
+half was retired on 2026-09-22: `grep -rnE "timeout: *[0-9_]+" packages apps --include="*.test.ts"`
+answered nowhere at all, so the half's two non-vacuity cases — which exist to
 refuse a scan that has judged no file — went red having nothing left to judge, and were deleted with
 the machinery that fed them. **The rule is unchanged under both roots**: a suite there whose test
 outlasts its per-test timeout still fails healthy runs, and nothing automated will say so. If you are
@@ -473,10 +470,8 @@ Two rigs start a container: `bench/sqlite-failover`, whose `startStore` opens a 
 (`bench/pglite-throughput/src/bench.ts`). Ryuk hangs on this machine, so it has to be off; with it off
 an interrupted run leaks, which is the next section.
 
-**A recurrent stall needs a retained log and a live database snapshot.** This was recorded against
-the PostgreSQL test harness: the #286 boot retry and cluster mutex did not eliminate the later
-migration stall, whose backend was waiting for client input with no blocking backend. What carries is the method: locate
-the stalled operation before assigning its cause to resource contention.
+**A recurrent stall needs a retained log and a snapshot of whatever it was waiting on.** Locate the
+stalled operation before assigning its cause to resource contention.
 
 ## With Ryuk off, INTERRUPTED runs leak containers
 
@@ -961,36 +956,17 @@ such file today, and [ci-and-gates.md](ci-and-gates.md) records what naming it w
 Restructure that code and the deletion can stop failing, with every test still green and nothing
 saying so. Re-run the control after the restructure, and move the proof to whatever still catches it.
 
-The instance (2026-09-21, task P4a of the storage switch). `packages/printing`'s agent pull used to
-claim jobs in two statements — a locking `SELECT ... FOR UPDATE ... SKIP LOCKED`, then an `UPDATE`
-keyed only on the ids it returned. `runtime.race.test.ts`'s header recorded a deletion for that
-shape, and the sentence is copied here because the change below replaced it and the report it cited
-(`task-5-report.md`) is not in this tree: *"with it, agent B skips agent A's in-flight row and the
-job prints exactly once; delete it and B re-claims the same row after A commits, printing it twice
-(total 2 → this test's `toBe(1)` fails)"*. That is a receipt nobody now holds, recorded as what the
-old header said rather than as something re-run.
-
-P4a replaced the pair with one statement — an `UPDATE ... WHERE <key> IN (locking SELECT)`. Three
-control runs, each with `for update ... skip locked` removed from `packages/db/src/job-claim.ts` and
-nothing else touched:
-
-- `pnpm --filter @waitron/printing test -- runtime.race runtime.reclaim`, against the first version
-  of the one statement (keyed on `ctid`) — **5 passed**.
-- The same command against the version that shipped (keyed on the row's primary key) — **5 passed**
-  again. The old proof does not hold for either.
-- `pnpm --filter @waitron/db test -- job-claim.pg`, against the shipped version — **3 failed**,
-  read on 2026-09-21, which on the day was every case in that file. That suite was deleted on
-  2026-09-22 with the rest of the real-PostgreSQL tier; read it with
-  `git show aabdde6a8^:packages/db/src/job-claim.pg.test.ts`. Only the FIRST failure is the
-  control: it fails on the 30-second test timeout, which is the waiting. Its holder is then still
-  parked, so the per-test reset blocks on that holder's row locks and takes the rest of the file
-  down with it. Expect the
-  control run to take minutes.
-
-So what the clause buys is that a claimer does not WAIT, and that was the property the
-real-PostgreSQL job-claim suite then held. What keeps a row from being claimed twice without
-it was not measured and is not a property of the helper: it depends on whether the CALLER's
-predicate excludes the state its stamp writes, which `claimPrintJobs`'s does.
+The instance (2026-09-21). `packages/printing`'s agent pull used to claim jobs in two statements —
+a locking selection, then an `UPDATE` keyed only on the ids it returned — and
+`runtime.race.test.ts`'s header recorded that deleting the lock let a second agent re-claim the
+first agent's row and print the job twice. Then the pair became one statement. With the locking
+clause removed from `packages/db/src/job-claim.ts` and nothing else touched,
+`pnpm --filter @waitron/printing test -- runtime.race runtime.reclaim` read **5 passed**, against
+both the first and the shipped version of the one statement: the old proof held for neither. The
+suite that did fail on the shipped version, `packages/db`'s own job-claim suite, was deleted on
+2026-09-22 with the database engine it ran against (read it with
+`git show aabdde6a8^:packages/db/src/job-claim.pg.test.ts`). Today's `job-claim.ts` has no locking
+clause to delete.
 
 ## Vitest 4 ships no default coverage excludes, and `include`/`exclude` replace rather than merge.
 
@@ -1052,14 +1028,7 @@ something an authority will judge, run the real check over it. Pointer:
 ## `toMatchObject` checks only the keys you list.
 
 A key you never list is never checked at all; `toEqual` is what put `memberOf` under a matcher for
-the first time. **The worked example is historical** — it was taken on PostgreSQL, and the file it
-names left this tree with the storage switch (read it with
-`git show aabdde6a8^:packages/provisioning/src/instance-state.ts`). What the matcher hid there:
-`pg_roles.rolname` is `name`, so `array(select rolname …)` was `name[]`, which `node-postgres`
-handed back as the wire literal `"{app_user}"` through a field typed `string[]` — hence that
-file's `::text[]` casts. Work such a failure out case by case:
-`"{app_user_probe}".includes("app_user")` is the one shape where string and array disagree, a false
-positive that SKIPS a needed grant. No equivalent example has been found in the current tree.
+the first time.
 
 ---
 
@@ -1114,18 +1083,7 @@ measures nothing. Compare statements; do not quote a branch delta.
 
 ## A contention test proves the write queue serialises writers, not that a lock blocked
 
-**This section replaces one that said PGlite cannot test lock contention and that chain-append
-concurrency must therefore run against real Postgres through Testcontainers.** Both halves of that
-advice retired with the engine: there is no PGlite, no PostgreSQL container tier, and no
-`FOR UPDATE`. The executable demonstration it pointed at — a suite named
-chain.pglite-cannot-test-contention.test.ts, beside the chain suites in
-`packages/fiscal-verifactu/src` and again in `packages/workforce/src` until the SQLite flip deleted
-both — existed to keep someone from dropping those two packages' Testcontainers dependency, and
-neither package declares one now. That suite is named here without a backticked path deliberately:
-the pointer guard (`scripts/claude-md-pointers.test.ts`) requires a backticked path to resolve, and
-this one no longer does.
-
-What a contention suite asserts now is that one writer holds the venue file at a time
+What a contention suite asserts is that one writer holds the venue file at a time
 (`packages/store/src/write-queue.ts`). `packages/fiscal-verifactu/src/chain.concurrency.test.ts` is
 the worked example, and its own header names the two properties that did NOT survive the change:
 per-node parallelism is gone — every writer serialises on the FILE, whichever node it appends to —
@@ -1135,7 +1093,7 @@ a time is the design rather than the thing that would make the suite theatre.
 **Start a writer through `withTransaction`, never through a bare `db.transaction(...)`.** Only the
 former takes the write queue (`packages/db/src/tenancy.ts` → `db.withWriteLock`). Twenty bare
 `db.transaction(...)` calls started together against one venue file fail
-`no such savepoint: wt_sp_1` — measured on the deleted suite above, which is how it was found.
+`no such savepoint: wt_sp_1` — measured on a suite since deleted, which is how it was found.
 
 ## Treat "there is a test" as an unfinished sentence
 

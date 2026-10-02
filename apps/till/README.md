@@ -99,10 +99,8 @@ naming the variable, never echoing its value.
 
 ### A no-browser check
 
-There is no longer a one-command in-process walk of the login → menu → cash-sale path: the script
-that did it (`demo:till`) was deleted on 2026-09-22 along with the three other demo scripts that
-opened a PostgreSQL connection string, and nothing replaced it. What covers that path now is
-`apps/server`'s own suites — `src/till-api.*.test.ts` and `src/till-sale*.test.ts` — and, for a
+There is no one-command in-process walk of the login → menu → cash-sale path. What covers that path
+is `apps/server`'s own suites — `src/till-api.*.test.ts` and `src/till-sale*.test.ts` — and, for a
 by-hand check, the dev stack (`pnpm dev:setup`, then `wa-wt demo <worktree-name>`), which provisions
 a venue and serves the real till.
 

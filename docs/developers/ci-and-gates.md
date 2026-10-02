@@ -186,9 +186,9 @@ git ls-tree -r -l <ref> | awk -F'\t' '$2 ~ "^(packages|apps)/[^/]+/src/" && $2 ~
 and per package by grouping on the first two path segments. Four packages shrank by more than a
 tenth: `packages/provisioning` by 32% (195,783 to 132,840 bytes), `packages/recipes` by 21%,
 `packages/purchasing` by 14% and `packages/workforce-es` by 14%. Provisioning is the large one, and
-it lost `waitron-provision instance` with the per-tenant PostgreSQL cluster; it still clears the
-floor by 7.7 points on statements, and the other three are at 100% on all four metrics. One package
-is new, `packages/store`, at 100% on all four against the high bar.
+it lost `waitron-provision instance`; it still clears the floor by 7.7 points on statements, and
+the other three are at 100% on all four metrics. One package is new, `packages/store`, at 100% on
+all four against the high bar.
 
 **The high bar is the one doing the work, and which metric binds differs by package** — worth saying
 because it is easy to assume branches always binds, and it does not. Taking each package's smallest

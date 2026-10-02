@@ -421,11 +421,8 @@ and `deleteImage` in `packages/media/src/images.ts`); a variant with no photo of
 parent's and holds no use of it.
 
 `products.image` is protected by the database, variant rows included, but not by a real foreign
-key: on PostgreSQL it was
-`products_media_image_fk`, `REFERENCES media_images (filename) ON DELETE RESTRICT`, written by hand
-into the media set's baseline; regenerating every migration set for the storage switch dropped it,
-and `packages/media/drizzle/0001_image_references.sql` brings it back as **four triggers** instead —
-one on insert, one on an update of `image`, one on deleting the parent image, one on renaming it.
+key: `packages/media/drizzle/0001_image_references.sql` protects it with **four triggers** — one on
+insert, one on an update of `image`, one on deleting the parent image, one on renaming it.
 That file's own header states what a trigger is not, and two of its points matter to anyone reading
 this page: `pragma foreign_key_list('products')` does not list the rule, so nothing that enumerates
 keys from the engine sees it; and the refusal arrives as errcode 1811
