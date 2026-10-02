@@ -1224,6 +1224,11 @@ portion as well as the dish quantity, and the receipt's `perDishOptionQuantity` 
 and the kitchen ticket's `extraLabel` must print an amount, with the unit's abbreviation. The
 amounts reach a sale record, so this takes the full review path (risk trigger: fiscal invariants).
 
+The [A203 design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md) and
+[implementation plan](superpowers/plans/2026-10-03-extra-fixed-portion.md) are drafted for owner
+review. The build remains open and awaits approval of those documents, including the plan's
+proposed behavior for an offer whose stored portion no longer fits a changed unit.
+
 **A menu's hours per location, and a publish date for a new version (A204, owner 2026-10-02) —
 OPEN, not designed.** The owner: _"we should be able to specify what times of of which days each
 menu is live in each location, and a publish date for a new version of a menu"_, and _"that can be
