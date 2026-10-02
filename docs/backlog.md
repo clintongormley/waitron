@@ -260,7 +260,8 @@ older build before using the new published document. What is left:
 - **The till navigation widens a 390 px full-page screenshot to about 797–803 px** (PF6 Task 9).
   The queue and pass cards fit the viewport; inspect the containing navigation before changing
   those cards. Task 9 read the full-page image dimensions with `sips`; this does not measure card
-  overflow.
+  overflow. C130's entry below measured the header alone: with only Find a bill offered, 560 px in
+  English and 602 px in Spanish; the Kitchen, Pass and My schedule switches widen it further.
 - **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01). A kitchen working from paper
   may never mark dishes ready on its screen. With that screen switched off, each send can raise
   the dark-screen alert for up to an hour while those dishes remain waiting. A kitchen screen
@@ -2519,8 +2520,9 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       basket from `GET /api/working-orders/:id/placed`, which carries the order's lines. Reported
       by B16's review fixer from reading; no test shows it.
     - Lane B item B31 (owner, 2026-10-02): a handheld whose layout has a Counter tab, or a
-      held-orders or prep-queue card, loads the counter's lists at login as a till does, and a
-      handheld is offered the card reader, on any pay card and on a bill, only when its device
+      held-orders or prep-queue card, loads the counter's lists at login (since C130 a till
+      likewise loads them only when its layout shows one), and a handheld is offered the card
+      reader, on any pay card and on a bill, only when its device
       profile has integrated card payment (`#showsCounterLists` and `#cardReader`,
       `apps/till/src/till-app.ts`). A till follows its profile the same way (C129, #1025); one with no
       device reads no capabilities at boot, so it is not offered the reader
@@ -2551,15 +2553,34 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       person's permission list instead of one yes/no, and the till locks only the cards whose
       permission the person lacks (today the table-plan editor); the server still checks every
       permission itself. The till's unused routes to add, rename and remove a table
-      (`POST`/`PATCH`/`DELETE /api/tables`), which checked no permission, are gone. Left open:
-      a till profile saved before C130, and one newly created on the Device profiles screen, has
-      the three switches off until a manager turns them on; a till with no device reads no
-      capabilities, so it shows none of the three buttons. Seen in a visual check on 2026-10-02:
-      at 390 wide a handheld's till header runs past the right edge (the page measured 736 wide;
-      Kitchen, Allergens, the operator's name and Log out sat off-screen) — believed to predate
-      C130 from reading main's code, not measured on main — and turning the switches on adds
-      buttons to it; on the handheld, the station screen's back button says "Back to counter"
-      though a handheld lands on the floor plan; and clicking the knob (`span.thumb`) of a
+      (`POST`/`PATCH`/`DELETE /api/tables`), which checked no permission, are gone. A sign-in that
+      something newer replaced while it was still loading — a second person signing in, the idle
+      lock, or the till moving to another server — now stops at its next step and installs nothing
+      further (`#onLoggedIn`, `apps/till/src/till-app.ts`); what it had already installed before
+      that step is cleared or overwritten by the event that replaced it (a logout or a server
+      switch clears the name and permissions, a newer sign-in overwrites them). Before, it could
+      put the earlier person's name and permission list back on the till, or open the till with
+      nobody signed in; this predated C130 (the same steps on main installed the person and the
+      table-plan yes/no the same way).
+      Left open: a till profile saved before C130, and one newly created on the Device profiles
+      screen, has the three switches off until a manager turns them on; a till with no device reads
+      no capabilities, so it shows none of the three buttons. A change to a device profile reaches
+      a till only when the till starts again — a page load, a move to another server or a
+      re-enrolment, or in dev mode the lock screen's switch-device button (the profile is read in
+      `#boot`, `apps/till/src/till-app.ts`, as the layout and the hardware switches already are),
+      so signing out and in again does not pick it up. Seen in a visual check on 2026-10-02: at
+      390 wide a handheld's till header runs past the right edge (the page measured 736 wide;
+      Kitchen, Allergens, the operator's name and Log out sat off-screen), and turning the switches
+      on adds buttons to it. A review measured the header on 2026-10-02 in
+      real Chromium at 390 px, with the real `till-tab-shell` mounted with two phone tabs and an
+      operator signed in: with only Find a bill offered — what main offers every handheld;
+      `apps/till/src/widgets/tab-shell.ts` is unchanged by C130 — the page measured 560 px wide in
+      English and 602 px in Spanish, so the overflow predates C130 (the same overflow as the open
+      PF6 Task 9 entry above, "The till navigation widens a 390 px full-page screenshot"); with
+      the three switches on it measured 843 and 867 px, and the Pass and My schedule buttons sat
+      wholly off-screen. On the handheld, the station screen's back button says "Back to counter"
+      though a handheld on the built-in phone layout lands on the floor plan; and clicking the
+      knob (`span.thumb`) of a
       `wt-switch` that is on does not turn it off (clicking the label or its left edge, or Space,
       does), seen on the Device profiles screen, on the existing "Integrated card payment" switch
       too — the same knob already left open under A215 (clicking a variant's row); `packages/ui`
@@ -2963,7 +2984,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
 - **Screen faults seen during menus Task 9's look on 2026-09-27.** Seen on the dev stack while
   checking the till's home page, not investigated, and not checked against `main`, so any of them
   may predate that branch:
-  - on the till at 390 px wide, the header makes the page wider than the screen;
+  - on the till at 390 px wide, the header makes the page wider than the screen (measured in
+    C130's entry above: 560 px in English and 602 px in Spanish with only Find a bill offered);
   - on the till's floor map at 390 px wide, tables overlap one another;
   - in Spanish, the till's tab names "Counter", "Floor" and "Order" stay in English (traced to
     canvases, see A182 below);
