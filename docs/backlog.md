@@ -3100,8 +3100,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   venue screen; **in Catalonia it is fixed to Catalan**
   ([regional-language-rules.md](compliance/regional-language-rules.md), Catalonia). Server: `GET`
   and `PUT /management-api/receipt-language` (`apps/server/src/location-settings-api.ts`).
-  - **A copy can be printed in another receipt language (C114, 2026-10-02, branch
-    `feat/receipt-reprint-language`).** Where the till reprints an issued receipt (the finished
+  - **A copy can be printed in another receipt language (C114, landed 2026-10-02 as #1022).** Where the till reprints an issued receipt (the finished
     sale's Reprint and a paid bill's Receipt), a venue whose country offers more than one receipt
     language asks which, starting on the first of these it offers: the language the sale was filed
     in, the location's, the first offered; a country with one reprints at once. Only the
@@ -3118,7 +3117,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     setup and the Receipts page says a copy can be printed in another language. The dashboard
     Printers screen's Resend still sends a job's stored bytes again (owner, 2026-10-02), and the
     Orders screen's copy (`reprintOrderReceipt`, `apps/server/src/orders-reprint.ts`) prints in the
-    language the sale was filed in.
+    language the sale was filed in. Two tidy-ups #1022's review raised and left, because each changes
+    files outside it: the till's four choice dialogs (`apps/till/src/widgets/`) each carry their own
+    radio-option styles, which could be one shared set; and three older dashboard screens name
+    languages with their own code rather than `languageDisplayName` (`packages/shared`).
   - **Open, for the owner:**
     - **A change is refused while an open order at the location holds a line**
       (`receipt.language_orders_open`; narrowed by C124, #1020, 2026-10-02, with core
