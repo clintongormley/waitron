@@ -71,7 +71,9 @@ export class OrderReprintDialog extends LitElement {
   override render() {
     const printers = this.printers ?? [];
     const bill =
-      this.row?.orderNumber === null ? (this.row.label ?? "") : String(this.row?.orderNumber ?? "");
+      this.row?.orderNumber === null
+        ? (this.row.label ?? "")
+        : t("orders.order_number").replace("{number}", String(this.row?.orderNumber ?? ""));
     return html`<wt-dialog .open=${this.row !== null} heading=${t("orders.reprint.title")}>
       ${
         this.row

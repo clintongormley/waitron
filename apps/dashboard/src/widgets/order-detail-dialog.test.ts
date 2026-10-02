@@ -148,3 +148,52 @@ it("explains when a bill outside the session's scope cannot be opened", async ()
   });
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("That bill was not found"));
 });
+
+it("shows the old unit price only when it differs from the charged price", async () => {
+  setLocale("en-GB");
+  const same = { ...detail, lines: [{ ...detail.lines[0]!, listUnitPrice: "10.00" }] };
+  const api = {
+    getOrder: vi.fn().mockResolvedValue(same),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+    api,
+    orderId: "bill-1",
+  });
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
+  expect(el.shadowRoot!.textContent).not.toContain("was €10.00");
+});
+
+it("explains payment states and an unnamed party in Spanish", async () => {
+  setLocale("es-ES");
+  const translated = {
+    ...detail,
+    party: { ...detail.party!, name: null },
+    payments: [
+      {
+        ...detail.payments[0]!,
+        refunds: [{ ...detail.payments[0]!.refunds[0]!, state: "completed" }],
+      },
+    ],
+  };
+  const api = {
+    getOrder: vi.fn().mockResolvedValue(translated),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+    api,
+    orderId: "bill-1",
+  });
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
+  const words = el.shadowRoot!.textContent!;
+  for (const value of [
+    "Tarjeta",
+    "Pago recibido",
+    "Devolución completada",
+    "Grupo sin nombre",
+    "Comensales: 2",
+    "por Luis",
+  ])
+    expect(words).toContain(value);
+  expect(words).not.toContain(" · received");
+});

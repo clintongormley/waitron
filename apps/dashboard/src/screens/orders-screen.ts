@@ -81,7 +81,6 @@ export class OrdersScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  @property({ attribute: false }) permissions: readonly string[] = [];
   @state() private filter: OrdersFilter = DEFAULT_ORDERS_FILTER;
   @state() private pages = 1;
   @state() private page?: OrdersPageDto;
@@ -89,7 +88,7 @@ export class OrdersScreen extends LitElement {
   @state() private refusal: { field: string | null; message: string } | null = null;
   @state() private loadingMore = false;
   @state() private openId: string | null = null;
-  @state() private reprintId: string | null = null;
+  @state() private reprintRow: OrderRowDto | null = null;
   #textTimer?: ReturnType<typeof setTimeout>;
 
   readonly #queries = new DashboardQueries(
@@ -154,10 +153,11 @@ export class OrdersScreen extends LitElement {
   }
 
   #apply(next: OrdersFilter): void {
-    this.filter = next;
+    const filter = next.from && next.to ? next : { ...next, from: undefined, to: undefined };
+    this.filter = filter;
     this.pages = 1;
     this.page = undefined;
-    this.#url.write(writeOrdersFilter(next));
+    this.#url.write(writeOrdersFilter(filter));
     this.#watch();
   }
 
@@ -205,7 +205,10 @@ export class OrdersScreen extends LitElement {
       {
         key: "invoice",
         label: t("orders.col.invoice"),
-        cell: (row) => [row.invoiceNumber, ...row.creditNotes].filter(Boolean).join(" · "),
+        cell: (row) =>
+          html`${row.invoiceNumber ?? ""}${row.creditNotes.map(
+            (number) => html`<span part="mark">${number}</span>`,
+          )}`,
       },
       {
         key: "status",
@@ -251,7 +254,7 @@ export class OrdersScreen extends LitElement {
                     variant="secondary"
                     @click=${(event: Event) => {
                       event.stopPropagation();
-                      this.reprintId = row.id;
+                      this.reprintRow = row;
                     }}
                     >${t("orders.reprint")}</wt-button
                   >`
@@ -375,7 +378,7 @@ export class OrdersScreen extends LitElement {
         .orderId=${this.openId}
         .mayReprint=${(row: OrderRowDto) => this.#mayReprint(row)}
         @order-reprint=${(event: CustomEvent<{ id: string }>) => {
-          this.reprintId = event.detail.id;
+          this.reprintRow = rows.find((row) => row.id === event.detail.id) ?? null;
         }}
         @wt-close=${() => {
           this.openId = null;
@@ -383,9 +386,9 @@ export class OrdersScreen extends LitElement {
       ></dashboard-order-detail-dialog>
       <dashboard-order-reprint-dialog
         .api=${this.api}
-        .row=${rows.find((row) => row.id === this.reprintId) ?? null}
+        .row=${this.reprintRow}
         @wt-close=${() => {
-          this.reprintId = null;
+          this.reprintRow = null;
         }}
       ></dashboard-order-reprint-dialog>`;
   }

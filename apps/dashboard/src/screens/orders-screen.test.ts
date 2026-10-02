@@ -67,8 +67,8 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
   } as unknown as DashboardApi;
 }
 
-async function loaded(api = stubApi(), permissions: string[] = ["report.view"]) {
-  const { el } = await mountWidget<OrdersScreen>("dashboard-orders-screen", { api, permissions });
+async function loaded(api = stubApi()) {
+  const { el } = await mountWidget<OrdersScreen>("dashboard-orders-screen", { api });
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("wt-data-table")?.rows).toHaveLength(1),
   );
@@ -105,6 +105,17 @@ describe("dashboard Orders", () => {
     expect(table.shadowRoot!.textContent).toContain("€15.00");
   });
 
+  it("places each credit note below its invoice number", async () => {
+    const { el } = await loaded();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const invoice = table.shadowRoot!.querySelectorAll("tbody tr td")[3]!;
+    expect(invoice.textContent).toContain("A/12");
+    expect(
+      [...invoice.querySelectorAll("span[part=mark]")].map((mark) => mark.textContent),
+    ).toEqual(["R/2"]);
+  });
+
   it("keeps dates when choosing Unpaid and writes them into the address", async () => {
     const { el, api } = await loaded();
     const choose = (name: string, value: string) =>
@@ -128,9 +139,30 @@ describe("dashboard Orders", () => {
     });
   });
 
-  it("offers finished statuses to staff because the server limits them to today", async () => {
+  it("does not send an empty date after one end of a range is cleared", async () => {
+    history.replaceState(null, "", "/manage/orders/from/2026-09-01/to/2026-09-02");
+    const { el, api } = await loaded();
+    const choose = (name: string, value: string) =>
+      el
+        .shadowRoot!.querySelector(`[name=${name}]`)!
+        .dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+        );
+    choose("from", "");
+    choose("status", "paid");
+    await vi.waitFor(() => expect(api.background.listOrderPages).toHaveBeenCalled());
+    expect(
+      (api.background.listOrderPages as ReturnType<typeof vi.fn>).mock.lastCall?.[0],
+    ).toMatchObject({
+      status: "paid",
+      from: undefined,
+      to: undefined,
+    });
+  });
+
+  it("accepts a paid status from the address and asks the server to apply session scope", async () => {
     history.replaceState(null, "", "/manage/orders/status/paid");
-    const { el, api } = await loaded(stubApi(), []);
+    const { el, api } = await loaded();
     const status = el.shadowRoot!.querySelector<
       HTMLElement & { options: { value: string }[]; value: string }
     >("wt-combobox[name=status]")!;
@@ -168,7 +200,6 @@ describe("dashboard Orders", () => {
     });
     const { el } = await mountWidget<OrdersScreen>("dashboard-orders-screen", {
       api,
-      permissions: ["report.view"],
     });
     await vi.waitFor(() =>
       expect(
@@ -200,6 +231,60 @@ describe("dashboard Orders", () => {
       expect(el.shadowRoot!.querySelector("dashboard-order-reprint-dialog")?.row?.id).toBe(ROW.id),
     );
     expect(api.getOrderPrinters).toHaveBeenCalled();
+  });
+
+  it("keeps an open printer picker when a refresh removes the bill from the list", async () => {
+    const { el, api } = await loaded();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector("wt-row-actions")!.querySelectorAll("wt-button")[1]!.click();
+    const picker = el.shadowRoot!.querySelector("dashboard-order-reprint-dialog")!;
+    await vi.waitFor(() =>
+      expect(picker.shadowRoot!.querySelector("wt-combobox")?.value).toBe("printer-1"),
+    );
+    (api.background.listOrderPages as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...PAGE,
+      rows: [],
+    });
+    api.liveData.invalidate([{ type: "working_orders", id: ROW.id }]);
+    await vi.waitFor(() => expect(table.rows).toHaveLength(0));
+    expect(picker.row?.id).toBe(ROW.id);
+    expect(picker.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+  });
+
+  it("keeps the sent confirmation when a refresh replaces the bill object", async () => {
+    const { el, api } = await loaded();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector("wt-row-actions")!.querySelectorAll("wt-button")[1]!.click();
+    const picker = el.shadowRoot!.querySelector("dashboard-order-reprint-dialog")!;
+    await vi.waitFor(() =>
+      expect(picker.shadowRoot!.querySelector("wt-combobox")?.value).toBe("printer-1"),
+    );
+    picker.shadowRoot!.querySelector<HTMLElement>("[data-test=print]")!.click();
+    await vi.waitFor(() => expect(picker.shadowRoot!.textContent).toContain("Copy sent to Barra"));
+    (api.background.listOrderPages as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...PAGE,
+      rows: [{ ...ROW }],
+    });
+    api.liveData.invalidate([{ type: "working_orders", id: ROW.id }]);
+    await vi.waitFor(() => expect(api.background.listOrderPages).toHaveBeenCalled());
+    expect(picker.shadowRoot!.textContent).toContain("Copy sent to Barra");
+    expect(api.getOrderPrinters).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["an invoice without a bill", { ...ROW, kind: "sale" as const }],
+    ["a bill without an invoice", { ...ROW, invoiceNumber: null }],
+  ])("does not offer reprint for %s", async (_name, row) => {
+    const api = stubApi({ listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [row] }) });
+    const { el } = await loaded(api);
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const actions = table.shadowRoot!.querySelector("wt-row-actions")!;
+    expect(
+      [...actions.querySelectorAll("wt-button")].map((button) => button.textContent?.trim()),
+    ).toEqual(["View details"]);
   });
 
   it("shows statuses and table headings in Spanish", async () => {

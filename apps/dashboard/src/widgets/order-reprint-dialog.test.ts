@@ -50,6 +50,7 @@ it("prints a duplicate on the selected printer and says where it went", async ()
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("wt-combobox")?.options).toHaveLength(2),
   );
+  expect(el.shadowRoot!.textContent).toContain("Bill No. 12, invoice A/12");
   el.shadowRoot!.querySelector("wt-combobox")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "printer-2" }, bubbles: true, composed: true }),
   );

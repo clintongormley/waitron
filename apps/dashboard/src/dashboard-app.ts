@@ -1165,7 +1165,6 @@ export class DashboardApp extends LitElement {
         </div>
       `;
     }
-    const hasNav = true;
     return html`
       <div
         class="shell"
@@ -1174,7 +1173,7 @@ export class DashboardApp extends LitElement {
         @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
       >
         <div class="banner-row">
-          ${this.#banner(true, hasNav)}
+          ${this.#banner(true, true)}
           <wt-toast
             class="alert-toast"
             data-test="alert-toast"
@@ -1186,25 +1185,19 @@ export class DashboardApp extends LitElement {
             @wt-close=${(e: Event) => this.#onToastClose(e)}
           ></wt-toast>
         </div>
-        <div class=${classMap({ layout: true, "drawer-open": hasNav && this.drawerOpen })}>
+        <div class=${classMap({ layout: true, "drawer-open": this.drawerOpen })}>
           <!-- At desktop width the sidebar is in-flow; below the
                breakpoint (Task 12) it becomes the off-canvas drawer the hamburger toggles. When it is
                off-canvas AND closed (narrow && not drawerOpen) it is inert, so its nav buttons
                leave the tab order + a11y tree rather than lurking off-screen ahead of every visible
                control; it is interactive at desktop width and whenever the drawer is open. -->
-          ${
-            hasNav
-              ? html`<aside class="sidebar" ?inert=${this.narrow && !this.drawerOpen}>
-                  ${this.#nav()}
-                </aside>`
-              : nothing
-          }
+          <aside class="sidebar" ?inert=${this.narrow && !this.drawerOpen}>${this.#nav()}</aside>
           <!-- The scrim behind the open drawer — a tap on it closes the drawer. Rendered only while open;
                the drawer is force-closed on the transition
                to desktop (#onBreakpointChange), so this never renders at desktop width.
                aria-hidden: it is a decorative veil, not an interactive control in the a11y tree. -->
           ${
-            hasNav && this.drawerOpen
+            this.drawerOpen
               ? html`<div
                   class="scrim"
                   aria-hidden="true"
@@ -1435,7 +1428,7 @@ export class DashboardApp extends LitElement {
     if (this.sessionRole === "staff")
       return [
         {
-          group: NAV_GROUPS[0]!,
+          group: NAV_GROUPS.find((group) => group.id === "reports")!,
           pages: [
             { screen: "my-schedule", label: t("nav.my_schedule") },
             { screen: "orders", label: t("nav.orders") },
@@ -1630,10 +1623,7 @@ export class DashboardApp extends LitElement {
       case "sales":
         return html`<dashboard-sales-screen .api=${this.api}></dashboard-sales-screen>`;
       case "orders":
-        return html`<dashboard-orders-screen
-          .api=${this.api}
-          .permissions=${this.#sessionPermissions}
-        ></dashboard-orders-screen>`;
+        return html`<dashboard-orders-screen .api=${this.api}></dashboard-orders-screen>`;
       case "staff":
         return html`<dashboard-staff-screen
           .api=${this.api}

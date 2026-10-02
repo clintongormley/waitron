@@ -49,11 +49,7 @@ afterEach(cleanupWidgets);
 for (const theme of ["light", "dark"] as const) {
   it(`has an accessible Orders table and dialogs in ${theme} theme`, async () => {
     history.replaceState(null, "", "/manage/orders");
-    const { el, host } = await mountWidget<OrdersScreen>(
-      "dashboard-orders-screen",
-      { api, permissions: ["report.view"] },
-      theme,
-    );
+    const { el, host } = await mountWidget<OrdersScreen>("dashboard-orders-screen", { api }, theme);
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("wt-data-table")?.rows).toHaveLength(1),
     );
