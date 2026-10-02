@@ -2628,6 +2628,19 @@ describe("till-app: a bill payment on the card reader", () => {
     const onHandheld = await takeOnHandheldReader(vi.fn().mockRejectedValue(refused));
     expect(inDialog(onHandheld, "wt-form-actions")!.error).toBe(says);
   });
+
+  it("stops saying to tap or insert the card once the reader payment is refused", async () => {
+    let refuse: (reason: unknown) => void = () => undefined;
+    const el = await takeOnReader(
+      vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+    );
+    expect(text(inDialog(el, "[data-pay-collecting]"))).toBe(t("card.collecting"));
+
+    refuse({ code: "device.forbidden_action", status: 403, action: "pay" });
+    await flush(el);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("card_reader.not_set_up"));
+    expect(inDialog(el, "[data-pay-collecting]")).toBeNull();
+  });
 });
 
 describe("till-app: giving back a bill payment", () => {

@@ -1903,6 +1903,38 @@ describe("till-app", () => {
       expect(banner.textContent).not.toContain(t("sale.error"));
     });
 
+    it("puts its sale tab's pay card back to its choices after the reader payment is refused", async () => {
+      const pay = vi
+        .fn()
+        .mockRejectedValue({ code: "device.forbidden_action", status: 403, action: "pay" });
+      const el = await toHandheld(
+        withSaleTab,
+        {
+          capabilities: withReader,
+          cardProvider: "stripe_terminal",
+          activeReaders: readers,
+          defaultReaderId: readers[0]!.id,
+        },
+        { pay },
+      );
+      selectTab(el, "sale");
+      await flush(el);
+      payCard(el, "sale").store.addProduct(cafe, "2");
+      await flush(el);
+
+      payCard(el, "sale").shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
+      await flush(el);
+
+      expect(pay).toHaveBeenCalledTimes(1);
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("card_reader.not_set_up"));
+      await payCard(el, "sale").updateComplete;
+      const card = payCard(el, "sale").shadowRoot!;
+      expect(card.querySelector(".collecting")).toBeNull();
+      expect(card.querySelector(".pay")).not.toBeNull();
+      expect(card.querySelector(".pay-card")).not.toBeNull();
+    });
+
     describe("a list that cannot be read at login", () => {
       let rejections: unknown[];
       const onRejection = (event: PromiseRejectionEvent): void => {
@@ -6239,6 +6271,68 @@ describe("till-app", () => {
       expect(banner.textContent).toContain(t("card_reader.not_set_up"));
       expect(banner.textContent).not.toContain(t("sale.error"));
       expect(c.store.lines).toHaveLength(1);
+    });
+
+    it.each([
+      {
+        refusal: { code: "device.forbidden_action", status: 403, action: "pay" },
+        says: "card_reader.not_set_up" as const,
+      },
+      { refusal: { code: "server.internal", status: 500 }, says: "sale.error" as const },
+    ])(
+      "puts the pay card back to its choices, with $refusal.code explained in the banner, after the reader payment is refused",
+      async ({ refusal, says }) => {
+        const pay = vi.fn().mockRejectedValue(refusal);
+        const { el } = await mountApp({
+          getTill: vi.fn().mockResolvedValue({
+            ...till,
+            cardProvider: "stripe_terminal",
+            capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+          }),
+          pay,
+        });
+        const c = await toCounter(el);
+        c.store.addProduct(cafe, "2");
+        await flush(el);
+
+        tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
+        await flush(el);
+
+        expect(pay).toHaveBeenCalledTimes(1);
+        const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+        expect(banner.textContent).toContain(t(says));
+        await tenderPay(el).updateComplete;
+        const card = tenderPay(el).shadowRoot!;
+        expect(card.querySelector(".collecting")).toBeNull();
+        expect(card.querySelector(".pay")).not.toBeNull();
+        expect(card.querySelector(".pay-card")).not.toBeNull();
+      },
+    );
+
+    it("puts the pay card back to its choices for the next sale after a reader payment is captured", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          cardProvider: "stripe_terminal",
+          capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+        }),
+        pay,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await flush(el);
+
+      tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
+      await flush(el);
+      expect(ticket(el)).not.toBeNull();
+      emit(ticket(el)!, "new-sale");
+      await flush(el);
+
+      await tenderPay(el).updateComplete;
+      const card = tenderPay(el).shadowRoot!;
+      expect(card.querySelector(".collecting")).toBeNull();
+      expect(card.querySelector(".pay-card")).not.toBeNull();
     });
 
     it("says the operator may not take payments when the server refuses them the reader payment", async () => {

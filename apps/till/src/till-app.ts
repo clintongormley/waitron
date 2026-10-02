@@ -1432,6 +1432,8 @@ export class TillApp extends LitElement {
    * leaves the counter, and deliberately not by `#onDiscardOrder`, which never touches the loaded basket.
    */
   @state() private cardOutcome?: Exclude<PayOutcome, { outcome: "captured" }>["outcome"];
+  /** Relayed to the pay card, which leaves its "Tap or insert card" spinner when this changes. */
+  @state() private cardAttemptsOver = 0;
   /**
    * Single-flight guard: two chained fiscal records for one purchase cannot be repaired. Set
    * synchronously before the first await of {@link TillApp.#onConfirmPayment}, so a second
@@ -2337,7 +2339,17 @@ export class TillApp extends LitElement {
    * `network_unavailable` comes back as data, not a throw: nothing was filed, so it is recorded in
    * {@link cardOutcome} and the basket stays, with no error banner.
    */
-  async #onCollectCard(event: Event, retried = false): Promise<void> {
+  async #onCollectCard(event: Event): Promise<void> {
+    // Another attempt is running and owns the pay card's spinner.
+    if (this.submitting) return;
+    try {
+      await this.#collectCard(event, false);
+    } finally {
+      this.cardAttemptsOver++;
+    }
+  }
+
+  async #collectCard(event: Event, retried: boolean): Promise<void> {
     if (this.submitting || this.#refusePaidInPart()) return;
     this.submitting = true;
     this.#counterSends++;
@@ -2407,9 +2419,9 @@ export class TillApp extends LitElement {
     }
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
-      await this.#afterVersionRefusal(refreshed, retried, () => this.#onCollectCard(event, true));
+      await this.#afterVersionRefusal(refreshed, retried, () => this.#collectCard(event, true));
     if (recheck && (await this.#askCounterDeadEnds("pay", true, inactiveChoice)))
-      await this.#onCollectCard(event, true);
+      await this.#collectCard(event, true);
   }
 
   #basketPaidInPartFor?: {
@@ -6271,6 +6283,7 @@ export class TillApp extends LitElement {
         .cardProvider=${this.#cardReader()}
         .tipsEnabled=${this.tipsEnabled}
         .cardOutcome=${this.cardOutcome}
+        .cardAttemptsOver=${this.cardAttemptsOver}
         .activeReaders=${this.activeReaders}
         .defaultReaderId=${this.defaultReaderId}
         .handheld=${this.handheldMode}
@@ -6301,6 +6314,7 @@ export class TillApp extends LitElement {
       .cardProvider=${this.#cardReader()}
       .tipsEnabled=${this.tipsEnabled}
       .cardOutcome=${this.cardOutcome}
+      .cardAttemptsOver=${this.cardAttemptsOver}
       .activeReaders=${this.activeReaders}
       .defaultReaderId=${this.defaultReaderId}
       .api=${this.api}

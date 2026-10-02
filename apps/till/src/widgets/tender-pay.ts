@@ -176,6 +176,9 @@ export class TillTenderPay extends LitElement {
   @property() cardProvider: CardProvider = "none";
   @property({ type: Boolean }) tipsEnabled = false;
   @property() cardOutcome?: CardOutcome;
+  /** Bumped by the app when a card attempt ends, after any automatic retry, whether or not it
+   * produced a {@link cardOutcome}. */
+  @property({ type: Number }) cardAttemptsOver = 0;
   @property({ attribute: false }) activeReaders: TillActiveReader[] = [];
   /** Only NAMES the default on screen — never sent; an unset {@link chosenReaderId} already means
    * "use the device default". */
@@ -224,6 +227,9 @@ export class TillTenderPay extends LitElement {
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("cardOutcome") && this.cardOutcome !== undefined) {
       this.view = "card_outcome";
+    }
+    if (changed.has("cardAttemptsOver") && this.view === "collecting") {
+      this.view = "idle";
     }
   }
 
