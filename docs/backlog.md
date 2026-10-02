@@ -807,6 +807,16 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   Add button under it (A176). Every `*.empty` string is rewritten to that pattern in both
   languages; a table with no Add action keeps just the sentence.
 
+**An empty field's label is the same size as a typed value (A184, owner 2026-10-02) — OPEN.** The
+owner, on a screenshot of a form with Password and PIN empty: _"the fieldname inside the field is
+font size 16px when a filled value is 14px"_. A resting label (an empty, unfocused field) reads
+`--wt-field-label-rest-size`, 16px (`packages/ui-core/src/tokens/structure.css`; the
+`data-label="rest"` rule in `packages/ui-core/src/field-styles.ts`; `wt-number-stepper` reads the
+same token), while the value inherits the body's `--wt-font-size-md`, 14px since A179. **Wanted:** a
+resting label is drawn at the value's size, and the two cannot drift apart again. The tests that pin
+16px, or override the token, change with it — the owner asked for the change; name them in the PR.
+The phone-zoom question above is about a field's TEXT, not its label, so this does not touch it.
+
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
