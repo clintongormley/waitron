@@ -27,7 +27,7 @@ export class WtDisclosure extends LitElement {
          while closed, never moves either of them. */
       .header {
         display: grid;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: max-content 1fr;
         grid-template-rows: minmax(var(--wt-tap-min), auto) auto;
         align-items: center;
         column-gap: var(--wt-space-3);
@@ -52,6 +52,7 @@ export class WtDisclosure extends LitElement {
       }
 
       .summary {
+        grid-column: 1 / -1;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
@@ -61,6 +62,7 @@ export class WtDisclosure extends LitElement {
       .chevron {
         grid-column: 2;
         grid-row: 1;
+        justify-self: start;
         transition: transform 150ms ease;
       }
 

@@ -1075,7 +1075,7 @@ disagree about what is on it.
 
 A disclosure draws no border and no lines in either state; spacing above and below sets the section
 apart (owner, 2026-10-01, A169). The heading and chevron stay exactly where they are when it opens,
-the chevron at the right-hand end of the row. Closed, the summary sits under the
+the chevron directly after the heading. Closed, the summary sits under the
 heading; open, the body shows in its place and the summary is not drawn.
 
 The body is a plain default slot, so the section's content is ordinary form markup and every rule
