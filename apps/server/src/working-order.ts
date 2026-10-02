@@ -124,6 +124,7 @@ import type {
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { FloorAnnotator, ServiceMode, ZoneMenuOffer, ZoneOffers } from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import type { FloorTableShape } from "./tables.js";
 import { issuancePass } from "./issuance-pass.js";
 import { issueMoment, type IssueMoment } from "./issue-moment.js";
@@ -4956,6 +4957,10 @@ export async function markOrderPlaced(
  * refused, writing nothing, while its bill holds a payment, or while a card payment of the invoice
  * is unresolved or captured and not yet filed. `saleTillId` is called only for such an order. Any
  * placed order is refused while an integrated card collection of it runs in this process.
+ *
+ * The credit needs `sale.rectify` from the operator or from `override`, whose PIN is checked under
+ * `override.attempts` before the credit, so a wrong one counts as it does on the other till
+ * overrides. `recordCorrection`'s own check, which counts nothing, then passes the same override.
  */
 export async function cancelPlacedOrder(
   deps: TillSaleDeps,
@@ -4965,6 +4970,7 @@ export async function cancelPlacedOrder(
   operatorId: string,
   sessionId: string,
   saleTillId: () => Promise<TillId>,
+  override?: Override & { attempts: PinAttempts },
 ): Promise<void> {
   // The reason is the amendment's accountable content. Checked before the status, so a missing reason
   // is a request-shape error, not the state conflict `not_placed` names.
@@ -4993,7 +4999,14 @@ export async function cancelPlacedOrder(
       throw new AppError("order.payment_in_flight", { workingOrderId: id });
     }
     if (invoice !== undefined) {
-      await creditWholeInvoice(tx, deps, cfg, invoice, sessionId, await saleTillId());
+      const authz = {
+        sessionId,
+        ...(override === undefined
+          ? {}
+          : { override: { personId: override.personId, pin: override.pin } }),
+      };
+      await authorize(tx, { ...authz, permission: "sale.rectify" }, override?.attempts);
+      await creditWholeInvoice(tx, deps, cfg, invoice, authz, await saleTillId());
     }
 
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));

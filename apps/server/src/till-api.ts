@@ -1735,10 +1735,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/working-orders/:id/cancel", (c) =>
     run(c, log, async () => {
-      const { personId, sessionId } = await requireSession(deps, c);
+      const { personId, sessionId, tillId } = await requireSession(deps, c);
       const device = await tryReadDevice(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
-      const body = await readJsonBody<{ reason: string }>(c);
+      const body = await readJsonBody<{ reason: string; override?: unknown }>(c);
+      const override = parseOverrideField(body.override);
       // The device's till reaches the credit note only, as placing's reaches its invoice; the
       // `order_cancelled` amendment keeps `cfg.tillId`.
       await cancelPlacedOrder(
@@ -1749,6 +1750,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         personId,
         sessionId,
         () => requireSaleTillId(deps, c, device),
+        override === undefined
+          ? undefined
+          : { ...override, attempts: overridePinAttempts(pinThrottle, tillId) },
       );
       return c.body(null, 200);
     }),

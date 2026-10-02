@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Hono } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -17,7 +18,7 @@ import {
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { createPinThrottle, hashPin, loginWithPin, persons } from "@waitron/identity";
 import { captureAttempting } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import {
@@ -36,6 +37,7 @@ import {
   statusOf,
   type BillVenue,
 } from "./testing/bill-venue.js";
+import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { payWorkingOrderIntegrated } from "./till-sale.js";
 import "./errors.js";
@@ -772,6 +774,143 @@ describe("cancelling a placed order whose invoice was issued", () => {
     // The control: with the refusal gone, the same cancel credits the invoice.
     expect((await cancel(id)).status).toBe(200);
     expect(await creditsOf(original.id)).toHaveLength(1);
+  });
+});
+
+describe("cancelling an invoiced order on a manager's PIN", () => {
+  type Override = { personId: unknown; pin: unknown } | string;
+
+  function cancelWith(override: Override, cookie = venue.cookie, app = venue.app) {
+    return (id: string) =>
+      send(app, cookie, "POST", `/api/working-orders/${id}/cancel`, { reason: REASON, override });
+  }
+
+  /** The till routes with a wrong-PIN limit of their own, on a clock the case moves. */
+  function throttledApp() {
+    const clockAt = { now: 1_000_000 };
+    const app = new Hono();
+    mountTillApi(
+      app,
+      {
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        cfg: venue.cfg,
+        secureCookies: false,
+        venueLocale: venue.cfg.locale,
+        pool: venue.pool,
+        pinThrottle: createPinThrottle({ now: () => clockAt.now }),
+      },
+      () => {},
+    );
+    return { app, clockAt };
+  }
+
+  it("credits the invoice for an operator without sale.rectify, naming the manager as authorising", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+
+    const answer = await cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN })(id);
+
+    expect(answer).toEqual({ status: 200, json: { body: "" } });
+    const credits = await creditsOf(original.id);
+    expect(credits).toEqual([
+      expect.objectContaining({
+        total: -300,
+        tillId: venue.deviceTillId,
+        authorizedBy: supervisorId,
+      }),
+    ]);
+    expect(await statusOf(venue, id)).toBe("abandoned");
+    expect(await amendmentsOf(id)).toEqual([
+      { kind: "order_placed", actorId: venue.operatorId, reason: null },
+      { kind: "order_cancelled", actorId: venue.operatorId, reason: REASON },
+    ]);
+  });
+
+  it("refuses a wrong manager PIN as pin.invalid, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+
+    await expectRefusedUnwritten(id, cancelWith({ personId: supervisorId, pin: "0000" })(id), {
+      status: 401,
+      code: "pin.invalid",
+    });
+  });
+
+  it("refuses the PIN of someone who does not hold sale.rectify, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const answer = cancelWith({ personId: venue.operatorId, pin: "5555" })(id);
+
+    await expectRefusedUnwritten(id, answer, { status: 403, code: "authorization.not_permitted" });
+    expect((await answer).json.params).toEqual({ permission: "sale.rectify" });
+  });
+
+  // Thunks, because the supervisor's id exists only once the suite's setup has run.
+  it.each<[string, () => Override, { status: number; code: string }]>([
+    [
+      "an override that is not an object",
+      () => SUPERVISOR_PIN,
+      { status: 400, code: "management.request_invalid" },
+    ],
+    [
+      "a person id that is not a UUID",
+      () => ({ personId: "sofia", pin: SUPERVISOR_PIN }),
+      { status: 401, code: "pin.invalid" },
+    ],
+    [
+      "a PIN that is not text",
+      () => ({ personId: supervisorId, pin: 7777 }),
+      { status: 401, code: "pin.invalid" },
+    ],
+  ])("refuses %s, writing nothing", async (_, override, refusal) => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+
+    await expectRefusedUnwritten(id, cancelWith(override())(id), refusal);
+  });
+
+  it("never checks an override sent by someone who holds sale.rectify, and credits on their own authority", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+
+    const answer = await cancelWith({ personId: supervisorId, pin: "0000" }, supervisorCookie)(id);
+
+    expect(answer.status).toBe(200);
+    expect(await creditsOf(original.id)).toEqual([
+      expect.objectContaining({ authorizedBy: supervisorId }),
+    ]);
+  });
+
+  it("counts wrong PINs in the till's override bucket: after four even the right one is 429, the drawer too, until the wait is over", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    const { app, clockAt } = throttledApp();
+    const right = { personId: supervisorId, pin: SUPERVISOR_PIN };
+
+    for (let i = 0; i < 4; i += 1) {
+      const wrong = await cancelWith(
+        { personId: supervisorId, pin: "0000" },
+        venue.cookie,
+        app,
+      )(id);
+      expect({ status: wrong.status, code: wrong.json.code }).toEqual({
+        status: 401,
+        code: "pin.invalid",
+      });
+    }
+    const throttled = cancelWith(right, venue.cookie, app)(id);
+    await expectRefusedUnwritten(id, throttled, { status: 429, code: "pin.throttled" });
+    expect((await throttled).json.params).toEqual({ retryAfterSeconds: 2 });
+    const drawer = await send(app, venue.cookie, "POST", "/api/drawer/open", { override: right });
+    expect({ status: drawer.status, code: drawer.json.code }).toEqual({
+      status: 429,
+      code: "pin.throttled",
+    });
+
+    clockAt.now += 2_001;
+    expect((await cancelWith(right, venue.cookie, app)(id)).status).toBe(200);
+    expect(await creditsOf(original.id)).toEqual([
+      expect.objectContaining({ authorizedBy: supervisorId }),
+    ]);
   });
 });
 
