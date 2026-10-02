@@ -366,7 +366,7 @@ export class ExtraListForm extends LitElement {
   }
 
   #addItem(productId: string): void {
-    if (!productId) return;
+    if (this.busy || !productId) return;
     this.#editItems(() => {
       // An item is given its id HERE, not by the server. `writeItems` deletes every item of the
       // list and re-inserts the body's under `item.id ?? randomUUID()`
@@ -387,6 +387,7 @@ export class ExtraListForm extends LitElement {
   #removeItem(id: string): void {
     this.#editItems(() => {
       this.items = this.items.filter((item) => item.id !== id);
+      this.addedMessage = "";
     });
   }
 

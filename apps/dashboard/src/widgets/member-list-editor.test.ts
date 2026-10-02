@@ -349,7 +349,7 @@ it("adds the chosen product and resets the picker", async () => {
 
 it.each([
   ["en", "Add a product", "Chips added."],
-  ["es", "Añadir un producto", "Chips añadido."],
+  ["es", "Añadir un producto", "Se ha añadido Chips."],
 ] as const)(
   "adds a menu product immediately and announces it in %s",
   async (locale, prompt, announcement) => {
@@ -391,6 +391,42 @@ it("adds nothing when the menu picker closes without a choice", async () => {
 
   expect(adds).toEqual([]);
   expect(box.value).toBe("");
+  expect(box.shadowRoot!.querySelector("button.trigger")!.getAttribute("aria-expanded")).toBe(
+    "false",
+  );
+});
+
+it("announces a section in Spanish without assuming its grammatical gender", async () => {
+  setLocale("es");
+  try {
+    const el = await mount({ sectionChoices: true });
+    await choose(el, "section:s-beer");
+    expect(q(el, '[data-test="added-status"]').textContent!.trim()).toBe("Se ha añadido Beer.");
+  } finally {
+    setLocale("en");
+    cleanupWidgets();
+  }
+});
+
+it("announces a product again after the person removes and re-adds it", async () => {
+  const el = await mount();
+  const adds = capture(el, "wt-member-add");
+  await choose(el, "product:p-chips");
+  expect(q(el, '[data-test="added-status"]').textContent!.trim()).toBe("Chips added.");
+  el.members = [
+    ...members(),
+    { id: "m-chips", position: 3, ref: { kind: "product", productId: "p-chips" } },
+  ];
+  await el.updateComplete;
+
+  q(el, '[data-test="remove-m-chips"]').click();
+  await el.updateComplete;
+  expect(q(el, '[data-test="added-status"]').textContent!.trim()).toBe("");
+  el.members = members();
+  await el.updateComplete;
+  await choose(el, "product:p-chips");
+  expect(adds).toHaveLength(2);
+  expect(q(el, '[data-test="added-status"]').textContent!.trim()).toBe("Chips added.");
 });
 
 it("adds nothing when the picker closes without a choice", async () => {
@@ -411,12 +447,22 @@ it("keeps the add picker within the standard form width in a modal on a wide win
     height = window.innerHeight;
   await page.viewport(1280, 800);
   try {
-    const el = await mount();
+    const el = await mount({
+      members: [
+        ...members(),
+        { id: "m-gone", position: 3, ref: { kind: "missing", name: "Old special" } },
+      ],
+      replaceable: new Set(["m-gone"]),
+    });
     const modal = document.createElement("wt-modal") as WtModal;
     el.parentElement!.appendChild(modal);
     modal.appendChild(el);
     modal.open = true;
     await modal.updateComplete;
+    await el.updateComplete;
+    q(el, '[data-test="replace-m-gone"]').click();
+    await el.updateComplete;
+    q(el, '[data-test="add"]').click();
     await el.updateComplete;
     const probe = document.createElement("div");
     probe.style.width = "var(--wt-form-max-width)";
@@ -428,6 +474,9 @@ it("keeps the add picker within the standard form width in a modal on a wide win
     const box = memberBox(el).shadowRoot!.querySelector(".field")!.getBoundingClientRect();
     expect(box.right - row.left).toBeLessThanOrEqual(form + 0.5);
     expect(box.width).toBeLessThanOrEqual(form);
+    const error = memberBox(el).shadowRoot!.querySelector("[data-error]")!.getBoundingClientRect();
+    expect(error.width).toBeCloseTo(box.width, 0);
+    expect(error.width).toBeLessThanOrEqual(form);
   } finally {
     await page.viewport(width, height);
   }
@@ -483,6 +532,13 @@ it("while busy, disables every control and reports nothing", async () => {
     el.addEventListener(type, () => seen.push(type));
   expect(memberBox(el).disabled).toBe(true);
   expect(q<HTMLButtonElement>(el, '[data-test="drag-m-burger"]').disabled).toBe(true);
+  memberBox(el).dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "product:p-chips" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
   q(el, '[data-test="remove-m-burger"]').click();
   q(el, '[data-test="open-m-drinks"]').click();
   q(el, '[data-test="drag-m-burger"]').dispatchEvent(
@@ -491,6 +547,7 @@ it("while busy, disables every control and reports nothing", async () => {
   await el.updateComplete;
   expect(seen).toEqual([]);
   expect(memberBox(el).error).toBe("");
+  expect(q(el, '[data-test="added-status"]').textContent!.trim()).toBe("");
 });
 
 it("says the list is empty and still offers everything not excluded", async () => {
@@ -530,6 +587,31 @@ it("keeps an available product on offer when the list changes around it", async 
   expect(await shownMember(el)).toBe(t("members.add_placeholder"));
   expect(memberBox(el).options.some((option) => option.value === "product:p-salad")).toBe(true);
   expect(adds).toEqual([{ ref: { kind: "product", productId: "p-salad" } }]);
+});
+
+it("keeps a replacement choice while an unrelated member changes", async () => {
+  const el = await mount({
+    members: [
+      ...members(),
+      { id: "m-gone", position: 3, ref: { kind: "missing", name: "Old special" } },
+    ],
+    replaceable: new Set(["m-gone"]),
+  });
+  const replaces = capture<{ memberId: string; ref: unknown }>(el, "wt-member-replace");
+  q(el, '[data-test="replace-m-gone"]').click();
+  await el.updateComplete;
+  await choose(el, "product:p-salad");
+  el.members = [
+    ...members().filter((member) => member.id !== "m-lemonade"),
+    { id: "m-gone", position: 2, ref: { kind: "missing", name: "Old special" } },
+  ];
+  await el.updateComplete;
+  expect(memberBox(el).value).toBe("product:p-salad");
+  expect(await shownMember(el)).toBe("Salad");
+  q(el, '[data-test="add"]').click();
+  expect(replaces).toEqual([
+    { memberId: "m-gone", ref: { kind: "product", productId: "p-salad" } },
+  ]);
 });
 
 it("finds the section and every section holding it however deep, even round a loop", () => {

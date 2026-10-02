@@ -491,7 +491,7 @@ it("offers every product it was given to an empty list, and adds nothing until o
 
 it.each([
   ["en", "Add a product", "Bacon added."],
-  ["es", "Añadir un producto", "Bacon añadido."],
+  ["es", "Añadir un producto", "Se ha añadido Bacon."],
 ] as const)(
   "adds a chosen product at once and announces it in %s",
   async (locale, prompt, announcement) => {
@@ -532,6 +532,28 @@ it("adds nothing when the picker closes without a choice", async () => {
 
   expect(el.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(0);
   expect(combobox.value).toBe("");
+});
+
+it("announces a product again when it is removed and re-added", async () => {
+  const { el } = await mount();
+  await addItem(el, "Bacon");
+  expect(text(el, "added-status")).toBe("Bacon added.");
+
+  await click(el, "remove-item-0");
+  expect(text(el, "added-status")).toBe("");
+  await addItem(el, "Bacon");
+  expect(text(el, "added-status")).toBe("Bacon added.");
+  expect(el.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(1);
+});
+
+it("adds and announces nothing from a change received while busy", async () => {
+  const { el } = await mount({ busy: true });
+  picker(el).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: BACON }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(0);
+  expect(text(el, "added-status")).toBe("");
 });
 
 it("leaves out of the picker every product a new list already holds", async () => {

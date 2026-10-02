@@ -357,7 +357,10 @@ export class MemberListEditor extends LitElement {
       .disabled=${this.busy}
       @click=${(event: Event) => {
         event.stopPropagation();
-        if (!this.busy) this.#emit(`wt-member-${name}`, detail);
+        if (!this.busy) {
+          if (name === "remove" || name === "delete") this.addedMessage = "";
+          this.#emit(`wt-member-${name}`, detail);
+        }
       }}
       >${text}</wt-button
     >`;
@@ -496,6 +499,7 @@ export class MemberListEditor extends LitElement {
           .disabled=${this.busy}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
+            if (this.busy) return;
             this.choice = event.detail.value;
             if (this.replacing === null && this.choice) {
               const label = [...this.#offer.products, ...this.#offer.sections].find(
