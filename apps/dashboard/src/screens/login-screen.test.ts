@@ -3072,13 +3072,16 @@ describe("login-screen: the sign-in card", () => {
   );
 
   it.each(pagesAtViewports)(
-    "the %s page shows its one primary button, then or, then the other ways in, each the card's width (%s, %i px)",
-    async (_step, locale, width, height, open, expected) => {
+    "the %s page shows its own way in, then or, then the other ways in, each the card's width (%s, %i px)",
+    async (step, locale, width, height, open, expected) => {
       setLocale(locale);
       await page.viewport(width, height);
       const el = await mountOn(open);
       expect(order(el)).toEqual(expected);
-      expect(el.shadowRoot!.querySelectorAll("wt-button[variant=primary]")).toHaveLength(1);
+      // Google's own button is drawn to Google's branding rules, so the Google page has no primary.
+      expect(el.shadowRoot!.querySelectorAll("wt-button[variant=primary]")).toHaveLength(
+        step === "Google" ? 0 : 1,
+      );
       expect(el.shadowRoot!.querySelector("[data-test=login-or]")!.textContent!.trim()).toBe(
         t("login.or"),
       );
@@ -3123,13 +3126,16 @@ describe("login-screen: the sign-in card", () => {
       );
       expect(others.length).toBeGreaterThan(0);
       const iconSize = tokenValue(el, "width", "var(--wt-font-size-lg)");
+      const googleMarkSize = tokenValue(el, "width", "var(--wt-google-mark-size)");
       for (const other of others) {
         const icons = other.querySelectorAll("svg, img");
         expect(icons).toHaveLength(1);
         const icon = icons[0]!;
         if (icon instanceof HTMLImageElement) expect(icon.getAttribute("alt")).toBe("");
         else expect(icon.getAttribute("aria-hidden")).toBe("true");
-        expect(getComputedStyle(icon).width).toBe(iconSize);
+        expect(getComputedStyle(icon).width).toBe(
+          other.dataset.test === "google-login" ? googleMarkSize : iconSize,
+        );
         const label = other.textContent!.trim();
         expect(label).not.toBe("");
         expect(
@@ -3144,6 +3150,76 @@ describe("login-screen: the sign-in card", () => {
         ).toBe(new URL("../assets/google-g.svg", import.meta.url).href);
     },
   );
+
+  // Google's sign-in branding guidelines: the custom button's fill, 1px line and text per theme.
+  const googleColours = {
+    light: { fill: "rgb(255, 255, 255)", line: "rgb(116, 119, 117)", text: "rgb(31, 31, 31)" },
+    dark: { fill: "rgb(19, 19, 20)", line: "rgb(142, 145, 143)", text: "rgb(227, 227, 227)" },
+  } as const;
+  const googlePagesByTheme = (
+    [
+      ["email", undefined],
+      ["password", openPassword],
+      ["passkey", openPasskey],
+      ["Google", openGoogle],
+    ] as const
+  ).flatMap(([step, open]) =>
+    (["light", "dark"] as const).map((theme) => [step, theme, open] as const),
+  );
+
+  it.each(googlePagesByTheme)(
+    "the %s page draws Continue with Google in Google's %s colours and Google Sans Medium, with Google's G at 20px",
+    async (_step, theme, open) => {
+      const { el } = await mountWidget<LoginScreen>(
+        "dashboard-login-screen",
+        { api: stubApi() },
+        theme,
+      );
+      await flush(el);
+      if (open) await open(el);
+      await flush(el);
+      const google = el.shadowRoot!.querySelector<HTMLElement>(
+        "wt-button[data-test=google-login]",
+      )!;
+      expect(google.textContent!.trim()).toBe(t("login.with_google"));
+      const style = getComputedStyle(google.shadowRoot!.querySelector("button")!);
+      expect(style.backgroundColor).toBe(googleColours[theme].fill);
+      for (const side of ["Top", "Right", "Bottom", "Left"] as const) {
+        expect(style[`border${side}Color`]).toBe(googleColours[theme].line);
+        expect(style[`border${side}Width`]).toBe("1px");
+      }
+      expect(style.color).toBe(googleColours[theme].text);
+      expect(style.fontFamily).toMatch(/^"Google Sans", /);
+      expect(style.fontWeight).toBe("500");
+      expect(style.columnGap).toBe("10px");
+      expect(parseFloat(style.height)).toBeGreaterThanOrEqual(44);
+      const g = google.querySelector("img")!;
+      expect(g.getAttribute("src")).toBe(new URL("../assets/google-g.svg", import.meta.url).href);
+      const box = g.getBoundingClientRect();
+      expect([box.width, box.height]).toEqual([20, 20]);
+    },
+  );
+
+  it("keeps the space above the Google page's own button that a primary button has", async () => {
+    const el = await mountOn(openGoogle);
+    const google = el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-test=google-login]")!;
+    expect(getComputedStyle(google).marginTop).toBe(
+      tokenValue(el, "margin-top", "var(--wt-space-4)"),
+    );
+  });
+
+  it("loads Google Sans Medium for the Google button", async () => {
+    await mountOn();
+    expect(await document.fonts.load('500 14px "Google Sans"')).not.toHaveLength(0);
+  });
+
+  it("draws Google's gradient G, not the old flat one", async () => {
+    const el = await mountOn();
+    const src = el.shadowRoot!.querySelector("[data-test=google-login] img")!.getAttribute("src")!;
+    const svg = await (await fetch(src)).text();
+    expect(svg).toContain("conic-gradient");
+    expect(svg).toContain("M29.3987 18.1814");
+  });
 
   it.each([1280, 390])(
     "puts I've forgotten my password under the password field, at the card's right, above Log in (%ipx)",
