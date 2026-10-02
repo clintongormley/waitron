@@ -2,8 +2,9 @@ import { ContentLanguageController } from "@waitron/ui";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "../widgets/ingredient-list.js";
@@ -33,7 +34,6 @@ export class RecipeScreen extends LitElement {
 
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -64,12 +64,10 @@ export class RecipeScreen extends LitElement {
         gap: var(--wt-space-3);
         margin-bottom: var(--wt-space-4);
       }
-      .picker {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        color: var(--wt-color-text);
-        min-width: 12rem;
+      .pickers wt-combobox {
+        flex: 1 1 calc(var(--wt-space-6) * 8);
+        min-width: 0;
+        max-width: calc(var(--wt-space-6) * 12);
       }
       .error {
         color: var(--wt-color-danger);
@@ -192,9 +190,9 @@ export class RecipeScreen extends LitElement {
     }
   }
 
-  #onSelectCatalogue(event: Event): void {
+  #onSelectCatalogue(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.selectedCatalogueId = (event.target as HTMLSelectElement).value;
+    this.selectedCatalogueId = event.detail.value;
     this.selectedProductId = "";
     this.recipe = [];
     this.recipeLoading = false;
@@ -217,9 +215,9 @@ export class RecipeScreen extends LitElement {
     }
   }
 
-  #onSelectProduct(event: Event): void {
+  #onSelectProduct(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.selectedProductId = (event.target as HTMLSelectElement).value;
+    this.selectedProductId = event.detail.value;
     this.recipe = [];
     this.recipeLoading = this.selectedProductId !== "";
     if (this.selectedProductId === "") return;
@@ -291,44 +289,40 @@ export class RecipeScreen extends LitElement {
         <div class="pickers">
           ${
             hasCatalogue
-              ? html`<label class="picker"
-                  >${t("recipe.select_catalogue")}
-                  <select
-                    data-test="recipe-catalogue-select"
-                    @change=${(e: Event) => this.#onSelectCatalogue(e)}
-                  >
-                    <option value="" .selected=${this.selectedCatalogueId === ""}>
-                      ${t("recipe.select_catalogue")}
-                    </option>
-                    ${this.catalogues.map(
-                      (c) =>
-                        html`<option value=${c.id} .selected=${c.id === this.selectedCatalogueId}>
-                          ${c.name}
-                        </option>`,
-                    )}
-                  </select>
-                </label>`
+              ? html`<wt-combobox
+                  name="catalogueId"
+                  data-test="recipe-catalogue-select"
+                  label=${t("recipe.select_catalogue")}
+                  search="auto"
+                  placeholder=${t("recipe.select_catalogue")}
+                  searchPlaceholder=${t("categories.combobox_search")}
+                  noResultsLabel=${t("categories.combobox_no_results")}
+                  .options=${[
+                    { value: "", label: t("recipe.select_catalogue") },
+                    ...this.catalogues.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                  .value=${this.selectedCatalogueId}
+                  @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onSelectCatalogue(e)}
+                ></wt-combobox>`
               : nothing
           }
           ${
             this.selectedCatalogueId !== ""
-              ? html`<label class="picker"
-                  >${t("recipe.select_product")}
-                  <select
-                    data-test="recipe-product-select"
-                    @change=${(e: Event) => this.#onSelectProduct(e)}
-                  >
-                    <option value="" .selected=${this.selectedProductId === ""}>
-                      ${t("recipe.select_product")}
-                    </option>
-                    ${this.products.map(
-                      (p) =>
-                        html`<option value=${p.id} .selected=${p.id === this.selectedProductId}>
-                          ${p.name}
-                        </option>`,
-                    )}
-                  </select>
-                </label>`
+              ? html`<wt-combobox
+                  name="productId"
+                  data-test="recipe-product-select"
+                  label=${t("recipe.select_product")}
+                  search="auto"
+                  placeholder=${t("recipe.select_product")}
+                  searchPlaceholder=${t("categories.combobox_search")}
+                  noResultsLabel=${t("categories.combobox_no_results")}
+                  .options=${[
+                    { value: "", label: t("recipe.select_product") },
+                    ...this.products.map((p) => ({ value: p.id, label: p.name })),
+                  ]}
+                  .value=${this.selectedProductId}
+                  @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onSelectProduct(e)}
+                ></wt-combobox>`
               : nothing
           }
         </div>

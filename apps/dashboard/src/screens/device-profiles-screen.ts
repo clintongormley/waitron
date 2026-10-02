@@ -2,8 +2,9 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
-import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
@@ -32,7 +33,6 @@ function hasChoice(menu: DeviceMenuHomeLayouts): boolean {
 export class DeviceProfilesScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -131,22 +131,6 @@ export class DeviceProfilesScreen extends LitElement {
         display: grid;
         gap: var(--wt-space-1);
         max-width: calc(var(--wt-tap-min) * 10);
-      }
-      .home-menu label {
-        display: grid;
-        gap: var(--wt-space-1);
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-      .home-menu select {
-        min-height: var(--wt-tap-min);
-      }
-      .home-menu select[aria-invalid="true"] {
-        border-color: var(--wt-color-danger);
-      }
-      .home-menu .error {
-        margin: 0;
-        font-size: var(--wt-font-size-sm);
       }
     `,
   ];
@@ -336,15 +320,15 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftName = event.detail.value;
   }
 
-  #onCanvas(event: Event): void {
+  #onCanvas(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    const value = (event.target as HTMLSelectElement).value;
+    const value = event.detail.value;
     this.draftCanvasId = value === "" ? null : value;
   }
 
-  #onFormFactor(event: Event): void {
+  #onFormFactor(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.draftFormFactor = (event.target as HTMLSelectElement).value as FormFactor;
+    this.draftFormFactor = event.detail.value as FormFactor;
   }
 
   #onInactivity(event: CustomEvent<{ value: string }>): void {
@@ -541,66 +525,52 @@ export class DeviceProfilesScreen extends LitElement {
     `;
   }
 
-  #renderCanvasOptions(): TemplateResult {
-    return html`<option value="" ?selected=${this.draftCanvasId === null}>
-        ${t("device_profiles.canvas_default")}
-      </option>
-      ${this.canvases.map(
-        (canvas) =>
-          html`<option value=${canvas.id} ?selected=${canvas.id === this.draftCanvasId}>
-            ${canvas.name}
-          </option>`,
-      )}`;
+  #canvasOptions(): { value: string; label: string }[] {
+    return [
+      { value: "", label: t("device_profiles.canvas_default") },
+      ...this.canvases.map((canvas) => ({ value: canvas.id, label: canvas.name })),
+    ];
   }
 
-  /** `live` compares with the option as shown, so a refused choice goes back to the saved one. */
-  #renderHomeOptions(menu: DeviceMenuHomeLayouts): TemplateResult {
+  #homeDefaultLabel(menu: DeviceMenuHomeLayouts): string {
+    const fallback = menu.layouts.find((layout) => layout.isDefault);
+    return fallback === undefined
+      ? t("device_profiles.home_default_plain")
+      : t("device_profiles.home_default").replace("{name}", fallback.name);
+  }
+
+  #homeOptions(menu: DeviceMenuHomeLayouts): { value: string; label: string }[] {
     const chosen = menu.selectedLayoutId;
     const named = menu.layouts.filter((layout) => !layout.isDefault || layout.id === chosen);
-    const fallback = menu.layouts.find((layout) => layout.isDefault);
-    return html`<option value="" .selected=${live(chosen === null)}>
-        ${
-          fallback === undefined
-            ? t("device_profiles.home_default_plain")
-            : t("device_profiles.home_default").replace("{name}", fallback.name)
-        }
-      </option>
-      ${named.map(
-        (layout) =>
-          html`<option value=${layout.id} .selected=${live(layout.id === chosen)}>
-            ${layout.name}
-          </option>`,
-      )}
-      ${
-        menu.selectedRemoved
-          ? html`<option value=${chosen!} .selected=${live(true)}>
-              ${t("device_profiles.home_removed")}
-            </option>`
-          : nothing
-      }`;
+    return [
+      { value: "", label: this.#homeDefaultLabel(menu) },
+      ...named.map((layout) => ({ value: layout.id, label: layout.name })),
+      ...(menu.selectedRemoved
+        ? [{ value: chosen!, label: t("device_profiles.home_removed") }]
+        : []),
+    ];
   }
 
   #renderHomeMenu(menu: DeviceMenuHomeLayouts): TemplateResult {
-    const error = this.homeErrors[menu.menuId];
-    const errorId = `home-error-${menu.menuId}`;
     const saving = this.homeSaving !== null;
     return html`<div class="home-menu" data-test=${`home-menu-${menu.menuId}`}>
-      <label
-        >${menu.menuName}
-        <select
-          name=${`home-layout-${menu.menuId}`}
-          .disabled=${saving}
-          aria-invalid=${error ? "true" : "false"}
-          aria-describedby=${error ? errorId : nothing}
-          @change=${(event: Event) => {
-            event.stopPropagation();
-            const value = (event.target as HTMLSelectElement).value;
-            void this.#chooseHome(this.editingId!, menu, value === "" ? null : value);
-          }}
-        >
-          ${this.#renderHomeOptions(menu)}
-        </select>
-      </label>
+      <wt-combobox
+        name=${`home-layout-${menu.menuId}`}
+        label=${menu.menuName}
+        search="auto"
+        placeholder=${this.#homeDefaultLabel(menu)}
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
+        .options=${this.#homeOptions(menu)}
+        .value=${live(menu.selectedLayoutId ?? "")}
+        .disabled=${saving}
+        error=${this.homeErrors[menu.menuId] ?? ""}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          const value = event.detail.value;
+          void this.#chooseHome(this.editingId!, menu, value === "" ? null : value);
+        }}
+      ></wt-combobox>
       ${
         menu.selectedRemoved
           ? html`<p class="home-help" data-test=${`home-removed-${menu.menuId}`}>
@@ -618,7 +588,6 @@ export class DeviceProfilesScreen extends LitElement {
               </div>`
           : nothing
       }
-      ${error ? html`<p class="error" id=${errorId}>${error}</p>` : nothing}
     </div>`;
   }
 
@@ -671,31 +640,32 @@ export class DeviceProfilesScreen extends LitElement {
           .value=${this.draftName}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onName(e)}
         ></wt-input>
-        <label class="field"
-          >${t("device_profiles.canvas_label")}
-          <select
-            data-test="profile-canvas"
-            .value=${this.draftCanvasId ?? ""}
-            @change=${(e: Event) => this.#onCanvas(e)}
-          >
-            ${this.#renderCanvasOptions()}
-          </select>
-        </label>
-        <label class="field"
-          >${t("device_profiles.form_factor")}
-          <select
-            data-test="profile-form-factor"
-            .value=${this.draftFormFactor}
-            @change=${(e: Event) => this.#onFormFactor(e)}
-          >
-            ${FORM_FACTORS.map(
-              (ff) =>
-                html`<option value=${ff} ?selected=${ff === this.draftFormFactor}>
-                  ${t(`device_profiles.form_factor.${ff}` as StringKey)}
-                </option>`,
-            )}
-          </select>
-        </label>
+        <wt-combobox
+          class="field"
+          data-test="profile-canvas"
+          name="canvasId"
+          label=${t("device_profiles.canvas_label")}
+          search="auto"
+          placeholder=${t("device_profiles.canvas_default")}
+          searchPlaceholder=${t("categories.combobox_search")}
+          noResultsLabel=${t("categories.combobox_no_results")}
+          .options=${this.#canvasOptions()}
+          .value=${this.draftCanvasId ?? ""}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onCanvas(e)}
+        ></wt-combobox>
+        <wt-combobox
+          class="field"
+          data-test="profile-form-factor"
+          name="formFactor"
+          label=${t("device_profiles.form_factor")}
+          search="auto"
+          .options=${FORM_FACTORS.map((ff) => ({
+            value: ff,
+            label: t(`device_profiles.form_factor.${ff}` as StringKey),
+          }))}
+          .value=${this.draftFormFactor}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFormFactor(e)}
+        ></wt-combobox>
         ${
           this.draftFormFactor === "kds"
             ? nothing

@@ -9,6 +9,7 @@ import { baseStyles, UrlStateController, type WtToast } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
+import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -289,21 +290,8 @@ export class DashboardApp extends LitElement {
         gap: var(--wt-space-1);
       }
 
-      .nav-search {
-        width: 100%;
-        min-width: 0;
-        min-height: var(--wt-tap-min);
+      .nav > wt-input {
         margin-block-end: var(--wt-space-2);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-full);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
-      }
-
-      .nav-search::placeholder {
-        color: var(--wt-color-text-muted);
       }
 
       /* Rendered even while empty, so the live region exists before its message does; with no
@@ -1488,18 +1476,18 @@ export class DashboardApp extends LitElement {
     const noMatch = searching && sections.every((section) => section.pages === undefined);
     return html`
       <nav class="nav" aria-label=${t("nav.sections")}>
-        <input
-          class="nav-search"
+        <wt-input
           type="search"
           name="nav-search"
           autocomplete="off"
           data-test="nav-search"
-          aria-label=${t("nav.search")}
+          label=${t("nav.search")}
+          hide-label
           placeholder=${t("nav.search")}
           .value=${live(this.navSearch)}
-          @input=${(e: Event) => (this.navSearch = (e.target as HTMLInputElement).value)}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => (this.navSearch = e.detail.value)}
           @keydown=${(e: KeyboardEvent) => this.#onNavSearchKeydown(e)}
-        />
+        ></wt-input>
         ${sections.map(({ group, pages }) => {
           if (pages === undefined) return nothing;
           // A search shows its matches open without touching `collapsedGroups`, and its headers

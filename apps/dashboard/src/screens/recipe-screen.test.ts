@@ -2,7 +2,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { setContentLanguages } from "@waitron/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import type {
@@ -102,9 +102,7 @@ function emit(source: Element, type: string, detail?: unknown): void {
 }
 
 function selectValue(el: RecipeScreen, testId: string, value: string): void {
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=${testId}]`)!;
-  select.value = value;
-  select.dispatchEvent(new Event("change"));
+  void chooseOption(el.shadowRoot!.querySelector(`[data-test=${testId}]`)!, value);
 }
 
 /** Select a catalogue, then a product, settling the recipe load — the editor's precondition. */
@@ -693,13 +691,13 @@ describe("recipe-screen", () => {
       selectValue(el, "recipe-catalogue-select", "cat-a");
       await flush(el);
 
-      const labels = [
-        ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>(
-          "[data-test=recipe-product-select] option",
-        ),
-      ]
+      const labels = (
+        el.shadowRoot!.querySelector("[data-test=recipe-product-select]") as unknown as {
+          options: { value: string; label: string }[];
+        }
+      ).options
         .filter((o) => o.value !== "") // drop the placeholder option
-        .map((o) => o.textContent!.trim());
+        .map((o) => o.label.trim());
       expect(labels).toEqual(["Bizcocho", "Sponge", "Gâteau"]);
     },
   );
@@ -708,6 +706,59 @@ describe("recipe-screen", () => {
     const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api: stubApi() });
     await flush(el);
     expect(el.shadowRoot!.querySelectorAll("h1").length).toBe(1);
+  });
+});
+
+describe("recipe-screen fields", () => {
+  type Combobox = HTMLElement & {
+    options: { value: string; label: string }[];
+    value: string;
+    label: string;
+    name: string;
+    placeholder: string;
+    search: string;
+  };
+  const box = (el: RecipeScreen, name: string) =>
+    el.shadowRoot!.querySelector(`wt-combobox[name=${name}]`) as Combobox | null;
+
+  it("picks the catalogue and then the product from labelled dropdowns that can be cleared", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
+    await flush(el);
+
+    const catalogue = box(el, "catalogueId")!;
+    expect(catalogue.getAttribute("data-test")).toBe("recipe-catalogue-select");
+    expect(catalogue.label).toBe(t("recipe.select_catalogue"));
+    expect(catalogue.search).toBe("auto");
+    expect(catalogue.placeholder).toBe(t("recipe.select_catalogue"));
+    expect(catalogue.options).toEqual([
+      { value: "", label: t("recipe.select_catalogue") },
+      { value: "cat-a", label: "Comida" },
+      { value: "cat-b", label: "Bebidas" },
+    ]);
+    expect(catalogue.value).toBe("");
+    expect(box(el, "productId")).toBeNull();
+
+    await chooseOption(catalogue, "cat-a");
+    await flush(el);
+    expect(api.listProducts).toHaveBeenCalledWith("cat-a");
+    const product = box(el, "productId")!;
+    expect(product.getAttribute("data-test")).toBe("recipe-product-select");
+    expect(product.label).toBe(t("recipe.select_product"));
+    expect(product.search).toBe("auto");
+    expect(product.placeholder).toBe(t("recipe.select_product"));
+    expect(product.options).toEqual([
+      { value: "", label: t("recipe.select_product") },
+      { value: "p1", label: "Bizcocho" },
+    ]);
+    expect(product.value).toBe("");
+
+    await chooseOption(product, "p1");
+    await flush(el);
+    expect(editor(el).product).toEqual(products[0]);
+    emit(editor(el), "wt-close");
+    await flush(el);
+    expect(product.value).toBe("");
   });
 });
 

@@ -1434,15 +1434,15 @@ of actions scrolls within its own part of the row. The rule is in
 
 **Search fields are pill-shaped; they should only round their corners (A175, owner 2026-10-01:
 "all the search fields have too much rounding they just need the corners rounded, not a
-semicircle") — OPEN.** Three search boxes use `border-radius: var(--wt-radius-full)` (9999px, a
-half-circle at each end): every table's search (`.table-search`,
-`packages/ui/src/components/wt-data-table.ts`), the sidebar's "Search pages" (`.nav-search`,
-`apps/dashboard/src/dashboard-app.ts`) and the search box inside the searchable dropdown
-(`.search`, `packages/ui/src/components/wt-combobox.ts`). The other search boxes found by
-`grep -rln 'type="search"'` (the Products screen's folder search and the till's menu search, both
-`wt-input`, and the Staff screen's own input) already have ordinary corners. **Wanted:** the three
-take `var(--wt-radius-md)` (8px), the radius every other text field uses, so the focus ring
-follows it too. Small; no guard checks a field's radius.
+semicircle") — OPEN.** One search box still uses `border-radius: var(--wt-radius-full)` (9999px,
+a half-circle at each end): every table's search (`.table-search`,
+`packages/ui/src/components/wt-data-table.ts`). The search box inside the searchable dropdown
+(`.search`, `packages/ui/src/components/wt-combobox.ts`) takes `var(--wt-radius-md)` since #1010.
+The sidebar's "Search pages" and the Staff screen's search are `wt-input` since A178b, which draws
+the filled field's corners, as do the Products screen's folder search and the till's menu search.
+**Wanted:** the table's search takes `var(--wt-radius-md)` (8px), the radius the filled field
+rounds its top corners to (`packages/ui-core/src/field-styles.ts`), so the focus ring follows it
+too. Small; no guard checks a field's radius.
 
 **An empty table shows a proper empty box, with the screen's Add button (A176, owner 2026-10-01)
 — OPEN.** The owner, on the Extras tab with no lists: _"The "No extras lists to show" could be
@@ -1474,7 +1474,7 @@ stop, "There are no menus yet."). **Decided (owner, 2026-10-01):**
   languages; a table with no Add action keeps just the sentence.
 
 **Form fields in the "filled" style, with the label inside the field (A178, owner 2026-10-01) —
-IN PROGRESS: A178a (the primitives) landed as #1010; A178b–f to come.** The owner, showing Home Assistant's device dialog, likes:
+IN PROGRESS: A178a (the primitives) landed as #1010, and A178b (the dashboard screens); A178c–f to come.** The owner, showing Home Assistant's device dialog, likes:
 
 1. the field is marked out by a background fill with a subtle line along its bottom, not a border
    all round;
@@ -1612,6 +1612,25 @@ case now expects the arrows to wrap (spec §12 point 8), and its "popup stays in
 gutter" case presses the trigger near its chevron, because a resting label now covers the
 trigger's middle, and checks the list opened before its unchanged assertion. Both tap-target suites'
 "the interactive set is exactly …" lists gained `wt-textarea`.
+
+**A178b — DONE.** Every field spec §9.1 lists for `apps/dashboard/src/screens/` and
+`apps/dashboard/src/dashboard-app.ts` is drawn by a primitive: native selects are `wt-combobox`
+(`search="auto"`), date, time and search inputs `wt-input`, whole-number inputs `wt-number-stepper`,
+the receipt footer `wt-textarea`; login's three hidden password-manager inputs stay. Also moved,
+though the spec's list predates them: the receipts preview's paper width and the menus screen's
+"Include a menu" field (#993). The after-render fix-ups that re-applied a select's value in
+`printing-rules-screen.ts` and `devices-screen.ts` are gone; where a refused change leaves the stored
+value unchanged, the dropdown binds it with Lit's `live()`, so it shows the stored value again. A
+dropdown in a flex row shrank to its value and cut its own label, so those screens give it a flex
+basis. On the printer calibration step, the two-sentence QR question that was the resolution
+dropdown's label is now visible text above the fields, and the dropdown is labelled "Print
+resolution". **Existing tests changed** are the three approved kinds (driving through
+`chooseOption` or `wt-change`, reading the primitive's value, options, error or the inner control's
+`aria-*`, and the new look), each listed in the pull request. **Left open, for the owner:** the
+backup screen's two retention steppers cut their labels to "Keep…" and "Dele…" (the approved
+§12 point 9 behaviour; the alternative is a box that widens to its label). **Seen, not changed:** a
+blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }` — the same parsing is on
+`main` before this change (`#buildSchedule`'s `split(":")`); what the server does with it was not checked.
 
 **Smaller text: the system font at 14px (A179, owner 2026-10-01) — DONE 2026-10-01, #988.** The owner:
 _"i find our text to be too big"_. Body text was `--wt-font-size-md`, 15px, with
@@ -2841,9 +2860,7 @@ kit text box, get no red outline — both screens' own styles have no rule for a
 text box (seen in screenshots of the refused state; only the dropdown was in A151's scope). Four
 stylesheets that already include `selectStyles` still carry their own identical
 `select[aria-invalid="true"]` rule — `reasons-screen.ts` (adjustments), `sumup-connect-form.ts`
-(payments-sumup), `member-list-editor.ts` and `unit-form.ts` (dashboard) — and a fifth,
-`apps/dashboard/src/screens/device-profiles-screen.ts` (dashboard), carries the same declaration
-limited to `.home-menu select[aria-invalid="true"]`. They were left because none of their own test
+(payments-sumup), `member-list-editor.ts` and `unit-form.ts` (dashboard). They were left because none of their own test
 files asserts a border colour, so removing them would go unchecked.
 
 The original walkthrough is retained under *Detail → Setup wizard*.
@@ -7346,13 +7363,9 @@ ongoing overhaul listed at the top of Track A.
   marked, and Turn on backups stays disabled before the first press until the folder is filled and
   the key is saved — the same shape as (7) (both seen by running, in the Codex run-it review); and,
   read and not run: the settings editor's Save changes is also disabled before any press while the
-  folder is blank (`#saveSettingsDisabled` in `apps/dashboard/src/screens/backup-screen.ts`); apart
-  from the two retention boxes and the configuration-export passphrases, the form's inputs (the
-  destination folder, the pasted key, the saved-it tick, and the day and time choices) carry no
-  `name`; and the screen does not submit on Enter (`submitOnEnter`, which design-system.md → "Submit
-  ordinary forms with Enter" asks for and `stream-settings-panel.ts` uses); the two retention boxes
-  are hand-built `<input type="number">`s rather than the shared `wt-input` that Forms prefers, left
-  so because switching changes how an older test fills them in; and no test covers only the second
+  folder is blank (`#saveSettingsDisabled` in `apps/dashboard/src/screens/backup-screen.ts`); the
+  destination folder, the saved-it tick and the weekday ticks carry no `name`; and the screen does not submit on Enter (`submitOnEnter`, which design-system.md → "Submit
+  ordinary forms with Enter" asks for and `stream-settings-panel.ts` uses); and no test covers only the second
   box being invalid, or where focus lands after a failed check on the Save form (#860's review);
   (5) **DONE (C64, #893, 2026-09-29):** the setup connect screen no
   longer comes back empty after a refusal that routes back to it. The shell keeps the body it sent,
@@ -7817,8 +7830,7 @@ ongoing overhaul listed at the top of Track A.
   chosen shift or colleague that a reload removes stays chosen (`coverShiftId` and
   `coverColleagueId` are cleared only after a cover request is sent, `:228`-`:229`). **Next
   action:** mark each till option `.selected` and drop the `<select>`'s `.value` binding, the way
-  `apps/dashboard/src/screens/my-schedule-screen.ts` and
-  `apps/till/src/screens/till-counter-screen.ts` do, with tests that reorder a list AND insert an
+  `apps/till/src/screens/till-counter-screen.ts` does, with tests that reorder a list AND insert an
   entry above the chosen one through the till's own triggers (not the dashboard's
   `LiveData.invalidate`) and read `select.selectedOptions[0]`; and fix the three defects above the
   way the dashboard screen now does.

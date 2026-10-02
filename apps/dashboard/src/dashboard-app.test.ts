@@ -52,6 +52,7 @@ import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import type { WtToast } from "@waitron/ui";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
 import type { AlertView, DashboardApi, PersonSummary } from "./api/client.js";
+import type { WtInput } from "@waitron/ui";
 
 const stubRequest: DashboardRequest = async () => [] as never;
 
@@ -4419,7 +4420,7 @@ describe("the nav search", () => {
       listStaff: vi.fn().mockResolvedValue([]),
     });
   const searchBox = (el: DashboardApp) =>
-    el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=nav-search]")!;
+    el.shadowRoot!.querySelector<WtInput>("[data-test=nav-search]")!;
   const shownItems = (el: DashboardApp) =>
     [...el.shadowRoot!.querySelectorAll<HTMLElement>(".nav-item")]
       .filter((item) => item.checkVisibility())
@@ -4440,7 +4441,7 @@ describe("the nav search", () => {
   async function search(el: DashboardApp, term: string): Promise<void> {
     const box = searchBox(el);
     box.focus();
-    box.select();
+    box.shadowRoot!.querySelector("input")!.select();
     await userEvent.keyboard(term === "" ? "{Backspace}" : term);
     await flush(el);
   }
@@ -4487,9 +4488,25 @@ describe("the nav search", () => {
     expect(box.type).toBe("search");
     expect(box.name).toBe("nav-search");
     expect(box.autocomplete).toBe("off");
-    expect(box.getAttribute("aria-label")).toBe("Search pages");
+    expect(box.shadowRoot!.querySelector("input")!.getAttribute("aria-label")).toBe("Search pages");
     expect(box.placeholder).toBe("Search pages");
     expect(el.shadowRoot!.querySelector("nav")!.firstElementChild).toBe(box);
+  });
+
+  it("is the shared search field, named by its hidden label, and filters on its change", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    const box = el.shadowRoot!.querySelector("wt-input[data-test=nav-search]") as
+      | (HTMLElement & { type: string; label: string; hideLabel: boolean; placeholder: string })
+      | null;
+    expect(box!.type).toBe("search");
+    expect(box!.label).toBe(t("nav.search"));
+    expect(box!.hideLabel).toBe(true);
+    expect(box!.placeholder).toBe(t("nav.search"));
+    box!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "print" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+    expect(shownItems(el)).toEqual(["nav-printers", "nav-printing-rules"]);
   });
 
   it("shows only the pages whose label holds the term, whatever its case", async () => {

@@ -1,8 +1,9 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
+import { submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -47,7 +48,6 @@ function wallClock(iso: string, offsetMinutes: number): { date: string; time: st
 export class MyScheduleScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -105,16 +105,13 @@ export class MyScheduleScreen extends LitElement {
         gap: var(--wt-space-3);
       }
 
-      .field {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        min-width: 12rem;
+      .form wt-combobox {
+        flex: 0 1 calc(var(--wt-space-6) * 7);
+        min-width: 0;
       }
 
-      .field label {
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
+      .form wt-combobox[name="cover-shift"] {
+        flex-basis: calc(var(--wt-space-6) * 10);
       }
 
       .notice {
@@ -411,43 +408,37 @@ export class MyScheduleScreen extends LitElement {
     return html`<section class="cover" aria-labelledby="cover-h">
       <h2 id="cover-h">${t("myschedule.cover_title")}</h2>
       <div class="form">
-        <div class="field">
-          <label for="cover-shift">${t("myschedule.cover_shift")}</label>
-          <select
-            id="cover-shift"
-            name="cover-shift"
-            data-test="cover-shift"
-            @change=${(e: Event) => (this.coverShiftId = (e.target as HTMLSelectElement).value)}
-          >
-            <option value="" .selected=${this.coverShiftId === ""}>—</option>
-            ${shifts.map(
-              (shift) =>
-                html`<option value=${shift.id} .selected=${shift.id === this.coverShiftId}>
-                  ${this.#shiftLabel(shift)}
-                </option>`,
-            )}
-          </select>
-        </div>
-        <div class="field">
-          <label for="cover-colleague">${t("myschedule.cover_colleague")}</label>
-          <select
-            id="cover-colleague"
-            name="cover-colleague"
-            data-test="cover-colleague"
-            @change=${(e: Event) => (this.coverColleagueId = (e.target as HTMLSelectElement).value)}
-          >
-            <option value="" .selected=${this.coverColleagueId === ""}>—</option>
-            ${colleagues.map(
-              (person) =>
-                html`<option
-                  value=${person.personId}
-                  .selected=${person.personId === this.coverColleagueId}
-                >
-                  ${person.displayName}
-                </option>`,
-            )}
-          </select>
-        </div>
+        <wt-combobox
+          name="cover-shift"
+          data-test="cover-shift"
+          label=${t("myschedule.cover_shift")}
+          search="auto"
+          placeholder="—"
+          searchPlaceholder=${t("categories.combobox_search")}
+          noResultsLabel=${t("categories.combobox_no_results")}
+          .options=${[
+            { value: "", label: "—" },
+            ...shifts.map((shift) => ({ value: shift.id, label: this.#shiftLabel(shift) })),
+          ]}
+          .value=${this.coverShiftId}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => (this.coverShiftId = e.detail.value)}
+        ></wt-combobox>
+        <wt-combobox
+          name="cover-colleague"
+          data-test="cover-colleague"
+          label=${t("myschedule.cover_colleague")}
+          search="auto"
+          placeholder="—"
+          searchPlaceholder=${t("categories.combobox_search")}
+          noResultsLabel=${t("categories.combobox_no_results")}
+          .options=${[
+            { value: "", label: "—" },
+            ...colleagues.map((person) => ({ value: person.personId, label: person.displayName })),
+          ]}
+          .value=${this.coverColleagueId}
+          @wt-change=${(e: CustomEvent<{ value: string }>) =>
+            (this.coverColleagueId = e.detail.value)}
+        ></wt-combobox>
         <wt-button
           variant="primary"
           data-test="cover-submit"
@@ -495,23 +486,16 @@ export class MyScheduleScreen extends LitElement {
     return html`<section class="request-absence" aria-labelledby="request-absence-h">
       <h2 id="request-absence-h">${t("myschedule.absence_title")}</h2>
       <div class="form">
-        <div class="field">
-          <label for="abs-kind">${t("myschedule.absence_kind")}</label>
-          <select
-            id="abs-kind"
-            name="abs-kind"
-            data-test="abs-kind"
-            @change=${(e: Event) =>
-              (this.absKind = (e.target as HTMLSelectElement).value as AbsenceKind)}
-          >
-            ${ABSENCE_KINDS.map(
-              (kind) =>
-                html`<option value=${kind} .selected=${kind === this.absKind}>
-                  ${absenceKindName(kind)}
-                </option>`,
-            )}
-          </select>
-        </div>
+        <wt-combobox
+          name="abs-kind"
+          data-test="abs-kind"
+          label=${t("myschedule.absence_kind")}
+          search="auto"
+          .options=${ABSENCE_KINDS.map((kind) => ({ value: kind, label: absenceKindName(kind) }))}
+          .value=${this.absKind}
+          @wt-change=${(e: CustomEvent<{ value: string }>) =>
+            (this.absKind = e.detail.value as AbsenceKind)}
+        ></wt-combobox>
         <wt-input
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=abs-submit]"))}
           name="abs-from"

@@ -2,7 +2,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -452,9 +452,7 @@ describe("your profile", () => {
     expect(el.shadowRoot!.textContent).toContain("alex@example.com");
     await editDetails(el);
     input(el, "displayName", "Alex Updated");
-    const language = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=locale]")!;
-    language.value = "es-ES";
-    language.dispatchEvent(new Event("change", { bubbles: true }));
+    await chooseOption(el.shadowRoot!.querySelector("wt-combobox[name=locale]")!, "es-ES");
     await click(el, "save");
     expect(api.saveProfile).toHaveBeenCalledWith({
       displayName: "Alex Updated",
@@ -464,6 +462,23 @@ describe("your profile", () => {
       email: "alex@example.com",
       locale: "es-ES",
     });
+  });
+  it("picks the interface language from a required dropdown showing the saved one", async () => {
+    const { el, api } = await mount();
+    await editDetails(el);
+    const language = el.shadowRoot!.querySelector("wt-combobox[name=locale]") as HTMLElement & {
+      options: { value: string; label: string }[];
+      value: string;
+      label: string;
+      required: boolean;
+    };
+    expect(language.label).toBe(t("profile.language"));
+    expect(language.required).toBe(true);
+    expect(language.options.map((o) => o.value)).toEqual(["en-GB", "es-ES"]);
+    expect(language.value).toBe("en-GB");
+    await chooseOption(language, "es-ES");
+    await click(el, "save");
+    expect(api.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ locale: "es-ES" }));
   });
   it("holds the language field to the same width as the inputs above it in the edit modal on a wide window", async () => {
     const width = window.innerWidth,
@@ -478,11 +493,7 @@ describe("your profile", () => {
       const form = probe.getBoundingClientRect().width;
       const body = el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector(".body")!;
       expect(body.clientWidth).toBeGreaterThan(form);
-      for (const selector of [
-        "wt-input[name=firstNames]",
-        ".select-field",
-        "select[name=locale]",
-      ]) {
+      for (const selector of ["wt-input[name=firstNames]", "wt-combobox[name=locale]"]) {
         const width = el.shadowRoot!.querySelector(selector)!.getBoundingClientRect().width;
         expect(width, selector).toBeCloseTo(form, 0);
       }
@@ -953,9 +964,10 @@ describe("your profile — validation, refusals and the remaining actions", () =
     expect(field(el, "lastNames").error).toBe(t("form.last_names_required"));
     expect(field(el, "email").value).toBe("");
     expect(field(el, "email").error).toBe(t("form.email_required"));
-    expect(el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=locale]")!.value).toBe(
-      "es-ES",
-    );
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-combobox[name=locale]")!
+        .value,
+    ).toBe("es-ES");
   });
 
   it("sends a cleared telephone as null", async () => {
@@ -1420,26 +1432,28 @@ describe("your profile — errors at the bottom of the form, not above it", () =
     expect(await bottomOf(el)).toBe("");
   });
 
-  it("puts a refused language under the language select until that select changes, leaving Save working", async () => {
+  it("puts a refused language under the language dropdown until that dropdown changes, leaving Save working", async () => {
     const { el, host } = await mount({
       saveProfile: vi.fn().mockRejectedValue({ code: "locale.unsupported" }),
     });
     await editDetails(el);
     await click(el, "save");
-    const language = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=locale]")!;
-    expect(language.getAttribute("aria-invalid")).toBe("true");
-    const described = el.shadowRoot!.getElementById(language.getAttribute("aria-describedby")!)!;
+    const language = el.shadowRoot!.querySelector<HTMLElement>("wt-combobox[name=locale]")!;
+    const control = language.shadowRoot!.querySelector(".trigger")!;
+    expect(control.getAttribute("aria-invalid")).toBe("true");
+    const described = language.shadowRoot!.getElementById(
+      control.getAttribute("aria-describedby")!,
+    )!;
     expect(described.textContent!.trim()).toBe("Ese idioma no está disponible. Elige otro.");
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     expect(await nativeSaveDisabled(el)).toBe(false);
     await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(language));
     await expectNoA11yViolations(host);
 
-    language.value = "es-ES";
-    language.dispatchEvent(new Event("change"));
+    await chooseOption(language, "es-ES");
     await flush(el);
-    expect(language.getAttribute("aria-invalid")).toBe("false");
-    expect(language.hasAttribute("aria-describedby")).toBe(false);
+    expect(control.getAttribute("aria-invalid")).toBe("false");
+    expect(control.hasAttribute("aria-describedby")).toBe(false);
     expect(described.isConnected).toBe(false);
     expect(await bottomOf(el)).toBe("");
   });

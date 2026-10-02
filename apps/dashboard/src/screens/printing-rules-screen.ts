@@ -2,8 +2,9 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import { t } from "../i18n/t.js";
@@ -26,7 +27,6 @@ const DRAWER_POLICIES: readonly DrawerOpenPolicy[] = ["gated", "open"];
 export class PrintingRulesScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -58,9 +58,9 @@ export class PrintingRulesScreen extends LitElement {
         margin-right: auto;
         font-weight: var(--wt-font-weight-bold);
       }
-      .field {
-        display: grid;
-        gap: var(--wt-space-1);
+      .row wt-combobox {
+        flex: 0 1 calc(var(--wt-space-6) * 7);
+        min-width: 0;
       }
       .empty {
         color: var(--wt-color-text-muted);
@@ -99,15 +99,6 @@ export class PrintingRulesScreen extends LitElement {
     void this.#load().catch((error: unknown) => {
       this.errorKey = codeOf(error);
     });
-  }
-  protected override updated(): void {
-    // Reconcile after option rendering, including after a rejected change.
-    for (const till of this.tills) {
-      const select = this.shadowRoot!.querySelector<HTMLSelectElement>(
-        `[data-test="till-receipt-printer-${till.id}"]`,
-      );
-      if (select) select.value = till.receiptPrinterId ?? "";
-    }
   }
   async #load(): Promise<void> {
     // Stations gate on venue.configure, locations on schedule.manage, and printers, each printer's
@@ -229,21 +220,25 @@ export class PrintingRulesScreen extends LitElement {
           <div class="details">
             <span class="label" data-test="till-label-${till.id}">${till.label}</span>
           </div>
-          <label class="field"
-            >${t("printers.receipt_printer")}
-            <select
-              name="receiptPrinterId"
-              .disabled=${this.saving}
-              data-test="till-receipt-printer-${till.id}"
-              @change=${(e: Event) => {
-                e.stopPropagation();
-                void this.#setTillPrinter(till.id, (e.target as HTMLSelectElement).value);
-              }}
-            >
-              <option value="">${t("printers.receipt_no_printer")}</option>
-              ${options.map((p) => html`<option value=${p.id}>${p.name}</option>`)}
-            </select>
-          </label>
+          <wt-combobox
+            name="receiptPrinterId"
+            label=${t("printers.receipt_printer")}
+            search="auto"
+            placeholder=${t("printers.receipt_no_printer")}
+            searchPlaceholder=${t("categories.combobox_search")}
+            noResultsLabel=${t("categories.combobox_no_results")}
+            .options=${[
+              { value: "", label: t("printers.receipt_no_printer") },
+              ...options.map((p) => ({ value: p.id, label: p.name })),
+            ]}
+            .value=${live(till.receiptPrinterId ?? "")}
+            .disabled=${this.saving}
+            data-test="till-receipt-printer-${till.id}"
+            @wt-change=${(e: CustomEvent<{ value: string }>) => {
+              e.stopPropagation();
+              void this.#setTillPrinter(till.id, e.detail.value);
+            }}
+          ></wt-combobox>
         </div>
       </wt-card>
     </li>`;

@@ -1,7 +1,9 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, DashboardTable, FloorZone } from "../api/client.js";
 import { FloorScreen } from "./floor-screen.js";
@@ -75,6 +77,11 @@ async function flush(el: FloorScreen): Promise<void> {
 }
 
 const q = (el: FloorScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
+type Dropdown = HTMLElement & {
+  options: { value: string; label: string }[];
+  value: string;
+  updateComplete: Promise<unknown>;
+};
 const errorKey = (el: FloorScreen): string | null =>
   (el as unknown as { errorKey: string | null }).errorKey;
 
@@ -85,9 +92,7 @@ function type(el: FloorScreen, sel: string, value: string): void {
 }
 
 function selectValue(el: FloorScreen, sel: string, value: string): void {
-  const node = q(el, sel) as HTMLSelectElement;
-  node.value = value;
-  node.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  void chooseOption(q(el, sel)!, value);
 }
 
 describe("floor-screen", () => {
@@ -156,11 +161,36 @@ describe("floor-screen", () => {
     expect(api.listTables).toHaveBeenCalledTimes(2);
   });
 
-  it("offers no blank clear option once a table has a zone (the select can never show a fake unassigned state)", async () => {
+  it("picks a table's zone from a dropdown labelled with the field, prompting No zone while it has none", async () => {
+    const api = stubApi({}, TWO_ZONES, TWO_TABLES);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    const zone = q(el, "wt-combobox[data-test=table-zone-t1]") as HTMLElement & {
+      options: { value: string; label: string }[];
+      value: string;
+      label: string;
+      placeholder: string;
+      name: string;
+    };
+    expect(zone.name).toBe("table-zone");
+    expect(zone.label).toBe(t("floor.table_zone"));
+    expect(zone.placeholder).toBe(t("floor.no_zone"));
+    expect(zone.options).toEqual([
+      { value: "", label: t("floor.no_zone") },
+      { value: "z1", label: "Comedor" },
+      { value: "z2", label: "Terraza" },
+    ]);
+    expect(zone.value).toBe("");
+    await chooseOption(zone, "z2");
+    await flush(el);
+    expect(api.updateTable).toHaveBeenCalledWith("t1", { zoneId: "z2" });
+  });
+
+  it("offers no blank clear option once a table has a zone (the dropdown can never show a fake unassigned state)", async () => {
     const api = stubApi({}, ZONES, TWO_TABLES);
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
-    const select = q(el, "[data-test=table-zone-t2]") as HTMLSelectElement;
+    const select = q(el, "[data-test=table-zone-t2]") as Dropdown;
     const values = Array.from(select.options).map((o) => o.value);
     expect(values).not.toContain("");
     expect(select.value).toBe("z1");
@@ -170,13 +200,13 @@ describe("floor-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
-    const select = q(el, "[data-test=table-zone-t1]") as HTMLSelectElement;
+    const select = q(el, "[data-test=table-zone-t1]") as Dropdown;
     expect(Array.from(select.options).map((o) => o.value)).toContain("");
     expect(select.value).toBe("");
     selectValue(el, "[data-test=table-zone-t1]", "");
     await flush(el);
     expect(api.updateTable).not.toHaveBeenCalled();
-    expect((q(el, "[data-test=table-zone-t1]") as HTMLSelectElement).value).toBe("");
+    expect((q(el, "[data-test=table-zone-t1]") as Dropdown).value).toBe("");
   });
 
   it("saves an edited table row (updateTable with the row's label + capacity), then reloads", async () => {
@@ -256,6 +286,23 @@ describe("floor-screen", () => {
     expect(errorKey(el)).toBe("table.not_found");
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("table.not_found", "es-ES"));
+  });
+
+  it("shows the table's stored zone again after a refused change", async () => {
+    const api = stubApi(
+      { updateTable: vi.fn().mockRejectedValue({ code: "table.not_found" }) },
+      TWO_ZONES,
+      TWO_TABLES,
+    );
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    const zone = q(el, "wt-combobox[data-test=table-zone-t2]") as Dropdown;
+    await chooseOption(zone, "z2");
+    await flush(el);
+    expect(errorKey(el)).toBe("table.not_found");
+    await zone.updateComplete;
+    expect(zone.value).toBe("z1");
+    expect(zone.shadowRoot!.querySelector(".trigger .value")!.textContent!.trim()).toBe("Comedor");
   });
 
   it("surfaces a rejected table create as a localised role=alert", async () => {

@@ -2,9 +2,11 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, PersonSummary, RosterSnapshot } from "../api/client.js";
 import { RosterScreen } from "./roster-screen.js";
+import type { WtInput } from "@waitron/ui";
 
 const staff: PersonSummary[] = [
   {
@@ -68,6 +70,13 @@ const draftSnapshot = (): RosterSnapshot => ({
   shifts: [],
 });
 afterEach(cleanupWidgets);
+
+/** Sends the week field's `wt-change`, as a date the operator finished typing does. */
+function chooseWeek(week: HTMLElement, value: string): void {
+  week.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+}
 
 describe("roster-screen", () => {
   it("loads locations, staff and the roster on connect and renders a row per staff member", async () => {
@@ -145,9 +154,8 @@ describe("roster-screen", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=breaches]")).not.toBeNull();
 
-    const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
-    week.value = "2026-04-08";
-    week.dispatchEvent(new Event("change"));
+    const week = el.shadowRoot!.querySelector<WtInput>("[data-test=week-picker]")!;
+    chooseWeek(week, "2026-04-08");
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=breaches]")).toBeNull();
 
@@ -175,9 +183,8 @@ describe("roster-screen", () => {
     };
     window.addEventListener("unhandledrejection", onReject);
     try {
-      const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
-      week.value = "";
-      week.dispatchEvent(new Event("change"));
+      const week = el.shadowRoot!.querySelector<WtInput>("[data-test=week-picker]")!;
+      chooseWeek(week, "");
       await flush(el);
       await flush(el);
     } finally {
@@ -274,9 +281,8 @@ describe("roster-screen", () => {
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
     // The fixture shift is in the week of 2026-03-02, not the current one the grid opens on.
-    const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
-    week.value = "2026-03-02";
-    week.dispatchEvent(new Event("change"));
+    const week = el.shadowRoot!.querySelector<WtInput>("[data-test=week-picker]")!;
+    chooseWeek(week, "2026-03-02");
     await flush(el);
     const editBtn = el.shadowRoot!.querySelector<HTMLButtonElement>("[data-test=edit-s1]")!;
     const addBtn = el.shadowRoot!.querySelector<HTMLButtonElement>(
@@ -345,9 +351,8 @@ describe("roster-screen", () => {
     select.dispatchEvent(new Event("change"));
     await flush(el);
     expect(api.getRoster).toHaveBeenLastCalledWith("loc-2", expect.any(String));
-    const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
-    week.value = "2026-04-08"; // a Wednesday — snaps to Monday 2026-04-06
-    week.dispatchEvent(new Event("change"));
+    const week = el.shadowRoot!.querySelector<WtInput>("[data-test=week-picker]")!;
+    chooseWeek(week, "2026-04-08"); // a Wednesday — snaps to Monday 2026-04-06
     await flush(el);
     expect(api.getRoster).toHaveBeenLastCalledWith("loc-2", "2026-04-06");
   });
@@ -464,9 +469,8 @@ describe("roster-screen — refusals, single-flight and refreshes", () => {
     });
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
-    const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
-    week.value = "2026-04-08";
-    week.dispatchEvent(new Event("change"));
+    const week = el.shadowRoot!.querySelector<WtInput>("[data-test=week-picker]")!;
+    chooseWeek(week, "2026-04-08");
     await flush(el);
     expect(errorText(el)).toBe(codeMessage("authorization.not_permitted"));
   });
@@ -492,9 +496,8 @@ describe("roster-screen — refusals, single-flight and refreshes", () => {
     const api = stubApi({ getRoster: vi.fn().mockResolvedValue(published) });
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
-    const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
-    week.value = "2026-03-02";
-    week.dispatchEvent(new Event("change"));
+    const week = el.shadowRoot!.querySelector<WtInput>("[data-test=week-picker]")!;
+    chooseWeek(week, "2026-03-02");
     await flush(el);
     const cell = el.shadowRoot!.querySelector("[data-test=cell-p1-2026-03-02]")!;
     expect(cell.tagName).toBe("TD");
@@ -633,5 +636,32 @@ describe("roster-screen — refusals, single-flight and refreshes", () => {
     await flush(el);
     expect(vi.mocked(api.getRoster).mock.calls.length).toBe(rosterLoads);
     expect(locationSelect(el).value).toBe("loc-1");
+  });
+});
+
+describe("roster-screen week field", () => {
+  it("picks the week from a labelled date field showing the Monday, and a picked day loads its week", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await flush(el);
+    const week = el.shadowRoot!.querySelector("wt-input[data-test=week-picker]") as HTMLElement & {
+      type: string;
+      label: string;
+      name: string;
+      value: string;
+    };
+    expect(week.type).toBe("date");
+    expect(week.name).toBe("week");
+    expect(week.label).toBe(t("roster.week"));
+    expect(new Date(`${week.value}T00:00:00Z`).getUTCDay()).toBe(1);
+    week.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "2026-04-08" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(api.getRoster).toHaveBeenLastCalledWith(expect.any(String), "2026-04-06");
   });
 });

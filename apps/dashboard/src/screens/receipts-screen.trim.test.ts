@@ -54,9 +54,9 @@ function typeHeader(el: ReceiptsScreen, value: string): void {
 }
 
 function typeFooter(el: ReceiptsScreen, value: string): void {
-  const ta = q(el, "[data-test=footer-message]") as HTMLTextAreaElement;
-  ta.value = value;
-  ta.dispatchEvent(new Event("input", { bubbles: true }));
+  q(el, "[data-test=footer-message]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
 }
 
 afterEach(cleanupWidgets);

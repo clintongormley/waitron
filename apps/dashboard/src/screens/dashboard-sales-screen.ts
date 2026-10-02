@@ -5,6 +5,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-input.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { metricStyles, renderMetric } from "../widgets/metric-row.js";
@@ -81,20 +83,6 @@ export class SalesScreen extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-4);
         margin-bottom: var(--wt-space-4);
-      }
-      .picker {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        color: var(--wt-color-text);
-      }
-      input[type="date"] {
-        font: inherit;
-        padding: var(--wt-space-2);
-        border-radius: var(--wt-radius-md);
-        border: 1px solid var(--wt-color-border);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
       }
       table {
         width: 100%;
@@ -192,14 +180,9 @@ export class SalesScreen extends LitElement {
         gap: var(--wt-space-2) var(--wt-space-4);
         margin-top: var(--wt-space-4);
       }
-      select {
-        font: inherit;
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2);
-        border-radius: var(--wt-radius-md);
-        border: 1px solid var(--wt-color-border);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
+      .print wt-combobox {
+        flex: 0 1 calc(var(--wt-space-6) * 7);
+        min-width: 0;
       }
     `,
   ];
@@ -324,9 +307,9 @@ export class SalesScreen extends LitElement {
     void this.#loadCategories();
   }
 
-  #onPrinterChange(event: Event): void {
+  #onPrinterChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.printerId = (event.target as HTMLSelectElement).value;
+    this.printerId = event.detail.value;
   }
 
   async #print(): Promise<void> {
@@ -375,11 +358,11 @@ export class SalesScreen extends LitElement {
     }
   }
 
-  #onDateChange(field: "from" | "to", event: Event): void {
+  #onDateChange(field: "from" | "to", event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    const value = (event.target as HTMLInputElement).value;
-    // A cleared <input type=date> (value "") builds an Invalid Date → NaN; ignore it rather than
-    // reloading with a bogus window.
+    const value = event.detail.value;
+    // A date field reads "" while cleared or part-typed, which builds an Invalid Date → NaN; ignore
+    // it rather than reloading with a bogus window.
     if (Number.isNaN(Date.parse(`${value}T00:00:00Z`))) return;
     this.#rangeChosen = true;
     this[field] = value;
@@ -391,24 +374,22 @@ export class SalesScreen extends LitElement {
     return html`
       <h1>${t("sales.title")}</h1>
       <div class="pickers">
-        <label class="picker"
-          >${t("sales.from")}
-          <input
-            type="date"
-            data-test="from-picker"
-            .value=${this.from}
-            @change=${(e: Event) => this.#onDateChange("from", e)}
-          />
-        </label>
-        <label class="picker"
-          >${t("sales.to")}
-          <input
-            type="date"
-            data-test="to-picker"
-            .value=${this.to}
-            @change=${(e: Event) => this.#onDateChange("to", e)}
-          />
-        </label>
+        <wt-input
+          type="date"
+          name="from"
+          data-test="from-picker"
+          label=${t("sales.from")}
+          .value=${this.from}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDateChange("from", e)}
+        ></wt-input>
+        <wt-input
+          type="date"
+          name="to"
+          data-test="to-picker"
+          label=${t("sales.to")}
+          .value=${this.to}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDateChange("to", e)}
+        ></wt-input>
       </div>
       ${
         this.errorKey
@@ -579,21 +560,17 @@ export class SalesScreen extends LitElement {
       <div class="print">
         ${
           printers.length > 0
-            ? html`<label class="picker"
-                >${t("sales.printer")}
-                <select
-                  name="printerId"
-                  data-test="print-printer"
-                  @change=${(e: Event) => this.#onPrinterChange(e)}
-                >
-                  ${printers.map(
-                    (printer) =>
-                      html`<option value=${printer.id} .selected=${printer.id === this.printerId}>
-                        ${printer.name}
-                      </option>`,
-                  )}
-                </select>
-              </label>`
+            ? html`<wt-combobox
+                name="printerId"
+                data-test="print-printer"
+                label=${t("sales.printer")}
+                search="auto"
+                searchPlaceholder=${t("categories.combobox_search")}
+                noResultsLabel=${t("categories.combobox_no_results")}
+                .options=${printers.map((printer) => ({ value: printer.id, label: printer.name }))}
+                .value=${this.printerId ?? ""}
+                @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPrinterChange(e)}
+              ></wt-combobox>`
             : nothing
         }
         <wt-button

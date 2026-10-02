@@ -4,7 +4,7 @@ import type { DashboardApi } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import "./payments-screen.js";
 import type { PaymentsScreen } from "./payments-screen.js";
 
@@ -98,9 +98,7 @@ const attestDisabled = (el: PaymentsScreen): boolean =>
   q(el, "[data-test=confirm-bill-attest]")!.hasAttribute("disabled");
 
 function chooseOutcome(el: PaymentsScreen, value: string): void {
-  const outcome = q(el, "[data-test=bill-attest-outcome]") as HTMLSelectElement;
-  outcome.value = value;
-  outcome.dispatchEvent(new Event("change"));
+  void chooseOption(q(el, "[data-test=bill-attest-outcome]")!, value);
 }
 
 describe("bill payment recovery on the Payments screen", () => {
@@ -212,9 +210,7 @@ describe("bill payment recovery on the Payments screen", () => {
     const el = await mount(api);
     q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
     await flush(el);
-    const outcome = q(el, "[data-test=bill-attest-outcome]") as HTMLSelectElement;
-    outcome.value = "failed";
-    outcome.dispatchEvent(new Event("change"));
+    await chooseOption(q(el, "[data-test=bill-attest-outcome]")!, "failed");
     change(el, "[data-test=bill-attest-note]", "Provider confirmed no charge");
     change(el, "[data-test=bill-attest-pin]", "1234");
     await flush(el);
@@ -255,7 +251,7 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     expect(attestDisabled(el)).toBe(true);
     expect(q(el, "[data-test=bill-attest-dialog] wt-form-error-summary")).toBeNull();
-    expect(q(el, "[data-test=bill-outcome-error]")!.textContent).toContain("outcome");
+    expect(errorOf(el, "bill-attest-outcome")).toContain("outcome");
     expect(
       q(el, "[data-test=bill-attest-dialog] wt-input[name=note]")!.hasAttribute("required"),
     ).toBe(true);
@@ -269,9 +265,7 @@ describe("bill payment recovery on the Payments screen", () => {
       (q(el, "[data-test=bill-attest-pin]") as HTMLElement & { error: string }).error,
     ).toBeTruthy();
 
-    const outcome = q(el, "[data-test=bill-attest-outcome]") as HTMLSelectElement;
-    outcome.value = "completed";
-    outcome.dispatchEvent(new Event("change"));
+    await chooseOption(q(el, "[data-test=bill-attest-outcome]")!, "completed");
     change(el, "[data-test=bill-attest-note]", "  Provider confirmed a refund  ");
     change(el, "[data-test=bill-attest-pin]", "1234");
     await flush(el);
@@ -291,9 +285,7 @@ describe("bill payment recovery on the Payments screen", () => {
     const el = await mount(api);
     q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
     await flush(el);
-    const outcome = q(el, "[data-test=bill-attest-outcome]") as HTMLSelectElement;
-    outcome.value = "received";
-    outcome.dispatchEvent(new Event("change"));
+    await chooseOption(q(el, "[data-test=bill-attest-outcome]")!, "received");
     change(el, "[data-test=bill-attest-note]", "Provider says no charge");
     change(el, "[data-test=bill-attest-pin]", "0000");
     await flush(el);
@@ -314,9 +306,7 @@ describe("bill payment recovery on the Payments screen", () => {
     const el = await mount();
     q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
     await flush(el);
-    const outcome = q(el, "[data-test=bill-attest-outcome]") as HTMLSelectElement;
-    outcome.value = "received";
-    outcome.dispatchEvent(new Event("change"));
+    await chooseOption(q(el, "[data-test=bill-attest-outcome]")!, "received");
     change(el, "[data-test=bill-attest-note]", "First order note");
     change(el, "[data-test=bill-attest-pin]", "1234");
     await flush(el);
@@ -324,7 +314,9 @@ describe("bill payment recovery on the Payments screen", () => {
     await flush(el);
     q(el, "[data-test=attest-bill-refund-br-1]")!.click();
     await flush(el);
-    expect((q(el, "[data-test=bill-attest-outcome]") as HTMLSelectElement).value).toBe("");
+    expect(
+      (q(el, "[data-test=bill-attest-outcome]") as HTMLElement & { value: string }).value,
+    ).toBe("");
     expect((q(el, "[data-test=bill-attest-note]") as HTMLElement & { value: string }).value).toBe(
       "",
     );
@@ -341,9 +333,7 @@ describe("bill payment recovery on the Payments screen", () => {
     const el = await mount(api);
     q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
     await flush(el);
-    const outcome = q(el, "[data-test=bill-attest-outcome]") as HTMLSelectElement;
-    outcome.value = "received";
-    outcome.dispatchEvent(new Event("change"));
+    await chooseOption(q(el, "[data-test=bill-attest-outcome]")!, "received");
     change(el, "[data-test=bill-attest-note]", "Provider confirms received");
     change(el, "[data-test=bill-attest-pin]", "1234");
     await flush(el);
@@ -361,7 +351,7 @@ describe("bill payment recovery on the Payments screen", () => {
     change(el, "[data-test=bill-attest-note]", " ");
     await flush(el);
     expect(errorOf(el, "bill-attest-note")).toBe("");
-    expect(q(el, "[data-test=bill-outcome-error]")).toBeNull();
+    expect(errorOf(el, "bill-attest-outcome")).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect(attestDisabled(el)).toBe(false);
   });
@@ -372,10 +362,15 @@ describe("bill payment recovery on the Payments screen", () => {
     await flush(el);
     q(el, "[data-test=confirm-bill-attest]")!.click();
     await flush(el);
-    const outcome = q(el, "[data-test=bill-attest-outcome]") as HTMLSelectElement;
+    const outcome = q(el, "[data-test=bill-attest-outcome]")!;
     await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(outcome));
-    expect(outcome.getAttribute("aria-invalid")).toBe("true");
-    expect(outcome.getAttribute("aria-describedby")).toBe("bill-outcome-error");
+    const control = outcome.shadowRoot!.querySelector(".trigger")!;
+    expect(control.getAttribute("aria-invalid")).toBe("true");
+    expect(
+      outcome
+        .shadowRoot!.getElementById(control.getAttribute("aria-describedby")!)!
+        .textContent!.trim(),
+    ).toBe(t("payments.bill.outcome_required"));
     expect(attestDisabled(el)).toBe(true);
 
     chooseOutcome(el, "received");
@@ -410,7 +405,7 @@ describe("bill payment recovery on the Payments screen", () => {
     change(el, "[data-test=bill-attest-pin]", "1234");
     chooseOutcome(el, "received");
     await flush(el);
-    expect(q(el, "[data-test=bill-outcome-error]")).toBeNull();
+    expect(errorOf(el, "bill-attest-outcome")).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect(attestDisabled(el)).toBe(false);
   });
@@ -477,8 +472,65 @@ describe("bill payment recovery on the Payments screen", () => {
     q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
     await flush(el);
     expect(errorOf(el, "bill-attest-note")).toBe("");
-    expect(q(el, "[data-test=bill-outcome-error]")).toBeNull();
+    expect(errorOf(el, "bill-attest-outcome")).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect(attestDisabled(el)).toBe(false);
   });
+});
+
+describe("bill recovery's outcome field", () => {
+  type Combobox = HTMLElement & {
+    options: { value: string; label: string }[];
+    value: string;
+    label: string;
+    name: string;
+    placeholder: string;
+    search: string;
+    required: boolean;
+    disabled: boolean;
+    error: string;
+  };
+
+  it.each([
+    [
+      "payment",
+      "attest-bill-payment-bp-1",
+      "received",
+      "payments.bill.received_option",
+      "payments.bill.failed_payment_option",
+    ],
+    [
+      "refund",
+      "attest-bill-refund-br-1",
+      "completed",
+      "payments.bill.completed_option",
+      "payments.bill.failed_refund_option",
+    ],
+  ] as const)(
+    "picks a %s's confirmed outcome from a required dropdown, prompting a choice",
+    async (_kind, opener, confirmed, confirmedKey, failedKey) => {
+      const el = await mount();
+      q(el, `[data-test=${opener}]`)!.click();
+      await flush(el);
+      const outcome = q(el, "wt-combobox[data-test=bill-attest-outcome]") as Combobox;
+      expect(outcome.name).toBe("outcome");
+      expect(outcome.label).toBe(t("payments.bill.outcome"));
+      expect(outcome.required).toBe(true);
+      expect(outcome.search).toBe("auto");
+      expect(outcome.placeholder).toBe(t("payments.bill.choose_outcome"));
+      expect(outcome.options).toEqual([
+        { value: confirmed, label: t(confirmedKey) },
+        { value: "failed", label: t(failedKey) },
+      ]);
+      expect(outcome.value).toBe("");
+
+      q(el, "[data-test=confirm-bill-attest]")!.click();
+      await flush(el);
+      expect(outcome.error).toBe(t("payments.bill.outcome_required"));
+      await chooseOption(outcome, "failed");
+      await flush(el);
+      expect(outcome.error).toBe("");
+      expect(outcome.value).toBe("failed");
+    },
+  );
 });

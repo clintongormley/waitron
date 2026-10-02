@@ -135,7 +135,7 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
     );
     await flush(el);
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("select[name=paperWidth]")).not.toBeNull(),
+      expect(el.shadowRoot!.querySelector("wt-combobox[name=paperWidth]")).not.toBeNull(),
     );
     await expectNoA11yViolations(host);
   });
@@ -147,9 +147,12 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
       theme,
     );
     await flush(el);
-    const footer = el.shadowRoot!.querySelector("textarea[name=footerMessage]")!;
-    const placeholder = getComputedStyle(footer, "::placeholder").color;
-    const field = getComputedStyle(footer).backgroundColor;
+    const footer = el.shadowRoot!.querySelector("wt-textarea[name=footerMessage]")!;
+    const placeholder = getComputedStyle(
+      footer.shadowRoot!.querySelector("textarea")!,
+      "::placeholder",
+    ).color;
+    const field = getComputedStyle(footer.shadowRoot!.querySelector(".field")!).backgroundColor;
     expect(contrastRatio(placeholder, field)).toBeGreaterThanOrEqual(4.5);
   });
 });

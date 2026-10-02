@@ -1,9 +1,10 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
+import { roleName, rolesByName, statusName } from "../i18n/domain.js";
 import type { DashboardApi, PersonSummary } from "../api/client.js";
 import type { StaffList } from "../widgets/staff-list.js";
 import type { PersonForm } from "../widgets/person-form.js";
@@ -191,14 +192,21 @@ describe("staff-screen", () => {
     const table = list(el).shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     expect(table.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(1000);
-    const search = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=search]")!;
+    const search = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+      "[data-test=search]",
+    )!;
     search.value = "User 999";
-    search.dispatchEvent(new Event("input"));
+    search.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "User 999" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
     await flush(el);
     expect(list(el).people.map((person) => person.personId)).toEqual(["p999"]);
-    const role = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=role-filter]")!;
-    role.value = "staff";
-    role.dispatchEvent(new Event("change"));
+    const role = el.shadowRoot!.querySelector<HTMLElement>("[data-test=role-filter]")!;
+    await chooseOption(role, "staff");
     await flush(el);
     expect(list(el).people).toEqual([]);
     expect(api.listStaff).toHaveBeenCalledTimes(1);
@@ -944,7 +952,7 @@ describe("staff-screen — row actions, filters and edit races", () => {
     await flush(el);
     const shown = () => list(el).people.map((person) => person.personId);
     expect(shown()).toEqual(["p1", "p3"]);
-    const status = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=status-filter]")!;
+    const status = el.shadowRoot!.querySelector<HTMLElement>("[data-test=status-filter]")!;
     for (const [value, expected] of [
       ["active", ["p1"]],
       ["pending", ["p3"]],
@@ -952,8 +960,7 @@ describe("staff-screen — row actions, filters and edit races", () => {
       ["all", ["p1", "p2", "p3"]],
       ["current", ["p1", "p3"]],
     ] as const) {
-      status.value = value;
-      status.dispatchEvent(new Event("change"));
+      await chooseOption(status, value);
       await flush(el);
       expect(shown()).toEqual(expected);
     }
@@ -1060,5 +1067,80 @@ describe("staff-screen — row actions, filters and edit races", () => {
       expect(editForm(el).open).toBe(true);
       expect(editForm(el).person).toEqual(people[1]);
     });
+  });
+});
+
+describe("staff-screen filter fields", () => {
+  type Field = HTMLElement & {
+    type: string;
+    name: string;
+    label: string;
+    hideLabel: boolean;
+    search: string;
+    value: string;
+    options: { value: string; label: string }[];
+  };
+  const field = (el: StaffScreen, selector: string) =>
+    el.shadowRoot!.querySelector(selector) as Field | null;
+  const shown = (el: StaffScreen) => list(el).people.map((person) => person.personId);
+
+  it("searches from a labelled search field", async () => {
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+    await flush(el);
+    const search = field(el, "wt-input[data-test=search]")!;
+    expect(search.type).toBe("search");
+    expect(search.name).toBe("search");
+    expect(search.label).toBe(t("staff.search"));
+    expect(search.hideLabel).toBe(false);
+    expect(search.value).toBe("");
+    search.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "ada" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+    expect(shown(el)).toEqual(["p1"]);
+  });
+
+  it("filters by role from a labelled dropdown starting on every role", async () => {
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+    await flush(el);
+    const role = field(el, "wt-combobox[data-test=role-filter]")!;
+    expect(role.name).toBe("role-filter");
+    expect(role.label).toBe(t("staff.filter_role"));
+    expect(role.search).toBe("auto");
+    expect(role.options).toEqual([
+      { value: "all", label: t("staff.filter_all_roles") },
+      ...rolesByName().map((value) => ({ value, label: roleName(value) })),
+    ]);
+    expect(role.value).toBe("all");
+    await chooseOption(role, "staff");
+    await flush(el);
+    expect(shown(el)).toEqual([]);
+    await chooseOption(role, "manager");
+    await flush(el);
+    expect(shown(el)).toEqual(["p1"]);
+  });
+
+  it("filters by status from a labelled dropdown starting on current users, its help beside it", async () => {
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+    await flush(el);
+    const status = field(el, "wt-combobox[data-test=status-filter]")!;
+    expect(status.name).toBe("status-filter");
+    expect(status.label).toBe(t("staff.filter_status"));
+    expect(status.search).toBe("auto");
+    expect(status.options).toEqual([
+      { value: "current", label: t("staff.filter_current") },
+      { value: "active", label: statusName("active") },
+      { value: "pending", label: statusName("pending") },
+      { value: "suspended", label: statusName("suspended") },
+      { value: "all", label: t("staff.filter_all_statuses") },
+    ]);
+    expect(status.value).toBe("current");
+    const help = el.shadowRoot!.querySelector("[data-test=status-filter-help]")!;
+    expect(help.parentElement).toBe(status);
+    expect(help.getAttribute("slot")).toBe("help");
+    expect(help.getAttribute("aria-label")).toBe(t("staff.filter_current_help_label"));
+    await chooseOption(status, "suspended");
+    await flush(el);
+    expect(shown(el)).toEqual(["p2"]);
   });
 });

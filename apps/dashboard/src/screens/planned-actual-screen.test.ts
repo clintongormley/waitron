@@ -1,8 +1,10 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { t } from "../i18n/t.js";
 import type { DashboardApi, PersonSummary, PlannedVsActualRow } from "../api/client.js";
 import { PlannedActualScreen } from "./planned-actual-screen.js";
+import type { WtInput } from "@waitron/ui";
 
 const staff: PersonSummary[] = [
   {
@@ -47,6 +49,13 @@ const locationSelect = (el: PlannedActualScreen) =>
     .shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]")!;
 afterEach(cleanupWidgets);
 
+/** Sends the week field's `wt-change`, as a date the operator finished typing does. */
+function chooseWeek(week: HTMLElement, value: string): void {
+  week.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+}
+
 describe("planned-actual-screen", () => {
   it("loads locations, staff and the week's rows on connect, resolving the person name", async () => {
     const api = stubApi();
@@ -70,9 +79,8 @@ describe("planned-actual-screen", () => {
       api,
     });
     await flush(el);
-    const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
-    week.value = "2026-04-08"; // a Wednesday → Monday 2026-04-06, to 2026-04-13
-    week.dispatchEvent(new Event("change"));
+    const week = el.shadowRoot!.querySelector<WtInput>("[data-test=week-picker]")!;
+    chooseWeek(week, "2026-04-08"); // a Wednesday → Monday 2026-04-06, to 2026-04-13
     await flush(el);
     expect(api.getPlannedVsActual).toHaveBeenLastCalledWith("loc-1", "2026-04-06", "2026-04-13");
   });
@@ -160,9 +168,8 @@ describe("planned-actual-screen", () => {
     });
     await flush(el);
     expect(api.getPlannedVsActual).toHaveBeenCalledTimes(1);
-    const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
-    week.value = "";
-    week.dispatchEvent(new Event("change"));
+    const week = el.shadowRoot!.querySelector<WtInput>("[data-test=week-picker]")!;
+    chooseWeek(week, "");
     await flush(el);
     expect(api.getPlannedVsActual).toHaveBeenCalledTimes(1);
   });
@@ -200,9 +207,8 @@ describe("planned-actual-screen", () => {
       api,
     });
     await flush(el);
-    const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
-    week.value = "2026-04-08";
-    week.dispatchEvent(new Event("change"));
+    const week = el.shadowRoot!.querySelector<WtInput>("[data-test=week-picker]")!;
+    chooseWeek(week, "2026-04-08");
     await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("convenio.not_found");
   });
@@ -329,5 +335,34 @@ describe("planned-actual-screen — location refreshes", () => {
     const since = vi.mocked(api.getPlannedVsActual).mock.calls.slice(rowLoads);
     expect(since.map(([locationId]) => locationId)).toEqual(["loc-2"]);
     expect(locationSelect(el).value).toBe("loc-2");
+  });
+});
+
+describe("planned-actual-screen week field", () => {
+  it("picks the week from a labelled date field showing the Monday, and a picked day loads its week", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
+      api,
+    });
+    await flush(el);
+    const week = el.shadowRoot!.querySelector("wt-input[data-test=week-picker]") as HTMLElement & {
+      type: string;
+      label: string;
+      name: string;
+      value: string;
+    };
+    expect(week.type).toBe("date");
+    expect(week.name).toBe("week");
+    expect(week.label).toBe(t("planned.week"));
+    expect(new Date(`${week.value}T00:00:00Z`).getUTCDay()).toBe(1);
+    week.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "2026-04-08" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(api.getPlannedVsActual).toHaveBeenLastCalledWith("loc-1", "2026-04-06", "2026-04-13");
   });
 });

@@ -1,11 +1,13 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { BackupStatusView, DashboardApi, StreamSettingsView } from "../api/client.js";
 import { BackupScreen } from "./backup-screen.js";
 import type { StreamSettingsPanel } from "./stream-settings-panel.js";
+import type { WtInput } from "@waitron/ui";
 
 afterEach(cleanupWidgets);
 
@@ -132,18 +134,6 @@ function tickCheckbox(el: BackupScreen, sel: string): void {
   const box = q(el, sel) as HTMLInputElement;
   box.checked = true;
   box.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
-}
-
-function selectValue(el: BackupScreen, sel: string, value: string): void {
-  const select = q(el, sel) as HTMLSelectElement;
-  select.value = value;
-  select.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
-}
-
-function setNativeInput(el: BackupScreen, sel: string, value: string): void {
-  const input = q(el, sel) as HTMLInputElement;
-  input.value = value;
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
 }
 
 describe("backup-screen", () => {
@@ -581,14 +571,14 @@ describe("backup-screen", () => {
     q(el, "[data-test=advanced-toggle]")!.click();
     await el.updateComplete;
     setInput(el, "[data-test=paste-key]", "correct-horse-battery-staple");
-    selectValue(el, "[data-test=days-mode]", "weekdays");
-    selectValue(el, "[data-test=time-mode]", "fixed");
+    await chooseOption(q(el, "[data-test=days-mode]")!, "weekdays");
+    await chooseOption(q(el, "[data-test=time-mode]")!, "fixed");
     await el.updateComplete;
     q(el, "[data-test=weekday-6]")!.dispatchEvent(new Event("change", { bubbles: true }));
     q(el, "[data-test=weekday-1]")!.dispatchEvent(new Event("change", { bubbles: true }));
-    setNativeInput(el, "[data-test=at-time]", "02:30");
-    setNativeInput(el, "[data-test=retain-count]", "5");
-    setNativeInput(el, "[data-test=retain-days]", "14");
+    setInput(el, "[data-test=at-time]", "02:30");
+    setInput(el, "[data-test=retain-count]", "5");
+    setInput(el, "[data-test=retain-days]", "14");
     tickCheckbox(el, "[data-test=saved-it]");
     await el.updateComplete;
     q(el, "[data-test=apply]")!.click();
@@ -1275,11 +1265,13 @@ describe("backup-screen failures and edit-mode prefill", () => {
       schedule: { kind: "wall-clock", days: [0, 3], at: { hour: 2, minute: 5 } },
     });
 
-    expect((q(el, "[data-test=days-mode]") as HTMLSelectElement).value).toBe("weekdays");
+    expect((q(el, "[data-test=days-mode]") as HTMLElement & { value: string }).value).toBe(
+      "weekdays",
+    );
     expect((q(el, "[data-test=weekday-0]") as HTMLInputElement).checked).toBe(true);
     expect((q(el, "[data-test=weekday-3]") as HTMLInputElement).checked).toBe(true);
     expect((q(el, "[data-test=weekday-1]") as HTMLInputElement).checked).toBe(false);
-    expect((q(el, "[data-test=at-time]") as HTMLInputElement).value).toBe("02:05");
+    expect((q(el, "[data-test=at-time]") as WtInput).value).toBe("02:05");
 
     q(el, "[data-test=save-settings]")!.click();
 
@@ -1442,7 +1434,7 @@ describe("backup-screen retention boxes", () => {
   }
 
   const boxError = (el: BackupScreen, box: "count" | "days"): string | null =>
-    q(el, `[data-test=retain-${box}-error]`)?.textContent?.trim() ?? null;
+    (q(el, `[data-test=retain-${box}]`) as (HTMLElement & { error: string }) | null)?.error || null;
 
   async function readyToApply(api: DashboardApi): Promise<BackupScreen> {
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
@@ -1456,7 +1448,7 @@ describe("backup-screen retention boxes", () => {
   it("a blank box sends nothing: the box says why, focus moves to it, and Apply waits until it is filled", async () => {
     const api = stubApi();
     const el = await readyToApply(api);
-    setNativeInput(el, "[data-test=retain-count]", "");
+    setInput(el, "[data-test=retain-count]", "");
     await el.updateComplete;
     expect(q(el, "[data-test=apply]")!.hasAttribute("disabled")).toBe(false);
 
@@ -1465,14 +1457,18 @@ describe("backup-screen retention boxes", () => {
 
     expect(api.applyBackup).not.toHaveBeenCalled();
     expect(boxError(el, "count")).toBe(t("backup.retention_invalid"));
-    expect(q(el, "[data-test=retain-count]")!.getAttribute("aria-invalid")).toBe("true");
+    expect(
+      q(el, "[data-test=retain-count]")!
+        .shadowRoot!.querySelector("input")!
+        .getAttribute("aria-invalid"),
+    ).toBe("true");
     expect(boxError(el, "days")).toBeNull();
     expect(await bottomOf(el, "apply-actions")).toBe(t("form.fix_fields"));
     expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=retain-count]"));
     expect(q(el, "[data-test=apply]")!.hasAttribute("disabled")).toBe(true);
     expect(alertText(el)).toBeUndefined();
 
-    setNativeInput(el, "[data-test=retain-count]", "5");
+    setInput(el, "[data-test=retain-count]", "5");
     await el.updateComplete;
     expect(boxError(el, "count")).toBeNull();
     expect(await bottomOf(el, "apply-actions")).toBeNull();
@@ -1488,7 +1484,7 @@ describe("backup-screen retention boxes", () => {
     for (const value of ["0", "-3", "2.5"]) {
       const api = stubApi();
       const el = await readyToApply(api);
-      setNativeInput(el, "[data-test=retain-days]", value);
+      setInput(el, "[data-test=retain-days]", value);
       q(el, "[data-test=apply]")!.click();
       await flush(el);
       expect(api.applyBackup, value).not.toHaveBeenCalled();
@@ -1502,7 +1498,7 @@ describe("backup-screen retention boxes", () => {
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
     await flush(el);
     setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
-    setNativeInput(el, "[data-test=retain-count]", "");
+    setInput(el, "[data-test=retain-count]", "");
     await el.updateComplete;
 
     q(el, "[data-test=apply]")!.click();
@@ -1519,7 +1515,7 @@ describe("backup-screen retention boxes", () => {
     await flush(el);
     q(el, "[data-test=edit-settings]")!.click();
     await flush(el);
-    setNativeInput(el, "[data-test=retain-days]", "");
+    setInput(el, "[data-test=retain-days]", "");
     await el.updateComplete;
 
     q(el, "[data-test=save-settings]")!.click();
@@ -1580,7 +1576,7 @@ describe("backup-screen retention boxes", () => {
     expect(alertText(el)).toBeUndefined();
     expect(q(el, "[data-test=apply]")!.hasAttribute("disabled")).toBe(false);
 
-    setNativeInput(el, "[data-test=retain-count]", "8");
+    setInput(el, "[data-test=retain-count]", "8");
     await el.updateComplete;
     expect(boxError(el, "count")).toBeNull();
     expect(boxError(el, "days")).toBeNull();
@@ -1617,8 +1613,8 @@ describe("backup-screen retention boxes", () => {
   it("a whole number written as 7.0 or 1e2 is sent as 7 and 100 when turning backups on", async () => {
     const api = stubApi();
     const el = await readyToApply(api);
-    setNativeInput(el, "[data-test=retain-count]", "7.0");
-    setNativeInput(el, "[data-test=retain-days]", "1e2");
+    setInput(el, "[data-test=retain-count]", "7.0");
+    setInput(el, "[data-test=retain-days]", "1e2");
     await el.updateComplete;
 
     q(el, "[data-test=apply]")!.click();
@@ -1637,8 +1633,8 @@ describe("backup-screen retention boxes", () => {
     await flush(el);
     q(el, "[data-test=edit-settings]")!.click();
     await flush(el);
-    setNativeInput(el, "[data-test=retain-count]", "7.0");
-    setNativeInput(el, "[data-test=retain-days]", "1e2");
+    setInput(el, "[data-test=retain-count]", "7.0");
+    setInput(el, "[data-test=retain-days]", "1e2");
     await el.updateComplete;
 
     q(el, "[data-test=save-settings]")!.click();
@@ -1693,5 +1689,56 @@ describe("backup-screen dates", () => {
     } finally {
       setLocale(before);
     }
+  });
+});
+
+describe("backup-screen fields", () => {
+  type Combobox = HTMLElement & { options: { value: string }[]; value: string };
+  type Stepper = HTMLElement & { value: string; min: number; label: string; required: boolean };
+
+  it("the days and time choices are dropdowns showing the stored choice, and a pick shows what it opens", async () => {
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api: stubApi() });
+    await flush(el);
+    const days = q(el, "wt-combobox[data-test=days-mode]") as Combobox;
+    const time = q(el, "wt-combobox[data-test=time-mode]") as Combobox;
+    expect(days.options.map((o) => o.value)).toEqual(["daily", "weekdays"]);
+    expect(days.value).toBe("daily");
+    expect(time.options.map((o) => o.value)).toEqual(["auto", "fixed"]);
+    expect(time.value).toBe("auto");
+
+    await chooseOption(days, "weekdays");
+    await chooseOption(time, "fixed");
+    await el.updateComplete;
+    expect(q(el, "[data-test=weekday-1]")).not.toBeNull();
+    const at = q(el, "wt-input[data-test=at-time]") as HTMLElement & {
+      type: string;
+      value: string;
+    };
+    expect(at.type).toBe("time");
+    expect(at.value).toBe("03:00");
+    expect(at.getAttribute("label")).toBe(t("backup.schedule.at"));
+  });
+
+  it("each retention box is a whole-number stepper from 1 under its own name", async () => {
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api: stubApi() });
+    await flush(el);
+    for (const box of ["count", "days"] as const) {
+      const stepper = q(el, `wt-number-stepper[name=retention-${box}]`) as Stepper;
+      expect(stepper, box).not.toBeNull();
+      expect(stepper.min).toBe(1);
+      expect(stepper.required).toBe(true);
+      expect(stepper.label).toBe(t(`backup.retention.${box}`));
+    }
+    expect((q(el, "wt-number-stepper[name=retention-count]") as Stepper).value).toBe("7");
+  });
+
+  it("the pasted key's field is named by its own label", async () => {
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api: stubApi() });
+    await flush(el);
+    q(el, "[data-test=advanced-toggle]")!.click();
+    await el.updateComplete;
+    const field = q(el, "wt-input[data-test=paste-key]") as HTMLElement & { label: string };
+    expect(field.label).toBe(t("backup.key.paste_label"));
+    expect(field.closest("label")).toBeNull();
   });
 });

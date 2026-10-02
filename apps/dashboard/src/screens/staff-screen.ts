@@ -1,11 +1,13 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
+import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 import { roleName, rolesByName, statusName } from "../i18n/domain.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -18,7 +20,6 @@ import type { DashboardApi, PersonEditDetails, PersonRole, PersonSummary } from 
 export class StaffScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -50,34 +51,13 @@ export class StaffScreen extends LitElement {
       }
       .filters {
         display: grid;
-        grid-template-columns: minmax(14rem, 1fr) repeat(2, minmax(10rem, auto));
+        grid-template-columns: minmax(calc(var(--wt-space-6) * 7), 1fr) repeat(
+            2,
+            minmax(calc(var(--wt-space-6) * 5), auto)
+          );
         gap: var(--wt-space-3);
-        align-items: end;
+        align-items: start;
         margin-bottom: var(--wt-space-4);
-      }
-      .filter {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        color: var(--wt-color-text);
-      }
-      /* Every heading row is button-height, so when the filters sit side by side the Status heading,
-         which holds a help button, is level with the Role heading. */
-      .filter-heading {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-        min-height: var(--wt-tap-min);
-      }
-      .filter input {
-        box-sizing: border-box;
-        min-height: var(--wt-tap-min);
-        padding: 0 var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
       }
       @media (max-width: 42rem) {
         .filters {
@@ -338,61 +318,52 @@ export class StaffScreen extends LitElement {
         </div>
       </div>
       <div class="filters" aria-label=${t("staff.filters")}>
-        <label class="filter">
-          <span class="filter-heading">${t("staff.search")}</span>
-          <input
-            data-test="search"
-            name="search"
-            type="search"
-            autocomplete="off"
-            .value=${this.search}
-            @input=${(event: InputEvent) =>
-              (this.search = (event.target as HTMLInputElement).value)}
-          />
-        </label>
-        <label class="filter">
-          <span class="filter-heading">${t("staff.filter_role")}</span>
-          <select
-            data-test="role-filter"
-            name="role-filter"
-            @change=${(event: Event) =>
-              (this.roleFilter = (event.target as HTMLSelectElement).value as PersonRole | "all")}
+        <wt-input
+          data-test="search"
+          name="search"
+          type="search"
+          autocomplete="off"
+          label=${t("staff.search")}
+          .value=${this.search}
+          @wt-change=${(event: CustomEvent<{ value: string }>) =>
+            (this.search = event.detail.value)}
+        ></wt-input>
+        <wt-combobox
+          data-test="role-filter"
+          name="role-filter"
+          label=${t("staff.filter_role")}
+          search="auto"
+          .options=${[
+            { value: "all", label: t("staff.filter_all_roles") },
+            ...rolesByName().map((role) => ({ value: role, label: roleName(role) })),
+          ]}
+          .value=${this.roleFilter}
+          @wt-change=${(event: CustomEvent<{ value: string }>) =>
+            (this.roleFilter = event.detail.value as PersonRole | "all")}
+        ></wt-combobox>
+        <wt-combobox
+          data-test="status-filter"
+          name="status-filter"
+          label=${t("staff.filter_status")}
+          search="auto"
+          .options=${[
+            { value: "current", label: t("staff.filter_current") },
+            { value: "active", label: statusName("active") },
+            { value: "pending", label: statusName("pending") },
+            { value: "suspended", label: statusName("suspended") },
+            { value: "all", label: t("staff.filter_all_statuses") },
+          ]}
+          .value=${this.statusFilter}
+          @wt-change=${(event: CustomEvent<{ value: string }>) =>
+            (this.statusFilter = event.detail.value as typeof this.statusFilter)}
+        >
+          <wt-help-tooltip
+            slot="help"
+            data-test="status-filter-help"
+            aria-label=${t("staff.filter_current_help_label")}
+            >${t("staff.filter_current_help")}</wt-help-tooltip
           >
-            <option value="all" .selected=${this.roleFilter === "all"}>
-              ${t("staff.filter_all_roles")}
-            </option>
-            ${rolesByName().map(
-              (role) =>
-                html`<option value=${role} .selected=${this.roleFilter === role}>
-                  ${roleName(role)}
-                </option>`,
-            )}
-          </select>
-        </label>
-        <div class="filter">
-          <span class="filter-heading">
-            <label for="status-filter">${t("staff.filter_status")}</label>
-            <wt-help-tooltip
-              data-test="status-filter-help"
-              aria-label=${t("staff.filter_current_help_label")}
-              >${t("staff.filter_current_help")}</wt-help-tooltip
-            >
-          </span>
-          <select
-            id="status-filter"
-            data-test="status-filter"
-            name="status-filter"
-            @change=${(event: Event) =>
-              (this.statusFilter = (event.target as HTMLSelectElement)
-                .value as typeof this.statusFilter)}
-          >
-            <option value="current">${t("staff.filter_current")}</option>
-            <option value="active">${statusName("active")}</option>
-            <option value="pending">${statusName("pending")}</option>
-            <option value="suspended">${statusName("suspended")}</option>
-            <option value="all">${t("staff.filter_all_statuses")}</option>
-          </select>
-        </div>
+        </wt-combobox>
       </div>
       <dashboard-staff-list
         .people=${this.#filteredPeople()}

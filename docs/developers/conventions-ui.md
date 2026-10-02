@@ -330,9 +330,7 @@ the test `a restored filter's dropdown shows the restored choice` in
 `packages/ui/src/components/wt-data-table.test.ts`. Putting the lone `.value` binding back on the
 2026-09-14 tree fails that test with `expected '' to be 'off'`.
 
-The siblings that already avoid it: `apps/dashboard/src/screens/device-profiles-screen.ts`
-`#renderCanvasOptions` and its form-factor dropdown put `?selected` on each option (an attribute
-binding, which the probe above did not test), and every mapped `<select>` in
+The siblings that already avoid it: every mapped `<select>` in
 `apps/dashboard/src/widgets/product-editor.ts` — the tax, unit and course dropdowns — marks
 its options `.selected` and binds no `.value` on the `<select>` at all, which is the shape this rule
 recommends. Nothing guards

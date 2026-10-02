@@ -1,5 +1,6 @@
 import { expect, afterEach, describe, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { chooseOption as pickOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
 import "./printers-screen.js";
@@ -211,9 +212,7 @@ function deepQuery(root: ShadowRoot | HTMLElement, sel: string): HTMLElement | n
 }
 const q = (el: PrintersScreen, sel: string) => deepQuery(el.shadowRoot!, sel);
 async function chooseOption(el: PrintersScreen, name: string, value: string): Promise<void> {
-  const select = q(el, `select[name="${name}"]`) as HTMLSelectElement;
-  select.value = value;
-  select.dispatchEvent(new Event("change"));
+  await pickOption(q(el, `wt-combobox[name="${name}"]`)!, value);
   await flush(el);
 }
 async function openPrinter(el: PrintersScreen, id = "p1"): Promise<void> {

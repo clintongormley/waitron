@@ -1,8 +1,11 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { MyScheduleScreen, scheduleWindow } from "./my-schedule-screen.js";
 import type { DashboardApi, MyAbsence, MyShift, MySwap, RosterEntry } from "../api/client.js";
+import { t } from "../i18n/t.js";
+import { absenceKindName } from "../i18n/domain.js";
 
 const roster: RosterEntry[] = [
   { personId: "me", displayName: "Yo" },
@@ -72,9 +75,7 @@ async function flush(el: MyScheduleScreen): Promise<void> {
 }
 
 function selectValue(el: MyScheduleScreen, dataTest: string, value: string): void {
-  const sel = el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=${dataTest}]`)!;
-  sel.value = value;
-  sel.dispatchEvent(new Event("change"));
+  void chooseOption(el.shadowRoot!.querySelector(`[data-test=${dataTest}]`)!, value);
 }
 
 /** `wt-input`'s own `<input>` is in its shadow root, so the widget's `wt-change` is fired directly. */
@@ -156,9 +157,11 @@ describe("my-schedule-screen", () => {
   it("excludes myself from the colleague picker", async () => {
     const { el } = await mount(stubApi());
     await flush(el);
-    const options = [
-      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=cover-colleague] option"),
-    ].map((o) => o.value);
+    const options = (
+      el.shadowRoot!.querySelector("[data-test=cover-colleague]") as unknown as {
+        options: { value: string }[];
+      }
+    ).options.map((o) => o.value);
     expect(options).toContain("col1");
     expect(options).not.toContain("me");
   });
@@ -428,10 +431,101 @@ describe("my-schedule-screen — keyboard submit and partial loads", () => {
   );
 });
 
+describe("my-schedule-screen fields", () => {
+  type Combobox = HTMLElement & {
+    options: { value: string; label: string }[];
+    value: string;
+    label: string;
+    name: string;
+    placeholder: string;
+    search: string;
+  };
+  const box = (el: MyScheduleScreen, name: string) =>
+    el.shadowRoot!.querySelector(`wt-combobox[name=${name}]`) as Combobox | null;
+
+  it("picks the shift to offer and the colleague from labelled dropdowns, a dash while none is chosen", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    await flush(el);
+
+    const shift = box(el, "cover-shift")!;
+    expect(shift.label).toBe(t("myschedule.cover_shift"));
+    expect(shift.search).toBe("auto");
+    expect(shift.placeholder).toBe("—");
+    expect(shift.options.map((o) => o.value)).toEqual(["", "s1"]);
+    expect(shift.options[1]!.label).toContain("bar");
+    expect(shift.value).toBe("");
+
+    const colleague = box(el, "cover-colleague")!;
+    expect(colleague.label).toBe(t("myschedule.cover_colleague"));
+    expect(colleague.search).toBe("auto");
+    expect(colleague.placeholder).toBe("—");
+    expect(colleague.options).toEqual([
+      { value: "", label: "—" },
+      { value: "col1", label: "Colega" },
+    ]);
+    expect(colleague.value).toBe("");
+
+    await chooseOption(shift, "s1");
+    await chooseOption(colleague, "col1");
+    await flush(el);
+    expect(shift.value).toBe("s1");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cover-submit]")!.click();
+    await flush(el);
+    expect(api.requestSwap).toHaveBeenCalledWith({
+      fromShiftId: "s1",
+      toPersonId: "col1",
+      toShiftId: null,
+    });
+    expect(shift.value).toBe("");
+    expect(colleague.value).toBe("");
+  });
+
+  it("picks the kind of time off from a labelled dropdown starting on holiday", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    await flush(el);
+
+    const kind = box(el, "abs-kind")!;
+    expect(kind.label).toBe(t("myschedule.absence_kind"));
+    expect(kind.search).toBe("auto");
+    expect(kind.options).toEqual(
+      ["holiday", "sick_leave", "leave", "unpaid"].map((value) => ({
+        value,
+        label: absenceKindName(value as "holiday"),
+      })),
+    );
+    expect(kind.value).toBe("holiday");
+    await chooseOption(kind, "unpaid");
+    el.shadowRoot!.querySelector("[data-test=abs-from]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "2026-08-01" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    el.shadowRoot!.querySelector("[data-test=abs-to]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "2026-08-02" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=abs-submit]")!.click();
+    await flush(el);
+    expect(api.requestAbsence).toHaveBeenCalledWith(expect.objectContaining({ kind: "unpaid" }));
+  });
+});
+
 describe("my-schedule-screen — dropdowns that keep their choice", () => {
-  function chosenText(el: MyScheduleScreen, dataTest: string): string | undefined {
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=${dataTest}]`)!;
-    return select.selectedOptions[0]?.textContent?.trim();
+  /** What the closed dropdown shows on its trigger, not what its properties say it holds. */
+  async function chosenText(el: MyScheduleScreen, dataTest: string): Promise<string | undefined> {
+    const box = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      `[data-test=${dataTest}]`,
+    )!;
+    await box.updateComplete;
+    return box.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
   }
 
   it("keeps the chosen colleague when the roster refreshes in a different order", async () => {
@@ -448,7 +542,7 @@ describe("my-schedule-screen — dropdowns that keep their choice", () => {
     liveData.invalidate([{ type: "persons", id: "col2" }]);
     await vi.waitFor(() => expect(api.getStaffRoster).toHaveBeenCalledTimes(2));
     await flush(el);
-    expect(chosenText(el, "cover-colleague")).toBe("Segunda");
+    expect(await chosenText(el, "cover-colleague")).toBe("Segunda");
   });
 
   it("keeps the chosen shift when my shifts refresh in a different order", async () => {
@@ -466,7 +560,7 @@ describe("my-schedule-screen — dropdowns that keep their choice", () => {
     liveData.invalidate([{ type: "shifts", id: "s2" }]);
     await vi.waitFor(() => expect(api.listMyShifts).toHaveBeenCalledTimes(2));
     await flush(el);
-    expect(chosenText(el, "cover-shift")).toContain("cocina");
+    expect(await chosenText(el, "cover-shift")).toContain("cocina");
   });
 
   it.each([
@@ -506,7 +600,7 @@ describe("my-schedule-screen — dropdowns that keep their choice", () => {
       liveData.invalidate([{ type, id }]);
       await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
       await flush(el);
-      expect(chosenText(el, `cover-${field}`)).toBe("—");
+      expect(await chosenText(el, `cover-${field}`)).toBe("—");
       const submit = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
         "[data-test=cover-submit]",
       )!;
@@ -525,8 +619,11 @@ describe("my-schedule-screen — dropdowns that keep their choice", () => {
       absKind: "sick_leave",
     } as Partial<MyScheduleScreen>);
     await flush(el);
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=abs-kind]")!;
-    expect(select.selectedOptions[0]?.value).toBe("sick_leave");
+    const select = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+      "[data-test=abs-kind]",
+    )!;
+    expect(select.value).toBe("sick_leave");
+    expect(await chosenText(el, "abs-kind")).toBe(absenceKindName("sick_leave"));
   });
 });
 

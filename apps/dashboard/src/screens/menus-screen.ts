@@ -6,7 +6,6 @@ import {
   focusFirstInvalid,
   setContentLanguages,
   currentContentLanguages,
-  selectStyles,
   submitOnEnter,
   UrlStateController,
   type DataTableColumn,
@@ -16,6 +15,7 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { memberName } from "../widgets/member-list-editor.js";
@@ -211,18 +211,9 @@ function withOrder(
 export class MenusScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       .field-error {
         color: var(--wt-color-danger);
-      }
-      .required-mark {
-        color: var(--wt-color-danger);
-      }
-      .include-field {
-        display: grid;
-        gap: var(--wt-space-1);
-        max-width: var(--wt-field-max-width);
       }
       [data-test="included-by"] a {
         display: inline-flex;
@@ -1218,7 +1209,7 @@ export class MenusScreen extends LitElement {
     this.includeError = "";
     if (!this.includedRoot) {
       await this.updateComplete;
-      this.shadowRoot!.querySelector<HTMLSelectElement>('[name="included-menu"]')?.focus();
+      this.shadowRoot!.querySelector<HTMLElement>('[name="included-menu"]')?.focus();
       return;
     }
     const target = this.includingMenu;
@@ -2150,25 +2141,25 @@ export class MenusScreen extends LitElement {
         test: "include",
         open: this.includingMenu !== null,
         heading: t("menus.include_menu"),
-        body: html`<label class="include-field"
-          ><span
-            >${t("menus.include_menu")}
-            <span class="required-mark" aria-hidden="true">*</span></span
-          ><select
-            name="included-menu"
-            aria-invalid=${this.includeAttempted && !this.includedRoot ? "true" : "false"}
-            aria-describedby=${this.includeAttempted && !this.includedRoot ? "include-menu-error" : nothing}
-            required
-            .disabled=${this.busy}
-            @change=${(event: Event) => {
-              this.includedRoot = (event.target as HTMLSelectElement).value;
-            }}
-          >
-            <option value="" .selected=${!this.includedRoot}>${t("menus.choose_menu")}</option>
-            ${(this.structure?.includable ?? []).map((menu) => html`<option value=${menu.rootSectionId} .selected=${this.includedRoot === menu.rootSectionId}>${menu.name}</option>`)}
-          </select>
-          ${this.includeAttempted && !this.includedRoot ? html`<span class="field-error" id="include-menu-error">${t("menus.choose_menu_required")}</span>` : nothing}</label
-        >`,
+        body: html`<wt-combobox
+          name="included-menu"
+          required
+          label=${t("menus.include_menu")}
+          search="auto"
+          searchPlaceholder=${t("categories.combobox_search")}
+          noResultsLabel=${t("categories.combobox_no_results")}
+          placeholder=${t("menus.choose_menu")}
+          .options=${(this.structure?.includable ?? []).map((menu) => ({
+            value: menu.rootSectionId,
+            label: menu.name,
+          }))}
+          .value=${this.includedRoot}
+          error=${this.includeAttempted && !this.includedRoot ? t("menus.choose_menu_required") : ""}
+          .disabled=${this.busy}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            this.includedRoot = event.detail.value;
+          }}
+        ></wt-combobox>`,
         save: "include-save",
         saveLabel: t("action.add"),
         errors: {

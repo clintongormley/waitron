@@ -1,6 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./canvas-editor-screen.js";
 import type { CanvasEditorScreen } from "./canvas-editor-screen.js";
@@ -162,11 +163,10 @@ describe("canvas-editor-screen list mode", () => {
         composed: true,
       }),
     );
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
-      "[data-test=create-form-factor]",
-    )!;
-    select.value = "phone-portrait";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await chooseOption(
+      el.shadowRoot!.querySelector("[data-test=create-form-factor]")!,
+      "phone-portrait",
+    );
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-create]")!.click();
     await el.updateComplete;
@@ -513,11 +513,7 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
     await el.updateComplete;
     change(el, "create-name", name);
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
-      "[data-test=create-form-factor]",
-    )!;
-    select.value = formFactor;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await chooseOption(el.shadowRoot!.querySelector("[data-test=create-form-factor]")!, formFactor);
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-create]")!.click();
     await el.updateComplete;
@@ -627,11 +623,7 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
     await el.updateComplete;
     change(el, "canvas-name", "Renamed");
     await el.updateComplete;
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
-      "[data-test=canvas-form-factor]",
-    )!;
-    select.value = "kds";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await chooseOption(el.shadowRoot!.querySelector("[data-test=canvas-form-factor]")!, "kds");
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await flush(el);
@@ -1487,5 +1479,81 @@ describe("canvas editor edge paths", () => {
       name ?? "Counter till",
       expected,
     );
+  });
+});
+
+describe("canvas-editor-screen fields", () => {
+  type Combobox = HTMLElement & {
+    options: { value: string; label: string }[];
+    value: string;
+    label: string;
+    name: string;
+    search: string;
+  };
+  const box = (el: CanvasEditorScreen, testId: string) =>
+    el.shadowRoot!.querySelector(`wt-combobox[data-test=${testId}]`) as Combobox | null;
+  const FORM_FACTOR_OPTIONS = [
+    { value: "till", label: t("canvas_editor.form_factor.till") },
+    { value: "phone-portrait", label: t("canvas_editor.form_factor.phone-portrait") },
+    { value: "tablet-landscape", label: t("canvas_editor.form_factor.tablet-landscape") },
+    { value: "kds", label: t("canvas_editor.form_factor.kds") },
+  ];
+
+  it("picks a new canvas's form factor from a labelled dropdown that starts on the cash register each time", async () => {
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await el.updateComplete;
+
+    const formFactor = box(el, "create-form-factor")!;
+    expect(formFactor.name).toBe("formFactor");
+    expect(formFactor.label).toBe(t("canvas_editor.form_factor_label"));
+    expect(formFactor.search).toBe("auto");
+    expect(formFactor.options).toEqual(FORM_FACTOR_OPTIONS);
+    expect(formFactor.value).toBe("till");
+
+    await chooseOption(formFactor, "kds");
+    el.shadowRoot!.querySelector("wt-dialog")!.dispatchEvent(new CustomEvent("wt-close"));
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await el.updateComplete;
+    expect(box(el, "create-form-factor")!.value).toBe("till");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-create]")!.click();
+    await el.updateComplete;
+    expect(
+      el
+        .shadowRoot!.querySelector("[data-test=editor-placeholder]")!
+        .getAttribute("data-form-factor"),
+    ).toBe("till");
+  });
+
+  it("picks the open canvas's form factor from a labelled dropdown showing its own", async () => {
+    const api = stubApi({
+      getCanvas: vi
+        .fn()
+        .mockResolvedValue({ id: "c1", name: "Counter till", definition: validTillDefinition }),
+    });
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-c1]")!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=canvas-settings]")!.click();
+    await el.updateComplete;
+
+    const formFactor = box(el, "canvas-form-factor")!;
+    expect(formFactor.name).toBe("formFactor");
+    expect(formFactor.label).toBe(t("canvas_editor.form_factor_label"));
+    expect(formFactor.search).toBe("auto");
+    expect(formFactor.options).toEqual(FORM_FACTOR_OPTIONS);
+    expect(formFactor.value).toBe("till");
+
+    await chooseOption(formFactor, "tablet-landscape");
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await flush(el);
+    const [, , definition] = (api.updateCanvas as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(definition.formFactor).toBe("tablet-landscape");
   });
 });

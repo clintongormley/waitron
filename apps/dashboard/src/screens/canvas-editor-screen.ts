@@ -2,8 +2,9 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardPath } from "../navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, selectStyles, UrlStateController } from "@waitron/ui";
+import { submitOnEnter, baseStyles, UrlStateController } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
@@ -30,12 +31,6 @@ import {
 import { validateCanvasDraft } from "./canvas-editor/validate-canvas.js";
 import type { Canvas, DashboardApi } from "../api/client.js";
 
-/** The form factor a native `<select>` change event carries (its `value` is always one of the
- * form-factor keys that populated the options). */
-function formFactorFromEvent(event: Event): FormFactor {
-  return (event.target as HTMLSelectElement).value as FormFactor;
-}
-
 function clampSpan(field: "colSpan" | "rowSpan", value: number, columns: number): number {
   return field === "colSpan" ? Math.min(Math.max(value, 1), columns) : Math.max(value, 1);
 }
@@ -44,7 +39,6 @@ function clampSpan(field: "colSpan" | "rowSpan", value: number, columns: number)
 export class CanvasEditorScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -320,9 +314,9 @@ export class CanvasEditorScreen extends LitElement {
     };
   }
 
-  #onCreateFormFactor(event: Event): void {
+  #onCreateFormFactor(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.createFormFactor = formFactorFromEvent(event);
+    this.createFormFactor = event.detail.value as FormFactor;
   }
 
   /** Nothing is written until Guardar. `structuredClone` keeps the shared `DEFAULT_CANVASES` template
@@ -619,11 +613,11 @@ export class CanvasEditorScreen extends LitElement {
     this.selection = { canvas: true };
   }
 
-  #onCanvasFormFactor(event: Event): void {
+  #onCanvasFormFactor(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     const draft = this.draft;
     if (draft === null) return;
-    this.#updateDraft({ ...draft, formFactor: formFactorFromEvent(event) });
+    this.#updateDraft({ ...draft, formFactor: event.detail.value as FormFactor });
   }
 
   // ── Save ─────────────────────────────────────────────────────────────────────────────────────────
@@ -769,16 +763,24 @@ export class CanvasEditorScreen extends LitElement {
     </li>`;
   }
 
-  /** With `selected` given, the matching option carries `?selected`; without it (the Crear dialog,
-   * whose `<select>` binds no value) the browser's first-option default stands, matching
-   * `createFormFactor`'s default. */
-  #renderFormFactorOptions(selected?: FormFactor): TemplateResult {
-    return html`${FORM_FACTORS.map(
-      (ff) =>
-        html`<option value=${ff} ?selected=${selected !== undefined && ff === selected}>
-          ${t(`canvas_editor.form_factor.${ff}` as StringKey)}
-        </option>`,
-    )}`;
+  #renderFormFactor(
+    testId: string,
+    value: FormFactor,
+    onChange: (event: CustomEvent<{ value: string }>) => void,
+  ): TemplateResult {
+    return html`<wt-combobox
+      class="field"
+      data-test=${testId}
+      name="formFactor"
+      label=${t("canvas_editor.form_factor_label")}
+      search="auto"
+      .options=${FORM_FACTORS.map((ff) => ({
+        value: ff,
+        label: t(`canvas_editor.form_factor.${ff}` as StringKey),
+      }))}
+      .value=${value}
+      @wt-change=${onChange}
+    ></wt-combobox>`;
   }
 
   #renderCreateDialog(): TemplateResult {
@@ -795,12 +797,9 @@ export class CanvasEditorScreen extends LitElement {
         .value=${this.createName}
         @wt-change=${this.#bindField("createName")}
       ></wt-input>
-      <label class="field"
-        >${t("canvas_editor.form_factor_label")}
-        <select data-test="create-form-factor" @change=${(e: Event) => this.#onCreateFormFactor(e)}>
-          ${this.#renderFormFactorOptions()}
-        </select>
-      </label>
+      ${this.#renderFormFactor("create-form-factor", this.createFormFactor, (e) =>
+        this.#onCreateFormFactor(e),
+      )}
       <wt-button
         slot="footer"
         variant="primary"
@@ -1068,16 +1067,9 @@ export class CanvasEditorScreen extends LitElement {
         .value=${this.draftName}
         @wt-change=${this.#bindField("draftName")}
       ></wt-input>
-      <label class="field"
-        >${t("canvas_editor.form_factor_label")}
-        <select
-          data-test="canvas-form-factor"
-          .value=${draft.formFactor}
-          @change=${(e: Event) => this.#onCanvasFormFactor(e)}
-        >
-          ${this.#renderFormFactorOptions(draft.formFactor)}
-        </select>
-      </label>
+      ${this.#renderFormFactor("canvas-form-factor", draft.formFactor, (e) =>
+        this.#onCanvasFormFactor(e),
+      )}
     </div>`;
   }
 

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
@@ -84,7 +85,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
     await flush(el);
     await vi.waitFor(() => {
-      if (!el.shadowRoot!.querySelector('select[name="home-layout-m-lunch"]'))
+      if (!el.shadowRoot!.querySelector('wt-combobox[name="home-layout-m-lunch"]'))
         throw new Error("layouts");
     });
     // The home page layout pickers are on screen, one holding a removed choice.
@@ -101,16 +102,15 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
     await vi.waitFor(() => {
-      if (!el.shadowRoot!.querySelector('select[name="home-layout-m-lunch"]'))
+      if (!el.shadowRoot!.querySelector('wt-combobox[name="home-layout-m-lunch"]'))
         throw new Error("layouts");
     });
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>(
-      'select[name="home-layout-m-lunch"]',
+    const select = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      'wt-combobox[name="home-layout-m-lunch"]',
     )!;
-    select.value = "l-counter";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await chooseOption(select, "l-counter");
     await vi.waitFor(() => {
-      if (!el.shadowRoot!.querySelector("#home-error-m-lunch")) throw new Error("refusal");
+      if (select.error === "") throw new Error("refusal");
     });
     await expectNoA11yViolations(host);
   });
