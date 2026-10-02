@@ -83,7 +83,11 @@ export class UnitsScreen extends LitElement {
         align-items: center;
       }
       .reassign wt-combobox {
-        min-width: 10rem;
+        flex: 0 1 calc(var(--wt-space-6) * 7);
+        min-width: 0;
+      }
+      .reassign wt-button {
+        flex: none;
       }
     `,
   ];
