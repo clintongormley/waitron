@@ -140,8 +140,8 @@ otherwise, then resolves whichever it picked against the locale it was asked for
 default content language — read from the staff map's one key, which both builders write under that
 language (`buildLineExtras`, and `optionSnapshotOf` in `apps/till/src/state/held-options.ts`) — then
 any language the map holds. The kitchen half
-does the same thing a function along, through `kitchenPresentationName`
-(`optionSnapshotLabels`, same file).
+(`optionSnapshotLabels`, same file) takes no language step: through `kitchenPresentationName` it
+prints the kitchen name and falls back to the staff map's one value.
 
 That customer-to-staff step is the exception the top of this file points at — the one place the
 rule is spelled out away from `product-presentation.ts`. A list and a label carry no variant, so
@@ -473,7 +473,8 @@ validation error opens itself and cannot be collapsed until the error is fixed �
 
 The main category is chosen in the editor itself, through the single-choice picker in
 `apps/dashboard/src/widgets/classification-fields.ts`.
-A variant shows its parent's main category as "Same as …". See
+A variant with no main category of its own shows its parent's as the dropdown's empty choice, in
+grey italic, or "Uncategorised" when the parent has none. See
 [Product categories](product-categories.md).
 
 ## One save, one transaction

@@ -81,7 +81,9 @@ the product.
 
 **Open** takes you to the variant's own page, where it can have its own VAT, main category,
 allergens and the other product details. Apart from the names, each detail you leave blank there
-shows the product's value greyed out as a hint, and the variant uses the product's value. The
+shows the product's value greyed out as a hint or, where the product has none, what will be used
+("None", "Uncategorised", "Each"; "Not yet reviewed" for allergens nobody has reviewed), and the variant
+uses the product's value. The
 description works as one value across all languages: to use the product's description, leave every
 language of the description blank. Once you write the description in one language, the variant uses
 only its own description, and the languages you left blank stay blank. The page has no Modifiers

@@ -745,7 +745,7 @@ the section. The option window (`option-label-form.ts`, A170), the product edito
 (`product-editor.ts`) and the variant form (`variant-form.ts`) already kept the two apart and are
 unchanged.
 
-**A name field's hint shows what a blank field will actually use (A172, owner 2026-10-01) — DONE.**
+**A name field's hint shows what a blank field will actually use (A172, owner 2026-10-01) — DONE (#1053).**
 Built in all five editors as the three bullets below ask, each hint following the field it copies
 as it is typed (`optionalTextFields`, `apps/dashboard/src/widgets/form-fields.ts`). Products and
 variants already fell back requested language → default language → Name (`resolveContentText`,
@@ -766,7 +766,7 @@ the value. The same everywhere."_), a variant's values taken from its parent dro
 the product editor's category, VAT, unit and course dropdowns and the allergen and dietary lines
 show the parent's value itself, and the variant table shows the product's price, all in grey
 italic; where the parent names nothing they show what will be used ("Uncategorised", the course's
-"— none —", "None", or "Not yet reviewed" for allergens the parent has not had reviewed). The
+"— none —", "Each" for the unit, "None", or "Not yet reviewed" for allergens the parent has not had reviewed). The
 photo caption ("Same as the main product's photo") stays: it is the only sign a photo is
 inherited.
 The owner: _"the kitchen name hint should be the name field, unless it has its own value. The main
@@ -1303,8 +1303,8 @@ every field is named on the line whether or not it has a value, e.g. "**Kitchen 
 **Course:** none", "**Allergens:** none specified · **Dietary preferences:** none specified". Build
 it with A200's product-editor decision above (each value after its bold field name, the
 Descriptors line one row per field), which this extends to the empty case. Choose the wording for
-"nothing set" once, in both languages; on a variant's page an empty value means "same as the
-parent" and must say so, as the fields themselves do.
+"nothing set" once, in both languages; on a variant's page an empty value shows the parent's
+value, as the fields themselves do (A172).
 
 **An Add course button beside the course dropdown (A212) — DECIDED, ready to build.** The owner:
 _"perhaps we should add an "Add course" button under Courses, which would open a modal to edit
@@ -1482,7 +1482,8 @@ till; the list form should mark that row.
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
 cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
 a chosen value rather than the grey prompt (the dropdown gives it the stand-in value `__each__`, and
-a save still stores no unit); a variant's "Same as …" keeps the grey look. **Seen while building,
+a save still stores no unit); a variant's "Same as …" keeps the grey look (since A172, #1053, 2026-10-02: the parent's
+value itself, still grey). **Seen while building,
 not changed:**
 
 - on a product of its own, the main category's "Uncategorised" and the course's "No course"

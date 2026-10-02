@@ -1015,7 +1015,9 @@ record's own value applies and its blank languages show no placeholder hint.
   first option has an empty value and reads as the fallback value itself, with no "Same as" before
   it (owner, 2026-10-02: "we just want to show the value"), e.g. "Reduced (10%)"; where the parent
   names nothing it reads as what will be used instead — `categories.uncategorised` for the main
-  category, `product.no_course` for the course, `editor.unit_each` for the unit. Its placeholder
+  category, `product.no_course` for the course, `editor.unit_each` for the unit; and where the parent names a category, course or unit the loaded
+  list lacks, it reads `editor.missing_choice` ("Unavailable selection"), while the VAT dropdown
+  shows the class's code. Its placeholder
   reads the same, in the combobox's grey italic, and is what it shows while the stored value is
   null; it has no separate hint line. A choice that means "none" on a record of its own
   (`editor.unit_each` for the unit and `product.no_course` for the course) is left out where the empty value already means "fall
