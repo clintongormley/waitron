@@ -30,6 +30,7 @@ import { createOpenOrder, fireCourse, fireLines, listStationQueue } from "./work
 import { reprintOrderTickets } from "./kitchen-print.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { routeProductTo } from "./testing/zone-offers.js";
+import { setStationFallback, setStationToday } from "@waitron/venue-service";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -100,6 +101,32 @@ async function deviceAt(
 }
 
 describe("device made-here stations", () => {
+  it("prints at the fallback when a made-here station closes by hand", async () => {
+    const venue = await setupVenue(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      const bar = await createStation(tx, venue.cfg, { name: "Bar" });
+      const downstairs = await createStation(tx, venue.cfg, { name: "Downstairs bar" });
+      await routeProductTo(tx, venue.cfg, venue.cafeId, bar.id);
+      await setStationFallback(tx, venue.cfg, bar.id, downstairs.id);
+      const downstairsPrinter = await stationPrinter(tx, venue.cfg.locationId, downstairs.id);
+      const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.cfg.tillId, bar.id);
+      await setStationToday(tx, venue.cfg, bar.id, "closed", new Date());
+      const orderId = randomUUID();
+      await createOpenOrder(tx, venue.cfg, orderId, [], null);
+      const lager = await rawLine(tx, orderId, venue.cafeId, 1);
+      await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [lager]);
+
+      const [item] = await tx
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, lager.id));
+      expect(item).toMatchObject({ stationId: downstairs.id, madeHere: false, state: "queued" });
+      expect(
+        await tx.select().from(printJobs).where(eq(printJobs.printerId, downstairsPrinter)),
+      ).toHaveLength(1);
+    });
+  });
+
   it("releases a made-here later-course drink immediately and never prints it on course fire or reprint", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {

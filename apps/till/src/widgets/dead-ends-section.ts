@@ -1,7 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
-import { selectStyles } from "../select-styles.js";
+import { baseStyles, selectStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import type { DeadEndAnswer } from "../api/client.js";
 import { trimQuantity } from "./dish-format.js";
