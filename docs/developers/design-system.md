@@ -899,9 +899,10 @@ it stays on the bottom left. A secondary action that belongs beside the primary 
 `secondary` slot. The row's message runs from the form's left edge only when the row is the form's
 full width. Where the row shares a line with something else, show the message with `formMessage`
 directly before that line, or let the row take the full width (in a `wt-modal`, the form width)
-while it has a message, as the Add printer dialog's address check does. The sign-in method screens
-put their primary action outside `wt-form-actions`, as a full-width button with the form's message
-on its own line directly above it (shown with `formMessage`); see the login section.
+while it has a message, as the Add printer dialog's address check does. The sign-in email,
+password, passkey and Google screens put their primary action outside `wt-form-actions`, as a
+full-width button with the form's message on its own line directly above it (shown with
+`formMessage`); see the login section.
 
 ```ts
 html`
@@ -1264,7 +1265,8 @@ directly above it. When there is any other way in, an **or** line follows, then 
 as a full-width outlined (`secondary`) button with a leading icon hidden from assistive technology:
 a key for **Use your password**, a person with a key for **Log in with passkey**, and Google's "G"
 for **Continue with Google** (`apps/dashboard/src/assets/google-g.svg`, so Google's colours stay out
-of the screen's styles). The email screen offers **Continue with Google** when the venue has Google
+of the screen's styles); neither the drawing nor Google's branding terms were checked against
+Google's own sources. The email screen offers **Continue with Google** when the venue has Google
 set up, because starting a Google sign-in takes no email; whether it shows depends on the venue's
 settings alone, so every visitor sees the same choices there. **I've forgotten my password** is a
 small link at the right directly under the password field, on the password screen only. On the code

@@ -968,7 +968,11 @@ describe("login-screen", () => {
     expect(
       el.shadowRoot!.querySelector("wt-button[variant=primary]")?.getAttribute("data-test"),
     ).toBe("submit");
-    expect(el.shadowRoot!.querySelector('wt-form-actions [slot="cancel"]')).toBeNull();
+    expect(
+      [...el.shadowRoot!.querySelectorAll("wt-button[variant=secondary]")].map((b) =>
+        b.getAttribute("data-test"),
+      ),
+    ).toEqual(["passkey-login", "google-login"]);
     await openPasskey(el);
     expect(
       el.shadowRoot!.querySelector("wt-button[variant=primary]")?.getAttribute("data-test"),
@@ -1205,7 +1209,8 @@ describe("login-screen", () => {
     await openPassword(el, "bea@x.com");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=reset-by-email]")!.click();
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=use-password]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=passkey-login]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=login-or]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=reset-sent]")?.textContent).toContain(
       "bea@x.com",
     );
@@ -1902,6 +1907,28 @@ describe("login-screen: password and second factor", () => {
       email: "clinton@example.com",
       password: "correct horse battery",
     });
+  });
+
+  it("keeps the code step and its code while the code's sign-in is pending", async () => {
+    const pending = deferred<{ personId: string }>();
+    const login = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "totp.required" })
+      .mockReturnValueOnce(pending.promise);
+    const { el } = await signInWithPassword({ login });
+    input(el, "one-time-code", "123456");
+    click(el, "submit-factor");
+    await el.updateComplete;
+    const back = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-test=back-to-password]",
+    )!;
+    expect(back.disabled).toBe(true);
+    back.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe(t("login.factor_heading"));
+    expect(field(el, "one-time-code").value).toBe("123456");
+    pending.resolve({ personId: "p1" });
+    await flush(el);
   });
 
   it("signs in with a recovery code, then asks for an authenticator code before adding a passkey", async () => {
@@ -3260,6 +3287,84 @@ describe("login-screen: Google on the first page", () => {
     expect(go.disabled).toBe(true);
     begin.resolve({ authorizationUrl: "https://accounts.google.test/login" });
     await flush(el);
+  });
+
+  it("does not sign in with an autofilled passkey the browser returns after Google was chosen", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const got = deferred<Credential | null>();
+    vi.mocked(navigator.credentials.get).mockReturnValueOnce(got.promise);
+    const api = stubApi();
+    const navigate = vi.fn();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, navigate });
+    const loggedIn = vi.fn();
+    el.addEventListener("logged-in", loggedIn);
+    await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalledTimes(1));
+    const { signal } = vi.mocked(navigator.credentials.get).mock.calls[0]![0]!;
+    await flush(el);
+    click(el, "google-login");
+    await flush(el);
+    expect(navigate).toHaveBeenCalledExactlyOnceWith("https://accounts.google.test/login");
+    expect(signal!.aborted).toBe(true);
+    got.resolve(passkeyCredential());
+    await flush(el);
+    expect(api.passkeyAuthVerify).not.toHaveBeenCalled();
+    expect(loggedIn).not.toHaveBeenCalled();
+  });
+
+  it("does not sign in when an autofilled passkey is confirmed after Google was chosen", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const verified = deferred<{ personId: string }>();
+    const api = stubApi({ passkeyAuthVerify: vi.fn().mockReturnValue(verified.promise) });
+    const navigate = vi.fn();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, navigate });
+    const loggedIn = vi.fn();
+    el.addEventListener("logged-in", loggedIn);
+    await vi.waitFor(() => expect(api.passkeyAuthVerify).toHaveBeenCalled());
+    await flush(el);
+    click(el, "google-login");
+    await flush(el);
+    expect(navigate).toHaveBeenCalledExactlyOnceWith("https://accounts.google.test/login");
+    verified.resolve({ personId: "p9" });
+    await flush(el);
+    expect(loggedIn).not.toHaveBeenCalled();
+  });
+
+  it("ignores Google while the passkey page's own prompt is pending", async () => {
+    const got = deferred<Credential | null>();
+    vi.mocked(navigator.credentials.get).mockReturnValueOnce(got.promise);
+    const api = stubApi();
+    const navigate = vi.fn();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, navigate });
+    const loggedIn = vi.fn();
+    el.addEventListener("logged-in", loggedIn);
+    await flush(el);
+    await openPasskey(el);
+    click(el, "passkey-login");
+    await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalledTimes(1));
+    await el.updateComplete;
+    click(el, "google-login");
+    await flush(el);
+    expect(api.beginGoogleLogin).not.toHaveBeenCalled();
+    got.resolve(passkeyCredential());
+    await vi.waitFor(() => expect(loggedIn).toHaveBeenCalledTimes(1));
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("offers passkey autofill again, never a passkey prompt, when Google cannot be started", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    vi.mocked(navigator.credentials.get).mockImplementation(never);
+    const api = stubApi({
+      beginGoogleLogin: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalledTimes(1));
+    await flush(el);
+    click(el, "google-login");
+    await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalledTimes(2));
+    for (const [request] of vi.mocked(navigator.credentials.get).mock.calls)
+      expect(request).toEqual(expect.objectContaining({ mediation: "conditional" }));
+    expect(await bottomOf(el)).toBe(codeMessage("connection.failed"));
+    expect(field(el, "email")).not.toBeNull();
   });
 
   it("with Remember ticked, carries the consent to Google without an email", async () => {

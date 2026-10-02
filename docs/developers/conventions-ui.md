@@ -26,7 +26,8 @@ submission until resolved — no current form embeds one (person-edit.ts's own c
 to the row's kebab menu as a separate `wt-dialog`, outside any form, on `ui-overhaul`), so there is
 no live instance to point at, but the shape can recur the next time a confirmation lands inside a
 form rather than beside one. `wt-form-actions` keeps the primary action bottom-right and Cancel/Back
-bottom-left; the sign-in method screens put their primary action outside it, full width
+bottom-left; the sign-in email, password, passkey and Google screens put their primary action
+outside it, full width
 (design-system.md, login section). Optional field
 explanations use `wt-help-tooltip`, whose button closes on outside click or Escape. Cost: the dashboard login exposed `wt-input-N` to password safes and disabled incomplete
 forms without saying what was missing (`ui-login`, owner review 2026-09-09).

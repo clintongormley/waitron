@@ -566,6 +566,8 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
 9. **Operator utilities** — `backup-screen.ts`, `diagnostics-screen.ts`, `email-screen.ts`.
 10. **Login** — `login-screen.ts`, which already carries the owner's own review from 2026-09-09
     (CLAUDE.md §3, the `ui-login` findings). Fold those corrections in rather than restyle it twice.
+    A191 (2026-10-03) put every sign-in step in a card; the email, password, passkey and Google
+    steps put their one primary button outside the action row (design-system.md, login section).
 
 The till (`apps/till`) and the setup wizard (`apps/setup`) are separate apps drawing on the same
 shared components. Whether they follow in this pass or later is open — decide it before the

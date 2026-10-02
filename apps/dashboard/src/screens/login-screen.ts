@@ -884,6 +884,8 @@ export class LoginScreen extends LitElement {
 
   async #googleLogin(): Promise<void> {
     if (this.busy) return;
+    // The email step's autofill passkey would otherwise sign in after Google was chosen.
+    this.#cancelPasskeyCeremony();
     this.busy = true;
     this.errorKey = null;
     try {
@@ -893,6 +895,7 @@ export class LoginScreen extends LitElement {
       this.navigate(authorizationUrl);
     } catch (error) {
       this.errorKey = codeOf(error);
+      if (this.isConnected && this.step === "email") void this.#conditionalPasskeyLogin();
     } finally {
       this.busy = false;
     }
@@ -940,7 +943,6 @@ export class LoginScreen extends LitElement {
     </wt-input>`;
   }
 
-  /** A small link under a field, at the form's right edge. */
   #fieldLink(id: string, label: string, action: () => void) {
     return html`<div class="field-link">
       <a
@@ -969,7 +971,6 @@ export class LoginScreen extends LitElement {
     >`;
   }
 
-  /** Every way in other than the step's own, under "or"; nothing when there is none. */
   #otherWays() {
     const password = this.#otherWay(
       "use-password",
@@ -1014,7 +1015,6 @@ export class LoginScreen extends LitElement {
       <div class="other-ways">${others}</div>`;
   }
 
-  /** The form's one message, on its own line directly above the step's own way in. */
   #methodActions(primary: TemplateResult, message: string) {
     return html`${formMessage(message)}${primary}${this.#otherWays()}`;
   }
@@ -1419,6 +1419,7 @@ export class LoginScreen extends LitElement {
                               data-test="back-to-password"
                               ?disabled=${this.busy}
                               @click=${() => {
+                                if (this.busy) return;
                                 this.secondFactor = "";
                                 this.errorKey = null;
                                 this.step = "password";
