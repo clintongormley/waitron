@@ -856,6 +856,21 @@ it("hints each blank name with what it falls back to, following the fields it co
   expect(hints()).toEqual(["Toppings", "Toppings", "Toppings"]);
 });
 
+it("never hints a customer-facing name with the kitchen name, which keeps its own text", async () => {
+  const { el } = await mount({ value: { ...addons, customerName: {} } });
+  const input = (name: string) => field<HTMLElementTagNameMap["wt-input"]>(el, name);
+  const hints = () =>
+    ["customer-name-en", "customer-name-es"].map((name) => input(name).placeholder);
+
+  expect(input("kitchen-name").value).toBe("ADD");
+  expect(hints()).toEqual(["Add-ons", "Add-ons"]);
+  await type(el, "customer-name-en", "Make it yours");
+  expect(hints()).toEqual(["Add-ons", "Make it yours"]);
+  await type(el, "kitchen-name", "EXTRAS");
+  expect(input("kitchen-name").value).toBe("EXTRAS");
+  expect(hints()).toEqual(["Add-ons", "Make it yours"]);
+});
+
 it("lists the customer-facing names in the closed section's line, but not the kitchen name", async () => {
   const { el } = await mount({ value: addons });
 

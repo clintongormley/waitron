@@ -115,6 +115,20 @@ it("hints each blank name with what it falls back to, following the fields it co
   expect(hints()).toEqual(["Blue", "Blue", "Blue"]);
 });
 
+it("never hints a customer-facing name with the kitchen name, which keeps its own text", async () => {
+  const { el } = await mount({ value: { ...rare, customerName: {} } });
+  const hints = () =>
+    ["label-customer-name-en", "label-customer-name-es"].map((name) => field(el, name).placeholder);
+
+  expect(field(el, "label-kitchen-name").value).toBe("R");
+  expect(hints()).toEqual(["Rare", "Rare"]);
+  await type(el, "label-customer-name-en", "Barely cooked");
+  expect(hints()).toEqual(["Rare", "Barely cooked"]);
+  await type(el, "label-kitchen-name", "BLEU");
+  expect(field(el, "label-kitchen-name").value).toBe("BLEU");
+  expect(hints()).toEqual(["Rare", "Barely cooked"]);
+});
+
 it.each([
   ["Edit option", rare],
   ["Add option", null],

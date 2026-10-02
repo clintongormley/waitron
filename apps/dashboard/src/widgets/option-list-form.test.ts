@@ -398,6 +398,20 @@ it("hints each blank name with what it falls back to, following the fields it co
   expect(hints()).toEqual(["Doneness", "Doneness", "Doneness"]);
 });
 
+it("never hints a customer-facing name with the kitchen name, which keeps its own text", async () => {
+  const { el } = await mount({ value: { ...cooked, customerName: {} } });
+  const hints = () =>
+    ["customer-name-en", "customer-name-es"].map((name) => field(el, name).placeholder);
+
+  expect(field(el, "kitchen-name").value).toBe("COOK");
+  expect(hints()).toEqual(["Cooked", "Cooked"]);
+  await type(el, "customer-name-en", "How would you like it?");
+  expect(hints()).toEqual(["Cooked", "How would you like it?"]);
+  await type(el, "kitchen-name", "STEAK");
+  expect(field(el, "kitchen-name").value).toBe("STEAK");
+  expect(hints()).toEqual(["Cooked", "How would you like it?"]);
+});
+
 it("lists the customer-facing names in the closed section's line, but not the kitchen name", async () => {
   const { el } = await mount({ value: cooked });
 

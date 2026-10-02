@@ -107,6 +107,17 @@ it("hints an existing variant's blank names with its own name", async () => {
   expect(nameHints(el)).toEqual(["Media", "Media", "Media"]);
 });
 
+it("never hints a customer-facing name with the kitchen name, which keeps its own text", async () => {
+  const el = await mountForm({ value: { ...halfPortion, customerName: null } });
+  expect(field(el, "kitchenName").value).toBe("1/2 RAC");
+  expect(nameHints(el).slice(1)).toEqual(["Media", "Media"]);
+  await change(el, "customerName-es", "Media ración");
+  expect(nameHints(el).slice(1)).toEqual(["Media", "Media ración"]);
+  await change(el, "kitchenName", "MEDIA");
+  expect(field(el, "kitchenName").value).toBe("MEDIA");
+  expect(nameHints(el).slice(1)).toEqual(["Media", "Media ración"]);
+});
+
 it("marks the name as required and leaves the price and the optional names unmarked", async () => {
   const el = await mountForm();
   expect(field(el, "name").required).toBe(true);

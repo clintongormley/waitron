@@ -32,8 +32,9 @@ export function optionSnapshotLabels(snapshots: readonly OptionSnapshot[]): stri
 
 /**
  * The DINER's wording. Each side takes its customer text in `locale`, then in the venue's default
- * content language, and falls back to the STAFF name, never to the kitchen name, which is a cook's
- * shorthand and identifies the goods to nobody else.
+ * content language, then in any other stored language, and falls back to the STAFF name only when
+ * it has no customer text at all, never to the kitchen name, which is a cook's shorthand and
+ * identifies the goods to nobody else.
  *
  * The default is read from the staff map's one key: both builders key it by the default content
  * language at the time the answer was frozen (`apps/server/src/modifier-selection.ts`,

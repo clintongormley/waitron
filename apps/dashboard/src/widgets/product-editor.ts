@@ -193,8 +193,9 @@ function emptyDraft(): ProductEditorDraft {
  * in this form's own submitted value.
  *
  * Opened on a VARIANT (its read carries `inherited`), the same form is the variant's own page: every
- * field the variant may leave blank shows blank, with the parent's value as its hint, and there is
- * no Standalone ordering, Modifiers or Variants section.
+ * field the variant may leave blank shows blank, with the parent's value as its hint except the
+ * kitchen and customer-facing names, which hint the variant's own names, never the parent's; and
+ * there is no Standalone ordering, Modifiers or Variants section.
  */
 @customElement("dashboard-product-editor")
 export class ProductEditor extends LitElement {

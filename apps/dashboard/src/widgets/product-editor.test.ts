@@ -2413,6 +2413,24 @@ it("hints a product's blank names with what they fall back to, following the fie
   expect(nameHints(el, ["en", "es"])).toEqual(["Espresso", "Espresso", "Espresso"]);
 });
 
+it("never hints a product's customer-facing names with its kitchen name, which keeps its own text", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, customerName: null },
+    locales: ["en", "es"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const kitchenName = () => control<{ value: string }>(el, "kitchen-name").value;
+  expect(kitchenName()).toBe("BAR");
+  expect(nameHints(el, ["en", "es"]).slice(1)).toEqual(["Coffee", "Coffee"]);
+  await input(el, "customer-name-en", "House coffee");
+  expect(nameHints(el, ["en", "es"]).slice(1)).toEqual(["Coffee", "House coffee"]);
+  await input(el, "kitchen-name", "ESPRESSO BAR");
+  expect(kitchenName()).toBe("ESPRESSO BAR");
+  expect(nameHints(el, ["en", "es"]).slice(1)).toEqual(["Coffee", "House coffee"]);
+});
+
 it("hints a variant's blank names on its own page with the variant's name", async () => {
   const el = await mountVariant({ ...glass, customerName: null, kitchenName: null });
   expect(nameHints(el, ["en"])).toEqual(["Glass of coffee", "Glass of coffee"]);
