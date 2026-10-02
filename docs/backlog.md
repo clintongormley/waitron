@@ -767,8 +767,8 @@ the product editor's category, VAT, unit and course dropdowns and the allergen a
 show the parent's value itself, and the variant table shows the product's price, all in grey
 italic; where the parent names nothing they show what will be used ("Uncategorised", the course's
 "— none —", "Each" for the unit, "None", or "Not yet reviewed" for allergens the parent has not had reviewed). The
-photo caption ("Same as the main product's photo") stays: it is the only sign a photo is
-inherited.
+photo now shows without a "Same as" caption too (A172b — DONE, owner 2026-10-02); its alt text still
+names the main product's photo.
 The owner: _"the kitchen name hint should be the name field, unless it has its own value. The main
 language name hint should be the name field, and the secondary languages should be the main
 language name"_. A field's hint is its placeholder (CLAUDE.md §3, Forms), so it shows only while

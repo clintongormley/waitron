@@ -1022,16 +1022,15 @@ record's own value applies and its blank languages show no placeholder hint.
   null; it has no separate hint line. A choice that means "none" on a record of its own
   (`editor.unit_each` for the unit and `product.no_course` for the course) is left out where the empty value already means "fall
   back": offering both would read as one thing and save as another.
-- **Any other control** (the allergen and dietary picker, an image): a muted hint line beside it
+- **The allergen and dietary pickers**: a muted hint line beside each
   shows the fallback value while the stored value is empty, and goes away once the record sets its
   own. The allergen and dietary lines name the values in grey italic ("Allergens: Milk"), "None"
   where the parent has none (`editor.allergens_none`, `editor.diet_none`) and, for allergens the
   parent has not had reviewed, "Not yet reviewed" (`editor.allergens_unreviewed`) — never "None",
   which would claim a reviewed empty set. A variant's price in the variant table, where it has none of
-  its own, is the product's price in the same grey italic. An image keeps its caption, "Same as the
-  main product's photo" (`editor.inherited_image`), and shows the fallback picture itself under it
-  (`dashboard-image-upload`'s `inheritedImage`), with no Remove action, because there is nothing of
-  the record's own to remove. A control whose empty state could also mean "none" (an allergen set,
+  its own, is the product's price in the same grey italic. An image shows the fallback picture itself
+  (`dashboard-image-upload`'s `inheritedImage`) without a caption or Remove action; its alt text names
+  the main product's photo (`editor.inherited_image_alt`). A control whose empty state could also mean "none" (an allergen set,
   a dietary set) saves an emptied choice as `null` — "falls back" — never as an empty set, which
   would declare the record free of what the fallback contains.
 
