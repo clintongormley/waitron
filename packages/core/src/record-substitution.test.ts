@@ -652,3 +652,25 @@ it("rejects repeated line numbers in a multi-ticket substitution without recordi
   expect(await countRows("sales")).toBe(before);
   expect(await countRows("sale_substitutions")).toBe(0);
 });
+
+it("stores no corrected line on a substitution's line, even when the caller names one", async () => {
+  const backend = new FakeFiscalBackend(suite.db);
+  const original = await sellTicket(backend);
+  const [ticketLine] = await suite.db
+    .select({ id: saleLines.id })
+    .from(saleLines)
+    .where(eq(saleLines.saleId, original.saleId));
+
+  const lines = substitutionInput([original.saleId]).lines.map((line) => ({
+    ...line,
+    correctsLineId: ticketLine!.id,
+  }));
+  const { saleId } = await substitute(backend, [original.saleId], { lines });
+
+  const saved = await suite.db
+    .select({ correctsLineId: saleLines.correctsLineId })
+    .from(saleLines)
+    .where(eq(saleLines.saleId, saleId));
+  expect(saved.every((line) => line.correctsLineId === null)).toBe(true);
+  expect(saved.length).toBeGreaterThan(0);
+});

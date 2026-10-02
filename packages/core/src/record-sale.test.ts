@@ -1480,7 +1480,7 @@ describe("recordSale — what each line sold and how it was classified", () => {
       sql`select name from pragma_table_info('sale_lines')`,
     );
     expect(tableColumns.map((c) => c.name).sort()).toEqual(
-      [...PRE_EXISTING, ...NEW, "id", "sale_id"].sort(),
+      [...PRE_EXISTING, ...NEW, "corrects_line_id", "id", "sale_id"].sort(),
     );
 
     const fake = new FakeFiscalBackend(suite.db);
@@ -1547,4 +1547,22 @@ describe("recordSale — what each line sold and how it was classified", () => {
       1,
     ]);
   });
+});
+
+it("stores no corrected line on an ordinary sale's line, even when the caller names one", async () => {
+  const backend = new FakeFiscalBackend(suite.db);
+  const earlier = await run(backend);
+  const [earlierLine] = await suite.db
+    .select({ id: saleLines.id })
+    .from(saleLines)
+    .where(eq(saleLines.saleId, earlier.saleId));
+
+  const lines = input().lines.map((line) => ({ ...line, correctsLineId: earlierLine!.id }));
+  const { saleId } = await run(backend, { lines });
+
+  const saved = await suite.db
+    .select({ correctsLineId: saleLines.correctsLineId })
+    .from(saleLines)
+    .where(eq(saleLines.saleId, saleId));
+  expect(saved.map((line) => line.correctsLineId)).toEqual([null, null]);
 });

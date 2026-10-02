@@ -63,6 +63,14 @@ declare module "@waitron/shared" {
       linesGross: string | null;
       breakdownGross: string;
     };
+    /** Thrown by `recordCorrection` when the corrective line `lineNo` names, as the line it
+     * reverses or adjusts, `correctsLineId`, which is not a line of the invoice `saleId` being
+     * corrected. Refused before a number is allocated. */
+    "sale.correction_line_not_on_invoice": {
+      saleId: string;
+      lineNo: number;
+      correctsLineId: string;
+    };
     /** Registered, but nothing throws it: no path translates a `sales_series_invoice_number_key`
      * violation into this code. */
     "sale.number_reused": { seriesId: string; invoiceNumber: number };

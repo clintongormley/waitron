@@ -62,6 +62,7 @@ describe("saleLineRows", () => {
       menuVersionId: null,
       lineGross: null,
       classification: null,
+      correctsLineId: null,
     });
   });
 
@@ -135,6 +136,7 @@ describe("saleLineRows", () => {
       menuVersionId: null,
       lineGross: null,
       classification: null,
+      correctsLineId: null,
     });
   });
 

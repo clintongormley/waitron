@@ -2851,9 +2851,17 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     - **`GET /api/cancel-credit-authorizers` (B33) lists the active holders of `sale.rectify`.**
       Every role holding `sale.rectify` today also holds `sale.refund`, `sale.void` and
       `cash.drawer`, so its cases cannot tell which of those it reads.
-    - **A credit note's lines do not record which invoice line each one reverses** — no column
-      holds that link, so a credit note cannot be traced back line by line. Storing it on every
-      corrective line `recordCorrection` writes is queued as C132 (owner, 2026-10-02), moved to lane B.
+    - **Done by C132 (2026-10-02): a credit note's line names the invoice line it reverses.**
+      `sale_lines.corrects_line_id` (core migration `0069_sale_line_corrects`, a foreign key to
+      `sale_lines.id`) holds, on a corrective invoice's line, the original line it reverses or
+      adjusts; it is null on an ordinary sale's line, on a substitution's, and on a corrective line
+      that names none. The whole-order cancel fills it on every reversing line, extras picks
+      included (`reversedLines`, `apps/server/src/cancel-credit.ts`). `recordCorrection` refuses a
+      line naming a line that is not on the invoice it corrects with
+      `sale.correction_line_not_on_invoice`, before a number is allocated. No report reads the link
+      yet. Open: neither of `recordCorrection`'s modes requires a line to name one, so a
+      whole-invoice credit from a future caller can still leave it null; whether whole-invoice mode
+      should require it is the owner's to decide.
     - **A fully credited bill's original invoice can still be reprinted**, from the till and from
       the dashboard; the server allows it. Whether a reprint should say the invoice was credited is
       not decided.

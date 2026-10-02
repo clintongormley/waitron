@@ -421,6 +421,41 @@ describe("cancelling a placed order whose invoice was issued", () => {
     );
   });
 
+  it("names, on each credit-note line, the invoice line with the same number that it reverses", async () => {
+    const id = await placed([
+      { name: "Caña", quantity: "2" },
+      {
+        name: "Café",
+        quantity: "1",
+        extras: [
+          { listId: extraListId, picks: [{ productId: productIdOf("Leche"), quantity: 2 }] },
+        ],
+      },
+    ]);
+    const original = await invoiceOf(id);
+
+    expect((await cancel(id)).status).toBe(200);
+
+    const [credit] = await creditsOf(original.id);
+    const linksOf = (saleId: string) =>
+      inTx(venue, (tx) =>
+        tx
+          .select({
+            id: saleLines.id,
+            lineNo: saleLines.lineNo,
+            correctsLineId: saleLines.correctsLineId,
+          })
+          .from(saleLines)
+          .where(eq(saleLines.saleId, saleId))
+          .orderBy(saleLines.lineNo),
+      );
+    const invoiced = await linksOf(original.id);
+    expect(invoiced).toHaveLength(3);
+    expect((await linksOf(credit!.id)).map((line) => [line.lineNo, line.correctsLineId])).toEqual(
+      invoiced.map((line) => [line.lineNo, line.id]),
+    );
+  });
+
   it("refuses an operator without sale.rectify and no override, writing nothing and using no invoice number", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
 

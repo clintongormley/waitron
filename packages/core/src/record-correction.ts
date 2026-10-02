@@ -87,8 +87,10 @@ export interface RecordCorrectionInput {
  * derived breakdown's `sale.total_mismatch` refusal comes before all three; a whole-invoice
  * credit's refusals come after the gate and `sale.correction_exceeds_total`, because they read
  * what is on the invoice, and before the number, a line value the converters refuse (overflow,
- * or not a decimal) included. A failed integrity check records an incident and the correction
- * proceeds anyway.
+ * or not a decimal) included. A line naming, as the line it reverses, one that is not on the
+ * invoice being corrected is refused with `sale.correction_line_not_on_invoice` after all of those
+ * and before the number. A failed integrity check records an incident and the correction proceeds
+ * anyway.
  */
 export async function recordCorrection(
   tx: Transaction,
@@ -195,7 +197,28 @@ export async function recordCorrection(
   // A whole-invoice credit converts its lines before a number is allocated, so a line value the
   // converters refuse (overflow, or not a decimal) is refused with nothing written; the sale's id
   // is filled in once it exists.
-  const wholeLineRows = input.wholeInvoice === true ? saleLineRows("", input.lines) : undefined;
+  const wholeLineRows =
+    input.wholeInvoice === true ? saleLineRows("", input.lines, { corrective: true }) : undefined;
+
+  if (input.lines.some((line) => line.correctsLineId != null)) {
+    const onInvoice = new Set(
+      (
+        await tx
+          .select({ id: saleLines.id })
+          .from(saleLines)
+          .where(eq(saleLines.saleId, input.correctsSaleId))
+      ).map((row) => row.id),
+    );
+    for (const line of input.lines) {
+      if (line.correctsLineId != null && !onInvoice.has(line.correctsLineId)) {
+        throw new AppError("sale.correction_line_not_on_invoice", {
+          saleId: input.correctsSaleId,
+          lineNo: line.lineNo,
+          correctsLineId: line.correctsLineId,
+        });
+      }
+    }
+  }
 
   // Nothing branches on `verification.ok`: a failed check records one incident carrying every
   // issue, once `saleId` exists, and the correction is chained anyway.
@@ -267,7 +290,10 @@ export async function recordCorrection(
 
   await tx
     .insert(saleLines)
-    .values(wholeLineRows?.map((row) => ({ ...row, saleId })) ?? saleLineRows(saleId, input.lines));
+    .values(
+      wholeLineRows?.map((row) => ({ ...row, saleId })) ??
+        saleLineRows(saleId, input.lines, { corrective: true }),
+    );
 
   const [location] = await tx
     .select({ operationDescription: locations.operationDescription })

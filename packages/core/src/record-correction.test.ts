@@ -1113,3 +1113,91 @@ it("persists the frozen options answers and child links on the issued lines", as
   expect(saved[1]!.parentLineId).toBe(saved[0]!.id);
   expect(saved.map((line) => line.category)).toEqual(["Drinks", "Drinks"]);
 });
+
+describe("recordCorrection — a corrective line names the invoice line it reverses", () => {
+  /** The original sale's line ids, by line number. */
+  async function lineIdsOf(saleId: SaleId): Promise<Map<number, string>> {
+    const rows = await suite.db
+      .select({ id: saleLines.id, lineNo: saleLines.lineNo })
+      .from(saleLines)
+      .where(eq(saleLines.saleId, saleId));
+    return new Map(rows.map((row) => [row.lineNo, row.id]));
+  }
+
+  async function linksOf(saleId: SaleId): Promise<(string | null)[]> {
+    const rows = await suite.db
+      .select({ correctsLineId: saleLines.correctsLineId })
+      .from(saleLines)
+      .where(eq(saleLines.saleId, saleId))
+      .orderBy(saleLines.lineNo);
+    return rows.map((row) => row.correctsLineId);
+  }
+
+  it("stores the original line a partial correction's line names", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+    const coffee = (await lineIdsOf(originalId)).get(1)!;
+
+    const [line] = credit("0.83", "-1.00").lines!;
+    const { saleId } = await correct(backend, originalId, {
+      total: "-1.00",
+      lines: [{ ...line!, correctsLineId: coffee }],
+    });
+
+    expect(await linksOf(saleId)).toEqual([coffee]);
+  });
+
+  it("stores each original line a whole-invoice credit's lines name", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+    const ids = await lineIdsOf(originalId);
+
+    const lines = correctionInput(originalId).lines.map((line) => ({
+      ...line,
+      correctsLineId: ids.get(line.lineNo)!,
+    }));
+    const { saleId } = await correct(backend, originalId, { wholeInvoice: true, lines });
+
+    expect(await linksOf(saleId)).toEqual([ids.get(1), ids.get(2)]);
+  });
+
+  it("stores no link on a line that names none", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+
+    const { saleId } = await correct(backend, originalId);
+
+    expect(await linksOf(saleId)).toEqual([null, null]);
+  });
+
+  it.each([false, true])(
+    "refuses a line naming a line of another invoice, writing nothing (whole invoice: %s)",
+    async (wholeInvoice) => {
+      const backend = new FakeFiscalBackend(suite.db);
+      const { saleId: originalId } = await sell(backend);
+      const { saleId: otherId } = await sell(backend);
+      const elsewhere = (await lineIdsOf(otherId)).get(2)!;
+      const ids = await lineIdsOf(originalId);
+      const lines = correctionInput(originalId).lines.map((line) => ({
+        ...line,
+        correctsLineId: line.lineNo === 2 ? elsewhere : ids.get(line.lineNo)!,
+      }));
+      const next = await rectSeriesNext();
+      const filed = (await backend.recordsFor(nodeId)).length;
+
+      await withTransaction(suite.db, async (tx) => {
+        await expect(
+          recordCorrection(tx, backend, correctionInput(originalId, { wholeInvoice, lines })),
+        ).rejects.toMatchObject({
+          code: "sale.correction_line_not_on_invoice",
+          params: { saleId: originalId, lineNo: 2, correctsLineId: elsewhere },
+        });
+      });
+
+      expect(await countCorrectives(originalId)).toBe(0);
+      expect(await rectSeriesNext()).toBe(next);
+      expect((await backend.recordsFor(nodeId)).length).toBe(filed);
+      expect(await countRows("sale_lines")).toBe(4);
+    },
+  );
+});

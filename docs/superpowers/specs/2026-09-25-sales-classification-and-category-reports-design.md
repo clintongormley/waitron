@@ -162,6 +162,10 @@ The rules follow what the existing reports already do (`packages/reporting/src/b
     copy each original line's `classification`, `productId`, `parentProductId`, `menuId`,
     `menuVersionId` and names, but name no original line: `sale_lines` has no column for it.
     Whether the "name that line" half is still owed is an open question for the owner.)_
+    _(2026-10-02, C132: `sale_lines.corrects_line_id` now names, on a corrective line, the original
+    line it reverses; the whole-order cancel fills it on every reversing line, and
+    `recordCorrection` refuses a line naming one that is not on the invoice it corrects
+    (`sale.correction_line_not_on_invoice`). Neither mode requires it, and no report reads it yet.)_
   - A delta line adding something new is classified when it is recorded.
   - Corrections count on the day they are issued, netting with their signed figures, as every
     existing report does.

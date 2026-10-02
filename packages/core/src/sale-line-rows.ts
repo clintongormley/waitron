@@ -6,9 +6,14 @@ import type { RecordSaleLine } from "./record-sale.js";
  * The `sale_lines` insert, and the only place a line's decimal literals become the whole numbers
  * those columns store, each at its own scale: amounts in cents, `quantity` in thousandths
  * (0.005 kg is 5), `vatRate` in basis points (21.00% is 2100). The fiscal breakdown is never built
- * from these rows. A child line's parent is resolved within the new sale.
+ * from these rows. A child line's parent is resolved within the new sale. A line's `correctsLineId`
+ * is stored only for a corrective invoice (`corrective`); any other sale's line stores null.
  */
-export function saleLineRows(saleId: string, lines: readonly RecordSaleLine[]) {
+export function saleLineRows(
+  saleId: string,
+  lines: readonly RecordSaleLine[],
+  { corrective = false }: { corrective?: boolean } = {},
+) {
   const ids = lines.map(() => randomUUID());
   const byLineNo = new Map(lines.map((line, index) => [line.lineNo, ids[index]!]));
   return lines.map((line, index) => ({
@@ -36,5 +41,6 @@ export function saleLineRows(saleId: string, lines: readonly RecordSaleLine[]) {
     menuVersionId: line.menuVersionId ?? null,
     lineGross: line.lineGross == null ? null : stringToCents(line.lineGross),
     classification: line.classification ?? null,
+    correctsLineId: corrective ? (line.correctsLineId ?? null) : null,
   }));
 }

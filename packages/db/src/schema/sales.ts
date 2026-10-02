@@ -196,6 +196,9 @@ export const saleLines = table(
     // The line's VAT-inclusive total, beside `line_total`'s net base.
     lineGross: money("line_gross"),
     classification: json<SaleLineClassification>("classification"),
+    // On a corrective invoice's line, the original invoice line it reverses or adjusts. NULL on an
+    // ordinary sale's line and on a corrective line that names none.
+    correctsLineId: id("corrects_line_id"),
   },
   (t) => [
     foreignKey({
@@ -207,6 +210,11 @@ export const saleLines = table(
       columns: [t.parentLineId],
       foreignColumns: [t.id],
       name: "sale_lines_parent_fk",
+    }),
+    foreignKey({
+      columns: [t.correctsLineId],
+      foreignColumns: [t.id],
+      name: "sale_lines_corrects_fk",
     }),
     unique("sale_lines_line_no_key").on(t.saleId, t.lineNo),
     check(
