@@ -4657,7 +4657,7 @@ approved.
   the two weaknesses the new guard states about itself: it reads text, and it judges a file rather
   than a call chain.
 
-- **No comment or test title names a PostgreSQL SQLSTATE as today's behaviour — DONE (C127).**
+- **No comment or test title names a PostgreSQL SQLSTATE as today's behaviour — DONE (C127, #1036).**
   Still unprobed: the remaining "not a 500" titles across the `apps/server` route suites, which name
   no engine.
 
@@ -4698,7 +4698,7 @@ approved.
   if there is none, say so in the comment and stop calling the case a guard test.
 - *Small:* `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
   output line is read by no consumer.
-- **The topic files no longer describe PostgreSQL as current — DONE (C127).**
+- **The topic files no longer describe PostgreSQL as current — DONE (C127, #1036).**
 
 ---
 
