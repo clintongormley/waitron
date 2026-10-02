@@ -378,6 +378,7 @@ describe("editing split-off extras", () => {
       const after = await slips(tx, venue.printers.fryer);
       expect(after).toHaveLength(before + 1);
       expect(after.at(-1)).toContain("+2");
+      expect(after.at(-1)).toContain("CHIPS");
       expect(await slips(tx, venue.printers.grill)).toEqual([]);
     });
   });
