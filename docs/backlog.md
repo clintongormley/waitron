@@ -1404,7 +1404,11 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   together: deleting a printed resend brings back the "in trouble" state of the job it copied (for
   a resend of a till Reprint, also the original kitchen ticket's alert and the table's problem that
   it cleared), and deleting a chain's first job while a resend still names it is refused by the
-  `resend_of` key (read, not run).
+  `resend_of` key (read, not run). A receipt copy now adds an append-only `receipt_reprints` row
+  with a required `print_job_id` key using `ON DELETE RESTRICT`
+  (`packages/db/src/schema/receipt-reprints.ts`); include that audit link when designing retention.
+  Whether a future replication drain can carry the audit row to a node without its print job is
+  unverified and needs a test when that drain is built.
 - **Printing A4 invoices on an office printer** (owner, 2026-09-14): a separate design, not started.
   It reverses the 2026-09-09 provisioning design's "raw ESC/POS only" decision and needs an A4
   invoice layout, a way to send a PDF to the printer over IPP (the standard office printing protocol,
