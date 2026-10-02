@@ -892,7 +892,6 @@ export interface Till {
   label: string;
   locationId: string;
   receiptPrinterId: string | null;
-  /** Whether this till opens its receipt printer's cash drawer. */
   opensDrawer: boolean;
 }
 

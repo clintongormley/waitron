@@ -982,11 +982,15 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
   receipt printer's drawer only while its "Opens the cash drawer" setting (`tills.opens_drawer`, on
   by default, on the Printing rules screen) is on, and several tills sharing one printer may all
   have it on (owner 2026-10-02). A handheld never opens it, even with `cash.drawer` and a profile
-  capability, and the manual open needs an enrolled device. The one exception is the dashboard's
-  "Test open drawer" calibration (`POST /management-api/printers/:id/test-drawer`), which opens any
-  active printer's drawer for a manager holding `printer.manage` and `cash.drawer`. Drawer jobs
-  cannot be manually resent. The receipt review reproduced a resent cash receipt opening the drawer
-  without a new audit row. Pointer: #324; the card slip, B30; the per-till setting, B29.
+  capability, on a route that builds its configuration through `deviceTillCfg`
+  (`apps/server/src/device-session.ts`); a configuration leaving `allowCashDrawer` unset opens a
+  drawer, and nothing guards a new route that builds it another way. The manual open needs an
+  enrolled device. The one exception is the dashboard's "Test open drawer" calibration
+  (`POST /management-api/printers/:id/test-drawer`), which opens any active printer's drawer for a
+  manager holding `printer.manage` and `cash.drawer`. Drawer jobs cannot be manually resent. The
+  receipt review reproduced a resent cash receipt opening the drawer without a new audit row.
+  Pointer: #324; the card slip, B30; the per-till setting, B29;
+  [conventions-ui.md](docs/developers/conventions-ui.md#a-till-opens-its-drawer-only-while-it-is-set-to-a-handheld-does-what-a-till-does).
 
 - **One database per environment.** A pre-production database is never promoted:
   `invoice_series.next_number` carries across and pre-production sales would leave a permanent hole

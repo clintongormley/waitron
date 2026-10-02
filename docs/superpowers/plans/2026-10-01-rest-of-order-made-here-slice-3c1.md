@@ -2,11 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Update (2026-10-02, B29, branch `feat/service-handheld-permissions`):** `deviceSaleCfgOf` in
-> `apps/server/src/bill-payments-api.ts`, which this plan cites, moved to
-> `apps/server/src/device-session.ts` as the exported `deviceSaleCfg`, and `POST /api/sales` and the
-> collect route now build their configuration through it too — anything this plan adds to it reaches
-> them as well.
+> **Update (2026-10-02, B29, branch `feat/service-handheld-permissions`):** `deviceSaleCfgOf`, which
+> this plan cites, is now the local `deviceSaleCfg` in `apps/server/src/bill-payments-api.ts`. Only
+> its till-and-drawer part (`tillId`, `allowCashDrawer`) moved, to `deviceTillCfg` in
+> `apps/server/src/device-session.ts`, which `POST /api/sales`, collect and the bill-payment routes
+> use. This plan's `sendingDeviceId` and `madeHereSink` stay in that local `deviceSaleCfg` and are
+> added inline in `POST /api/sales`; collect gets neither.
 
 **Goal:** Two kitchen-ticket settings from the routing design. First, a station can be set to "Show
 the rest of the order": its printed tickets and its kitchen screen then also list the order's other

@@ -2140,8 +2140,8 @@ describe("handheld sales and device capability gates", () => {
     }
   });
 
-  // Place, collect and cancel check no permission, so the one refusal a person meets on them is a
-  // missing session; a handheld meets it with the same answer as a till.
+  // Place, collect and cancel check no permission, so the refusal tested here is the missing
+  // session, which a handheld meets with the same answer as a till.
   it.each(["place", "collect", "cancel"] as const)(
     "refuses %s without an operator session with the same answer on a handheld as on a till",
     async (action) => {

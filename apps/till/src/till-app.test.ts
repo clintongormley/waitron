@@ -1778,7 +1778,7 @@ describe("till-app", () => {
     ["drawer.not_attached", "Esta impresora no tiene un cajón conectado"],
     [
       "drawer.till_switched_off",
-      "Esta caja no está configurada para abrir el cajón: un responsable puede activarlo en Reglas de impresión",
+      "Esta caja no está configurada para abrir el cajón: un responsable puede activarlo en la pantalla Reglas de impresión del panel de gestión",
     ],
   ])(
     "open-drawer: %s surfaces a helpful banner and leaves the ticket open",
@@ -1881,7 +1881,7 @@ describe("till-app", () => {
     ["drawer.not_attached", "Esta impresora no tiene un cajón conectado"],
     [
       "drawer.till_switched_off",
-      "Esta caja no está configurada para abrir el cajón: un responsable puede activarlo en Reglas de impresión",
+      "Esta caja no está configurada para abrir el cajón: un responsable puede activarlo en la pantalla Reglas de impresión del panel de gestión",
     ],
   ])(
     "%s on the override closes the dialog and surfaces a helpful banner",

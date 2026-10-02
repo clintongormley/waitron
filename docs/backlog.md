@@ -5199,6 +5199,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       profile allows (`apps/till/src/till-app.ts`, `HANDHELD_FACES` and the `cardReader` binding);
       both are screen choices by form factor, queued as B31 (owner, 2026-10-02). The Devices screen's per-device
       "Receipt printer" is read by nothing that prints.
+      - Follow-up, found in B29's review and not fixed there (it predates the branch): a cash sale
+        with automatic receipts reads the till's receipt printer twice in one transaction —
+        `enqueueSaleReceipt` (through `resolvePrinterAndReceipt`) and `enqueueSaleDrawer` (through
+        `drawerPrinter`) each call `resolveReceiptPrinter`. Resolve it once and pass it to both.
+      - Follow-up, same review: every change on the dashboard's Printing rules screen, the new
+        switch included, reloads all the screen's data through `#mutate` → `#load()`
+        (`apps/dashboard/src/screens/printing-rules-screen.ts`), where `#setPrintMode` and
+        `#setDrawerPolicy` update their own state in place.
     - **DONE — paying a sent order no longer counts as its handover** (owner decision 2026-10-01;
       B25, landed as #985). Paying a placed counter order records the payment only: it stays on the
       waiting list as paid and not handed over, and on the kitchen queue, until Hand over (or the
@@ -6761,8 +6769,10 @@ bill is refused.
   handheld block is still a blocklist. Left: refuse a request with no device, one table of which
   device kinds may do what with a guard that walks the routes, and printer identity (the design's
   sub-project C). It sits on the sale and cash path, so it takes the full review. 2026-10-02 (B29,
-  feat/service-handheld-permissions): a handheld now places, collects and cancels like a till; only
-  the drawer is refused it, so the design's table is out of date on those rows.
+  feat/service-handheld-permissions): a handheld now places, collects and cancels like a till. Of
+  the refusals for being a handheld, only the Open drawer button's remains; integrated card payment
+  and printing still need the device profile's capability. The design's table is out of date on
+  those rows.
 - Register/device follow-ups: `WAITRON_TILL_TILL_ID` still seeds a "Caja 1" register while a till
   enrol auto-creates its own; the device-management routes build their `devices ⨝ device_profiles`
   read inline where a `listDevices` store verb belongs.
