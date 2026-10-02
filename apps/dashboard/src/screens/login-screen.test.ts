@@ -808,7 +808,6 @@ describe("login-screen", () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
 
     expect(el.shadowRoot!.querySelector("wt-input[name=new-password]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("wt-language-footer")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=login-context]")).toBeNull();
     resolveInspection({ email: "pending@example.test", purpose: "invitation" });
     await flush(el);
@@ -1285,27 +1284,6 @@ describe("login-screen", () => {
     );
   });
 
-  it("renders the language chooser and lets its wt-locale-selected event bubble out", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
-    await el.updateComplete;
-    await flush(el);
-    const chooser = el.shadowRoot!.querySelector("wt-language-footer");
-    expect(chooser).toBeTruthy();
-
-    const heard = new Promise<{ code: string }>((resolve) =>
-      el.addEventListener("wt-locale-selected", (e) => resolve((e as CustomEvent).detail)),
-    );
-    chooser!.dispatchEvent(
-      new CustomEvent("wt-locale-selected", {
-        detail: { code: "en-GB" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    expect((await heard).code).toBe("en-GB");
-  });
-
   it("runs the passkey ceremony and logs in the returned person", async () => {
     const warn = vi.spyOn(console, "warn");
     const api = stubApi();
@@ -1736,64 +1714,6 @@ describe("login-screen: remembering the account", () => {
     expect(remember.checked).toBe(false);
     expect(sessionStorage.length).toBe(0);
     expect(localStorage.length).toBe(0);
-  });
-});
-
-describe("login-screen: language chooser", () => {
-  it.each([
-    ["the sign-in form", "/manage/"],
-    ["an emailed account link", "/manage/account?token=t1&purpose=invitation"],
-  ])("ends %s with the language footer, after the privacy link", async (_where, url) => {
-    history.replaceState(null, "", url);
-    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
-    await flush(el);
-    const last = el.shadowRoot!.lastElementChild!;
-    expect(last.localName).toBe("wt-language-footer");
-    const privacy = el.shadowRoot!.querySelector("a[href='https://restaurant.example/privacy']")!;
-    expect(privacy.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-
-  it("names the page's language on the footer, and follows a switch", async () => {
-    const before = currentLocale();
-    try {
-      setLocale("es-ES");
-      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
-      await flush(el);
-      const trigger = () =>
-        el
-          .shadowRoot!.querySelector("wt-language-footer")!
-          .shadowRoot!.querySelector("[data-test=lang-trigger]")!
-          .textContent!.trim();
-      expect(trigger()).toBe("Español");
-      setLocale("en-GB");
-      await flush(el);
-      expect(trigger()).toBe("English");
-    } finally {
-      setLocale(before);
-    }
-  });
-
-  it.each([
-    ["the sign-in form", "/manage/"],
-    ["an emailed account link", "/manage/account?token=t1&purpose=invitation"],
-  ])("offers the server's languages on %s", async (_where, url) => {
-    history.replaceState(null, "", url);
-    const api = stubApi({
-      getLocales: vi.fn().mockResolvedValue({
-        locales: [{ code: "en-GB", label: "English (server)" }],
-        venueDefault: "es-ES",
-      }),
-    });
-    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
-    await flush(el);
-    const chooser = el.shadowRoot!.querySelector("wt-language-footer")!;
-    chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
-    await vi.waitFor(() =>
-      expect(
-        chooser.shadowRoot!.querySelector('[data-test="lang-en-GB"]')?.textContent?.trim(),
-      ).toBe("English (server)"),
-    );
-    expect(api.getLocales).toHaveBeenCalledTimes(1);
   });
 });
 

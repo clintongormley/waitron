@@ -2353,26 +2353,65 @@ describe("page shell", () => {
     expect(Math.abs(pageBox.left - hostBox.left - (hostBox.right - pageBox.right))).toBeLessThan(1);
   });
 
-  it("ends the page with the language footer, at the foot of a window taller than the page", async () => {
-    const width = window.innerWidth,
-      height = window.innerHeight;
-    await page.viewport(1280, 1600);
-    document.body.style.margin = "0";
-    try {
-      const el = await mountSetupApp();
-      const footer = el.shadowRoot!.querySelector("wt-language-footer")!;
-      expect(
-        footer.compareDocumentPosition(wizard(el)) & Node.DOCUMENT_POSITION_PRECEDING,
-      ).toBeTruthy();
-      const footerBox = footer.getBoundingClientRect();
-      expect(footerBox.top).toBeGreaterThanOrEqual(wizard(el).getBoundingClientRect().bottom);
-      expect(wizard(el).getBoundingClientRect().bottom).toBeLessThan(window.innerHeight);
-      expect(Math.abs(footerBox.bottom - window.innerHeight)).toBeLessThan(1);
-    } finally {
-      document.body.style.margin = "";
-      await page.viewport(width, height);
-    }
-  });
+  it.each([1280, 390])(
+    "puts the language chooser at the trailing end of the card's header, beside the logo, %ipx wide",
+    async (width) => {
+      const before = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(width, 844);
+      try {
+        const el = await mountSetupApp();
+        expect(el.shadowRoot!.querySelector("wt-language-footer")).toBeNull();
+        const header = wizard(el).querySelector<HTMLElement>(":scope > header")!;
+        const chooser = header.querySelector<HTMLElement>("wt-language-chooser")!;
+        expect(chooser).not.toBeNull();
+        const logo = header.querySelector<HTMLElement>("[data-test=setup-logo]")!;
+        expect(
+          logo.compareDocumentPosition(chooser) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+
+        const headerBox = header.getBoundingClientRect();
+        const logoBox = logo.getBoundingClientRect();
+        const trigger = chooser
+          .shadowRoot!.querySelector("[data-test=lang-trigger]")!
+          .getBoundingClientRect();
+        expect(Math.abs(logoBox.left - headerBox.left)).toBeLessThan(1);
+        expect(Math.abs(trigger.right - headerBox.right)).toBeLessThan(1);
+        expect(trigger.left).toBeGreaterThan(logoBox.right);
+        const middle = (box: DOMRect) => box.top + box.height / 2;
+        expect(Math.abs(middle(trigger) - middle(logoBox))).toBeLessThan(1);
+      } finally {
+        await page.viewport(before.width, before.height);
+      }
+    },
+  );
+
+  it.each([
+    [1280, "English", "name"],
+    [390, "EN", "code"],
+  ] as const)(
+    "at %ipx the chooser shows %s, and its trigger is named in full for a screen reader",
+    async (width, shown, part) => {
+      const before = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(width, 844);
+      try {
+        const el = await mountSetupApp();
+        const trigger = el
+          .shadowRoot!.querySelector("wt-language-chooser")!
+          .shadowRoot!.querySelector<HTMLElement>("[data-test=lang-trigger]")!;
+        const name = trigger.querySelector<HTMLElement>("[part=name]")!;
+        const code = trigger.querySelector<HTMLElement>("[part=code]")!;
+        const [visible, hidden] = part === "name" ? [name, code] : [code, name];
+        expect(getComputedStyle(visible).display).not.toBe("none");
+        expect(getComputedStyle(hidden).display).toBe("none");
+        expect(visible.textContent!.trim()).toBe(shown);
+        expect(trigger.shadowRoot!.querySelector("button")!.getAttribute("aria-label")).toBe(
+          "English",
+        );
+      } finally {
+        await page.viewport(before.width, before.height);
+      }
+    },
+  );
 
   const screens: Screen[] = [
     "connection",
@@ -3910,7 +3949,7 @@ describe("the wizard's language", () => {
   async function choose(el: SetupApp, code: string): Promise<void> {
     const chooser = el.shadowRoot!.querySelector<
       HTMLElement & { updateComplete: Promise<unknown> }
-    >("wt-language-footer")!;
+    >("wt-language-chooser")!;
     chooser.shadowRoot!.querySelector<HTMLElement>("[data-test=lang-trigger]")!.click();
     await new Promise((resolve) => setTimeout(resolve));
     await chooser.updateComplete;
@@ -3937,8 +3976,8 @@ describe("the wizard's language", () => {
     const el = await mountWithBrowserLanguages(["en-GB"], unreachable());
     const trigger = () =>
       el
-        .shadowRoot!.querySelector("wt-language-footer")!
-        .shadowRoot!.querySelector("[data-test=lang-trigger]")!
+        .shadowRoot!.querySelector("wt-language-chooser")!
+        .shadowRoot!.querySelector("[data-test=lang-trigger] [part=name]")!
         .textContent!.trim();
     expect(trigger()).toBe("English");
     await choose(el, "es-ES");
