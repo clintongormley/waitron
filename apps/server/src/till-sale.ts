@@ -826,13 +826,26 @@ export async function payWorkingOrderIntegrated(
   const live = liveAttemptsOf(deps.db);
   // The mark this call wrote, once P1 has written it; unregistered however the call ends.
   let marked: string | null = null;
+  let heldPlaced = false;
   try {
-    return await payIntegrated(deps, cfg, req, operatorId, live, (attemptAt) => {
-      marked = attemptAt;
-      live.set(req.id, attemptAt);
-    });
+    return await payIntegrated(
+      deps,
+      cfg,
+      req,
+      operatorId,
+      live,
+      (attemptAt) => {
+        marked = attemptAt;
+        live.set(req.id, attemptAt);
+      },
+      () => {
+        heldPlaced = true;
+        holdPlacedAttempt(deps.db, req.id);
+      },
+    );
   } finally {
     if (marked !== null && live.get(req.id) === marked) live.delete(req.id);
+    if (heldPlaced) releasePlacedAttempt(deps.db, req.id);
   }
 }
 
@@ -843,6 +856,7 @@ async function payIntegrated(
   operatorId: string | undefined,
   live: ReadonlyMap<string, string>,
   onMarked: (attemptAt: string) => void,
+  onPlacedCollect: () => void,
 ): Promise<IntegratedPayOutcome> {
   // ---- P1 (tx A) ----
   const prepared = await withTransaction(deps.db, async (tx) => {
@@ -901,6 +915,7 @@ async function payIntegrated(
             ticket: await settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId),
           };
         }
+        if (locked.status === "placed") onPlacedCollect();
         return { kind: "settle" as const, outstanding };
       }
 
@@ -959,6 +974,10 @@ async function payIntegrated(
         .where(eq(workingOrders.id, req.id));
       // Inside the transaction, so no release pass runs between the mark and its registration.
       onMarked(attemptAt);
+    } else {
+      // Inside the transaction, so a cancel either runs first, and this P1 reads it `abandoned`, or
+      // runs after and sees the attempt live.
+      onPlacedCollect();
     }
     return {
       kind: "collect" as const,
@@ -1035,7 +1054,7 @@ function tipOf(cfg: TillConfig, req: IntegratedPayRequest): Decimal {
 }
 
 /** The integrated card attempts running in this process: order id to the mark its P1 wrote (plan
- * D22). */
+ * D22), or {@link PLACED_ATTEMPT} for a placed order, which has none. */
 const liveAttemptsOf = perDatabase(() => new Map<string, string>());
 
 /** Whether an integrated card attempt on this order is running in this process. */
@@ -1043,13 +1062,39 @@ export function paymentAttemptIsLive(db: Database, workingOrderId: string): bool
   return liveAttemptsOf(db).has(workingOrderId);
 }
 
+/** A placed order writes no mark, so its entry in the live map carries this instead of one. */
+const PLACED_ATTEMPT = "placed";
+
+/** How many integrated attempts on each placed order are running: two pays of one placed order may
+ * both reach the reader, and the entry must outlive the first to finish. */
+const placedAttemptsOf = perDatabase(() => new Map<string, number>());
+
+function holdPlacedAttempt(db: Database, workingOrderId: string): void {
+  const held = placedAttemptsOf(db);
+  held.set(workingOrderId, (held.get(workingOrderId) ?? 0) + 1);
+  liveAttemptsOf(db).set(workingOrderId, PLACED_ATTEMPT);
+}
+
+function releasePlacedAttempt(db: Database, workingOrderId: string): void {
+  const held = placedAttemptsOf(db);
+  const left = held.get(workingOrderId)! - 1;
+  if (left > 0) {
+    held.set(workingOrderId, left);
+    return;
+  }
+  held.delete(workingOrderId);
+  const live = liveAttemptsOf(db);
+  if (live.get(workingOrderId) === PLACED_ATTEMPT) live.delete(workingOrderId);
+}
+
 /**
  * Which of these orders has a payment that is, or could still become, a capture no sale records:
  * an attempt its provider has not resolved, or a capture not yet filed. This decides whether a
- * mark may be RELEASED and whether Pay may go ahead over one; the check of the mark itself
- * (`refuseOrderPaymentMarked`) reads only the mark.
+ * mark may be RELEASED, whether Pay may go ahead over one, and whether a placed order's invoice
+ * may be credited (`cancelPlacedOrder`); the check of the mark itself (`refuseOrderPaymentMarked`)
+ * reads only the mark.
  */
-async function ordersWithUnfiledPayment(
+export async function ordersWithUnfiledPayment(
   tx: Transaction,
   orderIds: readonly string[],
 ): Promise<Set<string>> {

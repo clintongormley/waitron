@@ -15,9 +15,18 @@ import {
   unpaidDepartures,
 } from "@waitron/db";
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
-import { listOutstandingSales } from "@waitron/core";
+import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { captureAttempting } from "@waitron/payments";
+import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
+import {
+  decimal,
+  negateDecimal,
+  saleId as brandSaleId,
+  seriesId as brandSeriesId,
+  tillId as brandTillId,
+} from "@waitron/shared";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   inTx,
@@ -28,7 +37,7 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { cancelPlacedOrder } from "./working-order.js";
+import { payWorkingOrderIntegrated } from "./till-sale.js";
 import "./errors.js";
 
 // Cancelling a placed order whose invoice was issued credits the whole invoice (an R5 corrective
@@ -44,6 +53,7 @@ let extraListId: string;
 let supervisorId: string;
 /** The supervisor's own session on the first till's device: holds `sale.rectify`. */
 let supervisorCookie: string;
+let supervisorSessionId: string;
 
 const SUPERVISOR_PIN = "7777";
 const REASON = "Pedido equivocado";
@@ -122,6 +132,7 @@ useVenueDb({
         pin: SUPERVISOR_PIN,
       });
     });
+    supervisorSessionId = session.id;
     const [, ...device] = venue.cookie.split("; ");
     supervisorCookie = [`${SESSION_COOKIE}=${session.token}`, ...device].join("; ");
   },
@@ -243,7 +254,9 @@ function fiscalSnapshot() {
       (select count(*) from sale_settlements) as settlements,
       (select count(*) from registros_facturacion) as registros,
       (select count(*) from order_amendments) as amendments,
-      (select group_concat(id || ':' || next_number, ',') from invoice_series) as series
+      (select group_concat(id || ':' || next_number, ',') from invoice_series) as series,
+      (select group_concat(node_id || ':' || secuencia || ':' || coalesce(ultima_huella, ''), ',')
+        from cadenas) as chain
   `)[0];
 }
 
@@ -252,21 +265,46 @@ async function expectRefusedUnwritten(
   answer: Promise<{ status: number; json: Record<string, unknown> }>,
   refusal: { status: number; code: string },
 ): Promise<void> {
-  const before = fiscalSnapshot();
-  const { status, json } = await answer;
-  expect({ status, code: json.code }).toEqual(refusal);
-  expect(fiscalSnapshot()).toEqual(before);
-  expect(await statusOf(venue, billId)).toBe("placed");
-  expect(await creditsOf((await invoiceOf(billId)).id)).toEqual([]);
+  expectUnwritten(await observeRefusal(billId, answer), refusal);
 }
 
-const negate = (amount: string) => (amount.startsWith("-") ? amount.slice(1) : `-${amount}`);
+// Observes a refusal without asserting, so a case holding a card at the reader can release it
+// before any assertion fails.
+async function observeRefusal(
+  billId: string,
+  answer: Promise<{ status: number; json: Record<string, unknown> }>,
+) {
+  const before = fiscalSnapshot();
+  const { status, json } = await answer;
+  return {
+    answered: { status, code: json.code },
+    before,
+    after: fiscalSnapshot(),
+    status: await statusOf(venue, billId),
+    credits: await creditsOf((await invoiceOf(billId)).id),
+  };
+}
+
+function expectUnwritten(
+  observed: Awaited<ReturnType<typeof observeRefusal>>,
+  refusal: { status: number; code: string },
+): void {
+  expect(observed.answered).toEqual(refusal);
+  expect(observed.after).toEqual(observed.before);
+  expect(observed.status).toBe("placed");
+  expect(observed.credits).toEqual([]);
+}
+
+const negate = (amount: string) => negateDecimal(decimal(amount));
 
 describe("cancelling a placed order whose invoice was issued", () => {
   it("credits the whole invoice in the rectificative series, settles it owing nothing, and abandons the order", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const original = await invoiceOf(id);
     expect(original.total).toBe(300);
+    // The device's till is not the box's configured one, so the two cannot be confused below.
+    expect(venue.deviceTillId).not.toBe(venue.cfg.tillId);
+    expect(original.tillId).toBe(venue.deviceTillId);
     const series = await activeRectificative();
 
     const answer = await cancel(id);
@@ -280,7 +318,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
       seriesId: series!.id,
       invoiceNumber: series!.next,
       nodeId: venue.cfg.nodeId,
-      tillId: venue.cfg.tillId,
+      tillId: venue.deviceTillId,
       authorizedBy: supervisorId,
       workingOrderId: null,
     });
@@ -500,24 +538,6 @@ describe("cancelling a placed order whose invoice was issued", () => {
     expect(await listedBills()).not.toContain(party.tabId);
   });
 
-  it("refuses an invoiced order cancelled with no session to authorise the credit, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
-    const before = fiscalSnapshot();
-
-    await expect(
-      cancelPlacedOrder(
-        { db: venue.db, backend: venue.backend, clock: venue.clock },
-        venue.cfg,
-        id,
-        REASON,
-        venue.operatorId,
-      ),
-    ).rejects.toMatchObject({ code: "session.required" });
-
-    expect(fiscalSnapshot()).toEqual(before);
-    expect(await statusOf(venue, id)).toBe("placed");
-  });
-
   it("fails loudly when the node has two live rectificative series, writing nothing", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const code = `R${randomUUID().slice(0, 4)}`;
@@ -542,7 +562,285 @@ describe("cancelling a placed order whose invoice was issued", () => {
       );
     }
   });
+  it("refuses an invoice already partly credited, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    const series = await activeRectificative();
+    // 0.83 at 21% is 1.00 of the Caña's 3.00, so a credit of the whole 3.00 would exceed it.
+    await inTx(venue, (tx) =>
+      recordCorrection(tx, venue.backend, {
+        tillId: brandTillId(venue.deviceTillId),
+        nodeId: venue.cfg.nodeId,
+        seriesId: brandSeriesId(series!.id),
+        correctsSaleId: brandSaleId(original.id),
+        total: "-1.00",
+        lines: [
+          {
+            lineNo: 1,
+            name: "Caña",
+            descriptions: { [venue.cfg.locale]: "Caña de cerveza" },
+            quantity: "-0.333",
+            unitPrice: "2.48",
+            vatRate: "21.00",
+            lineTotal: "-0.83",
+          },
+        ],
+        authz: { sessionId: supervisorSessionId },
+        clock: venue.clock,
+      }),
+    );
+    const partial = await creditsOf(original.id);
+    expect(partial.map((credit) => credit.total)).toEqual([-100]);
+    const before = fiscalSnapshot();
+
+    const answer = await cancel(id);
+
+    expect({ status: answer.status, code: answer.json.code }).toEqual({
+      status: 409,
+      code: "sale.correction_exceeds_total",
+    });
+    expect(fiscalSnapshot()).toEqual(before);
+    expect(await statusOf(venue, id)).toBe("placed");
+    expect(await creditsOf(original.id)).toEqual(partial);
+  });
+
+  it("files one credit when two cancels of the order arrive together, refusing the second", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    const series = await activeRectificative();
+
+    const answers = await Promise.all([cancel(id), cancel(id)]);
+
+    expect(answers.map((answer) => [answer.status, answer.json.code]).sort()).toEqual([
+      [200, undefined],
+      [409, "working_order.not_placed"],
+    ]);
+    expect(await creditsOf(original.id)).toHaveLength(1);
+    expect(await activeRectificative()).toEqual({ id: series!.id, next: series!.next + 1 });
+    expect(await amendmentsOf(id)).toHaveLength(2);
+  });
+
+  it("keeps none of the credit when a write after it fails", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    // The cancel's last write is its amendment, after the credit, its number, its record, the
+    // chain's move and the invoice's settlement.
+    venue.db.run(
+      sql.raw(
+        `create trigger refuse_cancel_amendment before insert on order_amendments
+         when new.kind = 'order_cancelled' and new.working_order_id = '${id}'
+         begin select raise(abort, 'refused by the test'); end`,
+      ),
+    );
+    const before = fiscalSnapshot();
+    let answer: Awaited<ReturnType<typeof cancel>>;
+    try {
+      answer = await cancel(id);
+    } finally {
+      venue.db.run(sql.raw("drop trigger refuse_cancel_amendment"));
+    }
+
+    expect({ status: answer.status, code: answer.json.code }).toEqual({
+      status: 500,
+      code: "server.internal",
+    });
+    expect(fiscalSnapshot()).toEqual(before);
+    expect(await statusOf(venue, id)).toBe("placed");
+    expect(await creditsOf(original.id)).toEqual([]);
+    const outstanding = await inTx(venue, (tx) => listOutstandingSales(tx));
+    expect(outstanding.map((sale) => sale.saleId)).toContain(original.id);
+    // The control: with the refusal gone, the same cancel credits the invoice.
+    expect((await cancel(id)).status).toBe(200);
+    expect(await creditsOf(original.id)).toHaveLength(1);
+  });
 });
+
+/**
+ * A reader provider that commits its `attempting` row before the card is asked, as the Stripe and
+ * SumUp providers do, holds the card at the reader until `release`, then captures it.
+ */
+class CardAtTheReader extends FakePaymentProvider {
+  readonly entered: Promise<void>;
+  release!: () => void;
+  private signal!: () => void;
+  private readonly gate: Promise<void>;
+
+  constructor() {
+    super(venue.db);
+    this.entered = new Promise((resolve) => (this.signal = resolve));
+    this.gate = new Promise((resolve) => (this.release = resolve));
+  }
+
+  override async collect(params: Parameters<FakePaymentProvider["collect"]>[0]) {
+    this.stallNextCollect();
+    const asked = await super.collect(params);
+    this.signal();
+    await this.gate;
+    const settledAt = new Date();
+    await inTx(venue, (tx) =>
+      captureAttempting(tx, {
+        provider: this.provider,
+        paymentRef: asked.paymentRef,
+        settledAt,
+        externalRef: `charge-${asked.paymentRef}`,
+      }),
+    );
+    return { ...asked, state: "captured" as const, settledAt };
+  }
+}
+
+describe("cancelling an invoiced order while a card is paying it", () => {
+  it("refuses while the card is at the reader, writing nothing, and the card then settles the invoice", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    const provider = new CardAtTheReader();
+    const paying = payWorkingOrderIntegrated(
+      { db: venue.db, backend: venue.backend, clock: venue.clock, provider },
+      venue.cfg,
+      { id, lines: [] },
+    );
+    await provider.entered;
+
+    const refused = await observeRefusal(id, cancel(id));
+    provider.release();
+    const paid = await paying;
+
+    expectUnwritten(refused, { status: 409, code: "order.payment_in_flight" });
+    expect(paid.outcome).toBe("captured");
+    expect(await statusOf(venue, id)).toBe("settled");
+    expect(await creditsOf(original.id)).toEqual([]);
+  });
+
+  it("refuses while a card captured for the invoice has not settled it, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    venue.card.crashNextCollect("captured");
+    const lost = await send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    expect(lost.status).toBe(500);
+
+    await expectRefusedUnwritten(id, cancel(id), {
+      status: 409,
+      code: "order.payment_in_flight",
+    });
+
+    // Pay again settles the invoice from the captured payment, charging nothing more.
+    const calls = venue.card.collectCalls.length;
+    const recovered = await send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    expect(recovered.status).toBe(200);
+    expect(venue.card.collectCalls.length).toBe(calls);
+    expect(await statusOf(venue, id)).toBe("settled");
+  });
+
+  it("refuses while the card is at a reader that has written no payment yet, and the card then settles the invoice", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    const calls = venue.card.collectCalls.length;
+    const release = venue.card.holdNextCollect();
+    const paying = send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    await expect.poll(() => venue.card.collectCalls.length).toBe(calls + 1);
+    const paymentsWhileHeld = paymentsOf(id);
+
+    const refused = await observeRefusal(id, cancel(id));
+    const outstandingWhileHeld = await outstandingIds();
+    release();
+    const paid = await paying;
+
+    expect(paymentsWhileHeld).toEqual([]);
+    expectUnwritten(refused, { status: 409, code: "order.payment_in_flight" });
+    expect(outstandingWhileHeld).toContain(original.id);
+    expect(paid.status).toBe(200);
+    expect(paid.json.outcome).toBe("captured");
+    expect(await statusOf(venue, id)).toBe("settled");
+    expect(await outstandingIds()).not.toContain(original.id);
+    expect(tendersOf(original.id)).toEqual([{ method: "card", amount: 300 }]);
+    expect(paymentsOf(id)).toEqual([{ state: "captured", saleId: original.id }]);
+    expect(await creditsOf(original.id)).toEqual([]);
+  });
+
+  it("refuses while either of two cards paying the order at once is at its reader", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    const first = new FakePaymentProvider(venue.db);
+    const second = new FakePaymentProvider(venue.db);
+    const releaseFirst = first.holdNextCollect();
+    first.failNextCollect();
+    const releaseSecond = second.holdNextCollect();
+    const pay = (provider: FakePaymentProvider) =>
+      payWorkingOrderIntegrated(
+        { db: venue.db, backend: venue.backend, clock: venue.clock, provider },
+        venue.cfg,
+        { id, lines: [] },
+      );
+    const firstPaying = pay(first);
+    await expect.poll(() => first.collectCalls.length).toBe(1);
+    const secondPaying = pay(second);
+    await expect.poll(() => second.collectCalls.length).toBe(1);
+
+    releaseFirst();
+    const firstPaid = await firstPaying;
+    const refused = await observeRefusal(id, cancel(id));
+    releaseSecond();
+    const secondPaid = await secondPaying;
+
+    expect(firstPaid.outcome).toBe("declined");
+    expectUnwritten(refused, { status: 409, code: "order.payment_in_flight" });
+    expect(secondPaid.outcome).toBe("captured");
+    expect(await statusOf(venue, id)).toBe("settled");
+    expect(await creditsOf(original.id)).toEqual([]);
+  });
+
+  it("credits the invoice once a declined card has left the reader", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    const calls = venue.card.collectCalls.length;
+    const release = venue.card.holdNextCollect();
+    venue.card.failNextCollect();
+    const paying = send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    await expect.poll(() => venue.card.collectCalls.length).toBe(calls + 1);
+    const refused = await cancel(id);
+    release();
+    const declined = await paying;
+
+    expect(refused.status).toBe(409);
+    expect(declined.status).toBe(200);
+    expect(declined.json.outcome).toBe("declined");
+
+    expect(await cancel(id)).toEqual({ status: 200, json: { body: "" } });
+    expect(await creditsOf(original.id)).toHaveLength(1);
+    expect(await statusOf(venue, id)).toBe("abandoned");
+  });
+
+  it("refuses a card for an order cancelled before it reached the reader, asking no reader", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    expect((await cancel(id)).status).toBe(200);
+    const calls = venue.card.collectCalls.length;
+
+    const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+
+    expect({ status: paid.status, code: paid.json.code }).toEqual({
+      status: 409,
+      code: "working_order.not_open",
+    });
+    expect(venue.card.collectCalls.length).toBe(calls);
+    expect(paymentsOf(id)).toEqual([]);
+  });
+});
+
+async function outstandingIds(): Promise<string[]> {
+  const outstanding = await inTx(venue, (tx) => listOutstandingSales(tx));
+  return outstanding.map((sale) => sale.saleId);
+}
+
+function tendersOf(saleId: string) {
+  return venue.db.all<{ method: string; amount: number }>(
+    sql`select method, amount from tenders where sale_id = ${saleId}`,
+  );
+}
+
+function paymentsOf(workingOrderId: string) {
+  return venue.db.all<{ state: string; saleId: string | null }>(
+    sql`select state, sale_id as saleId from payments where working_order_id = ${workingOrderId}`,
+  );
+}
 
 describe("cancelling a placed order with no invoice", () => {
   it("abandons it with its reasoned amendment and files nothing", async () => {
@@ -567,5 +865,41 @@ describe("cancelling a placed order with no invoice", () => {
       { kind: "order_placed", actorId: venue.operatorId, reason: null },
       { kind: "order_cancelled", actorId: venue.operatorId, reason: REASON },
     ]);
+  });
+
+  it("refuses while a card is at the reader for it, and the card then files its sale", async () => {
+    const ticketFirst = await inTx(venue, async (tx) => {
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: venue.cfg.locationId, name: "Barra tarjeta" })
+        .returning({ id: floorZones.id });
+      return offerProducts(tx, venue.cfg, {
+        zone: { zoneId: zone!.id },
+        serviceMode: "ticket_then_pay",
+      });
+    });
+    const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId);
+    const calls = venue.card.collectCalls.length;
+    const release = venue.card.holdNextCollect();
+    const paying = send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    await expect.poll(() => venue.card.collectCalls.length).toBe(calls + 1);
+    const before = fiscalSnapshot();
+
+    const refused = await cancel(id, venue.cookie);
+    const afterRefusal = fiscalSnapshot();
+    const statusWhileHeld = await statusOf(venue, id);
+    release();
+    const paid = await paying;
+
+    expect({ status: refused.status, code: refused.json.code }).toEqual({
+      status: 409,
+      code: "order.payment_in_flight",
+    });
+    expect(afterRefusal).toEqual(before);
+    expect(statusWhileHeld).toBe("placed");
+    expect(paid.status).toBe(200);
+    expect(await statusOf(venue, id)).toBe("settled");
+    const sale = await invoiceOf(id);
+    expect(paymentsOf(id)).toEqual([{ state: "captured", saleId: sale.id }]);
   });
 });

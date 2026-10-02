@@ -190,6 +190,7 @@ export { readMembershipTrustSet, setNodePublicKey, setNodePublicKeyTx } from "./
 export {
   insertReservedNodeTx,
   insertReservedSeriesTx,
+  readLiveSeriesIdTx,
   readNodeEndorsement,
   readStandardSeriesId,
   readStandardSeriesIdTx,

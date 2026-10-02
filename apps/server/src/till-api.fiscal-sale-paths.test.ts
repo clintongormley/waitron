@@ -2139,9 +2139,10 @@ describe("handheld sales and device capability gates", () => {
     }
   });
 
-  // Place and cancel check no permission, and collect checks its permission only once the session is
-  // found, so the refusal tested here is the missing session, which a handheld meets with the same
-  // answer as a till.
+  // Place and cancelling an order with no invoice check no permission (cancelling an invoiced
+  // order needs `sale.rectify`), and collect checks its permission only once the session is found,
+  // so the refusal tested here is the missing session, which a handheld meets with the same answer
+  // as a till.
   it.each(["place", "collect", "cancel"] as const)(
     "refuses %s without an operator session with the same answer on a handheld as on a till",
     async (action) => {

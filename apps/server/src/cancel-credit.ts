@@ -1,5 +1,5 @@
-import { and, eq, isNull } from "drizzle-orm";
-import { invoiceSeries, saleLines, sales } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { readLiveSeriesIdTx, saleLines, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { deriveVatBreakdown, recordCorrection, settleSale } from "@waitron/core";
 import type { RecordSaleLine } from "@waitron/core";
@@ -11,99 +11,106 @@ import {
   compareDecimal,
   decimal,
   negateDecimal,
+  saleId as brandSaleId,
   seriesId as brandSeriesId,
   sumDecimals,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import type { Decimal, SaleId, SeriesId } from "@waitron/shared";
+import type { Decimal, SaleId, TillId } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
-type StoredBreakdown = { rate: string; base: string; tax: string }[];
+type StoredBreakdown = (typeof sales.$inferSelect)["vatBreakdown"];
+
+/** The invoice a working order issued, as {@link creditWholeInvoice} credits it. */
+export interface IssuedInvoice {
+  id: SaleId;
+  total: number;
+  vatBreakdown: StoredBreakdown;
+}
+
+/** The invoice this working order issued; `sales_working_order_id_key` allows at most one. */
+export async function readOrderInvoice(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<IssuedInvoice | undefined> {
+  const [row] = await tx
+    .select({ id: sales.id, total: sales.total, vatBreakdown: sales.vatBreakdown })
+    .from(sales)
+    .where(eq(sales.workingOrderId, workingOrderId));
+  return row === undefined ? undefined : { ...row, id: brandSaleId(row.id) };
+}
 
 /**
  * Credit the whole of an issued invoice with a corrective invoice in the node's live rectificative
- * series, its lines the invoice's with their signs reversed, then settle the invoice owing nothing.
- * `recordCorrection` checks `sale.rectify` against `sessionId`.
+ * series, filed on `saleTillId`, its lines the invoice's with their signs reversed, then settle the
+ * invoice owing nothing. `recordCorrection` checks `sale.rectify` against `sessionId`.
  */
 export async function creditWholeInvoice(
   tx: Transaction,
   deps: { backend: FiscalBackend; clock: TrustedClock },
   cfg: TillConfig,
-  saleId: SaleId,
+  invoice: IssuedInvoice,
   sessionId: string,
+  saleTillId: TillId,
 ): Promise<void> {
-  const seriesId = await liveRectificativeSeries(tx, cfg);
-  const [invoice] = await tx
-    .select({ total: sales.total, vatBreakdown: sales.vatBreakdown })
-    .from(sales)
-    .where(eq(sales.id, saleId));
-  const total = centsToDecimal(-invoice!.total);
+  const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "rectificative"));
+  const total = centsToDecimal(-invoice.total);
   const lines = reversedLines(
-    await tx.select().from(saleLines).where(eq(saleLines.saleId, saleId)).orderBy(saleLines.lineNo),
+    await tx
+      .select()
+      .from(saleLines)
+      .where(eq(saleLines.saleId, invoice.id))
+      .orderBy(saleLines.lineNo),
   );
-  refuseUnmirroredBreakdown(saleId, invoice!.vatBreakdown, deriveVatBreakdown(total, lines), total);
+  refuseUnmirroredBreakdown(
+    invoice.id,
+    invoice.vatBreakdown,
+    deriveVatBreakdown(total, lines),
+    total,
+  );
   await recordCorrection(tx, deps.backend, {
-    tillId: cfg.tillId,
+    tillId: saleTillId,
     nodeId: cfg.nodeId,
     seriesId,
-    correctsSaleId: saleId,
+    correctsSaleId: invoice.id,
     total,
     lines,
     authz: { sessionId },
     clock: deps.clock,
   });
-  await settleSale(tx, { saleId, tenders: [] });
-}
-
-/** The node's one live rectificative series; two would make the credit's number a guess. */
-async function liveRectificativeSeries(tx: Transaction, cfg: TillConfig): Promise<SeriesId> {
-  const [row, extra] = await tx
-    .select({ id: invoiceSeries.id })
-    .from(invoiceSeries)
-    .where(
-      and(
-        eq(invoiceSeries.nodeId, cfg.nodeId),
-        eq(invoiceSeries.purpose, "rectificative"),
-        isNull(invoiceSeries.retiredAt),
-      ),
-    )
-    .limit(2);
-  if (row === undefined) {
-    throw new AppError("series.no_rectificative_for_node", { nodeId: cfg.nodeId });
-  }
-  if (extra !== undefined) {
-    throw new Error(`invoice_series: node ${cfg.nodeId} has more than one rectificative series`);
-  }
-  return brandSeriesId(row.id);
+  await settleSale(tx, { saleId: invoice.id, tenders: [] });
 }
 
 function reversedLines(rows: (typeof saleLines.$inferSelect)[]): RecordSaleLine[] {
   const lineNoOf = new Map(rows.map((row) => [row.id, row.lineNo]));
-  return rows.map((row) => ({
-    lineNo: row.lineNo,
-    name: row.name,
-    descriptions: row.descriptions,
-    unitName: row.unitName,
-    unitPrecision: row.unitPrecision,
-    quantity: thousandthsToDecimal(-row.quantity),
-    unitPrice: centsToDecimal(row.unitPrice),
-    vatRate: basisPointsToDecimal(row.vatRate),
-    lineTotal: centsToDecimal(-row.lineTotal),
-    category: row.category,
-    parentLineNo: row.parentLineId === null ? null : lineNoOf.get(row.parentLineId),
-    optionSnapshots: row.optionSnapshots,
-    variantName: row.variantName,
-    variantDescriptions: row.variantDescriptions,
-    variantKitchenName: row.variantKitchenName,
-    kitchenName: row.kitchenName,
-    productId: row.productId,
-    parentProductId: row.parentProductId,
-    menuId: row.menuId,
-    menuVersionId: row.menuVersionId,
-    lineGross: row.lineGross === null ? null : centsToDecimal(-row.lineGross),
-    classification: row.classification,
-  }));
+  return rows.map(
+    (row) =>
+      ({
+        lineNo: row.lineNo,
+        name: row.name,
+        descriptions: row.descriptions,
+        unitName: row.unitName,
+        unitPrecision: row.unitPrecision,
+        quantity: thousandthsToDecimal(-row.quantity),
+        unitPrice: centsToDecimal(row.unitPrice),
+        vatRate: basisPointsToDecimal(row.vatRate),
+        lineTotal: centsToDecimal(-row.lineTotal),
+        category: row.category,
+        parentLineNo: row.parentLineId === null ? null : lineNoOf.get(row.parentLineId)!,
+        optionSnapshots: row.optionSnapshots,
+        variantName: row.variantName,
+        variantDescriptions: row.variantDescriptions,
+        variantKitchenName: row.variantKitchenName,
+        kitchenName: row.kitchenName,
+        productId: row.productId,
+        parentProductId: row.parentProductId,
+        menuId: row.menuId,
+        menuVersionId: row.menuVersionId,
+        lineGross: row.lineGross === null ? null : centsToDecimal(-row.lineGross),
+        classification: row.classification,
+      }) satisfies Required<RecordSaleLine>,
+  );
 }
 
 /**
