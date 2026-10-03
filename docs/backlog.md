@@ -1113,6 +1113,15 @@ at 390px and 1280px in light and dark themes. The owner has not confirmed whethe
 was intended for every filter; this uses one stable width per filter. A filter whose longest choice
 exceeds the available phone width fills its row, and that choice is cut short in the closed control.
 
+**A dropdown with no search box keeps its blue focus line while its list is open (A256, owner
+2026-10-03) — DONE (#1137).** The owner, on a screenshot of the "Service style" dropdown open:
+_"when a combobox doesn't show a search bar, then leave the blue underline of the field active"_.
+`wt-combobox` now marks its field `data-search` when the list has a search box. While a list
+without one is open, the combobox's own styles keep the field's blue line and blue label; a list
+with a search box still drops them, since the search box's border marks focus. An invalid field
+keeps its red line and a disabled one draws neither. The light theme was inspected by the
+implementer; the dark theme and phone width only by the Codex review seat's screenshots.
+
 **A table's pinned Actions column keeps one narrow width (A195, owner 2026-10-02) — DONE.**
 `wt-data-table` gives its `actions` column only the space its heading or cell content needs; other
 columns take the spare width. The one-row Chromium test measures the column with both “Actions” and
