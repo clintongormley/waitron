@@ -582,7 +582,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property() filterClearLabel = "Clear";
   @property() filtersClearAllLabel = "Clear all";
   @property() filtersCloseLabel = "Close filters";
-  /** The column chooser's button text and the accessible name of its list. */
   @property() columnsLabel = "Columns";
   @property() customiseColumnsLabel = "Customise columns";
   @property() customiseLabel = "Customise";
