@@ -3750,8 +3750,33 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   venue to start with no devices and add each one. Seen using the default so far: the demo's
   sample sales, the fiscal test sale before going live, two kitchen alerts, and the Prepare to
   Live configuration transfer. About 20 server sites read it, and not all have been traced.
-  Decide between: no setup till at all; keep one but stop asking for its name; or leave it. An
-  investigation is running (2026-10-03); its findings go here.
+  Decide between: no setup till at all; keep one but stop asking for its name; or leave it.
+  Findings (2026-10-03, by reading code and `git log -S`; no tests run):
+  - History: the setup till dates from the one-box, one-till design. `create-till` came in #57
+    (2026-08-04) and `WAITRON_TILL_TILL_ID` in #60 (2026-08-05). Devices got their own tills later
+    (#199, #269, #1011), and the setup till stayed as the server's default.
+  - The server refuses to start without it (`apps/server/src/till-config.ts`).
+  - Still read in production by:
+    - parking an order (`createOpenOrder`, `apps/server/src/working-order.ts`)
+    - the `order_placed` and `order_cancelled` history entries, whose tamper-evident hash
+      includes the till (`packages/db/src/order-amendment-hash.ts`)
+    - a Live standby adopting the primary (`apps/server/src/adopt.ts`)
+    - the Prepare to Live transfer, by name (`apps/server/src/configuration-transfer.ts`)
+    - finding a half-finished setup again, by name (`apps/server/src/provision.ts`)
+    - the demo's sample sales
+  - Fiscal records do not need it. Their till is informational and left out of the hash; the
+    chain is the server's. The readiness test sale runs in its own scratch database.
+  - It shows in the dashboard's till list, and the handheld picker offers it.
+  - Believed bug, not yet shown by a test: the till's "print receipt" and "print payment slip"
+    routes pass the server default, not the device's till, so they pick the setup till's
+    printer (`apps/server/src/till-api.ts`, `apps/server/src/receipt-print.ts`). The one test
+    binds its device to the setup till, so it cannot tell the two apart.
+  - Options:
+    - Keep the till but stop asking for its name: small. The setup screens, translations and the
+      setup request change, and a fixed name keeps the transfer and the retry working.
+    - Remove it: medium to large. The order routes move to the device's till, which changes what
+      the order history hash covers. `applyVenue` stops requiring a till, and many test fixtures
+      change. No migration is needed.
 
 - **Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29).** A page saying
   what the section is for and what is in it, opened by the section's header. It was the answer to
