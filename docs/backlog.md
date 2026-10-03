@@ -3219,12 +3219,16 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       screen's Unpaid filter shows the same debts. The till-cancel question was C126, now built:
       see its entry below.
     - **The till's departure dialog lists a presented bill credited to nothing as owing its full
-      amount, so staff confirm a debt the server does not record.** The dialog lists each bill at
-      what `GET /api/parties/:id/bills` says it owes, which reads no credit note (`#departingBills`
-      in `apps/till/src/till-app.ts`): measured 2026-10-01, a presented bill credited to nothing
-      read 18.00, and the button read "Record 18.00 unpaid", while the server records no departure
-      row for it and settles it. The fix is for the dialog to show each invoice's amount due, its
-      total plus its credit notes.
+      amount — DONE (W26, 2026-10-03).** `GET /api/parties/:id/bills` now gives each bill with a
+      filed sale an `amountDue`, its invoice's total plus its credit notes, read through
+      `readIssuedSales` as the departure reads it, and the dialog lists each bill at that, so a
+      bill credited to nothing drops out of the list and the button's total.
+    - **The table screen still reads a credited presented bill at its full amount.** Its per-bill
+      "to pay" line (`apps/till/src/screens/till-table-order-screen.ts`, `bill.outstanding`) and
+      the party's total (`apps/till/src/till-app.ts`, summing each bill's `outstanding`) read no
+      credit note either, so a presented bill whose invoice a credit note cancelled still shows
+      its full total there (read, not run). **Next action:** decide whether those read
+      `amountDue` too, which W26 left out because other screens and the floor read `outstanding`.
     - **A 0.00 simplified invoice:** B17's departure, and since B28 (#1005) Pay on a bill whose
       total is zero, file one; whether AEAT accepts it was not tested.
     - **Left by B28's review (#1005), neither acted on.** (1) The reader pay's `tipOf`
