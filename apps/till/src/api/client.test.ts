@@ -2465,13 +2465,14 @@ describe("TillApi", () => {
 
   // --- Per-user language preference ---
 
-  it("getLocales GETs the public /api/locales list and returns { locales, venueDefault }", async () => {
+  it("getLocales GETs the public /api/locales list with the browser match", async () => {
     const body = {
       locales: [
         { code: "es-ES", label: "Español" },
         { code: "en-GB", label: "English" },
       ],
       venueDefault: "es-ES",
+      loginDefault: "en-GB",
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(body));
 

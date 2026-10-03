@@ -1014,6 +1014,7 @@ export class TillApp extends LitElement {
     diag.record("info", "server-switch", { from, to });
     this.operatorPersonId = "";
     this.operatorName = "";
+    this.#loginPending = false;
     this.permissions = [];
     this.#endOperatorSession();
     this.#dropDraft();
@@ -1049,7 +1050,7 @@ export class TillApp extends LitElement {
 
   #configureSessionActivity(): void {
     this.sessionActivity.configure({
-      // `operatorPersonId` is not cleared on logout, so `operatorName` is the login signal.
+      // `operatorPersonId` persists after logout; persons_display_name_ck keeps a signed-in name nonempty.
       loggedIn: this.operatorName !== "",
       kind: this.#deviceKind,
       timeoutSeconds: this.#inactivityTimeoutSeconds,
@@ -1085,7 +1086,10 @@ export class TillApp extends LitElement {
   readonly #store = new WorkingOrderStore();
 
   /** A stable field, so the shell's `loadLocales` property does not change on every render. */
-  readonly #loadLocales = () => this.api.getLocales().then((r) => r.locales);
+  readonly #loadLocales = () =>
+    this.#localeList === undefined
+      ? this.api.getLocales().then((r) => r.locales)
+      : Promise.resolve(this.#localeList);
 
   /** Recomputed in {@link willUpdate}, so the shell's `affordances` property is not a fresh array on
    * every render. */
@@ -1093,6 +1097,21 @@ export class TillApp extends LitElement {
 
   /** The venue's default UI locale, used when no operator's preference applies. */
   #venueLocale = "es-ES";
+  #browserLocale?: string;
+  #browserLocaleVenue?: string;
+  #localeList?: Awaited<ReturnType<TillApi["getLocales"]>>["locales"];
+  #localeBootGeneration = 0;
+  #preLoginChoice?: string;
+  #venueLocaleReady = false;
+  #loginPending = false;
+
+  #preLoginLocale(): string {
+    if (!this.#venueLocaleReady)
+      return this.#browserLocale ?? this.#browserLocaleVenue ?? this.#venueLocale;
+    return !this.deviceMode && this.#browserLocaleVenue === this.#venueLocale
+      ? (this.#browserLocale ?? this.#venueLocale)
+      : this.#venueLocale;
+  }
 
   /**
    * Set after a full {@link #loadFloorData}, so a repeat floor visit reloads tables only. A flag, not
@@ -1634,6 +1653,22 @@ export class TillApp extends LitElement {
   }
 
   async #boot(): Promise<void> {
+    const localeBootGeneration = ++this.#localeBootGeneration;
+    this.#browserLocale = undefined;
+    this.#browserLocaleVenue = undefined;
+    this.#localeList = undefined;
+    this.#venueLocaleReady = false;
+    void this.api
+      .getLocales()
+      .then(({ locales, loginDefault, venueDefault }) => {
+        if (!this.isConnected || localeBootGeneration !== this.#localeBootGeneration) return;
+        this.#browserLocale = loginDefault;
+        this.#browserLocaleVenue = venueDefault;
+        this.#localeList = locales;
+        if (this.operatorName === "" && !this.#loginPending && this.#preLoginChoice === undefined)
+          setLocale(this.#preLoginLocale());
+      })
+      .catch(() => undefined);
     this.#abandonListRefreshes();
     clearTimeout(this.#contentLanguageTimer);
     const contentGeneration = ++this.#contentLanguageGeneration;
@@ -1646,10 +1681,11 @@ export class TillApp extends LitElement {
       // writes below need no guard: Lit never paints a detached element.
       if (!this.isConnected) return;
       this.router?.setServers(till.servers);
-      // Only before any login: a login can complete while `getTill` is in flight, and re-applying the
-      // venue default would overwrite the operator's own language.
-      if (this.operatorPersonId === "") setLocale(till.locale);
       this.#venueLocale = till.locale;
+      this.#venueLocaleReady = true;
+      // A login can begin while `getTill` is in flight; its saved language wins.
+      if (this.operatorName === "" && !this.#loginPending && this.#preLoginChoice === undefined)
+        setLocale(this.#preLoginLocale());
       // A separate field: the UI default drops UI-unsupported codes, which must never change the
       // printed ticket's language.
       this.invoiceLocale = till.invoiceLocale;
@@ -1723,6 +1759,7 @@ export class TillApp extends LitElement {
         else this.initialDeviceStation = await this.api.getDeviceStation();
         if (!this.isConnected) return;
         this.deviceMode = true;
+        if (this.#preLoginChoice === undefined) setLocale(this.#venueLocale);
         this.#setScreen("station");
         this.#onHistory();
       }
@@ -1739,6 +1776,8 @@ export class TillApp extends LitElement {
     const { personId, displayName, permissions, locale } = (event as CustomEvent<LoggedInDetail>)
       .detail;
     setLocale(resolveActiveLocale(locale, this.#venueLocale));
+    this.#preLoginChoice = undefined;
+    this.#loginPending = true;
     const signIn = ++this.#signIns;
     const session = this.#operatorSession;
     // While this loads, the lock screen can start a newer sign-in, and a logout (idle, or from the
@@ -1769,6 +1808,7 @@ export class TillApp extends LitElement {
     this.#selectMenu(this.#defaultCatalogueId());
     this.#selectDiet(null);
     this.operatorName = displayName;
+    this.#loginPending = false;
     this.operatorPersonId = personId;
     this.#resumeOrderDraft();
     this.permissions = permissions;
@@ -6861,6 +6901,8 @@ export class TillApp extends LitElement {
     // Lock locally first: a rejecting or hanging `api.logout()` (offline, failover) must never leave
     // the till unlocked. The server logout is best-effort.
     this.operatorName = "";
+    this.#loginPending = false;
+    this.#preLoginChoice = undefined;
     this.permissions = [];
     this.#orderVisit++;
     this.#endOperatorSession();
@@ -6894,7 +6936,7 @@ export class TillApp extends LitElement {
     // After the round trip, so guarded: a detached till must not change a live sibling's module-global
     // locale.
     if (!this.isConnected) return;
-    setLocale(this.#venueLocale);
+    setLocale(this.#preLoginLocale());
   }
 
   /**
@@ -6904,6 +6946,7 @@ export class TillApp extends LitElement {
   async #onLocaleSelected(event: CustomEvent<{ code: string }>): Promise<void> {
     const { code } = event.detail;
     if (this.screen === "lock" || this.deviceMode) {
+      if (this.operatorName === "") this.#preLoginChoice = code;
       setLocale(code);
       return;
     }

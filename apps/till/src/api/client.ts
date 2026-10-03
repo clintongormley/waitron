@@ -1860,6 +1860,7 @@ export class TillApi {
   #localesPromise?: Promise<{
     locales: Array<{ code: string; label: string }>;
     venueDefault: string;
+    loginDefault: string;
   }>;
 
   /**
@@ -1879,12 +1880,17 @@ export class TillApi {
     return this.#request<ContentLanguages>("/api/content-languages", "GET");
   }
 
-  /** `GET /api/locales` — the venue's offered languages and its fallback locale. Public (pre-login). */
-  getLocales(): Promise<{ locales: Array<{ code: string; label: string }>; venueDefault: string }> {
+  /** `GET /api/locales` — public language choices and the browser's login default. */
+  getLocales(): Promise<{
+    locales: Array<{ code: string; label: string }>;
+    venueDefault: string;
+    loginDefault: string;
+  }> {
     // Fetched once and shared; a rejection clears the cache so a transient failure retries.
     this.#localesPromise ??= this.#request<{
       locales: Array<{ code: string; label: string }>;
       venueDefault: string;
+      loginDefault: string;
     }>("/api/locales", "GET").catch((err) => {
       this.#localesPromise = undefined;
       throw err;
