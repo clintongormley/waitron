@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { currentLocale, setLocale, subscribeLocale, t } from "./t.js";
-import { catalogues, en } from "./strings.js";
+import { catalogues, en, es } from "./strings.js";
 
 afterEach(() => {
   // Reset to the shipped default so a setLocale in one test cannot leak into another.
@@ -41,9 +41,13 @@ it("notifies subscribers on setLocale and stops after unsubscribe", () => {
 it("uses the cash-register wording for the register-meaning strings", () => {
   // The device-KIND label (devices.kind_till) means the device, and is deliberately not swept here.
   expect(en["devices.till"]).toBe("Cash register");
-  expect(en["sales.till"]).toBe("Cash register");
   expect(en["sales.tender_title"]).toBe("Tender by cash register");
   expect(en["device_profiles.form_factor.till"]).toBe("Cash register");
+});
+
+it("heads the Sales screen's tender column Device, because a sale's origin is a device", () => {
+  expect(en["sales.device"]).toBe("Device");
+  expect(es["sales.device"]).toBe("Dispositivo");
 });
 
 it("registers en-GB as a first-class catalogue entry", () => {

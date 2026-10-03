@@ -652,7 +652,7 @@ export class SalesScreen extends LitElement {
       <table data-test="tender-table">
         <thead>
           <tr>
-            <th scope="col">${t("sales.till")}</th>
+            <th scope="col">${t("sales.device")}</th>
             <th scope="col">${t("sales.method")}</th>
             <th scope="col" class="num">${t("sales.amount")}</th>
             <th scope="col" class="num">${t("sales.tip")}</th>
