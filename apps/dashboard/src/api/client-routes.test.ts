@@ -970,3 +970,23 @@ it("replaces a missing home tile through its own route with a structural referen
     ],
   ]);
 });
+
+it("downloads the modelo 303 file for the chosen period as an ordinary GET, bytes untouched", async () => {
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValue(new Response(new Uint8Array([0x4e, 0xd1, 0x0a]), { status: 200 }));
+  const api = new DashboardApi("", fetchImpl);
+
+  const file = await api.downloadVatReturnFile({
+    year: 2026,
+    period: "3T",
+    declarationType: "I",
+  });
+
+  const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+  expect(url).toBe("/management-api/reports/modelo-303?year=2026&period=3T&declarationType=I");
+  expect(init.method).toBe("GET");
+  expect(init.credentials).toBe("include");
+  expect(new Headers(init.headers).has("x-waitron-live")).toBe(false);
+  expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([0x4e, 0xd1, 0x0a]);
+});

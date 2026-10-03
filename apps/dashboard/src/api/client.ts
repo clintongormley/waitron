@@ -1033,6 +1033,13 @@ export interface PrintCategorySalesInput {
   printerId: string;
 }
 
+/** `period` is the server's own token: `01`..`12` for a month, `1T`..`4T` for a quarter. */
+export interface VatReturnFileInput {
+  year: number;
+  period: string;
+  declarationType: string;
+}
+
 // ── Diagnostics (recent logs + runtime verbosity) types ──────────────────────────────────────────
 
 export type DiagnosticsLine = {
@@ -2953,6 +2960,18 @@ export class DashboardApi {
       "POST",
       input,
     );
+  }
+
+  /** The DR303 file (modelo 303) for one period; the server answers its ISO-8859-1 bytes. */
+  downloadVatReturnFile(input: VatReturnFileInput): Promise<Blob> {
+    const params = new URLSearchParams({
+      year: String(input.year),
+      period: input.period,
+      declarationType: input.declarationType,
+    });
+    return this.#request<Blob>(`/management-api/reports/modelo-303?${params}`, "GET", undefined, {
+      as: "blob",
+    });
   }
 
   getOverdueOrders(): Promise<{ orders: OverdueOrder[] }> {

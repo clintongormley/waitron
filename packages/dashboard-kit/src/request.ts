@@ -6,12 +6,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Per-call options. `as: "blob"` resolves a 2xx to its body's bytes, undecoded, for a file download; a
+ * refusal is decoded exactly as without it.
+ */
+export interface RequestOptions {
+  passive?: boolean;
+  as?: "blob";
+}
+
 /** The one request primitive every dashboard API method funnels through — path-first: `(path, method, body?)`. */
 export type DashboardRequest = <T>(
   path: string,
   method: string,
   body?: unknown,
-  options?: { passive?: boolean },
+  options?: RequestOptions,
 ) => Promise<T>;
 
 /**
@@ -41,7 +50,7 @@ export function createRequest(
     path: string,
     method: string,
     body?: unknown,
-    options?: { passive?: boolean },
+    options?: RequestOptions,
   ): Promise<T> => {
     const init: RequestInit =
       body === undefined
@@ -86,8 +95,9 @@ export function createRequest(
         ? { code, status: res.status }
         : { code, params, status: res.status };
     }
-    const text = await res.text();
+    const read: Blob | string = await (options?.as === "blob" ? res.blob() : res.text());
     if (!passive) opts.onSuccess?.(path);
-    return (text === "" ? undefined : JSON.parse(text)) as T;
+    if (typeof read !== "string") return read as T;
+    return (read === "" ? undefined : JSON.parse(read)) as T;
   };
 }

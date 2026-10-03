@@ -191,3 +191,46 @@ it("reports a connection failure without pretending an HTTP response arrived", a
   await expect(request("/printers", "GET")).rejects.toEqual({ code: "connection.failed" });
   expect(onError).toHaveBeenCalledWith("connection.failed");
 });
+
+it('returns a file\'s bytes untouched with as: "blob"', async () => {
+  // 0xD1 is `Ñ` in ISO-8859-1 and not valid UTF-8 on its own: a text decode would turn it into
+  // U+FFFD, which re-encodes as three bytes, so a decoded body comes back five bytes long.
+  const bytes = new Uint8Array([0x4e, 0xd1, 0x0a]);
+  const onSuccess = vi.fn();
+  const request = createRequest({
+    fetchImpl: vi.fn<FetchLike>().mockResolvedValue(new Response(bytes, { status: 200 })),
+    onSuccess,
+  });
+
+  const out = await request<Blob>("/management-api/reports/modelo-303", "GET", undefined, {
+    as: "blob",
+  });
+
+  expect(out).toBeInstanceOf(Blob);
+  expect([...new Uint8Array(await out.arrayBuffer())]).toEqual([0x4e, 0xd1, 0x0a]);
+  expect(onSuccess).toHaveBeenCalledWith("/management-api/reports/modelo-303");
+});
+
+it('decodes a refusal the same way with as: "blob"', async () => {
+  const onError = vi.fn();
+  const request = createRequest({
+    fetchImpl: vi
+      .fn<FetchLike>()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "management.request_invalid", params: { field: "period" } } },
+          400,
+        ),
+      ),
+    onError,
+  });
+
+  await expect(
+    request("/management-api/reports/modelo-303", "GET", undefined, { as: "blob" }),
+  ).rejects.toEqual({
+    code: "management.request_invalid",
+    params: { field: "period" },
+    status: 400,
+  });
+  expect(onError).toHaveBeenCalledWith("management.request_invalid");
+});
