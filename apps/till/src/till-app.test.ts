@@ -3919,6 +3919,32 @@ describe("till-app", () => {
     });
   });
 
+  it("sends a walk-up line's options answer and not the names the picker copied onto it for display", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1", {
+      options: [{ listId: "list-punto", labelId: "label-medium" }],
+      optionSnapshots: [frozenPunto],
+    });
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(currentApi.recordSale).toHaveBeenCalledWith(
+      [
+        {
+          makeAt: null,
+          menuItemId: "menu-item-cafe-0",
+          quantity: "1",
+          options: [{ listId: "list-punto", labelId: "label-medium" }],
+        },
+      ],
+      { method: "cash", amount: "5" },
+      c.store.id,
+    );
+  });
+
   it("tells the operator when a still-offered list's frozen answer no longer matches it", async () => {
     // The label was renamed between the park and the retrieve, so the six frozen names name nothing
     // on offer. Substituting the list's default would change what the diner asked for on a line
@@ -10111,8 +10137,6 @@ describe("till-app follows a server move", () => {
     expect(banner()!.textContent).toContain(t("server.waiting_promotion"));
   });
 });
-
-it("sends a walk-up line's options answer without any local price preview", () => {});
 
 describe("a failed list refresh after a successful write", () => {
   // Fake timers from mount on: the retry countdown is a chain of one-second timeouts.

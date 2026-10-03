@@ -5169,7 +5169,7 @@ characters. Left open:
   `apps/till` (#614, #616, #618, #621) and `apps/server` in parts (#613, #615, #617, #620, #622,
   #623, #624, #625, #629, #653, #656, #657, #658). A pruning pull request cannot carry this file (the
   checker refuses it), so each one's line lands here as a docs-only push after the merge. Found by
-  those pull requests and left for the package that owns each, all still OPEN:
+  those pull requests and left for the package that owns each, all still OPEN unless marked DONE:
   - Found by the retroactive Codex reviews of #621–#626 and #629 (C3.18.12r, 2026-09-25), outside
     the files their fixes could change or not changeable in a comments-only PR:
     `apps/server/README.md` (near line 496) still says an `error` line and a 503 are "the same
@@ -5343,16 +5343,16 @@ characters. Left open:
     `transfer-lines.test.ts`, "(the TS-4 shape)" in `move-merge.test.ts`, "TS-4's move guards" and
     "TS-2 status" in `split-bill.test.ts`.
   - Found by #621 (the rest of `apps/till`), not fixable in a comments-only change.
-    **`apps/till/src/till-app.test.ts` has an empty test**, `it("sends a walk-up line's options
-    answer without any local price preview", () => {})`, which passes whatever the code does
-    (`git blame`: 9fbdc8ba7, 2026-09-21). The review reported that "resets any leftover drill/active
-    tab on login" still passes with login's own clearing line deleted, because logout clears the
-    same state first (run in review, not re-run here). A question the prune moved here from a
-    deleted `menu-filter.ts` comment: should the `no-meat`/`no-fish` lenses also hide a dish whose
-    diet is still pending review, as `vegan`/`vegetarian` do? Today they hide only dishes known to
-    contain the tag. Comments inside `till-app.ts`'s template text still carry design-doc pointers
-    (`cash-drawer-authorization §5`, `device-enrolment §3.1`), and many `till-app.test.ts` titles
-    carry plan and review labels ("(Finding 2)", "(P6)", "(FP-1)", "(KDS-1)", "Task 8",
+    **The empty walk-up options test in `apps/till/src/till-app.test.ts` is now a real case — DONE
+    (W25, 2026-10-03):** it fails when the paid line drops its options answer, and when it carries
+    the names the picker copied onto the line for display. The review reported that "resets any
+    leftover drill/active tab on login" still passes with login's own clearing line deleted, because
+    logout clears the same state first (run in review, not re-run here). A question the prune moved
+    here from a deleted `menu-filter.ts` comment: should the `no-meat`/`no-fish` lenses also hide a
+    dish whose diet is still pending review, as `vegan`/`vegetarian` do? Today they hide only dishes
+    known to contain the tag. Comments inside `till-app.ts`'s template text still carry design-doc
+    pointers (`cash-drawer-authorization §5`, `device-enrolment §3.1`), and many `till-app.test.ts`
+    titles carry plan and review labels ("(Finding 2)", "(P6)", "(FP-1)", "(KDS-1)", "Task 8",
     "(SP-B2.1)"), as do three `session-activity.test.ts` titles ("(C3)").
   - Found by #620 (`apps/server` part h1), not fixable in a comments-only change.
     `redact-secrets.ts` was written against the PostgreSQL connection-string parser, and `pg` is now
