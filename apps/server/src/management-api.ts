@@ -6,7 +6,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, isAppError } from "@waitron/shared";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
-import { checkOwnPasswordAhead } from "./own-password-ahead.js";
+import { ownPasswordChanges } from "./own-password-ahead.js";
 import {
   fireControlMode,
   readNodeMembership,
@@ -39,7 +39,6 @@ import {
   invitePerson,
   reactivatePersonForInvitation,
   readPasskeySignals,
-  resolveManagementSession,
   resetPersonLogin,
   shouldOfferPasskey,
   requestAccountRecoveryAction,
@@ -47,7 +46,6 @@ import {
   updatePersonDetails,
   verifyOwnCredentials,
   type PersonRoleValue,
-  type SecretCheck,
   type TotpKeyRing,
 } from "@waitron/identity";
 import type { IssuedAccountAction } from "@waitron/identity";
@@ -532,31 +530,7 @@ export function mountManagementApi(
     deps.accountActionRateLimiters?.completion ?? createAccountActionRateLimiter();
   const googleCodeExchange = deps.googleCodeExchange ?? exchangeGoogleCode;
   const googleFlowCookie = "waitron_google_flow";
-  const withCredentialChange = async <T>(
-    sessionId: string,
-    currentPassword: string | undefined,
-    fn: (tx: Transaction, checked: SecretCheck | undefined) => Promise<T>,
-  ): Promise<T> => {
-    const checked = await checkOwnPasswordAhead(deps.db, credentialChangeThrottle, sessionId, {
-      currentPassword,
-    });
-    return withTransaction(deps.db, async (tx) => {
-      const { personId } = await resolveManagementSession(tx, sessionId);
-      const finish = credentialChangeThrottle.begin(personId);
-      try {
-        const result = await fn(tx, checked);
-        finish("success");
-        return result;
-      } catch (error) {
-        finish(
-          isAppError(error) && (error.code === "password.invalid" || error.code === "totp.invalid")
-            ? "invalid"
-            : "error",
-        );
-        throw error;
-      }
-    });
-  };
+  const withCredentialChange = ownPasswordChanges(deps.db, credentialChangeThrottle);
   const bindGoogleFlow = (c: Context, state: string): void => {
     setCookie(c, googleFlowCookie, state, {
       httpOnly: true,
@@ -590,19 +564,19 @@ export function mountManagementApi(
       if (deps.googleOidc === undefined) throw new AppError("google.invalid", {});
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
-      const currentPassword =
-        typeof body.currentPassword === "string" ? body.currentPassword : undefined;
-      const out = await withCredentialChange(sessionId, currentPassword, async (tx, checked) => {
-        return beginGoogleLink(tx, {
-          managementSessionId: sessionId,
-          ...(currentPassword === undefined ? {} : { currentPassword }),
+      const out = await withCredentialChange(
+        sessionId,
+        () => ({
+          ...(typeof body.currentPassword === "string"
+            ? { currentPassword: body.currentPassword }
+            : {}),
           ...(typeof body.totp === "string" ? { totp: body.totp } : {}),
           keyRing: credentialKeyRing,
-          checked,
           clientId: deps.googleOidc!.clientId,
           redirectUri: deps.googleOidc!.redirectUri,
-        });
-      });
+        }),
+        beginGoogleLink,
+      );
       bindGoogleFlow(c, out.state);
       return c.json({ authorizationUrl: out.authorizationUrl });
     }),
@@ -2053,20 +2027,22 @@ export function mountManagementApi(
         throw new AppError("management.request_invalid", { field: "currentPassword" });
       }
       const currentPassword = body.currentPassword;
-      const out = await withCredentialChange(sessionId, currentPassword, async (tx, checked) => {
-        await verifyOwnCredentials(tx, {
-          managementSessionId: sessionId,
+      const out = await withCredentialChange(
+        sessionId,
+        () => ({
           currentPassword,
           ...(typeof body.totp === "string" ? { totp: body.totp } : {}),
           keyRing: credentialKeyRing,
-          checked,
-        });
-        return beginPasskeyRegistration(tx, {
-          managementSessionId: sessionId,
-          rpId: deps.rpId,
-          rpName: "Waitron",
-        });
-      });
+        }),
+        async (tx, credentials) => {
+          await verifyOwnCredentials(tx, credentials);
+          return beginPasskeyRegistration(tx, {
+            managementSessionId: sessionId,
+            rpId: deps.rpId,
+            rpName: "Waitron",
+          });
+        },
+      );
       return c.json(out);
     }),
   );

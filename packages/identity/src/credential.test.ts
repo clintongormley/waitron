@@ -32,6 +32,7 @@ function spiedAttempts(slot = "override:till-1"): {
   const real = createPinThrottle({ now: () => 1_000_000 });
   const throttle = {
     check: vi.fn(real.check),
+    wouldRefuse: vi.fn(real.wouldRefuse),
     recordFailure: vi.fn(real.recordFailure),
     clear: vi.fn(real.clear),
   };

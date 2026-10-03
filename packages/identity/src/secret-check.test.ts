@@ -520,7 +520,7 @@ async function ownSession(): Promise<{ personId: string; managementSessionId: st
 }
 
 describe("checkOwnPassword", () => {
-  it("reports whether the signed-in person's current password matches", async () => {
+  it("reports whether the person's current password matches", async () => {
     const owner = await ownSession();
 
     const right = await checkOwnPassword(suite.db, { ...owner, currentPassword: "correct horse" });
@@ -532,40 +532,32 @@ describe("checkOwnPassword", () => {
     expect(missing.matches).toBe(false);
   });
 
-  it("leaves the session's last-seen time alone", async () => {
+  it("is not trusted by a change whose session names another person, even one with the same hash", async () => {
     const owner = await ownSession();
-    const earlier = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const other = await ownSession();
     await run((tx) =>
       tx.execute(
-        sql`update management_sessions set last_seen_at = ${earlier} where person_id = ${owner.personId}`,
+        sql`update persons set password_hash = (select password_hash from persons where id = ${owner.personId}) where id = ${other.personId}`,
       ),
     );
+    const checked = await checkOwnPassword(suite.db, {
+      personId: other.personId,
+      currentPassword: "correct horse",
+    });
+    passwordSpy.mockClear();
 
-    await checkOwnPassword(suite.db, { ...owner, currentPassword: "correct horse" });
-
-    const rows = await suite.db.execute<{ last_seen_at: string }>(
-      sql`select last_seen_at from management_sessions where person_id = ${owner.personId}`,
+    const person = await run((tx) =>
+      verifyOwnCredentials(tx, {
+        ...owner,
+        currentPassword: "correct horse",
+        checked,
+        keyRing: TOTP_KEY_RING,
+      }),
     );
-    expect(rows.rows).toEqual([{ last_seen_at: earlier }]);
-  });
 
-  it("passes the session's own refusal through", async () => {
-    const owner = await ownSession();
-    await setStatus(owner.personId, "suspended");
-
-    expect(
-      await codeOf(() =>
-        checkOwnPassword(suite.db, {
-          managementSessionId: "no-such-session",
-          currentPassword: "x",
-        }),
-      ),
-    ).toBe("management_session.required");
-    expect(
-      await codeOf(() =>
-        checkOwnPassword(suite.db, { ...owner, currentPassword: "correct horse" }),
-      ),
-    ).toBe("person.suspended");
+    expect(checked.matches).toBe(true);
+    expect(person.id).toBe(owner.personId);
+    expect(passwordSpy).toHaveBeenCalledTimes(1);
   });
 
   it("lets another writer commit while it derives the key", async () => {

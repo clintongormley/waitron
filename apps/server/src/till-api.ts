@@ -32,7 +32,7 @@ import {
   permissionsForRole,
   setPersonLocale,
 } from "@waitron/identity";
-import type { PinAttempts, PinThrottle, SecretCheck } from "@waitron/identity";
+import type { PinAttempts, PinThrottle } from "@waitron/identity";
 import {
   listAccessibleCatalogues,
   listAvailableProducts,
@@ -54,7 +54,7 @@ import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
-import { checkOverrideAhead, withCheck } from "./pin-check-ahead.js";
+import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { moveDishesToStation } from "./station-move.js";
 import { madeHereAnswer, madeHereSinkFor } from "./made-here.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
@@ -519,16 +519,15 @@ export function overridePinAttempts(pinThrottle: PinThrottle, sessionTillId: str
 }
 
 /**
- * The drawer override checked ahead of the transaction, when the transaction will check it: the
- * policy is not `open` and the override is well formed (a malformed one is refused inside).
+ * The drawer override the transaction will check: the policy is not `open` and the override is well
+ * formed (a malformed one is refused inside).
  */
-async function checkDrawerOverrideAhead(
+async function drawerOverrideToCheck(
   db: Database,
   cfg: TillConfig,
   sessionId: string,
   body: { override?: { personId?: unknown; pin?: unknown } },
-  attempts: PinAttempts,
-): Promise<SecretCheck | undefined> {
+): Promise<{ personId: string; pin: string } | undefined> {
   const open = await db
     .select({ id: locations.id })
     .from(locations)
@@ -540,7 +539,7 @@ async function checkDrawerOverrideAhead(
   } catch {
     return undefined;
   }
-  return checkOverrideAhead(db, { sessionId, permission: "cash.drawer" }, override, attempts);
+  return overrideToCheck(db, { sessionId, permission: "cash.drawer" }, override);
 }
 
 /** A non-UUID names no open tab, so it gets the absent tab's `tab.not_open`. */
@@ -1747,49 +1746,51 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const drawerCfg = await deviceTillCfg(deps, c, device);
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
       const attempts = overridePinAttempts(pinThrottle, tillId);
-      const checked = await checkDrawerOverrideAhead(deps.db, deps.cfg, sessionId, body, attempts);
-      await withTransaction(deps.db, async (tx) => {
-        const [loc] = await tx
-          .select({ policy: locations.drawerOpenPolicy })
-          .from(locations)
-          .where(eq(locations.id, deps.cfg.locationId));
-        // A missing location row falls back to the secure 'gated' default.
-        /* v8 ignore start -- unreachable: the provisioned till's own location row exists */
-        const policy = loc?.policy ?? "gated";
-        /* v8 ignore stop */
+      const toCheck = await drawerOverrideToCheck(deps.db, deps.cfg, sessionId, body);
+      await withPinCheckAhead(deps.db, toCheck, attempts, (checked) =>
+        withTransaction(deps.db, async (tx) => {
+          const [loc] = await tx
+            .select({ policy: locations.drawerOpenPolicy })
+            .from(locations)
+            .where(eq(locations.id, deps.cfg.locationId));
+          // A missing location row falls back to the secure 'gated' default.
+          /* v8 ignore start -- unreachable: the provisioned till's own location row exists */
+          const policy = loc?.policy ?? "gated";
+          /* v8 ignore stop */
 
-        const { authorizedBy, viaOverride } =
-          policy === "open"
-            ? { authorizedBy: personId, viaOverride: false }
-            : await authorize(
-                tx,
-                {
-                  sessionId,
-                  permission: "cash.drawer",
-                  override: withCheck(parseDrawerOverride(body.override), checked),
-                },
-                attempts,
-              );
+          const { authorizedBy, viaOverride } =
+            policy === "open"
+              ? { authorizedBy: personId, viaOverride: false }
+              : await authorize(
+                  tx,
+                  {
+                    sessionId,
+                    permission: "cash.drawer",
+                    override: withCheck(parseDrawerOverride(body.override), checked),
+                  },
+                  attempts,
+                );
 
-        const printer = await resolveReceiptPrinter(tx, drawerCfg);
-        if (printer === undefined) {
-          throw new AppError("drawer.no_printer", { tillId: drawerCfg.tillId });
-        }
-        if (!printer.hasCashDrawer) {
-          throw new AppError("drawer.not_attached", { printerId: printer.id });
-        }
-        if (!printer.tillOpensDrawer) {
-          throw new AppError("drawer.till_switched_off", { tillId: drawerCfg.tillId });
-        }
-        await enqueueManualDrawerOpen(
-          tx,
-          drawerCfg,
-          printer.id,
-          personId,
-          authorizedBy,
-          viaOverride,
-        );
-      });
+          const printer = await resolveReceiptPrinter(tx, drawerCfg);
+          if (printer === undefined) {
+            throw new AppError("drawer.no_printer", { tillId: drawerCfg.tillId });
+          }
+          if (!printer.hasCashDrawer) {
+            throw new AppError("drawer.not_attached", { printerId: printer.id });
+          }
+          if (!printer.tillOpensDrawer) {
+            throw new AppError("drawer.till_switched_off", { tillId: drawerCfg.tillId });
+          }
+          await enqueueManualDrawerOpen(
+            tx,
+            drawerCfg,
+            printer.id,
+            personId,
+            authorizedBy,
+            viaOverride,
+          );
+        }),
+      );
       return c.body(null, 200);
     }),
   );

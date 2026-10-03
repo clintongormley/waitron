@@ -36,6 +36,8 @@ export interface PinThrottleOptions {
 export interface PinThrottle {
   /** Called before verifying a PIN; throws `pin.throttled` while inside a wait window. */
   check(slot: string, personId: string): void;
+  /** Whether `check` would refuse now. Changes nothing, not even what it forgets. */
+  wouldRefuse(slot: string, personId: string): boolean;
   recordFailure(slot: string, personId: string): void;
   clear(slot: string, personId: string): void;
 }
@@ -124,6 +126,19 @@ export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
       }
       // The window has elapsed: keep the streak so the NEXT wrong PIN escalates rather than resetting.
       touch(key, entry, t);
+    },
+
+    wouldRefuse(slot: string, personId: string): boolean {
+      const t = now();
+      const entry = entries.get(entryKey(slot, personId));
+      if (entry !== undefined && t - entry.lastAt < PIN_THROTTLE_IDLE_MS) return t < entry.unlockAt;
+      // A new pair: refused only while its slot is full once `check` has swept the idle entries.
+      let idleInSlot = 0;
+      for (const kept of entries.values()) {
+        if (t - kept.lastAt < PIN_THROTTLE_IDLE_MS) break;
+        if (kept.slot === slot) idleInSlot += 1;
+      }
+      return (heldBySlot.get(slot) ?? 0) - idleInSlot >= PIN_THROTTLE_MAX_KEYS_PER_SLOT;
     },
 
     recordFailure(slot: string, personId: string): void {

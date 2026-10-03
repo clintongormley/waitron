@@ -81,6 +81,8 @@ const derivations = vi.hoisted(() => ({
   writes: [] as Promise<unknown>[],
   requestHoldsLock: 0,
   stopWatchingLock: () => {},
+  /** Every derivation of the watched PIN, held back or not. */
+  count: 0,
 }));
 
 vi.mock("node:crypto", async (importOriginal) => {
@@ -90,6 +92,7 @@ vi.mock("node:crypto", async (importOriginal) => {
     ...actual,
     scrypt: (secret: string, salt: Buffer, keyLength: number, done: Done) => {
       const watched = secret === derivations.pin;
+      if (watched) derivations.count += 1;
       if (watched && derivations.requestHoldsLock > 0) {
         derivations.order.push("derived under the request's lock");
       }
@@ -117,6 +120,7 @@ vi.mock("node:crypto", async (importOriginal) => {
 function watchDerivations(db: Database, pin: string, ...during: (() => Promise<unknown>)[]): void {
   derivations.pin = pin;
   derivations.during = during;
+  derivations.count = 0;
   const scope = new AsyncResource("watched derivation");
   let starting = false;
   derivations.start = (action) => {
@@ -1761,20 +1765,24 @@ describe("the bill payment attestation checks the manager's PIN before the write
     expect(await watchedOrder()).toEqual([]);
   });
 
-  it("counts wrong PINs sent at once as it counts them sent in turn", async () => {
+  it("counts wrong PINs sent at once as it counts them sent in turn, deriving as many keys", async () => {
     const v = await setup();
     const id = await strandedBillPayment(v);
     const wrong = { outcome: "failed", note: NOTE, pin: "9999" };
+    watchDerivations(suite.db, "9999");
 
     const answers = await Promise.all(
       Array.from({ length: PIN_THROTTLE_FREE_ATTEMPTS + 2 }, () => post(v, attestPath(id), wrong)),
     );
+    const derived = derivations.count;
     const right = await post(v, attestPath(id), { ...wrong, pin: "1234" });
 
     expect(answers.map((res) => res.status).sort()).toEqual([
       ...Array.from({ length: PIN_THROTTLE_FREE_ATTEMPTS + 1 }, () => 401),
       429,
     ]);
+    // As many keys as when they are sent in turn: none for the one the limit refuses.
+    expect(derived).toBe(PIN_THROTTLE_FREE_ATTEMPTS + 1);
     expect(right.status).toBe(429);
     expect((await billPaymentOf(id)).state).toBe("pending");
   });

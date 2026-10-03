@@ -1826,6 +1826,28 @@ describe("Management API — a credential change checks the current password bef
     expect(result.status).toBe(429);
     expect({ order, outside }).toEqual({ order: [], outside: 0 });
   });
+  it("derives a key only for the attempts the slow-down lets through when eight arrive at once", async () => {
+    await setupTenant();
+    const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const { result, order, outside } = await watchingDerivations(() =>
+      Promise.all(
+        Array.from({ length: 8 }, () =>
+          app.request("/management-api/session/me/google", {
+            method: "POST",
+            headers: { cookie, ...json },
+            body: JSON.stringify({ currentPassword: "not the password" }),
+          }),
+        ),
+      ),
+    );
+
+    const statuses = result.map((res) => res.status);
+    expect(statuses.filter((status) => status === 401)).toHaveLength(4);
+    expect(statuses.filter((status) => status === 429)).toHaveLength(4);
+    expect(outside + order.length).toBe(4);
+  });
 });
 
 /** Runs `request`, recording each key it derives, inside or outside a transaction. */

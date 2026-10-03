@@ -6,7 +6,6 @@ import {
   roleHasPermission,
   verifyThrottledCredential,
   type PinAttempts,
-  type SecretCheck,
 } from "@waitron/identity";
 import type { Override } from "@waitron/identity";
 import {
@@ -39,7 +38,7 @@ import {
 } from "./bill-payments.js";
 import type { Attestation, BillBalance, BillRefundView } from "./bill-payments.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
-import { checkOverrideAhead, withCheck } from "./pin-check-ahead.js";
+import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { enqueueBillRefundDrawer } from "./receipt-print.js";
 import type { TillConfig } from "./till-config.js";
 import { fingerprint } from "./parties.js";
@@ -460,17 +459,17 @@ export async function attestCardRefund(
 }
 
 /**
- * The override's PIN checked before the refund's transaction opens, when that transaction will check
- * it: `authorize` does for an operator lacking `sale.refund`, and a hand-keyed card refund confirmed
- * done checks it as the confirmer otherwise. Read without writing; the transaction decides again.
+ * The override whose PIN the refund's transaction will check: `authorize` does for an operator
+ * lacking `sale.refund`, and a hand-keyed card refund confirmed done checks it as the confirmer
+ * otherwise. Read without writing; the transaction decides again.
  */
-async function checkRefundPinAhead(
+async function refundOverrideToCheck(
   db: Database,
   workingOrderId: string,
   paymentId: string,
   req: BillRefundRequest,
-  operator: { sessionId: string; attempts: PinAttempts },
-): Promise<SecretCheck | undefined> {
+  sessionId: string,
+): Promise<{ personId: string; pin: string } | undefined> {
   if (req.override === undefined) return undefined;
   let confirmsHandKeyedCard = false;
   if (req.manualConfirmed === true) {
@@ -482,11 +481,10 @@ async function checkRefundPinAhead(
       payment?.method === "card" &&
       (await findPaymentByBillPayment(db, paymentId))?.provider === MANUAL_PROVIDER;
   }
-  return checkOverrideAhead(
+  return overrideToCheck(
     db,
-    { sessionId: operator.sessionId, permission: "sale.refund" },
+    { sessionId, permission: "sale.refund" },
     req.override,
-    operator.attempts,
     confirmsHandKeyedCard,
   );
 }
@@ -514,155 +512,161 @@ export async function refundBillPayment(
 ): Promise<BillRefundResult> {
   const applied = money(decimal(req.appliedAmount));
   const tip = money(decimal(req.tipAmount));
-  const override = withCheck(
-    req.override,
-    await checkRefundPinAhead(deps.db, workingOrderId, paymentId, req, operator),
+  const toCheck = await refundOverrideToCheck(
+    deps.db,
+    workingOrderId,
+    paymentId,
+    req,
+    operator.sessionId,
   );
   let release = (): void => {};
   try {
-    const begun = await withTransaction(deps.db, async (tx) => {
-      const authorization = await authorize(
-        tx,
-        { sessionId: operator.sessionId, permission: "sale.refund", override },
-        operator.attempts,
-      );
-      const [payment] = await tx
-        .select()
-        .from(billPayments)
-        .where(
-          and(eq(billPayments.id, paymentId), eq(billPayments.workingOrderId, workingOrderId)),
+    const begun = await withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) => {
+      const override = withCheck(req.override, checked);
+      return withTransaction(deps.db, async (tx) => {
+        const authorization = await authorize(
+          tx,
+          { sessionId: operator.sessionId, permission: "sale.refund", override },
+          operator.attempts,
         );
-      if (payment === undefined) throw new AppError("bill.payment_not_found", { paymentId });
-      const provided =
-        payment.method === "card" ? await findPaymentByBillPayment(tx, paymentId) : undefined;
-      const print = refundFingerprint(
-        paymentId,
-        req.appliedAmount,
-        req.tipAmount,
-        req.reason,
-        provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true,
-      );
+        const [payment] = await tx
+          .select()
+          .from(billPayments)
+          .where(
+            and(eq(billPayments.id, paymentId), eq(billPayments.workingOrderId, workingOrderId)),
+          );
+        if (payment === undefined) throw new AppError("bill.payment_not_found", { paymentId });
+        const provided =
+          payment.method === "card" ? await findPaymentByBillPayment(tx, paymentId) : undefined;
+        const print = refundFingerprint(
+          paymentId,
+          req.appliedAmount,
+          req.tipAmount,
+          req.reason,
+          provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true,
+        );
 
-      const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
-      if (earlier.refund !== undefined) {
-        if (earlier.refund.fingerprint !== print) {
+        const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
+        if (earlier.refund !== undefined) {
+          if (earlier.refund.fingerprint !== print) {
+            throw new AppError("submission.id_reused", { submissionId: req.submissionId });
+          }
+          if (earlier.refund.state === "pending") {
+            return { kind: "resume" as const, refundId: earlier.refund.id };
+          }
+          return {
+            kind: "done" as const,
+            result: await resultOf(tx, earlier.refund, workingOrderId),
+          };
+        }
+        if (earlier.payment !== undefined) {
           throw new AppError("submission.id_reused", { submissionId: req.submissionId });
         }
-        if (earlier.refund.state === "pending") {
-          return { kind: "resume" as const, refundId: earlier.refund.id };
+
+        await requireOpenBill(tx, workingOrderId);
+        await refusePaymentInFlight(tx, [workingOrderId]);
+
+        const held = await readOnePaymentMoney(tx, payment);
+        const [refundable, refundableTip] =
+          payment.state === "received" ? [held.netApplied, held.netTip] : [ZERO, ZERO];
+        const whole = compareDecimal(applied, refundable) === 0;
+        if (
+          compareDecimal(applied, refundable) > 0 ||
+          (compareDecimal(tip, ZERO) !== 0 && !(whole && compareDecimal(tip, refundableTip) === 0))
+        ) {
+          throw new AppError("bill.refund_exceeds_payment", {
+            paymentId,
+            applied: money(refundable),
+            tip: money(refundableTip),
+          });
         }
-        return {
-          kind: "done" as const,
-          result: await resultOf(tx, earlier.refund, workingOrderId),
-        };
-      }
-      if (earlier.payment !== undefined) {
-        throw new AppError("submission.id_reused", { submissionId: req.submissionId });
-      }
+        if (payment.kind === "items" && !whole) {
+          throw new AppError("bill.refund_not_whole", {
+            paymentId,
+            applied: money(refundable),
+            tip: money(refundableTip),
+          });
+        }
 
-      await requireOpenBill(tx, workingOrderId);
-      await refusePaymentInFlight(tx, [workingOrderId]);
-
-      const held = await readOnePaymentMoney(tx, payment);
-      const [refundable, refundableTip] =
-        payment.state === "received" ? [held.netApplied, held.netTip] : [ZERO, ZERO];
-      const whole = compareDecimal(applied, refundable) === 0;
-      if (
-        compareDecimal(applied, refundable) > 0 ||
-        (compareDecimal(tip, ZERO) !== 0 && !(whole && compareDecimal(tip, refundableTip) === 0))
-      ) {
-        throw new AppError("bill.refund_exceeds_payment", {
-          paymentId,
-          applied: money(refundable),
-          tip: money(refundableTip),
-        });
-      }
-      if (payment.kind === "items" && !whole) {
-        throw new AppError("bill.refund_not_whole", {
-          paymentId,
-          applied: money(refundable),
-          tip: money(refundableTip),
-        });
-      }
-
-      const createdAt = deps.clock.now().instant.toISOString();
-      const values = {
-        billPaymentId: paymentId,
-        submissionId: req.submissionId,
-        fingerprint: print,
-        appliedAmount: decimalToCents(applied),
-        tipAmount: decimalToCents(tip),
-        reason: req.reason,
-        authorizedBy: authorization.authorizedBy,
-        requestedBy: operator.personId,
-        tillId: cfg.tillId,
-        createdAt,
-      };
-      if (payment.method === "cash") {
-        const [refund] = await tx
-          .insert(billPaymentRefunds)
-          .values({ ...values, state: "completed", completedAt: createdAt })
-          .returning();
-        await enqueueBillRefundDrawer(tx, cfg, paymentId, operator.personId, {
+        const createdAt = deps.clock.now().instant.toISOString();
+        const values = {
+          billPaymentId: paymentId,
+          submissionId: req.submissionId,
+          fingerprint: print,
+          appliedAmount: decimalToCents(applied),
+          tipAmount: decimalToCents(tip),
+          reason: req.reason,
           authorizedBy: authorization.authorizedBy,
-          viaOverride: authorization.viaOverride,
-        });
-        return { kind: "done" as const, result: await resultOf(tx, refund!, workingOrderId) };
-      }
-
-      if (provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true) {
-        let confirmedBy = authorization.authorizedBy;
-        if (!authorization.viaOverride) {
-          if (override === undefined) {
-            throw new AppError("bill.manual_refund_pin_required", { paymentId });
-          }
-          const confirmer = await verifyThrottledCredential(
-            tx,
-            override.personId,
-            override.pin,
-            operator.attempts,
-            override.checked,
-          );
-          if (!roleHasPermission(confirmer.role, "sale.refund")) {
-            throw new AppError("authorization.not_permitted", { permission: "sale.refund" });
-          }
-          confirmedBy = override.personId;
+          requestedBy: operator.personId,
+          tillId: cfg.tillId,
+          createdAt,
+        };
+        if (payment.method === "cash") {
+          const [refund] = await tx
+            .insert(billPaymentRefunds)
+            .values({ ...values, state: "completed", completedAt: createdAt })
+            .returning();
+          await enqueueBillRefundDrawer(tx, cfg, paymentId, operator.personId, {
+            authorizedBy: authorization.authorizedBy,
+            viaOverride: authorization.viaOverride,
+          });
+          return { kind: "done" as const, result: await resultOf(tx, refund!, workingOrderId) };
         }
+
+        if (provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true) {
+          let confirmedBy = authorization.authorizedBy;
+          if (!authorization.viaOverride) {
+            if (override === undefined) {
+              throw new AppError("bill.manual_refund_pin_required", { paymentId });
+            }
+            const confirmer = await verifyThrottledCredential(
+              tx,
+              override.personId,
+              override.pin,
+              operator.attempts,
+              override.checked,
+            );
+            if (!roleHasPermission(confirmer.role, "sale.refund")) {
+              throw new AppError("authorization.not_permitted", { permission: "sale.refund" });
+            }
+            confirmedBy = override.personId;
+          }
+          const [refund] = await tx
+            .insert(billPaymentRefunds)
+            .values({
+              ...values,
+              authorizedBy: confirmedBy,
+              state: "completed",
+              completedAt: createdAt,
+            })
+            .returning();
+          await recordManualRefund(tx, {
+            paymentRef: provided.paymentRef,
+            amount: centsToDecimal(values.appliedAmount + values.tipAmount),
+            authorizedBy: confirmedBy,
+          });
+          return { kind: "done" as const, result: await resultOf(tx, refund!, workingOrderId) };
+        }
+        const provider =
+          provided === undefined ? undefined : await deps.refundProviderFor?.(provided.provider);
+        if (provided === undefined || provider?.sendRefund === undefined) {
+          throw new AppError("bill.refund_unsupported", { paymentId });
+        }
+        // The provider's own record must allow this refund before it is asked for it.
+        await assertReversible(tx, {
+          provider: provided.provider,
+          paymentRef: provided.paymentRef,
+          kind: "refund",
+          amount: centsToDecimal(values.appliedAmount + values.tipAmount),
+        });
         const [refund] = await tx
           .insert(billPaymentRefunds)
-          .values({
-            ...values,
-            authorizedBy: confirmedBy,
-            state: "completed",
-            completedAt: createdAt,
-          })
+          .values({ ...values, state: "pending" })
           .returning();
-        await recordManualRefund(tx, {
-          paymentRef: provided.paymentRef,
-          amount: centsToDecimal(values.appliedAmount + values.tipAmount),
-          authorizedBy: confirmedBy,
-        });
-        return { kind: "done" as const, result: await resultOf(tx, refund!, workingOrderId) };
-      }
-      const provider =
-        provided === undefined ? undefined : await deps.refundProviderFor?.(provided.provider);
-      if (provided === undefined || provider?.sendRefund === undefined) {
-        throw new AppError("bill.refund_unsupported", { paymentId });
-      }
-      // The provider's own record must allow this refund before it is asked for it.
-      await assertReversible(tx, {
-        provider: provided.provider,
-        paymentRef: provided.paymentRef,
-        kind: "refund",
-        amount: centsToDecimal(values.appliedAmount + values.tipAmount),
+        // Inside the transaction, so no loop pass runs between the insert and the claim.
+        release = claimLive(liveRefundsOf(deps.db), refund!.id);
+        return { kind: "send" as const, refundId: refund!.id, provider };
       });
-      const [refund] = await tx
-        .insert(billPaymentRefunds)
-        .values({ ...values, state: "pending" })
-        .returning();
-      // Inside the transaction, so no loop pass runs between the insert and the claim.
-      release = claimLive(liveRefundsOf(deps.db), refund!.id);
-      return { kind: "send" as const, refundId: refund!.id, provider };
     });
     if (begun.kind === "done") return begun.result;
     if (begun.kind === "send") {

@@ -20,7 +20,13 @@ import {
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
-import { createPinThrottle, hashPin, loginWithPin, persons } from "@waitron/identity";
+import {
+  createPinThrottle,
+  hashPin,
+  loginWithPin,
+  persons,
+  PIN_THROTTLE_IDLE_MS,
+} from "@waitron/identity";
 import { captureAttempting } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import {
@@ -1082,6 +1088,29 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     expect(await creditsOf(original.id)).toEqual([
       expect.objectContaining({ authorizedBy: supervisorId }),
     ]);
+  });
+
+  it("lets a refused cancel that never reaches the PIN check leave the wrong-PIN count to go idle", async () => {
+    const cancelled = await placed([{ name: "Caña", quantity: "1" }]);
+    expect(
+      (await cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN })(cancelled)).status,
+    ).toBe(200);
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const { app, clockAt } = throttledApp();
+    const wrong = cancelWith({ personId: supervisorId, pin: "0000" }, venue.cookie, app);
+    for (let i = 0; i < 4; i += 1) expect((await wrong(id)).status).toBe(401);
+
+    clockAt.now += PIN_THROTTLE_IDLE_MS - 60_000;
+    const notPlaced = await wrong(cancelled);
+    expect({ status: notPlaced.status, code: notPlaced.json.code }).toEqual({
+      status: 409,
+      code: "working_order.not_placed",
+    });
+    clockAt.now += 60_000;
+
+    expect((await wrong(id)).status).toBe(401);
+    const right = cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN }, venue.cookie, app);
+    expect((await right(id)).status).toBe(200);
   });
 
   function noInvoiceZone(name: string) {

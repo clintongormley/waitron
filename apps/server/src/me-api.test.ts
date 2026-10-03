@@ -1364,6 +1364,48 @@ describe("mountMeApi — the current password is checked before the write lock i
     expect({ order, outside }).toEqual({ order: [], outside: 0 });
   });
 
+  it("derives a key only for the attempts the slow-down lets through when sixteen arrive at once", async () => {
+    const personId = await personWithPassword();
+    const app = mountApp();
+    const cookie = await cookieFor(personId);
+
+    const { result, order, outside } = await watchingDerivations(() =>
+      Promise.all(
+        Array.from({ length: 16 }, () =>
+          send(app, "PUT", "/management-api/session/me/pin", {
+            cookie,
+            body: { currentPassword: "wrong", pin: "8642" },
+          }),
+        ),
+      ),
+    );
+
+    const statuses = result.map((res) => res.status);
+    expect(statuses.filter((status) => status === 401)).toHaveLength(4);
+    expect(statuses.filter((status) => status === 429)).toHaveLength(12);
+    expect(outside + order.length).toBe(4);
+  });
+
+  it.each([
+    ["POST", "/management-api/session/me/totp/begin"],
+    ["POST", "/management-api/session/me/recovery-codes"],
+    ["DELETE", "/management-api/session/me/totp"],
+    ["DELETE", "/management-api/session/me/google"],
+  ])(
+    "answers %s %s from a signed-out browser with a malformed password as signed out, as before",
+    async (method, path) => {
+      const res = await send(mountApp(), method, path, {
+        cookie: `${MANAGEMENT_COOKIE}=${crypto.randomUUID()}`,
+        body: { currentPassword: 1234 },
+      });
+
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({
+        error: { code: "management_session.required", params: {} },
+      });
+    },
+  );
+
   it("answers a suspended person's change as before, deriving no key", async () => {
     const personId = await personWithPassword();
     const app = mountApp();

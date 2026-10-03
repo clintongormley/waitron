@@ -52,7 +52,7 @@ import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import { billPaymentIsLive, completeBillPayment, failBillPayment } from "./bill-payments.js";
 import { CHARGED, settleFromProviderRow } from "./bill-payments-loop.js";
-import { checkPinAhead } from "./pin-check-ahead.js";
+import { withPinCheckAhead } from "./pin-check-ahead.js";
 import {
   attestCardRefund,
   billRefundIsLive,
@@ -193,31 +193,25 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
 
   /**
-   * `checkPin` on the session's manager, before `gated` opens its transaction, when
-   * {@link verifyManagerPin} inside it will check the PIN. Undefined, deriving nothing, when `gated`
-   * or the wrong-PIN limit would refuse first, or the PIN is not text: the transaction then refuses
-   * as it would have without this.
+   * The session manager's PIN, for `checkPin` before {@link pinGated} opens its transaction.
+   * Undefined when `gated` would refuse first or the PIN is not text: the transaction then refuses as
+   * it would have without a check.
    */
-  const checkManagerPinAhead = async (
+  const managerPinToCheck = async (
     sessionId: string,
     pin: unknown,
-  ): Promise<SecretCheck | undefined> => {
+  ): Promise<{ personId: string; pin: string } | undefined> => {
     if (typeof pin !== "string") return undefined;
-    let personId: string;
     try {
-      ({ authorizedBy: personId } = await authorizeManager(deps.db, {
+      const { authorizedBy } = await authorizeManager(deps.db, {
         managementSessionId: sessionId,
         permission: PAYMENTS_MANAGE,
         touch: false,
-      }));
+      });
+      return { personId: authorizedBy, pin };
     } catch {
       return undefined;
     }
-    return checkPinAhead(
-      deps.db,
-      { personId, pin },
-      { throttle: pinThrottle, slot: DASHBOARD_PIN_SLOT },
-    );
   };
 
   /** Re-checks the manager's own PIN, refusing `pin.throttled` after too many wrong ones. */
@@ -239,6 +233,23 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }
     pinThrottle.clear(DASHBOARD_PIN_SLOT, personId);
   };
+
+  /** {@link gated} after {@link verifyManagerPin}, its key derived before the transaction opens. */
+  const pinGated = async <T>(
+    sessionId: string,
+    pin: unknown,
+    fn: (tx: Transaction, personId: string) => Promise<T>,
+  ): Promise<T> =>
+    withPinCheckAhead(
+      deps.db,
+      await managerPinToCheck(sessionId, pin),
+      { throttle: pinThrottle, slot: DASHBOARD_PIN_SLOT },
+      (checked) =>
+        gated(sessionId, async (tx, personId) => {
+          await verifyManagerPin(tx, personId, pin, checked);
+          return fn(tx, personId);
+        }),
+    );
 
   /**
    * Asks the provider what became of an abandoned attempt. `payment.not_found` from it means a
@@ -896,9 +907,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         await readJsonBody<Record<string, unknown>>(c),
         ["received", "failed"] as const,
       );
-      const checked = await checkManagerPinAhead(sessionId, pin);
-      const answer = await gated(sessionId, async (tx, personId) => {
-        await verifyManagerPin(tx, personId, pin, checked);
+      const answer = await pinGated(sessionId, pin, async (tx, personId) => {
         await requireStuckBillPayment(tx, id);
         // A provider row still `attempting` can yet be charged, so no outcome is recorded over it;
         // one that shows the card charged contradicts a failure.
@@ -1015,11 +1024,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         await readJsonBody<Record<string, unknown>>(c),
         ["completed", "failed"] as const,
       );
-      const checked = await checkManagerPinAhead(sessionId, pin);
-      const personId = await gated(sessionId, async (tx, authorizedBy) => {
-        await verifyManagerPin(tx, authorizedBy, pin, checked);
-        return authorizedBy;
-      });
+      const personId = await pinGated(sessionId, pin, async (_tx, authorizedBy) => authorizedBy);
       const refund = await attestCardRefund(refundDeps, id, outcome, {
         attestedBy: personId,
         note,

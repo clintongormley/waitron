@@ -49,18 +49,16 @@ interface Credentials {
 }
 
 /**
- * Checks the signed-in person's current password. Opens no transaction, so a caller holding none
- * leaves the write lock free while the key is derived, and writes nothing, not even the session's
- * last-seen time. Pass the result to the change inside the transaction; the authenticator code is
- * still checked there.
+ * Checks `personId`'s current password. Opens no transaction, so a caller holding none leaves the
+ * write lock free while the key is derived, and writes nothing. Pass the result to the change inside
+ * the transaction, which trusts it only for the person its own session names; the authenticator
+ * code is still checked there.
  */
 export async function checkOwnPassword(
   db: Database,
-  input: Owner & { currentPassword?: string },
+  input: { personId: string; currentPassword?: string },
 ): Promise<SecretCheck> {
-  const { personId } = await resolveManagementSession(db, input.managementSessionId, {
-    touch: false,
-  });
+  const { personId } = input;
   const [person] = await db
     .select({ passwordHash: persons.passwordHash })
     .from(persons)

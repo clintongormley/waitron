@@ -29,13 +29,12 @@ import {
   disableOwnTotp,
   unlinkOwnGoogle,
   normalizeAndValidateEmail,
-  type SecretCheck,
   type TotpKeyRing,
 } from "@waitron/identity";
-import { SUPPORTED_LOCALES, AppError, isAppError } from "@waitron/shared";
+import { SUPPORTED_LOCALES, AppError } from "@waitron/shared";
 import { resolveLoginLocale } from "./login-locale.js";
 import { createPasswordThrottle } from "./password-throttle.js";
-import { checkOwnPasswordAhead, type OwnPasswordAhead } from "./own-password-ahead.js";
+import { ownPasswordChanges } from "./own-password-ahead.js";
 import "./errors.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
@@ -111,32 +110,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       return fn(tx);
     });
 
-  const updateProfile = async <T>(
-    sessionId: string,
-    fn: (tx: Transaction, checked: SecretCheck | undefined) => Promise<T>,
-    ahead?: OwnPasswordAhead,
-  ): Promise<T> => {
-    const checked =
-      ahead === undefined
-        ? undefined
-        : await checkOwnPasswordAhead(deps.db, profileThrottle, sessionId, ahead);
-    return asStaff(async (tx) => {
-      const { personId } = await resolveManagementSession(tx, sessionId);
-      const finish = profileThrottle.begin(personId);
-      try {
-        const result = await fn(tx, checked);
-        finish("success");
-        return result;
-      } catch (error) {
-        finish(
-          isAppError(error) && (error.code === "password.invalid" || error.code === "totp.invalid")
-            ? "invalid"
-            : "error",
-        );
-        throw error;
-      }
-    });
-  };
+  const updateProfile = ownPasswordChanges(deps.db, profileThrottle);
   const textField = (body: Record<string, unknown>, field: string): string => {
     if (typeof body[field] !== "string")
       throw new AppError("management.request_invalid", { field });
@@ -171,12 +145,9 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       };
       const issued = await updateProfile(
         managementSessionId,
-        (tx, checked) =>
-          saveOwnProfile(tx, { ...input, checked, emailCodeKey: accountActionCodeKey }),
-        {
-          currentPassword: input.currentPassword,
-          checksPassword: (person) => normalizeAndValidateEmail(input.email) !== person.email,
-        },
+        () => ({ ...input, emailCodeKey: accountActionCodeKey }),
+        saveOwnProfile,
+        (person) => normalizeAndValidateEmail(input.email) !== person.email,
       );
       let emailVerificationSent = false;
       if (issued !== null && deps.sendAccountEmail !== undefined) {
@@ -222,11 +193,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         password: textField(body, "password"),
         ...credentials(body),
       };
-      await updateProfile(
-        managementSessionId,
-        (tx, checked) => changeOwnPassword(tx, { ...input, checked }),
-        input,
-      );
+      await updateProfile(managementSessionId, () => input, changeOwnPassword);
       return c.body(null, 204);
     }),
   );
@@ -239,11 +206,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         pin: textField(body, "pin"),
         ...credentials(body),
       };
-      await updateProfile(
-        managementSessionId,
-        (tx, checked) => changeOwnPin(tx, { ...input, checked }),
-        input,
-      );
+      await updateProfile(managementSessionId, () => input, changeOwnPin);
       return c.body(null, 204);
     }),
   );
@@ -256,11 +219,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         id: requireUuidParam(c.req.param("id"), "passkey"),
         ...credentials(body),
       };
-      await updateProfile(
-        managementSessionId,
-        (tx, checked) => removeOwnPasskey(tx, { ...input, checked }),
-        input,
-      );
+      await updateProfile(managementSessionId, () => input, removeOwnPasskey);
       return c.body(null, 204);
     }),
   );
@@ -268,13 +227,8 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
-      const input = { managementSessionId, ...credentials(body) };
       return c.json(
-        await updateProfile(
-          managementSessionId,
-          (tx, checked) => beginOwnTotpEnrollment(tx, { ...input, checked }),
-          input,
-        ),
+        await updateProfile(managementSessionId, () => credentials(body), beginOwnTotpEnrollment),
       );
     }),
   );
@@ -282,13 +236,15 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
-      const result = await updateProfile(managementSessionId, (tx) =>
-        finishOwnTotpEnrollment(tx, {
-          managementSessionId,
+      const result = await updateProfile(
+        managementSessionId,
+        () => ({
           enrollmentId: requireBodyUuid(body.enrollmentId, "enrollmentId"),
           code: textField(body, "code"),
           keyRing: credentialKeyRing,
         }),
+        finishOwnTotpEnrollment,
+        false,
       );
       return c.json(result);
     }),
@@ -297,12 +253,11 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
-      const input = { managementSessionId, ...credentials(body) };
       return c.json(
         await updateProfile(
           managementSessionId,
-          (tx, checked) => regenerateOwnRecoveryCodes(tx, { ...input, checked }),
-          input,
+          () => credentials(body),
+          regenerateOwnRecoveryCodes,
         ),
       );
     }),
@@ -311,12 +266,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
-      const input = { managementSessionId, ...credentials(body) };
-      await updateProfile(
-        managementSessionId,
-        (tx, checked) => disableOwnTotp(tx, { ...input, checked }),
-        input,
-      );
+      await updateProfile(managementSessionId, () => credentials(body), disableOwnTotp);
       return c.body(null, 204);
     }),
   );
@@ -324,12 +274,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
-      const input = { managementSessionId, ...credentials(body) };
-      await updateProfile(
-        managementSessionId,
-        (tx, checked) => unlinkOwnGoogle(tx, { ...input, checked }),
-        input,
-      );
+      await updateProfile(managementSessionId, () => credentials(body), unlinkOwnGoogle);
       return c.body(null, 204);
     }),
   );

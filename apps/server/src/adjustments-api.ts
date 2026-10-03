@@ -7,9 +7,7 @@ import {
   personRole,
   persons,
   type PersonRoleValue,
-  type PinAttempts,
   type PinThrottle,
-  type SecretCheck,
 } from "@waitron/identity";
 import { requireNullableBodyUuid, requireBodyUuid, readRawJsonBody } from "@waitron/server-kit";
 import { decimal } from "@waitron/shared";
@@ -29,7 +27,7 @@ import {
   withSaleTillWhenIssuing,
 } from "./bill-payments-api.js";
 import type { Logger } from "./logger.js";
-import { checkPinAhead, withCheck } from "./pin-check-ahead.js";
+import { withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import {
   overridePinAttempts,
@@ -94,16 +92,15 @@ function requireRole(value: string | undefined): PersonRoleValue {
 }
 
 /**
- * The approver's PIN checked ahead of the transaction when the plan, read now, needs an approver.
- * A plan that cannot be made is refused inside the transaction, so it checks nothing here.
+ * The approver whose PIN the transaction will check: the plan, read now, needs an approver. A plan
+ * that cannot be made is refused inside the transaction, so it names no one here.
  */
-async function checkApproverAhead(
+async function approverToCheck(
   db: Database,
   ask: AdjustmentAsk,
   approver: { personId: string; pin: string } | undefined,
   venueLocale: string,
-  attempts: PinAttempts,
-): Promise<SecretCheck | undefined> {
+): Promise<{ personId: string; pin: string } | undefined> {
   if (approver === undefined) return undefined;
   let needsApproval;
   try {
@@ -111,7 +108,7 @@ async function checkApproverAhead(
   } catch {
     return undefined;
   }
-  return needsApproval === null ? undefined : checkPinAhead(db, approver, attempts);
+  return needsApproval === null ? undefined : approver;
 }
 
 /**
@@ -140,24 +137,24 @@ export function mountAdjustmentsApi(
         body.approver as { personId?: unknown; pin?: unknown } | undefined,
       );
       const attempts = overridePinAttempts(pinThrottle, tillId);
-      const approver = withCheck(
-        parsedApprover,
-        await checkApproverAhead(deps.db, ask, parsedApprover, deps.venueLocale, attempts),
-      );
-      const answer = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
-        withTransaction(deps.db, async (tx) => {
-          const applied = await applyAdjustment(
-            tx,
-            deps.cfg,
-            { ...ask, submissionId, ...(approver === undefined ? {} : { approver }) },
-            deps.venueLocale,
-            attempts,
-          );
-          await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
-          await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);
-          return { ...applied, party: await partyRevisionOfOrder(tx, id) };
-        }),
-      );
+      const toCheck = await approverToCheck(deps.db, ask, parsedApprover, deps.venueLocale);
+      const answer = await withPinCheckAhead(deps.db, toCheck, attempts, (checked) => {
+        const approver = withCheck(parsedApprover, checked);
+        return withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+          withTransaction(deps.db, async (tx) => {
+            const applied = await applyAdjustment(
+              tx,
+              deps.cfg,
+              { ...ask, submissionId, ...(approver === undefined ? {} : { approver }) },
+              deps.venueLocale,
+              attempts,
+            );
+            await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
+            await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);
+            return { ...applied, party: await partyRevisionOfOrder(tx, id) };
+          }),
+        );
+      });
       return c.json(answer);
     }),
   );

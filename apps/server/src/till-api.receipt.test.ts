@@ -70,6 +70,8 @@ const derivations = vi.hoisted(() => ({
   start: (action: () => Promise<unknown>) => action(),
   order: [] as string[],
   writes: [] as Promise<unknown>[],
+  /** Every derivation of the watched PIN, held back or not. */
+  count: 0,
 }));
 
 vi.mock("node:crypto", async (importOriginal) => {
@@ -78,6 +80,7 @@ vi.mock("node:crypto", async (importOriginal) => {
   return {
     ...actual,
     scrypt: (secret: string, salt: Buffer, keyLength: number, done: Done) => {
+      if (secret === derivations.pin) derivations.count += 1;
       const during = secret === derivations.pin ? derivations.during.shift() : undefined;
       if (during === undefined) {
         actual.scrypt(secret, salt, keyLength, done);
@@ -102,6 +105,7 @@ vi.mock("node:crypto", async (importOriginal) => {
 function watchDerivations(pin: string, ...during: (() => Promise<unknown>)[]): void {
   derivations.pin = pin;
   derivations.during = during;
+  derivations.count = 0;
   const scope = new AsyncResource("watched derivation");
   derivations.start = (action) => scope.runInAsyncScope(action);
 }
@@ -1672,19 +1676,24 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
     expect(await watchedOrder()).toEqual([]);
   });
 
-  it("counts wrong override PINs sent at once as it counts them sent in turn", async () => {
+  it("counts wrong override PINs sent at once as it counts them sent in turn, deriving as many keys", async () => {
     const { app, cookie, supervisorId, cfg } = await staffAtDrawerTill(
       createPinThrottle({ now: () => 1_000_000 }),
     );
+
+    watchDerivations("0000");
 
     const wrong = await Promise.all(
       Array.from({ length: 5 }, () =>
         openWithOverride(app, cookie, { personId: supervisorId, pin: "0000" }),
       ),
     );
+    const derived = derivations.count;
     const right = await openWithOverride(app, cookie, { personId: supervisorId, pin: "5555" });
 
     expect(wrong.map((res) => res.status).sort()).toEqual([401, 401, 401, 401, 429]);
+    // As many keys as when the five are sent in turn: none for the one the limit refuses.
+    expect(derived).toBe(4);
     expect(right.status).toBe(429);
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });

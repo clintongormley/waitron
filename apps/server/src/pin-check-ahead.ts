@@ -10,37 +10,40 @@ import {
   type PinAttempts,
   type SecretCheck,
 } from "@waitron/identity";
+import { inTurn } from "./attempt-turns.js";
 
 /**
- * `checkPin`, run before the transaction opens so the key is derived outside the write lock.
- * Undefined, deriving nothing, when the wrong-PIN limit would refuse first: the transaction then
- * refuses it, as it would have without this.
+ * Runs `transaction` with `checkPin`'s verdict on `credential`, derived before the transaction opens
+ * so the key is not derived under the write lock. Attempts on the same person and slot take turns
+ * from the check until their transaction settles, so each is checked only once the outcomes before
+ * it are counted. No check, and no turn, when there is no credential or the wrong-PIN limit would
+ * refuse first: the transaction then answers as it would without this.
  */
-export async function checkPinAhead(
+export async function withPinCheckAhead<T>(
   db: Database,
-  credential: { personId: string; pin: string },
+  credential: { personId: string; pin: string } | undefined,
   attempts: PinAttempts,
-): Promise<SecretCheck | undefined> {
-  try {
-    attempts.throttle.check(attempts.slot, credential.personId);
-  } catch {
-    return undefined;
-  }
-  return checkPin(db, credential.personId, credential.pin);
+  transaction: (checked: SecretCheck | undefined) => Promise<T>,
+): Promise<T> {
+  const refused = (personId: string) => attempts.throttle.wouldRefuse(attempts.slot, personId);
+  if (credential === undefined || refused(credential.personId)) return transaction(undefined);
+  const { personId, pin } = credential;
+  return inTurn(attempts.throttle, JSON.stringify([attempts.slot, personId]), async () =>
+    transaction(refused(personId) ? undefined : await checkPin(db, personId, pin)),
+  );
 }
 
 /**
- * {@link checkPinAhead} on an override `authorize` will check: one sent by a session whose operator
- * lacks `permission`, or, with `checkedAnyway`, by any open session (the caller checks the same PIN
- * itself when `authorize` does not). Undefined otherwise, deriving nothing.
+ * The override `authorize` will check: one sent by a session whose operator lacks `permission`, or,
+ * with `checkedAnyway`, by any open session (the caller checks the same PIN itself when `authorize`
+ * does not). Undefined otherwise. Reads without writing.
  */
-export async function checkOverrideAhead(
+export async function overrideToCheck<T extends { personId: string; pin: string }>(
   db: Database,
   authz: { sessionId: string; permission: Permission },
-  override: { personId: string; pin: string } | undefined,
-  attempts: PinAttempts,
+  override: T | undefined,
   checkedAnyway = false,
-): Promise<SecretCheck | undefined> {
+): Promise<T | undefined> {
   if (override === undefined) return undefined;
   const [operator] = await db
     .select({ role: persons.role })
@@ -53,7 +56,7 @@ export async function checkOverrideAhead(
   ) {
     return undefined;
   }
-  return checkPinAhead(db, override, attempts);
+  return override;
 }
 
 /** `override` carrying `checked`, which `authorize` uses instead of deriving the key again. */
