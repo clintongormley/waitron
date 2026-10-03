@@ -4022,8 +4022,6 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   - The membership route, the adjustment approver, the refund override and the manual-refund
     confirmer have no one-answer test case of their own.
   - Refusals thrown in `apps/server` itself (a malformed id or PIN) carry no `reason`.
-  - The till's `APPROVER_REFUSALS` (`apps/till/src/till-app.ts`) still lists `person.not_found` and
-    `person.suspended`, which the approval routes no longer send for an approver.
   - After a refused login the setup wizard's Connect form leaves the cursor where it was (an
     existing test pins that), while Reset and the dashboard sign-in move it to the password; the
     owner's rule covers marking fields, not the cursor, so whether Connect should match is the
@@ -4141,6 +4139,23 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `apps/dashboard/src/screens/my-schedule-screen.ts`, added in 4bfbf03ea, #876) and also puts a
   failure line under each failed list's own heading. **Next action:** add a retry button the
   way the dashboard does, and decide whether each failed list gets its own line.
+- **Two till controls put `aria-pressed` on a `wt-button`, which does not pass it to its inner
+  button** (found 2026-10-03 in review of lane C's W23; read, not run). `wt-button`
+  (`packages/ui-core/src/components/wt-button.ts`) forwards `aria-label`, `aria-haspopup`,
+  `aria-expanded` and `aria-invalid` to its inner `<button>`, not `aria-pressed`. The two are the
+  station picker (`#pick`, `apps/till/src/screens/till-station-screen.ts`) and the card-simulation
+  result buttons (`apps/till/src/widgets/tender-pay.ts`). **Next action:** make them native buttons
+  with `aria-pressed`, as the Tab drawer's transfer and split pickers and the draft line toggle are.
+- **Three till loading lines may not be announced** (found 2026-10-03 in review of lane C's W23).
+  The schedule screen (`apps/till/src/screens/till-schedule-screen.ts`, #1103), the lock screen and
+  the device chooser each insert a `role="status"` element already holding the loading text and
+  remove it when loading ends. W3C's technique ARIA22
+  (https://www.w3.org/WAI/WCAG21/Techniques/aria/ARIA22) tests: _"Check that the container destined
+  to hold the status message has a role attribute with a value of status before the status message
+  occurs."_ The review's run-it seat watched the lock screen's and device chooser's DOM in Chromium:
+  each status element was inserted already holding its text and removed when loading ended. The
+  schedule screen's was read, not run, and no real screen reader was tried. **Next action:** decide
+  whether to keep an empty status region on the page and fill it later, and test that sequence.
 - **The counter till may start in a zone its service zone dropdown does not list** (found
   2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
   in `apps/server/src/till-api.ts`), but its starting zone comes from `resolveNewOrderZone`
