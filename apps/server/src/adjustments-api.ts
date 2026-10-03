@@ -1,13 +1,15 @@
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { ADJUSTMENT_ACTIONS, listAdjustmentReasons } from "@waitron/adjustments";
-import { withTransaction } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import {
   listActivePersonsAtOrAboveRole,
   personRole,
   persons,
   type PersonRoleValue,
+  type PinAttempts,
   type PinThrottle,
+  type SecretCheck,
 } from "@waitron/identity";
 import { requireNullableBodyUuid, requireBodyUuid, readRawJsonBody } from "@waitron/server-kit";
 import { decimal } from "@waitron/shared";
@@ -27,6 +29,7 @@ import {
   withSaleTillWhenIssuing,
 } from "./bill-payments-api.js";
 import type { Logger } from "./logger.js";
+import { checkPinAhead, withCheck } from "./pin-check-ahead.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import {
   overridePinAttempts,
@@ -91,6 +94,27 @@ function requireRole(value: string | undefined): PersonRoleValue {
 }
 
 /**
+ * The approver's PIN checked ahead of the transaction when the plan, read now, needs an approver.
+ * A plan that cannot be made is refused inside the transaction, so it checks nothing here.
+ */
+async function checkApproverAhead(
+  db: Database,
+  ask: AdjustmentAsk,
+  approver: { personId: string; pin: string } | undefined,
+  venueLocale: string,
+  attempts: PinAttempts,
+): Promise<SecretCheck | undefined> {
+  if (approver === undefined) return undefined;
+  let needsApproval;
+  try {
+    ({ needsApproval } = await previewAdjustment(db, ask, venueLocale));
+  } catch {
+    return undefined;
+  }
+  return needsApproval === null ? undefined : checkPinAhead(db, approver, attempts);
+}
+
+/**
  * The till's adjustment routes (service plan Task 11, spec §7), behind the till session: apply a
  * cancel, comp or discount to an open bill, a table's or a counter order, preview what it would
  * do, and the reasons and approvers the till offers.
@@ -112,8 +136,13 @@ export function mountAdjustmentsApi(
       const body = asObject(await readRawJsonBody<unknown>(c));
       const ask = parseAsk(id, personId, body);
       const submissionId = submissionIdOf(body);
-      const approver = parseDrawerOverride(
+      const parsedApprover = parseDrawerOverride(
         body.approver as { personId?: unknown; pin?: unknown } | undefined,
+      );
+      const attempts = overridePinAttempts(pinThrottle, tillId);
+      const approver = withCheck(
+        parsedApprover,
+        await checkApproverAhead(deps.db, ask, parsedApprover, deps.venueLocale, attempts),
       );
       const answer = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
@@ -122,7 +151,7 @@ export function mountAdjustmentsApi(
             deps.cfg,
             { ...ask, submissionId, ...(approver === undefined ? {} : { approver }) },
             deps.venueLocale,
-            overridePinAttempts(pinThrottle, tillId),
+            attempts,
           );
           await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
           await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);

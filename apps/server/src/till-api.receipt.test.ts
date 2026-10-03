@@ -1,7 +1,8 @@
+import { AsyncResource } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   devices,
@@ -57,6 +58,65 @@ import {
 } from "./testing/decode-ticket.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
+// Each key derivation of the watched PIN runs the next `during` action (another writer, or a change
+// to a person) and holds its key back until that action has committed or a second has passed. A
+// derivation outside the write lock lets the action commit first ("writer", "derived"); inside it,
+// the action waits for the lock and "derived" comes first.
+const derivations = vi.hoisted(() => ({
+  pin: null as string | null,
+  during: [] as (() => Promise<unknown>)[],
+  /** Runs an action in the test's own async context, not the route's: a writer inside the route's
+   * context would read as the route asking again for a lock it holds. */
+  start: (action: () => Promise<unknown>) => action(),
+  order: [] as string[],
+  writes: [] as Promise<unknown>[],
+}));
+
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  type Done = (error: Error | null, key: Buffer) => void;
+  return {
+    ...actual,
+    scrypt: (secret: string, salt: Buffer, keyLength: number, done: Done) => {
+      const during = secret === derivations.pin ? derivations.during.shift() : undefined;
+      if (during === undefined) {
+        actual.scrypt(secret, salt, keyLength, done);
+        return;
+      }
+      const write = derivations.start(during).then(
+        () => derivations.order.push("writer"),
+        (error: unknown) => derivations.order.push(`writer failed: ${String(error)}`),
+      );
+      derivations.writes.push(write);
+      actual.scrypt(secret, salt, keyLength, (error, key) => {
+        const waited = new Promise((resolve) => setTimeout(resolve, 1_000));
+        void Promise.race([write, waited]).then(() => {
+          derivations.order.push("derived");
+          done(error, key);
+        });
+      });
+    },
+  };
+});
+
+function watchDerivations(pin: string, ...during: (() => Promise<unknown>)[]): void {
+  derivations.pin = pin;
+  derivations.during = during;
+  const scope = new AsyncResource("watched derivation");
+  derivations.start = (action) => scope.runInAsyncScope(action);
+}
+
+/** What the watched derivations recorded, once every action they started has finished. */
+async function watchedOrder(): Promise<string[]> {
+  await Promise.all(derivations.writes);
+  const order = derivations.order;
+  derivations.pin = null;
+  derivations.during = [];
+  derivations.order = [];
+  derivations.writes = [];
+  return order;
+}
+
 // The manual reprint and drawer-open routes over HTTP, against a GENUINE chained fiscal sale read
 // back and paper enqueued for it.
 const LOCALE = "es-ES";
@@ -64,6 +124,8 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });
+
+const anotherWriter = () => withTransaction(suite.db, (tx) => tx.execute(sql`select 1`));
 
 let backend: FiscalBackend;
 let clock: TrustedClock;
@@ -1484,4 +1546,163 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
   expect(text).toContain("Current welcome");
   expect(text).toContain("Current farewell");
   expect(await registroCount(cfg)).toBe(1);
+});
+
+describe("the till's sign-in and drawer override derive the PIN's key outside the write lock", () => {
+  afterEach(async () => {
+    await watchedOrder();
+  });
+
+  function suspend(personId: string) {
+    return () =>
+      withTransaction(suite.db, (tx) =>
+        tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId)),
+      );
+  }
+
+  function signIn(app: Hono, deviceCookie: string, personId: string) {
+    return app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: deviceCookie },
+      body: JSON.stringify({ personId, pin: "5555" }),
+    });
+  }
+
+  function openWithOverride(
+    app: Hono,
+    cookie: string,
+    override: { personId: string; pin: string },
+  ) {
+    return app.request("/api/drawer/open", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ override }),
+    });
+  }
+
+  /** A staff operator signed in at the configured till, whose printer has a drawer. */
+  async function staffAtDrawerTill(pinThrottle = createPinThrottle()) {
+    const venue = await setupVenue();
+    await configureReceipt(venue.cfg, { printerId: await makePrinter(venue.cfg) });
+    const app = new Hono();
+    mountTillApi(app, { ...apiDeps(venue.cfg), pinThrottle }, noopLog);
+    const cookie = await loginAtTill(app, venue.cfg, venue.operatorId);
+    return { ...venue, app, cookie };
+  }
+
+  it("signs in while another writer commits during the PIN check", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const deviceCookie = await enrolConfiguredTillCookie(cfg);
+    watchDerivations("5555", anotherWriter, anotherWriter, anotherWriter);
+
+    const res = await signIn(app, deviceCookie, operatorId);
+
+    expect(res.status).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+  });
+
+  it("refuses a sign-in whose person is suspended while the PIN's key is being derived", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const deviceCookie = await enrolConfiguredTillCookie(cfg);
+    watchDerivations("5555", suspend(operatorId));
+
+    const res = await signIn(app, deviceCookie, operatorId);
+
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(res.status).toBe(401);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("pin.invalid");
+  });
+
+  it("opens the drawer on an override while another writer commits during the PIN check", async () => {
+    const { app, cookie, supervisorId, operatorId, cfg } = await staffAtDrawerTill();
+    watchDerivations("5555", anotherWriter, anotherWriter, anotherWriter);
+
+    const res = await openWithOverride(app, cookie, { personId: supervisorId, pin: "5555" });
+
+    expect(res.status).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(await drawerOpensFor(cfg)).toEqual([
+      expect.objectContaining({
+        personId: operatorId,
+        authorizedBy: supervisorId,
+        viaOverride: true,
+      }),
+    ]);
+  });
+
+  it("refuses an override whose supervisor is suspended while the PIN's key is being derived, writing nothing", async () => {
+    const { app, cookie, supervisorId, cfg } = await staffAtDrawerTill();
+    watchDerivations("5555", suspend(supervisorId));
+
+    const res = await openWithOverride(app, cookie, { personId: supervisorId, pin: "5555" });
+
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(res.status).toBe(401);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("pin.invalid");
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await printJobsFor(cfg)).toEqual([]);
+  });
+
+  it("derives no key for an override sent by an operator who holds cash.drawer", async () => {
+    const { cfg, supervisorId } = await setupVenue();
+    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await loginAtTill(app, cfg, supervisorId);
+    watchDerivations("0000", anotherWriter);
+
+    const res = await openWithOverride(app, cookie, { personId: supervisorId, pin: "0000" });
+
+    expect(res.status).toBe(200);
+    expect(await watchedOrder()).toEqual([]);
+  });
+
+  it("derives no key for an override while the drawer's policy is open", async () => {
+    const { app, cookie, supervisorId, cfg } = await staffAtDrawerTill();
+    await setDrawerPolicy(cfg, "open");
+    watchDerivations("0000", anotherWriter);
+
+    const res = await openWithOverride(app, cookie, { personId: supervisorId, pin: "0000" });
+
+    expect(res.status).toBe(200);
+    expect(await watchedOrder()).toEqual([]);
+  });
+
+  it("counts wrong override PINs sent at once as it counts them sent in turn", async () => {
+    const { app, cookie, supervisorId, cfg } = await staffAtDrawerTill(
+      createPinThrottle({ now: () => 1_000_000 }),
+    );
+
+    const wrong = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        openWithOverride(app, cookie, { personId: supervisorId, pin: "0000" }),
+      ),
+    );
+    const right = await openWithOverride(app, cookie, { personId: supervisorId, pin: "5555" });
+
+    expect(wrong.map((res) => res.status).sort()).toEqual([401, 401, 401, 401, 429]);
+    expect(right.status).toBe(429);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+
+  it("derives no key for an override the wrong-PIN limit refuses", async () => {
+    const { app, cookie, supervisorId, cfg } = await staffAtDrawerTill(
+      createPinThrottle({ now: () => 1_000_000 }),
+    );
+    for (let i = 0; i < 4; i += 1) {
+      const wrong = await openWithOverride(app, cookie, { personId: supervisorId, pin: "0000" });
+      expect(wrong.status).toBe(401);
+    }
+    watchDerivations("5555", anotherWriter);
+
+    const res = await openWithOverride(app, cookie, { personId: supervisorId, pin: "5555" });
+
+    expect(res.status).toBe(429);
+    expect(await watchedOrder()).toEqual([]);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
 });

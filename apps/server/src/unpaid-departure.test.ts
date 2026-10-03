@@ -1,7 +1,8 @@
+import { AsyncResource } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -15,6 +16,7 @@ import {
   saleSettlements,
   sales,
   unpaidDepartures,
+  withTransaction,
 } from "@waitron/db";
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
@@ -42,6 +44,65 @@ import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { cancelBody, giveAway } from "./testing/cancel-line.js";
 import "./errors.js";
+
+// Each key derivation of the watched PIN runs the next `during` action (another writer, or a change
+// to a person) and holds its key back until that action has committed or a second has passed. A
+// derivation outside the write lock lets the action commit first ("writer", "derived"); inside it,
+// the action waits for the lock and "derived" comes first.
+const derivations = vi.hoisted(() => ({
+  pin: null as string | null,
+  during: [] as (() => Promise<unknown>)[],
+  /** Runs an action in the test's own async context, not the route's: a writer inside the route's
+   * context would read as the route asking again for a lock it holds. */
+  start: (action: () => Promise<unknown>) => action(),
+  order: [] as string[],
+  writes: [] as Promise<unknown>[],
+}));
+
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  type Done = (error: Error | null, key: Buffer) => void;
+  return {
+    ...actual,
+    scrypt: (secret: string, salt: Buffer, keyLength: number, done: Done) => {
+      const during = secret === derivations.pin ? derivations.during.shift() : undefined;
+      if (during === undefined) {
+        actual.scrypt(secret, salt, keyLength, done);
+        return;
+      }
+      const write = derivations.start(during).then(
+        () => derivations.order.push("writer"),
+        (error: unknown) => derivations.order.push(`writer failed: ${String(error)}`),
+      );
+      derivations.writes.push(write);
+      actual.scrypt(secret, salt, keyLength, (error, key) => {
+        const waited = new Promise((resolve) => setTimeout(resolve, 1_000));
+        void Promise.race([write, waited]).then(() => {
+          derivations.order.push("derived");
+          done(error, key);
+        });
+      });
+    },
+  };
+});
+
+function watchDerivations(pin: string, ...during: (() => Promise<unknown>)[]): void {
+  derivations.pin = pin;
+  derivations.during = during;
+  const scope = new AsyncResource("watched derivation");
+  derivations.start = (action) => scope.runInAsyncScope(action);
+}
+
+/** What the watched derivations recorded, once every action they started has finished. */
+async function watchedOrder(): Promise<string[]> {
+  await Promise.all(derivations.writes);
+  const order = derivations.order;
+  derivations.pin = null;
+  derivations.during = [];
+  derivations.order = [];
+  derivations.writes = [];
+  return order;
+}
 
 // Record unpaid departure (spec §8; service plan Task 17; owner's Q28 decision of 2026-10-01): an
 // owing bill with no invoice yet is invoiced for its full amount and a bill already invoiced keeps
@@ -485,6 +546,35 @@ describe("who may record it", () => {
     expect(ids).toEqual(expect.arrayContaining([venue.adminId, supervisorId]));
     expect(ids).not.toContain(venue.operatorId);
     for (const person of people) expect(Object.keys(person)).toEqual(["personId", "displayName"]);
+  });
+});
+
+describe("a supervisor's PIN on a departure", () => {
+  const anotherWriter = () => withTransaction(venue.db, (tx) => tx.execute(sql`select 1`));
+
+  afterEach(async () => {
+    await watchedOrder();
+  });
+
+  it("is checked while another writer commits, outside the write lock", async () => {
+    const party = await seatedWith(venue, "Botella tinto");
+    watchDerivations(SUPERVISOR_PIN, anotherWriter, anotherWriter, anotherWriter);
+
+    const answer = await depart(
+      party.partyId,
+      {
+        expectedPartyRevision: party.revision,
+        reason: REASON,
+        override: { personId: supervisorId, pin: SUPERVISOR_PIN },
+      },
+      venue.cookie,
+    );
+
+    expect(answer.status).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(await departuresOf(party.tabId)).toEqual([
+      expect.objectContaining({ recordedBy: venue.operatorId, authorizedBy: supervisorId }),
+    ]);
   });
 });
 

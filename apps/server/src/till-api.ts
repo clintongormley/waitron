@@ -23,6 +23,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
+  checkPin,
   createPinThrottle,
   endSession,
   listActivePersonsWithPermission,
@@ -31,7 +32,7 @@ import {
   permissionsForRole,
   setPersonLocale,
 } from "@waitron/identity";
-import type { PinAttempts, PinThrottle } from "@waitron/identity";
+import type { PinAttempts, PinThrottle, SecretCheck } from "@waitron/identity";
 import {
   listAccessibleCatalogues,
   listAvailableProducts,
@@ -53,6 +54,7 @@ import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
+import { checkOverrideAhead, withCheck } from "./pin-check-ahead.js";
 import { moveDishesToStation } from "./station-move.js";
 import { madeHereAnswer, madeHereSinkFor } from "./made-here.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
@@ -516,6 +518,31 @@ export function overridePinAttempts(pinThrottle: PinThrottle, sessionTillId: str
   return { throttle: pinThrottle, slot: `override:${sessionTillId}` };
 }
 
+/**
+ * The drawer override checked ahead of the transaction, when the transaction will check it: the
+ * policy is not `open` and the override is well formed (a malformed one is refused inside).
+ */
+async function checkDrawerOverrideAhead(
+  db: Database,
+  cfg: TillConfig,
+  sessionId: string,
+  body: { override?: { personId?: unknown; pin?: unknown } },
+  attempts: PinAttempts,
+): Promise<SecretCheck | undefined> {
+  const open = await db
+    .select({ id: locations.id })
+    .from(locations)
+    .where(and(eq(locations.id, cfg.locationId), eq(locations.drawerOpenPolicy, "open")));
+  if (open.length > 0) return undefined;
+  let override;
+  try {
+    override = parseDrawerOverride(body.override);
+  } catch {
+    return undefined;
+  }
+  return checkOverrideAhead(db, { sessionId, permission: "cash.drawer" }, override, attempts);
+}
+
 /** A non-UUID names no open tab, so it gets the absent tab's `tab.not_open`. */
 export function requireTabParam(id: string): string {
   if (!isUuid(id)) {
@@ -887,6 +914,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (device.tillId === null) throw new AppError("device.till_required", {});
       const deviceTillId = device.tillId;
       pinThrottle.check(device.deviceId, personId);
+      const checked = await checkPin(deps.db, personId, pin);
       let session;
       try {
         session = await withTransaction(deps.db, async (tx) => {
@@ -894,6 +922,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             tillId: deviceTillId,
             personId,
             pin,
+            checked,
           });
         });
       } catch (err) {
@@ -1717,6 +1746,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open", device);
       const drawerCfg = await deviceTillCfg(deps, c, device);
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
+      const attempts = overridePinAttempts(pinThrottle, tillId);
+      const checked = await checkDrawerOverrideAhead(deps.db, deps.cfg, sessionId, body, attempts);
       await withTransaction(deps.db, async (tx) => {
         const [loc] = await tx
           .select({ policy: locations.drawerOpenPolicy })
@@ -1735,9 +1766,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                 {
                   sessionId,
                   permission: "cash.drawer",
-                  override: parseDrawerOverride(body.override),
+                  override: withCheck(parseDrawerOverride(body.override), checked),
                 },
-                overridePinAttempts(pinThrottle, tillId),
+                attempts,
               );
 
         const printer = await resolveReceiptPrinter(tx, drawerCfg);

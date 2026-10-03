@@ -187,6 +187,7 @@ import { ordersWithUnfiledPayment, paymentAttemptIsLive, receiptQr } from "./til
 import type { TillSaleResult } from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
+import { checkOverrideAhead, withCheck } from "./pin-check-ahead.js";
 import {
   assertBillInvariant,
   issueIfFullyPaid,
@@ -5516,6 +5517,17 @@ export async function cancelPlacedOrder(
   if (reason.trim() === "") {
     throw new AppError("working_order.reason_required", { workingOrderId: id });
   }
+  // Only an order with an invoice has its override checked.
+  const checked =
+    (await readOrderInvoice(deps.db, id)) === undefined
+      ? undefined
+      : await checkOverrideAhead(
+          deps.db,
+          { sessionId: operator.sessionId, permission: "sale.rectify" },
+          override,
+          operator.attempts,
+        );
+  const authz = { sessionId: operator.sessionId, override: withCheck(override, checked) };
 
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
@@ -5538,7 +5550,6 @@ export async function cancelPlacedOrder(
       throw new AppError("order.payment_in_flight", { workingOrderId: id });
     }
     if (invoice !== undefined) {
-      const authz = { sessionId: operator.sessionId, override };
       await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
       await creditWholeInvoice(tx, deps, cfg, invoice, authz, await saleTillId());
     }
