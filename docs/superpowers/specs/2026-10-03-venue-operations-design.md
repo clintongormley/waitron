@@ -115,9 +115,18 @@ categories and products. There is no editor panel: clicking a cell opens its dro
   zone's cells may be blank: the dropdown's first entry is blank, and a blank cell shows the
   department's value in grey. There is no other marker.
 - **Moving a zone** to another department is a drag onto that department.
-- **Row menu (⋮)**: Rename and Remove on a zone; Hours (opening the Hours page) on a department.
-  Names are also edited in place. **Proposed:** a department can be removed only once it has no
-  zones.
+- **Row menu (⋮)**: Rename and Remove on a zone; Rename, Remove and Hours (opening the Hours page)
+  on a department. Names are also edited in place.
+- **Removing** switches a department or zone off rather than deleting it, as today, so past orders
+  and reports keep its name (`deactivateDepartment`, `packages/venue-service/src/operations.ts`;
+  `deactivateZone`, `apps/server/src/tables.ts`). Owner, 2026-10-03:
+  - **Removing a department that has zones warns, then removes its zones with it.** The warning lists
+    each zone and how many tables it has ("This also removes Deli counter (4 tables)"); confirming
+    switches off the department and those zones in one transaction. This replaces today's refusal,
+    `department.has_active_zones`.
+  - **Removing is refused while a tab is open at a table in a zone it would remove**, naming the
+    table. This applies to removing a single zone too, which today checks nothing.
+  - **The last department cannot be removed.**
 - **New department** and **New zone** sit at the top right.
 - **A problem that stops a zone taking orders** is a red line under the zone's name, lined up with
   it, with a link to where it is fixed, for example "No menu is offered here. Set one up in Menus".
@@ -174,12 +183,11 @@ Settings.** "New station" and "New watcher" sit at the right of the tab bar. "Fo
   today's whole-day overrides (`station_day_states`). The default station reads "Always open" and
   has no button.
 - **A station with no kitchen screen** has nobody marking its dishes as being made or ready, so it
-  shows "No screen" in those two columns. Its dishes count as waiting until they are served.
-  **Open:** whether its lateness runs from when the dish was sent to the station (as the kitchen
-  screens count today) or from when its ticket printed. The print time is recorded: a kitchen
-  ticket's job (`kitchen_print_jobs.print_job_id`) carries `print_jobs.delivered_at`, stamped when
-  the print agent reports it delivered. Counting from the sending makes a dish behind a jammed
-  printer turn late; counting from the print shows how long the kitchen has had the ticket.
+  shows "No screen" in those two columns. Its dishes count as waiting until they are served, and
+  its lateness runs from when the dish was sent to the station, as the kitchen screens count today
+  (owner, 2026-10-03). The print time is recorded too (`print_jobs.delivered_at`, through
+  `kitchen_print_jobs.print_job_id`), but counting from the sending makes a dish behind a jammed
+  printer turn late rather than look fine.
 - **Problems** sit under the name in red, as today's warnings do: a stopped printer, a screen gone
   dark.
 - **Creating and changing stations happens here:** *New station*; the row menu has Rename, Make
@@ -364,7 +372,7 @@ Each step is one queue item, with its own plan.
 
 1. Everything A254 §6 lists, apart from what this spec settles: A254 §4's day types (replaced by
    §7) and the trading name's switch (§5).
-2. **Proposed, not yet confirmed:** a department can be removed only once it has no zones (§4);
-   products with no category sit in a "No category" group in the routing grid (§6.2).
-3. Step 7's check of what changing each venue detail affects.
-4. Where a no-screen station's lateness starts: the sending or the print (§6.1).
+2. **Proposed, not yet confirmed:** products with no category sit in a "No category" group in the
+   routing grid (§6.2).
+3. Step 7's plan decides, for each venue detail, whether a change is allowed, allowed with a
+   warning, or refused once the venue has made sales (§11).
