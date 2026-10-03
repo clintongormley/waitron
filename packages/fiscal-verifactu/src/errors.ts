@@ -55,7 +55,7 @@ declare module "@waitron/shared" {
 
     /**
      * `attemptAppend` (./chain.ts) refused a record that `@waitron/verifactu`'s `validate` reports
-     * as one AEAT could not accept. Raised BEFORE the insert, so nothing is written and the chain
+     * as one AEAT could not accept, or as having a malformed fingerprint. Raised BEFORE the insert, so nothing is written and the chain
      * head does not move: `registros_facturacion` is append-only and hash-chained, so refusing a
      * record is the only remedy that leaves the venue repairable.
      *
@@ -73,6 +73,13 @@ declare module "@waitron/shared" {
      * `recordIncident`. Params never carry the amounts (see `fiscal.record_invalid`).
      */
     "fiscal.record_totals_disagree": { fields: string[]; codes: string[] };
+
+    /**
+     * `attemptAppend` (./chain.ts) wrote a record that `validate` warned about for a reason other
+     * than its totals — one AEAT accepts but reports back. Never thrown; params as
+     * `fiscal.record_totals_disagree`.
+     */
+    "fiscal.record_flagged": { fields: string[]; codes: string[] };
 
     /**
      * `./drain.ts`'s `applyOutcome`: AEAT rejected this record outright. Constructed, never thrown —

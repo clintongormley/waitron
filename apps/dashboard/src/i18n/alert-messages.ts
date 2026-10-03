@@ -128,6 +128,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "An invoice's totals do not match its tax lines. The tax agency accepts it, but check that sale's prices.",
     es: "Los totales de una factura no coinciden con sus líneas de impuestos. La AEAT la acepta, pero revisa los precios de esa venta.",
   },
+  "fiscal.record_flagged": {
+    en: "An invoice record has a problem the tax agency (AEAT) accepts, though it may flag it. Contact support.",
+    es: "Un registro de facturación tiene un problema que la AEAT acepta, aunque puede señalarlo. Contacta con soporte.",
+  },
   "fiscal.reconcile_no_trace": {
     en: "Invoice {numSerieFactura} was sent, but the tax agency (AEAT) has no record of it. Contact support.",
     es: "La factura {numSerieFactura} se envió, pero la AEAT no tiene constancia de ella. Contacta con soporte.",
