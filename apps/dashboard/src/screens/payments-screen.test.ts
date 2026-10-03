@@ -1,5 +1,5 @@
 import { page } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { html } from "lit";
 import type { CardProviderPanel } from "@waitron/dashboard-kit";
 import {
@@ -1714,5 +1714,84 @@ describe("the providers and readers once the server answers again", () => {
     await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(2));
     await flush(el);
     expect(api.readerStatus).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("the readers' status reads", () => {
+  const readers = (count: number): ReaderRow[] =>
+    Array.from({ length: count }, (_, i) => ({ ...READERS[0]!, id: `r-${i + 1}` }));
+
+  function heldStatuses(): {
+    readerStatus: Mock<(id: string) => Promise<ReaderStatusView>>;
+    answer: (id: string) => void;
+  } {
+    const waiting = new Map<string, (status: ReaderStatusView) => void>();
+    const readerStatus = vi.fn(
+      (id: string) => new Promise<ReaderStatusView>((resolve) => waiting.set(id, resolve)),
+    );
+    return {
+      readerStatus,
+      answer: (id) => waiting.get(id)!({ online: true } as ReaderStatusView),
+    };
+  }
+
+  it("asks at most two readers at a time, so a silent card provider cannot hold every connection to the box", async () => {
+    const held = heldStatuses();
+    const { el } = await mount(
+      stubApi({
+        listReaders: vi.fn().mockResolvedValue(readers(6)),
+        readerStatus: held.readerStatus,
+      }),
+    );
+    await flush(el);
+    expect(held.readerStatus.mock.calls.map(([id]) => id)).toEqual(["r-1", "r-2"]);
+
+    held.answer("r-1");
+    await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledTimes(3));
+    await flush(el);
+    expect(held.readerStatus).toHaveBeenCalledTimes(3);
+    expect(qCell(el, "[data-test=reader-status-r-1]")?.textContent).toBe("Online");
+  });
+
+  it("asks every active reader in the end", async () => {
+    const held = heldStatuses();
+    const { el } = await mount(
+      stubApi({
+        listReaders: vi.fn().mockResolvedValue(readers(6)),
+        readerStatus: held.readerStatus,
+      }),
+    );
+    for (let i = 1; i <= 6; i++) {
+      await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledWith(`r-${i}`));
+      held.answer(`r-${i}`);
+    }
+    await vi.waitFor(() =>
+      expect(qCell(el, "[data-test=reader-status-r-6]")?.textContent).toBe("Online"),
+    );
+    expect(held.readerStatus).toHaveBeenCalledTimes(6);
+  });
+
+  it("starts no third read when a refresh asks again while two are still waiting", async () => {
+    const held = heldStatuses();
+    const api = Object.assign(
+      stubApi({
+        listReaders: vi.fn().mockResolvedValueOnce(readers(4)).mockResolvedValue(readers(5)),
+        readerStatus: held.readerStatus,
+      }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mount(api);
+    expect(held.readerStatus).toHaveBeenCalledTimes(2);
+
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(held.readerStatus).toHaveBeenCalledTimes(2);
+
+    held.answer("r-1");
+    held.answer("r-2");
+    await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledTimes(4));
+    await flush(el);
+    expect(held.readerStatus.mock.calls.map(([id]) => id)).toEqual(["r-1", "r-2", "r-1", "r-2"]);
   });
 });

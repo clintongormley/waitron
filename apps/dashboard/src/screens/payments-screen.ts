@@ -266,6 +266,12 @@ export class PaymentsScreen extends LitElement {
   #pairSucceeded = false;
   #statusesDue = true;
   #statusIds: string | undefined;
+  /**
+   * Status reads in flight, across every load: a read can wait 250 s on a silent card provider, and
+   * the browser opens only six connections to the box (backlog A260).
+   */
+  #statusSlotsFree = 2;
+  #statusSlotWaiters: (() => void)[] = [];
   @state() private errorKey: string | null = null;
   /** Whether `errorKey` is a list read's failure, the only message the read's recovery may clear. */
   #readErrorShown = false;
@@ -410,17 +416,35 @@ export class PaymentsScreen extends LitElement {
       readers
         .filter((r) => r.active)
         .map(async (reader) => {
+          await this.#takeStatusSlot();
           try {
+            if (version !== this.#statusVersion) return;
             const status = await client.readerStatus(reader.id);
             if (version === this.#statusVersion)
               this.statuses = new Map(this.statuses).set(reader.id, status);
           } catch {
             if (version === this.#statusVersion)
               this.statuses = new Map(this.statuses).set(reader.id, "error");
+          } finally {
+            this.#releaseStatusSlot();
           }
         }),
     );
     if (version === this.#statusVersion) this.refreshing = false;
+  }
+
+  async #takeStatusSlot(): Promise<void> {
+    if (this.#statusSlotsFree > 0) {
+      this.#statusSlotsFree--;
+      return;
+    }
+    await new Promise<void>((resolve) => this.#statusSlotWaiters.push(resolve));
+  }
+
+  #releaseStatusSlot(): void {
+    const next = this.#statusSlotWaiters.shift();
+    if (next) next();
+    else this.#statusSlotsFree++;
   }
 
   async #mutate(action: () => Promise<unknown>): Promise<void> {
