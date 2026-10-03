@@ -852,9 +852,10 @@ describe("product-list", () => {
     ).toBe(euros("3,00"));
   });
 
-  // Every field differs between Wine 175 and its product, and its three names differ from one
-  // another, so a row reading the product's values or the wrong name fails.
-  it("shows a variant's own name, its effective price and main category", async () => {
+  // Its name and price differ from its product's, and its three names differ from one another, so a
+  // row reading the product's values or the wrong name fails. A variant is always in its product's
+  // category, which only the product's row shows.
+  it("shows a variant's own name and effective price, and leaves its main category to its product's row", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({
@@ -874,7 +875,7 @@ describe("product-list", () => {
               effective: {
                 unitPrice: "4.75",
                 vatClass: "general",
-                primaryCategoryId: "drinks",
+                primaryCategoryId: "food",
               },
             },
           ],
@@ -895,7 +896,7 @@ describe("product-list", () => {
     expect(cell(t("product.price")).querySelector('[data-test="price"]')!.textContent!.trim()).toBe(
       euros("4,75"),
     );
-    expect(cell(t("editor.main_category")).textContent!.trim()).toBe("Bebidas");
+    expect(cell(t("editor.main_category")).textContent!.trim()).toBe("");
     expect(cellUnder(root, "wine", t("editor.main_category")).textContent!.trim()).toBe("Comida");
   });
 

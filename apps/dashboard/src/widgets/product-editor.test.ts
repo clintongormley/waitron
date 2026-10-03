@@ -381,8 +381,8 @@ it("renders the sections in the designed order, with the price above the VAT rat
       (node) => node.dataset.section,
     ),
   ).toEqual([
-    "name",
     "categories",
+    "name",
     "available",
     "ordering",
     "kitchen",
@@ -1304,7 +1304,6 @@ it("offers Uncategorised as the main category, and saves it as none", async () =
     taxChoices: reduced,
     categories,
   });
-  expect(combobox(el, "primary")!.placeholder).toBe(t("categories.uncategorised"));
   expect(combobox(el, "primary")!.options[0]).toEqual({
     value: "",
     label: t("categories.uncategorised"),
@@ -1313,12 +1312,215 @@ it("offers Uncategorised as the main category, and saves it as none", async () =
   const categoryText = combobox(el, "primary")!.shadowRoot!.querySelector<HTMLElement>(
     ".trigger .value",
   )!;
+  expect(categoryText.textContent!.trim()).toBe(t("categories.uncategorised"));
   expect(categoryText.classList.contains("placeholder")).toBe(false);
   expect(getComputedStyle(categoryText).fontStyle).toBe("normal");
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
   expect(submit.mock.calls[0]![0].detail.value.primaryCategoryId).toBeNull();
+});
+
+// --- The category path ---
+
+// Listed out of order, with sibling names that sort differently by name and by id, so a tree read
+// in list order, or siblings sorted by id, fails.
+const tree: CategorySummary[] = [
+  { id: "c-plates", name: "Platos", parentId: null },
+  { id: "a-soft", name: "Refrescos", parentId: "drinks" },
+  { id: "cocktails", name: "Cócteles", parentId: "b-alcohol" },
+  { id: "drinks", name: "Bebidas", parentId: null },
+  { id: "b-alcohol", name: "Bebidas alcohólicas", parentId: "drinks" },
+  { id: "z-snacks", name: "Aperitivos", parentId: null },
+];
+const cocktailsPath = "Bebidas › Bebidas alcohólicas › Cócteles";
+
+type LinkCombobox = HTMLElement & {
+  value: string;
+  options: ComboboxOption[];
+  appearance: string;
+  actionLabel: string;
+  label: string;
+  showEmptyOption: boolean;
+  error: string;
+  updateComplete: Promise<unknown>;
+};
+async function categoryLink(el: ProductEditor): Promise<LinkCombobox> {
+  const link = el.shadowRoot!.querySelector<LinkCombobox>('wt-combobox[name="primary"]')!;
+  await link.updateComplete;
+  return link;
+}
+/** The path a link trigger shows, without the hidden field name before it. */
+function linkPath(link: LinkCombobox): string {
+  return link.shadowRoot!.querySelector(".trigger .value")!.textContent!.trim();
+}
+async function mountCategorised(value: Partial<ProductEditorDraft> = {}) {
+  return (
+    await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: { ...product, primaryCategoryId: "cocktails", ...value },
+      locales: ["en"],
+      units: [unit],
+      taxChoices: reduced,
+      categories: tree,
+    })
+  ).el;
+}
+
+it("shows a product's category as its path, first in the window, with Change and no other category control", async () => {
+  const el = await mountCategorised();
+  const link = await categoryLink(el);
+  expect(link.appearance).toBe("link");
+  expect(link.actionLabel).toBe(t("editor.change_category"));
+  expect(link.label).toBe(t("editor.classification"));
+  expect(linkPath(link)).toBe(cocktailsPath);
+  const form = el.shadowRoot!.querySelector(".form")!;
+  expect(form.firstElementChild!.getAttribute("data-section")).toBe("categories");
+  expect(form.firstElementChild!.contains(link)).toBe(true);
+  expect(el.shadowRoot!.querySelectorAll('wt-combobox[name="primary"]')).toHaveLength(1);
+  expect(el.shadowRoot!.querySelector("[data-test=add-category]")).toBeNull();
+});
+
+it("puts the category path above the notice that the product is Inactive", async () => {
+  const el = await mountCategorised({ active: false });
+  const link = await categoryLink(el);
+  const notice = el.shadowRoot!.querySelector("[data-test=inactive-notice]")!;
+  expect(link.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+it("lists Uncategorised and then every category as a tree, each under its parent and siblings by name", async () => {
+  const el = await mountCategorised();
+  const link = await categoryLink(el);
+  expect(link.showEmptyOption).toBe(true);
+  expect(link.options).toEqual([
+    { value: "", label: t("categories.uncategorised") },
+    { value: "z-snacks", label: "Aperitivos", depth: 0, valueLabel: "Aperitivos" },
+    { value: "drinks", label: "Bebidas", depth: 0, valueLabel: "Bebidas" },
+    {
+      value: "b-alcohol",
+      label: "Bebidas alcohólicas",
+      depth: 1,
+      valueLabel: "Bebidas › Bebidas alcohólicas",
+    },
+    { value: "cocktails", label: "Cócteles", depth: 2, valueLabel: cocktailsPath },
+    { value: "a-soft", label: "Refrescos", depth: 1, valueLabel: "Bebidas › Refrescos" },
+    { value: "c-plates", label: "Platos", depth: 0, valueLabel: "Platos" },
+  ]);
+});
+
+it("orders numbered sibling categories by value, as the category list does", async () => {
+  const el = await mountCategorised();
+  el.categories = [
+    { id: "c10", name: "Cat 10", parentId: null },
+    { id: "c9", name: "Cat 9", parentId: null },
+  ];
+  await el.updateComplete;
+  expect((await categoryLink(el)).options.map((option) => option.label)).toEqual([
+    t("categories.uncategorised"),
+    "Cat 9",
+    "Cat 10",
+  ]);
+});
+
+it("changes the category from Change: the path shown follows, and Save sends the chosen one", async () => {
+  const el = await mountCategorised({ primaryCategoryId: "c-plates" });
+  const link = await categoryLink(el);
+  expect(linkPath(link)).toBe("Platos");
+  await userEvent.click(link.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+  const row = [...link.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (option) => option.textContent!.trim() === "Cócteles",
+  )!;
+  await userEvent.click(row);
+  await el.updateComplete;
+  await link.updateComplete;
+  expect(linkPath(link)).toBe(cocktailsPath);
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value.primaryCategoryId).toBe("cocktails");
+});
+
+it("reads Uncategorised for a product with no category, and the path for a new one made in a category", async () => {
+  const uncategorised = await mountCategorised({ primaryCategoryId: null });
+  expect(linkPath(await categoryLink(uncategorised))).toBe(t("categories.uncategorised"));
+  cleanupWidgets();
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    locales: ["en"],
+    units: [unit],
+    categories: tree,
+    newCategoryId: "cocktails",
+  });
+  expect(linkPath(await categoryLink(el))).toBe(cocktailsPath);
+});
+
+it("names a category missing from the list as unavailable, never as Uncategorised", async () => {
+  const el = await mountCategorised({ primaryCategoryId: "gone" });
+  expect(linkPath(await categoryLink(el))).toBe(t("editor.missing_choice"));
+});
+
+it("puts a refused category under the path and focuses it, until another is chosen", async () => {
+  const el = await mountCategorised();
+  el.fieldErrors = { primary: "That category is gone" };
+  await el.updateComplete;
+  const link = await categoryLink(el);
+  expect(link.error).toBe("That category is gone");
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(link);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  await chooseOption(link, "c-plates");
+  await el.updateComplete;
+  expect(link.error).toBe("");
+});
+
+/** The path a variant's page shows, as read aloud: the hidden field name, then the path. */
+function variantPath(el: ProductEditor): string | undefined {
+  return el.shadowRoot!.querySelector("[data-test=category-path]")?.textContent?.trim();
+}
+
+it("shows a variant's product's path as plain text, with no Change, and saves no category of its own", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    // A category left stored on the variant from before it could not have one.
+    value: {
+      ...glass,
+      primaryCategoryId: "c-plates",
+      inherited: { ...parentValues, primaryCategoryId: "cocktails" },
+    },
+    locales: ["en"],
+    units: [unit, litre],
+    taxChoices: taxes,
+    categories: tree,
+  });
+  expect(el.shadowRoot!.querySelector('wt-combobox[name="primary"]')).toBeNull();
+  expect(variantPath(el)).toBe(`${t("editor.classification")}: ${cocktailsPath}`);
+  const form = el.shadowRoot!.querySelector(".form")!;
+  expect(form.firstElementChild!.getAttribute("data-section")).toBe("categories");
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value.primaryCategoryId).toBeNull();
+});
+
+it("reads Uncategorised, or unavailable, on a variant whose product has no category or a missing one", async () => {
+  const label = t("editor.classification");
+  for (const [primaryCategoryId, shown] of [
+    [null, t("categories.uncategorised")],
+    ["gone", t("editor.missing_choice")],
+  ] as const) {
+    const el = await mountVariant({
+      ...glass,
+      inherited: { ...parentValues, primaryCategoryId },
+    });
+    expect(variantPath(el)).toBe(`${label}: ${shown}`);
+    cleanupWidgets();
+  }
+});
+
+it("says a refused category on a variant's page in the message above Save, having no field for it", async () => {
+  const el = await mountVariant();
+  el.fieldErrors = { primary: "A variant takes its product's category" };
+  await el.updateComplete;
+  expect(await bottomOf(el)).toBe("A variant takes its product's category");
 });
 
 it("closes an allergen dropdown on Escape without closing the product's window", async () => {
@@ -2763,10 +2965,9 @@ it("marks a variant's own choice selected over the parent's value", async () => 
   expect(await shownIn(el, "product-course")).toBe("Desserts");
 });
 
-it("hints the parent's category, allergens, dietary declarations and photo beside their controls", async () => {
+it("shows the parent's category, and hints its allergens, dietary declarations and photo beside their controls", async () => {
   const el = await mountVariant();
-  expect(combobox(el, "primary")!.placeholder).toBe("Bebidas");
-  expect(combobox(el, "primary")!.options[0]).toEqual({ value: "", label: "Bebidas" });
+  expect(variantPath(el)).toBe(`${t("editor.classification")}: Bebidas`);
   expect(hint(el, "allergens-hint")).toBe(`${t("modifiers.allergens")}: ${allergenName("milk")}`);
   expect(hint(el, "dietary-hint")).toBe(
     `${t("modifiers.dietary_preferences")}: ${t("editor.diet.vegetarian")}`,
@@ -2788,16 +2989,13 @@ it("hints what a variant will actually use where its parent names nothing there"
       dietaryDeclarations: [],
     },
   });
-  expect(combobox(el, "primary")!.placeholder).toBe(t("categories.uncategorised"));
+  expect(variantPath(el)).toBe(`${t("editor.classification")}: ${t("categories.uncategorised")}`);
   expect(combobox(el, "product-course")!.placeholder).toBe(t("product.no_course"));
-  for (const name of ["primary", "product-course"]) {
-    expect(
-      combobox(el, name)!
-        .shadowRoot!.querySelector(".trigger .value")!
-        .classList.contains("placeholder"),
-      name,
-    ).toBe(true);
-  }
+  expect(
+    combobox(el, "product-course")!
+      .shadowRoot!.querySelector(".trigger .value")!
+      .classList.contains("placeholder"),
+  ).toBe(true);
   expect(combobox(el, "tax")!.placeholder).toBe("retired");
   expect(hint(el, "allergens-hint")).toBe(
     `${t("modifiers.allergens")}: ${t("editor.allergens_none")}`,
@@ -2867,7 +3065,7 @@ it.each([
       await openUnits(el);
       expect(combobox(el, "unit")!.placeholder).toBe(expected.unit);
       expect(firstOption(el, "unit")).toEqual({ value: "", label: expected.unit });
-      expect(combobox(el, "primary")!.placeholder).toBe(expected.category);
+      expect(variantPath(el)).toBe(`${t("editor.classification")}: ${expected.category}`);
       expect(combobox(el, "product-course")!.placeholder).toBe(expected.course);
       expect(hint(el, "allergens-hint")).toBe(expected.allergens);
       expect(hint(el, "dietary-hint")).toBe(expected.dietary);
@@ -2896,7 +3094,6 @@ it("draws a variant's inherited allergens and dietary hints in grey italic, like
 it("drops a hint once the variant sets that field itself", async () => {
   const el = await mountVariant({
     ...glass,
-    primaryCategoryId: "plates",
     allergens: { gluten: { presence: "contains" } },
     dietaryDeclarations: ["vegan"],
   });
@@ -3800,15 +3997,6 @@ it("leaves Descriptors closed on a refused photo, says why beside it, and puts f
     .poll(() => photoControl(el).shadowRoot!.activeElement?.getAttribute("data-test"))
     .toBe("choose-image");
   expect(section(el, "descriptors").open).toBe(false);
-});
-
-it("asks the screen for a new category from Add category", async () => {
-  const el = await mountPricing(saved);
-  const create = vi.fn();
-  el.addEventListener("wt-create-related", create);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-category]")!.click();
-  expect(create).toHaveBeenCalledOnce();
-  expect(create.mock.calls[0]![0].detail).toEqual({ kind: "category" });
 });
 
 it("refuses a variant with no name on its row, and saves nothing", async () => {

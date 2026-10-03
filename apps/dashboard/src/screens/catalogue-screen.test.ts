@@ -767,16 +767,13 @@ describe("catalogue-screen", () => {
   }
   /** A form's one message about a failed submission, or "" when it shows none. */
   async function bottomOf(form: Element): Promise<string> {
-    if (form.tagName === "DASHBOARD-CATEGORY-FORM")
-      return form.shadowRoot!.querySelector('[role="alert"]')?.textContent?.trim() ?? "";
     const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
     return (await formMessageOf(actions))?.textContent?.trim() ?? "";
   }
   const errorBeside = (form: Element, selector: string): string =>
     form.shadowRoot!.querySelector<HTMLElement & { error: string }>(selector)!.error;
 
-  // The unit and category forms key their errors by their OWN field names, not by the path a refusal
-  // carries.
+  // The unit form keys its errors by its OWN field names, not by the path a refusal carries.
   it("gives a refused nested unit create back to the unit form, beside the field it concerns", async () => {
     const api = stubApi({
       createUnit: vi
@@ -811,37 +808,6 @@ describe("catalogue-screen", () => {
     expect(await bottomOf(form)).toBe(t("form.fix_fields"));
   });
 
-  it("gives a refused nested category create back to the category form, beside the field it concerns", async () => {
-    const api = stubApi({
-      getContentLanguages: vi
-        .fn()
-        .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
-      createCategory: vi
-        .fn()
-        .mockRejectedValueOnce({ code: "category.parent_cycle", params: {}, status: 400 })
-        .mockRejectedValueOnce({
-          code: "category.invalid",
-          params: { field: "name" },
-          status: 400,
-        }),
-    });
-    const el = await openNested(api, "category");
-    const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
-    const input = { name: "Postres", parentId: "c1" };
-    await submitNested(el, form, input);
-    expect(form.open).toBe(true);
-    expect(errorBeside(form, "wt-combobox[name=category-parent]")).toBe(
-      codeMessage("category.parent_cycle"),
-    );
-    expect(await bottomOf(form)).toBe(t("form.fix_fields"));
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
-
-    await submitNested(el, form, input);
-    expect(errorBeside(form, "wt-input[name=name]")).toBe(codeMessage("category.invalid"));
-    expect(errorBeside(form, "wt-combobox[name=category-parent]")).toBe("");
-    expect(await bottomOf(form)).toBe(t("form.fix_fields"));
-  });
-
   it("leaves a nested form's Save working on a refusal beside a field, which stays gone once that field changes", async () => {
     const api = stubApi({
       createUnit: vi
@@ -870,35 +836,9 @@ describe("catalogue-screen", () => {
     expect(errorBeside(form, "wt-combobox[name=precision]")).toBe("");
   });
 
-  it("puts a nested category create's missing parent beside the parent it chose", async () => {
-    const api = stubApi({
-      getContentLanguages: vi
-        .fn()
-        .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
-      createCategory: vi.fn().mockRejectedValueOnce({
-        code: "category.not_found",
-        params: { categoryId: "c1" },
-        status: 404,
-      }),
-    });
-    const el = await openNested(api, "category");
-    const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
-    await submitNested(el, form, {
-      name: { es: "Postres", en: "" },
-      parentId: "c1",
-    });
-    expect(errorBeside(form, "wt-combobox[name=category-parent]")).toBe(
-      codeMessage("category.not_found"),
-    );
-    expect(await bottomOf(form)).toBe(t("form.fix_fields"));
-  });
-
-  it("still says a nested unit or category refusal that names no field of the form, in its bottom message", async () => {
+  it("still says a nested unit refusal that names no field of the form, in its bottom message", async () => {
     const api = stubApi({
       createUnit: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
-      createCategory: vi
-        .fn()
-        .mockRejectedValue({ code: "content.translation_invalid", params: {}, status: 400 }),
     });
     const el = await openNested(api, "unit");
     const unitForm = el.shadowRoot!.querySelector("dashboard-unit-form")!;
@@ -910,51 +850,34 @@ describe("catalogue-screen", () => {
     expect(unitForm.open).toBe(true);
     expect(await bottomOf(unitForm)).toBe(codeMessage("server.internal"));
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
-
-    emit(unitForm, "wt-cancel", {});
-    await flush(el);
-    emit(editor(el), "wt-create-related", { kind: "category" });
-    await el.updateComplete;
-    const categoryForm = el.shadowRoot!.querySelector("dashboard-category-form")!;
-    await categoryForm.updateComplete;
-    // The unit form's refusal is not carried into the next form.
-    expect(await bottomOf(categoryForm)).toBe("");
-    await submitNested(el, categoryForm, {
-      name: { es: "Postres" },
-      parentId: null,
-      image: null,
-      color: null,
-    });
-    expect(categoryForm.open).toBe(true);
-    expect(await bottomOf(categoryForm)).toBe(codeMessage("content.translation_invalid"));
   });
 
-  it("ignores a closed unit form's second cancel once the category form is open", async () => {
+  it("ignores a closed unit form's second cancel once the extras form is open", async () => {
     const el = await openNested(stubApi(), "unit");
     const unitForm = el.shadowRoot!.querySelector("dashboard-unit-form")!;
     emit(unitForm, "wt-cancel", {});
     await flush(el);
-    emit(editor(el), "wt-create-related", { kind: "category" });
+    emit(editor(el), "wt-create-related", { kind: "extras" });
     await el.updateComplete;
-    const categoryForm = el.shadowRoot!.querySelector("dashboard-category-form")!;
-    expect(categoryForm.open).toBe(true);
+    const extrasForm = el.shadowRoot!.querySelector("dashboard-extra-list-form")!;
+    expect(extrasForm.open).toBe(true);
     emit(unitForm, "wt-cancel", {});
     await flush(el);
-    expect([categoryForm.open, unitForm.open, editor(el).childOpen]).toEqual([true, false, true]);
+    expect([extrasForm.open, unitForm.open, editor(el).childOpen]).toEqual([true, false, true]);
   });
 
-  it("ignores a closed category form's second cancel once the unit form is open", async () => {
-    const el = await openNested(stubApi(), "category");
-    const categoryForm = el.shadowRoot!.querySelector("dashboard-category-form")!;
-    emit(categoryForm, "wt-cancel", {});
+  it("ignores a closed extras form's second cancel once the unit form is open", async () => {
+    const el = await openNested(stubApi(), "extras");
+    const extrasForm = el.shadowRoot!.querySelector("dashboard-extra-list-form")!;
+    emit(extrasForm, "wt-cancel", {});
     await flush(el);
     emit(editor(el), "wt-create-related", { kind: "unit" });
     await el.updateComplete;
     const unitForm = el.shadowRoot!.querySelector("dashboard-unit-form")!;
     expect(unitForm.open).toBe(true);
-    emit(categoryForm, "wt-cancel", {});
+    emit(extrasForm, "wt-cancel", {});
     await flush(el);
-    expect([unitForm.open, categoryForm.open, editor(el).childOpen]).toEqual([true, false, true]);
+    expect([unitForm.open, extrasForm.open, editor(el).childOpen]).toEqual([true, false, true]);
   });
 
   // Opened by a real click: opened by a synthetic click with this case run first, one Escape also
@@ -1686,23 +1609,6 @@ describe("catalogue-screen", () => {
       );
       expect(editor(el).currentValue.courseId).toBe("k1");
     });
-  });
-
-  it("offers the new-category form, with its one name field, before the content languages load", async () => {
-    const api = stubApi({
-      getContentLanguages: vi.fn().mockReturnValue(new Promise(() => {})),
-    });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-    emit(editor(el), "wt-create-related", { kind: "category" });
-    await el.updateComplete;
-    const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
-    expect(form.open).toBe(true);
-    await form.updateComplete;
-    const names = [...form.shadowRoot!.querySelectorAll("wt-input")].map((input) =>
-      input.getAttribute("name"),
-    );
-    expect(names).toEqual(["name"]);
   });
 
   it("ignores a late product response after the editor is cancelled", async () => {

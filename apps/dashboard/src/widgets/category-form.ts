@@ -1,15 +1,5 @@
-import { LocaleChangeController } from "../state/locale-controller.js";
-import { LitElement, css, html, type PropertyValues } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
-import "@waitron/ui/src/components/wt-modal.js";
-import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-combobox.js";
-import type { CategoryInput, CategorySummary } from "../api/client.js";
+import type { CategorySummary } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
 
 /** The category, then each category above it, stopping at a parent the list lacks or a loop. */
 export function categoryAncestors(
@@ -30,11 +20,12 @@ export function categoryAncestors(
 export function categoryPath(
   category: CategorySummary,
   categories: readonly CategorySummary[],
+  separator = " / ",
 ): string {
   return categoryAncestors(category, categories)
     .map(({ name }) => name)
     .reverse()
-    .join(" / ");
+    .join(separator);
 }
 
 /** The collation `wt-data-table` sorts text with, so a picker or list and the tables agree. */
@@ -68,8 +59,8 @@ const FIELD_BY_REQUEST_FIELD = new Map([
   ["parentId", "parent"],
 ]);
 
-/** A refused category write, keyed by the form's fields; `_form` is shown in the bottom message alone.
- * `parentId` is the parent the refused write named. */
+/** A refused category write, keyed by the field it concerns (`name` or `parent`), or `_form` when it
+ * concerns neither. `parentId` is the parent the refused write named. */
 export function categoryRefusalErrors(
   error: unknown,
   parentId: string | null = null,
@@ -83,183 +74,4 @@ export function categoryRefusalErrors(
   if (code === "management.request_invalid" && typeof params.field === "string")
     field = FIELD_BY_REQUEST_FIELD.get(params.field);
   return { [field ?? "_form"]: message };
-}
-
-/** API writes belong to the host, so the same editor can create a category inside a product draft. */
-@customElement("dashboard-category-form")
-export class CategoryForm extends LitElement {
-  constructor() {
-    super();
-    new LocaleChangeController(this);
-  }
-
-  static override styles = [
-    baseStyles,
-    css`
-      .fields {
-        display: grid;
-        gap: var(--wt-space-4);
-      }
-    `,
-  ];
-  @property({ type: Boolean }) open = false;
-  @property({ type: Boolean }) busy = false;
-  @property({ attribute: false }) defaultParentId: string | null = null;
-  @property({ attribute: false }) value: CategorySummary | null = null;
-  @property({ attribute: false }) categories: readonly CategorySummary[] = [];
-  @property({ attribute: false }) fieldErrors: Record<string, string> = {};
-  @state() private name = "";
-  @state() private parentId: string | null = null;
-  @state() private attempted = false;
-  /** Refusal keys the operator has since changed the field of, or submitted past. */
-  @state() private dismissed = new Set<string>();
-  protected override willUpdate(changes: PropertyValues<this>): void {
-    if (
-      (changes.has("open") && this.open) ||
-      (changes.has("value") &&
-        this.value?.id !== (changes.get("value") as CategorySummary | null | undefined)?.id)
-    ) {
-      this.name = this.value?.name ?? "";
-      this.parentId = this.value ? this.value.parentId : this.defaultParentId;
-      this.attempted = false;
-      this.dismissed = new Set();
-    }
-    if (changes.has("fieldErrors")) this.dismissed = new Set();
-  }
-  protected override updated(changes: PropertyValues<this>): void {
-    if (changes.has("fieldErrors") && this.#fieldKeys(this.fieldErrors).length > 0)
-      void focusFirstInvalid(this.shadowRoot!);
-  }
-  #dismiss(...keys: string[]): void {
-    this.dismissed = new Set([...this.dismissed, ...keys]);
-  }
-  #validate(): Record<string, string> {
-    return this.name.trim() ? {} : { name: t("categories.name_required") };
-  }
-  /** The keys of `errors` that a field this form shows displays. */
-  #fieldKeys(errors: Record<string, string>): string[] {
-    const shown = new Set(["name", "parent"]);
-    return Object.entries(errors)
-      .filter(([key, message]) => Boolean(message) && shown.has(key))
-      .map(([key]) => key);
-  }
-  #errors(): Record<string, string> {
-    const refused = Object.fromEntries(
-      Object.entries(this.fieldErrors).filter(([key]) => !this.dismissed.has(key)),
-    );
-    return { ...refused, ...(this.attempted ? this.#validate() : {}) };
-  }
-  #emit(
-    event: Event,
-    type: "wt-submit" | "wt-cancel",
-    detail: { value: CategoryInput } | Record<string, never>,
-  ): void {
-    event.stopPropagation();
-    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
-  }
-  #submit(event: Event): void {
-    event.stopPropagation();
-    if (this.busy) return;
-    this.attempted = true;
-    this.#dismiss(...Object.keys(this.fieldErrors));
-    if (Object.keys(this.#validate()).length > 0) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
-      return;
-    }
-    this.#emit(event, "wt-submit", { value: { name: this.name, parentId: this.parentId } });
-  }
-  #parents(): readonly CategorySummary[] {
-    if (!this.value) return this.categories;
-    const excluded = categoryWithDescendants(this.value.id, this.categories);
-    return this.categories.filter((category) => !excluded.has(category.id));
-  }
-  override render() {
-    const errors = this.#errors();
-    const fieldKeys = new Set(this.#fieldKeys(errors));
-    const formMessages = Object.entries(errors)
-      .filter(([key, message]) => Boolean(message) && !fieldKeys.has(key))
-      .map(([, message]) => message);
-    const bottom = [...formMessages, ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : [])].join(
-      " ",
-    );
-    const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
-    return html`<wt-modal
-      .open=${this.open}
-      heading=${t(this.value ? "categories.edit" : "categories.create")}
-      @keydown=${(event: KeyboardEvent) => {
-        if (this.busy && event.key === "Escape") event.preventDefault();
-      }}
-      @wt-close=${(event: Event) => {
-        // The dialog also reports a close it was told to make, a task later; by then the screen has
-        // closed this form and a second cancel would be about nothing.
-        if (!this.busy && this.open) this.#emit(event, "wt-cancel", {});
-        else event.stopPropagation();
-      }}
-    >
-      <div
-        ?inert=${this.busy}
-        class="fields"
-        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]'))}
-      >
-        <wt-input
-          name="name"
-          label=${t("categories.name")}
-          required
-          .disabled=${this.busy}
-          .value=${this.name}
-          .error=${errors.name ?? ""}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.name = event.detail.value;
-            this.#dismiss("name");
-          }}
-        ></wt-input>
-        <wt-combobox
-          name="category-parent"
-          label=${t("categories.parent")}
-          .disabled=${this.busy}
-          .options=${[
-            { value: "", label: t("categories.no_parent") },
-            ...this.#parents()
-              .map((category) => ({
-                value: category.id,
-                label: categoryPath(category, this.categories),
-              }))
-              .sort((a, b) => byLabel(a.label, b.label)),
-          ]}
-          .value=${this.parentId ?? ""}
-          .error=${errors.parent ?? ""}
-          searchPlaceholder=${t("categories.combobox_search")}
-          noResultsLabel=${t("categories.combobox_no_results")}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.parentId = event.detail.value || null;
-            this.#dismiss("parent");
-          }}
-        ></wt-combobox>
-        ${bottom ? html`<p role="alert">${bottom}</p>` : ""}
-      </div>
-      <wt-form-actions slot="footer"
-        ><wt-button
-          slot="cancel"
-          variant="secondary"
-          .disabled=${this.busy}
-          @click=${(event: Event) => this.#emit(event, "wt-cancel", {})}
-          >${t("action.cancel")}</wt-button
-        >
-        <wt-button
-          data-test="save"
-          variant="primary"
-          .disabled=${this.busy || invalid}
-          @click=${(event: Event) => this.#submit(event)}
-          >${t("action.save")}</wt-button
-        ></wt-form-actions
-      >
-    </wt-modal>`;
-  }
-}
-declare global {
-  interface HTMLElementTagNameMap {
-    "dashboard-category-form": CategoryForm;
-  }
 }

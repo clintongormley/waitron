@@ -31,17 +31,14 @@ async function fixture() {
   const refresh = vi.fn(async () => {});
   const focus = vi.fn();
   const accept = vi.fn(
-    (kind: "unit" | "category", value: { id: string; name: string | Record<string, string> }) => {
+    (kind: "unit" | "courses", value: { id: string; name: string | Record<string, string> }) => {
       if (kind === "unit")
         el.units = [
           ...el.units,
           { ...value, name: value.name as Record<string, string>, abbreviation: {} },
         ];
-      if (kind === "category")
-        el.categories = [
-          ...el.categories,
-          { id: value.id, name: value.name as string, parentId: null },
-        ];
+      if (kind === "courses")
+        el.courses = [...el.courses, { id: value.id, name: value.name as string }];
       el.selectRelated(kind, value.id);
     },
   );
@@ -52,7 +49,7 @@ async function fixture() {
 // The controller does not care which kind it is carrying, so two of them exercise every branch of
 // its lifecycle; the extras and options kinds are covered where the screen wires them up
 // (`catalogue-screen.test.ts`).
-it.each(["unit", "category"] as const)(
+it.each(["unit", "courses"] as const)(
   "keeps the dirty product after a durable %s create even if refresh fails",
   async (kind) => {
     const fx = await fixture();
@@ -69,7 +66,7 @@ it.each(["unit", "category"] as const)(
     expect(fx.focus).toHaveBeenCalledWith(kind);
     expect(fx.loadError).toHaveBeenCalledOnce();
     expect(fx.el.currentValue.name).toBe("Dirty coffee");
-    expect(kind === "unit" ? fx.el.currentValue.unitId : fx.el.currentValue.primaryCategoryId).toBe(
+    expect(kind === "unit" ? fx.el.currentValue.unitId : fx.el.currentValue.courseId).toBe(
       saved.id,
     );
   },
@@ -99,12 +96,12 @@ it("retains a failed child and drops a duplicate submit while the write is pendi
 
 it("does not attach a late write to a different product or release its child gate", async () => {
   const fx = await fixture();
-  fx.controller.open("category");
+  fx.controller.open("courses");
   const request = deferred<{ id: string; name: string }>();
   const saving = fx.controller.submit(() => request.promise);
   fx.controller.reset();
   fx.controller.open("unit");
-  request.resolve({ id: crypto.randomUUID(), name: "Old category" });
+  request.resolve({ id: crypto.randomUUID(), name: "Old course" });
   await saving;
   expect(fx.controller.kind).toBe("unit");
   expect(fx.accept).not.toHaveBeenCalled();
@@ -124,9 +121,9 @@ it("closes the child before refresh completes and ignores a late load error afte
   await expect.poll(() => fx.refresh.mock.calls.length).toBe(1);
   expect(fx.controller.kind).toBeNull();
   fx.controller.reset();
-  fx.controller.open("category");
+  fx.controller.open("courses");
   refreshing.reject(new Error("Offline"));
   await saving;
   expect(fx.loadError).not.toHaveBeenCalled();
-  expect(fx.controller.kind).toBe("category");
+  expect(fx.controller.kind).toBe("courses");
 });
