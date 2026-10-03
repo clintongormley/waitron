@@ -150,7 +150,7 @@ describe("DashboardApi", () => {
     const onError = vi.fn();
     const onSuccess = vi.fn();
     const api = new DashboardApi("", vi.fn().mockResolvedValue(response), onError, onSuccess);
-    await expect(api.exportConfiguration("a strong passphrase")).rejects.toMatchObject({
+    await expect(api.exportConfiguration("a strong passphrase")).rejects.toEqual({
       code: "management_session.expired",
       status: 401,
     });
