@@ -3226,8 +3226,13 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     - **The table screen still reads a credited presented bill at its full amount.** Its per-bill
       "to pay" line (`apps/till/src/screens/till-table-order-screen.ts`, `bill.outstanding`) and
       the party's total (`apps/till/src/till-app.ts`, summing each bill's `outstanding`) read no
-      credit note either, so a presented bill whose invoice a credit note cancelled still shows
-      its full total there (read, not run). **Next action:** decide whether those read
+      credit note either, so a presented bill whose invoice a credit note has reduced, in part or
+      to nothing, without the bill being cancelled, still shows its full total there (read, not
+      run). The partly paid bill's "to pay" line and its pay-the-rest button
+      (`apps/till/src/screens/till-table-order-screen.ts`, `partlyPaid.outstanding`) read
+      `outstanding` too, but that section is drawn only for an open bill holding a payment
+      (`paidInPart`, `apps/till/src/state/bill-state.ts`), and an open bill has no invoice, so no
+      credit note reaches it today (read, not run). **Next action:** decide whether those read
       `amountDue` too, which W26 left out because other screens and the floor read `outstanding`.
     - **A 0.00 simplified invoice:** B17's departure, and since B28 (#1005) Pay on a bill whose
       total is zero, file one; whether AEAT accepts it was not tested.

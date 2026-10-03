@@ -46,7 +46,8 @@ export interface PartyBill {
   invoiceNumber?: string;
   /** The numbers of the sales correcting the bill's sale, oldest first; absent while no sale is filed. */
   creditNotes?: string[];
-  /** What the bill's sale owes: its total plus its credit notes; absent while no sale is filed. */
+  /** Its sale's total plus its credit notes, whether or not the bill has been paid; absent while no
+   * sale is filed. */
   amountDue?: string;
 }
 
@@ -411,7 +412,7 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
   );
   const issued = await readIssuedSales(
     tx,
-    bills.map((bill) => bill.workingOrderId),
+    filedSales.flatMap((sale) => (sale.workingOrderId === null ? [] : [sale.workingOrderId])),
   );
   return bills.map((bill) => {
     const sale = filed.get(bill.workingOrderId);

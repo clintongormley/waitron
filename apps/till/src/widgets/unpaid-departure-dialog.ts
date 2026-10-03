@@ -13,6 +13,7 @@ import { REASON_MAX, moneyPlus, type DialogRefusal } from "../state/bill-payment
 export interface DepartingBill {
   workingOrderId: string;
   name: string;
+  /** An invoiced bill's amount due, otherwise its outstanding. */
   outstanding: string;
 }
 
