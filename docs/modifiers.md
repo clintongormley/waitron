@@ -15,11 +15,14 @@ have already created, and takes that product's names, tax treatment, allergens, 
 picture from it — you never retype them here. A product that has Active variants cannot be an
 entry, because it is sold only as one of its variants. What you set on the entry is the terms of the
 offer: **Maximum quantity**, how many of it one dish may take (at least one, so 1 means "one or
-none"); **Preselected**, whether it starts chosen; and **Price**, what the diner is charged for it.
-That price REPLACES the product's own rather than adding to it, so 1.50 against a 3.00 product bills
-1.50. Leave it blank and the product's own price is what gets charged — the field shows you that
-price, greyed, while it is blank. The product's unit is shown after the price (under it on a phone), so
-you can see what one of it is; a product with no unit reads Each. The list itself sets **Minimum choices** — 0 makes the list optional, 1 or more makes
+none"); **Preselected**, whether it starts chosen; and **Price per portion**, what one pick costs.
+For a weighed or fractional product, also enter the **Portion** that one pick adds, in the product's
+own unit. A product counted as Each adds one, so it needs no portion field. An entered price replaces
+the product's price for that portion: 1.50 means 1.50 per pick. Leave the price blank and Waitron
+multiplies the portion by the product's unit price, then rounds once to a cent for each pick; the
+field shows that calculated price while it is blank. The product's unit is shown with the price
+(under it on a phone), or reads Each when the product has no unit. The list itself sets
+**Minimum choices** — 0 makes the list optional, 1 or more makes
 it required — and **Maximum choices**, left blank for no limit. Each of these numbers has − and +
 buttons, and you can also type it.
 
@@ -114,11 +117,11 @@ Each extra picked becomes its own indented line under the dish in the basket, wi
 and its own allergens and dietary labels — never folded into the dish's. An options answer costs
 nothing and rides along as wording on the dish's line.
 
-An order stores the answers it was given and not a link back to the list they came from, so a parked
-order has to be matched up with the dish's lists again before it can be changed. An options answer
+An order stores the answers it was given. A parked order has to be matched up with the dish's
+current lists again before it can be changed. An options answer
 is stored as wording, all three names of the list and all three of the chosen option, and the till
-matches on the staff name of each. An extra is stored as the product that was picked, so the till
-finds its list by that product instead.
+matches on the staff name of each. An extra keeps the product and the list it was picked from, so
+another list offering the same product cannot silently take its place.
 
 Change the staff name of a list or an option, or turn an option off, and an options answer no longer
 matches. The till will not guess: it asks the operator to open that line and choose again before the
