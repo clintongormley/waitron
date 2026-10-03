@@ -14,14 +14,15 @@ import type { ProductModifierRef } from "./product-modifiers.js";
  * A list item with its price already settled: never null, because the fallback chain ends at the
  * product's `unit_price`, which is not on the item, so a till or menu screen could not resolve it.
  */
-export type ResolvedExtraListItem = Omit<ExtraListItem, "price"> & {
+export type ResolvedExtraListItem = Omit<ExtraListItem, "price" | "portion"> & {
   price: string;
-  unit?: {
+  portion: string;
+  unit: {
     id: string;
-    name?: Readonly<Record<string, string>>;
+    name: Record<string, string>;
     abbreviation: Record<string, string>;
     precision: number;
-    hardwareUnit?: "kg" | "g" | "mg" | null;
+    hardwareUnit: "kg" | "g" | "mg" | null;
   };
 };
 
@@ -94,7 +95,7 @@ function priceItems(
     const price = resolveExtraPrice(item, product);
     return price === undefined || product === undefined
       ? []
-      : [{ ...item, price, unit: product.unit }];
+      : [{ ...item, price, portion: item.portion ?? "1", unit: product.unit }];
   });
 }
 

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { OptionLabel, OptionList, ResolvedExtraList } from "@waitron/catalogue";
+import {
+  EACH_UNIT,
+  type OptionLabel,
+  type OptionList,
+  type ResolvedExtraList,
+} from "@waitron/catalogue";
 import {
   buildLineExtras,
   editLineExtras,
@@ -68,8 +73,18 @@ const breads: ResolvedExtraList = {
       maxQuantity: 2,
       preselected: false,
       price: "1.50",
+      portion: "1",
+      unit: EACH_UNIT,
     },
-    { id: "item-rye", productId: "product-rye", maxQuantity: 1, preselected: false, price: "0.00" },
+    {
+      id: "item-rye",
+      productId: "product-rye",
+      maxQuantity: 1,
+      preselected: false,
+      price: "0.00",
+      portion: "1",
+      unit: EACH_UNIT,
+    },
   ],
 };
 const drinks: ResolvedExtraList = {
@@ -88,6 +103,8 @@ const drinks: ResolvedExtraList = {
       maxQuantity: 3,
       preselected: false,
       price: "4.50",
+      portion: "1",
+      unit: EACH_UNIT,
     },
   ],
 };
@@ -135,7 +152,13 @@ describe("buildLineExtras", () => {
           ...drinks.items[0]!,
           portion: "0.050",
           price: "0.01",
-          unit: { id: "unit-kg", abbreviation: { en: "kg", es: "kg" }, precision: 3 },
+          unit: {
+            id: "unit-kg",
+            name: { en: "Kilogram" },
+            abbreviation: { en: "kg", es: "kg" },
+            precision: 3,
+            hardwareUnit: "kg" as const,
+          },
         },
       ],
     };
@@ -154,6 +177,12 @@ describe("buildLineExtras", () => {
         priceQuantity: "0.050",
         unitName: { en: "kg", es: "kg" },
         unitPrecision: 3,
+        unitContext: {
+          id: "unit-kg",
+          name: { en: "Kilogram" },
+          precision: 3,
+          hardwareUnit: "kg",
+        },
         price: "0.01",
         vatClass: "general",
       },
@@ -214,6 +243,16 @@ describe("buildLineExtras", () => {
         vatClass: "general",
         // The picks per dish as sent — this function never multiplies by the dish count.
         quantity: 2,
+        physicalQuantity: "2",
+        priceQuantity: "1",
+        unitName: EACH_UNIT.abbreviation,
+        unitPrecision: 0,
+        unitContext: {
+          id: EACH_UNIT.id,
+          name: EACH_UNIT.name,
+          precision: 0,
+          hardwareUnit: null,
+        },
       },
     ]);
   });
@@ -531,7 +570,13 @@ describe("editLineExtras", () => {
           ...drinks.items[0]!,
           portion: "0.050",
           price: "0.01",
-          unit: { id: "unit-kg", abbreviation: { en: "kg", es: "kg" }, precision: 3 },
+          unit: {
+            id: "unit-kg",
+            name: { en: "Kilogram" },
+            abbreviation: { en: "kg", es: "kg" },
+            precision: 3,
+            hardwareUnit: "kg" as const,
+          },
         },
       ],
     };
@@ -551,6 +596,12 @@ describe("editLineExtras", () => {
         priceQuantity: "0.050",
         unitName: { en: "kg", es: "kg" },
         unitPrecision: 3,
+        unitContext: {
+          id: "unit-kg",
+          name: { en: "Kilogram" },
+          precision: 3,
+          hardwareUnit: "kg",
+        },
         price: "0.01",
       },
     ]);

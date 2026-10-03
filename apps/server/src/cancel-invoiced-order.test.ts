@@ -511,6 +511,67 @@ describe("cancelling a placed order whose invoice was issued", () => {
     );
   });
 
+  it("files the published 0.055 kg portion exactly after unit precision falls", async () => {
+    await inTx(venue, async (tx) => {
+      await tx.execute(
+        sql`update extra_list_items set portion = 55 where list_id = ${portionListId}`,
+      );
+      await tx.execute(sql`update units set precision = 2 where seed_key = 'credit-test-kg'`);
+    });
+    try {
+      const oldId = await placed([
+        {
+          name: "Mosto",
+          quantity: "1",
+          extras: [
+            { listId: portionListId, picks: [{ productId: productIdOf("Jamón"), quantity: 3 }] },
+          ],
+        },
+      ]);
+      expect((await linesOf((await invoiceOf(oldId)).id))[1]).toMatchObject({
+        quantity: 150,
+        priceQuantity: 50,
+        lineGross: 3,
+      });
+
+      await inTx(venue, (tx) =>
+        offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
+      );
+      const newId = await placed([
+        {
+          name: "Mosto",
+          quantity: "1",
+          extras: [
+            { listId: portionListId, picks: [{ productId: productIdOf("Jamón"), quantity: 3 }] },
+          ],
+        },
+      ]);
+      const newSale = await invoiceOf(newId);
+      expect((await linesOf(newSale.id))[1]).toMatchObject({
+        quantity: 165,
+        priceQuantity: 55,
+        lineGross: 3,
+      });
+      const [child] = await inTx(venue, (tx) =>
+        tx
+          .select({ unitPrecision: saleLines.unitPrecision })
+          .from(saleLines)
+          .where(
+            and(eq(saleLines.saleId, newSale.id), eq(saleLines.productId, productIdOf("Jamón"))),
+          ),
+      );
+      expect(child?.unitPrecision).toBe(2);
+    } finally {
+      await inTx(venue, async (tx) => {
+        await tx.execute(
+          sql`update extra_list_items set portion = 50 where list_id = ${portionListId}`,
+        );
+        await tx.execute(sql`update units set precision = 3 where seed_key = 'credit-test-kg'`);
+        await offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" });
+      });
+    }
+  });
+
   it("names, on each credit-note line, the invoice line with the same number that it reverses", async () => {
     const id = await placed([
       { name: "Caña", quantity: "2" },

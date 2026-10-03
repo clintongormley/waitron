@@ -1349,6 +1349,59 @@ describe("listHeldOrders", () => {
 });
 
 describe("getHeldOrder", () => {
+  it("keeps an over-precise published extra portion exact after the unit precision falls", async () => {
+    const { cfg, catalogueId, zoneId, cafeId, premiumCafeOfferId, kgUnitId } = await setupVenue();
+    const extra = await withTransaction(db, async (tx) => {
+      const product = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Jamón",
+        unitId: kgUnitId,
+        unitPrice: "0.27",
+        vatClass: "general",
+      });
+      const list = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Portions",
+          minPicks: 0,
+          maxPicks: 3,
+          items: [{ productId: product.id, portion: "0.055", maxQuantity: 3, price: null }],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
+      await republishMenus(tx);
+      return { listId: list.id, productId: product.id };
+    });
+    await withTransaction(db, (tx) => catalogue.updateUnit(tx, kgUnitId, { precision: 2 }, LOCALE));
+    await withTransaction(db, (tx) => republishMenus(tx));
+
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        {
+          menuItemId: premiumCafeOfferId,
+          quantity: "1",
+          extras: [{ listId: extra.listId, picks: [{ productId: extra.productId, quantity: 3 }] }],
+        },
+      ],
+    });
+
+    const child = await db.execute<{
+      quantity: number;
+      price_quantity: number;
+      unit_precision: number;
+      line_total: number;
+    }>(sql`select quantity, price_quantity, unit_precision, line_total from working_order_lines
+      where working_order_id = ${id} and parent_line_id is not null`);
+    expect(child.rows).toEqual([
+      { quantity: 165, price_quantity: 55, unit_precision: 2, line_total: 3 },
+    ]);
+  });
+
   it("parks weighted extras with physical quantity and the frozen per-pick basis", async () => {
     const { cfg, catalogueId, zoneId, cafeId, premiumCafeOfferId, kgUnitId } = await setupVenue();
     const extra = await withTransaction(db, async (tx) => {

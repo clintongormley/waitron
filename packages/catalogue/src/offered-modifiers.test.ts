@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, products as productRows, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -23,6 +23,16 @@ import * as productModifiers from "./product-modifiers.js";
 import * as optionsModule from "./options.js";
 import { seedVenue } from "../test/fixtures.js";
 import { EACH_UNIT } from "./units.js";
+import type { OfferedExtraItem } from "./menu-types.js";
+
+expectTypeOf<OfferedExtraItem["portion"]>().toEqualTypeOf<string>();
+expectTypeOf<OfferedExtraItem["unit"]>().toEqualTypeOf<{
+  id: string;
+  name: Record<string, string>;
+  abbreviation: Record<string, string>;
+  precision: number;
+  hardwareUnit: "kg" | "g" | "mg" | null;
+}>();
 
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
@@ -269,7 +279,7 @@ describe("what a product offers", () => {
           kitchenName: "BCN",
           price: "1.50",
           portion: "1.000",
-          unit: { id: EACH_UNIT.id, abbreviation: EACH_UNIT.abbreviation, precision: 0 },
+          unit: EACH_UNIT,
           vatClass: "reduced",
           maxQuantity: 2,
           preselected: true,
@@ -283,7 +293,7 @@ describe("what a product offers", () => {
           kitchenName: "CHS",
           price: "2.00",
           portion: "1.000",
-          unit: { id: EACH_UNIT.id, abbreviation: EACH_UNIT.abbreviation, precision: 0 },
+          unit: EACH_UNIT,
           vatClass: "general",
           maxQuantity: 1,
           preselected: false,
@@ -299,7 +309,7 @@ describe("what a product offers", () => {
           kitchenName: "OLV",
           price: "0.75",
           portion: "1.000",
-          unit: { id: EACH_UNIT.id, abbreviation: EACH_UNIT.abbreviation, precision: 0 },
+          unit: EACH_UNIT,
           vatClass: "reduced",
           maxQuantity: 1,
           preselected: false,

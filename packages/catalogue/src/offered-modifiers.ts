@@ -234,7 +234,7 @@ export async function readOfferedModifiers(
                   {
                     ...product,
                     price: item.price,
-                    portion: item.portion ?? "1.000",
+                    portion: item.portion,
                     unit: item.unit,
                     maxQuantity: item.maxQuantity,
                     preselected: item.preselected,

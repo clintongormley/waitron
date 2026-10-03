@@ -2148,6 +2148,14 @@ describe("till-table-order-screen", () => {
       ],
     };
     const extraItem = (productId: string, name: string, preselected: boolean) => ({
+      portion: "1",
+      unit: {
+        name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
+        hardwareUnit: null,
+        id: "00000000-0000-0000-0000-000000000001",
+        abbreviation: { en: "ea", es: "ud", ca: "u", eu: "u", gl: "u" },
+        precision: 0,
+      },
       productId,
       name,
       customerName: { es: `${name} carta` },

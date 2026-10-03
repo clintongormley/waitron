@@ -29,6 +29,14 @@ function offeredItem(
   preselected = false,
 ) {
   return {
+    portion: "1",
+    unit: {
+      name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
+      hardwareUnit: null,
+      id: "00000000-0000-0000-0000-000000000001",
+      abbreviation: { en: "ea", es: "ud", ca: "u", eu: "u", gl: "u" },
+      precision: 0,
+    },
     productId,
     name: staff,
     customerName: { es: `${staff} carta`, en: `${staff} menu` },
@@ -249,7 +257,13 @@ describe("till-modifier-picker", () => {
         {
           ...offeredItem("p-ham", "Jamón", "5.00", 3),
           portion: "0.050",
-          unit: { id: "unit-kg", abbreviation: { en: "kg", es: "kg" }, precision: 3 },
+          unit: {
+            id: "unit-kg",
+            name: { en: "Kilogram" },
+            abbreviation: { en: "kg", es: "kg" },
+            precision: 3,
+            hardwareUnit: "kg",
+          },
         },
       ],
     } satisfies OfferedModifier;

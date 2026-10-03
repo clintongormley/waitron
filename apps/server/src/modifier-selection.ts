@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { validateExtraSelections, validateOptionSelections } from "@waitron/catalogue";
+import { EACH_UNIT, validateExtraSelections, validateOptionSelections } from "@waitron/catalogue";
 import type { OptionList, ResolvedExtraList, VatClass } from "@waitron/catalogue";
 import { AppError, compareDecimal, decimal, multiplyDecimal } from "@waitron/shared";
 import type { OptionSnapshot } from "@waitron/shared";
@@ -99,26 +99,16 @@ export function buildLineExtras(
           listId: list.id,
           vatClass: product.vatClass,
           quantity: pick.quantity,
-          ...(item.portion === undefined
-            ? {}
-            : {
-                physicalQuantity: multiplyDecimal(
-                  decimal(item.portion),
-                  decimal(String(pick.quantity)),
-                ),
-                priceQuantity: item.portion,
-                unitName: item.unit?.abbreviation,
-                unitPrecision: item.unit?.precision,
-                unitContext:
-                  item.unit?.name !== undefined && item.unit.hardwareUnit !== undefined
-                    ? {
-                        id: item.unit.id,
-                        name: item.unit.name,
-                        precision: item.unit.precision,
-                        hardwareUnit: item.unit.hardwareUnit,
-                      }
-                    : undefined,
-              }),
+          physicalQuantity: multiplyDecimal(decimal(item.portion), decimal(String(pick.quantity))),
+          priceQuantity: item.portion,
+          unitName: item.unit.abbreviation,
+          unitPrecision: item.unit.precision,
+          unitContext: {
+            id: item.unit.id,
+            name: item.unit.name,
+            precision: item.unit.precision,
+            hardwareUnit: item.unit.hardwareUnit,
+          },
         };
       });
     },
@@ -253,6 +243,8 @@ export function editLineExtras<
         maxQuantity: perDish,
         preselected: false,
         price: "0.00",
+        portion: child.priceQuantity ?? "1",
+        unit: EACH_UNIT,
       });
     } else {
       const item = list.items[index]!;
@@ -284,17 +276,16 @@ export function editLineExtras<
         listId: list.id,
         vatClass: product.vatClass,
         quantity: pick.quantity,
-        ...(item.portion === undefined
-          ? {}
-          : {
-              physicalQuantity: multiplyDecimal(
-                decimal(item.portion),
-                decimal(String(pick.quantity)),
-              ),
-              priceQuantity: item.portion,
-              unitName: item.unit?.abbreviation,
-              unitPrecision: item.unit?.precision,
-            }),
+        physicalQuantity: multiplyDecimal(decimal(item.portion), decimal(String(pick.quantity))),
+        priceQuantity: item.portion,
+        unitName: item.unit.abbreviation,
+        unitPrecision: item.unit.precision,
+        unitContext: {
+          id: item.unit.id,
+          name: item.unit.name,
+          precision: item.unit.precision,
+          hardwareUnit: item.unit.hardwareUnit,
+        },
       });
     }
   }
