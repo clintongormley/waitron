@@ -5893,39 +5893,30 @@ change (owner decision 2026-09-23; PR #536).** The ticket belongs to the TILL, n
 who started it, so a late result shown on that device after a change of operator is right; the
 payment belongs to the table, so no payment is lost.
 
-**Till code that no test can reach, and small till defects — OPEN (found 2026-09-23, till
-coverage, PR #536).** Left uncovered rather than deleted, each by reading its callers (none was
-run without the code):
+**Till code that no test can reach, and small till defects — DONE (W24; found 2026-09-23, till
+coverage, PR #536).**
 
-- `till-app.ts`: the handlers for `show-station`, `show-expo`, `show-schedule`, `open-allergens`,
-  `close-allergens`, `new-sale`, `back-to-counter` and `back-to-floor` each keep an arm for when
-  the shell is not active, which after a successful boot only the lock screen is, and nothing on the
-  lock screen emits them. `back-to-counter`'s arm checks for the lock screen first (B31).
-- `#onShowFloor` in `till-app.ts` has no shell split at all: the one control that emits
-  `show-floor`, the counter screen's floor button (`screens/till-counter-screen.ts`), is drawn only
-  when the counter is not `embedded`, and the app mounts it only as its `embedded` counter tab. It
-  waits for the floor read and then sets the screen with no lock check, so a synthetic `show-floor`
-  followed by a logout left the till unlocked when the read answered (run in review, 2026-09-23).
-- `till-app.ts`: the `#setScreen` calls in `#showTicket`'s and `#onOpenTable`'s no-shell arms
-  (after a successful boot only a till locked mid-request reaches that arm, and the lock check then
-  skips the call), and the `?? []` on the shell's `.tabs` binding.
-- `trust-check.ts:83` (`timer` is always set by then), `widgets/station-queue.ts:501` (the bump
-  button renders only when a next step exists), `session-activity.ts:67` and `:125`,
-  `screens/till-station-screen.ts:227`.
-- `api/server-router.ts` writes a tracked server's `nodeId` at `:184`, `:208` and `:214`, and
-  nothing reads it.
-- `deviceKindLabel` (`apps/till/src/i18n/device-label.ts`) looks a kind up in a plain object, so
-  `deviceKindLabel("constructor")` returns `undefined` rather than the kind (run). The server sends
-  only `till`, `handheld` and `kds_station` today.
-- In `apps/till/src/session-activity.test.ts`, "is a clean no-op when the Wake Lock API is absent"
-  passes `wakeLock: undefined`, which falls back to the real `navigator.wakeLock` — present in the
-  test browser — so it does not test an absent API. The branch added a test that does.
-- The two "show-floor …" cases in `apps/till/src/till-app.test.ts`'s live-floor block select the
-  floor tab rather than fire `show-floor`, so their titles overstate them.
-
-**Next action:** delete the unreachable arms, and `#onShowFloor` with its `show-floor` listener (or
-give it the lock check), with a receipt each; key the label lookup on own properties; rename or
-rewrite that wake-lock test; and rename those two show-floor test titles.
+- `till-app.ts`: the branches that switched the screen when the shell was not showing are gone,
+  with `#onShowFloor` and the app's `show-floor` listener. Every sender of those events is drawn
+  only inside the tab shell; the receipt is in the commit. Sent from the lock screen, six of the
+  events unlocked the till before the change; a new case per event now holds that it stays locked,
+  reads nothing and leaves no destination in the address. The counter screen keeps its own floor
+  button, which the app never draws (it mounts the counter only `embedded`).
+- `#showTicket` now always opens the ticket overlay (a tab payment answered after logout reaches
+  it; the next sign-in clears it, pinned by a new case). Opening a table keeps its shell check, and
+  no test reaches that check's other side; I believe only a re-boot that leaves the operator's
+  session open could (not run). The shell's `.tabs` reads a narrowed local instead of `?? []`.
+- Removed as unreachable: the timeout check in `trust-check.ts`, the "active" check in
+  `session-activity.ts`'s `#shouldHoldWakeLock`, the kitchen-display return in the station
+  screen's `#selectStation`, and the no-next-step return in the station queue's `#bump`. Left by
+  decision: `session-activity.ts`'s default `onIdle`, a placeholder the type needs that is never
+  called (the default configuration is logged out, and the idle timer runs only when logged in).
+- `api/server-router.ts` no longer copies a server's `nodeId` into its private list.
+- `deviceKindLabel` looks kinds up in a `Map`, so `constructor`, `toString` and `__proto__` come
+  back as themselves.
+- The wake-lock test is renamed to what it tests (the browser's own API, which the test browser
+  has); the truly absent case is the existing "no navigator" test. The two live-floor titles now
+  say they select the floor tab.
 
 **The email-change form calls an empty code field an "authentication code" — DONE (W12, #1114; found by
 C61's review, #859, 2026-09-29).** In the Profile screen's email mode a blank confirmation code now
