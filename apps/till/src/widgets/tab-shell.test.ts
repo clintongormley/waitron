@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import type { TabDef } from "../layout.js";
 import { chooserFaces, cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./tab-shell.js";
@@ -243,6 +244,61 @@ describe("till-tab-shell", () => {
     expect(el.shadowRoot!.querySelector("header")).toBeNull(); // header gone entirely
     expect(el.shadowRoot!.querySelector("slot:not([name])")).not.toBeNull(); // body slot stays
   });
+
+  const sixTabs: TabDef[] = [
+    ...tabs,
+    { key: "takeaway", title: "Takeaway", columns: 12, cards: [] },
+    { key: "terrace", title: "Terrace", columns: 12, cards: [] },
+    { key: "bar", title: "Bar", columns: 12, cards: [] },
+    { key: "deliveries", title: "Deliveries", columns: 12, cards: [] },
+  ];
+
+  it.each([
+    ["en-GB", "two tabs", tabs],
+    ["es-ES", "two tabs", tabs],
+    ["en-GB", "six tabs", sixTabs],
+  ] as const)(
+    "fits the header, every button on screen, at phone width in %s with %s",
+    async (locale, _label, shellTabs) => {
+      const before = currentLocale();
+      setLocale(locale);
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      await page.viewport(390, 844);
+      try {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+          tabs: [...shellTabs],
+          activeTabKey: "counter",
+          operatorName: "Ana Fernández",
+          affordances: ["find-bill", "station", "expo", "schedule"],
+          loadLocales: async () => [{ code: locale, label: locale }],
+        });
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        expect(window.innerWidth).toBe(390);
+        const header = el.shadowRoot!.querySelector("header")!;
+        const controls = [
+          ...header.querySelectorAll<HTMLElement>(
+            ".brand, .tab, wt-button, wt-language-chooser, .operator",
+          ),
+        ];
+        expect(controls.length).toBe(9 + shellTabs.length);
+        const offScreen = controls
+          .map((c) => ({ c: c.className || c.localName, r: c.getBoundingClientRect() }))
+          .filter(({ r }) => r.left < 0 || r.right > 390)
+          .map(({ c }) => c);
+        expect(offScreen).toEqual([]);
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+        // Laid out in rows, not squeezed into narrow columns beside the brand.
+        const top = (selector: string): number =>
+          header.querySelector(selector)!.getBoundingClientRect().top;
+        expect(top(".tab:nth-child(2)")).toBe(top(".tab:first-child"));
+        expect(top(".station")).toBe(top(".find-bill"));
+      } finally {
+        await page.viewport(width, height);
+        setLocale(before);
+      }
+    },
+  );
 
   it("renders the full header when not in kiosk mode (default)", async () => {
     const { el } = await mountWidget<TillTabShell>("till-tab-shell", {

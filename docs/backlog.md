@@ -295,14 +295,9 @@ alert. A dish made at the till is never moved or re-routed
   pass read its frozen customer `descriptions` (`readQueueSubItems`,
   `apps/server/src/working-order.ts`). A split-off extra's cross-reference reads kitchen names on
   both surfaces. Decide which name the following extra should show, then make the surfaces agree.
-- **The till navigation widens a 390 px full-page screenshot to about 797–803 px** (PF6 Task 9).
-  The queue and pass cards fit the viewport; inspect the containing navigation before changing
-  those cards. Task 9 read the full-page image dimensions with `sips`; this does not measure card
-  overflow. C130's entry below measured the header alone: with only Find a bill offered, 560 px in
-  English and 602 px in Spanish; the Kitchen, Pass and My schedule switches widen it further.
-  The language chooser now sits in that bar too (A187), before the operator's name, so at 390 wide
-  it is mostly off screen until the bar fits: measured in English with no optional buttons, the bar
-  542 px wide and the chooser spanning 380 to 433 px.
+- **Done (lane C's W27) — the till navigation fits a 390 px screen** (PF6 Task 9's wide
+  screenshot). The header bar wraps onto more rows at phone width; the entry under C130's review
+  below has the measurements.
 - **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01). A kitchen working from paper
   may never mark dishes ready on its screen. With that screen switched off, each send can raise
   the dark-screen alert for up to an hour while those dishes remain waiting. A kitchen screen
@@ -3186,18 +3181,18 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       re-enrolment, or in dev mode the lock screen's switch-device button (the profile is read in
       `#boot`, `apps/till/src/till-app.ts`, as the layout and the hardware switches already are),
       so signing out and in again does not pick it up. Seen in a visual check on 2026-10-02: at
-      390 wide a handheld's till header runs past the right edge (the page measured 736 wide;
-      Kitchen, Allergens, the operator's name and Log out sat off-screen), and turning the switches
-      on adds buttons to it. A review measured the header on 2026-10-02 in
-      real Chromium at 390 px, with the real `till-tab-shell` mounted with two phone tabs and an
-      operator signed in: with only Find a bill offered — what main offers every handheld;
-      `apps/till/src/widgets/tab-shell.ts` is unchanged by C130 — the page measured 560 px wide in
-      English and 602 px in Spanish, so the overflow predates C130 (the same overflow as the open
-      PF6 Task 9 entry above, "The till navigation widens a 390 px full-page screenshot"); with
+      390 wide a handheld's till header ran past the right edge (the page measured 736 wide;
+      Kitchen, Allergens, the operator's name and Log out sat off-screen; fixed by lane C's W27,
+      below), and turning the switches on adds buttons to it. A review measured the header on
+      2026-10-02 in real Chromium at 390 px, with the real `till-tab-shell` mounted with two phone
+      tabs and an operator signed in: with only Find a bill offered — what main offers every
+      handheld; `apps/till/src/widgets/tab-shell.ts` is unchanged by C130 — the page measured
+      560 px wide in English and 602 px in Spanish, so the overflow predates C130 (the overflow
+      PF6 Task 9 recorded; that entry, near the top of this file, is done under lane C's W27); with
       the three switches on it measured 843 and 867 px, and the Pass and My schedule buttons sat
-      wholly off-screen. On the handheld, the station screen's back button says "Back to counter"
-      though a handheld on the built-in phone layout lands on the floor plan; and clicking the
-      knob (`span.thumb`) of a
+      wholly off-screen (fixed by lane C's W27, below). On the handheld, the station screen's back
+      button says "Back to counter" though a handheld on the built-in phone layout lands on the
+      floor plan; and clicking the knob (`span.thumb`) of a
       `wt-switch` that is on does not turn it off (clicking the label or its left edge, or Space,
       does), seen on the Device profiles screen, on the existing "Integrated card payment" switch
       too — the same knob already left open under A215 (clicking a variant's row); `packages/ui`
@@ -3225,12 +3220,23 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       countdown keeps running,
       since `wt-toast` (`packages/ui/src/components/wt-toast.ts`) pauses it only while the pointer
       or keyboard focus is on the pop-up. Decide whether an arriving alert should close the menu.
-    - **Open — the counter header scrolls sideways at phone width.** At a 390 px viewport,
-      `till-tab-shell`'s `.session` runs from x=294 to x=936 and the document is 936 px wide;
-      the header's flex row does not wrap its action buttons. The same isolated shell fixture
-      measured 936 px on the pre station-choice commit `0d9447d58` and on the current code.
-      Fit the header at handheld width without losing Find a bill, Allergens, the operator, or
-      Log out (`apps/till/src/widgets/tab-shell.ts`).
+    - **Done (lane C's W27) — the counter header fits at phone width.** The header, its tab row
+      and its button group wrap onto further rows (`apps/till/src/widgets/tab-shell.ts`). Measured
+      in real Chromium at 390 px: with Find a bill, Kitchen, Pass, My schedule, Allergens, the
+      language chooser, the operator and Log out all shown, every one sits on screen in English
+      and Spanish, and with six tabs in English (`apps/till/src/widgets/tab-shell.test.ts`). The
+      whole till app, signed in on a handheld profile in the setup of the "a round at phone width"
+      case (`apps/till/src/till-app-menu-refresh.test.ts`), measured 390 px wide where it measured
+      601 px before — a probe added for the measurement and removed, not a kept assertion. The
+      cost was measured on 2026-10-03 in real Chromium with the tab-shell test's fixture (every
+      optional button on, operator "Ana Fernández"); after the fix every figure here was the same in
+      English and Spanish. At 390 px with two tabs the header takes four rows and is 237 px tall, on
+      an 844 px-tall phone screen. At 1280 px with two tabs it keeps one row, 69 px tall, as before
+      the fix. At 1280 px with six tabs it wraps onto a second row, 125 px tall; before the fix it
+      kept one row, 94 px tall in English and 77 px in Spanish, and the page ran past the right
+      edge, 1349 px wide in English and 1378 px in Spanish. Lane C's W27 takes this cost rather than
+      adding a breakpoint: the wrap is sized by the controls, as the data table's toolbar is
+      (`docs/developers/design-system.md`).
     - The Devices screen's per-device "Receipt printer" is read by nothing that prints.
     - The dashboard's "Test open drawer" calibration
       (`POST /management-api/printers/:id/test-drawer`) opens any active printer's drawer for a
