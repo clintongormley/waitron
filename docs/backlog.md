@@ -930,12 +930,13 @@ of three mockups):**
   it, replacing the Mode row and the demo paragraph;
 - a language shows by its name ("Català"), never its code; "Rectificative series" reads
   "Corrections series" (Spanish wording to match);
-- help: each box has a `wt-help-tooltip` saying in general what the group is, and each row that
-  needs explaining has its own saying what that value does (e.g. the series: "Every invoice number
-  starts with this: FS-000001, FS-000002…"). The owner: the tooltips float over the text and close
-  when focus moves, and use the existing primitive, not a dark box. `wt-help-tooltip` is a popover,
-  so it floats and closes on an outside click or Escape; the primitive now also closes it when focus
-  moves away;
+- help (replaced 2026-10-03 by A243: the review screen has no "?" buttons, and each box's
+  explanation is a muted line under its heading): each box has a `wt-help-tooltip` saying in general
+  what the group is, and each row that needs explaining has its own saying what that value does
+  (e.g. the series: "Every invoice number starts with this: FS-000001, FS-000002…"). The owner: the
+  tooltips float over the text and close when focus moves, and use the existing primitive, not a
+  dark box. `wt-help-tooltip` is a popover, so it floats and closes on an outside click or Escape;
+  the primitive now also closes it when focus moves away;
 - Back and Provision move into `wt-form-actions`.
 
 **The setup wizard's provisioning page is a page of its own with a spinner (A186, owner
@@ -2392,20 +2393,21 @@ restore screen (`restore.backup_file_help` and `restore.recovery_key_help` in
 `apps/setup/src/i18n/strings/restore.ts`). The connect screen fills its fields in again from the
 earlier request when the operator comes back to it, which is the rule's "starts filled in"
 exception, so each of its fields needs a judgement rather than a straight swap. Other screens' "?"
-buttons were not reviewed against the rule. Separately, the role screen
+buttons were not reviewed against the rule. A243 removed every "?" button from the setup review
+screen. Separately, the role screen
 (`apps/setup/src/screens/role-screen.ts`), reached from Join or recover, still shows its choices as
 cards with buttons rather than `wt-choice-row` rows. The certificate help page the setup wizard opens
 (`/setup/trust`, drawn by `apps/server/src/trust-page.ts`) still writes the browser's warning as
 “not secure” in quotes, where the wizard's first screen (#1107) now writes Not secure without them.
 
-**The setup review screen's "?" buttons (A243, owner 2026-10-03) — OPEN, queued as lane A's W33.**
-`apps/setup/src/screens/review-screen.ts` puts a `wt-help-tooltip` on all four section headings and on
-seven of its rows, and every explanation is one short sentence (`review.help.*` in
-`apps/setup/src/i18n/strings/venue.ts`). The owner called it messy. Two causes: the button's
-44-pixel tap area makes the rows that carry one taller than the rows that don't, so the row spacing
-looks random; and the many bold circles pull the eye away from the values. Agreed fix: no "?" on any
-row (the person entered each value a moment earlier, on a screen that explains it, and Edit goes
-back there); each section's explanation becomes one muted line under its heading.
+**The setup review screen's "?" buttons (A243, owner 2026-10-03) — DONE (W33, 2026-10-03).**
+`apps/setup/src/screens/review-screen.ts` no longer shows a "?" button anywhere, so at 1280 px
+wide every row whose label and value each fit on one line is the same height, except the
+certificate row, whose value carries its own Edit button; and each section's explanation is now one
+muted line under its heading
+(`review.help.*` in `apps/setup/src/i18n/strings/venue.ts`, where the seven row explanations and the
+button's label were deleted). The owner had called the "?" buttons messy: a row carrying one was
+taller than its neighbours, and the many bold circles pulled the eye away from the values.
 
 **The "Setup complete" screen lacks the earlier screens' polish (A244, owner 2026-10-03) — OPEN,
 queued as lane A's W34.** `apps/setup/src/screens/done-screen.ts`: "not terrible but it doesn't

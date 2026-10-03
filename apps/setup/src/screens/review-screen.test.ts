@@ -46,6 +46,127 @@ function fullDraft(): DeepPartial<ProvisionBody> {
 
 afterEach(cleanupWidgets);
 
+/** `fullDraft` with every row's value filled in, so no row shows a dash in place of a value. */
+function everyRowDraft(mode: "demo" | "live"): DeepPartial<ProvisionBody> {
+  const draft = fullDraft();
+  draft.mode = mode;
+  draft.venue!.tillName = "Caja 1";
+  Object.assign(draft.venue!.location!, {
+    operationDescription: "Venta en establecimiento",
+    dayCutover: "04:00",
+    addressLine1: "Calle Mayor 1",
+    postalCode: "28013",
+    city: "Madrid",
+    province: "Madrid",
+  });
+  return draft;
+}
+
+const GROUP_EXPLANATIONS = {
+  "en-GB": [
+    "These details identify the legal business on invoices and tax records.",
+    "These details describe the place where sales are made and receipts are issued.",
+    "These settings control invoice numbering and the details printed on invoices.",
+    "This account signs in to manage the venue after setup.",
+  ],
+  "es-ES": [
+    "Estos datos identifican al negocio en las facturas y los registros fiscales.",
+    "Estos datos describen el lugar donde se hacen las ventas y se emiten los recibos.",
+    "Estos ajustes controlan la numeración y los datos que aparecen en las facturas.",
+    "Con esta cuenta iniciarás sesión para gestionar el local después de configurarlo.",
+  ],
+} as const;
+
+describe("setup-review-screen's explanations", () => {
+  afterEach(() => setLocale("en-GB"));
+
+  it.each(["demo", "live"] as const)("puts no help button anywhere (%s)", async (mode) => {
+    const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+      draft: everyRowDraft(mode),
+    });
+    if (mode === "live") expect(q(el, "[data-test=summary-cert]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelectorAll("wt-help-tooltip")).toHaveLength(0);
+  });
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "shows each section's explanation as a muted line directly under its heading (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const { el, host } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+        draft: everyRowDraft("live"),
+      });
+      host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+      const groups = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-group]")];
+      expect(groups).toHaveLength(4);
+      groups.forEach((group, index) => {
+        const heading = group.querySelector("h2")!;
+        expect(group.getAttribute("aria-labelledby")).toBe(heading.id);
+        const header = heading.parentElement!;
+        const line = header.nextElementSibling as HTMLElement;
+        expect(line.tagName).toBe("P");
+        expect(line.textContent?.trim()).toBe(GROUP_EXPLANATIONS[locale][index]);
+        expect(line.checkVisibility()).toBe(true);
+        expect(getComputedStyle(line).color).toBe("rgb(7, 8, 9)");
+        const lineBox = line.getBoundingClientRect();
+        expect(lineBox.top).toBeGreaterThanOrEqual(header.getBoundingClientRect().bottom - 1);
+        expect(lineBox.bottom).toBeLessThanOrEqual(
+          group.querySelector("dl")!.getBoundingClientRect().top,
+        );
+      });
+    },
+  );
+
+  it.each(["demo", "live"] as const)(
+    "gives every row of a section the same height at 1280 px (%s)",
+    async (mode) => {
+      const original = { width: window.innerWidth, height: window.innerHeight };
+      try {
+        await page.viewport(1280, 800);
+        const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+          draft: everyRowDraft(mode),
+        });
+        const heights: { label: string; height: number }[] = [];
+        for (const dt of el.shadowRoot!.querySelectorAll<HTMLElement>("dt")) {
+          const dd = dt.nextElementSibling as HTMLElement;
+          // The certificate's value carries its own Edit button, which is taller than a line of text.
+          if (dd.querySelector("[data-test=edit-cert]")) continue;
+          const top = Math.min(dt.getBoundingClientRect().top, dd.getBoundingClientRect().top);
+          const bottom = Math.max(
+            dt.getBoundingClientRect().bottom,
+            dd.getBoundingClientRect().bottom,
+          );
+          heights.push({ label: dt.textContent!.trim(), height: Math.round(bottom - top) });
+        }
+        expect(heights.length).toBeGreaterThanOrEqual(11);
+        const shortest = Math.min(...heights.map(({ height }) => height));
+        expect(heights.filter(({ height }) => height > shortest + 1)).toEqual([]);
+      } finally {
+        await page.viewport(original.width, original.height);
+      }
+    },
+  );
+
+  it("centres the certificate label beside its value and Edit button", async () => {
+    const original = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(1280, 800);
+      const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+        draft: everyRowDraft("live"),
+      });
+      const value = q(el, "[data-test=summary-cert]")!.closest("dd")!;
+      const label = document.createRange();
+      label.selectNodeContents(value.previousElementSibling!);
+      const labelBox = label.getBoundingClientRect();
+      const valueBox = value.getBoundingClientRect();
+      expect(
+        Math.abs((labelBox.top + labelBox.bottom) / 2 - (valueBox.top + valueBox.bottom) / 2),
+      ).toBeLessThan(2);
+    } finally {
+      await page.viewport(original.width, original.height);
+    }
+  });
+});
+
 describe("setup-review-screen", () => {
   it("groups the summary by setup step and edits the collected details", async () => {
     const { el, host } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
@@ -112,7 +233,7 @@ describe("setup-review-screen", () => {
     }
   });
 
-  it("explains every group and the values that need context", async () => {
+  it("explains every group under its heading, and no row", async () => {
     const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
       draft: fullDraft(),
     });
@@ -124,9 +245,7 @@ describe("setup-review-screen", () => {
     ];
     const groups = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-group]");
     expect(
-      [...groups].map((group) =>
-        group.querySelector(".group-header wt-help-tooltip")?.textContent?.trim(),
-      ),
+      [...groups].map((group) => group.querySelector(".group-header + p")?.textContent?.trim()),
     ).toEqual(groupHelp);
     const rowHelp = [
       ["summary-invoiceLocales", "Receipts use this language for their fixed words."],
@@ -146,42 +265,11 @@ describe("setup-review-screen", () => {
     for (const [field, explanation] of rowHelp) {
       const value = q(el, `[data-test=${field}]`)!;
       const label = value.closest("dd")?.previousElementSibling;
-      expect(label?.querySelector("wt-help-tooltip")?.textContent?.trim()).toBe(explanation);
+      expect(label?.querySelector("wt-help-tooltip")).toBeNull();
+      expect(label?.textContent).not.toContain(explanation);
     }
   });
 
-  it("names each help control for the setting it explains", async () => {
-    const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
-      draft: fullDraft(),
-    });
-    const business = q(el, '[data-group="business"] .group-header wt-help-tooltip')!;
-    const series = q(el, '[data-test="summary-seriesCode"]')!.previousElementSibling!;
-    expect(business.getAttribute("aria-label")).toBe("About Business");
-    expect(series.querySelector("wt-help-tooltip")?.getAttribute("aria-label")).toBe(
-      "About Invoice series",
-    );
-  });
-
-  it("centres a value beside a taller label with a help control", async () => {
-    const original = { width: window.innerWidth, height: window.innerHeight };
-    try {
-      await page.viewport(1280, 800);
-      const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
-        draft: fullDraft(),
-      });
-      const value = q(el, '[data-test="summary-seriesCode"]')!;
-      const label = value.previousElementSibling!;
-      const labelBox = label.getBoundingClientRect();
-      const text = document.createRange();
-      text.selectNodeContents(value);
-      const valueBox = text.getBoundingClientRect();
-      expect(
-        Math.abs((labelBox.top + labelBox.bottom) / 2 - (valueBox.top + valueBox.bottom) / 2),
-      ).toBeLessThan(2);
-    } finally {
-      await page.viewport(original.width, original.height);
-    }
-  });
   it("names the country in the wizard's language", async () => {
     setLocale("es-ES");
     try {
