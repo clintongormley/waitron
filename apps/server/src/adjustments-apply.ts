@@ -368,7 +368,7 @@ function zeroed(subjects: readonly Subject[]): Change[] {
  * taken with its extras; part of one splits its extras in proportion, the part covered taking the
  * part of each. An extra is taken on its own, and only whole.
  */
-async function planAdjustment(
+export async function planAdjustment(
   tx: Transaction,
   ask: AdjustmentAsk,
   venueLocale: string,

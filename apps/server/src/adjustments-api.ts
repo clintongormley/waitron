@@ -13,6 +13,7 @@ import { requireNullableBodyUuid, requireBodyUuid, readRawJsonBody } from "@wait
 import { decimal } from "@waitron/shared";
 import {
   applyAdjustment,
+  planAdjustment,
   previewAdjustment,
   reasonNameIn,
   type AdjustmentAsk,
@@ -102,13 +103,13 @@ async function approverToCheck(
   venueLocale: string,
 ): Promise<{ personId: string; pin: string } | undefined> {
   if (approver === undefined) return undefined;
-  let needsApproval;
+  let approverRole;
   try {
-    ({ needsApproval } = await previewAdjustment(db, ask, venueLocale));
+    ({ approverRole } = await planAdjustment(db, ask, venueLocale));
   } catch {
     return undefined;
   }
-  return needsApproval === null ? undefined : approver;
+  return approverRole === null ? undefined : approver;
 }
 
 /**
