@@ -15,12 +15,15 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   assignCatalogueToLocation,
+  assignProductUnit,
+  clearProductUnit,
   createCatalogue,
   createCategory,
   createExtraList,
   addProductToMenu,
   createOptionList,
   createProduct,
+  deleteUnit,
   listAvailableProducts,
   menuItems,
   menuPublications,
@@ -29,6 +32,7 @@ import {
   setProductVariants,
   updateExtraList,
   updateProduct,
+  units,
   writeProductModifiers,
   rateLines,
 } from "@waitron/catalogue";
@@ -51,7 +55,7 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
-import { payWorkingOrder, receiptQr, recordTillSale } from "./till-sale.js";
+import { payWorkingOrder, receiptQr, recordTillSale, type TillSaleRequest } from "./till-sale.js";
 import { addTabRound, createOpenOrder, updateHeldOrder } from "./working-order.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -908,7 +912,7 @@ describe("ordering extras and options — parent + child lines", () => {
    * An extra's price is the LIST ITEM's, never the product's own — so every extra product is priced
    * 3.00 of itself, and a child line reading 3.00 would mean the offer was never read.
    */
-  async function setupModifierVenue(): Promise<ModifierVenue> {
+  async function setupModifierVenue(storedEachExtra = false): Promise<ModifierVenue> {
     const venue = await applyVenue(
       planVenue(
         {
@@ -981,7 +985,33 @@ describe("ordering extras and options — parent + child lines", () => {
       const combo = await dish("Combo", "8.00", "general");
       const plato = await dish("Plato", "10.00", "general");
       const bacon = await extraProduct("Bacon", "reduced");
+      if (storedEachExtra) {
+        const [each] = await tx
+          .insert(units)
+          .values({
+            seedKey: "each",
+            name: { es: "Unidad", en: "Each" },
+            abbreviation: { es: "pzas", en: "pcs" },
+            precision: 0,
+            hardwareUnit: null,
+          })
+          .returning({ id: units.id });
+        await assignProductUnit(tx, bacon.id, each!.id);
+      }
       const queso = await extraProduct("Queso", "general");
+      if (storedEachExtra) {
+        const [millilitres] = await tx
+          .insert(units)
+          .values({
+            seedKey: null,
+            name: { es: "Mililitro", en: "Millilitre" },
+            abbreviation: { es: "ml", en: "ml" },
+            precision: 0,
+            hardwareUnit: null,
+          })
+          .returning({ id: units.id });
+        await assignProductUnit(tx, queso.id, millilitres!.id);
+      }
       const patatas = await extraProduct("Patatas", "general");
       const ensalada = await extraProduct("Ensalada", "general");
 
@@ -996,7 +1026,13 @@ describe("ordering extras and options — parent + child lines", () => {
           active: true,
           items: [
             { productId: bacon.id, maxQuantity: 3, preselected: false, price: "0.50" },
-            { productId: queso.id, maxQuantity: 1, preselected: false, price: "0.75" },
+            {
+              productId: queso.id,
+              maxQuantity: 1,
+              preselected: false,
+              price: "0.75",
+              ...(storedEachExtra ? { portion: "150" } : {}),
+            },
           ],
         },
         cfg.locale,
@@ -1098,6 +1134,75 @@ describe("ordering extras and options — parent + child lines", () => {
   const extrasPick = (v: ModifierVenue, picks: { productId: string; quantity: number }[]) => [
     { listId: v.extrasListId, picks },
   ];
+
+  it("prints x3 for a sold extra whose product uses the stored Each unit", async () => {
+    const v = await setupModifierVenue(true);
+    const workingOrderId = randomUUID();
+    const request = {
+      zoneId: v.zoneId,
+      lines: [
+        {
+          menuItemId: v.offerFor(v.burgerId),
+          quantity: "1",
+          extras: extrasPick(v, [{ productId: v.baconId, quantity: 3 }]),
+        },
+      ],
+      tender: { method: "cash", amount: "20.00" },
+      workingOrderId,
+    } satisfies TillSaleRequest;
+    const result = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, request);
+    const paper = printedLines(
+      formatReceipt({
+        result,
+        issuer: { venueName: "Deli Test SL", nif: "B12345678" },
+        receipt: {},
+        invoiceLocale: LOCALE,
+        printer: { paperWidth: "80mm", resolution: "203dpi" },
+      }),
+    ).join("\n");
+
+    expect(result.lines[1]).toMatchObject({ soldInEach: true, quantity: "3" });
+    expect(paper).toContain("Bacon customer x3");
+    expect(paper).not.toContain("Bacon customer 3 pzas");
+
+    await withTransaction(suite.db, async (tx) => {
+      const [unit] = await tx.select({ id: units.id }).from(units).where(eq(units.seedKey, "each"));
+      await clearProductUnit(tx, v.baconId);
+      await deleteUnit(tx, unit!.id);
+    });
+    const replay = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, request);
+    expect(replay.lines[1]).toMatchObject({ soldInEach: true, quantity: "3" });
+  });
+
+  it("keeps a whole-millilitre extra as an amount and unit on a real sale", async () => {
+    const v = await setupModifierVenue(true);
+    const result = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
+      zoneId: v.zoneId,
+      lines: [
+        {
+          menuItemId: v.offerFor(v.burgerId),
+          quantity: "1",
+          extras: extrasPick(v, [{ productId: v.quesoId, quantity: 1 }]),
+        },
+      ],
+      tender: { method: "cash", amount: "20.00" },
+      workingOrderId: randomUUID(),
+    });
+    const paper = printedLines(
+      formatReceipt({
+        result,
+        issuer: { venueName: "Deli Test SL", nif: "B12345678" },
+        receipt: {},
+        invoiceLocale: LOCALE,
+        printer: { paperWidth: "80mm", resolution: "203dpi" },
+      }),
+    ).join("\n");
+
+    expect(result.lines[1]).toMatchObject({ quantity: "150" });
+    expect(result.lines[1]?.soldInEach).toBeUndefined();
+    expect(paper).toContain("Queso customer 150 ml");
+    expect(paper).not.toContain("Queso customer x150");
+  });
 
   it("counter sale of a dish with two extras files THREE sale_lines with parent/child links", async () => {
     const v = await setupModifierVenue();

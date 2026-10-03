@@ -133,6 +133,8 @@ export interface TillSaleLine {
   /** Unit label frozen with the filed line, including a weighted extra child. */
   unitName?: Record<string, string> | null;
   unitPrecision?: number | null;
+  /** Presentation marker derived from the working line's stored unit identity. */
+  soldInEach?: true;
   /** The filed quantity; weighted extra children retain the saved fractional scale for display. */
   quantity: string;
   /** The GROSS (VAT-inclusive) line total the line was filed at, as a decimal string. */

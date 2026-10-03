@@ -9,6 +9,7 @@ import {
   sumDecimals,
 } from "@waitron/shared";
 import { groupByParent, ticketLinesFrom, type ReceiptSource } from "./receipt-lines.js";
+import { VENUE_SERVICE } from "./modules.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
 import type { OrderLineIdentity } from "./working-order.js";
 
@@ -25,7 +26,17 @@ export async function receiptLines(
   priced: { lines: readonly ReceiptSource[] },
   identities: readonly Pick<OrderLineIdentity, "id" | "listUnitGross">[],
 ): Promise<Pick<TillSaleResult, "lines" | "billAdjustments">> {
-  const lines = ticketLinesFrom(priced, identities);
+  const each = await VENUE_SERVICE.readLinesSoldInEach(
+    tx,
+    identities.flatMap((identity, i) =>
+      priced.lines[i]?.parentLineNo != null && priced.lines[i]?.unitName != null
+        ? [identity.id]
+        : [],
+    ),
+  );
+  const lines = ticketLinesFrom(priced, identities).map((line, i) =>
+    each.has(identities[i]!.id) ? { ...line, soldInEach: true as const } : line,
+  );
   if (!lines.some((line) => line.listGross !== undefined)) return { lines };
   const records = await readBillAdjustments(tx, workingOrderId);
 

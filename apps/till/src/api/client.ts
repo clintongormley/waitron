@@ -776,6 +776,8 @@ export interface TillSaleLine {
   /** Unit values frozen with the filed line; null for a modifier child. */
   unitName?: Record<string, string> | null;
   unitPrecision?: number | null;
+  /** Presentation marker derived from the working line's stored unit identity. */
+  soldInEach?: true;
   quantity: string;
   gross: string;
   /** The line's total before a comp or a discount changed it; present only when that differs from

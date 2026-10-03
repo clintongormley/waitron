@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { workingOrders, type Transaction } from "@waitron/db";
+import { workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
 import type { AdjustmentAction } from "@waitron/adjustments";
 import { decimal } from "@waitron/shared";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
@@ -87,6 +87,20 @@ function shown(receipt: Awaited<ReturnType<typeof receiptOf>>) {
 }
 
 describe("receiptLines", () => {
+  it("carries an Each context flag to the filed extra's display line", async () => {
+    const billId = await bill([{ name: "Pizza", olives: 1 }]);
+    const childId = await lineIdOf(venue, billId, 2);
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(workingOrderLines)
+        .set({ unitName: { es: "pzas" }, unitPrecision: 0 })
+        .where(eq(workingOrderLines.id, childId));
+    });
+
+    const receipt = await receiptOf(billId);
+    expect(receipt.lines[1]).toMatchObject({ quantity: "1", soldInEach: true });
+  });
+
   it("puts a comp of one of three units under the unit it split off", async () => {
     const billId = await bill([{ name: "Burger", quantity: "3" }]);
     await adjust(billId, {
