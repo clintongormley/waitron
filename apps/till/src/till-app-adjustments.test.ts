@@ -5,7 +5,7 @@ import {
   mountWidget,
   type DraftServer,
 } from "./widgets/test-helpers.js";
-import { SUBMIT_RETRY_PAUSE_MS, TillApp } from "./till-app.js";
+import { TillApp } from "./till-app.js";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
@@ -580,7 +580,7 @@ describe("till-app: an adjustment with no answer", () => {
     await previewComp(el, order);
 
     inDialog(el, "[data-adjust-confirm]").click();
-    await new Promise((resolve) => setTimeout(resolve, SUBMIT_RETRY_PAUSE_MS + 100));
+    await vi.waitFor(() => expect(dialog(el)).toBeNull(), { timeout: 4000, interval: 50 });
     await flush(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
@@ -601,7 +601,11 @@ describe("till-app: an adjustment with no answer", () => {
     const reads = vi.mocked(api.getTabLines).mock.calls.length;
 
     inDialog(el, "[data-adjust-confirm]").click();
-    await new Promise((resolve) => setTimeout(resolve, 3 * SUBMIT_RETRY_PAUSE_MS + 200));
+    // Two pauses between the three tries run on real time; wait for the message they end in.
+    await vi.waitFor(() => expect(banner(el)?.textContent).toBe(t("adjust.unconfirmed")), {
+      timeout: 4000,
+      interval: 50,
+    });
     await flush(el);
 
     expect(applyAdjustment).toHaveBeenCalledTimes(3);

@@ -1066,7 +1066,7 @@ describe("till-app: sending the draft", () => {
     await tap(el, "Beer");
 
     await act(el, "fire-all");
-    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
+    await vi.waitFor(() => expect(tableOrder(el)).toBeNull(), { timeout: 4000, interval: 50 });
     await flush(el);
 
     const calls = api.submitDraft.mock.calls;
@@ -1412,6 +1412,8 @@ describe("till-app: signing out while a save is out", () => {
 });
 
 describe("till-app: a Send the session outlives", () => {
+  afterEach(() => vi.useRealTimers());
+
   it("sends nothing as the next person when Send was waiting on a save at sign-out", async () => {
     const sentBy: string[] = [];
     const { el } = await mountApp({ submitDraft: submitRecordingWho(sentBy) });
@@ -1447,8 +1449,10 @@ describe("till-app: a Send the session outlives", () => {
     await flush(el);
     await signIn(el, "p2", "Sam");
     const reads = api.listDrafts.mock.calls.length;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     lose();
-    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
+    await vi.advanceTimersByTimeAsync(2 * SUBMIT_RETRY_PAUSE_MS);
+    vi.useRealTimers();
     await flush(el);
 
     expect(sentBy).toEqual(["p1"]);
