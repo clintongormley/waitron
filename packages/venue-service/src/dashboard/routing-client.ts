@@ -61,7 +61,7 @@ export type StationInput = {
 export type WatcherInput = Pick<
   WatcherView,
   "name" | "everyStation" | "stationIds" | "everyZone" | "zoneIds" | "runsPass"
->;
+> & { displayOrder?: number };
 export class PrepStationsApi {
   constructor(
     private readonly request: DashboardRequest,

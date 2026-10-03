@@ -77,6 +77,33 @@ it("disables station boxes for every station and saves only visible checked boxe
   });
 });
 
+it("keeps an edited watcher's saved display order", async () => {
+  const form = await mount();
+  const saved = vi.fn();
+  form.addEventListener("watcher-save", saved);
+  form.watcher = {
+    id: "pass",
+    name: "Pass",
+    displayOrder: 7,
+    active: true,
+    everyStation: true,
+    stationIds: [],
+    everyZone: true,
+    zoneIds: [],
+    runsPass: true,
+    printerIds: [],
+  };
+  await form.updateComplete;
+  change(form, '[name="name"]', { value: "Main pass" });
+  await form.updateComplete;
+  q(form, '[data-test="save-watcher"]')!.click();
+  expect(saved).toHaveBeenCalledOnce();
+  expect(saved.mock.calls[0]![0].detail.input).toMatchObject({
+    name: "Main pass",
+    displayOrder: 7,
+  });
+});
+
 it.each([
   ["watcher.name_taken", undefined, "name"],
   ["management.request_invalid", "stationIds", "stationIds"],

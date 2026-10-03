@@ -74,6 +74,7 @@ export class WatcherForm extends LitElement {
             everyZone: this.watcher.everyZone,
             zoneIds: [...this.watcher.zoneIds],
             runsPass: this.watcher.runsPass,
+            displayOrder: this.watcher.displayOrder,
           }
         : {
             name: "",
