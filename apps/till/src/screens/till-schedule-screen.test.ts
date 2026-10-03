@@ -424,12 +424,19 @@ describe("till-schedule-screen", () => {
   });
 
   it("drops a chosen shift that a reload no longer lists, and keeps one it still lists", async () => {
+    const earlier: MyShift = {
+      ...shifts[0]!,
+      id: "s0",
+      startsAt: "2026-05-03T09:00:00Z",
+      endsAt: "2026-05-03T17:00:00Z",
+    };
     const listMyShifts = vi
       .fn()
       .mockResolvedValueOnce(shifts)
-      .mockResolvedValueOnce(shifts)
-      .mockResolvedValueOnce([]);
-    const { el } = await mount(stubApi({ listMyShifts }));
+      .mockResolvedValueOnce([earlier, ...shifts])
+      .mockResolvedValueOnce([earlier]);
+    const api = stubApi({ listMyShifts });
+    const { el } = await mount(api);
     const shift = root(el).querySelector<WtCombobox>('wt-combobox[name="cover-shift"]')!;
     const submit = root(el).querySelector<HTMLElement>("wt-button.cover-submit")!;
     await setSelect(el, 'wt-combobox[name="cover-shift"]', "s1");
@@ -446,20 +453,28 @@ describe("till-schedule-screen", () => {
     root(el).querySelector<HTMLElement>("wt-button.accept")!.click();
     await vi.waitFor(() => expect(listMyShifts).toHaveBeenCalledTimes(3));
     await flush(el);
-    expect(root(el).querySelectorAll(".shift")).toHaveLength(0);
+    expect(root(el).querySelectorAll(".shift")).toHaveLength(1);
     expect(shift.value).toBe("");
     expect(submit.hasAttribute("disabled")).toBe(true);
+    submit.click();
+    await flush(el);
+    expect(api.requestSwap).not.toHaveBeenCalled();
   });
 
   it("drops a chosen colleague the staff list no longer offers, and keeps one it still offers", async () => {
-    const { el } = await mount(stubApi());
+    const api = stubApi();
+    const { el } = await mount(api);
     const colleague = root(el).querySelector<WtCombobox>('wt-combobox[name="cover-colleague"]')!;
     const submit = root(el).querySelector<HTMLElement>("wt-button.cover-submit")!;
     await setSelect(el, 'wt-combobox[name="cover-shift"]', "s1");
     await setSelect(el, 'wt-combobox[name="cover-colleague"]', "col1");
     await el.updateComplete;
 
-    el.staff = [...staff, { personId: "col2", displayName: "Otra" }];
+    el.staff = [
+      { personId: "me", displayName: "Yo" },
+      { personId: "col2", displayName: "Otra" },
+      { personId: "col1", displayName: "Colega" },
+    ];
     await el.updateComplete;
     expect(colleague.value).toBe("col1");
     expect(submit.hasAttribute("disabled")).toBe(false);
@@ -471,16 +486,27 @@ describe("till-schedule-screen", () => {
     await el.updateComplete;
     expect(colleague.value).toBe("");
     expect(submit.hasAttribute("disabled")).toBe(true);
+    submit.click();
+    await flush(el);
+    expect(api.requestSwap).not.toHaveBeenCalled();
   });
 
   it("drops a chosen colleague who becomes the operator", async () => {
-    const { el } = await mount(stubApi());
+    const api = stubApi();
+    const { el } = await mount(api);
     const colleague = root(el).querySelector<WtCombobox>('wt-combobox[name="cover-colleague"]')!;
+    const submit = root(el).querySelector<HTMLElement>("wt-button.cover-submit")!;
+    await setSelect(el, 'wt-combobox[name="cover-shift"]', "s1");
     await setSelect(el, 'wt-combobox[name="cover-colleague"]', "col1");
     await el.updateComplete;
+    expect(submit.hasAttribute("disabled")).toBe(false);
     el.operatorPersonId = "col1";
     await el.updateComplete;
     expect(colleague.value).toBe("");
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    submit.click();
+    await flush(el);
+    expect(api.requestSwap).not.toHaveBeenCalled();
   });
 });
 
