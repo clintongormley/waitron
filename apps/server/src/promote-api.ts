@@ -11,6 +11,7 @@ import { AppError } from "@waitron/shared";
 import { withTransaction, type Database } from "@waitron/db";
 import {
   authorizeManager,
+  checkManagerPassword,
   endManagementSession,
   loginManagerById,
   type TotpKeyRing,
@@ -76,12 +77,14 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
         (body.totp === undefined || typeof body.totp === "string")
       ) {
         const { personId, password, totp } = body;
+        const checked = await checkManagerPassword(deps.appDb, { personId }, password);
         await withTransaction(deps.appDb, async (tx) => {
           const session = await loginManagerById(tx, {
             personId,
             password,
             totp,
             totpKeyRing: deps.credentialKeyRing,
+            checked,
           });
           await authorizeManager(tx, {
             managementSessionId: session.token,

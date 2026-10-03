@@ -12,17 +12,23 @@ const GOOD_SECRET = "correct-break-glass-secret";
 const SESSION_ID = "33333333-3333-3333-3333-333333333333";
 
 // `vi.hoisted`, because the `vi.mock` factory is hoisted above the file and closes over these refs.
-const { loginManagerById, authorizeManager, endManagementSession, verifyBreakGlass } = vi.hoisted(
-  () => ({
-    loginManagerById: vi.fn(async () => ({ token: "33333333-3333-3333-3333-333333333333" })),
-    authorizeManager: vi.fn(async () => {}),
-    endManagementSession: vi.fn(async () => {}),
-    verifyBreakGlass: vi.fn(
-      async (_db: unknown, _nodeId: string, secret: string) =>
-        secret === "correct-break-glass-secret",
-    ),
-  }),
-);
+const {
+  checkManagerPassword,
+  loginManagerById,
+  authorizeManager,
+  endManagementSession,
+  verifyBreakGlass,
+} = vi.hoisted(() => ({
+  // The database is `{}` here, so the real pre-check could not read it.
+  checkManagerPassword: vi.fn(async () => undefined),
+  loginManagerById: vi.fn(async () => ({ token: "33333333-3333-3333-3333-333333333333" })),
+  authorizeManager: vi.fn(async () => {}),
+  endManagementSession: vi.fn(async () => {}),
+  verifyBreakGlass: vi.fn(
+    async (_db: unknown, _nodeId: string, secret: string) =>
+      secret === "correct-break-glass-secret",
+  ),
+}));
 vi.mock("@waitron/db", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/db")>();
   return {
@@ -32,7 +38,13 @@ vi.mock("@waitron/db", async (importOriginal) => {
 });
 vi.mock("@waitron/identity", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/identity")>();
-  return { ...actual, loginManagerById, authorizeManager, endManagementSession };
+  return {
+    ...actual,
+    checkManagerPassword,
+    loginManagerById,
+    authorizeManager,
+    endManagementSession,
+  };
 });
 
 vi.mock("./break-glass.js", () => ({ verifyBreakGlass }));

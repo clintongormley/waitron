@@ -22,6 +22,7 @@ import {
   clearPersonPin,
   claimGoogleState,
   completeAccountAction,
+  checkManagerPassword,
   completeGoogleLink,
   deactivatePerson,
   endManagementSession,
@@ -675,6 +676,8 @@ export function mountManagementApi(
       const finishAttempt = passwordThrottle.begin(email);
       let session;
       try {
+        // Derived before the transaction so the key's derivation does not hold the write lock.
+        const checked = await checkManagerPassword(deps.db, { email }, password);
         session = await withTransaction(deps.db, async (tx) => {
           const opened = await loginManager(tx, {
             email,
@@ -682,6 +685,7 @@ export function mountManagementApi(
             totp,
             recoveryCode,
             totpKeyRing: credentialKeyRing,
+            checked,
           });
           // Deliberately in the sign-in's transaction: if this read throws, the sign-in fails with
           // it rather than leaving a session half open. Read only after the sign-in succeeded, so the
@@ -836,12 +840,14 @@ export function mountManagementApi(
         throw new AppError("password.invalid", {});
       }
       const { personId, password, totp } = credential;
+      const checked = await checkManagerPassword(deps.db, { personId }, password);
       await withTransaction(deps.db, async (tx) => {
         const session = await loginManagerById(tx, {
           personId,
           password,
           totp,
           totpKeyRing: credentialKeyRing,
+          checked,
         });
         await authorizeManager(tx, {
           managementSessionId: session.token,
