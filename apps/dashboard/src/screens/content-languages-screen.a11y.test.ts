@@ -179,27 +179,25 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
 
   it.each([
     ["open", false],
-    ["showing a missing choice", true],
-  ] as const)("renders the Add language dialog %s accessibly", async (_state, submit) => {
+    ["closed without a choice", true],
+  ] as const)("renders the Add language dialog %s accessibly", async (_state, close) => {
+    const api = stubApi(LOADED);
     const { el, host } = await mountWidget<ContentLanguagesScreen>(
       "dashboard-content-languages-screen",
-      { api: stubApi(LOADED) },
+      { api },
       theme,
     );
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-language]")!.click();
     await flush(el);
-    if (submit) {
+    if (close) {
       const add = el.shadowRoot!.querySelector<AddContentLanguageDialog>(
         "dashboard-add-content-language",
       )!;
-      add.shadowRoot!.querySelector<HTMLElement>("[data-test=save-language]")!.click();
+      add.shadowRoot!.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
       await add.updateComplete;
-      expect(
-        add.shadowRoot!.querySelector<HTMLElement & { error: string }>(
-          "wt-combobox[name=language]",
-        )!.error,
-      ).not.toBe("");
+      expect(add.open).toBe(false);
+      expect(api.updateContentLanguages).not.toHaveBeenCalled();
     }
     await expectNoA11yViolations(host);
   });

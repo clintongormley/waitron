@@ -1226,7 +1226,21 @@ on the dropdown after an add, so a keyboard user can
 add the next product, and the new row is announced (the form's live region). The owner extended the
 same behavior to the menu screen's members editor (`member-list-editor.ts`): choosing a product or
 section adds it immediately and announces it; replacing an existing member still requires explicit
-confirmation. Other single-choice add pickers are tracked separately as A201b in Lane E's queue.
+confirmation. The remaining single-choice add pickers are covered by A201b below.
+
+**Choosing one thing to add acts at selection (A201b, owner 2026-10-03) — DONE.** In the
+dashboard, choosing a content language or a menu to include saves it immediately and closes
+the dialog on success; closing without a choice saves nothing. A refused save leaves the
+dialog open so you can choose again. Section products and Add to menus let you choose several
+items before saving. Allergen editing was changed separately in A213. The till's station move
+and the dashboard's unit reassignment each ask for confirmation. Setup forms with other required
+fields still wait for those fields before saving.
+
+**Open test gap from A201b:** removing `#closeLostList()` from `#includeMenu` in a disposable
+checkout left `pnpm --filter @waitron/dashboard exec vitest run src/screens/menus-screen.test.ts`
+green (207/207, 2026-10-03). The suite does not establish whether that guard catches a list
+disappearing between the last read and selection. Check that race with a focused test, or remove
+the guard if the path cannot occur; its reachability remains unverified.
 
 **The number field's − and + move inside the field, as pale blue buttons (A202, owner 2026-10-02)
 — DONE.** The owner, on a screenshot of the extras form's Minimum and Maximum choices: _"the +-

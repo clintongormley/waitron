@@ -4767,7 +4767,6 @@ it("offers only menus that can be included, and includes one as a folder", async
   ]);
   await chooseOption(picker, "drinks-root");
   await el.updateComplete;
-  await click(el, "include-save");
   await vi.waitFor(() =>
     expect(client.addSectionMember).toHaveBeenCalledWith("root-lunch", {
       kind: "section",
@@ -4812,6 +4811,21 @@ describe("the include-a-menu field", () => {
     });
   }
 
+  it("includes the chosen menu without a second action", async () => {
+    const client = includeClient();
+    const el = await mountLunch(client);
+    await click(el, "include-menu");
+    const picker = inModal<Combobox>(el, "include", 'wt-combobox[name="included-menu"]');
+    await chooseOption(picker, "wine-root");
+    await vi.waitFor(() =>
+      expect(client.addSectionMember).toHaveBeenCalledExactlyOnceWith("root-lunch", {
+        kind: "section",
+        sectionId: "wine-root",
+      }),
+    );
+    expect(inModal(el, "include", '[data-test="include-save"]')).toBeNull();
+  });
+
   it("picks the menu from a required labelled dropdown, prompting a choice", async () => {
     const adding = deferred<SectionMember>();
     const client = includeClient({ addSectionMember: vi.fn(() => adding.promise) });
@@ -4829,13 +4843,10 @@ describe("the include-a-menu field", () => {
     ]);
     expect(picker.value).toBe("");
 
-    await click(el, "include-save");
-    expect(picker.error).toBe(t("menus.choose_menu_required"));
     await chooseOption(picker, "wine-root");
     await el.updateComplete;
     expect(picker.error).toBe("");
     expect(picker.value).toBe("wine-root");
-    await click(el, "include-save");
     expect(picker.disabled).toBe(true);
     expect(client.addSectionMember).toHaveBeenCalledExactlyOnceWith("root-lunch", {
       kind: "section",
@@ -4912,7 +4923,7 @@ describe("review fix: inclusion target and validation", () => {
   }
   async function openInclude(el: MenusScreen, choose = true) {
     await click(el, "include-menu");
-    const picker = inModal<HTMLElement & { error: string }>(
+    const picker = inModal<HTMLElement & { error: string; value: string }>(
       el,
       "include",
       '[name="included-menu"]',
@@ -4923,12 +4934,12 @@ describe("review fix: inclusion target and validation", () => {
     }
     return picker;
   }
-  it("closes Include without a write when its original list disappears before Add", async () => {
+  it("closes Include without a write when its original list disappears before selection", async () => {
     const live = new LiveData();
     const client = includeApi({ liveData: live });
     const el = await mountLunch(client);
     await editDrinks(el);
-    await openInclude(el);
+    await openInclude(el, false);
     await takeDrinksOff(el, client, live);
     expect(modal(el, "include").open).toBe(false);
     expect(client.addSectionMember).not.toHaveBeenCalled();
@@ -4945,7 +4956,6 @@ describe("review fix: inclusion target and validation", () => {
       const el = await mountLunch(client);
       await editDrinks(el);
       await openInclude(el);
-      await click(el, "include-save");
       await vi.waitFor(() =>
         expect(client.addSectionMember).toHaveBeenCalledExactlyOnceWith("s-drinks", {
           kind: "section",
@@ -4967,7 +4977,8 @@ describe("review fix: inclusion target and validation", () => {
         await vi.waitFor(async () =>
           expect(await bottom(el, "include")).toBe(codeMessage("menu_section.not_found")),
         );
-        await click(el, "include-save");
+        expect(modal(el, "include").open).toBe(true);
+        await click(el, "include-cancel");
         expect(modal(el, "include").open).toBe(false);
         expect(client.addSectionMember).toHaveBeenCalledOnce();
       }
@@ -4977,7 +4988,7 @@ describe("review fix: inclusion target and validation", () => {
     const client = includeApi();
     const el = await mountLunch(client);
     await editDrinks(el);
-    await openInclude(el);
+    await openInclude(el, false);
     await visit(el, DINNER_PATH, "Dinner Menu");
     expect(modal(el, "include").open).toBe(false);
     expect(client.addSectionMember).not.toHaveBeenCalled();
@@ -4991,7 +5002,6 @@ describe("review fix: inclusion target and validation", () => {
       const el = await mountLunch(client);
       await editDrinks(el);
       await openInclude(el);
-      await click(el, "include-save");
       await vi.waitFor(() => expect(client.addSectionMember).toHaveBeenCalledOnce());
       await visit(el, DINNER_PATH, "Dinner Menu");
       expect(modal(el, "include").open).toBe(true);
@@ -5011,39 +5021,17 @@ describe("review fix: inclusion target and validation", () => {
       else expect(q(el, '[data-test="member-error"]')).toBeNull();
     },
   );
-  it("explains an empty Include submission, focuses it, rechecks changes and resets on reopen", async () => {
+  it("closes Include without a write when no menu is chosen, then reopens empty", async () => {
     const client = includeApi();
     const el = await mountLunch(client);
     const picker = await openInclude(el, false);
-    const save = inModal<HTMLElementTagNameMap["wt-button"]>(
-      el,
-      "include",
-      '[data-test="include-save"]',
-    );
-    expect(save.disabled).toBe(false);
-    const control = picker.shadowRoot!.querySelector(".trigger")!;
-    expect(control.getAttribute("aria-invalid")).not.toBe("true");
-    await click(el, "include-save");
-    expect(save.disabled).toBe(true);
-    expect(control.getAttribute("aria-invalid")).toBe("true");
-    const error = picker.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
-    expect(picker.error).toBe(t("menus.choose_menu_required"));
-    expect(getComputedStyle(error).color).toBe(
-      getComputedStyle(picker.shadowRoot!.querySelector("[data-required]")!).color,
-    );
-    expect(control.getAttribute("aria-describedby")).toContain(error.id);
-    expect(await bottom(el, "include")).toBe(t("form.fix_fields"));
-    expect(el.shadowRoot!.activeElement).toBe(picker);
-    await chooseOption(picker, "wine-root");
-    await el.updateComplete;
-    expect(save.disabled).toBe(false);
-    expect(await bottom(el, "include")).toBe("");
-    await chooseOption(picker, "");
-    await el.updateComplete;
-    expect(save.disabled).toBe(true);
+    expect(picker.value).toBe("");
+    expect(picker.error).toBe("");
     await click(el, "include-cancel");
     await openInclude(el, false);
-    expect(save.disabled).toBe(false);
+    expect(
+      inModal<HTMLElement & { value: string }>(el, "include", '[name="included-menu"]').value,
+    ).toBe("");
     expect(await bottom(el, "include")).toBe("");
     expect(client.addSectionMember).not.toHaveBeenCalled();
   });
@@ -5056,15 +5044,11 @@ describe("review fix: inclusion target and validation", () => {
     });
     const el = await mountLunch(client);
     await openInclude(el);
-    await click(el, "include-save");
     await vi.waitFor(async () =>
       expect(await bottom(el, "include")).toBe(codeMessage("menu_section.member_cycle")),
     );
-    expect(
-      inModal<HTMLElementTagNameMap["wt-button"]>(el, "include", '[data-test="include-save"]')
-        .disabled,
-    ).toBe(false);
-    await click(el, "include-save");
+    const picker = inModal<HTMLElement>(el, "include", '[name="included-menu"]');
+    await chooseOption(picker, "wine-root");
     await vi.waitFor(() => expect(modal(el, "include").open).toBe(false));
   });
 });
