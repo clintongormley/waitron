@@ -1217,6 +1217,12 @@ items before saving. Allergen editing was changed separately in A213. The till's
 and the dashboard's unit reassignment each ask for confirmation. Setup forms with other required
 fields still wait for those fields before saving.
 
+**Open test gap from A201b:** removing `#closeLostList()` from `#includeMenu` in a disposable
+checkout left `pnpm --filter @waitron/dashboard exec vitest run src/screens/menus-screen.test.ts`
+green (207/207, 2026-10-03). The suite does not establish whether that guard catches a list
+disappearing between the last read and selection. Check that race with a focused test, or remove
+the guard if the path cannot occur; its reachability remains unverified.
+
 **The number field's − and + move inside the field, as pale blue buttons (A202, owner 2026-10-02)
 — DONE.** The owner, on a screenshot of the extras form's Minimum and Maximum choices: _"the +-
 fields are very bulky and become difficult to read"_. Their first idea, up and down arrows stacked
