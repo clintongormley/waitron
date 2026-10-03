@@ -697,10 +697,10 @@ describe("the CLI", () => {
     );
   });
 
-  it("selects the real members that build through scripts/bundle-node.mjs", () => {
+  it("selects the real bundle-node consumers and builds the image when that script changes", () => {
     expect(run("scripts/bundle-node.mjs\n").stdout).toBe(
       "code=true\nscope=packages\npackages=@waitron/credentials @waitron/print-agent-app " +
-        "@waitron/provisioning @waitron/server\nroot=true\ndeploy=false\n",
+        "@waitron/provisioning @waitron/server\nroot=true\ndeploy=true\n",
     );
   });
 

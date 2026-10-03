@@ -1,5 +1,7 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync, rmSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { writeBundledNpmNotices } from "./npm-bundle-notices.mjs";
 
 /** sharp is a native addon: esbuild bundles it without complaint and the bundle then cannot load
  * (docs/developers/ci-and-gates.md, "sharp and the server bundle"). */
@@ -17,6 +19,7 @@ export function esbuildArgs(entry, outfile) {
     ...BUNDLE_EXTERNALS.map((name) => `--external:${name}`),
     `--outfile=${outfile}`,
     "--banner:js=import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
+    `--metafile=${outfile}.meta.json`,
   ];
 }
 
@@ -29,10 +32,21 @@ export function parsePairs(argv) {
   });
 }
 
-export function bundle(pairs, { run = execFileSync } = {}) {
+export function bundle(pairs, { run = execFileSync, writeNotices = noticeForBundle } = {}) {
   for (const { entry, outfile } of pairs) {
     // Found on PATH: each caller keeps esbuild in its devDependencies and runs this via `pnpm run`.
     run("esbuild", esbuildArgs(entry, outfile), { stdio: "inherit" });
+    writeNotices(outfile);
+  }
+}
+
+function noticeForBundle(outfile) {
+  const metafile = `${outfile}.meta.json`;
+  try {
+    const { inputs } = JSON.parse(readFileSync(metafile, "utf8"));
+    writeBundledNpmNotices(Object.keys(inputs), `${outfile}.NOTICES.txt`);
+  } finally {
+    rmSync(metafile, { force: true });
   }
 }
 

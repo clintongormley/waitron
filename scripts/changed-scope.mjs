@@ -49,6 +49,7 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
     ["apps/print-agent", "apps/server", "packages/credentials", "packages/provisioning"],
   ],
   ["scripts/dev-server-proxy.ts", ["apps/dashboard", "apps/setup", "apps/till"]],
+  ["scripts/npm-bundle-notices.mjs", ["apps/dashboard", "apps/setup", "apps/till"]],
   ["scripts/setup-litestream.mjs", ["apps/server"]],
   ["scripts/setup-s3-test-server.mjs", ["apps/server"]],
 ]);
@@ -76,6 +77,11 @@ export function isRootScopePath(path) {
  * decision (ci.yml's `image` job comment): an edit to it is left to image-nightly.yml.
  */
 const IMAGE_SMOKE_FILES = [
+  "scripts/bundle-node.mjs",
+  "scripts/npm-bundle-notices.mjs",
+  "apps/till/vite.config.ts",
+  "apps/dashboard/vite.config.ts",
+  "apps/setup/vite.config.ts",
   "scripts/fake-bluez.py",
   "scripts/bluetoothctl-pair.mjs",
   "apps/print-agent/src/rfcomm-send.py",

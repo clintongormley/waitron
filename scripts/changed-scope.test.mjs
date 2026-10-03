@@ -115,6 +115,15 @@ describe("isRootScopePath", () => {
 });
 
 describe("isImageInputPath", () => {
+  it.each([
+    "scripts/bundle-node.mjs",
+    "scripts/npm-bundle-notices.mjs",
+    "apps/till/vite.config.ts",
+    "apps/dashboard/vite.config.ts",
+    "apps/setup/vite.config.ts",
+  ])("builds the images when the bundled-notice input %s changes", (path) => {
+    expect(isImageInputPath(path)).toBe(true);
+  });
   // Match the WHOLE directory, not a named-file allowlist: too broad only re-runs the smoke on a
   // deploy/README.md edit, while too narrow would silently skip the smoke on a NEW image-input file
   // nobody remembered to list.

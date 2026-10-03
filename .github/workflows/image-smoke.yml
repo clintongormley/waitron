@@ -179,6 +179,23 @@ jobs:
             && test -s /app/third-party/libvips/versions.json \
             && grep -q "Written offer of source code" /app/third-party/README.md'
 
+      - name: The image carries the npm notices for every shipped JavaScript bundle
+        run: |
+          set -euo pipefail
+          app=$(docker compose ps -q app)
+          agent=$(docker compose ps -q print-agent)
+          for bundle in server node-entry bin-restore bin-rejoin bin-break-glass bin-recovery; do
+            docker exec "$app" test -s "/app/third-party/npm/server/$bundle.js.NOTICES.txt"
+          done
+          docker exec "$app" test -s /app/third-party/npm/till/THIRD-PARTY-NOTICES.txt
+          docker exec "$app" test -s /app/third-party/npm/dashboard/THIRD-PARTY-NOTICES.txt
+          docker exec "$app" test -s /app/third-party/npm/setup/THIRD-PARTY-NOTICES.txt
+          docker exec "$app" grep -q '===== lit ' /app/third-party/npm/till/THIRD-PARTY-NOTICES.txt
+          docker exec "$app" grep -q '===== lit ' /app/third-party/npm/dashboard/THIRD-PARTY-NOTICES.txt
+          docker exec "$app" grep -q '===== lit ' /app/third-party/npm/setup/THIRD-PARTY-NOTICES.txt
+          docker exec "$agent" test -s /app/third-party/npm/print-agent/print-agent.js.NOTICES.txt
+          docker exec "$agent" grep -q '@hono/node-server' /app/third-party/npm/print-agent/print-agent.js.NOTICES.txt
+
       # The build's own `litestream version` ran in the full node:26 stage as root. This runs the copy
       # the slim runtime carries, found on PATH the way the server's default finds it, as the user
       # the server runs as. The boot above configures no bucket, so the server never started it.

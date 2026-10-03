@@ -3,11 +3,29 @@
 The box image carries software written by others under their own licences. This folder is
 copied to `/app/third-party/` in the image (`deploy/Dockerfile`). It covers libvips, Litestream,
 the Iosevka font printed text is drawn from, the Moby template the print agent's AppArmor
-profile is copied from, the Material Symbols icons the web apps carry, and the Google Sans font and
-Google's "G" on the dashboard's Sign in with Google button; the npm packages bundled
-into the server, the web apps and the print-agent have no notice file yet (`docs/backlog.md`).
-The print-agent image, built by the same `deploy/Dockerfile`, does not carry this folder; its own
-`/app/third-party/` holds the notices of its Python, described below.
+profile is copied from, the Material Symbols icons the web apps carry, the Google Sans font and
+Google's "G" on the dashboard's Sign in with Google button, and npm packages bundled into the
+server and web apps. The print-agent image, built by the same `deploy/Dockerfile`, has its own
+`/app/third-party/` with notices for its bundled npm packages and Python packages.
+
+## Bundled npm packages
+
+Each server JavaScript bundle ships its own `/app/third-party/npm/server/<bundle>.js.NOTICES.txt`.
+The till, dashboard and setup each ship a `/app/third-party/npm/<app>/THIRD-PARTY-NOTICES.txt`.
+The print-agent image ships `/app/third-party/npm/print-agent/print-agent.js.NOTICES.txt`.
+`scripts/bundle-node.mjs` reads esbuild's input list, and the three Vite builds read the modules in
+their emitted JavaScript chunks. The generator (`scripts/npm-bundle-notices.mjs`) copies the
+installed package's licence and notice files into the generated text, grouped by name and version.
+The image build fails when a bundled package has no local notice and no pinned fallback.
+
+The published tarballs of the QR generator, Nodable entities, Drizzle ORM and three internal AWS
+SDK packages lack a root licence file. Their exact
+name-and-version fallback files live in `npm-fallback/`. The QR generator text comes from its
+upstream tag at commit `83b7e8fe3fddd3b0368dbafd6ce56995bd25e3c8`.
+The Nodable text comes from its matching upstream `val-parsers` tag. The AWS SDK and Drizzle package
+manifests state Apache-2.0; their fallback files reproduce `licenses/Apache-2.0.txt`.
+When upgrading one of these packages, check its new tarball and provide a new pinned fallback if
+it still has no licence file.
 
 ## libvips and the libraries built into it
 

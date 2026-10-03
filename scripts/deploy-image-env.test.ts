@@ -527,6 +527,22 @@ function libvipsRelease(): { packageVersion: string; libvips: string } {
 
 const NOTICES = read("deploy/third-party/README.md");
 
+describe("bundled npm notices in the two images", () => {
+  it("copies the server and three web build notices into the app image", () => {
+    for (const app of ["server", "till", "dashboard", "setup"]) {
+      expect(DOCKERFILE).toContain(`/src/apps/${app}/dist/`);
+      expect(DOCKERFILE).toContain(`/app/third-party/npm/${app}/`);
+      expect(IMAGE_SMOKE).toContain(`/app/third-party/npm/${app}/`);
+    }
+  });
+
+  it("copies the print-agent bundle notice into its own image", () => {
+    expect(DOCKERFILE).toContain("/src/apps/print-agent/dist/print-agent.js.NOTICES.txt");
+    expect(DOCKERFILE).toContain("/app/third-party/npm/print-agent/");
+    expect(IMAGE_SMOKE).toContain("/app/third-party/npm/print-agent/");
+  });
+});
+
 /** The `## <heading>…` section of the third-party notice, up to the next `## ` heading. */
 function noticeSection(heading: string): string {
   const sections = NOTICES.split(/^(?=## )/m).filter((section) =>

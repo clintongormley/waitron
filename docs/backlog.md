@@ -7045,7 +7045,7 @@ and #723).**
 - The case "refused while the run is stopping" catches a removed stop check only through the order
   two pending steps finish in, so re-run that removal if `#bucketAnswers` is restructured.
 
-**Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
+**Done (#W32): the images ship notice files for npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence
 notices; the server bundles (`scripts/bundle-node.mjs`, esbuild), the three SPAs (`vite build`,
 copied to `/app/web/`) and the print-agent bundle (copied to `/app/print-agent.js` in
@@ -7058,8 +7058,10 @@ took in 81 npm packages, 76 of which have a `LICENSE` file, and the output kept 
 comments covering 9 source files from 8 of those packages; `apps/till` built with `vite build`
 contains Lit, whose source opens with a `@license` comment, and its output holds no `@license` or
 `/*!` comment at all. The other server bundles, the print-agent bundle and the dashboard and setup
-SPAs were not built. Needed: a generated notice file for each bundle — the server's
-and the SPAs' beside the Litestream one, and the print-agent's in the print-agent image.
+SPAs were not built. The build now generates a notice per server JavaScript bundle and one per
+web app from the bundlers' input lists, including a pinned fallback when a published tarball has
+no licence file. The app image copies the server and web notices into `/app/third-party/npm/`;
+the print-agent image copies its own. The image-smoke job checks the built copies.
 
 **Box script constraints found by T2 (#492), for anyone working near the box.** `is_production` in
 `deploy/waitron.sh` once failed OPEN and a caller wiped a production box with no

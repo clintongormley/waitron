@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -33,6 +34,7 @@ describe("the shared node bundle command", () => {
       "--external:sharp",
       "--outfile=dist/server.js",
       BANNER,
+      "--metafile=dist/server.js.meta.json",
     ]);
   });
 
@@ -60,6 +62,7 @@ describe("the shared node bundle command", () => {
     const calls = [];
     bundle(parsePairs(["a.ts=dist/a.js", "b.ts=dist/b.js"]), {
       run: (...call) => calls.push(call),
+      writeNotices: () => {},
     });
     expect(calls).toEqual([
       ["esbuild", esbuildArgs("a.ts", "dist/a.js"), { stdio: "inherit" }],
@@ -72,6 +75,7 @@ describe("the shared node bundle command", () => {
     const failure = new Error("esbuild exited 1");
     expect(() =>
       bundle(parsePairs(["a.ts=dist/a.js", "b.ts=dist/b.js", "c.ts=dist/c.js"]), {
+        writeNotices: () => {},
         run: (_command, args) => {
           entries.push(args[0]);
           if (args[0] === "b.ts") throw failure;
@@ -79,6 +83,21 @@ describe("the shared node bundle command", () => {
       }),
     ).toThrow(failure);
     expect(entries).toEqual(["a.ts", "b.ts"]);
+  });
+
+  it("writes one notice from esbuild's input list and removes the temporary metadata", () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-bundle-meta-"));
+    try {
+      const outfile = join(dir, "out.js");
+      const lit = realpathSync(join(ROOT, "apps/till/node_modules/lit/index.js"));
+      bundle([{ entry: "entry.ts", outfile }], {
+        run: () => writeFileSync(`${outfile}.meta.json`, JSON.stringify({ inputs: { [lit]: {} } })),
+      });
+      expect(readFileSync(`${outfile}.NOTICES.txt`, "utf8")).toContain("lit 3.3.3");
+      expect(existsSync(`${outfile}.meta.json`)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("prints its usage and exits 1 when run with no pairs", () => {
@@ -123,6 +142,42 @@ describe("the shared node bundle command", () => {
       const output = readFileSync(join(dir, "dist/out.js"), "utf8");
       expect(output).toContain('import("sharp")');
       expect(output.startsWith("import { createRequire } from 'node:module';")).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 40_000);
+
+  it("writes the bundled package's licence beside a real node bundle", () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-bundle-notice-"));
+    try {
+      mkdirSync(join(dir, "node_modules"));
+      symlinkSync(
+        realpathSync(join(ROOT, "apps/server/node_modules/hono")),
+        join(dir, "node_modules/hono"),
+      );
+      writeFileSync(
+        join(dir, "entry.ts"),
+        'import { Hono } from "hono"; export const app = new Hono();\n',
+      );
+      const result = spawnSync(
+        process.execPath,
+        [join(ROOT, "scripts/bundle-node.mjs"), "entry.ts=dist/out.js"],
+        {
+          cwd: dir,
+          encoding: "utf8",
+          timeout: 20_000,
+          env: {
+            ...process.env,
+            PATH: `${join(ROOT, "apps/server/node_modules/.bin")}${delimiter}${process.env.PATH}`,
+          },
+        },
+      );
+      expect(result.status, result.stderr).toBe(0);
+      const notice = readFileSync(join(dir, "dist/out.js.NOTICES.txt"), "utf8");
+      expect(notice).toContain("hono 4.13.9");
+      expect(notice).toContain(
+        readFileSync(join(ROOT, "apps/server/node_modules/hono/LICENSE"), "utf8"),
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
