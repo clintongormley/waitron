@@ -4928,8 +4928,7 @@ characters. Left open:
   `POST /api/sales`, which does not reach `readPartyBills`. W30 adds failure diagnostics with the
   child exit code when available, whether the restore was abandoned, and whatever Litestream
   output was captured; output may be empty on abandonment. The cause of the one-off failure remains
-  open. Next action: inspect those details from any new
-  failing run before choosing a repair.
+  open. Next action: inspect those details from any new failing run before choosing a repair.
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full (in a Linux
   container the test peaked at about 14 MiB and failed with 8 MiB free), and on CI's Linux runner
