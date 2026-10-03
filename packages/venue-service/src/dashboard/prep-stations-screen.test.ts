@@ -1205,6 +1205,31 @@ it("lists exceptions by position as sentences and identifies both warnings", asy
   expect(rows[1]!.textContent).toContain("Never used: an exception above always catches it first");
   expect(rows[1]!.textContent).toContain("Its station is switched off");
 });
+it("sorts equal-position exceptions by id and restores that order after cancellation", async () => {
+  const tied = {
+    ...exceptionView,
+    routing: {
+      ...exceptionView.routing,
+      exceptions: exceptionView.routing.exceptions.map((row) => ({ ...row, position: 10 })),
+    },
+  };
+  const a = api({ load: vi.fn().mockResolvedValue(tied), reorderExceptions: vi.fn() });
+  const el = await mount(a);
+  const ids = () =>
+    [...el.shadowRoot!.querySelectorAll('[data-test="exceptions"] tbody tr')].map((row) =>
+      row.getAttribute("data-id"),
+    );
+  expect(ids()).toEqual(["a", "b"]);
+  q(el, '[data-test="drag-b"]')!.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }),
+  );
+  await settle(el);
+  expect(ids()).toEqual(["b", "a"]);
+  q(el, '[data-test="cancel-routing"]')!.click();
+  await settle(el);
+  expect(ids()).toEqual(["a", "b"]);
+  expect(a.reorderExceptions).not.toHaveBeenCalled();
+});
 it("moves the second exception up by keyboard and sends the complete new order", async () => {
   const a = api({
     load: vi.fn().mockResolvedValue(exceptionView),
