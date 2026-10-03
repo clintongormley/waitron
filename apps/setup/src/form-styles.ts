@@ -15,6 +15,21 @@ export const fieldStyles = css`
   }
 `;
 
+/** Two short fields that belong together share a row while each can still be five tap targets wide. */
+export const pairStyles = css`
+  .pair {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--wt-tap-min) * 5)), 1fr));
+    column-gap: var(--wt-space-3);
+  }
+`;
+
+export const introStyles = css`
+  .intro {
+    color: var(--wt-color-text-muted);
+  }
+`;
+
 export const errorStyles = css`
   .error {
     color: var(--wt-color-danger);

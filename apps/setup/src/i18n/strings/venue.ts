@@ -59,17 +59,15 @@ export const venueEn = {
 
   "venue.help.country":
     "Choose the country where your business is registered. It determines the available address and tax settings.",
-  "venue.help.tax_id": "Enter the tax identifier of the business that issues the invoices.",
-  "venue.help.legal_name":
-    "Use the business's registered legal name, as it appears on its tax documents.",
-  "venue.help.name": "Choose the name you use for this location in Waitron.",
+  "venue.hint.tax_id": "Of the business that issues the invoices",
+  "venue.hint.legal_name": "As on the business's tax documents",
+  "venue.hint.name": "The name you use for this location",
   "venue.help.operation_description":
     "This text describes the sale on every record sent to the tax agency. Keep the suggested wording for ordinary shop sales. The receipt language does not translate this text. You can change it in the dashboard for future records.",
-  "venue.help.address_line1": "Enter the location's street and building number.",
-  "venue.help.address_line2": "Add a floor, unit or other address detail if needed.",
-  "venue.help.postal_code":
-    "Enter the location's postal code. Waitron uses it to suggest the province.",
-  "venue.help.city": "Enter the town or city where this location is based.",
+  "venue.hint.address_line1": "Street and building number",
+  "venue.hint.address_line2": "Floor, unit or other detail",
+  "venue.hint.postal_code": "Used to suggest the province",
+  "venue.hint.city": "Town or city",
   "venue.help.province":
     "The province must match the postal code. It determines the fiscal territory and time zone.",
   "venue.help.day_cutover":
@@ -259,19 +257,15 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
 
   "venue.help.country":
     "Elige el país donde está registrado tu negocio. Determina los ajustes de dirección e impuestos disponibles.",
-  "venue.help.tax_id":
-    "Introduce el número de identificación fiscal del negocio que emite las facturas.",
-  "venue.help.legal_name":
-    "Usa la razón social registrada del negocio, tal como aparece en sus documentos fiscales.",
-  "venue.help.name": "Elige el nombre que usas para este local en Waitron.",
+  "venue.hint.tax_id": "Del negocio que emite las facturas",
+  "venue.hint.legal_name": "Como en sus documentos fiscales",
+  "venue.hint.name": "El nombre que usas para este local",
   "venue.help.operation_description":
     "Este texto describe la venta en cada registro que se envía a la Agencia Tributaria. Mantén el texto propuesto para las ventas habituales en tienda. El idioma del recibo no traduce este texto. Puedes cambiarlo en el panel de control para los registros futuros.",
-  "venue.help.address_line1": "Introduce la calle y el número del local.",
-  "venue.help.address_line2":
-    "Añade el piso, la puerta u otro detalle de la dirección si hace falta.",
-  "venue.help.postal_code":
-    "Introduce el código postal del local. Waitron lo usa para proponer la provincia.",
-  "venue.help.city": "Introduce la localidad donde está este local.",
+  "venue.hint.address_line1": "Calle y número",
+  "venue.hint.address_line2": "Piso, puerta u otro detalle",
+  "venue.hint.postal_code": "Sirve para proponer la provincia",
+  "venue.hint.city": "Pueblo o ciudad",
   "venue.help.province":
     "La provincia debe corresponder al código postal. Determina el territorio fiscal y la zona horaria.",
   "venue.help.day_cutover":

@@ -2,7 +2,8 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import { helpLinkStyles, actionsStyles, errorStyles } from "../form-styles.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
+import { errorStyles } from "../form-styles.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 
@@ -15,22 +16,17 @@ import { LocaleChangeController } from "../i18n/locale-controller.js";
 @customElement("setup-connection-screen")
 export class SetupConnectionScreen extends LitElement {
   static override styles = [
-    helpLinkStyles,
     baseStyles,
-    actionsStyles,
     errorStyles,
     css`
       :host {
         display: block;
       }
-      /* "Otherwise:" and the button are one sentence, so they share a row and wrap together. */
-      .actions {
-        justify-content: space-between;
-        align-items: center;
-        flex-wrap: wrap;
+      .intro {
+        color: var(--wt-color-text-muted);
       }
-      .otherwise {
-        margin: 0;
+      wt-form-actions {
+        margin-top: var(--wt-space-4);
       }
       /* The browser's own warning, shown the way the browser shows it. The literal words carry the
          meaning; the colour is emphasis, so nothing is lost to a reader who cannot see it. */
@@ -42,8 +38,8 @@ export class SetupConnectionScreen extends LitElement {
   ];
   @property() errorMessage?: string;
   @property({ type: Boolean }) checking = false;
-  /** Set when retrying cannot help, so Continue is withheld. The install link stays: the certificate
-   * still needs trusting to use this server. */
+  /** Set when retrying cannot help, so Continue is withheld. Install certificate stays: the
+   * certificate still needs trusting to use this server. */
   @property({ type: Boolean }) setupUnavailable = false;
 
   constructor() {
@@ -54,30 +50,33 @@ export class SetupConnectionScreen extends LitElement {
   override render(): TemplateResult {
     return html`
       <h1>${t("connection.heading")}</h1>
-      <p>
+      <p class="intro" data-test="instructions">
         ${t("connection.check_address_bar")}
         <span class="warning-words" data-test="warning-words">${t("connection.warning_words")}</span
-        >${t("connection.then_you_need_to")}
-        <a href="/setup/trust" target="_blank" rel="noopener" data-test="trust-help"
-          >${t("connection.install_certificate")}</a
-        >.
+        >${t("connection.install_before_continuing")}
       </p>
       ${this.errorMessage ? html`<p class="error" role="alert">${this.errorMessage}</p>` : nothing}
-      ${
-        this.setupUnavailable
-          ? nothing
-          : html`<div class="actions">
-              <p class="otherwise" data-test="otherwise">${t("connection.otherwise")}</p>
-              <wt-button
+      <wt-form-actions>
+        <wt-button
+          slot="secondary"
+          variant="secondary"
+          data-test="trust-help"
+          @click=${() => window.open("/setup/trust", "_blank", "noopener")}
+          >${t("connection.install_certificate")}</wt-button
+        >
+        ${
+          this.setupUnavailable
+            ? nothing
+            : html`<wt-button
                 variant="primary"
                 data-test="continue"
                 ?disabled=${this.checking}
                 @click=${() => this.dispatchEvent(new CustomEvent("connection-continue"))}
               >
                 ${this.checking ? t("connection.checking") : t("connection.continue")}
-              </wt-button>
-            </div>`
-      }
+              </wt-button>`
+        }
+      </wt-form-actions>
     `;
   }
 }

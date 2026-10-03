@@ -375,11 +375,9 @@ describe("setup-app", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).toBeNull();
     const host = await screenHost(el, "connection");
-    expect(
-      host
-        .shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=trust-help]")
-        ?.getAttribute("href"),
-    ).toBe("/setup/trust");
+    expect(host.shadowRoot!.querySelector("[data-test=trust-help]")?.textContent?.trim()).toBe(
+      "Install certificate",
+    );
     host.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
@@ -523,7 +521,7 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).toBeNull();
   });
 
-  it("boot reads the box environment via getStatus and surfaces it on the mode screen", async () => {
+  it("boot reads the box environment via getStatus and the mode screen warns of a production box", async () => {
     const getStatus = vi.fn().mockResolvedValue({
       provisioned: false,
       environment: "production",
@@ -533,9 +531,7 @@ describe("setup-app", () => {
     await flush(el);
     expect(getStatus).toHaveBeenCalledOnce();
     const mode = await screenHost(el, "mode");
-    expect(mode.shadowRoot!.querySelector("[data-test=environment]")?.textContent).toBe(
-      "production",
-    );
+    expect(mode.shadowRoot!.querySelector("[data-test=production-warning]")).not.toBeNull();
   });
 
   it("still renders when boot's getStatus rejects (the try/catch is proven)", async () => {
@@ -544,7 +540,7 @@ describe("setup-app", () => {
     await flush(el);
     const connection = await screenHost(el, "connection");
     expect(connection.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
-    expect(connection.shadowRoot!.querySelector("[data-test=environment]")).toBeNull();
+    expect(connection.shadowRoot!.querySelector("[data-test=production-warning]")).toBeNull();
   });
 
   it("#goto flips the visible screen", async () => {
@@ -2497,9 +2493,7 @@ describe("connection checks", () => {
     boot.resolve({ provisioned: false, environment: "production", needs: ["venue"] });
     await flush(el);
     const mode = await screenHost(el, "mode");
-    expect(mode.shadowRoot!.querySelector("[data-test=environment]")?.textContent).toBe(
-      "preproduction",
-    );
+    expect(mode.shadowRoot!.querySelector("[data-test=production-warning]")).toBeNull();
   });
 
   it("writes nothing when the boot read answers after the element is detached", async () => {
@@ -3917,9 +3911,7 @@ describe("screen fallback", () => {
     goto(el, "no-such-screen" as Screen);
     await el.updateComplete;
     const mode = await screenHost(el, "mode");
-    expect(mode.shadowRoot!.querySelector("[data-test=environment]")?.textContent).toBe(
-      "production",
-    );
+    expect(mode.shadowRoot!.querySelector("[data-test=production-warning]")).not.toBeNull();
   });
 });
 

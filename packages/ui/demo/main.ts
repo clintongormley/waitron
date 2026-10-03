@@ -19,6 +19,7 @@ import "../src/components/wt-tabs.js";
 import "../src/components/wt-row-actions.js";
 import "../src/components/wt-combobox.js";
 import "../src/components/wt-count-badge.js";
+import "../src/components/wt-choice-row.js";
 import "../src/components/wt-toast.js";
 import "../src/components/wt-notice.js";
 import "../src/components/wt-language-chooser.js";
@@ -63,6 +64,7 @@ const panel = (theme: "light" | "dark") => `
       <wt-count-badge count="12" tone="warning"></wt-count-badge>
       <wt-count-badge count="120" tone="error"></wt-count-badge>
     </div>
+    <wt-choice-row heading="Demo">A practice server. Nothing is filed to AEAT.</wt-choice-row>
     <wt-toast open message="2 new alerts" close-label="Close" duration="0"></wt-toast>
     <wt-toast open tone="error" message="The tax agency rejected an invoice record" close-label="Close" duration="0"></wt-toast>
     <p><wt-notice duration="0">Unpaired</wt-notice></p>

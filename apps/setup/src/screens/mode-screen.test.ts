@@ -19,18 +19,49 @@ function collect(host: HTMLElement): Emitted[] {
 
 const q = (el: SetupModeScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
+const text = (node: Element): string => node.textContent!.replace(/\s+/g, " ").trim();
+
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
 });
 
 describe("setup-mode-screen", () => {
-  it("renders the four top-level onboarding choices", async () => {
+  it("offers Demo, Prepare and Live as three equal rows, each a whole-row choice", async () => {
     const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
-    expect(q(el, "[data-test=choose-demo]")).not.toBeNull();
-    expect(q(el, "[data-test=choose-prepare]")).not.toBeNull();
-    expect(q(el, "[data-test=choose-live]")).not.toBeNull();
-    expect(q(el, "[data-test=choose-existing]")).not.toBeNull();
+    const rows = [...el.shadowRoot!.querySelectorAll(".choices > wt-choice-row")];
+    expect(rows.map((row) => row.getAttribute("data-test"))).toEqual([
+      "choose-demo",
+      "choose-prepare",
+      "choose-live",
+    ]);
+    expect(rows.map((row) => row.getAttribute("heading"))).toEqual([
+      "Demo",
+      "Prepare your restaurant",
+      "Live",
+    ]);
+    expect(rows.map((row) => text(row))).toEqual([
+      "A practice server. Nothing is filed to AEAT — safe to explore and throw away.",
+      "Enter your real menus, staff and layouts, then practise with test payments. Nothing is filed to AEAT.",
+      "The real thing. Every sale is filed to AEAT. This choice is permanent.",
+    ]);
+  });
+
+  it("puts Join or recover under its own question, apart from the three new-restaurant choices", async () => {
+    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
+    const existing = q(el, "[data-test=choose-existing]")!;
+    expect(existing.tagName).toBe("WT-CHOICE-ROW");
+    expect(existing.closest(".choices")).toBeNull();
+    expect(existing.getAttribute("heading")).toBe("Join or recover");
+    expect(text(existing)).toBe(
+      "Add this server as a mirror of a running restaurant, or recover a restaurant from a backup.",
+    );
+    expect(text(q(el, "h2")!)).toBe("Already have a restaurant?");
+  });
+
+  it("draws no extra buttons beside the rows", async () => {
+    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
+    expect(el.shadowRoot!.querySelectorAll("wt-button")).toHaveLength(0);
   });
 
   it("says nothing about certificates unless asked to", async () => {
@@ -132,11 +163,10 @@ describe("setup-mode-screen", () => {
     expect((el as unknown as { understood: boolean }).understood).toBe(false);
   });
 
-  it("surfaces the box environment and calls out a production box loudly", async () => {
+  it("calls out a production box loudly", async () => {
     const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
       environment: "production",
     });
-    expect(q(el, "[data-test=environment]")?.textContent).toBe("production");
     expect(q(el, "[data-test=production-warning]")).not.toBeNull();
   });
 
@@ -144,19 +174,20 @@ describe("setup-mode-screen", () => {
     const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
       environment: "preproduction",
     });
-    expect(q(el, "[data-test=environment]")?.textContent).toBe("preproduction");
     expect(q(el, "[data-test=production-warning]")).toBeNull();
   });
 
-  it("shows no environment line before the shell has read the status", async () => {
-    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
-    expect(q(el, "[data-test=environment]")).toBeNull();
+  it("never prints the box environment as a word of its own", async () => {
+    for (const environment of ["production", "preproduction"] as const) {
+      const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", { environment });
+      const paragraphs = [...el.shadowRoot!.querySelectorAll("p")].map((p) => text(p));
+      expect(paragraphs).not.toContain(environment);
+      expect(q(el, "[data-test=environment]")).toBeNull();
+    }
   });
 });
 
 describe("setup-mode-screen in Spanish", () => {
-  const text = (node: Element): string => node.textContent!.replace(/\s+/g, " ").trim();
-
   it("offers every choice and the live warning in Spanish", async () => {
     setLocale("es-ES");
     const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
@@ -168,7 +199,11 @@ describe("setup-mode-screen in Spanish", () => {
     expect(text(q(el, "[data-test=production-warning]")!)).toBe(
       "Este servidor está marcado para producción: al configurarlo se envían registros reales a la AEAT.",
     );
-    expect(text(q(el, "[data-test=choose-demo]")!)).toBe("Configurar un servidor de demostración");
+    expect(q(el, "[data-test=choose-demo]")!.getAttribute("heading")).toBe("Demostración");
+    expect(q(el, "[data-test=choose-existing]")!.getAttribute("heading")).toBe(
+      "Unirse o recuperar",
+    );
+    expect(text(q(el, "h2")!)).toBe("¿Ya tienes un restaurante?");
     q(el, "[data-test=choose-live]")!.click();
     await el.updateComplete;
     expect(text(q(el, "h2")!)).toBe("Esto es permanente");
@@ -176,18 +211,6 @@ describe("setup-mode-screen in Spanish", () => {
       "Entiendo que no se puede deshacer",
     );
     expect(text(q(el, "[data-test=confirm-live]")!)).toBe("Configurar este servidor en vivo");
-  });
-
-  it("names the box environment in Spanish", async () => {
-    setLocale("es-ES");
-    const production = await mountWidget<SetupModeScreen>("setup-mode-screen", {
-      environment: "production",
-    });
-    expect(text(q(production.el, "[data-test=environment]")!)).toBe("producción");
-    const preproduction = await mountWidget<SetupModeScreen>("setup-mode-screen", {
-      environment: "preproduction",
-    });
-    expect(text(q(preproduction.el, "[data-test=environment]")!)).toBe("preproducción");
   });
 
   it("switches language while mounted and keeps the live confirm open", async () => {

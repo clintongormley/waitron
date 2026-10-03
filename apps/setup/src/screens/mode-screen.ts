@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
+import "@waitron/ui/src/components/wt-choice-row.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import { helpLinkStyles, actionsStyles } from "../form-styles.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
@@ -35,12 +36,6 @@ export class SetupModeScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
-      .env {
-        margin: var(--wt-space-3) 0 0;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
       .production-warning {
         margin: var(--wt-space-3) 0 0;
         color: var(--wt-color-danger);
@@ -49,7 +44,7 @@ export class SetupModeScreen extends LitElement {
 
       .choices {
         display: grid;
-        gap: var(--wt-space-4);
+        gap: var(--wt-space-2);
         margin-top: var(--wt-space-4);
       }
 
@@ -58,9 +53,8 @@ export class SetupModeScreen extends LitElement {
         font-size: var(--wt-font-size-lg);
       }
 
-      .choice-copy {
-        margin: 0 0 var(--wt-space-3);
-        color: var(--wt-color-text-muted);
+      .existing {
+        margin-top: var(--wt-space-5);
       }
 
       .warning {
@@ -131,7 +125,6 @@ export class SetupModeScreen extends LitElement {
   }
 
   override render(): TemplateResult {
-    const environment = this.environment && t(`mode.environment.${this.environment}`);
     return html`
       <h1>${t("mode.heading")}</h1>
       <p class="intro">${t("mode.intro")}</p>
@@ -144,9 +137,6 @@ export class SetupModeScreen extends LitElement {
               >.
             </p>`
           : nothing
-      }
-      ${
-        this.environment ? html`<p class="env" data-test="environment">${environment}</p>` : nothing
       }
       ${
         this.environment === "production"
@@ -162,41 +152,34 @@ export class SetupModeScreen extends LitElement {
   #renderChoices(): TemplateResult {
     return html`
       <div class="choices">
-        <wt-card raised>
-          <h2>${t("mode.demo.heading")}</h2>
-          <p class="choice-copy">${t("mode.demo.copy")}</p>
-          <wt-button variant="primary" data-test="choose-demo" @click=${() => this.#chooseDemo()}
-            >${t("mode.demo.button")}</wt-button
-          >
-        </wt-card>
-        <wt-card raised>
-          <h2>${t("mode.prepare.heading")}</h2>
-          <p class="choice-copy">${t("mode.prepare.copy")}</p>
-          <wt-button
-            variant="secondary"
-            data-test="choose-prepare"
-            @click=${() => this.#choosePrepare()}
-            >${t("mode.prepare.button")}</wt-button
-          >
-        </wt-card>
-        <wt-card raised>
-          <h2>${t("mode.live.heading")}</h2>
-          <p class="choice-copy">${t("mode.live.copy")}</p>
-          <wt-button variant="secondary" data-test="choose-live" @click=${() => this.#chooseLive()}
-            >${t("mode.live.button")}</wt-button
-          >
-        </wt-card>
-        <wt-card raised>
-          <h2>${t("mode.existing.heading")}</h2>
-          <p class="choice-copy">${t("mode.existing.copy")}</p>
-          <wt-button
-            variant="secondary"
-            data-test="choose-existing"
-            @click=${() => this.#chooseExisting()}
-            >${t("mode.existing.button")}</wt-button
-          >
-        </wt-card>
+        <wt-choice-row
+          data-test="choose-demo"
+          heading=${t("mode.demo.heading")}
+          @click=${() => this.#chooseDemo()}
+          >${t("mode.demo.copy")}</wt-choice-row
+        >
+        <wt-choice-row
+          data-test="choose-prepare"
+          heading=${t("mode.prepare.heading")}
+          @click=${() => this.#choosePrepare()}
+          >${t("mode.prepare.copy")}</wt-choice-row
+        >
+        <wt-choice-row
+          data-test="choose-live"
+          heading=${t("mode.live.heading")}
+          @click=${() => this.#chooseLive()}
+          >${t("mode.live.copy")}</wt-choice-row
+        >
       </div>
+      <section class="existing">
+        <h2>${t("mode.existing.heading")}</h2>
+        <wt-choice-row
+          data-test="choose-existing"
+          heading=${t("mode.existing.choice")}
+          @click=${() => this.#chooseExisting()}
+          >${t("mode.existing.copy")}</wt-choice-row
+        >
+      </section>
     `;
   }
 

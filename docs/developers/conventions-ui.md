@@ -28,8 +28,9 @@ no live instance to point at, but the shape can recur the next time a confirmati
 form rather than beside one. `wt-form-actions` keeps the primary action bottom-right and Cancel/Back
 bottom-left; the sign-in email, password, passkey and Google screens put their own way in
 outside it, full width
-(design-system.md, login section). Optional field
-explanations use `wt-help-tooltip`, whose button closes on outside click or Escape. Cost: the dashboard login exposed `wt-input-N` to password safes and disabled incomplete
+(design-system.md, login section). A short field
+explanation is the field's hint; one too long for a hint, or on a field that starts filled in, uses
+`wt-help-tooltip`, whose button closes on outside click or Escape (owner, 2026-10-03). Cost: the dashboard login exposed `wt-input-N` to password safes and disabled incomplete
 forms without saying what was missing (`ui-login`, owner review 2026-09-09).
 
 ## A screen does not draw its own form field
