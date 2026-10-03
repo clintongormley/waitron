@@ -70,7 +70,10 @@ async function walkAttachedModifiers(
 
 /** The `products` columns an offered extras item borrows — everything its own row deliberately does
  * not duplicate. */
-type OfferedExtraItemFacts = Omit<OfferedExtraItem, "price" | "maxQuantity" | "preselected">;
+type OfferedExtraItemFacts = Omit<
+  OfferedExtraItem,
+  "price" | "maxQuantity" | "preselected" | "portion" | "unit"
+>;
 
 const activeVariant = alias(products, "active_variant");
 
@@ -231,6 +234,8 @@ export async function readOfferedModifiers(
                   {
                     ...product,
                     price: item.price,
+                    portion: item.portion ?? "1.000",
+                    unit: item.unit,
                     maxQuantity: item.maxQuantity,
                     preselected: item.preselected,
                   },

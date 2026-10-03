@@ -16,7 +16,7 @@ import type { ProductModifierRef } from "./product-modifiers.js";
  */
 export type ResolvedExtraListItem = Omit<ExtraListItem, "price"> & {
   price: string;
-  unit: { id: string; abbreviation: Record<string, string>; precision: number };
+  unit?: { id: string; abbreviation: Record<string, string>; precision: number };
 };
 
 /** A list with every item priced — what the product projection hands back. */
