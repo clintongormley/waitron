@@ -137,7 +137,10 @@ same as `--wt-color-primary` there). `--wt-color-primary` itself is 4.32:1 on th
 is 4.5:1 or more on `--wt-color-bg`, `--wt-color-surface` and `--wt-color-surface-raised` in both
 themes, which the "primary text" cases in `packages/ui-core/src/tokens/colors.test.ts` hold. It
 holds its own value rather than reading `--wt-color-primary`, so a deployment that overrides the
-primary colour has to override this one as well.
+primary colour has to override this one as well, with a light and a dark value: no single colour
+reaches 4.5:1 on both themes' `--wt-color-bg`. A tenant theme cannot set it: `THEMEABLE_TOKENS`
+(`packages/layouts/src/theme.ts`) does not list it, and no screen applies a stored tenant theme
+yet.
 
 `--wt-color-warning` is the amber for a warning that is not yet an error, such as the alerts count
 badge when no open alert is an error. Text on it uses `--wt-color-on-warning`.
@@ -1664,11 +1667,14 @@ value chosen, open with the chosen row ticked, with icons, with groups, with an 
 without a search box, with focus back on the trigger, compact, with a hint shown as the
 placeholder, with a help button, disabled with a value chosen, and opened from the keyboard with
 and without a search box — verified 2026-10-01, and open with options described by a second line
-— verified 2026-10-02, and with the pointer over a described row and opened from the keyboard with
-a described row active — verified 2026-10-03, by running
+— verified 2026-10-02, and with the pointer over a described row, opened from the keyboard with a
+described row active, open with a primary row in each group, with the pointer over a primary row,
+and opened from the keyboard with a primary row active — verified 2026-10-03, by running
 `packages/ui-core/src/components/wt-input.a11y.test.ts`, `wt-textarea.a11y.test.ts` beside it, and
 `packages/ui/src/components/wt-price-input.a11y.test.ts`, `wt-number-stepper.a11y.test.ts` and
-`wt-combobox.a11y.test.ts`, each state in both themes). No token values needed changing. (axe does flag unrelated `incomplete` — not
+`wt-combobox.a11y.test.ts`, each state in both themes). No token values needed changing, except that a primary row needed the
+new `--wt-color-primary-text` (A218), because `--wt-color-primary` measured 4.32:1 on a hovered
+light row. (axe does flag unrelated `incomplete` — not
 violation — results: a `color-contrast` "background partially obscured" reading on `wt-dialog`'s
 `.body` slot, an [axe/shadow-DOM slot-content limitation](https://github.com/dequelabs/axe-core), and
 an `aria-prohibited-attr` note about `aria-label` on a light-DOM host that forwards it inward, which

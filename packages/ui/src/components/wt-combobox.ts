@@ -15,8 +15,8 @@ export interface ComboboxOption {
   group?: string;
   /** A row that sends `wt-combobox-action` and never becomes the value. */
   action?: true;
-  /** Draws the row's label and icon in `--wt-color-primary`, so a row that makes something new
-   * does not read as one more item of the list. */
+  /** Draws the row's label and icon in `--wt-color-primary-text`, so a row that makes something
+   * new does not read as one more item of the list. */
   primary?: true;
   /** A second, muted line under the label in the open list, and the row's accessible description.
    * The closed field shows the label alone. */

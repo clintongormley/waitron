@@ -1441,8 +1441,8 @@ reported problem or a just-added unsaved variant would sit on a hidden row, and 
 modifiers dropdown. how else could we organise those? at the very least they should be at the end
 of the list, separated from the others with a line. could we make it a single "add new
 modifier"? although then we'd need a second click to choose which, or to open a modal with two
-tabs or something"_. Today the two actions (`editor.create_extra_list`,
-`editor.create_option_list`) are the first two choices in "Add extras or options", above the
+tabs or something"_. Before A218 the two actions (`editor.create_extra_list`,
+`editor.create_option_list`) were the first two choices in "Add extras or options", above the
 lists themselves. **The minimum:** they move to the end, after a dividing line, which
 `wt-combobox` cannot draw today (it has group headings, no divider). Mock up the alternatives for
 the owner: that minimum; one "New modifier…" choice opening a window with Extras and Options
