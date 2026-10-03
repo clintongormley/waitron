@@ -876,8 +876,9 @@ cancelled, a profile save that changes the email and blanks the name) has derive
 same throttle key take turns, outside the write lock, from the early check until the request's
 transaction finishes (`inTurn`, `apps/server/src/attempt-turns.ts`), so attempts sent at once are
 each checked only after the outcomes before them are counted. `inTurn` must never be awaited inside
-a transaction, and nothing checks that either. **Weaker than it looks:** nothing makes a route pass a result or take turns, so a new
-route that forgets the early half still derives under the write lock, and no guard notices. The tests that see
+a transaction, and nothing checks that. **Weaker than it looks:** nothing makes a route pass a result or take turns, so a new
+route that forgets the early half still derives under the write lock, one that skips the turns derives a key for every attempt
+sent at once even after the limit would refuse them, and no guard notices. The tests that see
 it are per route: each converted route has a case in which another writer commits while the key is
 derived, and it fails if a key is derived while the request's own transaction holds the lock.
 
