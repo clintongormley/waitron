@@ -105,7 +105,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
         background: var(--wt-color-surface);
       }
 
-      [data-actions][data-pinned="end"] {
+      [data-actions][data-pinned="end"],
+      [data-pinned="end"]:last-child {
         width: 0;
       }
 

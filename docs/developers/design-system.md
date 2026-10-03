@@ -530,8 +530,8 @@ fitting it. It is set per column, and every row-menu column keyed `actions` sets
 `scripts/pinned-actions-column.test.ts`, weaker than its name: it knows a row-menu column only by
 a literal `key: "actions"` and reads only non-test `.ts` files under `apps/` and `packages/`, and never checks that the column is
 the table's last; its header lists the rest). A pinned `actions` column takes only the width its
-heading or widest cell needs; other columns take spare width. A pinned column under another key does
-not get that width rule. The pinned header and cells paint the row's own
+heading or widest cell needs, including when another column follows it. Any pinned last column gets
+the same width rule regardless of its key; other columns take spare width. The pinned header and cells paint the row's own
 background (`--wt-color-surface`, and `--wt-color-surface-raised` while the row is hovered, or a
 clickable row focused; a row that joins its parent paints `--wt-color-bg` while it is not hovered), sit above a clickable row's lifted controls, and draw a `--wt-color-border`
 line on their leading side from the cell's own `::before`: the table collapses its borders, and in
