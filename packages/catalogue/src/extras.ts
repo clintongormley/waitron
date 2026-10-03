@@ -5,8 +5,10 @@ import {
   AppError,
   centsToDecimal,
   decimal,
+  decimalToThousandths,
   multiplyDecimal,
   stringToCents,
+  thousandthsToDecimal,
   toScale,
 } from "@waitron/shared";
 import { extraListItems, extraLists, productModifiers } from "./schema/extras.js";
@@ -19,6 +21,9 @@ import {
 import type { ExtraListDependants, ExtraListRow } from "./modifier-list-types.js";
 import { findContentTranslationGap } from "./content-languages.js";
 import { parentsWithActiveVariants } from "./variants.js";
+import { productUnits, units } from "./schema/units.js";
+import { parentJoin, parentProducts, unitOwnerJoin } from "./variant-fallback.js";
+import { assertQuantityPrecision } from "./unit-validation.js";
 import "./errors.js";
 
 export function resolveExtraPrice(
@@ -48,6 +53,7 @@ const itemColumns = {
   maxQuantity: extraListItems.maxQuantity,
   preselected: extraListItems.preselected,
   price: extraListItems.price,
+  portion: extraListItems.portion,
 };
 
 /** One query for every list's items, never one per list, whatever the number of lists. */
@@ -65,11 +71,15 @@ async function withItems(tx: Transaction, lists: Omit<ExtraList, "items">[]): Pr
     .orderBy(extraListItems.sort, extraListItems.id);
   const grouped = new Map<string, ExtraListItem[]>();
   for (const row of rows) {
-    const { listId, price, ...item } = row;
+    const { listId, price, portion, ...item } = row;
     const held = grouped.get(listId) ?? [];
     // A null price means "inherit" and a stored zero means "free": `resolveExtraPrice` reads the
     // two differently, so the conversion must keep them apart.
-    held.push({ ...item, price: price === null ? null : centsToDecimal(price) });
+    held.push({
+      ...item,
+      price: price === null ? null : centsToDecimal(price),
+      portion: toScale(thousandthsToDecimal(portion), 3),
+    });
     grouped.set(listId, held);
   }
   return lists.map((list) => ({ ...list, items: grouped.get(list.id) ?? [] }));
@@ -191,6 +201,70 @@ async function assertProductsExist(tx: Transaction, input: ExtraListInput): Prom
   if (at !== -1) throw new AppError("extras.invalid", { field: `items.${at}.productId` });
 }
 
+async function assertPortionPrecision(
+  tx: Transaction,
+  extraListId: string,
+  input: ExtraListInput,
+): Promise<void> {
+  const named = input.items.filter((item) => item.portion !== undefined || item.id === undefined);
+  if (named.length === 0) return;
+  const rows = await tx
+    .select({
+      id: products.id,
+      unitId: units.id,
+      precision: units.precision,
+      hardwareUnit: units.hardwareUnit,
+      seedKey: units.seedKey,
+    })
+    .from(products)
+    .leftJoin(parentProducts, parentJoin)
+    .leftJoin(productUnits, unitOwnerJoin)
+    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .where(
+      inArray(
+        products.id,
+        named.map((item) => item.productId),
+      ),
+    );
+  const unitByProduct = new Map(rows.map((row) => [row.id, row]));
+  const retainedIds = input.items.flatMap((item) => (item.id === undefined ? [] : [item.id]));
+  const retained = retainedIds.length
+    ? await tx
+        .select({
+          id: extraListItems.id,
+          productId: extraListItems.productId,
+          portion: extraListItems.portion,
+        })
+        .from(extraListItems)
+        .where(eq(extraListItems.listId, extraListId))
+    : [];
+  const savedById = new Map(retained.map((row) => [row.id, row]));
+  for (const [index, item] of input.items.entries()) {
+    const unit = unitByProduct.get(item.productId);
+    const precision = unit?.precision ?? 0;
+    const saved = item.id === undefined ? undefined : savedById.get(item.id);
+    if (item.portion === undefined) {
+      if (item.id === undefined && (precision > 0 || Boolean(unit?.hardwareUnit)))
+        throw new AppError("extras.invalid", { field: `items.${index}.portion` });
+      continue;
+    }
+    if (
+      saved?.productId === item.productId &&
+      saved.portion === decimalToThousandths(decimal(item.portion))
+    )
+      continue;
+    try {
+      if ((unit?.unitId === null || unit?.seedKey === "each") && item.portion !== "1.000")
+        throw new Error("Each portion must be one");
+      assertQuantityPrecision(item.portion, precision, {
+        positive: true,
+      });
+    } catch {
+      throw new AppError("extras.invalid", { field: `items.${index}.portion` });
+    }
+  }
+}
+
 /** The till never offers a product with an Active variant as an extra, so a list may not name one. */
 async function assertNoParentsWithVariants(tx: Transaction, input: ExtraListInput): Promise<void> {
   const parents = await parentsWithActiveVariants(
@@ -222,6 +296,7 @@ async function writeItems(
 ): Promise<void> {
   await assertProductsExist(tx, input);
   await assertNoParentsWithVariants(tx, input);
+  await assertPortionPrecision(tx, extraListId, input);
   const bodyIds = input.items.flatMap((item) => (item.id === undefined ? [] : [item.id]));
   const existing = bodyIds.length
     ? await tx
@@ -250,6 +325,7 @@ async function writeItems(
         maxQuantity: item.maxQuantity,
         preselected: item.preselected,
         price: item.price === null ? null : stringToCents(item.price),
+        portion: decimalToThousandths(decimal(item.portion ?? "1")),
         sort,
       })
       .onConflictDoNothing({ target: extraListItems.id })

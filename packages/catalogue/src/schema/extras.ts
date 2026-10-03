@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { count, flag, id, json, label, money, newId, products, table } from "@waitron/db";
+import { count, flag, id, json, label, money, newId, products, quantity, table } from "@waitron/db";
 import { optionLists } from "./options.js";
 
 /** A reusable, named list of products a diner may add to a dish, with rules on how many. Its items
@@ -43,6 +43,7 @@ export const extraListItems = table(
     maxQuantity: count("max_quantity").notNull().default(1),
     preselected: flag("preselected").notNull().default(false),
     price: money("price"),
+    portion: quantity("portion").notNull().default(1000),
   },
   (t) => [
     foreignKey({
@@ -58,6 +59,7 @@ export const extraListItems = table(
     check("extra_list_items_qty_ck", sql`${t.maxQuantity} >= 1`),
     // An item's price reaches a fiscal record: the backstop under `isProductPrice`.
     check("extra_list_items_price_ck", sql`${t.price} >= 0`),
+    check("extra_list_items_portion_ck", sql`${t.portion} > 0`),
     // One offer per product per list: `validateExtraSelections` matches a diner's pick to an item BY
     // PRODUCT ID and could not tell two rows apart. The backstop under `parseExtraListInput`.
     uniqueIndex("extra_list_items_list_product_uq").on(t.listId, t.productId),

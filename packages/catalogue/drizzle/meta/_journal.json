@@ -155,6 +155,13 @@
       "when": 1790869631060,
       "tag": "0021_sections_owned_restore",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1791006242080,
+      "tag": "0022_jittery_bromley",
+      "breakpoints": true
     }
   ]
 }
