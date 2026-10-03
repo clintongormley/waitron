@@ -18,7 +18,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { and, eq, sql } from "drizzle-orm";
-import { openVenueDatabase, tills, withTransaction, type Database } from "@waitron/db";
+import { openVenueDatabase, tills, watchers, withTransaction, type Database } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { listDeviceProfiles } from "@waitron/layouts";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -260,21 +260,21 @@ async function provisionVenue(
 
   await seedDemoRestaurant(db, { venue: ids, locale: seedLocale, salesDays });
 
-  // After the seed: the kitchen display binds the default preparation station it creates.
+  // The displays bind the station and watcher created by the seed.
   await seedDemoDevices(db, ids, seedLocale);
 
   return ids;
 }
 
 /**
- * Enrol a till, a handheld and a kitchen display through `enrolDeviceForTest`, which bypasses the
+ * Enrol a till, a handheld and two kitchen displays through `enrolDeviceForTest`, which bypasses the
  * pairing window and number match, so `?dev`'s chooser lists them on first run. Each device is its own
  * transaction: a failure partway leaves the earlier devices enrolled.
  *
  * The till auto-creates a register named after the device, so it is "Mostrador", not "Caja 1" (which
  * provisioning already made and would be refused `device.register_name_taken`). The handheld rings
  * into that same register. The kitchen display binds the default station by `isDefault`, since the
- * demo may rename it.
+ * demo may rename it. The pass display binds the demo's one active watcher.
  */
 async function seedDemoDevices(
   db: Database,
@@ -292,10 +292,14 @@ async function seedDemoDevices(
     orderFlow: "prepay",
   };
 
-  const { profiles, stations } = await withTransaction(db, async (tx) => {
+  const { profiles, stations, activeWatchers } = await withTransaction(db, async (tx) => {
     return {
       profiles: await listDeviceProfiles(tx),
       stations: await listStations(tx, cfg),
+      activeWatchers: await tx
+        .select({ id: watchers.id })
+        .from(watchers)
+        .where(and(eq(watchers.locationId, cfg.locationId), eq(watchers.active, true))),
     };
   });
   const profileFor = (formFactor: "till" | "kds" | "phone-portrait"): string => {
@@ -308,6 +312,10 @@ async function seedDemoDevices(
   const kitchen = stations.find((station) => station.isDefault);
   if (kitchen === undefined) {
     throw new Error("dev-setup: no default preparation station to bind the kitchen display to");
+  }
+  const pass = activeWatchers[0];
+  if (pass === undefined || activeWatchers.length !== 1) {
+    throw new Error("dev-setup: expected one active demo watcher for the pass display");
   }
 
   await enrolDeviceForTest(db, cfg, { name: "Mostrador", profileId: profileFor("till") });
@@ -334,6 +342,11 @@ async function seedDemoDevices(
     name: "Pantalla Cocina",
     profileId: profileFor("kds"),
     stationId: kitchen.id,
+  });
+  await enrolDeviceForTest(db, cfg, {
+    name: "Pantalla Pase",
+    profileId: profileFor("kds"),
+    watcherId: pass.id,
   });
 }
 
