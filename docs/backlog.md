@@ -186,10 +186,11 @@ Track C.
   and the Prep Stations screen, slice 3a (#1004); folders with no routing rule flagged on Products,
   PF3b (#1009); a station's ticket shows the rest of the order, and dishes made at the till, slice
   3c-1 (#1013).
-- Sales classification, Tasks 1–3 (#645, #648, #738). The menus plan, Tasks 1–9 (#651, #654,
-  #659, #664, #670, #680, #677, #683, #696, #710, #719, #722, #729), with M6c (#705), M7b2 (#702),
-  M7b3 (#713, since retired) and M7v (#720); a line keeps its frozen VAT class and the rate is
-  looked up by the day of issue, A68 (#726).
+- Sales classification, Tasks 1–3 (#645, #648, #738); the category report at time of sale
+  ignores catalogue edits (lane A's W10). The menus plan, Tasks 1–9 (#651, #654, #659, #664,
+  #670, #680, #677, #683, #696, #710, #719, #722, #729), with M6c (#705), M7b2 (#702), M7b3 (#713,
+  since retired) and M7v (#720); a line keeps its frozen VAT class and the rate is looked up by the
+  day of issue, A68 (#726).
 - Extras and Options replaced modifiers (#412, #436, #445, #449, #452, #456, #462, #465, #469,
   #471, #476, #478, #480); variants as products (#511, #517, #528, #532, #537, #539, #545, #551,
   #556); a sale needs a zone (lane B's B4, #571).
@@ -343,17 +344,10 @@ the 2026-09-30 folders design; what remains:
   `daily-close-z-demo.ts`, `modelo-303-demo.ts`) and `apps/server/src/fiscal-readiness-runner.ts`
   file sales without the issuance pass, so seeded demo lines carry no product id, classification or
   gross, and the Sales screen's category report shows every seeded line under Not recorded.
-- **The category sales report (#738).** Done (W10): the at-time-of-sale report no longer
-  refetches when the catalogue is edited — `dependenciesOf` (`apps/dashboard/src/api/live-queries.ts`)
-  gives that mode the sale tables and `locations` alone, rather than a second query name, so the
-  Sales screen's calls kept their shape. Still open: the current mode's list names
-  `content_languages`, which nothing on the report's path has read since #968 removed
-  `readContentLanguages` from `currentClassifications`, so a content-language change refetches it
-  for nothing; `live-queries.test.ts` pins that list. `wt-button` disables only its inner
-  `<button>`, so a scripted click on the host still reaches a click handler; the Sales screen's
-  print handler checks for itself, other screens relying on `?disabled` alone have not been
-  checked. The spec (§6) wanted the category analysis printable with the daily close, but no
-  daily-close print exists.
+- **The category sales report (#738).** `wt-button` disables only its inner `<button>`, so a
+  scripted click on the host still reaches a click handler; the Sales screen's print handler checks
+  for itself, other screens relying on `?disabled` alone have not been checked. The spec (§6)
+  wanted the category analysis printable with the daily close, but no daily-close print exists.
 - **Photo-holding tables are named by hand in several places in `packages/media`** (the triggers,
   `listImageUsages`, `countUsages`, the live-query dependencies, the `before` lists in
   `module.ts`, the `ImageUsage` unions), and only a comment keeps `countUsages` and

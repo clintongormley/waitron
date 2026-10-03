@@ -134,7 +134,6 @@ it.each([
       "products",
       "categories",
       "category_details",
-      "content_languages",
     ],
   ],
   // At time of sale names each line's category from the snapshot the line recorded, so no
@@ -164,7 +163,7 @@ it.each([
     ],
   ],
 ] as const)(
-  "subscribes %s to exactly the tables its read selects from",
+  "subscribes %s %j to exactly the tables its read selects from",
   async (name, args, types) => {
     const query = dashboardQuery(new DashboardApi("", vi.fn()), name, [...args]);
     expect(query.dependencies).toEqual(types.map((type) => ({ type })));
@@ -221,7 +220,7 @@ it("leaves the category report at time of sale alone when the catalogue is edite
   const observed = api.liveData.observe(query, () => {});
   try {
     await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
-    for (const type of ["products", "categories", "category_details", "content_languages"]) {
+    for (const type of ["products", "categories", "category_details"]) {
       api.liveData.invalidate([{ type, id: "edited" }]);
       await new Promise((settle) => setTimeout(settle, 0));
       expect(observed.snapshot.loading).toBe(false);
