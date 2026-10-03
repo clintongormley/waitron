@@ -82,7 +82,7 @@ export class ExtraListForm extends LitElement {
       }
       .picks-row {
         display: grid;
-        grid-template-columns: repeat(2, max-content);
+        grid-template-columns: repeat(2, minmax(0, max-content));
         gap: var(--wt-space-3);
         align-items: start;
       }

@@ -1220,6 +1220,41 @@ it("sets Maximum choices just after Minimum choices on a wide screen, not at the
   }
 });
 
+it.each([
+  [390, "es"],
+  [640, "es"],
+  [640, "en"],
+  [1280, "es"],
+] as const)(
+  "keeps both choices' refusals inside the choices row at %ipx in %s",
+  async (frame, locale) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(frame, 844);
+    setLocale(locale);
+    try {
+      const { el } = await mount({ value: addons });
+      await type(el, "min-picks", "-1");
+      await type(el, "max-picks", "-1");
+      await click(el, "save");
+      const row = el.shadowRoot!.querySelector('[data-test="picks-row"]')!.getBoundingClientRect();
+      for (const name of ["min-picks", "max-picks"]) {
+        const stepper = field<HTMLElementTagNameMap["wt-number-stepper"]>(el, name);
+        await stepper.updateComplete;
+        const message = stepper.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+        expect(message.textContent, name).toBe(t("extras.picks_invalid"));
+        const at = `${name} at ${frame}px in ${locale}`;
+        expect(stepper.getBoundingClientRect().right, at).toBeLessThanOrEqual(row.right + 0.5);
+        expect(message.getBoundingClientRect().right, at).toBeLessThanOrEqual(row.right + 0.5);
+        expect(message.scrollWidth, at).toBeLessThanOrEqual(message.clientWidth);
+      }
+    } finally {
+      setLocale("en");
+      await page.viewport(width, height);
+    }
+  },
+);
+
 it("stacks the two choices steppers on a phone and sets them side by side on a wide screen", async () => {
   const width = window.innerWidth,
     height = window.innerHeight;
