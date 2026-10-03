@@ -43,21 +43,10 @@ async function choose(el: AddContentLanguageDialog, value: string): Promise<void
   await el.updateComplete;
 }
 
-/** The dropdown's own trigger, which carries its invalid state and its description. */
-const control = (el: AddContentLanguageDialog): HTMLElement =>
-  field(el).shadowRoot!.querySelector<HTMLElement>("button.trigger")!;
-
-function click(el: AddContentLanguageDialog, action: string): void {
-  el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${action}"]`)!.click();
-}
-
 async function bottomOf(el: AddContentLanguageDialog): Promise<string | null> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
   return (await formMessageOf(actions))?.textContent ?? null;
 }
-
-const disabled = (el: AddContentLanguageDialog, action: string): boolean =>
-  el.shadowRoot!.querySelector(`[data-test="${action}"]`)!.hasAttribute("disabled");
 
 type LanguageBox = HTMLElement & {
   value: string;
@@ -81,6 +70,19 @@ async function shownLanguage(el: AddContentLanguageDialog): Promise<string | und
 }
 
 describe("add content language dialog: the shared dropdown", () => {
+  it("adds the selected language without a second action", async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mount(save);
+    await choose(el, "fr");
+    await vi.waitFor(() =>
+      expect(save).toHaveBeenCalledExactlyOnceWith({
+        defaultLanguage: "es",
+        languages: ["es", "en", "fr"],
+      }),
+    );
+    expect(el.shadowRoot!.querySelector('[data-test="save-language"]')).toBeNull();
+  });
+
   it("picks the language from a required shared dropdown with a search box, the official languages grouped first", async () => {
     const save = vi.fn().mockResolvedValue(undefined);
     const { el } = await mount(save, OFFICIAL);
@@ -107,9 +109,6 @@ describe("add content language dialog: the shared dropdown", () => {
     expect(await shownLanguage(el)).toBe(t("content_languages.choose"));
 
     await chooseOption(language, "gl");
-    await el.updateComplete;
-    expect(await shownLanguage(el)).toBe("Gallego");
-    click(el, "save-language");
     await vi.waitFor(() =>
       expect(save).toHaveBeenCalledWith({ defaultLanguage: "es", languages: ["es", "en", "gl"] }),
     );
@@ -161,18 +160,17 @@ describe("add content language dialog: official languages first", () => {
   });
 
   it("saves an official language chosen from its group, and keeps it chosen through a live refresh", async () => {
-    const save = vi.fn().mockResolvedValue(undefined);
+    const save = vi.fn(() => new Promise<void>(() => {}));
     const { el } = await mount(save, OFFICIAL);
     await choose(el, "gl");
     el.config = { defaultLanguage: "es", languages: ["es", "en", "de"] };
     await el.updateComplete;
     expect(field(el).value).toBe("gl");
     expect(await shownLanguage(el)).toBe("Gallego");
-    click(el, "save-language");
     await vi.waitFor(() =>
       expect(save).toHaveBeenCalledWith({
         defaultLanguage: "es",
-        languages: ["es", "en", "de", "gl"],
+        languages: ["es", "en", "gl"],
       }),
     );
   });
@@ -197,10 +195,7 @@ describe("add content language dialog", () => {
     expect(codes).not.toContain("en");
     expect(options.find((option) => option.value === "fr")!.label).toBe("Francés");
     const buttons = el.shadowRoot!.querySelectorAll("wt-form-actions wt-button");
-    expect([...buttons].map((button) => button.textContent!.trim())).toEqual([
-      t("action.cancel"),
-      t("action.add"),
-    ]);
+    expect([...buttons].map((button) => button.textContent!.trim())).toEqual([t("action.cancel")]);
   });
 
   it("holds the field and its error to the standard form width on a wide window", async () => {
@@ -209,20 +204,16 @@ describe("add content language dialog", () => {
     await page.viewport(1280, 800);
     try {
       const { el } = await mount();
-      click(el, "save-language");
-      await el.updateComplete;
       const probe = document.createElement("div");
       probe.style.width = "var(--wt-form-max-width)";
       el.shadowRoot!.appendChild(probe);
       const form = probe.getBoundingClientRect().width;
       const body = el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector(".body")!;
       expect(body.clientWidth).toBeGreaterThan(form);
-      const parts = [
-        field(el),
-        field(el).shadowRoot!.querySelector(".field"),
-        field(el).shadowRoot!.querySelector("[data-error]"),
-      ].filter((part) => part !== null);
-      expect(parts).toHaveLength(3);
+      const parts = [field(el), field(el).shadowRoot!.querySelector(".field")].filter(
+        (part) => part !== null,
+      );
+      expect(parts).toHaveLength(2);
       for (const part of parts) {
         expect(part.getBoundingClientRect().width, part.localName).toBeCloseTo(form, 0);
       }
@@ -237,67 +228,46 @@ describe("add content language dialog", () => {
     const saved = vi.fn();
     host.addEventListener("languages-saved", saved);
     await choose(el, "fr");
-    click(el, "save-language");
     const config = { defaultLanguage: "es", languages: ["es", "en", "fr"] };
     await vi.waitFor(() => expect(saved).toHaveBeenCalledOnce());
     expect(save).toHaveBeenCalledWith(config);
     expect(el.open).toBe(false);
   });
 
-  it("says nothing before the first Add, then explains an Add with no language beside the field and at the bottom, focuses it and holds Add until one is chosen", async () => {
+  it("closes without adding when no language is chosen", async () => {
     const save = vi.fn();
     const { el } = await mount(save);
     expect(field(el).error).toBe("");
     expect(await bottomOf(el)).toBeNull();
-    expect(disabled(el, "save-language")).toBe(false);
-
-    click(el, "save-language");
+    el.shadowRoot!.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
     await el.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve));
     expect(save).not.toHaveBeenCalled();
-    expect(control(el).getAttribute("aria-invalid")).toBe("true");
-    const describedBy = control(el).getAttribute("aria-describedby")!;
-    expect(field(el).shadowRoot!.getElementById(describedBy)!.textContent).toBe(
-      t("content_languages.choose"),
-    );
-    expect(field(el).error).toBe(t("content_languages.choose"));
-    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-    expect(el.shadowRoot!.activeElement).toBe(field(el));
-    expect(disabled(el, "save-language")).toBe(true);
-    expect(el.open).toBe(true);
-
-    await choose(el, "fr");
-    expect(field(el).error).toBe("");
-    expect(control(el).getAttribute("aria-invalid")).toBe("false");
-    expect(control(el).hasAttribute("aria-describedby")).toBe(false);
-    expect(await bottomOf(el)).toBeNull();
-    expect(disabled(el, "save-language")).toBe(false);
+    expect(el.open).toBe(false);
   });
 
-  it("shows a refused save at the bottom, leaves the dialog open with Add working, and drops the message when Add is pressed again", async () => {
+  it("shows a refused save at the bottom and retries when the language is chosen again", async () => {
     const save = vi
       .fn()
       .mockRejectedValueOnce({ code: "content.language_invalid" })
       .mockReturnValueOnce(new Promise(() => {}));
     const { el } = await mount(save);
     await choose(el, "fr");
-    click(el, "save-language");
     await vi.waitFor(async () =>
       expect(await bottomOf(el)).toBe(codeMessage("content.language_invalid")),
     );
     expect(el.open).toBe(true);
-    expect(disabled(el, "save-language")).toBe(false);
     expect(field(el).value).toBe("fr");
     expect(await shownLanguage(el)).toBe("Francés");
 
-    click(el, "save-language");
+    await choose(el, "");
+    await choose(el, "fr");
     await el.updateComplete;
     expect(await bottomOf(el)).toBeNull();
     expect(save).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the chosen language through a live refresh of the enabled languages", async () => {
-    const { el } = await mount();
+    const { el } = await mount(vi.fn(() => new Promise<void>(() => {})));
     await choose(el, "fr");
     el.config = { defaultLanguage: "es", languages: ["es", "en", "ca"] };
     await el.updateComplete;
@@ -306,8 +276,8 @@ describe("add content language dialog", () => {
     expect(field(el).options.map((option) => option.value)).not.toContain("ca");
   });
 
-  it("drops the chosen language when a live refresh enables it: the placeholder shows, stays when the language is disabled again, and Add counts as nothing chosen", async () => {
-    const save = vi.fn().mockResolvedValue(undefined);
+  it("drops the chosen language when a live refresh enables it and keeps the placeholder when disabled again", async () => {
+    const save = vi.fn(() => new Promise<void>(() => {}));
     const { el } = await mount(save);
     await choose(el, "");
     await choose(el, "fr");
@@ -319,34 +289,23 @@ describe("add content language dialog", () => {
     await el.updateComplete;
     expect(field(el).value).toBe("");
 
-    click(el, "save-language");
-    await el.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve));
-    expect(save).not.toHaveBeenCalled();
-    expect(control(el).getAttribute("aria-invalid")).toBe("true");
-    expect(field(el).error).toBe(t("content_languages.choose"));
-    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(save).toHaveBeenCalledOnce();
     expect(el.open).toBe(true);
   });
 
-  it("sends no duplicate when Add is pressed before a refresh enabling the chosen language has rendered", async () => {
-    const save = vi.fn().mockResolvedValue(undefined);
+  it("sends no duplicate when a refresh enables the chosen language", async () => {
+    const save = vi.fn(() => new Promise<void>(() => {}));
     const { el } = await mount(save);
     await choose(el, "fr");
     el.config = { defaultLanguage: "es", languages: ["es", "en", "fr"] };
-    click(el, "save-language");
     await el.updateComplete;
     await new Promise((resolve) => setTimeout(resolve));
-    expect(save).not.toHaveBeenCalled();
+    expect(save).toHaveBeenCalledOnce();
     expect(field(el).value).toBe("");
-    expect(control(el).getAttribute("aria-invalid")).toBe("true");
   });
 
   it("starts again when reopened: nothing chosen and no messages", async () => {
     const { el } = await mount();
-    await choose(el, "fr");
-    await choose(el, "");
-    click(el, "save-language");
     await el.updateComplete;
     el.open = false;
     await el.updateComplete;
@@ -355,7 +314,7 @@ describe("add content language dialog", () => {
     expect(field(el).value).toBe("");
     expect(field(el).error).toBe("");
     expect(await bottomOf(el)).toBeNull();
-    expect(disabled(el, "save-language")).toBe(false);
+    expect(el.open).toBe(true);
   });
 
   it("closes from Cancel, announcing languages-closed", async () => {
@@ -400,11 +359,9 @@ describe("add content language dialog", () => {
     host.addEventListener("languages-closed", closed);
     host.addEventListener("languages-saved", saved);
     await choose(el, "fr");
-    click(el, "save-language");
     await el.updateComplete;
 
     expect(field(el).disabled).toBe(true);
-    click(el, "save-language");
     el.shadowRoot!.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
     await el.updateComplete;
     const modal = el.shadowRoot!.querySelector("wt-modal")!;

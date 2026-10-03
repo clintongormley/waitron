@@ -197,7 +197,6 @@ describe("required content languages", () => {
     const add = dialog(el);
     await chooseOption(add.shadowRoot!.querySelector("wt-combobox[name=language]")!, "ca");
     await add.updateComplete;
-    add.shadowRoot!.querySelector<HTMLElement>("[data-test=save-language]")!.click();
     const saved = { defaultLanguage: "en", languages: ["en", "ca", "es"] };
     await vi.waitFor(() => expect(shown(el)).toEqual(["Inglés", "Catalán", "Español"]));
     expect(client.updateContentLanguages).toHaveBeenCalledWith(saved);
@@ -491,7 +490,6 @@ describe("content languages screen", () => {
     expect(add.open).toBe(true);
     await chooseOption(add.shadowRoot!.querySelector("wt-combobox[name=language]")!, "fr");
     await add.updateComplete;
-    add.shadowRoot!.querySelector<HTMLElement>("[data-test=save-language]")!.click();
     const saved = { defaultLanguage: "ca", languages: ["ca", "en", "de", "fr"] };
     await vi.waitFor(() => expect(shown(el)).toEqual(["Catalán", "Alemán", "Francés", "Inglés"]));
     expect(client.updateContentLanguages).toHaveBeenCalledWith(saved);
@@ -514,7 +512,6 @@ describe("content languages screen", () => {
     const add = dialog(el);
     await chooseOption(add.shadowRoot!.querySelector("wt-combobox[name=language]")!, "fr");
     await add.updateComplete;
-    add.shadowRoot!.querySelector<HTMLElement>("[data-test=save-language]")!.click();
     await vi.waitFor(() =>
       expect(client.updateContentLanguages).toHaveBeenCalledWith({
         defaultLanguage: "ca",
@@ -615,7 +612,6 @@ describe("content languages screen", () => {
       const add = dialog(el);
       await chooseOption(add.shadowRoot!.querySelector("wt-combobox[name=language]")!, "fr");
       await add.updateComplete;
-      add.shadowRoot!.querySelector<HTMLElement>("[data-test=save-language]")!.click();
       await add.updateComplete;
       await serverNow(live, WITH_ITALIAN);
       const release = await finishWhileReReading(live, () => expect(dialog(el).open).toBe(false));
@@ -1132,7 +1128,6 @@ describe("receipt language warning", () => {
     const add = dialog(el);
     await chooseOption(add.shadowRoot!.querySelector("wt-combobox[name=language]")!, "gl");
     await add.updateComplete;
-    add.shadowRoot!.querySelector<HTMLElement>("[data-test=save-language]")!.click();
     await vi.waitFor(() => expect(receiptWarning(el)).toBeNull());
   });
 

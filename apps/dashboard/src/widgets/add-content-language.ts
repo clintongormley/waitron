@@ -111,6 +111,7 @@ export class AddContentLanguageDialog extends LitElement {
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
           this.language = event.detail.value;
+          if (this.language) void this.#add();
         }}
       ></wt-combobox>
       <wt-form-actions
@@ -123,13 +124,6 @@ export class AddContentLanguageDialog extends LitElement {
           ?disabled=${this.busy}
           @click=${() => this.#close()}
           >${t("action.cancel")}</wt-button
-        >
-        <wt-button
-          data-test="save-language"
-          variant="primary"
-          ?disabled=${this.busy || missing}
-          @click=${() => void this.#add()}
-          >${t("action.add")}</wt-button
         >
       </wt-form-actions>
     </wt-modal>`;

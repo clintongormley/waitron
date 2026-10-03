@@ -1598,8 +1598,8 @@ export class MenusScreen extends LitElement {
     open: boolean;
     heading: string;
     body: unknown;
-    save: string;
-    saveLabel: string;
+    save?: string;
+    saveLabel?: string;
     saveVariant?: "primary" | "danger";
     /** The message above Save, and whether a field the form finds wrong holds it. */
     errors?: { blocked: boolean; bottom: string };
@@ -1631,13 +1631,17 @@ export class MenusScreen extends LitElement {
             if (!this.busy) options.close();
           }}
           >${t("action.cancel")}</wt-button
-        ><wt-button
-          variant=${options.saveVariant ?? "primary"}
-          data-test=${options.save}
-          .disabled=${this.busy || options.errors?.blocked === true}
-          @click=${options.submit}
-          >${options.saveLabel}</wt-button
-        ></wt-form-actions
+        >${
+          options.save
+            ? html`<wt-button
+                variant=${options.saveVariant ?? "primary"}
+                data-test=${options.save}
+                .disabled=${this.busy || options.errors?.blocked === true}
+                @click=${options.submit}
+                >${options.saveLabel}</wt-button
+              >`
+            : nothing
+        }</wt-form-actions
       >
     </wt-modal>`;
   }
@@ -2182,10 +2186,9 @@ export class MenusScreen extends LitElement {
           .disabled=${this.busy}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             this.includedRoot = event.detail.value;
+            if (this.includedRoot) void this.#includeMenu();
           }}
         ></wt-combobox>`,
-        save: "include-save",
-        saveLabel: t("action.add"),
         errors: {
           blocked: this.includeAttempted && !this.includedRoot,
           bottom:
