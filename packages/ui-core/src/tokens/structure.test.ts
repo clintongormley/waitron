@@ -154,7 +154,7 @@ test("a stepper's buttons are 24px wide, WCAG 2.2's level AA minimum target", ()
   expect(token(el, "--wt-stepper-button-width")).toBe("24px");
 });
 
-test("the narrowest stepper box is 88px: its two buttons and 40px for the number between them", () => {
+test("the narrowest stepper box is 88px", () => {
   const el = mount();
   expect(token(el, "--wt-stepper-field-width")).toBe("88px");
 });

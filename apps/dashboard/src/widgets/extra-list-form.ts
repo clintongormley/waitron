@@ -72,7 +72,7 @@ export class ExtraListForm extends LitElement {
         padding: 0;
         border: 0;
       }
-      .picks > legend {
+      .group-label {
         padding: 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -842,7 +842,7 @@ export class ExtraListForm extends LitElement {
           )}
           ${this.#namesSection(errors)}
           <fieldset class="picks" data-test="picks" aria-describedby="picks-note">
-            <legend>${t("extras.picks_heading")}</legend>
+            <legend class="group-label">${t("extras.picks_heading")}</legend>
             <p class="picks-note" id="picks-note" data-test="picks-note">
               ${t("extras.picks_note")}
             </p>

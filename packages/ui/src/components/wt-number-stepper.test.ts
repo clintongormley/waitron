@@ -593,21 +593,18 @@ test("the number and both buttons sit in a filled field box, with its label on t
   expect(getComputedStyle(label!).fontSize).toBe("11px");
 });
 
-for (const [what, attrs] of [
-  ["a value", 'value="3"'],
-  ["a hint", 'hint="Optional"'],
-  ["a placeholder", 'placeholder="No limit"'],
-] as const) {
-  test(`with ${what}, the label floats small at the top of the box`, async () => {
+test("the label floats small at the top of the box whether the box is empty, holds a value, or shows a hint or a placeholder", async () => {
+  for (const attrs of ["", 'value="3"', 'hint="Optional"', 'placeholder="No limit"']) {
     const el = await mount(`<wt-number-stepper label="Q" ${attrs}></wt-number-stepper>`);
     host.style.setProperty("--wt-font-size-sm", "11px");
-    expect(box(el).getAttribute("data-label")).toBe("float");
-    expect(getComputedStyle(parts(el).label!).fontSize).toBe("11px");
-    expect(parts(el).label!.getBoundingClientRect().top - box(el).getBoundingClientRect().top).toBe(
-      8,
-    );
-  });
-}
+    expect(box(el).getAttribute("data-label"), attrs).toBe("float");
+    expect(getComputedStyle(parts(el).label!).fontSize, attrs).toBe("11px");
+    expect(
+      parts(el).label!.getBoundingClientRect().top - box(el).getBoundingClientRect().top,
+      attrs,
+    ).toBe(8);
+  }
+});
 
 test("the number paints from the field-value token, centred in the box between the buttons", async () => {
   const el = await mount('<wt-number-stepper label="Q" value="3"></wt-number-stepper>');
@@ -665,7 +662,7 @@ function labelText(stepper: Element): HTMLElement {
   return stepper.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
 }
 
-/** The test window is narrower than a resting 40-character label needs. */
+/** Mounts in a 600px row, room for a 40-character label on one line whatever the window's width. */
 async function mountInWideRow(html: string): Promise<HTMLElement> {
   const el = await mount(html);
   host.style.width = "600px";
