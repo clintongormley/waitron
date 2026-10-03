@@ -2400,7 +2400,7 @@ cards with buttons rather than `wt-choice-row` rows. The certificate help page t
 (`/setup/trust`, drawn by `apps/server/src/trust-page.ts`) still writes the browser's warning as
 “not secure” in quotes, where the wizard's first screen (#1107) now writes Not secure without them.
 
-**The setup review screen's "?" buttons (A243, owner 2026-10-03) — DONE (W33, 2026-10-03).**
+**The setup review screen's "?" buttons (A243, owner 2026-10-03) — DONE (W33, #1143, 2026-10-03).**
 `apps/setup/src/screens/review-screen.ts` no longer shows a "?" button anywhere, so at 1280 px
 wide every row whose label and value each fit on one line is the same height, except the
 certificate row, whose value carries its own Edit button; and each section's explanation is now one
@@ -2408,6 +2408,11 @@ muted line under its heading
 (`review.help.*` in `apps/setup/src/i18n/strings/venue.ts`, where the seven row explanations and the
 button's label were deleted). The owner had called the "?" buttons messy: a row carrying one was
 taller than its neighbours, and the many bold circles pulled the eye away from the values.
+Left open: no test covers the value cell's own centring (`align-self: center` on the value in
+`review-screen.ts`) — removing it alone leaves all 31 review-screen tests green, because it changes
+nothing until a label is taller than its value (a label wrapping onto two lines). The test that
+used to cover it was deleted on the owner's answer to the W33 question; the certificate-row test
+covers only the label's centring.
 
 **The "Setup complete" screen lacks the earlier screens' polish (A244, owner 2026-10-03) — OPEN,
 queued as lane A's W34.** `apps/setup/src/screens/done-screen.ts`: "not terrible but it doesn't
