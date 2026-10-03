@@ -4835,10 +4835,13 @@ characters. Left open:
   `planVenue` turns `"06:00"` into `"06:00:00"` before creating the location action, and
   `applyVenue` normalizes both values when comparing a stored location with the plan. Real-database
   retry tests saw `provisioning.second_venue` before each fix and success afterwards in both
-  directions: long stored then short planned, and short stored then long planned. The old note's claim that the
-  database always reads a time value back in the long form was wrong: `timeOfDay` is a text column
-  (`packages/db/src/schema/columns.ts`), and a repeated short-form plan succeeded before this
-  change. The venue-plan test also checks the normalized action directly.
+  directions: long stored then short planned, and short stored then long planned. The old note's
+  claim that the database always reads a time value back in the long form was wrong: `timeOfDay` is
+  a text column (`packages/db/src/schema/columns.ts`), and a repeated short-form plan succeeded
+  before this change. The venue-plan test also checks the normalized action directly.
+- **`dayCutover` still needs input validation.** The W6 review passed `"24:00"` and `"99:99"`
+  through `planVenue`; both emerged with seconds appended. **Next action:** choose the validation
+  boundary and a domain refusal, then test invalid values before they reach storage.
 
 ### B8. Module framework follow-ons
 
