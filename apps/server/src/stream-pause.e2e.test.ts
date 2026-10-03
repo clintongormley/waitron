@@ -287,7 +287,7 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
           planVenue(
             {
               country: "ES",
-              taxId: "74000002E",
+              taxId: "74000002D",
               legalName: "Stream Pause SL",
               location: {
                 name: "Sala principal",
