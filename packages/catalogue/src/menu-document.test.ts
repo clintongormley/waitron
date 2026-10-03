@@ -30,6 +30,7 @@ import { setMenuVariants, setProductVariants } from "./variants.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { createUnit, EACH_UNIT, updateUnit } from "./units.js";
 import { extraListItems } from "./schema/extras.js";
+import { createExtraList } from "./extras.js";
 import { menuDetails } from "./schema/menu.js";
 import { optionLabels, optionLists } from "./schema/options.js";
 import { sectionMembers, sections } from "./schema/sections.js";
@@ -956,6 +957,75 @@ describe("diffMenuDocuments", () => {
       to: { abbreviation: { en: "kg" }, precision: 3 },
       source: "shared_product",
     });
+  });
+
+  it("names a unit change on both lists when the extra is also sold as a dish", async () => {
+    const f = await menusFixture(fx.db);
+    const secondList = await app(async (tx) => {
+      const list = await createExtraList(
+        tx,
+        {
+          name: "Soup extras",
+          minPicks: 0,
+          maxPicks: 2,
+          items: [{ productId: f.extraLemon, price: "0.40" }],
+        },
+        "en",
+      );
+      await writeProductModifiers(tx, f.soup, [{ kind: "extras", id: list.id }]);
+      await addMember(tx, f.lunchRoot, product(f.extraLemon));
+      return list.id;
+    });
+    const live = await build(f.lunch);
+    await app(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+        "en",
+      );
+      await updateProduct(tx, f.extraLemon, { unitId: unit.id });
+    });
+
+    expect(
+      diffMenuDocuments(live, await build(f.lunch)).filter(
+        (change) => change.kind === "extra_unit_changed",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        productId: f.extraLemon,
+        listId: f.extrasList,
+        listName: "Extras",
+      }),
+      expect.objectContaining({
+        productId: f.extraLemon,
+        listId: secondList,
+        listName: "Soup extras",
+      }),
+    ]);
+  });
+
+  it("shows an included menu's extra unit change on each affected menu", async () => {
+    const f = await menusFixture(fx.db);
+    const live = await Promise.all([f.drinksMenu, f.lunch, f.dinner].map(build));
+    await app(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+        "en",
+      );
+      await updateProduct(tx, f.extraLemon, { unitId: unit.id });
+    });
+
+    for (const [index, menuId] of [f.drinksMenu, f.lunch, f.dinner].entries()) {
+      expect(diffMenuDocuments(live[index]!, await build(menuId))).toContainEqual(
+        expect.objectContaining({
+          kind: "extra_unit_changed",
+          productId: f.extraLemon,
+          listId: f.extrasList,
+          listName: "Extras",
+        }),
+      );
+    }
   });
 
   it("does not claim an extra's unit changed when only the unit name changed", async () => {
