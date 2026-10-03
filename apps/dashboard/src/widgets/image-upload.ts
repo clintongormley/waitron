@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  visuallyHiddenStyles,
   currentContentLanguages,
   ContentLanguageController,
   uniqueId,
@@ -23,7 +24,7 @@ export interface ImageUploader {
  *
  * As a `thumbnail` it is one small button showing the photo, which opens the picker; the picker's
  * footer then holds Remove. Its default slot holds what sits beside the photo, taking the rest of
- * the row, so the inherited photo's caption can run under both.
+ * the row.
  */
 @customElement("dashboard-image-upload")
 export class ImageUpload extends LitElement {
@@ -54,7 +55,6 @@ export class ImageUpload extends LitElement {
         grid-template-columns: auto minmax(0, 1fr);
         align-items: center;
         column-gap: var(--wt-space-3);
-        row-gap: var(--wt-space-1);
       }
       :host([thumbnail]) slot {
         display: block;
@@ -84,9 +84,7 @@ export class ImageUpload extends LitElement {
         object-fit: cover;
       }
       .caption {
-        grid-column: 1 / -1;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
+        ${visuallyHiddenStyles}
       }
     `,
   ];

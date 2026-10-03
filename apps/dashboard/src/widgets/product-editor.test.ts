@@ -3877,12 +3877,13 @@ it("removes the photo from the library window's footer, and saves none", async (
   expect(submit.mock.calls[0]![0].detail.value.image).toBeNull();
 });
 
-it("shows a variant's inherited photo beside its Name, marked as the main product's", async () => {
+it("shows a variant's inherited photo beside its Name, described as the main product's for a screen reader only", async () => {
   const el = await mountVariant();
   expect(photoButton(el).querySelector("img")!.getAttribute("src")).toBe("/media/coffee.png");
   const caption = photoControl(el).shadowRoot!.querySelector("[data-test=inherited-caption]")!;
   expect(caption.textContent!.trim()).toBe(t("editor.inherited_image_alt"));
   expect(photoButton(el).getAttribute("aria-describedby")).toBe(caption.id);
+  expect(caption.getBoundingClientRect().width).toBeLessThanOrEqual(1);
 });
 
 it("marks the photo invalid on a refused photo, with the reason under it", async () => {

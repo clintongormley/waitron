@@ -285,7 +285,7 @@ describe("image-upload as a thumbnail", () => {
   });
 
   it.each(["en-GB", "es-ES"] as const)(
-    "marks a variant's inherited photo as the main product's, in %s",
+    "marks a variant's inherited photo with a dashed border, and names it the main product's for a screen reader only, in %s",
     async (locale) => {
       setLocale(locale);
       const { el, host } = await thumbnail({ inheritedImage: "parent.png" });
@@ -299,6 +299,14 @@ describe("image-upload as a thumbnail", () => {
       expect(button(el).contains(caption)).toBe(false);
       expect(button(el).getAttribute("aria-describedby")).toBe(caption.id);
       expect(el.shadowRoot!.getElementById(caption.id)).toBe(caption);
+      const hidden = getComputedStyle(caption);
+      expect([hidden.position, hidden.width, hidden.height, hidden.overflow, hidden.clip]).toEqual([
+        "absolute",
+        "1px",
+        "1px",
+        "hidden",
+        "rect(0px, 0px, 0px, 0px)",
+      ]);
     },
   );
 
@@ -352,7 +360,7 @@ describe("image-upload as a thumbnail", () => {
     expect(button(el).hasAttribute("aria-invalid")).toBe(false);
   });
 
-  it("lays what it holds beside the photo, taking the rest of the row, with the inherited caption under both", async () => {
+  it("lays what it holds beside the photo, taking the rest of the row, with nothing under them for an inherited photo", async () => {
     const { el, host } = await thumbnail({ inheritedImage: "parent.png" });
     host.style.width = "390px";
     const field = document.createElement("div");
@@ -368,10 +376,6 @@ describe("image-upload as a thumbnail", () => {
     expect(Math.abs(beside.top + beside.height / 2 - (photo.top + photo.height / 2))).toBeLessThan(
       1,
     );
-    const caption = el
-      .shadowRoot!.querySelector<HTMLElement>("[data-test=inherited-caption]")!
-      .getBoundingClientRect();
-    expect(caption.top).toBeGreaterThanOrEqual(Math.max(photo.bottom, beside.bottom));
-    expect(caption.left).toBe(photo.left);
+    expect(row.height).toBe(Math.max(photo.height, beside.height));
   });
 });

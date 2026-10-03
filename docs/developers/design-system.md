@@ -1088,8 +1088,8 @@ shows a product description today (the reader check in A220, `docs/backlog.md`).
   its own, is the product's price in the same grey italic. An image shows the fallback picture itself
   (`dashboard-image-upload`'s `inheritedImage`) without a Remove action. In the variant form it has no
   caption, and its alt text names the main product's photo (`editor.inherited_image_alt`); in the
-  product editor, where the photo is a thumbnail beside Name, it has a dashed border and that same
-  text as a caption under the row, which describes the photo button. A control whose empty state could also mean "none" (an allergen set,
+  product editor, where the photo is a thumbnail beside Name, it has a dashed border, and that same
+  text, hidden from sight, describes the photo button to a screen reader. A control whose empty state could also mean "none" (an allergen set,
   a dietary set) saves an emptied choice as `null` — "falls back" — never as an empty set, which
   would declare the record free of what the fallback contains.
 

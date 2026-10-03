@@ -1222,7 +1222,8 @@ own "Kitchen name" ("Nombre de cocina") and a new short "Course" ("Curso"). In t
 only "Name:" and "Description:" are bold; the language codes are plain text, as the decision above
 writes them. The photo is the thumbnail form of `dashboard-image-upload` (`thumbnail`), beside Name
 and stopping where the other fields stop; it is named "Add photo" or "Change photo"; an inherited
-photo has a dashed border and the caption "The main product's photo" under the row. In the editor,
+photo has a dashed border and no visible caption: "The main product's photo" describes the photo
+button to a screen reader only (owner, 2026-10-03, choosing that over a visible caption). In the editor,
 Remove moved into the image library window's footer, shown when the product has a photo of its own;
 the variant form and the section details form keep today's photo control. With no
 `api` there is no photo and Name takes the whole row. A refused photo shows its reason under the
