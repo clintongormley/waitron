@@ -1336,7 +1336,7 @@ at the bottom. The Kitchen screen shows the same list, replacing its one-card-pe
 with its own Save buttons and typed-in order numbers — so the list is one widget both use.
 Closing the window selects a course just added, and the product's unsaved edits survive it.
 
-**Allergens and dietary preferences are edited in place (A213) — DONE (this branch).** The owner:
+**Allergens and dietary preferences are edited in place (A213) — DONE (#1079).** The owner:
 _"for nutritional info, we can show: Allergens: Nuts, Seeds / Dietary preferences: None specified.
 And when you click on one it converts into a multi-value combobox (ie no need for the Edit
 button)"_, and _"each one doesn't need a box around it, like we've removed them for descriptors
