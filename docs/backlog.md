@@ -1187,7 +1187,7 @@ measured only before the review's fixes: a 90 s outage recovers and an unsaved f
 Not covered — below, A224.
 
 **Dashboard reads have no time limit, and a save's lost-connection message can vanish when reads
-recover (A224, from A206's review, 2026-10-02) — DONE (lane A's W18, #1125; W18a, #1135; W18b).** Done: Payments'
+recover (A224, from A206's review, 2026-10-02) — DONE (lane A's W18, #1125; W18a, #1135; W18b, #1142).** Done: Payments'
 providers and readers, Cloud services' status and Profile's language list now load through the
 shared queries, so a screen opened while the server is down fills in once it is back. Payments asks
 for each reader's status again only when the set of active readers changes, after a change the
@@ -1222,6 +1222,8 @@ Diagnostics, Units, Bookings and Prep stations; Payments and Cloud services alre
 placement step keeps a save's failures in a list of their own. Prep stations used to clear any
 message on every successful read; an action's message there now stays until the person acts or
 edits again.
+Left as it was (#1142's run-it review, which found the same on `main`): on Device profiles, a
+failed one-off reload's message can stay after fresh data arrives.
 
 **A dashboard read that waits on an outside service can be cut off at 30 seconds and reported as a
 broken connection (A255, from lane A's W18a, #1135, 2026-10-03) — OPEN, queued as lane A's W18c.**
