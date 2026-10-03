@@ -463,12 +463,9 @@ export class ProfileScreen extends LitElement {
       if (!f.confirmPin) errors.confirmPin = t("form.pin_required");
       else if (f.confirmPin !== f.pin) errors.confirmPin = t("account.pin_mismatch");
     }
-    if (
-      ((this.mode === "totp" && this.totpSetup !== null) || this.mode === "email") &&
-      !f.setupCode
-    ) {
+    if (this.mode === "email" && !f.setupCode) errors.setupCode = t("profile.email_code_required");
+    if (this.mode === "totp" && this.totpSetup !== null && !f.setupCode)
       errors.setupCode = t("profile.code_required");
-    }
     return errors;
   }
 

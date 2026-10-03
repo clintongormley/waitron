@@ -573,6 +573,7 @@ export const en = {
   "profile.confirm_email": "Confirm new email",
   "profile.email_code": "Email confirmation code",
   "profile.email_code_hint": "Enter the six-digit code sent to your new email address.",
+  "profile.email_code_required": "Enter the code from your email",
   "profile.email_code_refused":
     "This code is incorrect or no longer valid. Check it, or change your email again to get a new one.",
   "profile.authenticator": "Authenticator app",
@@ -2658,6 +2659,7 @@ export const es: Record<StringKey, string> = {
   "profile.email_code": "Código de confirmación del correo",
   "profile.email_code_hint":
     "Introduce el código de seis dígitos enviado a tu nueva dirección de correo.",
+  "profile.email_code_required": "Introduce el código de tu correo",
   "profile.email_code_refused":
     "Este código no es correcto o ya no es válido. Revísalo o vuelve a cambiar tu correo para recibir uno nuevo.",
   "profile.authenticator": "Aplicación de autenticación",

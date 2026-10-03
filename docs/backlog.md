@@ -5931,13 +5931,11 @@ run without the code):
 give it the lock check), with a receipt each; key the label lookup on own properties; rename or
 rewrite that wake-lock test; and rename those two show-floor test titles.
 
-**The email-change form calls an empty code field an "authentication code" — OPEN (found by C61's
-review, #859, 2026-09-29; read, not run).** In the Profile screen's email mode, leaving the email
-confirmation code blank shows `profile.code_required` ("Enter your authentication code"), the
-wording for the authenticator-app code (`apps/dashboard/src/screens/profile-screen.ts`, the
-`setupCode` check in the form's own validation). **Next action:** give email mode its own "Enter
-the code from your email" sentence in `en` and `es`, test first, and LOOK at it in both themes and
-languages at 390 and 1280 px.
+**The email-change form calls an empty code field an "authentication code" — DONE (W12; found by
+C61's review, #859, 2026-09-29).** In the Profile screen's email mode a blank confirmation code now
+shows `profile.email_code_required` ("Enter the code from your email" / "Introduce el código de tu
+correo"); the authenticator-app setup keeps `profile.code_required`
+(`apps/dashboard/src/screens/profile-screen.ts`, the form's own validation).
 
 **The tunnel's stand-in relay pairs with sockets that have already gone — OPEN (found 2026-09-23,
 writing tunnel's coverage tests, PR #506).** `packages/tunnel/src/testing/relay.ts` is test-only:
