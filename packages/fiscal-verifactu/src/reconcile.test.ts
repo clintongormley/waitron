@@ -102,6 +102,77 @@ async function altaIdentityFor(saleId: string): Promise<{ id: string; facturaKey
   };
 }
 
+/**
+ * A real sale, filed through the drainer (local aceptado, AEAT Correcto), then voided. The sale
+ * comes from the real `recordSale`, not `seedPendingEnvios`: that fixture's `huella` is not
+ * chain-valid, and `recordVoid` verifies the chain. `steadyClock`'s instant is in March, hence the
+ * returned period. With `submitAnulacion`, the drainer files the anulación too.
+ */
+async function fileThenVoid(options: { submitAnulacion: boolean }) {
+  const period = { year: "2026", month: "03" };
+  const { tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db);
+  // recordVoid requires `sale.void`: a manager session authorizes it.
+  const { rows: mgr } = await suite.db.execute<{ id: string }>(
+    // `id` and `created_at` have no SQL DEFAULT (drizzle's `$defaultFn` runs only for a builder
+    // insert), so raw SQL supplies them.
+    sql`insert into persons (id, created_at, display_name, pin_hash, role)
+        values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
+  );
+  const voidSession = await withTransaction(suite.db, (tx) =>
+    loginWithPin(tx, { tillId, personId: mgr[0]!.id, pin: "1234" }),
+  );
+  const aeat = createFakeAeat({ serverNow: SERVER_NOW });
+  const resolveClient = staticResolver(aeat.client());
+  const backend = new VerifactuBackend({
+    deploymentEnvironment: "production",
+    clock: steadyClock,
+    db: suite.db,
+    resolveClient,
+  });
+
+  const sale = await withTransaction(suite.db, async (tx) => {
+    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
+  });
+  // An envío takes `proximo_intento_en` from the wall clock; pin it so the drain is deterministic.
+  const pinDue = () =>
+    withTransaction(suite.db, async (tx) => {
+      await tx.execute(sql`update envios set proximo_intento_en = ${DRAIN_AT.toISOString()}`);
+    });
+  await pinDue();
+  await drain(drainDeps(resolveClient), DRAIN_AT);
+
+  const alta = await altaIdentityFor(sale.saleId);
+  await withTransaction(suite.db, async (tx) => {
+    await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
+  });
+  expect(await hasAnulacion(alta.id)).toBe(true);
+  const { rows: anul } = await suite.db.execute<{ id: string }>(
+    sql`select id from registros_facturacion
+        where sale_id = ${sale.saleId} and tipo_registro = 'anulacion'`,
+  );
+  const anulacionId = anul[0]!.id;
+
+  if (options.submitAnulacion) {
+    await withTransaction(suite.db, async (tx) => {
+      await tx.execute(sql`
+        update envios set proximo_intento_en = ${DRAIN_AT.toISOString()}
+        where registro_id = ${anulacionId}
+      `);
+    });
+    // Past the flow-control gate the first drain set.
+    await drain(drainDeps(resolveClient), new Date(DRAIN_AT.getTime() + 3_600_000));
+    expect((await estadosFor()).get(anulacionId)).toBe("aceptado");
+  }
+  return { period, aeat, resolveClient, alta, anulacionId };
+}
+
+async function huellaOf(registroId: string): Promise<string> {
+  const { rows } = await suite.db.execute<{ huella: string }>(
+    sql`select huella from registros_facturacion where id = ${registroId}`,
+  );
+  return rows[0]!.huella;
+}
+
 /** Confirms the fixture set up the sibling anulación the void case means to exercise. */
 async function hasAnulacion(altaRegistroId: string): Promise<boolean> {
   const { rows } = await withTransaction(suite.db, (tx) =>
@@ -347,51 +418,60 @@ describe("reconcile — the three audit cases", () => {
   });
 
   it("drift-Anulado with a local anulacion is clean — no drift entry, no incident", async () => {
-    // AEAT marks the alta Anulado once it accepts the anulación we submitted for the same sale,
-    // while the alta's own envío stays `aceptado`.
-    //
-    // The sale comes from the real `recordSale`, not `seedPendingEnvios`: that fixture's `huella`
-    // is not chain-valid, and `recordVoid` verifies the chain. `steadyClock`'s instant is in March,
-    // hence the local period.
-    const period = { year: "2026", month: "03" };
-    const { tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db);
-    // recordVoid requires `sale.void`: a manager session authorizes it.
-    const { rows: mgr } = await suite.db.execute<{ id: string }>(
-      // `id` and `created_at` have no SQL DEFAULT (drizzle's `$defaultFn` runs only for a builder
-      // insert), so raw SQL supplies them.
-      sql`insert into persons (id, created_at, display_name, pin_hash, role)
-          values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
-    );
-    const voidSession = await withTransaction(suite.db, (tx) =>
-      loginWithPin(tx, { tillId, personId: mgr[0]!.id, pin: "1234" }),
-    );
-    const aeat = createFakeAeat({ serverNow: SERVER_NOW });
-    const resolveClient = staticResolver(aeat.client());
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: steadyClock,
-      db: suite.db,
-      resolveClient,
+    // AEAT marks the invoice Anulado once it accepts the anulación we submitted for the same sale,
+    // while the alta's own envío stays `aceptado`. Both records go through the real drainer, so
+    // AEAT's view is what the fake builds from an accepted anulación.
+    const { period, aeat, resolveClient, alta, anulacionId } = await fileThenVoid({
+      submitAnulacion: true,
     });
 
-    const sale = await withTransaction(suite.db, async (tx) => {
-      return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
+    // The fixture's premise: after the anulación, AEAT's one record for this invoice carries the
+    // anulación's reference and fingerprint, not the alta's.
+    const anulacionHuella = await huellaOf(anulacionId);
+    expect(aeat.stored().find((s) => s.key === alta.facturaKey)).toMatchObject({
+      estado: "Anulado",
+      refExterna: anulacionId,
+      huella: anulacionHuella,
     });
-    // `recordSale`'s envío takes `proximo_intento_en` from the wall clock; pin it so the drain is
-    // deterministic.
-    await withTransaction(suite.db, async (tx) => {
-      await tx.execute(sql`update envios set proximo_intento_en = ${DRAIN_AT.toISOString()}`);
-    });
-    await drain(drainDeps(resolveClient), DRAIN_AT); // alta: local aceptado, AEAT Correcto
 
-    const alta = await altaIdentityFor(sale.saleId);
-    await withTransaction(suite.db, async (tx) => {
-      await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
-    });
-    // The void's own anulación envío is never submitted here, so it stays in flight.
-    expect(await hasAnulacion(alta.id)).toBe(true);
+    for (const sweep of [1, 2]) {
+      const result = await reconcile(reconcileDeps(resolveClient, steadyClock), period);
 
-    // AEAT now reports the alta itself Anulado — the expected authority state post-void.
+      expect({ sweep, ...result }).toMatchObject({
+        sweep,
+        checked: 2, // the alta's envío + the anulación's
+        drift: [], // agreement — neither record is flagged
+        noTrace: [], // the alta is not missing: AEAT reports it through the anulación
+        lostAck: [],
+        incidentsRaised: 0,
+      });
+    }
+    expect(await incidentsFor()).toHaveLength(0);
+
+    // No correction or resubmission — both envíos stay exactly as the drainer left them.
+    const estados = await estadosFor();
+    expect(estados.get(alta.id)).toBe("aceptado");
+    expect(estados.get(anulacionId)).toBe("aceptado");
+    expect(await reconciledResubmitAtFor(alta.id)).toBeNull();
+  });
+
+  it("still reports a voided sale missing when AEAT holds nothing for the invoice", async () => {
+    const { period, aeat, resolveClient, alta, anulacionId } = await fileThenVoid({
+      submitAnulacion: true,
+    });
+    aeat.forget(alta.facturaKey);
+
+    const result = await reconcile(reconcileDeps(resolveClient, steadyClock), period);
+
+    expect(result.noTrace.map((m) => m.recordId).sort()).toEqual([alta.id, anulacionId].sort());
+  });
+
+  it("is clean too when AEAT reports the alta's own record Anulado while our anulación is in flight", async () => {
+    // The other shape a voided invoice could take at AEAT: Anulado under the alta's own reference.
+    // `setConsultaState` changes only the state, keeping the alta's reference and fingerprint.
+    const { period, aeat, resolveClient, alta, anulacionId } = await fileThenVoid({
+      submitAnulacion: false,
+    });
     aeat.setConsultaState(alta.facturaKey, "Anulado");
 
     const result = await reconcile(reconcileDeps(resolveClient, steadyClock), period);
@@ -403,9 +483,9 @@ describe("reconcile — the three audit cases", () => {
     expect(result.incidentsRaised).toBe(0);
     expect(await incidentsFor()).toHaveLength(0);
 
-    // No correction either — the alta's envío stays exactly as the drainer left it.
     const estados = await estadosFor();
     expect(estados.get(alta.id)).toBe("aceptado");
+    expect(estados.get(anulacionId)).toBe("pendiente");
   });
 
   it("drift-Anulado with NO local anulacion is idempotent across sweeps — one incident, not two", async () => {

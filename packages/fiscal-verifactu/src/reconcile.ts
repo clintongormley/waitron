@@ -38,6 +38,8 @@ type PeriodRow = {
   id: string;
   till_id: string;
   sale_id: string;
+  /** For an alta, the id of its sale's anulación, if one exists; otherwise null. */
+  anulacion_id: string | null;
   estado: string;
   reconciled_resubmit_at: string | null;
   id_emisor_factura: string;
@@ -141,7 +143,7 @@ export async function reconcile(
   const detectedAt = deps.clock.now().instant;
   await withTransaction(deps.db, async (tx) => {
     for (const row of rows) {
-      const reported = authority.get(row.id) ?? null;
+      const reported = authority.get(row.id) ?? reportedThroughAnulacion(row, authority);
 
       if (PENDIENTE.has(row.estado)) {
         if (reported !== null) {
@@ -223,6 +225,11 @@ async function rowsForPeriod(
   const { rows } = await tx.execute<PeriodRow>(sql`
     select
       r.id, r.till_id, r.sale_id,
+      case when r.tipo_registro = 'alta' then (
+        select a.id from registros_facturacion a
+        where a.sale_id = r.sale_id and a.tipo_registro = 'anulacion'
+        limit 1
+      ) end as anulacion_id,
       e.estado, e.reconciled_resubmit_at,
       r.id_emisor_factura, r.nombre_razon_emisor, r.num_serie_factura,
       r.fecha_expedicion_factura
@@ -234,6 +241,20 @@ async function rowsForPeriod(
     ...row,
     fecha_expedicion_factura: toAeatDate(row.fecha_expedicion_factura),
   }));
+}
+
+/**
+ * Once AEAT accepts a cancellation, its consulta reports the invoice `Anulado` with the anulación's
+ * fingerprint (`@waitron/verifactu`'s live preproduction check), and the library's fake also moves
+ * the reference to the anulación's. So an alta absent under its own reference whose anulación AEAT
+ * reports `Anulado` is reported `Anulado` itself, not missing.
+ */
+function reportedThroughAnulacion(
+  row: PeriodRow,
+  authority: Map<string, EstadoRegistroConsulta>,
+): EstadoRegistroConsulta | null {
+  if (row.anulacion_id === null) return null;
+  return authority.get(row.anulacion_id) === "Anulado" ? "Anulado" : null;
 }
 
 function cabeceraFor(row: PeriodRow): Cabecera {
