@@ -5722,8 +5722,9 @@ job pull. The review's test drove the real loop with a fake host whose scan retu
 at once, no queued jobs, for 250 ms: it counted 195 pulls where it allows at most 2; the loop from
 before #955 made one. How quickly a real scan returns on a box, for example one with only a USB
 printer, has not been measured, so how often a real box repeats is not known. The running loop
-now waits out its polling interval before another pass, while sending the finished pass's devices
-on the next pull. The 250 ms fast-scan case checks both.
+starts passes at least one polling interval apart, while sending a finished pass's devices on the
+next pull. A 250 ms fast-scan case checks delivery without repeat passes; a controlled-clock case
+checks that an empty scan starts again at the next interval.
 
 **Comments and test titles still cite sections of specs that were deleted — OPEN (2026-09-26).**
 The docs prune that day deleted every spec and plan for built work (#711 and the direct docs commits

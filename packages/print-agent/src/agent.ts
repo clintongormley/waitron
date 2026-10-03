@@ -291,6 +291,8 @@ export function createAgent(opts: AgentOptions): Agent {
     const generation = scanGeneration;
     let found: DiscoveredDevice[] = [];
     try {
+      // A delivery wake may run the next tick early, but passes stay at least one interval apart.
+      nextScanAt = host.now() + intervalMs;
       found = await host.scan();
     } catch (error) {
       try {
@@ -301,8 +303,6 @@ export function createAgent(opts: AgentOptions): Agent {
     }
     scanning = false;
     if (generation === scanGeneration) {
-      // Sending a finished pass promptly must not start another pass before the polling interval.
-      nextScanAt = host.now() + intervalMs;
       if (found.length > 0) {
         scanFound = found;
         wake();
