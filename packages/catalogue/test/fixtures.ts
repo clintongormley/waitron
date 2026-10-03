@@ -28,7 +28,7 @@ import { createUnit } from "../src/units.js";
 import { productUnits, units } from "../src/schema/units.js";
 
 /** The unit a product's OWN `product_units` row names, or null when it has none (a
- * top-level product then reads as Each; a variant reads its parent's unit).
+ * top-level product then reads as Each). A variant reads its parent's unit whatever row it stores.
  * Throws when no such product exists, so a null always means "no unit row", never "wrong id". */
 export async function storedUnitId(tx: Transaction, productId: string): Promise<string | null> {
   const [row] = await tx

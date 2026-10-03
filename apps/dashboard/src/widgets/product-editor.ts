@@ -587,9 +587,10 @@ export class ProductEditor extends LitElement {
     if (!unit) return t("editor.missing_choice");
     return this.text(unit.abbreviation) || this.text(unit.name);
   }
-  /** The unit dropdown is a chooser behind the price field's button. It also has to be on screen
-   * whenever the server has rejected the unit — a field carrying an error cannot hide behind a
-   * button that gives no sign anything is wrong. Having no unit is NOT such a case: it means Each,
+  /** The unit dropdown is a chooser behind the price field's button, on a product's own page only
+   * (a variant's page has no unit dropdown). There it also has to be on screen whenever the server
+   * has rejected the unit — a field carrying an error cannot hide behind a button that gives no
+   * sign anything is wrong. Having no unit is NOT such a case: it means Each,
    * which the button names like any other unit. */
   private get unitOpen(): boolean {
     return this.inherited === null && (this.unitPickerOpen || this.error("unit") !== "");

@@ -3055,9 +3055,11 @@ it("says a refused unit on a variant's page in the message above Save, opening n
   expect(el.shadowRoot!.querySelector("[data-test=add-unit]")).toBeNull();
 });
 
-// Guard, green before the variant change: a product's own page keeps choosing its unit.
 it("keeps a product's unit button, its dropdown and Add unit on the product's own page", async () => {
-  const el = await mountVariant({ ...product, id: "coffee", unitId: litre.id });
+  const el = await mountPricing(
+    { ...product, id: "coffee", unitId: litre.id },
+    { units: [unit, litre] },
+  );
   expect(priceInput(el).fixedUnit).toBe(false);
   expect((await unitButton(el))!.textContent!.trim()).toBe(
     t("editor.per_unit").replace("{unit}", "l"),

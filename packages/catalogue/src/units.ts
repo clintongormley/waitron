@@ -246,7 +246,7 @@ export async function deleteUnit(tx: Transaction, unitId: string): Promise<void>
   if (references.length > 0) {
     throw new AppError("unit.in_use", { products: references });
   }
-  // Only variants' rows, which no read uses, are left on the unit; its foreign key restricts.
+  // Only variants' rows are left on the unit; its foreign key restricts.
   await tx.delete(productUnits).where(eq(productUnits.unitId, unitId));
   await tx.delete(units).where(eq(units.id, unitId));
 }

@@ -1754,13 +1754,14 @@ category; it was missing only for a variant saved Inactive and for a product wit
 editor with no prompt, so a variant added and not saved is lost silently — the likeliest cause; ask
 the owner if it recurs.
 
-**A variant always has its product's unit (A222, owner 2026-10-02) — DONE (PR number to follow).**
+**A variant always has its product's unit (A222, owner 2026-10-02) — DONE.**
 The owner: _"currently variants can have different units from their parents. i think that's a bad idea"_.
 A variant's page offers its own unit today (`renderUnit` in `product-editor.ts`, whose blank
 choice is the parent's unit). **Wanted:** a variant takes its product's unit and cannot set one; the
 field goes from the variant's page and the variant window, the server refuses or ignores a
 variant's unit, and variants holding a unit of their own are cleared (allowed before go-live,
-§3). The unit decides how a line's quantity and price are worked out, which reaches a sale
+§3). (2026-10-03: not cleared, pending the owner's OK; see "Left open" below.) The unit decides
+how a line's quantity and price are worked out, which reaches a sale
 record, so this takes the full review path (risk trigger: fiscal invariants); trace every reader
 of a variant's `unitId` first. A203 (extras as a fixed portion) allows for a variant's own unit
 ("or a parent's, which its variants without their own inherit") and gets simpler. The owner also
@@ -1778,7 +1779,8 @@ no unit.
 - No migration clears the unit rows variants already store. This carries the owner's A209 answer
   for categories (no data-migration code before go-live, CLAUDE.md §3) over to units, and awaits
   the owner's OK; the alternative is a one-statement clearing migration. The product, menu and unit
-  reads ignore such a row, and the variant's next save, or its unit's deletion, removes it.
+  reads ignore such a row, and the next save of the variant's own page, or its unit's deletion,
+  removes it.
 - A menu published before this keeps a variant's own unit, frozen in its published copy, until the
   menu is next published (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`, serves that
   copy; read, not run).
