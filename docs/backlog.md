@@ -4695,6 +4695,16 @@ approved.
   already trusts — the same GitHub URL over HTTPS. No case in `scripts/waitron-sh.test.mjs` covers a
   script not run from a file, a link `readlink -f` cannot follow, a folder the script cannot enter,
   or a box with neither curl nor wget.
+- **What `waitron.sh --reset install` (#1122) left open:** a build or pull that fails still leaves
+  the box's files changed, as a plain `install` always has. `fetch_box_files` replaces `compose.yml`
+  before any image work, and an install of `main` removes the image lines from `.env` before its
+  pull, so after a failure the box's files name the new ref while its running containers are the
+  old ones. Nothing has been taken down or wiped at that point, and the error asks for a re-run;
+  making it leave the files untouched means fetching into a temporary folder and moving the files
+  into place only once the images are in. Raised by the run-it review and not taken because it
+  restructures `install`. Also open: the simplify review suggested `waitron.sh reset … --install
+  [ref]` instead of `--reset … install [ref]`, reusing reset's own option reading; the form shipped
+  is the one the owner asked for, so that is the owner's call.
 
 ### B5. The recovery page and degraded mode
 
