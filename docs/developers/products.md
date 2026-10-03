@@ -268,9 +268,11 @@ whatever its own `category_id` holds: `effectiveProductColumns.categoryId` reads
 variant, `readProductEditor` returns `primaryCategoryId: null` for one, the editor save refuses a
 variant body naming a category (`product.invalid`, field `primaryCategoryId`) and writes the
 variant's column back to null, and deleting a category clears it from any variant still holding it
-(`vacateCategories`, `packages/catalogue/src/categories.ts`). No migration cleared the categories
-variants held before this rule (A209, 2026-10-03), so an older variant row may still store one until
-its next save or until that category is deleted. Its unit is
+(`vacateCategories`, `packages/catalogue/src/categories.ts`). No migration clears the categories
+variants held before this rule (A209), and the owner decided on 2026-10-03 that none will be
+written: there is no data-migration code before go-live (CLAUDE.md §3) and the dev venue is reset
+before then. So an older variant row may still store one until its next save or until that
+category is deleted. Its unit is
 its parent's while it stores none of its own (`unitOwnerJoin`, same file). Its extras and options
 lists are always its parent's. Its Name, customer-facing name and kitchen name are never inherited: a blank customer or
 kitchen name falls back to the variant's own staff name (_The three names_, above).

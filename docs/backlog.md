@@ -1430,11 +1430,11 @@ from any variant still holding it. The Add category button, `editor.add_category
 screen's nested category create and the `dashboard-category-form` element went; the Products list
 leaves a variant's category cell empty without comparing.
 **Left open:**
-- No migration clears the categories variants already store: the campaign lane that built this
-  adds no migration while another of its pull requests (#1076, A200) waits for the owner. The
-  effective category (`effectiveProductColumns.categoryId`) and the editor's read ignore a stored
-  one, and the variant's next save, or that category's deletion, clears it. Whether to add a
-  one-statement migration that clears them once nothing is parked is a question for the owner.
+- No migration clears the categories variants already store, and none will be written (owner
+  decision, 2026-10-03: no data-migration code before go-live, CLAUDE.md §3, and the dev venue is
+  reset before then). The effective category (`effectiveProductColumns.categoryId`) and the
+  editor's read ignore a stored one, and the variant's next save, or that category's deletion,
+  clears it.
 - Prep Stations marks a product exception that can never apply when an earlier category exception
   already catches the product and every one of its variants (`family.every(...)` in `routingModel`,
   `packages/venue-service/src/routing-store.ts`). A variant's category is now its product's, so the
