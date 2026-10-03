@@ -1022,8 +1022,10 @@ Status shouldn't be a hint, it is a value that appears in the dropdown"_. `wt-da
 each column filter's `wt-combobox` a first option `{ value: "", label: allLabel }` and also passes
 `allLabel` as its `placeholder`. The table now asks the combobox to display its offered empty-string
 option as a selected value. "Any status" and the other table-filter "Any …" choices use the ordinary
-value style. The empty string still means no filter to the saved view (`#persistView`) and to
-`wt-filter-change` listeners; their existing behavior tests remain in place.
+value style. The standalone product editor uses the same combobox setting for "Uncategorised" and
+"No course"; a variant's inherited values still read as hints. The empty string still means no
+filter to the saved view (`#persistView`) and to `wt-filter-change` listeners; their existing
+behavior tests remain in place.
 
 **A table filter's dropdown keeps one width whatever is chosen (A194, owner 2026-10-02) — OPEN.**
 The owner, on a screenshot of the Modifiers screen's status filter showing "Active" after "Any
@@ -1586,7 +1588,8 @@ not changed:**
 - on a product of its own, the main category's "Uncategorised" and the course's "No course"
   choices still have the empty value, so the shared dropdown draws them as the grey prompt when
   chosen, as Each was; the owner's answer on A178c (2026-10-02) asked for the stand-in for Each
-  alone;
+  alone. A193 (2026-10-03) later gave those choices the selected-value look while retaining their
+  empty values;
 - a blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }` — the same parsing is
   on `main` before A178b (`#buildSchedule`'s `split(":")`); what the server does with it was not
   checked;
