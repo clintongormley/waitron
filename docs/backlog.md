@@ -1526,7 +1526,7 @@ blank language other than the default shows the variant's own default-language d
 hint, where there is one, as a product's does; the parent's description is a hint only while the
 variant describes itself in no language.
 
-**Variants in the Products list look like part of their product (A221, owner 2026-10-02) — DONE.**
+**Variants in the Products list look like part of their product (A221, owner 2026-10-02) — DONE (#1081).**
 The owner, on a screenshot of an opened "Cured pork loin" with its variant "More pork": _"it is
 there, but it doesn't look very good"_ — a heavy black triangle far to the left, the variant's name
 starting left of its product's in the same bold, and its row repeating "Made at" and filling the
@@ -4411,6 +4411,19 @@ approved.
   `apps/server/src/print-api.ts` already does, rather than one `runAgentOnce` in one transaction.
 
 ### B7. Provisioning and build debt
+
+**`@waitron/verifactu` 0.2.0 (A230, owner 2026-10-03) — BLOCKED on an owner decision.** 0.2.0 hashes,
+builds and serialises exactly what 0.1.0 did for the same input (both suites' captured inputs fed to
+both published packages, 2026-10-03), but its validator refuses every sale Waitron builds today: no
+`ClaveRegimen` on a VAT line (`packages/fiscal-verifactu/src/backend.ts`), which AEAT's rules make
+mandatory, so today's filings likely lack a required field (not tried against AEAT). It also refuses
+test tax IDs with a wrong check letter, including the golden fingerprint test's pinned one, so that
+test cannot pass unedited. 0.1.0's lookup state names were wrong (`Correcta` for AEAT's `Correcto`),
+so `reconcile.ts` would not recognise a real AEAT status. On 0.2.0, 156 of 420 fiscal-verifactu and
+699 of 7,775 apps/server tests fail. The options, the extra refusals that can reach a till (€3,010
+simplified-invoice limit, a customer tax ID's check letter, a VAT of 0.00 on a tiny base) and the
+recommendation are in lane B's question of 2026-10-03; the measurement branch
+`feat/service-verifactu-0-2-0` is local only.
 
 - **Resetting a box without a terminal** (owner, 2026-10-02). An operator who set the box up in
   Demo and now wants to Prepare has to wipe Demo away first, and the only wipe is
