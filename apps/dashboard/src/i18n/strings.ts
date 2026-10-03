@@ -2385,7 +2385,7 @@ export const es: Record<StringKey, string> = {
   "extras.min_picks": "Selecciones mínimas",
   "extras.max_picks": "Selecciones máximas",
   "extras.picks_heading": "Número de selecciones",
-  "extras.picks_none": "Ninguno",
+  "extras.picks_none": "Ninguna",
   "extras.items": "Productos ofrecidos",
   "extras.product": "Producto",
   "extras.product_added": "Se ha añadido {name}.",

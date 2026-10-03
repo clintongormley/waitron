@@ -1434,7 +1434,7 @@ the backup screen, the extras list editor and the venue operations screen).
   instead of being disabled there;
 - in the extras list editor, Minimum and Maximum choices sit under a "Number of choices" heading.
   Both are clearable from 1, so − goes 3 → 2 → 1 → blank, and an empty box shows the hint "None"
-  ("Ninguno"). A blank minimum is saved as 0, and a saved 0 shows as the empty box; a typed 0 is
+  ("Ninguna"). A blank minimum is saved as 0, and a saved 0 shows as the empty box; a typed 0 is
   kept as typed. A blank maximum means no limit. A maximum of 0 is refused by the form
   (`extras.max_picks_zero`) and by `parseExtraListInput`
   (`packages/catalogue/src/extra-contract.ts`, `extras.invalid` naming `maxPicks`); the database

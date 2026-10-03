@@ -1056,9 +1056,9 @@ it("paints the choices heading from tokens", async () => {
 
 it.each([
   [1280, "en", "None"],
-  [1280, "es", "Ninguno"],
+  [1280, "es", "Ninguna"],
   [390, "en", "None"],
-  [390, "es", "Ninguno"],
+  [390, "es", "Ninguna"],
 ] as const)(
   "shows the whole None in both empty boxes at %ipx in %s",
   async (frame, locale, word) => {
