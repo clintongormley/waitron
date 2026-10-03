@@ -4912,8 +4912,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   booking, Needs clearing, Bill requested and the kitchen signals), which a venue can switch off,
   which customers can trigger (asking for the bill or calling a waiter from a QR code), whether
   marking a table reserved by hand becomes a built-in action, and whether the hand-set labels on
-  Venue settings › Tables are still needed after that — the owner expects they may not be. From
-  A261 §10.
+  Venue settings › Tables are still needed after that — the owner expects they may not be, and if
+  they stay, they sit beside a table's state as labels rather than being states. From A261 §10.
 - **Counter/walk-up kitchen fire** — the #193 follow-up, the next piece of menu work.
 - **Menu draft/published state** and time-of-day / seasonal scheduling.
 - **KDS corrections deferred from #191** (owner, 2026-09-01): a moved dish must keep its kitchen
