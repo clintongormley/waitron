@@ -94,7 +94,7 @@ import {
 } from "./testing/zone-offers.js";
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { createException, setClaim } from "@waitron/venue-service";
+import { createException, setClaim, writePrintHeldWork } from "@waitron/venue-service";
 import {
   replaceStationHours,
   setStationFallback,
@@ -106,6 +106,7 @@ import { openPartyTab, serveLine } from "./testing/serve-line.js";
 import { inTx, join, orderForParty, seat, setupPartyVenue, split } from "./testing/party-venue.js";
 import "./errors.js";
 import { cancelLine } from "./testing/cancel-line.js";
+import { placeGroups } from "./order-groups.js";
 
 const LOCALE = "es-ES";
 
@@ -5710,8 +5711,13 @@ describe("a cancel's extras cascade (FIX 2)", () => {
   it("rescales a held kitchen ticket by the extra's frozen 50 g portion", async () => {
     const { cfg, cafeId, catalogueId, kgUnitId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const extrasStation = await createStation(tx, cfg, { name: "Emplatado" });
+      await attachedPrinter(tx, cfg, { name: "Cocina", isDefault: true }, "P-Cocina");
+      const { station: extrasStation } = await attachedPrinter(
+        tx,
+        cfg,
+        { name: "Emplatado" },
+        "P-Emplatado",
+      );
       const extrasCategory = await createCategory(tx, { name: "Extras" });
       await setClaim(tx, cfg, extrasCategory.id, { kind: "station", stationId: extrasStation.id });
       const extra = await createProduct(tx, {
@@ -5744,21 +5750,37 @@ describe("a cancel's extras cascade (FIX 2)", () => {
         LOCALE,
       );
       await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
+      await writePrintHeldWork(tx, true);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openPartyTab(tx, cfg, { tableId });
-      await addRound(tx, cfg, tabId, [
-        {
-          productId: cafeId,
-          quantity: "2",
-          hold: true,
-          extras: [{ listId: list.id, picks: [{ productId: extra.id, quantity: 3 }] }],
-        },
-      ]);
+      const { tabId, partyId } = await openPartyTab(tx, cfg, { tableId });
+      const offers = await tableOffers(tx, cfg);
+      await placeGroups(tx, cfg, partyId, {
+        operatorId: OPERATOR,
+        groups: [
+          {
+            release: "hold",
+            lines: offers.toOfferLines([
+              {
+                productId: cafeId,
+                quantity: "2",
+                extras: [{ listId: list.id, picks: [{ productId: extra.id, quantity: 3 }] }],
+              },
+            ]),
+          },
+        ],
+      });
       const [{ revision }] = await tx
         .select({ revision: workingOrders.revision })
         .from(workingOrders)
         .where(eq(workingOrders.id, tabId));
+      const beforeJobs = await tx.select({ id: printJobs.id }).from(printJobs);
       await updateOrderLine(tx, cfg, tabId, 1, { quantity: "3" }, revision!);
+      const changedJobs = (
+        await tx.select({ id: printJobs.id, payload: printJobs.payload }).from(printJobs)
+      )
+        .filter((job) => !beforeJobs.some((before) => before.id === job.id))
+        .map((job) => decodeTicket(job.payload));
+      expect(changedJobs.join("\n")).toContain("+0.150 x Jamón");
       const rows = await tx.execute<{
         quantity: number;
         price_quantity: number;
@@ -5772,6 +5794,18 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       expect(rows.rows).toEqual([
         { quantity: 450, price_quantity: 50, line_total: 9, ticket_quantity: 450 },
       ]);
+      const [{ revision: nextRevision }] = await tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, tabId));
+      const beforeNoteJobs = await tx.select({ id: printJobs.id }).from(printJobs);
+      await updateOrderLine(tx, cfg, tabId, 1, { note: "Sin sal" }, nextRevision!);
+      const noteJobs = (
+        await tx.select({ id: printJobs.id, payload: printJobs.payload }).from(printJobs)
+      )
+        .filter((job) => !beforeNoteJobs.some((before) => before.id === job.id))
+        .map((job) => decodeTicket(job.payload));
+      expect(noteJobs.join("\n")).toContain("+0.450 x Jamón");
     });
   });
 

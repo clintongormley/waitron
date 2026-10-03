@@ -5138,7 +5138,7 @@ async function planHeldCorrections(
           edit.modified
             ? (child.ticket?.firedQuantity ?? 0)
             : (child.ticket?.firedQuantity ?? 0) -
-                decimalToThousandths(extraQuantityFor(perDish, edit.quantity)),
+                decimalToThousandths(extraQuantityFor(perDish, edit.quantity, child.priceQuantity)),
         ),
       ),
     ]),
@@ -5149,8 +5149,8 @@ async function planHeldCorrections(
           edit.parent,
           child,
           edit.modified
-            ? decimalToThousandths(extraQuantityFor(perDish, edit.quantity))
-            : decimalToThousandths(extraQuantityFor(perDish, edit.quantity)) -
+            ? decimalToThousandths(extraQuantityFor(perDish, edit.quantity, child.priceQuantity))
+            : decimalToThousandths(extraQuantityFor(perDish, edit.quantity, child.priceQuantity)) -
                 (child.ticket?.firedQuantity ?? 0),
         ),
       ),
