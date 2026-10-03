@@ -37,6 +37,14 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
+    getLocales: vi.fn().mockResolvedValue({
+      locales: [
+        { code: "es-ES", label: "Español" },
+        { code: "en-GB", label: "English" },
+      ],
+      venueDefault: "es-ES",
+      loginDefault: "es-ES",
+    }),
     getTill: vi.fn().mockResolvedValue({
       locale: "es-ES",
       venueName: "Bar Pepe",
