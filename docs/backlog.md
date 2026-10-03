@@ -5931,7 +5931,7 @@ run without the code):
 give it the lock check), with a receipt each; key the label lookup on own properties; rename or
 rewrite that wake-lock test; and rename those two show-floor test titles.
 
-**The email-change form calls an empty code field an "authentication code" — DONE (W12; found by
+**The email-change form calls an empty code field an "authentication code" — DONE (W12, #1114; found by
 C61's review, #859, 2026-09-29).** In the Profile screen's email mode a blank confirmation code now
 shows `profile.email_code_required` ("Enter the code from your email" / "Introduce el código de tu
 correo"); the authenticator-app setup keeps `profile.code_required`
