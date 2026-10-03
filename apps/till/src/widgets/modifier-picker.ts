@@ -4,11 +4,12 @@ import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
 import { baseStyles } from "@waitron/ui";
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
-import { formatMoney } from "@waitron/shared";
+import { decimal, formatMoney, toScale } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
-import { lineGross, productAsVariant } from "../state/order-line.js";
+import { lineGross, productAsVariant, quantityPlaces } from "../state/order-line.js";
 import { optionSnapshotOf } from "../state/held-options.js";
 import { productName } from "./product-name.js";
+import { descriptionFor } from "./dish-format.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import type { LineSelection, OrderLine, SelectedExtra } from "../state/working-order.js";
 import type {
@@ -500,6 +501,14 @@ export class TillModifierPicker extends LitElement {
     return Number(item.price) !== 0 ? formatMoney(item.price, currentLocale()) : nothing;
   }
 
+  #extraName(item: OfferedExtraItem): string {
+    if (item.portion === undefined || item.unit === undefined) return item.name;
+    const places = Math.max(item.unit.precision, quantityPlaces(item.portion));
+    const amount = toScale(decimal(item.portion), places);
+    const unit = descriptionFor(item.unit.abbreviation, "");
+    return `${item.name} · ${amount}${unit ? ` ${unit}` : ""}`;
+  }
+
   #renderPick(list: OfferedExtrasList, item: OfferedExtraItem, atListMax: boolean) {
     const checked = this.#countOf(list.id, item.productId) >= 1;
     return html`
@@ -515,7 +524,7 @@ export class TillModifierPicker extends LitElement {
             this.#setCount(list.id, item.productId, (e.target as HTMLInputElement).checked ? 1 : 0);
           }}
         />
-        <span class="option-name">${item.name}</span>
+        <span class="option-name">${this.#extraName(item)}</span>
         <span class="option-delta">${this.#priceOf(item)}</span>
       </label>
     `;
@@ -526,7 +535,7 @@ export class TillModifierPicker extends LitElement {
     const test = `pick-${list.id}-${item.productId}`;
     return html`
       <div class="option stepper-option">
-        <span class="option-name">${item.name}</span>
+        <span class="option-name">${this.#extraName(item)}</span>
         <span class="option-delta">${this.#priceOf(item)}</span>
         <span class="stepper">
           <wt-button
