@@ -37,7 +37,7 @@ export const priceSearchText = (shown: string, raw: readonly string[]) =>
   [shown, shown.replace(/\u00a0/g, " "), ...raw].join(" ");
 
 /** Each language's text after its upper-case code, blank ones left out: a folded names section's
- * closed line as `wt-disclosure`'s `summaryFields`, and the product editor's Descriptors rows. */
+ * closed line as `wt-disclosure`'s `summaryFields`. */
 export function namesLine(
   locales: readonly string[],
   text: Record<string, string>,

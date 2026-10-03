@@ -3,7 +3,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, submitOnEnter, type ComboboxOption } from "@waitron/ui";
+import { baseStyles, submitOnEnter, type ComboboxOption, type SummaryField } from "@waitron/ui";
 import { resolveContentText } from "@waitron/shared";
 import { DIETARY_LABELS } from "@waitron/catalogue/src/dietary-declarations.js";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
@@ -766,12 +766,29 @@ export class ProductEditor extends LitElement {
     </div>`;
   }
 
+  private foldedValue(label: string, own: string | null, inherited: () => string): SummaryField {
+    if (own !== null) return { label, value: own };
+    if (this.inherited === null) return { label, value: t("modifiers.none_specified") };
+    return { label, value: inherited(), placeholder: true };
+  }
+
   private renderKitchen() {
-    const course = this.courses.find(({ id }) => id === this.draft.courseId)?.name;
+    const { courseId } = this.draft;
     const summary = [
-      { label: t("editor.kitchen_name"), value: this.draft.kitchenName?.trim() },
-      { label: t("editor.summary_course"), value: course },
-    ].filter((field): field is { label: string; value: string } => !!field.value);
+      // A variant's blank kitchen name falls back to its own Name, never the parent's.
+      {
+        label: t("editor.kitchen_name"),
+        value: this.draft.kitchenName?.trim() || t("modifiers.none_specified"),
+      },
+      this.foldedValue(
+        t("editor.summary_course"),
+        courseId === null
+          ? null
+          : (this.courses.find(({ id }) => id === courseId)?.name ?? t("editor.missing_choice")),
+        () =>
+          this.blankChoice(t("modifiers.none_specified"), this.courses, this.inherited?.courseId),
+      ),
+    ];
     return html`<wt-disclosure
       data-section="kitchen"
       heading=${t("editor.section_kitchen")}
@@ -834,8 +851,11 @@ export class ProductEditor extends LitElement {
   }
 
   private languagesLine(value: LocalizedText | null): string {
-    return namesLine(this.locales, value ?? {})
-      .map(({ label, value: text }) => `${label}: ${text}`)
+    const none = t("modifiers.none_specified");
+    const text = value ?? {};
+    if (!namesLine(this.locales, text).length) return none;
+    return this.locales
+      .map((locale) => `${locale.toUpperCase()}: ${text[locale]?.trim() || none}`)
       .join(SUMMARY_SEPARATOR);
   }
 
@@ -891,11 +911,14 @@ export class ProductEditor extends LitElement {
     const summary = [
       { label: t("editor.name"), value: this.languagesLine(this.draft.customerName), lines: 1 },
       {
-        label: t("editor.description"),
-        value: this.languagesLine(this.draft.description),
+        ...this.foldedValue(
+          t("editor.description"),
+          described.length ? this.languagesLine(this.draft.description) : null,
+          () => this.languagesLine(this.inherited!.description),
+        ),
         lines: 2,
       },
-    ].filter((row) => row.value);
+    ];
     return html`<wt-disclosure
       data-section="descriptors"
       heading=${t("editor.section_descriptors")}
@@ -964,14 +987,35 @@ export class ProductEditor extends LitElement {
   }
 
   private renderNutrition() {
+    const none = t("modifiers.none_specified");
+    const allergens = (value: Record<string, unknown>) =>
+      Object.keys(value)
+        .map((code) => allergenName(code))
+        .join(", ") || none;
+    const dietary = (labels: readonly DietaryLabel[]) =>
+      labels.map((label) => t(`editor.diet.${label}`)).join(", ") || none;
+    const { allergens: ownAllergens, dietaryDeclarations: ownDietary } = this.draft;
+    const parent = this.inherited;
     const summary = [
-      ...Object.keys(this.draft.allergens ?? {}).map((code) => allergenName(code)),
-      ...(this.draft.dietaryDeclarations ?? []).map((label) => t(`editor.diet.${label}`)),
-    ].join(SUMMARY_SEPARATOR);
+      // On a product's own page a list never reviewed reads as the open line reads it.
+      this.foldedValue(
+        t("modifiers.allergens"),
+        ownAllergens === null ? null : allergens(ownAllergens),
+        () =>
+          parent!.allergens === null
+            ? t("editor.allergens_unreviewed")
+            : allergens(parent!.allergens),
+      ),
+      this.foldedValue(
+        t("modifiers.dietary_preferences"),
+        ownDietary === null ? null : dietary(ownDietary),
+        () => dietary(parent!.dietaryDeclarations),
+      ),
+    ];
     return html`<wt-disclosure
       data-section="nutrition"
       heading=${t("editor.section_nutrition")}
-      summary=${summary}
+      .summaryFields=${summary}
     >
       <dashboard-allergen-dietary-picker
         .busy=${this.suspended}

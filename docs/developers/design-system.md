@@ -392,7 +392,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-icon` | `name`, `size` (`sm`\|`md`\|`lg`) | — |
 | `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name), `decorative` | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
-| `wt-disclosure` | `heading`, `summary` (shown under the heading while the section is closed), `summaryFields` (`{ label, value }[]`; when it holds any, the closed line is these instead of `summary`: each value after its bold label and a colon, joined with a middot), `summaryRows` (`{ label, value, lines }[]`; when it holds any, it is used instead of both: one row per entry, the value after its bold label and a colon, each row cut with an ellipsis after its own `lines` lines, so a long value never widens the header), `open` (reflected), `has-error` (reflected); default slot (body). The header is a `<button aria-expanded>` and the shadow root delegates focus to it; clicking it toggles `open`. `has-error` forces the section open and makes the header inert, so a section holding a validation error cannot be collapsed out of view | `wt-toggle` — `detail: { open: boolean }` |
+| `wt-disclosure` | `heading`, `summary` (shown under the heading while the section is closed), `summaryFields` (`{ label, value, placeholder? }[]`; when it holds any, the closed line is these instead of `summary`: each value after its bold label and a colon, joined with a middot; a value marked `placeholder` is drawn in italic, as a field's placeholder is), `summaryRows` (`{ label, value, lines, placeholder? }[]`; when it holds any, it is used instead of both: one row per entry, the value after its bold label and a colon, each row cut with an ellipsis after its own `lines` lines, so a long value never widens the header, and a `placeholder` value in italic), `open` (reflected), `has-error` (reflected); default slot (body). The header is a `<button aria-expanded>` and the shadow root delegates focus to it; clicking it toggles `open`. `has-error` forces the section open and makes the header inert, so a section holding a validation error cannot be collapsed out of view | `wt-toggle` — `detail: { open: boolean }` |
 | `wt-lozenge` | `color` (a hex string; empty or invalid renders the neutral chip); default slot (label) | — |
 | `wt-count-badge` | `count` (renders nothing at zero; shows `99+` above 99), `tone` (`neutral`\|`warning`\|`error`, reflected). It has no accessible name: the control it decorates must say the count | — |
 | `wt-toast` | `open`, `tone` (`info`\|`error`, reflected; info is announced politely through `role="status"`, error assertively through `role="alert"`), `message`, `close-label` (required: the close button's accessible name, and an empty one leaves that button nameless), `duration` (milliseconds, default `8000`; `0` keeps it open); `show()` opens it and restarts the full countdown (unless the pointer or keyboard focus is on it, when the countdown waits), which is how to re-announce an identical message. While the pointer or keyboard focus is on it the countdown never runs, even when the message changes; once both have left, the full duration restarts. Positioning belongs to the consumer, which must also register the `close` icon | `wt-activate` — `detail: {}` (the message was pressed; the toast then closes); `wt-close` — `detail: {}` (closed by the timer, the close button, or after activation) |
@@ -1114,17 +1114,28 @@ variant, and then folds too, with the base price and VAT on its closed line as n
 Three rules make the fold safe rather than merely tidy.
 
 **Every collapsed section carries a summary of what is inside it**, passed as `summary`, as named
-values in `summaryFields`, or as rows in `summaryRows`, built from what a person has filled in. Each
+values in `summaryFields`, or as rows in `summaryRows`. Each
 `summaryRows` row is cut after its own number of lines, which can hide a later value in that row
 completely (a long English name hides the Spanish one), so opening the section is what shows every
-value. Build it from the values themselves, skipping the empty ones, joined with a middot. The
-product editor's Kitchen and Pricing sections give each value after its field's name in bold
-(`summaryFields`); its Nutritional info section still lists bare values (A211). The Kitchen section
-reads "**Kitchen name:** Café c/leche · **Course:** Drinks". The product editor's Descriptors section has one row per field, its languages
+value. Build it from the values themselves, joined with a middot. The product editor's Kitchen,
+Descriptors and Nutritional info sections name every field they hold, filled or not, each value
+after its field's name in bold, and a field with nothing set reads "None specified" ("Sin
+especificar", `modifiers.none_specified`), the words the open allergen and dietary lines use
+(A211). The Kitchen section reads "**Kitchen name:** Café c/leche ·
+**Course:** Drinks", or "**Kitchen name:** None specified · **Course:** None specified" with
+neither set. The Descriptors section has one row per field, its languages
 side by side and only the field name bold — "**Name:** EN: Beef tenderloin · ES: Solomillo de
 ternera", cut after one line, then "**Description:** EN: … · ES: …", cut after two — so it stays two
-rows however many languages the venue has. An empty summary means an empty section, which is a
-useful signal in itself. A names section (the Options and Extras editors' "Customer-facing names")
+rows however many languages the venue has; a blank language reads "None specified" in its place,
+and a row with every language blank reads "None specified" alone. Nutritional info lists the
+allergens and the dietary preferences separated by commas, as the open lines do. On a variant's
+page, a field the variant leaves blank to take its parent's value (the course, the description,
+the allergens, the dietary preferences) shows the parent's value in italic (`placeholder`), or,
+where the parent has none either, "None specified", or "Not yet reviewed" for allergens the parent
+has not had reviewed. A variant's blank kitchen and customer-facing names fall back to its own
+Name, not the parent's, so they read "None specified" as on a product. The Pricing fold still
+leaves a blank base price, and a VAT class the form does not offer, off its line. A names section
+(the Options and Extras editors' "Customer-facing names")
 puts each language's customer-facing name after its upper-case code in bold — "**ES:** ¿Cómo la
 quiere hecha? · **EN:** How would you like it cooked?" — leaving blank names out, so a section with
 every name blank shows no line. It is built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`)

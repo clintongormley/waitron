@@ -1447,17 +1447,38 @@ calls it).
 overlapping element (such as an empty `wt-input`), a background image or gradient, content too
 short or not text — passes, so contrast in those places is checked by nobody.
 
-**A folded section says what is missing, not only what is filled in (A211) — OPEN.** The owner:
+**A folded section says what is missing, not only what is filled in (A211) — DONE.** The owner:
 _"we should show the missing values under kitchen and descriptors and nutritional info when
-collapsed"_. Today each folded section's line lists only the filled values
-(`renderKitchen`, `renderNutrition` and the Descriptors section), so a product with no kitchen
-name, course, allergens or dietary preferences shows a heading and a blank line. **Wanted:**
+collapsed"_. Before A211, each folded section's line listed only the filled
+values (`renderKitchen`, `renderNutrition` and the Descriptors section), so a product with no
+kitchen name, course, allergens or dietary preferences showed only its heading. **Wanted:**
 every field is named on the line whether or not it has a value, e.g. "**Kitchen name:** none ·
 **Course:** none", "**Allergens:** none specified · **Dietary preferences:** none specified". Build
 it with A200's product-editor decision above (each value after its bold field name, the
 Descriptors line one row per field), which this extends to the empty case. Choose the wording for
 "nothing set" once, in both languages; on a variant's page an empty value shows the parent's
 value, as the fields themselves do (A172).
+**Built:** the product editor's Kitchen, Descriptors and Nutritional info folds name every field
+they hold: Kitchen (kitchen name, course), Descriptors (customer-facing name, description, one row
+each) and Nutritional info (allergens, dietary preferences, now named fields rather than a bare
+list). Nothing set reads "None specified" ("Sin especificar"), the existing
+`modifiers.none_specified` the open allergen and dietary lines already use. In a Descriptors row a
+blank language reads "None specified" in its place ("EN: Steak · ES: None specified"), and a row
+with every language blank reads "None specified" alone. On a product's own page, allergens never
+reviewed and allergens reviewed as none both read "None specified", folded as on the open line. On
+a variant's page the course, description, allergens and dietary preferences left blank show the
+parent's value in italic (a new `placeholder` mark on `wt-disclosure`'s `summaryFields` and
+`summaryRows`), or "None specified", or "Not yet reviewed" for allergens the parent has not had
+reviewed; a variant's kitchen and customer-facing names do not come from its parent, so blank
+they read "None specified" as on a product. A product's course the course list does not hold reads
+"Unavailable selection". Looked at, 2026-10-03, at 1280 and 390 wide in both
+themes and both languages.
+**Left open:** the same "nothing" still reads two ways in one window: the course dropdown says
+"— none —", and on a variant's page the hints under the open Nutritional info say "None"
+(`editor.allergens_none`, `editor.diet_none`) where the closed line says "None specified". At 390
+wide a two-field line can wrap inside a value ("Dietary preferences: None" / "specified"). The
+options list and extras list forms' names sections still leave a blank name out (`namesLine`).
+Whether the Pricing fold should also name an empty base price or VAT is a question for the owner.
 
 **An Add course button beside the course dropdown (A212) — DONE (#1087).** The owner:
 _"perhaps we should add an "Add course" button under Courses, which would open a modal to edit
@@ -1515,6 +1536,10 @@ it. And on a product's own page a reviewed-empty allergen list and one nobody ha
 (`allergens: null`) both read "None specified"; before #1079 both read "None selected", so this
 predates it (checked against the old code in #1079's review). The variant hint already tells the
 two apart ("Not yet reviewed", `editor.allergens_unreviewed`); the product line does not.
+(2026-10-03, A211: a variant's closed Nutritional info line now shows the parent's values in
+italic, but the open line still reads "None specified" above the hint, so the first point stands;
+on a product's own page the closed line reads both cases as "None specified" too, as the open line
+does, so the second stands.)
 
 **No box around Pricing (A214) — DONE (#1065).** The owner: _"Pricing also doesn't need the box around it"_.
 Built: `renderPrice` draws a borderless `fieldset class="group"` whose legend is the same upper-case

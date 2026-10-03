@@ -458,15 +458,19 @@ photo that exists was accepted.
 
 `dashboard-product-editor` (`apps/dashboard/src/widgets/product-editor.ts`) is one short form. The
 fields that change often are always visible; everything else is folded into a `wt-disclosure`
-section that shows a summary built from what is filled in. The Descriptors rows are cut after one
-and two lines, which can hide a later language's value, so opening the section is what shows every
-value. Top to bottom: Name, with the photo beside it as a small button that opens the image
+section with a summary on its closed line. Kitchen, Descriptors and Nutritional info name each
+field they hold, with "None specified" (`modifiers.none_specified`) for one left blank; the Pricing
+fold leaves a blank base price, and a VAT class the form does not offer, off its line. The
+Descriptors rows are cut after one and two lines, which can hide a later language's value, so
+opening the section is what shows every value. Top to bottom: Name, with the photo beside it as a
+small button that opens the image
 library (absent when the editor is given no `api`), Category, Available, Standalone
 ordering (absent on a variant's page), ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info, Pricing (a ▸ fold once some variant is Active),
 Variants, Modifiers, then Cancel and Save. An Inactive product's editor also opens with a line
 saying so, and offers Restore beside Save. Opened on a variant, the same form is the variant's own
 page: it has no Standalone ordering, Modifiers or Variants section, and each field the variant may
-leave blank to take the parent's value shows that value as its hint.
+leave blank to take the parent's value shows that value as its hint; the course, description,
+allergens and dietary preferences also show it in italic on their folded section's closed line.
 
 The form's Modifiers section is one ordered list mixing extras lists and options lists, reordered by
 each row's handle — a pointer drag or the arrow keys (`reorder-table.ts`'s `handle`) — with each row
