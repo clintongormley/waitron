@@ -10,6 +10,7 @@ import { createOptionList } from "./options.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
 import * as productModifiers from "./product-modifiers.js";
 import { readProductExtras } from "./extra-projection.js";
+import { createUnit } from "./units.js";
 
 const UNKNOWN_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 
@@ -96,6 +97,54 @@ const carries = async (tx: Transaction, dish: keyof typeof offers, ...listIds: s
 };
 
 describe("what a product's own extras lists offer", () => {
+  it("returns the effective unit and portion with a rounded per-pick price", async () => {
+    const { listId, unitId, weightedId } = await run(async (tx) => {
+      const kg = await createUnit(
+        tx,
+        { name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+        "en",
+      );
+      const weighted = await createProduct(tx, {
+        catalogueId: (await createCatalogue(tx, { name: "Weight" })).id,
+        categoryId: null,
+        name: "Olives by weight",
+        unitId: kg.id,
+        unitPrice: "0.27",
+        vatClass: "reduced",
+      });
+      const list = await createExtraList(
+        tx,
+        {
+          name: "Weighted toppings",
+          items: [
+            { productId: weighted.id, portion: "0.050" },
+            { productId: ids.bacon, price: "1.50" },
+          ],
+        },
+        "en",
+      );
+      await carries(tx, "burger", list.id);
+      return { listId: list.id, unitId: kg.id, weightedId: weighted.id };
+    });
+
+    const offered = await run((tx) => readProductExtras(tx, [ids.burger]));
+    expect(offered.get(ids.burger)![0]!.id).toBe(listId);
+    expect(offered.get(ids.burger)![0]!.items).toEqual([
+      expect.objectContaining({
+        productId: weightedId,
+        portion: "0.050",
+        price: "0.01",
+        unit: { id: unitId, abbreviation: { en: "kg" }, precision: 3 },
+      }),
+      expect.objectContaining({
+        productId: ids.bacon,
+        portion: "1.000",
+        price: "1.50",
+        unit: expect.objectContaining({ precision: 0 }),
+      }),
+    ]);
+  });
+
   it("prices each item from the list item and then the product, with no menu offer involved", async () => {
     const list = await run((tx) => createExtraList(tx, toppings(), "en"));
     await run((tx) => carries(tx, "burger", list.id));
