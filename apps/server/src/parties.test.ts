@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -14,9 +14,11 @@ import {
   tableServiceStatuses,
   parties,
   partyTables,
+  saleSettlements,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { listOutstandingSales } from "@waitron/core";
 import { writeClearingWorkflow } from "@waitron/venue-service";
 import { MONEY_SCALE, decimal, sumDecimals, toScale } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
@@ -47,7 +49,17 @@ import {
   readPartyBills,
   runServiceCommand,
   partyFamily,
+  type PartyBill,
 } from "./parties.js";
+import {
+  placedCounterBillMovedTo,
+  provisionBillVenue,
+  registroCount,
+  seatedWith,
+  send,
+  tendersOfBill,
+} from "./testing/bill-venue.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { splitBill, mergeBills } from "./bill-actions.js";
@@ -1232,6 +1244,137 @@ describe("merged parties keep their bills", () => {
       return row!.id;
     });
     expect(await inTx(suite, (tx) => partyFamily(tx, lone))).toEqual([lone]);
+  });
+});
+
+describe("a merged party's invoiced bill, collected at the till (spec §12 item 9)", () => {
+  it("is owed on the surviving visit and blocks Finish until the till collects it under the invoice filed at placing", async () => {
+    const venue = await provisionBillVenue(suite.db);
+    const invoiceFirst = await inTx(suite, (tx) =>
+      offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
+    );
+    const s = await seatedWith(venue);
+    // Placed in an invoice-first zone, so its invoice is filed before it reaches the party.
+    const billId = await placedCounterBillMovedTo(venue, invoiceFirst.zoneId, s);
+    const filed = await inTx(suite, (tx) =>
+      tx
+        .select({ id: sales.id, settledAt: saleSettlements.settledAt })
+        .from(sales)
+        .leftJoin(saleSettlements, eq(saleSettlements.saleId, sales.id))
+        .where(eq(sales.workingOrderId, billId)),
+    );
+    expect(filed).toEqual([{ id: expect.any(String), settledAt: null }]);
+    expect(registroCount(venue, billId)).toBe(1);
+    const t = await seatedWith(venue);
+
+    const joined = await send(venue.app, venue.cookie, "POST", `/api/parties/${t.partyId}/join`, {
+      tableId: s.tableId,
+      bills: "merge",
+      expectedPartyRevision: await revisionOf(suite, t.partyId),
+      otherPartyId: s.partyId,
+      expectedOtherPartyRevision: await revisionOf(suite, s.partyId),
+    });
+    expect(joined.status).toBe(200);
+    expect(await partyRow(suite, s.partyId)).toMatchObject({
+      state: "closed",
+      mergedIntoPartyId: t.partyId,
+    });
+
+    const billsOfT = async (): Promise<PartyBill[]> => {
+      const answer = await send(venue.app, venue.cookie, "GET", `/api/parties/${t.partyId}/bills`);
+      expect(answer.status).toBe(200);
+      return answer.json as unknown as PartyBill[];
+    };
+    const before = await billsOfT();
+    // A presented bill moves to the surviving party when the parties combine (P13).
+    const listed = before.find((bill) => bill.workingOrderId === billId)!;
+    expect(listed).toEqual({
+      workingOrderId: billId,
+      partyId: t.partyId,
+      label: null,
+      status: "placed",
+      total: "18.00",
+      outstanding: "18.00",
+      hasPayments: false,
+      receiptAvailable: true,
+      receiptLanguage: "es-ES",
+      invoiceNumber: expect.stringMatching(/^A\/\d+$/),
+      creditNotes: [],
+    });
+    expect(total(before)).toBe("18.00");
+
+    const refused = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${t.partyId}/finish`,
+      {
+        expectedPartyRevision: await revisionOf(suite, t.partyId),
+      },
+    );
+    expect(refused).toEqual({
+      status: 409,
+      json: { code: "party.bill_outstanding", params: { partyId: t.partyId } },
+    });
+
+    const collected = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/collect`,
+      { tender: { method: "cash", amount: "20.00" } },
+    );
+
+    expect(collected.status).toBe(200);
+    expect(collected.json).toMatchObject({
+      invoiceNumber: listed.invoiceNumber,
+      total: "18.00",
+      tender: { method: "cash", change: "2.00" },
+    });
+    // The invoice filed at placing is the one settled: no second record, for this bill or any other.
+    expect(registroCount(venue, billId)).toBe(1);
+    expect(venue.db.all(sql`select id from sales`)).toEqual([{ id: filed[0]!.id }]);
+    const settled = await inTx(suite, (tx) =>
+      tx
+        .select({ id: sales.id, settledAt: saleSettlements.settledAt })
+        .from(sales)
+        .innerJoin(saleSettlements, eq(saleSettlements.saleId, sales.id))
+        .where(eq(sales.workingOrderId, billId)),
+    );
+    expect(settled).toEqual([{ id: filed[0]!.id, settledAt: expect.any(String) }]);
+    // Stored in whole cents; the sale keeps the till it was invoiced on.
+    expect(await tendersOfBill(venue, billId)).toEqual([
+      {
+        method: "cash",
+        amount: 1800,
+        tip: 0,
+        billPaymentId: null,
+        saleTillId: venue.cfg.tillId,
+      },
+    ]);
+    const outstanding = await inTx(suite, listOutstandingSales);
+    expect(outstanding.map((sale) => sale.saleId)).not.toContain(filed[0]!.id);
+
+    const after = await billsOfT();
+    expect(after.find((bill) => bill.workingOrderId === billId)).toMatchObject({
+      partyId: t.partyId,
+      status: "settled",
+      outstanding: "0.00",
+      receiptAvailable: true,
+      invoiceNumber: listed.invoiceNumber,
+    });
+    expect(total(after)).toBe("0.00");
+
+    const finished = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${t.partyId}/finish`,
+      {
+        expectedPartyRevision: await revisionOf(suite, t.partyId),
+      },
+    );
+    expect(finished).toEqual({ status: 200, json: { state: "closed" } });
   });
 });
 

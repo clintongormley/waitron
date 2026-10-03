@@ -3106,13 +3106,9 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       the trigger allows one there.
   - **Two gaps against the service plan's acceptance checks (spec §12)**, from a sweep on
     2026-10-01:
-    - **The merged-party check of §12 item 9 uses a bill whose state is written by hand.** In
-      `apps/server/src/parties.test.ts` ("merged parties keep their bills") the unpaid €15.00 bill
-      is set to `placed` with no invoice filed and later set to `settled` directly
-      (`apps/server/src/testing/party-venue.ts`), so no test files that bill's invoice, merges its
-      party and collects it through `POST /api/working-orders/:id/collect`.
-      `apps/server/src/unpaid-departure.test.ts` builds a really invoiced bill on a party, which
-      such a test could reuse.
+    - **The merged-party check of §12 item 9 used only a bill whose state is written by hand —
+      DONE (W4, 2026-10-03):** `apps/server/src/parties.test.ts`, "is owed on the surviving visit
+      and blocks Finish until the till collects it under the invoice filed at placing".
     - **No permanent test lays the service screens out at phone and till widths in both themes
       (§12 item 14).** The axe scans run in both themes, mostly at the browser's default size with
       one block at 390 px (`apps/till/src/screens/till-table-order-screen.a11y.test.ts`).
