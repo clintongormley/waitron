@@ -49,7 +49,7 @@ export interface SumUpConnectPayload {
   merchantCode?: string;
 }
 
-// Above SumUp's worst case, two calls in turn of 20 seconds each (`timeoutMs`, src/sumup-client.ts:85).
+/** Above SumUp's worst case, two calls in turn of 20 seconds each (`timeoutMs`, src/sumup-client.ts:85). */
 const SUMUP_STATUS_READ_LIMIT_MS = 50_000;
 
 /** The SumUp routes as a small class over an injected {@link DashboardRequest}. The connect form and

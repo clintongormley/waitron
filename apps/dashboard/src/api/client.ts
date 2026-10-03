@@ -1427,7 +1427,8 @@ export interface OrderDetailDto {
   }[];
 }
 
-// Above Stripe's worst case, three 80-second attempts (stripe 22.6.2, esm/stripe.esm.node.js:98, :178).
+/** Above three Stripe attempts that go silent for 80 s once connected (`defaultMakeStripe`, in
+ * payments-stripe's card-provider.ts); a slow sender or a connection slow to open can take longer. */
 const CARD_PROVIDER_READ_LIMIT_MS = 250_000;
 
 export class DashboardApi {
