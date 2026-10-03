@@ -29,11 +29,6 @@ export class ServiceStatusScreen extends LitElement {
       :host {
         display: block;
       }
-      .title {
-        margin: 0 0 var(--wt-space-4);
-        font-size: var(--wt-font-size-lg);
-        color: var(--wt-color-text);
-      }
       ol {
         list-style: none;
         margin: 0;
@@ -250,7 +245,6 @@ export class ServiceStatusScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <h1 class="title">${t("status.title")}</h1>
       <ol>
         ${this.statuses.map((s) => this.#renderRow(s))}
       </ol>

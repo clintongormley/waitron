@@ -16,11 +16,6 @@ export class KitchenScreen extends LitElement {
       :host {
         display: block;
       }
-      .title {
-        margin: 0 0 var(--wt-space-4);
-        font-size: var(--wt-font-size-lg);
-        color: var(--wt-color-text);
-      }
       .panel-title {
         margin: 0 0 var(--wt-space-3);
         font-size: var(--wt-font-size-md);
@@ -133,9 +128,6 @@ export class KitchenScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <h1 class="title">${t("kitchen.title")}</h1>
-      <p><a href="/manage/prep-stations">${t("kitchen.prep_stations_link")}</a></p>
-
       <section data-test="courses-panel">
         <h2 class="panel-title">${t("kitchen.courses_title")}</h2>
         <dashboard-course-list .api=${this.api}></dashboard-course-list>

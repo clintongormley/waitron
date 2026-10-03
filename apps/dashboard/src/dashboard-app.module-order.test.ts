@@ -70,12 +70,5 @@ it("orders a group's module items by their stated order, an unstated order count
   const service = [
     ...el.shadowRoot!.querySelectorAll<HTMLElement>("#nav-group-panel-service [data-test]"),
   ].map((item) => item.dataset.test);
-  expect(service).toEqual([
-    "nav-floor",
-    "nav-statuses",
-    "nav-kitchen",
-    "nav-unordered",
-    "nav-first",
-    "nav-second",
-  ]);
+  expect(service).toEqual(["nav-floor", "nav-unordered", "nav-first", "nav-second"]);
 });

@@ -54,6 +54,8 @@ import "./screens/content-languages-screen.js";
 import "./screens/service-status-screen.js";
 import "./screens/floor-screen.js";
 import "./screens/kitchen-screen.js";
+import "./screens/venue-settings-screen.js";
+import type { VenueSettingsPanel, VenueSettingsTab } from "./screens/venue-settings-screen.js";
 import "./screens/roster-screen.js";
 import "./screens/approvals-screen.js";
 import "./screens/planned-actual-screen.js";
@@ -100,11 +102,9 @@ const CORE_SCREENS = [
   "modifiers",
   "menus",
   "units",
-  "receipts",
   "content-languages",
-  "statuses",
+  "venue-settings",
   "floor",
-  "kitchen",
   "roster",
   "approvals",
   "planned-actual",
@@ -139,11 +139,11 @@ const WAITRON_LOGO_DARK_URL = new URL(
   import.meta.url,
 ).href;
 
-type ScreenRule = {
-  screen: ScreenId;
+type AccessRule = {
   requiresManager?: boolean;
   requiresPermission?: string;
 };
+type ScreenRule = AccessRule & { screen: ScreenId };
 type NavItem = ScreenRule & { labelKey: StringKey };
 type NavGroup = {
   id: NavGroupId;
@@ -189,11 +189,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: "service",
     headerKey: "nav.group.service",
-    items: [
-      { screen: "floor", labelKey: "nav.floor" },
-      { screen: "statuses", labelKey: "nav.statuses" },
-      { screen: "kitchen", labelKey: "nav.kitchen" },
-    ],
+    items: [{ screen: "floor", labelKey: "nav.floor" }],
   },
   {
     id: "team",
@@ -215,7 +211,7 @@ const NAV_GROUPS: NavGroup[] = [
     headerKey: "nav.group.configuration",
     icon: "gear",
     items: [
-      { screen: "receipts", labelKey: "nav.receipts", requiresManager: true },
+      { screen: "venue-settings", labelKey: "nav.venue_settings" },
       {
         screen: "content-languages",
         labelKey: "nav.content_languages",
@@ -239,6 +235,32 @@ const NAV_GROUPS: NavGroup[] = [
 const UNLISTED_SCREENS: ScreenRule[] = [
   { screen: "email", requiresManager: true },
   { screen: "demo-printer", requiresManager: true },
+];
+
+type CoreSettingsPanel = AccessRule & {
+  key: string;
+  tab: VenueSettingsTab;
+  render(api: DashboardApi): TemplateResult;
+};
+
+const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
+  {
+    key: "receipts",
+    tab: "receipts",
+    requiresManager: true,
+    render: (api) => html`<dashboard-receipts-screen .api=${api}></dashboard-receipts-screen>`,
+  },
+  {
+    key: "statuses",
+    tab: "tables",
+    render: (api) =>
+      html`<dashboard-service-status-screen .api=${api}></dashboard-service-status-screen>`,
+  },
+  {
+    key: "kitchen",
+    tab: "kitchen",
+    render: (api) => html`<dashboard-kitchen-screen .api=${api}></dashboard-kitchen-screen>`,
+  },
 ];
 
 /**
@@ -1408,13 +1430,22 @@ export class DashboardApp extends LitElement {
     this.#url.write({ product: event.detail.productId }, true);
   }
 
-  #mayOpen(item: ScreenRule): boolean {
+  #mayOpen(item: AccessRule): boolean {
     if (item.requiresManager && this.sessionRole !== "manager" && this.sessionRole !== "admin")
       return false;
     return (
       item.requiresPermission === undefined ||
       this.#sessionPermissions.includes(item.requiresPermission)
     );
+  }
+
+  #settingsPanels(): (VenueSettingsPanel & { order: number })[] {
+    return CORE_SETTINGS_PANELS.filter((panel) => this.#mayOpen(panel)).map((panel) => ({
+      key: panel.key,
+      tab: panel.tab,
+      order: 0,
+      render: () => panel.render(this.api),
+    }));
   }
 
   /** The module permission check here matches the one `#activate` applies to the nav. */
@@ -1714,16 +1745,12 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-content-languages-screen
           .api=${this.api}
         ></dashboard-content-languages-screen>`;
-      case "receipts":
-        return html`<dashboard-receipts-screen .api=${this.api}></dashboard-receipts-screen>`;
-      case "statuses":
-        return html`<dashboard-service-status-screen
-          .api=${this.api}
-        ></dashboard-service-status-screen>`;
+      case "venue-settings":
+        return html`<dashboard-venue-settings-screen
+          .panels=${this.#settingsPanels()}
+        ></dashboard-venue-settings-screen>`;
       case "floor":
         return html`<dashboard-floor-screen .api=${this.api}></dashboard-floor-screen>`;
-      case "kitchen":
-        return html`<dashboard-kitchen-screen .api=${this.api}></dashboard-kitchen-screen>`;
       case "roster":
         return html`<dashboard-roster-screen .api=${this.api}></dashboard-roster-screen>`;
       case "approvals":

@@ -82,14 +82,13 @@ describe("kitchen-screen", () => {
     expect(q(el, "[role=alert]")!.textContent).toContain(codeMessage("server.internal"));
   });
 
-  it("links to Prep stations without the former stations panel", async () => {
+  it("draws no h1, no stations panel and no link to Prep stations", async () => {
     const api = stubApi();
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
     await flush(el);
+    expect(el.shadowRoot!.querySelectorAll("h1")).toHaveLength(0);
     expect(q(el, "[data-test=stations-panel]")).toBeNull();
-    expect(q(el, 'a[href="/manage/prep-stations"]')?.textContent).toContain(
-      t("kitchen.prep_stations_link"),
-    );
+    expect(q(el, 'a[href="/manage/prep-stations"]')).toBeNull();
     expect(api.listStations).not.toHaveBeenCalled();
   });
 

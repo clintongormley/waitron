@@ -782,29 +782,28 @@ export class ReceiptsScreen extends LitElement {
   }
 
   override render(): TemplateResult {
-    return html`<h1>${t("receipts.title")}</h1>
-      ${
-        this.receiptLoadError !== null
-          ? html`<p role="alert">${codeMessage(this.receiptLoadError)}</p>`
-          : nothing
-      }
-      ${
-        this.locationLoadFailed || this.languageLoadFailed
-          ? html`<p role="alert">${t("location_settings.load_error")}</p>`
-          : nothing
-      }
-      ${
-        this.locationLoadFailed || this.languageLoadFailed || this.receiptLoadError !== null
-          ? html`<wt-button data-test="retry" @click=${() => void this.#load()}
-              >${t("location_settings.retry")}</wt-button
-            >`
-          : nothing
-      }
-      ${
-        this.receiptLoaded && this.locationLoaded && this.receiptLanguage !== null
-          ? html`<div class="layout">${this.#renderForm()} ${this.#renderPreview()}</div>`
-          : nothing
-      }`;
+    return html` ${
+      this.receiptLoadError !== null
+        ? html`<p role="alert">${codeMessage(this.receiptLoadError)}</p>`
+        : nothing
+    }
+    ${
+      this.locationLoadFailed || this.languageLoadFailed
+        ? html`<p role="alert">${t("location_settings.load_error")}</p>`
+        : nothing
+    }
+    ${
+      this.locationLoadFailed || this.languageLoadFailed || this.receiptLoadError !== null
+        ? html`<wt-button data-test="retry" @click=${() => void this.#load()}
+            >${t("location_settings.retry")}</wt-button
+          >`
+        : nothing
+    }
+    ${
+      this.receiptLoaded && this.locationLoaded && this.receiptLanguage !== null
+        ? html`<div class="layout">${this.#renderForm()} ${this.#renderPreview()}</div>`
+        : nothing
+    }`;
   }
 }
 
