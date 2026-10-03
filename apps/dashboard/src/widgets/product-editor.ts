@@ -66,7 +66,7 @@ const SUMMARY_SEPARATOR = " · ";
  * can be mistaken for an attachment, whose value always carries a colon. */
 const CREATE_EXTRA_LIST = "create-extras";
 const CREATE_OPTION_LIST = "create-options";
-/** The course dropdown's last row: it opens the courses window rather than choosing a course. */
+
 const EDIT_COURSES = "edit-courses";
 
 /** The word for each kind, taken from the Modifiers screen's own tab labels so a list is called the
@@ -821,21 +821,15 @@ export class ProductEditor extends LitElement {
       .options=${[
         { value: "", label: noneLabel },
         ...this.courses.map((choice) => ({ value: choice.id, label: choice.name })),
-        { value: EDIT_COURSES, label: t("editor.edit_courses"), primary: true },
+        { value: EDIT_COURSES, label: t("editor.edit_courses"), action: true, primary: true },
       ]}
       .value=${this.draft.courseId ?? ""}
       error=${this.error("product-course")}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
-        if (event.detail.value !== EDIT_COURSES) {
-          this.change("courseId", event.detail.value || null);
-          return;
-        }
-        // Assigned on the element: the combobox set its own value to the row, and Lit does not
-        // re-commit the unchanged binding above.
-        (event.currentTarget as HTMLElement & { value: string }).value = this.draft.courseId ?? "";
-        this.related(event, "courses");
+        this.change("courseId", event.detail.value || null);
       }}
+      @wt-combobox-action=${(event: Event) => this.related(event, "courses")}
     ></wt-combobox>`;
   }
 

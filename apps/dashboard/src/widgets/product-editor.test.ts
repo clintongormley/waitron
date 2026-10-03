@@ -3224,7 +3224,7 @@ it("picks the default course from a shared dropdown, with none as a chosen value
     { value: "", label: t("product.no_course") },
     { value: "course-1", label: "Starters" },
     { value: "course-2", label: "Mains" },
-    { value: "edit-courses", label: t("editor.edit_courses"), primary: true },
+    { value: "edit-courses", label: t("editor.edit_courses"), action: true, primary: true },
   ]);
   expect(course.value).toBe("course-2");
   expect(await shownIn(el, "product-course")).toBe("Mains");
@@ -3269,10 +3269,15 @@ async function clickCourseRow(el: ProductEditor, label: string) {
   return box;
 }
 
-it("ends the course dropdown with Edit courses…, drawn in the primary colour with no icon", async () => {
+it("ends the course dropdown with Edit courses…, a command row drawn in the primary colour with no icon", async () => {
   const el = await mountCourses();
   const last = sharedField(el, "wt-combobox", "product-course").options.at(-1)!;
-  expect(last).toEqual({ value: "edit-courses", label: t("editor.edit_courses"), primary: true });
+  expect(last).toEqual({
+    value: "edit-courses",
+    label: t("editor.edit_courses"),
+    action: true,
+    primary: true,
+  });
 });
 
 it("asks for the courses window when Edit courses… is chosen, keeping the product's course", async () => {
@@ -3320,6 +3325,7 @@ it("offers Edit courses… on a variant's page too", async () => {
   expect(options.at(-1)).toEqual({
     value: "edit-courses",
     label: t("editor.edit_courses"),
+    action: true,
     primary: true,
   });
 });
