@@ -5780,7 +5780,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       )
         .filter((job) => !beforeJobs.some((before) => before.id === job.id))
         .map((job) => decodeTicket(job.payload));
-      expect(changedJobs.join("\n")).toContain("+0.150 x Jamón");
+      expect(changedJobs.join("\n")).toContain("+0.150 kg x Jamón");
       const rows = await tx.execute<{
         quantity: number;
         price_quantity: number;
@@ -5805,7 +5805,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       )
         .filter((job) => !beforeNoteJobs.some((before) => before.id === job.id))
         .map((job) => decodeTicket(job.payload));
-      expect(noteJobs.join("\n")).toContain("+0.450 x Jamón");
+      expect(noteJobs.join("\n")).toContain("+0.450 kg x Jamón");
     });
   });
 
@@ -6624,6 +6624,76 @@ it("shows the dish's own allergens and diet beside a frozen options answer", asy
 });
 
 describe("frozen answers through a fractional quantity edit", () => {
+  it("keeps three frozen 50 g picks per dish when a held edit omits extras", async () => {
+    const { cfg, cafeId, catalogueId, kgUnitId } = await setupVenue();
+    const seeded = await withTransaction(db, async (tx) => {
+      const extra = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Jamón",
+        unitId: kgUnitId,
+        unitPrice: "0.27",
+        vatClass: "general",
+      });
+      const list = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Jamón list",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 3,
+          active: true,
+          items: [
+            {
+              productId: extra.id,
+              portion: "0.050",
+              maxQuantity: 3,
+              preselected: false,
+              price: null,
+            },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
+      return { extraId: extra.id, listId: list.id };
+    });
+    const id = randomUUID();
+    await parkProducts(cfg, {
+      id,
+      lines: [
+        {
+          productId: cafeId,
+          quantity: "2",
+          extras: [{ listId: seeded.listId, picks: [{ productId: seeded.extraId, quantity: 3 }] }],
+        },
+      ],
+    });
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(before[1]).toMatchObject({ quantity: 300, priceQuantity: 50, lineTotal: 6 });
+
+    await withTransaction(db, (tx) => updateOrderLine(tx, cfg, id, 1, { quantity: "3" }, 0));
+
+    const after = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(after).toHaveLength(2);
+    expect(after[1]).toMatchObject({
+      id: before[1]!.id,
+      quantity: 450,
+      priceQuantity: 50,
+      unitPriceGross: 1,
+      lineTotal: 9,
+    });
+  });
+
   it("reads a frozen priced portion separately from the physical held quantity", async () => {
     const { cfg, cafeOfferId, zoneId } = await setupVenue();
     const id = randomUUID();
