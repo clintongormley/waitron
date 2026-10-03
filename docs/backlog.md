@@ -1348,6 +1348,13 @@ focus in it, Escape swaps it back with focus on the line (the second Escape, whe
 the open list) without closing the product's window, and focus leaving the combobox swaps it back.
 The product picker still offers no "may contain", a stored allergen keeps its presence when another
 is added, and a variant's hints of its parent's values are unchanged.
+**Left open by #1079 (raised in its review, not changed there):** on a variant's page an empty
+line reads "None specified" while the grey hint under it gives the parent's values, which reads as
+a contradiction — A211's "an empty value shows the parent's value" is the natural place to settle
+it. And on a product's own page a reviewed-empty allergen list and one nobody has reviewed yet
+(`allergens: null`) both read "None specified"; before #1079 both read "None selected", so this
+predates it (checked against the old code in #1079's review). The variant hint already tells the
+two apart ("Not yet reviewed", `editor.allergens_unreviewed`); the product line does not.
 
 **No box around Pricing (A214) — DONE (#1065).** The owner: _"Pricing also doesn't need the box around it"_.
 Built: `renderPrice` draws a borderless `fieldset class="group"` whose legend is the same upper-case
