@@ -13,7 +13,7 @@ import {
 import { isRefusal } from "../unique-violation.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
-import { seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { saleLines, sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
@@ -35,6 +35,7 @@ const AT = "2026-07-20T19:20:30+00:00";
 
 let seriesA = "";
 let nodeA = "";
+let deviceA = "";
 
 async function seed(db: Database): Promise<void> {
   await db
@@ -55,11 +56,14 @@ async function seed(db: Database): Promise<void> {
     .values({ nodeId: nodeA, code: "FA", purpose: "standard" })
     .returning({ id: invoiceSeries.id });
   seriesA = a!.id;
+  ({ deviceId: deviceA } = await seedDevice(db, { tillId: TILL_A1 }));
 }
 
 function saleValues(overrides: Record<string, unknown> = {}) {
   return {
     tillId: TILL_A1,
+    source: "device",
+    deviceId: deviceA,
     nodeId: nodeA,
     seriesId: seriesA,
     invoiceNumber: 1,
@@ -258,10 +262,10 @@ describe("sales — the commercial record", () => {
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) =>
         tx.run(
-          sql`insert into sales (id, till_id, series_id, invoice_number, issued_at,
+          sql`insert into sales (id, till_id, source, device_id, series_id, invoice_number, issued_at,
                  issued_offset_minutes, total, vat_breakdown, locale, invoice_locales,
                  fiscal_backend, fiscal_state)
-               values ('sale-no-node', ${TILL_A1}, ${seriesA}, 2, ${AT}, 120,
+               values ('sale-no-node', ${TILL_A1}, 'device', ${deviceA}, ${seriesA}, 2, ${AT}, 120,
                  100, '[]', 'es', '["es","ca"]', 'verifactu', 'recorded')`,
         ),
       ),
@@ -278,6 +282,15 @@ describe("sales — the commercial record", () => {
           nodeId: "99999999-9999-4999-8999-999999999999",
         }),
       ),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it("rejects a device_id that does not exist with a foreign-key violation", async () => {
+    const error = await captureError(() =>
+      suite.db
+        .insert(sales)
+        .values(saleValues({ invoiceNumber: 2, deviceId: "99999999-9999-4999-8999-999999999999" })),
     );
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
@@ -522,10 +535,10 @@ describe("sales — fiscal_state", () => {
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) =>
         tx.run(
-          sql`insert into sales (id, till_id, node_id, series_id, invoice_number, issued_at,
+          sql`insert into sales (id, till_id, source, device_id, node_id, series_id, invoice_number, issued_at,
                  issued_offset_minutes, total, vat_breakdown, locale, invoice_locales,
                  fiscal_backend, fiscal_state)
-               values ('sale-third-state', ${TILL_A1}, ${nodeA}, ${seriesA}, 3, ${AT}, 120,
+               values ('sale-third-state', ${TILL_A1}, 'device', ${deviceA}, ${nodeA}, ${seriesA}, 3, ${AT}, 120,
                  100, '[]', 'es', '["es","ca"]', 'verifactu', 'submitted')`,
         ),
       ),
@@ -567,10 +580,10 @@ describe("sales — corrective link and negative total", () => {
     return withTransaction(suite.db, (tx) =>
       Promise.resolve(
         tx.all<{ id: string }>(
-          sql`insert into sales (id, till_id, node_id, series_id, invoice_number, issued_at,
+          sql`insert into sales (id, till_id, source, device_id, node_id, series_id, invoice_number, issued_at,
                  issued_offset_minutes, total, vat_breakdown, locale, invoice_locales,
                  fiscal_backend, fiscal_state, corrects_sale_id)
-               values (${`raw-sale-${rawSeq}`}, ${tillId}, ${nodeId}, ${seriesId},
+               values (${`raw-sale-${rawSeq}`}, ${tillId}, 'device', ${deviceA}, ${nodeId}, ${seriesId},
                  ${opts.invoiceNumber}, ${AT}, 120, ${opts.total}, '[]', 'es', ${locales},
                  'verifactu', 'recorded', ${opts.correctsSaleId})
                returning id`,

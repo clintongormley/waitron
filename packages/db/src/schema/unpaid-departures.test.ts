@@ -8,7 +8,7 @@ import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError } from "../testing/errors.js";
-import { seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { workingOrders } from "./orders.js";
 import { parties } from "./parties.js";
@@ -26,6 +26,7 @@ const AT = "2026-10-01T21:00:00.000Z";
 
 let nodeId = "";
 let seriesId = "";
+let deviceId = "";
 let nextOrder = 0;
 
 describe("unpaid_departures", () => {
@@ -53,6 +54,7 @@ describe("unpaid_departures", () => {
       .values({ nodeId, code: "FA", purpose: "standard" })
       .returning({ id: invoiceSeries.id });
     seriesId = series!.id;
+    ({ deviceId } = await seedDevice(db, { tillId: TILL }));
   });
 
   /** A party, one bill of it and that bill's unsettled invoice. */
@@ -79,6 +81,8 @@ describe("unpaid_departures", () => {
         .insert(sales)
         .values({
           tillId: TILL,
+          source: "device",
+          deviceId,
           nodeId,
           seriesId,
           invoiceNumber: orderNumber,
@@ -110,6 +114,8 @@ describe("unpaid_departures", () => {
       recordedBy: STAFF,
       authorizedBy: SUPERVISOR,
       tillId: TILL,
+      source: "device",
+      deviceId,
       ...overrides,
     };
   }
@@ -137,6 +143,8 @@ describe("unpaid_departures", () => {
       recordedBy: STAFF,
       authorizedBy: SUPERVISOR,
       tillId: TILL,
+      source: "device",
+      deviceId,
       recordedAt: expect.any(String),
     });
   });
@@ -160,6 +168,7 @@ describe("unpaid_departures", () => {
     ["bill", { workingOrderId: MISSING }],
     ["sale", { saleId: MISSING }],
     ["till", { tillId: MISSING }],
+    ["device", { deviceId: MISSING }],
   ] as const)("refuses a departure naming no %s", async (_, overrides) => {
     const bill = await invoicedBill();
     const error = await captureError(() =>

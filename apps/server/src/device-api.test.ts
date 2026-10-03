@@ -48,6 +48,7 @@ import { setProfilePrinterLists } from "@waitron/layouts";
 import "./errors.js";
 import { createWatcher } from "./watchers.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // Every test provisions its OWN tenant, and `tenants` is a singleton (id = 1), so the per-test reset
 // is what makes that legal twice in one file: `useVenueDb` empties every data table after each `it`.
@@ -111,7 +112,7 @@ async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string
   });
   await placeOrder(
     { db: suite.db, backend, clock },
-    venue.cfg,
+    await deviceRequestCfg(suite.db, venue.cfg),
     orderId,
     OPERATOR,
     venue.cfg.tillId,

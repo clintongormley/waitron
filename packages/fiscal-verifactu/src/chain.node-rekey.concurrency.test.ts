@@ -50,7 +50,7 @@ describe("appendToChain from many callers started together, keyed by node", () =
     const results = await Promise.all(
       sales.map((saleId, i) =>
         withTransaction(suite.db, (tx) =>
-          appendToChain(tx, node.nodeId, altaFor(node.tillId, saleId, i + 1, i)),
+          appendToChain(tx, node.nodeId, altaFor(node, saleId, i + 1, i)),
         ),
       ),
     );
@@ -88,7 +88,7 @@ describe("appendToChain from many callers started together, keyed by node", () =
       sec += 1;
       const saleId = await seedSale(suite.db, till, sec);
       await suite.db.transaction((tx) =>
-        appendToChain(tx, node.nodeId, altaFor(till.tillId, saleId, sec, sec)),
+        appendToChain(tx, node.nodeId, altaFor(till, saleId, sec, sec)),
       );
     }
 
@@ -123,7 +123,7 @@ describe("currentSif resolves per node", () => {
     // And distinct chains: an append on nodeA leaves the sibling's chain untouched.
     const saleId = await seedSale(suite.db, nodeA, 1);
     await suite.db.transaction((tx) =>
-      appendToChain(tx, nodeA.nodeId, altaFor(nodeA.tillId, saleId, 1, 1)),
+      appendToChain(tx, nodeA.nodeId, altaFor(nodeA, saleId, 1, 1)),
     );
     const counts = await suite.db.execute<{ node_id: string; count: number }>(sql`
       select node_id, cast(count(*) as int) as count from registros_facturacion group by node_id

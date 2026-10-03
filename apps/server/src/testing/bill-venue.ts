@@ -36,7 +36,7 @@ import { DEVICE_COOKIE } from "../device-session.js";
 import type { Logger } from "../logger.js";
 import { ALL_MODULES } from "../modules.js";
 import { createTable } from "../tables.js";
-import type { TillConfig } from "../till-config.js";
+import type { DeviceRequestConfig } from "../till-config.js";
 import { mountTillApi } from "../till-api.js";
 import { systemClock } from "../till-backend.js";
 import { SESSION_COOKIE } from "../till-session.js";
@@ -45,6 +45,7 @@ import { enrolDeviceForTest } from "./enrol.js";
 import { offerProducts } from "./zone-offers.js";
 import { partyRevisionOfOrder } from "../parties.js";
 import { parkOrder, placeOrder } from "../working-order.js";
+import { deviceRequestCfg } from "./session-device.js";
 
 /**
  * A provisioned venue for the bill payment suites that take a card on a reader: real Veri*Factu
@@ -70,7 +71,7 @@ export interface BillVenue {
   backend: FiscalBackend;
   clock: TrustedClock;
   /** The box's configuration, tips off. */
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   card: FakePaymentProvider;
   /** Serves the fake card provider as `fake`. */
   pool: CardProviderPool;
@@ -90,6 +91,8 @@ export interface BillVenue {
   cookieNoCard: string;
   deviceTillId: string;
   device2TillId: string;
+  /** The second till's device: `cookie2`'s. */
+  device2Id: string;
   operatorId: string;
   /** The provisioned administrator, PIN 1234. */
   adminId: string;
@@ -141,7 +144,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     ),
     { db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
+  const cfg = await deviceRequestCfg(db, {
     tillId: brandTillId(provisioned.tillId),
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
@@ -151,7 +154,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  });
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
     const platos = await createCategory(tx, { name: "Platos" });
@@ -278,6 +281,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     cookieNoCard: await cookieFor(cashOnlyDevice),
     deviceTillId: devices[0]!.tillId,
     device2TillId: devices[1]!.tillId,
+    device2Id: devices[1]!.deviceId,
     operatorId: seeded.personId,
     adminId: db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!.id,
     offerFor: (name) => seeded.offers.offerFor(seeded.productIds.get(name)!),

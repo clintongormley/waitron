@@ -160,6 +160,57 @@ describe("fiscal readiness submission runner", () => {
    * Read through a raw `node:sqlite` connection rather than the runner's own handle, which it
    * closes: reopening the FILE shows the triggers were persisted, not merely installed on a session.
    */
+  it("records the sample sale as the readiness test's, with no device", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-readiness-runner-origin-"));
+    dirs.push(stateDir);
+    const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+    const modules = enabledModules(ALL_MODULES, selected.config);
+    const contribution = {
+      ...selected.contribution!,
+      activationReadiness: "accepted-test-submission" as const,
+      drain: vi.fn().mockResolvedValue({ ...emptyDrainResult(), recordsAccepted: 1 }),
+    };
+    const readinessInput: FiscalReadinessInput = {
+      requirement: "accepted-test-submission",
+      fiscalModule: contribution.id,
+      country: venue.country,
+      taxId: venue.taxId,
+      legalName: venue.legalName,
+      fiscalTerritory: venue.location.fiscalTerritory,
+      submissionTarget: null,
+      certificateFingerprint: null,
+      certificateKind: null,
+      moduleVersions: { core: 1 },
+      applicationVersion: "0.0.0",
+    };
+
+    await submitFiscalReadiness({
+      stateDir,
+      modules,
+      venue,
+      contribution,
+      secret: undefined,
+      ring: {} as never,
+      readinessInput,
+      now: () => new Date("2026-09-09T12:00:00.000Z"),
+    });
+
+    const connection = new DatabaseSync(
+      join(
+        stateDir,
+        `fiscal-readiness-db-${fiscalReadinessDatabaseKey(readinessInput)}`,
+        "venue.db",
+      ),
+    );
+    try {
+      expect(connection.prepare("select source, device_id from sales").all()).toEqual([
+        { source: "readiness_test", device_id: null },
+      ]);
+    } finally {
+      connection.close();
+    }
+  });
+
   it("leaves the retained sample database refusing to rewrite the sale it recorded", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-readiness-runner-append-only-"));
     dirs.push(stateDir);

@@ -21,7 +21,7 @@ import type { Transaction } from "@waitron/db";
 import { listOutstandingSales } from "@waitron/core";
 import { writeClearingWorkflow } from "@waitron/venue-service";
 import { MONEY_SCALE, decimal, sumDecimals, toScale } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./till-config.js";
 import { takeBillPayment } from "./bill-payments.js";
 import {
   OPERATOR,
@@ -102,7 +102,7 @@ async function giveStatus(tableIds: string[]): Promise<string> {
 }
 
 /** Joins a free table to the party, as the till's join does. */
-async function join(cfg: TillConfig, partyId: string, tableId: string): Promise<void> {
+async function join(cfg: DeviceRequestConfig, partyId: string, tableId: string): Promise<void> {
   const command = await commandFor(suite, partyId);
   await inTx(suite, (tx) =>
     joinTables(tx, cfg, partyId, tableId, { ...command, bills: "merge", otherPartyId: null }),
@@ -115,7 +115,7 @@ async function join(cfg: TillConfig, partyId: string, tableId: string): Promise<
  * leave theirs.
  */
 async function merge(
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   into: { partyId: string; tableId: string },
   from: { partyId: string; tableId: string },
   guestsMove = false,
@@ -1665,7 +1665,7 @@ describe("money received against a bill before its invoice", () => {
 
   /** A completed cash refund of `applied` and `tip` cents, as a refund of the payment leaves it. */
   async function refund(
-    cfg: TillConfig,
+    cfg: DeviceRequestConfig,
     paymentId: string,
     applied: number,
     tip: number,
@@ -1681,6 +1681,8 @@ describe("money received against a bill before its invoice", () => {
         authorizedBy: OPERATOR,
         requestedBy: OPERATOR,
         tillId: cfg.tillId,
+        source: cfg.origin.source,
+        deviceId: cfg.origin.deviceId,
         state: "completed",
         completedAt: new Date().toISOString(),
       }),
@@ -1722,6 +1724,8 @@ describe("money received against a bill before its invoice", () => {
           ...(state === "failed" ? { failedAt: new Date().toISOString() } : {}),
           requestedBy: OPERATOR,
           tillId: venue.cfg.tillId,
+          source: venue.cfg.origin.source,
+          deviceId: venue.cfg.origin.deviceId,
         }),
       );
     await card(pendingId, "pending");

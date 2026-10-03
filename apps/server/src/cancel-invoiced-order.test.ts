@@ -635,6 +635,8 @@ describe("cancelling a placed order whose invoice was issued", () => {
         receivedAt: new Date().toISOString(),
         requestedBy: venue.operatorId,
         tillId: venue.cfg.tillId,
+        source: venue.cfg.origin.source,
+        deviceId: venue.cfg.origin.deviceId,
       }),
     );
 
@@ -811,6 +813,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     // 0.83 at 21% is 1.00 of the Caña's 3.00, so a credit of the whole 3.00 would exceed it.
     await inTx(venue, (tx) =>
       recordCorrection(tx, venue.backend, {
+        origin: venue.cfg.origin,
         tillId: brandTillId(venue.deviceTillId),
         nodeId: venue.cfg.nodeId,
         seriesId: brandSeriesId(series!.id),
@@ -853,6 +856,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     // 0.83 at 21% is 1.00 added to the Caña's 3.00, so a credit of 3.00 would leave it 1.00.
     await inTx(venue, (tx) =>
       recordCorrection(tx, venue.backend, {
+        origin: venue.cfg.origin,
         tillId: brandTillId(venue.deviceTillId),
         nodeId: venue.cfg.nodeId,
         seriesId: brandSeriesId(series!.id),

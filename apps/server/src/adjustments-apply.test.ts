@@ -497,6 +497,7 @@ describe("the receipt (ruling R13)", () => {
     const billId = await compBurgerAndDiscountBottle();
     await inTx(venue, (tx) =>
       insertCapturedPayment(tx, {
+        origin: venue.cfg.origin,
         workingOrderId: billId,
         provider: "simulator",
         paymentRef: `sim-${randomUUID()}`,

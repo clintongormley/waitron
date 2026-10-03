@@ -20,6 +20,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { restoreDatabase } from "./restore.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 const LEDGER_TABLE = "registros_facturacion";
 
@@ -50,11 +51,14 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     operationDescription: "Venta en establecimiento",
   });
   await db.insert(tills).values({ id: F.tillId, locationId: F.locationId, name: "Caja 1" });
+  await seedDevice(db, { tillId: F.tillId });
   await db.insert(nodes).values({ id: F.nodeId, locationId: F.locationId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: F.seriesId, nodeId: F.nodeId, code: "A" });
   await db.insert(sales).values({
     id: F.saleId,
     tillId: F.tillId,
+    source: "device",
+    deviceId: sql`(select id from devices where till_id = ${F.tillId})`,
     nodeId: F.nodeId,
     seriesId: F.seriesId,
     invoiceNumber: 1,
@@ -76,6 +80,8 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
   });
   await db.insert(registrosFacturacion).values({
     tillId: F.tillId,
+    source: "device",
+    deviceId: sql`(select id from devices where till_id = ${F.tillId})`,
     nodeId: F.nodeId,
     sifId: F.sifId,
     saleId: F.saleId,

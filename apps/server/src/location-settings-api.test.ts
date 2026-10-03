@@ -15,6 +15,7 @@ import { recordTillSale } from "./till-sale.js";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import { getCountryPack } from "@waitron/country-packs";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 /** The venue's invoice operation description, over the route. */
 // The full manifest, because the first case files a real fiscal record through `recordTillSale`.
@@ -77,8 +78,9 @@ describe("location invoice settings", () => {
       deploymentEnvironment: "preproduction",
       resolveClient: () => Promise.reject(new Error("A local sale must not contact AEAT")),
     });
+    const saleCfg = await deviceRequestCfg(suite.db, venue.cfg);
     const sell = () =>
-      recordTillSale({ db: suite.db, backend, clock }, venue.cfg, {
+      recordTillSale({ db: suite.db, backend, clock }, saleCfg, {
         zoneId: offers.zoneId,
         lines: [{ menuItemId: offers.offerFor(venue.cafeId), quantity: "1" }],
         tender: { method: "cash", amount: "1.50" },

@@ -133,6 +133,7 @@ export class StripeTerminalProvider implements PaymentProvider {
     // Commit the attempt before any network call.
     const stripeIdempotencyKey = await this.inTransaction(async (tx) => {
       await insertAttempting(tx, {
+        origin: params.origin,
         workingOrderId: params.workingOrderId,
         provider: PROVIDER,
         paymentRef,

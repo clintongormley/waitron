@@ -1,5 +1,6 @@
 import type { RecordSaleInput } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
+import { jobOrigin } from "@waitron/shared";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { VerifactuClient } from "@waitron/verifactu";
@@ -40,7 +41,8 @@ export const steadyClock: TrustedClock = {
 
 /**
  * Builds a `RecordSaleInput` from `@waitron/core`: 10.00 base + 2.10 tax at 21%, 2.10 base + 0.21
- * tax at 10%, taxable total 14.41.
+ * tax at 10%, taxable total 14.41. Its origin defaults to the readiness test's, which needs no
+ * device row.
  */
 export function saleInput(
   params: {
@@ -52,6 +54,7 @@ export function saleInput(
   const { tillId, nodeId, seriesId, ...overrides } = params;
   return {
     tillId,
+    origin: jobOrigin("readiness_test"),
     nodeId,
     seriesId,
     locale: "es-ES",

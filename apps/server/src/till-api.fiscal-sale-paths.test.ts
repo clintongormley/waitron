@@ -930,6 +930,38 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
   });
 
+  it("records the card payment and its sale under the device that paid", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+    await connectStripe();
+    const reader = await seedReader();
+    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+
+    const workingOrderId = randomUUID();
+    const payRes = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        id: workingOrderId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+      }),
+    });
+
+    expect(payRes.status).toBe(200);
+    const expected = [{ source: "device", device_id: deviceIdOf(deviceCookie) }];
+    for (const table of ["payments", "sales"]) {
+      expect(
+        suite.db.all(
+          sql`select source, device_id from ${sql.raw(table)} where working_order_id = ${workingOrderId}`,
+        ),
+      ).toEqual(expected);
+    }
+  });
+
   it("a request readerId OVERRIDES the device default, and stamps that reader", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;

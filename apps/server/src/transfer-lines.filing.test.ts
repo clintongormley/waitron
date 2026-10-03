@@ -26,7 +26,7 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -36,6 +36,7 @@ import { transferItems } from "./bill-actions.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { createOpenOrder } from "./working-order.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 /**
  * H2 after a partial transfer: each tab files its own single fiscal record, at its own locked price.
@@ -94,7 +95,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 }
 
 interface SeededVenue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   available: AvailableProduct[];
   /** "Café" — each, 1.50 gross, general(21%). */
   cafe: AvailableProduct;
@@ -141,7 +142,7 @@ async function setupVenue(): Promise<SeededVenue> {
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = tillConfigFromVenue(venue);
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const available = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -174,7 +175,7 @@ async function setupVenue(): Promise<SeededVenue> {
  * (working_order) ids to transfer between.
  */
 async function setupTwoTabs(): Promise<{
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   tabA: string;
   tabB: string;
   cafe: AvailableProduct;

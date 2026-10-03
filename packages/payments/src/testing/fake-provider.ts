@@ -234,6 +234,7 @@ export class FakePaymentProvider implements PaymentProvider {
       return this.collectOffline(params, paymentRef);
     }
     const common = {
+      origin: params.origin,
       workingOrderId: params.workingOrderId,
       provider: this.provider,
       paymentRef,
@@ -410,6 +411,7 @@ export class FakePaymentProvider implements PaymentProvider {
       }
       const settledAt = new Date();
       await insertAcceptedOffline(tx, {
+        origin: params.origin,
         workingOrderId: params.workingOrderId,
         provider: this.provider,
         paymentRef,

@@ -16,7 +16,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedDevice } from "@waitron/db/testing/seed.js";
 import {
   CATALOGUE_MIGRATIONS,
   createCatalogue,
@@ -57,6 +57,7 @@ const DAY3 = "2026-06-12"; // a product whose category today sits in a loop
 let nodeId: string;
 let locationId: string;
 let tillId: string;
+let deviceId: string;
 let seriesId: string;
 let managerCookie: string;
 let supervisorCookie: string;
@@ -98,6 +99,8 @@ async function seedSale(db: Database, issuedAt: string, lines: SeedLine[]): Prom
     .insert(sales)
     .values({
       tillId,
+      source: "device",
+      deviceId,
       nodeId,
       seriesId,
       invoiceNumber: ++invoiceNumber,
@@ -161,6 +164,7 @@ const suite = useVenueDb({
       .values({ locationId, name: "Caja 1" })
       .returning({ id: tills.id });
     tillId = till!.id;
+    ({ deviceId } = await seedDevice(db, { tillId }));
     const [node] = await db
       .insert(nodes)
       .values({ locationId, name: "Nodo 1" })

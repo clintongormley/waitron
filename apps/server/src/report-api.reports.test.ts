@@ -14,7 +14,7 @@ import {
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { stringToBasisPoints, stringToCents, stringToThousandths } from "@waitron/shared";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedDevice } from "@waitron/db/testing/seed.js";
 import {
   IDENTITY_MIGRATIONS,
   hashPin,
@@ -33,6 +33,7 @@ import "./errors.js";
 const noopLog: Logger = () => {};
 
 let tillId: string;
+let deviceId: string;
 let nodeId: string;
 let locationId: string;
 let seriesId: string;
@@ -106,6 +107,8 @@ async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise
     .insert(sales)
     .values({
       tillId,
+      source: "device",
+      deviceId,
       nodeId,
       seriesId,
       invoiceNumber,
@@ -146,6 +149,8 @@ async function seedVariantDay(db: Database, invoiceNumber: number): Promise<void
     .insert(sales)
     .values({
       tillId,
+      source: "device",
+      deviceId,
       nodeId,
       seriesId,
       invoiceNumber,
@@ -212,6 +217,7 @@ const suite = useVenueDb({
       .values({ locationId, name: "Caja 1" })
       .returning({ id: tills.id });
     tillId = till!.id;
+    ({ deviceId } = await seedDevice(db, { tillId }));
     const [node] = await db
       .insert(nodes)
       .values({ locationId, name: "Nodo 1" })

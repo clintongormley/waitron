@@ -216,7 +216,7 @@ describe("restoreFiscal", () => {
     };
     const sale1 = await seedSale(db, till, 1);
     const before = await db.transaction((tx) =>
-      appendToChain(tx, till.nodeId, altaFor(till.tillId, sale1, 1, 1)),
+      appendToChain(tx, till.nodeId, altaFor(till, sale1, 1, 1)),
     );
 
     await withTransaction(db, (tx) => restoreFiscal(tx, node, NOW));
@@ -224,7 +224,7 @@ describe("restoreFiscal", () => {
 
     const sale2 = await seedSale(db, till, 2);
     const after = await db.transaction((tx) =>
-      appendToChain(tx, till.nodeId, altaFor(till.tillId, sale2, 2, 2)),
+      appendToChain(tx, till.nodeId, altaFor(till, sale2, 2, 2)),
     );
     // Through the builder: only it maps the stored 0/1 `primer_registro` back to a boolean.
     const rec = await db

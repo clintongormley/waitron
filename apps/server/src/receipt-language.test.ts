@@ -27,14 +27,14 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { loadTillConfig } from "./till-config.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./till-config.js";
 import { payWorkingOrderIntegrated } from "./till-sale.js";
 import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
-import { seedSessionDevice } from "./testing/session-device.js";
+import { seedSessionDevice, deviceRequestCfg } from "./testing/session-device.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 
@@ -67,7 +67,7 @@ const MADRID = { postalCode: "28013", city: "Madrid", province: "Madrid" };
 
 interface Venue {
   app: Hono;
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   /** The operator's session on a device allowed every capability, with no device cookie. */
   session: string;
   /** The session plus an enrolled till device, as a sale is sent. */
@@ -113,7 +113,7 @@ async function venueWith(
     { db, modules: ALL_MODULES },
   );
   // Built the way boot builds it, from the variables the box sets.
-  const cfg: TillConfig = {
+  const cfg = await deviceRequestCfg(suite.db, {
     ...loadTillConfig({
       WAITRON_TILL_TILL_ID: venue.tillId,
       WAITRON_TILL_NODE_ID: venue.nodeId,
@@ -123,7 +123,7 @@ async function venueWith(
     }),
     orderFlow: "prepay",
     simplifiedInvoiceLimit: null,
-  };
+  });
   const { menuItemId, staffId, profileId, printerId } = await withTransaction(db, async (tx) => {
     await tx.execute(
       sql`insert into content_languages (id, default_language, languages) values (1, 'es', '["es","ca","gl"]')
@@ -483,6 +483,7 @@ describe("a card-reader sale files and prints in the location's language", () =>
     await inTx(venue, async (tx) => {
       await createOpenOrder(tx, venue.cfg, id, [{ menuItemId, quantity: "1" }], null, { zoneId });
       await insertCapturedPayment(tx, {
+        origin: venue.cfg.origin,
         workingOrderId: id,
         provider: "simulator",
         paymentRef: `sim-ref-${randomUUID()}`,

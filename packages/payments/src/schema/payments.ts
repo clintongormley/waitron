@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, index, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   billPayments,
+  devices,
   enumCheck,
   enumType,
   id,
@@ -44,6 +45,14 @@ export const payments = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     workingOrderId: id("working_order_id").notNull(),
+    // The device that started the payment; a stuck payment's sale is filed under it.
+    // Plain text until the table is rebuilt with the source's CHECKs: a declared vocabulary with no
+    // CHECK in the database fails the schema conformance suite.
+    source: label("source"),
+    /* v8 ignore start */
+    // Added by `ALTER TABLE`, which writes no delete rule, so it is declared with none.
+    deviceId: id("device_id").references(() => devices.id),
+    /* v8 ignore stop */
     // Null until the sale is written: the money moves first (`associatePaymentWithSale`).
     saleId: id("sale_id"),
     // Nullable: no writer sets it yet (design §5).

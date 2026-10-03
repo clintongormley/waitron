@@ -6,7 +6,9 @@ import {
   saleId as brandSaleId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { NodeId, SaleId, TillId } from "@waitron/shared";
+import { deviceOrigin } from "@waitron/shared";
+import type { DeviceId, NodeId, SaleId, TillId } from "@waitron/shared";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import type { AltaInput, AnulacionInput, SistemaInformatico } from "@waitron/verifactu";
 import { registerSif } from "../registro-sif.js";
 import type { PendingRegistro } from "../chain.js";
@@ -28,10 +30,11 @@ export const TEST_SISTEMA: SistemaInformatico = {
 
 /**
  * A seeded fiscal fixture: one NODE (the SIF/chain/series owner) with one TILL under it, where a
- * sale rings.
+ * sale rings, and one device on that till.
  */
 export interface SeededTill {
   tillId: TillId;
+  deviceId: DeviceId;
   nodeId: NodeId;
   seriesId: string;
   sifId: string;
@@ -104,7 +107,11 @@ async function insertTill(tx: Transaction, location: string, label: string): Pro
 }
 
 /** Adds one node (+ location + till + a node-keyed series + a live SIF registration). */
-async function addTill(tx: Transaction, nif: string, label: string): Promise<SeededTill> {
+async function addTill(
+  tx: Transaction,
+  nif: string,
+  label: string,
+): Promise<Omit<SeededTill, "deviceId">> {
   const location = await insertLocation(tx, label);
   const node = await insertNode(tx, location, label);
   const tillId = await insertTill(tx, location, label);
@@ -131,10 +138,12 @@ async function addTill(tx: Transaction, nif: string, label: string): Promise<See
  */
 export async function seedTill(db: Database, label = "A"): Promise<SeededTill> {
   const nif = freshNif();
-  return db.transaction(async (tx) => {
+  const seeded = await db.transaction(async (tx) => {
     await ensureTaxpayer(tx, nif);
     return addTill(tx, nif, label);
   });
+  const { deviceId } = await seedDevice(db, { tillId: seeded.tillId });
+  return { ...seeded, deviceId };
 }
 
 /**
@@ -146,7 +155,7 @@ export async function addTillToNode(
   seed: SeededTill,
   label: string,
 ): Promise<SeededTill> {
-  return db.transaction(async (tx) => {
+  const added = await db.transaction(async (tx) => {
     const [locationRow] = await tx
       .select({ locationId: nodes.locationId })
       .from(nodes)
@@ -165,6 +174,8 @@ export async function addTillToNode(
       sifId: seed.sifId,
     };
   });
+  const { deviceId } = await seedDevice(db, { tillId: added.tillId });
+  return { ...added, deviceId };
 }
 
 /** Inserts one location + node, deliberately WITHOUT registering a SIF. */
@@ -210,6 +221,8 @@ export async function seedSale(
     .insert(sales)
     .values({
       tillId: till.tillId,
+      source: "device",
+      deviceId: till.deviceId,
       nodeId: till.nodeId,
       seriesId: till.seriesId,
       invoiceNumber,
@@ -229,11 +242,12 @@ export async function seedSale(
 
 /**
  * A minimal alta ready for appendToChain — Encadenamiento is chain-owned, not this fixture's.
- * `tillId` rides beside `input`, never inside it: it is not an AEAT field and must never be hashed.
- * The return type is the NARROWED branch so a caller's `.input` is not the union of both shapes.
+ * The till and the device's origin ride beside `input`, never inside it: neither is an AEAT field
+ * and neither may be hashed. The return type is the NARROWED branch so a caller's `.input` is not
+ * the union of both shapes.
  */
 export function altaFor(
-  tillId: TillId,
+  till: Pick<SeededTill, "tillId" | "deviceId">,
   saleId: SaleId,
   invoiceNumber: number,
   seconds: number,
@@ -261,12 +275,19 @@ export function altaFor(
     generadoEn: new Date(Date.UTC(2026, 6, 20, 17, 20, seconds)),
     offsetMinutes: 120,
   };
-  return { tipo: "alta", saleId, tillId, entorno, input };
+  return {
+    tipo: "alta",
+    saleId,
+    tillId: till.tillId,
+    origin: deviceOrigin(till.deviceId),
+    entorno,
+    input,
+  };
 }
 
 /** A minimal anulación against an already-issued invoice; see `altaFor`. */
 export function anulacionFor(
-  tillId: TillId,
+  till: Pick<SeededTill, "tillId" | "deviceId">,
   saleId: SaleId,
   invoiceNumber: number,
   seconds: number,
@@ -280,5 +301,12 @@ export function anulacionFor(
     generadoEn: new Date(Date.UTC(2026, 6, 20, 17, 20, seconds)),
     offsetMinutes: 120,
   };
-  return { tipo: "anulacion", saleId, tillId, entorno, input };
+  return {
+    tipo: "anulacion",
+    saleId,
+    tillId: till.tillId,
+    origin: deviceOrigin(till.deviceId),
+    entorno,
+    input,
+  };
 }

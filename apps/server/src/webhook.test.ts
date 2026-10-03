@@ -7,8 +7,8 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { PAYMENTS_MIGRATIONS, insertInitiated } from "@waitron/payments";
-import { decimal } from "@waitron/shared";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { decimal, deviceOrigin } from "@waitron/shared";
+import { seedTenant, seedDevice } from "@waitron/db/testing/seed.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { createHealthState, healthApp } from "./health.js";
 import { hostedWebhookSecretFrom, mountWebhook } from "./webhook.js";
@@ -73,8 +73,10 @@ async function seedInitiated(
     .insert(workingOrders)
     .values({ tillId: till!.id, orderNumber: 1 })
     .returning({ id: workingOrders.id });
+  const { deviceId } = await seedDevice(db, { tillId: till!.id });
   await withTransaction(db, (tx) =>
     insertInitiated(tx, {
+      origin: deviceOrigin(deviceId),
       workingOrderId: wo!.id,
       provider: "stripe",
       paymentRef: randomUUID(),

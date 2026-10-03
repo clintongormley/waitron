@@ -8,6 +8,7 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
+  deviceOrigin,
 } from "@waitron/shared";
 import { openIncidents, recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
@@ -41,6 +42,7 @@ const steadyClock: TrustedClock = {
 
 function buildInput(s: SeededForSale, settledAt: Date): RecordSaleInput {
   return {
+    origin: deviceOrigin(s.deviceId),
     tillId: brandTillId(s.tillId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
@@ -77,7 +79,7 @@ describe("offline accept -> recordSale -> associate -> forward decline (sale sta
     const provider = new FakePaymentProvider(suite.db);
     provider.offlineNextCollect();
     const paid = await provider.collect({
-      tillId: brandTillId(s.tillId),
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("10.00"),
       allowOffline: true,

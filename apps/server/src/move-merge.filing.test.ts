@@ -26,7 +26,7 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -35,6 +35,7 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { joinTables, moveGuests } from "./table-actions.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 /**
  * Joining and merging tabs, through to what gets FILED: every case here pays through a real
@@ -92,7 +93,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 }
 
 interface SeededVenue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   available: AvailableProduct[];
   /** "Café" — each, 1.50 gross, general(21%). */
   cafe: AvailableProduct;
@@ -139,7 +140,7 @@ async function setupVenue(): Promise<SeededVenue> {
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = tillConfigFromVenue(venue);
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const available = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -173,12 +174,12 @@ async function setupVenue(): Promise<SeededVenue> {
 
 /** Each venue's offers in its tables zone, keyed by the venue's config so call sites pass only `cfg`. */
 const offersByCfg = new WeakMap<TillConfig, ZoneOffers>();
-function offersOf(cfg: TillConfig): ZoneOffers {
+function offersOf(cfg: DeviceRequestConfig): ZoneOffers {
   return offersByCfg.get(cfg)!;
 }
 
 /** Seed one active dining table in the venue's tables zone; returns its id. */
-async function seedTable(cfg: TillConfig, label: string): Promise<string> {
+async function seedTable(cfg: DeviceRequestConfig, label: string): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     return createTable(tx, cfg, { label, zoneId: offersOf(cfg).zoneId }).then((r) => r.id);
   });
@@ -186,7 +187,7 @@ async function seedTable(cfg: TillConfig, label: string): Promise<string> {
 
 /** Open a tab on a table; returns its tab (working_order) id. */
 async function openTabOn(
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   tableId: string,
   lines: { productId: string; quantity: string }[],
 ): Promise<string> {

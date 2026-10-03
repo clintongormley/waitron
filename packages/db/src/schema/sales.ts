@@ -17,6 +17,7 @@ import {
   tsString,
 } from "./columns.js";
 import { billPayments } from "./bill-payments.js";
+import { devices } from "./devices.js";
 import { nodes } from "./nodes.js";
 import { workingOrders } from "./orders.js";
 import { invoiceSeries } from "./series.js";
@@ -69,6 +70,13 @@ export const sales = table(
       .notNull()
       /* v8 ignore start */
       .references(() => tills.id, { onDelete: "restrict" }),
+    /* v8 ignore stop */
+    // Plain text until the table is rebuilt with the source's CHECKs: a declared vocabulary with no
+    // CHECK in the database fails the schema conformance suite.
+    source: label("source"),
+    /* v8 ignore start */
+    // Added by `ALTER TABLE`, which writes no delete rule, so it is declared with none.
+    deviceId: id("device_id").references(() => devices.id),
     /* v8 ignore stop */
     seriesId: id("series_id")
       .notNull()

@@ -2,11 +2,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  decimal,
-  tillId as brandTillId,
-  workingOrderId as brandWorkingOrderId,
-} from "@waitron/shared";
+import { decimal, deviceOrigin, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { findPaymentByRef } from "./store.js";
 import { SimulatorPaymentProvider } from "./simulator.js";
@@ -24,14 +20,40 @@ async function setup() {
   const seeded = await seedWorkingOrder(suite.db, freshNif());
   const provider = new SimulatorPaymentProvider(suite.db);
   const params = {
-    tillId: brandTillId(seeded.tillId),
+    origin: deviceOrigin(seeded.deviceId),
     workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
     amount: decimal("10.00"),
   };
   return { seeded, provider, params };
 }
 
+/** The stored source and device of the payment with this reference. */
+async function storedOrigin(paymentRef: string) {
+  const rows = await suite.db.execute<{ source: string | null; device_id: string | null }>(
+    sql`select source, device_id from payments where payment_ref = ${paymentRef}`,
+  );
+  return rows.rows[0];
+}
+
 describe("SimulatorPaymentProvider", () => {
+  it("stores the device a captured payment was started on", async () => {
+    const { seeded, provider, params } = await setup();
+    const result = await provider.collect({ ...params, simulationOutcome: "captured" });
+    expect(await storedOrigin(result.paymentRef)).toEqual({
+      source: "device",
+      device_id: seeded.deviceId,
+    });
+  });
+
+  it("stores the device a declined payment was started on", async () => {
+    const { seeded, provider, params } = await setup();
+    const result = await provider.collect({ ...params, simulationOutcome: "declined" });
+    expect(await storedOrigin(result.paymentRef)).toEqual({
+      source: "device",
+      device_id: seeded.deviceId,
+    });
+  });
+
   it("captures the success scenario and persists the simulated payment", async () => {
     const { provider, params } = await setup();
     const result = await provider.collect({ ...params, simulationOutcome: "captured" });

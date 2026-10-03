@@ -32,13 +32,14 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
 import { readTenderBlock } from "./till-sale.js";
 import { createOpenOrder } from "./working-order.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // The whole manifest is migrated because the seed runs the real provisioning plan and `recordSale`.
 // Each case seeds its own sale under its own working-order id, which `sales_working_order_id_key`
@@ -95,7 +96,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
   };
 }
 
-let cfg: TillConfig;
+let cfg: DeviceRequestConfig;
 let menuItemId: string;
 let zoneId: string;
 
@@ -146,7 +147,7 @@ beforeAll(async () => {
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  cfg = tillConfigFromVenue(venue);
+  cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   ({ menuItemId, zoneId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -186,6 +187,7 @@ async function seedSale(
   );
   const priced = rateLines(gross, "2026-09-27");
   const { saleId } = await recordSale(tx, backend, {
+    origin: cfg.origin,
     tillId: cfg.tillId,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
@@ -212,6 +214,7 @@ async function seedSale(
   if (payment !== undefined) {
     const paymentRef = randomUUID();
     await insertCapturedPayment(tx, {
+      origin: cfg.origin,
       workingOrderId,
       provider: payment.provider,
       paymentRef,
@@ -341,6 +344,7 @@ describe("readTenderBlock", () => {
       );
       const priced = rateLines(gross, "2026-09-27");
       const { saleId } = await recordSale(tx, backend, {
+        origin: cfg.origin,
         tillId: cfg.tillId,
         nodeId: cfg.nodeId,
         seriesId: cfg.seriesId,

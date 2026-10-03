@@ -10,7 +10,7 @@ import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode } from "../testing/seed.js";
 import { sales } from "./sales.js";
 import { invoiceSeries } from "./series.js";
 import { locations, tenants, tills } from "./tenants.js";
@@ -29,6 +29,7 @@ const AT = "2026-07-20T19:20:30+00:00";
 
 let seriesA = "";
 let nodeA = "";
+let deviceA = "";
 
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
   const result = (await db.execute(query)) as unknown as { rows: T[] } | T[];
@@ -49,6 +50,7 @@ async function seed(db: Database): Promise<void> {
   ]);
   await db.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
   nodeA = await seedNode(db, brandLocationId(LOCATION_A));
+  ({ deviceId: deviceA } = await seedDevice(db, { tillId: TILL_A1 }));
   const [a] = await db
     .insert(invoiceSeries)
     .values({ nodeId: nodeA, code: "FA", purpose: "standard" })
@@ -78,7 +80,7 @@ async function insertSale(
     db,
     // `id` is named explicitly because `sales.id` is `$defaultFn(newId)` — a JavaScript generator
     // rather than a SQL DEFAULT, which a raw insert never reaches.
-    sql`insert into sales (id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, counterparty_tax_id, counterparty_legal_name, counterparty_country_code) values (${randomUUID()}, ${tillId}, ${nodeId}, ${seriesId}, ${invoiceCounter}, ${AT}, 120,
+    sql`insert into sales (id, till_id, source, device_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, counterparty_tax_id, counterparty_legal_name, counterparty_country_code) values (${randomUUID()}, ${tillId}, 'device', ${deviceA}, ${nodeId}, ${seriesId}, ${invoiceCounter}, ${AT}, 120,
            100, '[]', ${locales[0]}, ${localesJson}, 'verifactu', 'recorded',
            ${cp?.taxId ?? null}, ${cp?.legalName ?? null}, ${cp?.countryCode ?? null}
          ) returning id`,

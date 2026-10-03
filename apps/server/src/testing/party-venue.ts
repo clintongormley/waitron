@@ -38,12 +38,13 @@ import { placeGroups } from "../order-groups.js";
 import { memberTables, seatTable, setPartyName } from "../parties.js";
 import { joinTables } from "../table-actions.js";
 import { createTable } from "../tables.js";
-import type { TillConfig } from "../till-config.js";
+import type { DeviceRequestConfig } from "../till-config.js";
 import { systemClock } from "../till-backend.js";
 import { payWorkingOrder } from "../till-sale.js";
 import { addTabRound, listTablesWithState, parkOrder } from "../working-order.js";
 import { publishWorkingMenu } from "./publish-menu.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";
+import { deviceRequestCfg } from "./session-device.js";
 
 /**
  * A provisioned venue for the party suites: real Veri*Factu filing that never contacts AEAT, one
@@ -68,7 +69,7 @@ export interface PartyVenue {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   /** The "tables" zone. */
   tables: ZoneOffers;
   /** The venue's counter-default zone, selling the same offers as the tables zone. */
@@ -128,7 +129,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     ),
     { db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
+  const cfg = await deviceRequestCfg(db, {
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -138,7 +139,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  });
   const { tables, counter, productIds } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
     const platos = await createCategory(tx, { name: "Platos" });

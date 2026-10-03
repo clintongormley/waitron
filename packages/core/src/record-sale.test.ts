@@ -5,8 +5,10 @@ import {
   seriesId as brandSeriesId,
   workingOrderId as brandWorkingOrderId,
   decimal,
+  deviceOrigin,
+  jobOrigin,
 } from "@waitron/shared";
-import type { NodeId, SeriesId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { DeviceId, NodeId, SeriesId, TillId, WorkingOrderId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type {
   FiscalBackend,
@@ -36,6 +38,7 @@ import { settleSale } from "./settle-sale.js";
 import { seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
 let tillId: TillId;
+let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
@@ -46,7 +49,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ tillId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -79,6 +82,7 @@ const DEFAULT_TENDERS: RecordSaleTender[] = [
 function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
     tillId,
+    origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,
     locale: "es-ES",
@@ -167,6 +171,41 @@ describe("formatInvoiceNumber", () => {
 
   it("does not pad or otherwise reformat the counter", () => {
     expect(formatInvoiceNumber("FA", 123)).toBe("FA/123");
+  });
+});
+
+describe("recordSale — the sale's origin", () => {
+  it("stores the device a sale was rung on", async () => {
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), {
+      origin: deviceOrigin(deviceId),
+    });
+    const [row] = await rows<{ source: string; device_id: string | null }>(
+      sql`select source, device_id from sales where id = ${saleId}`,
+    );
+    expect(row).toEqual({ source: "device", device_id: deviceId });
+  });
+
+  it("stores a demo seed sale with no device", async () => {
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), {
+      origin: jobOrigin("demo_seed"),
+    });
+    const [row] = await rows<{ source: string; device_id: string | null }>(
+      sql`select source, device_id from sales where id = ${saleId}`,
+    );
+    expect(row).toEqual({ source: "demo_seed", device_id: null });
+  });
+
+  it("hands the origin to the fiscal backend", async () => {
+    const fake = new FakeFiscalBackend(suite.db);
+    const seen: SaleForFiscalRecord[] = [];
+    const backend = wrapBackend(fake, {
+      recordSale: (tx, sale) => {
+        seen.push(sale);
+        return fake.recordSale(tx, sale);
+      },
+    });
+    await run(backend, { origin: jobOrigin("readiness_test") });
+    expect(seen.map((sale) => sale.origin)).toEqual([jobOrigin("readiness_test")]);
   });
 });
 
@@ -725,6 +764,8 @@ describe("recordSale — numbering", () => {
       withTransaction(suite.db, async (tx) => {
         await tx.insert(sales).values({
           tillId,
+          source: "device",
+          deviceId,
           nodeId,
           seriesId,
           invoiceNumber: 1,

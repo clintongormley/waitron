@@ -49,7 +49,7 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { OrderFlow, TillConfig } from "./till-config.js";
+import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
 import { collectOrder, printSaleReceipt, recordTillSale, reprintSale } from "./till-sale.js";
 import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { createTable } from "./tables.js";
@@ -72,6 +72,7 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { printingAlertSource } from "./alert-sources.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 /**
  * The auto-print hook: a `print_jobs` outbox row and a `drawer_opens` audit row written atomically
@@ -138,7 +139,7 @@ function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConf
   };
 }
 
-function printCfg(cfg: TillConfig): PrintConfig {
+function printCfg(cfg: DeviceRequestConfig): PrintConfig {
   return { locationId: cfg.locationId };
 }
 
@@ -147,7 +148,7 @@ function printCfg(cfg: TillConfig): PrintConfig {
  * the counter zone under `orderFlow`.
  */
 async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   each: AvailableProduct & { menuItemId: string };
   zoneId: string;
 }> {
@@ -185,7 +186,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = tillConfigFromVenue(venue, orderFlow);
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, orderFlow));
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -213,7 +214,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
  * 5737, unroutable).
  */
 async function makePrinter(
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   {
     active = true,
     transport = "cloud_poll" as "cloud_poll" | "network_tcp",
@@ -241,7 +242,7 @@ async function makePrinter(
 /** Set the location's `receipt_print_mode` and/or the till's `receipt_printer_id`. Pass
  *  `printerId: null` to leave the till with no printer. */
 async function configureReceipt(
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   opts: { mode?: "auto" | "on_request" | "never"; printerId?: string | null },
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
@@ -261,7 +262,7 @@ async function configureReceipt(
 }
 
 async function printJobsFor(
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
 ): Promise<{ printerId: string; status: string; payload: Uint8Array }[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
@@ -275,7 +276,7 @@ async function printJobsFor(
   });
 }
 
-async function drawerOpensFor(cfg: TillConfig): Promise<
+async function drawerOpensFor(cfg: DeviceRequestConfig): Promise<
   {
     reason: string;
     saleId: string | null;
@@ -298,7 +299,7 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
   });
 }
 
-async function registroCount(cfg: TillConfig): Promise<number> {
+async function registroCount(cfg: DeviceRequestConfig): Promise<number> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx.select().from(registrosFacturacion);
@@ -307,7 +308,7 @@ async function registroCount(cfg: TillConfig): Promise<number> {
 }
 
 /** The one filed sale's id; the database is emptied after each test. */
-async function onlySaleId(cfg: TillConfig): Promise<string> {
+async function onlySaleId(cfg: DeviceRequestConfig): Promise<string> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx.select({ id: sales.id }).from(sales);
@@ -394,7 +395,7 @@ describe("receipt grouping after table changes", () => {
     "%s freezes the table label at issuance across renaming, collection and table turnover",
     async (orderFlow) => {
       const base = await setupVenue(orderFlow);
-      const cfg: TillConfig = { ...base.cfg, orderFlow };
+      const cfg = await deviceRequestCfg(suite.db, { ...base.cfg, orderFlow });
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode: "auto", printerId });
       // A tab opens only in a table_tab zone, so the order that carries the table here is a counter
@@ -713,7 +714,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
   it("hand-keyed CARD on a device that may not open the drawer: the receipt prints, and no drawer job or audit row", async () => {
     const { cfg: base, each, zoneId } = await setupVenue();
-    const cfg: TillConfig = { ...base, allowCashDrawer: false };
+    const cfg = await deviceRequestCfg(suite.db, { ...base, allowCashDrawer: false });
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "auto", printerId });
 
@@ -910,7 +911,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     "invoice-first placement routes the original to the issuing device's till printer in %s mode",
     async (mode) => {
       const base = await setupVenue("invoice_first");
-      const cfg: TillConfig = { ...base.cfg, orderFlow: "invoice_first" };
+      const cfg = await deviceRequestCfg(suite.db, { ...base.cfg, orderFlow: "invoice_first" });
       const deviceTillId = await withTransaction(suite.db, async (tx) => {
         const [till] = await tx
           .insert(tills)
@@ -948,7 +949,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
           .set({ orderFlow: "invoice_first" })
           .where(eq(locations.id, base.cfg.locationId));
       });
-      const cfg: TillConfig = { ...base.cfg, orderFlow: "invoice_first" };
+      const cfg = await deviceRequestCfg(suite.db, { ...base.cfg, orderFlow: "invoice_first" });
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode, printerId });
 
@@ -1002,7 +1003,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
 describe("every till switched to open its receipt printer's drawer opens it", () => {
   /** Another till at the venue's location, and the config a sale on it runs under. */
-  async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
+  async function addTill(cfg: DeviceRequestConfig, name: string): Promise<DeviceRequestConfig> {
     const id = await withTransaction(suite.db, async (tx) => {
       const [till] = await tx
         .insert(tills)
@@ -1013,14 +1014,14 @@ describe("every till switched to open its receipt printer's drawer opens it", ()
     return { ...cfg, tillId: brandTillId(id) };
   }
 
-  async function setOpensDrawer(cfg: TillConfig, opensDrawer: boolean): Promise<void> {
+  async function setOpensDrawer(cfg: DeviceRequestConfig, opensDrawer: boolean): Promise<void> {
     await withTransaction(suite.db, (tx) =>
       tx.update(tills).set({ opensDrawer }).where(eq(tills.id, cfg.tillId)),
     );
   }
 
   async function sale(
-    cfg: TillConfig,
+    cfg: DeviceRequestConfig,
     product: { zoneId: string; menuItemId: string },
     method: "cash" | "card" = "cash",
   ): Promise<void> {
@@ -1037,7 +1038,9 @@ describe("every till switched to open its receipt printer's drawer opens it", ()
   }
 
   /** Each job's printer, and whether it is a drawer kick or a document. */
-  async function jobKinds(cfg: TillConfig): Promise<{ printerId: string; kick: boolean }[]> {
+  async function jobKinds(
+    cfg: DeviceRequestConfig,
+  ): Promise<{ printerId: string; kick: boolean }[]> {
     return (await printJobsFor(cfg)).map((job) => ({
       printerId: job.printerId,
       kick: Buffer.from(job.payload).equals(Buffer.from(DRAWER_KICK)),
@@ -1047,7 +1050,7 @@ describe("every till switched to open its receipt printer's drawer opens it", ()
   /** Two tills at one location, both printing their receipts on one drawer printer. */
   async function sharedDrawer(orderFlow: OrderFlow = "prepay") {
     const base = await setupVenue(orderFlow);
-    const cfg: TillConfig = { ...base.cfg, orderFlow };
+    const cfg = await deviceRequestCfg(suite.db, { ...base.cfg, orderFlow });
     const other = await addTill(cfg, "Caja 2");
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "auto", printerId });
@@ -1124,7 +1127,7 @@ describe("every till switched to open its receipt printer's drawer opens it", ()
       });
       await setOpensDrawer(other, false);
 
-      const collectOn = async (till: TillConfig): Promise<void> => {
+      const collectOn = async (till: DeviceRequestConfig): Promise<void> => {
         const id = randomUUID();
         await parkOrder({ db: suite.db }, till, {
           id,

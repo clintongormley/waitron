@@ -112,7 +112,13 @@ export interface VerifactuBackendOptions {
 /** The columns `recordVoid` reads off the alta it voids. */
 type OriginalAlta = Pick<
   RegistroRow,
-  "till_id" | "node_id" | "id_emisor_factura" | "num_serie_factura" | "fecha_expedicion_factura"
+  | "till_id"
+  | "source"
+  | "device_id"
+  | "node_id"
+  | "id_emisor_factura"
+  | "num_serie_factura"
+  | "fecha_expedicion_factura"
 >;
 
 /**
@@ -238,6 +244,7 @@ export class VerifactuBackend implements FiscalBackend {
         tipo: "alta",
         saleId: sale.saleId,
         tillId: sale.tillId,
+        origin: sale.origin,
         entorno: this.deploymentEnvironment,
         input,
       },
@@ -320,7 +327,8 @@ export class VerifactuBackend implements FiscalBackend {
     void reason;
 
     const { rows } = await tx.execute<OriginalAlta>(sql`
-      select till_id, node_id, id_emisor_factura, num_serie_factura, fecha_expedicion_factura
+      select till_id, source, device_id, node_id, id_emisor_factura, num_serie_factura,
+        fecha_expedicion_factura
       from registros_facturacion
       where sale_id = ${saleId} and tipo_registro = 'alta'
       limit 1
@@ -330,8 +338,10 @@ export class VerifactuBackend implements FiscalBackend {
       throw new AppError("fiscal.sale_not_recorded", { saleId });
     }
 
-    // The anulación extends the ORIGINAL's chain, keyed by its node, and inherits its `till_id`.
+    // The anulación extends the ORIGINAL's chain, keyed by its node, and inherits its `till_id`,
+    // `source` and `device_id`.
     const tillId = original.till_id as TillId;
+    const origin = { source: original.source, deviceId: original.device_id };
     const nodeId = original.node_id as NodeId;
     const sif = await currentSif(tx, nodeId);
     const tenant = await this.taxpayer(tx);
@@ -355,7 +365,7 @@ export class VerifactuBackend implements FiscalBackend {
     const appended = await appendToChain(
       tx,
       nodeId,
-      { tipo: "anulacion", saleId, tillId, entorno: this.deploymentEnvironment, input },
+      { tipo: "anulacion", saleId, tillId, origin, entorno: this.deploymentEnvironment, input },
       sif,
     );
 
@@ -449,6 +459,7 @@ export class VerifactuBackend implements FiscalBackend {
         tipo: "alta",
         saleId: sale.saleId,
         tillId: sale.tillId,
+        origin: sale.origin,
         entorno: this.deploymentEnvironment,
         input,
       },
@@ -569,6 +580,7 @@ export class VerifactuBackend implements FiscalBackend {
         tipo: "alta",
         saleId: sale.saleId,
         tillId: sale.tillId,
+        origin: sale.origin,
         entorno: this.deploymentEnvironment,
         input,
       },

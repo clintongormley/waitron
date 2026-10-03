@@ -53,6 +53,7 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
 import type { Decimal, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { InputVatRateLine } from "@waitron/reporting";
@@ -477,6 +478,7 @@ async function main(): Promise<void> {
       const total = addDecimal(decimal(s.base), decimal(s.tax));
       const input: RecordSaleInput = {
         tillId: venue.tillId,
+        origin: jobOrigin("demo_seed"),
         nodeId: node.nodeId,
         seriesId: node.seriesId,
         locale: LOCALE,
@@ -517,6 +519,7 @@ async function main(): Promise<void> {
     const rect = issuanceAt(RECTIFICATIVA.day);
     const correctionInput: RecordCorrectionInput = {
       tillId: venue.tillId,
+      origin: jobOrigin("demo_seed"),
       nodeId: node0.nodeId,
       seriesId: node0.rectificativeSeriesId,
       correctsSaleId: saleIds[RECTIFICATIVA.correctsIndex]!,

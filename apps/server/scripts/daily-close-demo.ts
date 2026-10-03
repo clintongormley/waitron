@@ -40,6 +40,7 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 import { scriptSessionDevice } from "./script-device.js";
@@ -151,6 +152,7 @@ async function main(): Promise<void> {
     // Sale A — immediate cash settlement, base 100.00 @ 21%.
     const saleAInput: RecordSaleInput = {
       tillId: venue.tillId,
+      origin: jobOrigin("demo_seed"),
       nodeId: venue.nodeId,
       seriesId: venue.seriesId,
       locale: LOCALE,
@@ -180,6 +182,7 @@ async function main(): Promise<void> {
     // Sale B — deferred (invoice-first), base 50.00 @ 10%.
     const saleBInput: RecordSaleInput = {
       tillId: venue.tillId,
+      origin: jobOrigin("demo_seed"),
       nodeId: venue.nodeId,
       seriesId: venue.seriesId,
       locale: LOCALE,
@@ -222,6 +225,7 @@ async function main(): Promise<void> {
     // Corrects Sale A by −5.00 base @ 21% (total −6.05).
     const correctionInput: RecordCorrectionInput = {
       tillId: venue.tillId,
+      origin: jobOrigin("demo_seed"),
       nodeId: venue.nodeId,
       seriesId: venue.rectificativeSeriesId,
       correctsSaleId: saleA.saleId,

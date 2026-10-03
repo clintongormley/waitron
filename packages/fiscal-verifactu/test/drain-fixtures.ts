@@ -11,6 +11,7 @@ import type { Entorno } from "../src/registro-row.js";
 import { TEST_SISTEMA, nifWithControlLetter } from "../src/testing/seed.js";
 import { seedTenantWithSif } from "./fixtures.js";
 import { steadyClock } from "./write-path-fixtures.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 /**
  * Every row here is inserted through its TABLE DEFINITION, for the reason `./fixtures.ts`'s own
@@ -91,6 +92,7 @@ export async function insertPendingAlta(
   },
 ): Promise<{ registroId: string; numSerieFactura: string }> {
   const numSerieFactura = `S${String(params.secuencia)}/1`;
+  const { deviceId } = await seedDevice(db, { tillId: params.tillId });
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId: params.nodeId, code: `S${String(params.secuencia)}` })
@@ -99,6 +101,8 @@ export async function insertPendingAlta(
     .insert(sales)
     .values({
       tillId: params.tillId,
+      source: "device",
+      deviceId,
       nodeId: params.nodeId,
       seriesId: series!.id,
       invoiceNumber: params.secuencia,
@@ -150,6 +154,8 @@ export async function insertPendingAlta(
     .insert(registrosFacturacion)
     .values({
       tillId: params.tillId,
+      source: "device",
+      deviceId,
       nodeId: params.nodeId,
       sifId: params.sifId,
       saleId: sale!.id,

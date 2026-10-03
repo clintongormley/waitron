@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedDevice } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import {
   addDecimal,
@@ -33,6 +33,7 @@ import "./errors.js";
 const noopLog: Logger = () => {};
 
 let tillId: string;
+let deviceId: string;
 let nodeId: string;
 let locationId: string;
 let seriesId: string;
@@ -92,6 +93,8 @@ async function seedSale(db: Database, s: SeededSale | typeof Q1_SALE): Promise<v
   // column, and keeps the decimal literals the aggregate reads.
   await db.insert(sales).values({
     tillId,
+    source: "device",
+    deviceId,
     nodeId,
     seriesId,
     invoiceNumber: s.invoiceNumber,
@@ -156,6 +159,7 @@ const suite = useVenueDb({
       .values({ locationId, name: "Caja 1" })
       .returning({ id: tills.id });
     tillId = till!.id;
+    ({ deviceId } = await seedDevice(db, { tillId }));
     const [node] = await db
       .insert(nodes)
       .values({ locationId, name: "Nodo 1" })

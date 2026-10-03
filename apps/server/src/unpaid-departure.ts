@@ -4,11 +4,11 @@ import type { TrustedClock, FiscalBackend } from "@waitron/fiscal";
 import { authorize } from "@waitron/identity";
 import type { Override, PinAttempts } from "@waitron/identity";
 import { AppError, decimalToCents } from "@waitron/shared";
-import type { Decimal, SaleId, TillId } from "@waitron/shared";
+import type { Decimal, DeviceId, SaleId, TillId } from "@waitron/shared";
 import { billOwes, checkAndBumpParty, closeParty, readBillsOfParties } from "./parties.js";
 import { readIssuedSales } from "./sale-due.js";
 import type { Logger } from "./logger.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./till-config.js";
 import { settleIssuedOwingNothing } from "./till-sale.js";
 import {
   issueUnpaidInvoice,
@@ -59,7 +59,7 @@ export interface RecordedDeparture {
 export async function recordUnpaidDeparture(
   tx: Transaction,
   deps: { backend: FiscalBackend; clock: TrustedClock; log?: Logger },
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   saleTillId: TillId,
   partyId: string,
   req: UnpaidDepartureRequest,
@@ -142,6 +142,8 @@ export async function recordUnpaidDeparture(
           recordedBy: operator.personId,
           authorizedBy,
           tillId: saleTillId,
+          source: cfg.origin.source,
+          deviceId: cfg.origin.deviceId,
         });
 
   const empty = bills
@@ -163,6 +165,8 @@ async function insertDepartures(
     recordedBy: string;
     authorizedBy: string;
     tillId: TillId;
+    source: "device";
+    deviceId: DeviceId;
   },
 ): Promise<RecordedDeparture[]> {
   const numbers = await readInvoiceNumbers(

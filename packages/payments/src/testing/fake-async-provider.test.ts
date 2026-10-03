@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
+import { decimal, workingOrderId as brandWorkingOrderId, deviceOrigin } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import { getPaymentByRef } from "../store.js";
 import { freshNif, seedWorkingOrder } from "../../test/seed.js";
@@ -21,6 +21,7 @@ describe("FakeAsyncProvider", () => {
     const s = await seedWorkingOrder(suite.db, freshNif());
     const provider = new FakeAsyncProvider(suite.db);
     const res = await provider.initiate({
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       paymentRef: "pay-1",

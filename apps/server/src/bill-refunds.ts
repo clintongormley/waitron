@@ -40,7 +40,7 @@ import type { Attestation, BillBalance, BillRefundView } from "./bill-payments.j
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { enqueueBillRefundDrawer } from "./receipt-print.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./till-config.js";
 import { fingerprint } from "./parties.js";
 import { refusePaymentInFlight } from "./working-order.js";
 import type { TillSaleDeps } from "./working-order.js";
@@ -504,7 +504,7 @@ async function refundOverrideToCheck(
  */
 export async function refundBillPayment(
   deps: BillRefundDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   workingOrderId: string,
   paymentId: string,
   req: BillRefundRequest,
@@ -599,6 +599,8 @@ export async function refundBillPayment(
           authorizedBy: authorization.authorizedBy,
           requestedBy: operator.personId,
           tillId: cfg.tillId,
+          source: cfg.origin.source,
+          deviceId: cfg.origin.deviceId,
           createdAt,
         };
         if (payment.method === "cash") {

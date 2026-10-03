@@ -7,7 +7,7 @@ import type { KeyRing } from "@waitron/credentials";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets, type WaitronModule } from "@waitron/module";
-import { nodeId, seriesId, tillId } from "@waitron/shared";
+import { nodeId, seriesId, tillId, jobOrigin } from "@waitron/shared";
 import {
   applyVenue,
   planVenue,
@@ -107,6 +107,7 @@ export async function submitFiscalReadiness(args: {
           args.contribution.makeBackend({ db, clock: systemClock(), environment: "preproduction" }),
           {
             tillId: tillId(venue.tillId),
+            origin: jobOrigin("readiness_test"),
             nodeId: nodeId(venue.nodeId),
             seriesId: seriesId(venue.seriesIds[0]!),
             locale: args.venue.location.invoiceLocales[0]!,

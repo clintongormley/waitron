@@ -460,3 +460,32 @@ describe("SP-C: a sale posted with the dev-override header files under THAT devi
     expect(await saleTillIds(cfg)).toEqual([tillY]);
   });
 });
+
+describe("a sale names the device it was rung on", () => {
+  it("files the sale and its fiscal record under the ringing device's source and device", async () => {
+    // Two devices on one till, so only the device can tell the two sales apart.
+    const { cfg, product, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const deviceX = await enrolTillCookie(cfg, cfg.tillId);
+    const deviceY = await enrolTillCookie(cfg, cfg.tillId);
+    for (const cookie of [deviceX, deviceY]) {
+      await ringSale(app, await login(app, operatorId, { cookie }), cookie, product.menuItemId);
+    }
+    const idOf = (cookie: string) => cookie.slice(`${DEVICE_COOKIE}=`.length).split(".")[0];
+    const expected = [deviceX, deviceY].map((cookie) => ({
+      source: "device",
+      device_id: idOf(cookie),
+    }));
+
+    const saleRows = await suite.db.execute<{ source: string | null; device_id: string | null }>(
+      sql`select source, device_id from sales order by invoice_number`,
+    );
+    expect(saleRows.rows).toEqual(expected);
+    const registroRows = await suite.db.execute<{
+      source: string | null;
+      device_id: string | null;
+    }>(sql`select source, device_id from registros_facturacion order by secuencia`);
+    expect(registroRows.rows).toEqual(expected);
+  });
+});

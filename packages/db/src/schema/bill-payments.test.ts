@@ -8,7 +8,7 @@ import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError } from "../testing/errors.js";
-import { seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import {
   BILL_PAYMENT_CHANGE_REFUSAL,
@@ -37,6 +37,7 @@ const AT = "2026-09-27T12:00:00.000Z";
 const LATER = "2026-09-27T12:05:00.000Z";
 
 let nodeId = "";
+let deviceId = "";
 let seriesId = "";
 let billId = "";
 let otherBillId = "";
@@ -66,6 +67,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       { id: TILL_2, locationId: LOCATION, name: "Till 2" },
     ]);
     nodeId = await seedNode(db, brandLocationId(LOCATION));
+    ({ deviceId } = await seedDevice(db, { tillId: TILL }));
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "FA", purpose: "standard" })
@@ -98,6 +100,8 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       state: "pending",
       requestedBy: PERSON,
       tillId: TILL,
+      source: "device",
+      deviceId,
       ...overrides,
     };
   }
@@ -121,6 +125,8 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       authorizedBy: MANAGER,
       requestedBy: PERSON,
       tillId: TILL,
+      source: "device",
+      deviceId,
       state: "pending" as const,
       ...overrides,
     };
@@ -171,6 +177,8 @@ describe("bill payments: the three tables, their checks and their triggers", () 
         .insert(sales)
         .values({
           tillId: TILL,
+          source: "device",
+          deviceId,
           nodeId,
           seriesId,
           invoiceNumber,

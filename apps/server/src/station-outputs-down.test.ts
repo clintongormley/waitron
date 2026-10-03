@@ -29,6 +29,7 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { deploymentEnvironment } from "./config.js";
 import { stationOutputAlertSource } from "./alert-sources.js";
 import { createWatcher } from "./watchers.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -109,7 +110,7 @@ async function waitingItem(
   });
   await placeOrder(
     { db: suite.db, backend, clock },
-    venue.cfg,
+    await deviceRequestCfg(suite.db, venue.cfg),
     orderId,
     randomUUID(),
     venue.cfg.tillId,

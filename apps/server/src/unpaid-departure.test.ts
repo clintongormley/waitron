@@ -205,6 +205,7 @@ async function credit(billId: string, base: string, total: string): Promise<void
       pin: "1234",
     });
     await recordCorrection(tx, venue.backend, {
+      origin: venue.cfg.origin,
       tillId: venue.cfg.tillId,
       nodeId: venue.cfg.nodeId,
       seriesId: brandSeriesId(series!.id),
@@ -258,6 +259,8 @@ describe("recording that a table left without paying", () => {
         recordedBy: supervisorId,
         authorizedBy: supervisorId,
         tillId: venue.deviceTillId,
+        source: "device",
+        deviceId: venue.deviceId,
         recordedAt: expect.any(String),
       },
     ]);
@@ -457,6 +460,51 @@ describe("who may record it", () => {
       }),
     ]);
     expect((await partyState(party.partyId)).state).toBe("closed");
+  });
+
+  it("records the departure under the device it was recorded on", async () => {
+    const [profile] = await inTx(venue, (tx) =>
+      tx
+        .insert(deviceProfiles)
+        .values({
+          name: "Handheld origin",
+          formFactor: "phone-portrait",
+          capabilities: ["take-cash"],
+        })
+        .returning({ id: deviceProfiles.id }),
+    );
+    const handheld = await enrolDeviceForTest(venue.db, venue.cfg, {
+      name: "Comandera origin",
+      profileId: profile!.id,
+      registerId: venue.cfg.tillId,
+    });
+    const party = await seatedWith(venue, "Botella tinto");
+    const onHandheld = await inTx(venue, (tx) =>
+      loginWithPin(tx, {
+        deviceId: handheld.deviceId,
+        personId: supervisorId,
+        pin: SUPERVISOR_PIN,
+      }),
+    );
+
+    const answer = await depart(
+      party.partyId,
+      { expectedPartyRevision: party.revision, reason: REASON },
+      `${SESSION_COOKIE}=${onHandheld.token}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`,
+    );
+
+    expect(answer.status).toBe(200);
+    const expected = [{ source: "device", device_id: handheld.deviceId }];
+    expect(
+      venue.db.all(
+        sql`select source, device_id from unpaid_departures where working_order_id = ${party.tabId}`,
+      ),
+    ).toEqual(expected);
+    expect(
+      venue.db.all(
+        sql`select source, device_id from sales where working_order_id = ${party.tabId}`,
+      ),
+    ).toEqual(expected);
   });
 
   it("refuses a wrong supervisor PIN, and writes nothing", async () => {

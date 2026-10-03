@@ -5,8 +5,8 @@ import { recordSale } from "@waitron/core";
 import { captureError, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
-import { AppError } from "@waitron/shared";
-import type { NodeId, SeriesId, TillId } from "@waitron/shared";
+import { AppError, deviceOrigin, jobOrigin } from "@waitron/shared";
+import type { DeviceId, NodeId, SeriesId, TillId } from "@waitron/shared";
 import {
   MONEY_SCALE,
   decimal,
@@ -23,13 +23,14 @@ import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/writ
 
 let backend: VerifactuBackend;
 let tillId: TillId;
+let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
+  ({ tillId, deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -38,10 +39,23 @@ beforeEach(async () => {
   });
 });
 
-async function sell() {
+async function sell(overrides: Partial<Parameters<typeof saleInput>[0]> = {}) {
   return withTransaction(suite.db, async (tx) => {
-    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
+    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId, ...overrides }));
   });
+}
+
+/** Each record's stored source and device, by record type. */
+async function storedOrigins(saleId: string) {
+  const { rows } = await suite.db.execute<{
+    tipo_registro: string;
+    source: string | null;
+    device_id: string | null;
+  }>(sql`
+    select tipo_registro, source, device_id from registros_facturacion
+    where sale_id = ${saleId} order by secuencia
+  `);
+  return rows;
 }
 
 describe("id", () => {
@@ -64,6 +78,7 @@ describe("zero-rate sales", () => {
         backend,
         saleInput({
           tillId,
+          origin: deviceOrigin(deviceId),
           nodeId,
           seriesId,
           total: "5.00",
@@ -154,6 +169,40 @@ describe("the taxpayer every record is filed as", () => {
     );
     expect(error).not.toBeInstanceOf(AppError);
     expect((error as Error).message).toContain("tenants is empty");
+  });
+});
+
+describe("the source and device on each record", () => {
+  it("files a sale's alta with the sale's source and device", async () => {
+    const { saleId } = await sell({ origin: deviceOrigin(deviceId) });
+    expect(await storedOrigins(saleId)).toEqual([
+      { tipo_registro: "alta", source: "device", device_id: deviceId },
+    ]);
+  });
+
+  it("files a demo seed sale's alta with no device", async () => {
+    const { saleId } = await sell({ origin: jobOrigin("demo_seed") });
+    expect(await storedOrigins(saleId)).toEqual([
+      { tipo_registro: "alta", source: "demo_seed", device_id: null },
+    ]);
+  });
+
+  it("copies the original alta's source and device onto a void's anulación", async () => {
+    const { saleId } = await sell({ origin: deviceOrigin(deviceId) });
+    await withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error"));
+    expect(await storedOrigins(saleId)).toEqual([
+      { tipo_registro: "alta", source: "device", device_id: deviceId },
+      { tipo_registro: "anulacion", source: "device", device_id: deviceId },
+    ]);
+  });
+
+  it("copies a job-origin alta's source, with no device, onto its anulación", async () => {
+    const { saleId } = await sell({ origin: jobOrigin("readiness_test") });
+    await withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error"));
+    expect(await storedOrigins(saleId)).toEqual([
+      { tipo_registro: "alta", source: "readiness_test", device_id: null },
+      { tipo_registro: "anulacion", source: "readiness_test", device_id: null },
+    ]);
   });
 });
 
@@ -265,6 +314,7 @@ describe("recordCorrection — refusals", () => {
   function correctiveSale(): SaleForFiscalRecord {
     return {
       tillId,
+      origin: deviceOrigin(deviceId),
       nodeId,
       saleId: brandSaleId("33333333-3333-4333-8333-333333333333"),
       seriesId,
@@ -298,6 +348,8 @@ describe("recordCorrection — refusals", () => {
       await tx.insert(sales).values({
         id: original,
         tillId,
+        source: "device",
+        deviceId,
         nodeId,
         seriesId,
         invoiceNumber: 500,
@@ -313,6 +365,7 @@ describe("recordCorrection — refusals", () => {
       });
       await backend.recordSale(tx, {
         tillId,
+        origin: deviceOrigin(deviceId),
         nodeId,
         saleId: original,
         seriesId,
@@ -349,6 +402,7 @@ describe("recordSubstitution — refusals", () => {
   function substitutionSale(overrides: Partial<SaleForFiscalRecord> = {}): SaleForFiscalRecord {
     return {
       tillId,
+      origin: deviceOrigin(deviceId),
       nodeId,
       saleId: brandSaleId("55555555-5555-4555-8555-555555555555"),
       seriesId,
@@ -386,6 +440,8 @@ describe("recordSubstitution — refusals", () => {
       await tx.insert(sales).values({
         id: original,
         tillId,
+        source: "device",
+        deviceId,
         nodeId,
         seriesId,
         invoiceNumber: 600,
@@ -401,6 +457,7 @@ describe("recordSubstitution — refusals", () => {
       });
       await backend.recordSale(tx, {
         tillId,
+        origin: deviceOrigin(deviceId),
         nodeId,
         saleId: original,
         seriesId,
@@ -471,6 +528,8 @@ describe("recordSale — invoice type selection", () => {
       await tx.insert(sales).values({
         id: freshSaleId,
         tillId,
+        source: "device",
+        deviceId,
         nodeId,
         seriesId,
         invoiceNumber: 999,
@@ -486,6 +545,7 @@ describe("recordSale — invoice type selection", () => {
       });
       await backend.recordSale(tx, {
         tillId,
+        origin: deviceOrigin(deviceId),
         nodeId,
         saleId: freshSaleId,
         seriesId,
@@ -517,6 +577,8 @@ describe("recordSale — invoice type selection", () => {
       await tx.insert(sales).values({
         id: saleId,
         tillId,
+        source: "device",
+        deviceId,
         nodeId,
         seriesId,
         invoiceNumber,
@@ -531,6 +593,7 @@ describe("recordSale — invoice type selection", () => {
       });
       await backend.recordSale(tx, {
         tillId,
+        origin: deviceOrigin(deviceId),
         nodeId,
         saleId: brandSaleId(saleId),
         seriesId,
@@ -663,6 +726,8 @@ describe("filedReceiptFor", () => {
       await tx.insert(sales).values({
         id: freshSaleId,
         tillId,
+        source: "device",
+        deviceId,
         nodeId,
         seriesId,
         invoiceNumber: 700,
@@ -678,6 +743,7 @@ describe("filedReceiptFor", () => {
       });
       return backend.recordSale(tx, {
         tillId,
+        origin: deviceOrigin(deviceId),
         nodeId,
         saleId: freshSaleId,
         seriesId,

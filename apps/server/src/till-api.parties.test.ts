@@ -679,8 +679,11 @@ describe("GET /api/parties/:id/bills", () => {
       .insert(invoiceSeries)
       .values({ nodeId: cfg.nodeId, code: `R${randomUUID()}` })
       .returning({ id: invoiceSeries.id });
+    const deviceId = await seedSessionDevice(suite.db, cfg);
     await suite.db.insert(sales).values({
       tillId: cfg.tillId,
+      source: "device",
+      deviceId,
       nodeId: cfg.nodeId,
       seriesId: series!.id,
       invoiceNumber: 1,

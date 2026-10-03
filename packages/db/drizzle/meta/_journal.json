@@ -519,6 +519,13 @@
       "when": 1791041562151,
       "tag": "0073_profile_printer_lists",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "6",
+      "when": 1791050478790,
+      "tag": "0074_money_records_origin",
+      "breakpoints": true
     }
   ]
 }

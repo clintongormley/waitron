@@ -84,6 +84,8 @@ async function strandedPending(billId: string, applied: number, tip = 0): Promis
         state: "pending",
         requestedBy: venue.operatorId,
         tillId: venue.device2TillId,
+        source: "device",
+        deviceId: venue.device2Id,
       })
       .returning({ id: billPayments.id }),
   );
@@ -114,6 +116,7 @@ async function capturedPending(billId: string, applied: number): Promise<string>
   const id = await strandedPending(billId, applied);
   await inTx(venue, (tx) =>
     insertCapturedPayment(tx, {
+      origin: venue.cfg.origin,
       workingOrderId: brandWorkingOrderId(billId),
       provider: "fake",
       paymentRef: `captured-${randomUUID()}`,
@@ -220,6 +223,7 @@ describe("recovery after a crash (design §8 test 13)", () => {
     const id = await strandedPending(billId, 3000, 500);
     await inTx(venue, (tx) =>
       insertCapturedPayment(tx, {
+        origin: venue.cfg.origin,
         workingOrderId: brandWorkingOrderId(billId),
         provider: "fake",
         paymentRef: `mismatch-${randomUUID()}`,
@@ -254,6 +258,7 @@ describe("the loop's own edges", () => {
     const paymentRef = `untimed-${randomUUID()}`;
     await inTx(venue, (tx) =>
       insertCapturedPayment(tx, {
+        origin: venue.cfg.origin,
         workingOrderId: brandWorkingOrderId(billId),
         provider: "fake",
         paymentRef,
@@ -399,6 +404,7 @@ describe("a pending card with no provider row (design §8 test 16)", () => {
     const id = await strandedPending(billId, 2000);
     await inTx(venue, (tx) =>
       insertFailedPayment(tx, {
+        origin: venue.cfg.origin,
         workingOrderId: brandWorkingOrderId(billId),
         provider: "fake",
         paymentRef: `failed-${randomUUID()}`,
@@ -472,6 +478,8 @@ describe("rows written within one millisecond", () => {
             receivedAt: state === "received" ? at : null,
             requestedBy: venue.operatorId,
             tillId: venue.device2TillId,
+            source: "device",
+            deviceId: venue.device2Id,
             createdAt: at,
           })
           .returning({ id: billPayments.id }),
@@ -521,6 +529,8 @@ describe("rows written within one millisecond", () => {
             authorizedBy: venue.operatorId,
             requestedBy: venue.operatorId,
             tillId: venue.device2TillId,
+            source: "device",
+            deviceId: venue.device2Id,
             state: "pending",
             createdAt: at,
           })

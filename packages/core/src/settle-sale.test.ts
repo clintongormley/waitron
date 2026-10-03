@@ -21,7 +21,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { AppError, saleId as brandSaleId, stringToCents } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import type { DeviceId, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { seedTenant } from "../test/fixtures.js";
 import { settleSale } from "./settle-sale.js";
 import type { SettleSaleInput } from "./settle-sale.js";
@@ -36,13 +36,15 @@ const SETTLED_AT = new Date("2026-08-01T12:00:00Z");
  */
 async function seedSale(
   db: Database,
-  seed: { tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
+  seed: { tillId: TillId; deviceId: DeviceId; nodeId: NodeId; seriesId: SeriesId },
   overrides: { total?: string; invoiceNumber?: number; correctsSaleId?: SaleId } = {},
 ): Promise<SaleId> {
   const [row] = await db
     .insert(sales)
     .values({
       tillId: seed.tillId,
+      source: "device",
+      deviceId: seed.deviceId,
       nodeId: seed.nodeId,
       seriesId: seed.seriesId,
       invoiceNumber: overrides.invoiceNumber ?? 1,
@@ -214,6 +216,8 @@ describe("settleSale — a bill paid in parts", () => {
         state: "received",
         requestedBy: "cccccccc-0000-4000-8000-000000000001",
         tillId: seed.tillId,
+        source: "device",
+        deviceId: seed.deviceId,
         receivedAt: SETTLED_AT.toISOString(),
       })
       .returning({ id: billPayments.id });

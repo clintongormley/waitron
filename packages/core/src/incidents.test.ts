@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { AppError } from "@waitron/shared";
-import type { NodeId, SeriesId, TillId } from "@waitron/shared";
+import { AppError, deviceOrigin } from "@waitron/shared";
+import type { DeviceId, NodeId, SeriesId, TillId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { CORE_MIGRATIONS, incidents, nowIso, sales, withTransaction } from "@waitron/db";
@@ -22,6 +22,7 @@ import type { RecordSaleInput } from "./record-sale.js";
 import { seedTenant } from "../test/fixtures.js";
 
 let tillId: TillId;
+let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
@@ -32,7 +33,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ tillId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -73,6 +74,7 @@ const degradedClock: TrustedClock = fixedClock(() => ({
 function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
     tillId,
+    origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,
     locale: "es-ES",

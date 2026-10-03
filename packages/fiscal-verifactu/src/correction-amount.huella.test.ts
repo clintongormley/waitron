@@ -6,15 +6,14 @@ import { computeHuella } from "@waitron/verifactu";
 import { invoiceSeries, newId, nowIso, saleLines, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
-import { centsToDecimal, seriesId as brandSeriesId } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import { centsToDecimal, seriesId as brandSeriesId, deviceOrigin } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TillId, DeviceId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
 
 /**
  * A corrective invoice is filed at the cent amounts its `sales` and `sale_lines` rows store; of
@@ -26,6 +25,7 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let backend: VerifactuBackend;
 let tillId: TillId;
+let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 let rectSeriesId: SeriesId;
@@ -33,7 +33,9 @@ let rectifySessionId: string;
 
 beforeEach(async () => {
   // A pinned NIF: it is a huella input, and the control below pins a huella literal.
-  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db, { nif: "20009999E" }));
+  ({ tillId, deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db, {
+    nif: "20009999E",
+  }));
   const [series] = await suite.db
     .insert(invoiceSeries)
     .values({ nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })
@@ -44,7 +46,6 @@ beforeEach(async () => {
     sql`insert into persons (id, created_at, display_name, pin_hash, role)
         values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'supervisor') returning id`,
   );
-  const deviceId = (await seedDevice(suite.db, { tillId: tillId })).deviceId;
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId: rows[0]!.id, pin: "1234" }),
   );
@@ -73,6 +74,7 @@ async function correct(
 ): Promise<SaleId> {
   const input: RecordCorrectionInput = {
     tillId,
+    origin: deviceOrigin(deviceId),
     nodeId,
     seriesId: rectSeriesId,
     correctsSaleId,

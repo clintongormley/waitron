@@ -1,8 +1,8 @@
 {
-  "id": "e2e8b565-e096-4447-86f1-6f80d8ab7d75",
-  "prevId": "f08c4bad-814d-4956-991d-4147d8593843",
   "version": "6",
   "dialect": "sqlite",
+  "id": "4826e3fe-0aa4-46b2-9f6c-52bc67082b3a",
+  "prevId": "4dc3d55f-850e-4602-80fa-b45d21fb5302",
   "tables": {
     "locations": {
       "name": "locations",
@@ -147,15 +147,15 @@
         "locations_catalogue_id_catalogues_id_fk": {
           "name": "locations_catalogue_id_catalogues_id_fk",
           "tableFrom": "locations",
+          "tableTo": "catalogues",
           "columnsFrom": [
             "catalogue_id"
           ],
-          "tableTo": "catalogues",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -307,28 +307,28 @@
         "tills_location_id_locations_id_fk": {
           "name": "tills_location_id_locations_id_fk",
           "tableFrom": "tills",
+          "tableTo": "locations",
           "columnsFrom": [
             "location_id"
           ],
-          "tableTo": "locations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "tills_receipt_printer_id_printers_id_fk": {
           "name": "tills_receipt_printer_id_printers_id_fk",
           "tableFrom": "tills",
+          "tableTo": "printers",
           "columnsFrom": [
             "receipt_printer_id"
           ],
-          "tableTo": "printers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -400,15 +400,15 @@
         "nodes_location_id_locations_id_fk": {
           "name": "nodes_location_id_locations_id_fk",
           "tableFrom": "nodes",
+          "tableTo": "locations",
           "columnsFrom": [
             "location_id"
           ],
-          "tableTo": "locations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -477,15 +477,15 @@
         "invoice_series_node_fk": {
           "name": "invoice_series_node_fk",
           "tableFrom": "invoice_series",
+          "tableTo": "nodes",
           "columnsFrom": [
             "node_id"
           ],
-          "tableTo": "nodes",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -606,14 +606,6 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
-        },
-        "price_quantity": {
-          "name": "price_quantity",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1000
         },
         "unit_price_gross": {
           "name": "unit_price_gross",
@@ -764,80 +756,80 @@
         "working_order_lines_order_fk": {
           "name": "working_order_lines_order_fk",
           "tableFrom": "working_order_lines",
+          "tableTo": "working_orders",
           "columnsFrom": [
             "working_order_id"
           ],
-          "tableTo": "working_orders",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "working_order_lines_group_fk": {
           "name": "working_order_lines_group_fk",
           "tableFrom": "working_order_lines",
+          "tableTo": "order_groups",
           "columnsFrom": [
             "group_id"
           ],
-          "tableTo": "order_groups",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "working_order_lines_product_fk": {
           "name": "working_order_lines_product_fk",
           "tableFrom": "working_order_lines",
+          "tableTo": "products",
           "columnsFrom": [
             "product_id"
           ],
-          "tableTo": "products",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "working_order_lines_course_fk": {
           "name": "working_order_lines_course_fk",
           "tableFrom": "working_order_lines",
+          "tableTo": "kitchen_courses",
           "columnsFrom": [
             "course_id"
           ],
-          "tableTo": "kitchen_courses",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "working_order_lines_make_at_station_fk": {
           "name": "working_order_lines_make_at_station_fk",
           "tableFrom": "working_order_lines",
+          "tableTo": "kitchen_stations",
           "columnsFrom": [
             "make_at_station_id"
           ],
-          "tableTo": "kitchen_stations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "working_order_lines_parent_fk": {
           "name": "working_order_lines_parent_fk",
           "tableFrom": "working_order_lines",
+          "tableTo": "working_order_lines",
           "columnsFrom": [
             "parent_line_id"
           ],
-          "tableTo": "working_order_lines",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -985,54 +977,54 @@
         "working_orders_till_id_tills_id_fk": {
           "name": "working_orders_till_id_tills_id_fk",
           "tableFrom": "working_orders",
+          "tableTo": "tills",
           "columnsFrom": [
             "till_id"
           ],
-          "tableTo": "tills",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "working_orders_delivery_table_id_dining_tables_id_fk": {
           "name": "working_orders_delivery_table_id_dining_tables_id_fk",
           "tableFrom": "working_orders",
+          "tableTo": "dining_tables",
           "columnsFrom": [
             "delivery_table_id"
           ],
-          "tableTo": "dining_tables",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "working_orders_node_fk": {
           "name": "working_orders_node_fk",
           "tableFrom": "working_orders",
+          "tableTo": "nodes",
           "columnsFrom": [
             "node_id"
           ],
-          "tableTo": "nodes",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "working_orders_party_fk": {
           "name": "working_orders_party_fk",
           "tableFrom": "working_orders",
+          "tableTo": "parties",
           "columnsFrom": [
             "party_id"
           ],
-          "tableTo": "parties",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1164,41 +1156,41 @@
         "order_amendments_order_fk": {
           "name": "order_amendments_order_fk",
           "tableFrom": "order_amendments",
+          "tableTo": "working_orders",
           "columnsFrom": [
             "working_order_id"
           ],
-          "tableTo": "working_orders",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "order_amendments_till_fk": {
           "name": "order_amendments_till_fk",
           "tableFrom": "order_amendments",
+          "tableTo": "tills",
           "columnsFrom": [
             "captured_by_till_id"
           ],
-          "tableTo": "tills",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "order_amendments_node_fk": {
           "name": "order_amendments_node_fk",
           "tableFrom": "order_amendments",
+          "tableTo": "nodes",
           "columnsFrom": [
             "captured_by_node_id"
           ],
-          "tableTo": "nodes",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1340,41 +1332,41 @@
         "dining_tables_location_fk": {
           "name": "dining_tables_location_fk",
           "tableFrom": "dining_tables",
+          "tableTo": "locations",
           "columnsFrom": [
             "location_id"
           ],
-          "tableTo": "locations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "dining_tables_status_fk": {
           "name": "dining_tables_status_fk",
           "tableFrom": "dining_tables",
+          "tableTo": "table_service_statuses",
           "columnsFrom": [
             "status_id"
           ],
-          "tableTo": "table_service_statuses",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "dining_tables_zone_fk": {
           "name": "dining_tables_zone_fk",
           "tableFrom": "dining_tables",
+          "tableTo": "floor_zones",
           "columnsFrom": [
             "zone_id"
           ],
-          "tableTo": "floor_zones",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1489,28 +1481,28 @@
         "parties_main_bill_id_working_orders_id_fk": {
           "name": "parties_main_bill_id_working_orders_id_fk",
           "tableFrom": "parties",
+          "tableTo": "working_orders",
           "columnsFrom": [
             "main_bill_id"
           ],
-          "tableTo": "working_orders",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "parties_merged_into_fk": {
           "name": "parties_merged_into_fk",
           "tableFrom": "parties",
+          "tableTo": "parties",
           "columnsFrom": [
             "merged_into_party_id"
           ],
-          "tableTo": "parties",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1579,8 +1571,8 @@
           "columns": [
             "table_id"
           ],
-          "where": "\"party_tables\".\"left_at\" is null",
-          "isUnique": true
+          "isUnique": true,
+          "where": "\"party_tables\".\"left_at\" is null"
         },
         "party_tables_party_idx": {
           "name": "party_tables_party_idx",
@@ -1594,28 +1586,28 @@
         "party_tables_party_fk": {
           "name": "party_tables_party_fk",
           "tableFrom": "party_tables",
+          "tableTo": "parties",
           "columnsFrom": [
             "party_id"
           ],
-          "tableTo": "parties",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "party_tables_table_fk": {
           "name": "party_tables_table_fk",
           "tableFrom": "party_tables",
+          "tableTo": "dining_tables",
           "columnsFrom": [
             "table_id"
           ],
-          "tableTo": "dining_tables",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1776,28 +1768,28 @@
         "order_group_events_party_fk": {
           "name": "order_group_events_party_fk",
           "tableFrom": "order_group_events",
+          "tableTo": "parties",
           "columnsFrom": [
             "party_id"
           ],
-          "tableTo": "parties",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "order_group_events_group_fk": {
           "name": "order_group_events_group_fk",
           "tableFrom": "order_group_events",
+          "tableTo": "order_groups",
           "columnsFrom": [
             "group_id"
           ],
-          "tableTo": "order_groups",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1896,15 +1888,15 @@
         "order_groups_party_fk": {
           "name": "order_groups_party_fk",
           "tableFrom": "order_groups",
+          "tableTo": "parties",
           "columnsFrom": [
             "party_id"
           ],
-          "tableTo": "parties",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1993,15 +1985,15 @@
         "order_draft_events_draft_fk": {
           "name": "order_draft_events_draft_fk",
           "tableFrom": "order_draft_events",
+          "tableTo": "order_drafts",
           "columnsFrom": [
             "draft_id"
           ],
-          "tableTo": "order_drafts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2122,41 +2114,41 @@
         "order_draft_lines_draft_fk": {
           "name": "order_draft_lines_draft_fk",
           "tableFrom": "order_draft_lines",
+          "tableTo": "order_drafts",
           "columnsFrom": [
             "draft_id"
           ],
-          "tableTo": "order_drafts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "order_draft_lines_course_fk": {
           "name": "order_draft_lines_course_fk",
           "tableFrom": "order_draft_lines",
+          "tableTo": "kitchen_courses",
           "columnsFrom": [
             "course_id"
           ],
-          "tableTo": "kitchen_courses",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "order_draft_lines_make_at_station_fk": {
           "name": "order_draft_lines_make_at_station_fk",
           "tableFrom": "order_draft_lines",
+          "tableTo": "kitchen_stations",
           "columnsFrom": [
             "make_at_station_id"
           ],
-          "tableTo": "kitchen_stations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2237,23 +2229,23 @@
             "party_id",
             "owner_id"
           ],
-          "where": "\"order_drafts\".\"state\" = 'open'",
-          "isUnique": true
+          "isUnique": true,
+          "where": "\"order_drafts\".\"state\" = 'open'"
         }
       },
       "foreignKeys": {
         "order_drafts_party_fk": {
           "name": "order_drafts_party_fk",
           "tableFrom": "order_drafts",
+          "tableTo": "parties",
           "columnsFrom": [
             "party_id"
           ],
-          "tableTo": "parties",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2327,15 +2319,15 @@
         "floor_zones_location_fk": {
           "name": "floor_zones_location_fk",
           "tableFrom": "floor_zones",
+          "tableTo": "locations",
           "columnsFrom": [
             "location_id"
           ],
-          "tableTo": "locations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2436,8 +2428,8 @@
           "columns": [
             "location_id"
           ],
-          "where": "\"kitchen_stations\".\"is_default\"",
-          "isUnique": true
+          "isUnique": true,
+          "where": "\"kitchen_stations\".\"is_default\""
         },
         "kitchen_stations_name_key": {
           "name": "kitchen_stations_name_key",
@@ -2452,15 +2444,15 @@
         "kitchen_stations_location_fk": {
           "name": "kitchen_stations_location_fk",
           "tableFrom": "kitchen_stations",
+          "tableTo": "locations",
           "columnsFrom": [
             "location_id"
           ],
-          "tableTo": "locations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2534,15 +2526,15 @@
         "kitchen_courses_location_fk": {
           "name": "kitchen_courses_location_fk",
           "tableFrom": "kitchen_courses",
+          "tableTo": "locations",
           "columnsFrom": [
             "location_id"
           ],
-          "tableTo": "locations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2704,54 +2696,54 @@
         "ticket_items_node_id_nodes_id_fk": {
           "name": "ticket_items_node_id_nodes_id_fk",
           "tableFrom": "ticket_items",
+          "tableTo": "nodes",
           "columnsFrom": [
             "node_id"
           ],
-          "tableTo": "nodes",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "ticket_items_working_order_line_id_working_order_lines_id_fk": {
           "name": "ticket_items_working_order_line_id_working_order_lines_id_fk",
           "tableFrom": "ticket_items",
+          "tableTo": "working_order_lines",
           "columnsFrom": [
             "working_order_line_id"
           ],
-          "tableTo": "working_order_lines",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "ticket_items_station_id_kitchen_stations_id_fk": {
           "name": "ticket_items_station_id_kitchen_stations_id_fk",
           "tableFrom": "ticket_items",
+          "tableTo": "kitchen_stations",
           "columnsFrom": [
             "station_id"
           ],
-          "tableTo": "kitchen_stations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "ticket_items_course_id_kitchen_courses_id_fk": {
           "name": "ticket_items_course_id_kitchen_courses_id_fk",
           "tableFrom": "ticket_items",
+          "tableTo": "kitchen_courses",
           "columnsFrom": [
             "course_id"
           ],
-          "tableTo": "kitchen_courses",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2815,6 +2807,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "payment_slip_printer_id": {
+          "name": "payment_slip_printer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "label": {
           "name": "label",
           "type": "text",
@@ -2864,80 +2863,93 @@
         "devices_location_id_locations_id_fk": {
           "name": "devices_location_id_locations_id_fk",
           "tableFrom": "devices",
+          "tableTo": "locations",
           "columnsFrom": [
             "location_id"
           ],
-          "tableTo": "locations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "devices_station_id_kitchen_stations_id_fk": {
           "name": "devices_station_id_kitchen_stations_id_fk",
           "tableFrom": "devices",
+          "tableTo": "kitchen_stations",
           "columnsFrom": [
             "station_id"
           ],
-          "tableTo": "kitchen_stations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "devices_watcher_id_watchers_id_fk": {
           "name": "devices_watcher_id_watchers_id_fk",
           "tableFrom": "devices",
+          "tableTo": "watchers",
           "columnsFrom": [
             "watcher_id"
           ],
-          "tableTo": "watchers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "devices_till_id_tills_id_fk": {
           "name": "devices_till_id_tills_id_fk",
           "tableFrom": "devices",
+          "tableTo": "tills",
           "columnsFrom": [
             "till_id"
           ],
-          "tableTo": "tills",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "devices_device_profile_id_device_profiles_id_fk": {
           "name": "devices_device_profile_id_device_profiles_id_fk",
           "tableFrom": "devices",
+          "tableTo": "device_profiles",
           "columnsFrom": [
             "device_profile_id"
           ],
-          "tableTo": "device_profiles",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "devices_receipt_printer_id_printers_id_fk": {
           "name": "devices_receipt_printer_id_printers_id_fk",
           "tableFrom": "devices",
+          "tableTo": "printers",
           "columnsFrom": [
             "receipt_printer_id"
           ],
-          "tableTo": "printers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "devices_payment_slip_printer_id_printers_id_fk": {
+          "name": "devices_payment_slip_printer_id_printers_id_fk",
+          "tableFrom": "devices",
+          "tableTo": "printers",
+          "columnsFrom": [
+            "payment_slip_printer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2967,28 +2979,28 @@
         "device_made_here_stations_device_fk": {
           "name": "device_made_here_stations_device_fk",
           "tableFrom": "device_made_here_stations",
+          "tableTo": "devices",
           "columnsFrom": [
             "device_id"
           ],
-          "tableTo": "devices",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "device_made_here_stations_station_fk": {
           "name": "device_made_here_stations_station_fk",
           "tableFrom": "device_made_here_stations",
+          "tableTo": "kitchen_stations",
           "columnsFrom": [
             "station_id"
           ],
-          "tableTo": "kitchen_stations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -3176,15 +3188,15 @@
         "print_agents_location_id_locations_id_fk": {
           "name": "print_agents_location_id_locations_id_fk",
           "tableFrom": "print_agents",
+          "tableTo": "locations",
           "columnsFrom": [
             "location_id"
           ],
-          "tableTo": "locations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3306,23 +3318,23 @@
             "location_id",
             "local_key"
           ],
-          "where": "\"printers\".\"local_key\" is not null",
-          "isUnique": true
+          "isUnique": true,
+          "where": "\"printers\".\"local_key\" is not null"
         }
       },
       "foreignKeys": {
         "printers_location_id_locations_id_fk": {
           "name": "printers_location_id_locations_id_fk",
           "tableFrom": "printers",
+          "tableTo": "locations",
           "columnsFrom": [
             "location_id"
           ],
-          "tableTo": "locations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3483,67 +3495,67 @@
         "print_jobs_location_id_locations_id_fk": {
           "name": "print_jobs_location_id_locations_id_fk",
           "tableFrom": "print_jobs",
+          "tableTo": "locations",
           "columnsFrom": [
             "location_id"
           ],
-          "tableTo": "locations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "print_jobs_printer_id_printers_id_fk": {
           "name": "print_jobs_printer_id_printers_id_fk",
           "tableFrom": "print_jobs",
+          "tableTo": "printers",
           "columnsFrom": [
             "printer_id"
           ],
-          "tableTo": "printers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "print_jobs_claimed_by_print_agents_id_fk": {
           "name": "print_jobs_claimed_by_print_agents_id_fk",
           "tableFrom": "print_jobs",
+          "tableTo": "print_agents",
           "columnsFrom": [
             "claimed_by"
           ],
-          "tableTo": "print_agents",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "print_jobs_resend_of_print_jobs_id_fk": {
           "name": "print_jobs_resend_of_print_jobs_id_fk",
           "tableFrom": "print_jobs",
+          "tableTo": "print_jobs",
           "columnsFrom": [
             "resend_of"
           ],
-          "tableTo": "print_jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "print_jobs_sale_id_sales_id_fk": {
           "name": "print_jobs_sale_id_sales_id_fk",
           "tableFrom": "print_jobs",
+          "tableTo": "sales",
           "columnsFrom": [
             "sale_id"
           ],
-          "tableTo": "sales",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3618,28 +3630,28 @@
         "receipt_reprints_sale_fk": {
           "name": "receipt_reprints_sale_fk",
           "tableFrom": "receipt_reprints",
+          "tableTo": "sales",
           "columnsFrom": [
             "sale_id"
           ],
-          "tableTo": "sales",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "receipt_reprints_job_fk": {
           "name": "receipt_reprints_job_fk",
           "tableFrom": "receipt_reprints",
+          "tableTo": "print_jobs",
           "columnsFrom": [
             "print_job_id"
           ],
-          "tableTo": "print_jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3692,28 +3704,28 @@
         "kitchen_print_job_lines_job_fk": {
           "name": "kitchen_print_job_lines_job_fk",
           "tableFrom": "kitchen_print_job_lines",
+          "tableTo": "print_jobs",
           "columnsFrom": [
             "print_job_id"
           ],
-          "tableTo": "print_jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "kitchen_print_job_lines_line_fk": {
           "name": "kitchen_print_job_lines_line_fk",
           "tableFrom": "kitchen_print_job_lines",
+          "tableTo": "working_order_lines",
           "columnsFrom": [
             "working_order_line_id"
           ],
-          "tableTo": "working_order_lines",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3789,41 +3801,41 @@
         "kitchen_print_jobs_job_fk": {
           "name": "kitchen_print_jobs_job_fk",
           "tableFrom": "kitchen_print_jobs",
+          "tableTo": "print_jobs",
           "columnsFrom": [
             "print_job_id"
           ],
-          "tableTo": "print_jobs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "kitchen_print_jobs_order_fk": {
           "name": "kitchen_print_jobs_order_fk",
           "tableFrom": "kitchen_print_jobs",
+          "tableTo": "working_orders",
           "columnsFrom": [
             "working_order_id"
           ],
-          "tableTo": "working_orders",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "kitchen_print_jobs_station_fk": {
           "name": "kitchen_print_jobs_station_fk",
           "tableFrom": "kitchen_print_jobs",
+          "tableTo": "kitchen_stations",
           "columnsFrom": [
             "station_id"
           ],
-          "tableTo": "kitchen_stations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3853,28 +3865,28 @@
         "station_printers_station_id_kitchen_stations_id_fk": {
           "name": "station_printers_station_id_kitchen_stations_id_fk",
           "tableFrom": "station_printers",
+          "tableTo": "kitchen_stations",
           "columnsFrom": [
             "station_id"
           ],
-          "tableTo": "kitchen_stations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "station_printers_printer_id_printers_id_fk": {
           "name": "station_printers_printer_id_printers_id_fk",
           "tableFrom": "station_printers",
+          "tableTo": "printers",
           "columnsFrom": [
             "printer_id"
           ],
-          "tableTo": "printers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -3912,28 +3924,28 @@
         "watcher_printers_printer_fk": {
           "name": "watcher_printers_printer_fk",
           "tableFrom": "watcher_printers",
+          "tableTo": "printers",
           "columnsFrom": [
             "printer_id"
           ],
-          "tableTo": "printers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "watcher_printers_watcher_fk": {
           "name": "watcher_printers_watcher_fk",
           "tableFrom": "watcher_printers",
+          "tableTo": "watchers",
           "columnsFrom": [
             "watcher_id"
           ],
-          "tableTo": "watchers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3963,28 +3975,28 @@
         "watcher_stations_watcher_fk": {
           "name": "watcher_stations_watcher_fk",
           "tableFrom": "watcher_stations",
+          "tableTo": "watchers",
           "columnsFrom": [
             "watcher_id"
           ],
-          "tableTo": "watchers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "watcher_stations_station_fk": {
           "name": "watcher_stations_station_fk",
           "tableFrom": "watcher_stations",
+          "tableTo": "kitchen_stations",
           "columnsFrom": [
             "station_id"
           ],
-          "tableTo": "kitchen_stations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -4022,28 +4034,28 @@
         "watcher_zones_watcher_fk": {
           "name": "watcher_zones_watcher_fk",
           "tableFrom": "watcher_zones",
+          "tableTo": "watchers",
           "columnsFrom": [
             "watcher_id"
           ],
-          "tableTo": "watchers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "watcher_zones_zone_fk": {
           "name": "watcher_zones_zone_fk",
           "tableFrom": "watcher_zones",
+          "tableTo": "floor_zones",
           "columnsFrom": [
             "zone_id"
           ],
-          "tableTo": "floor_zones",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -4137,23 +4149,23 @@
             "location_id",
             "name"
           ],
-          "where": "\"watchers\".\"active\"",
-          "isUnique": true
+          "isUnique": true,
+          "where": "\"watchers\".\"active\""
         }
       },
       "foreignKeys": {
         "watchers_location_fk": {
           "name": "watchers_location_fk",
           "tableFrom": "watchers",
+          "tableTo": "locations",
           "columnsFrom": [
             "location_id"
           ],
-          "tableTo": "locations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -4212,41 +4224,41 @@
         "watcher_item_marks_watcher_fk": {
           "name": "watcher_item_marks_watcher_fk",
           "tableFrom": "watcher_item_marks",
+          "tableTo": "watchers",
           "columnsFrom": [
             "watcher_id"
           ],
-          "tableTo": "watchers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "watcher_item_marks_item_fk": {
           "name": "watcher_item_marks_item_fk",
           "tableFrom": "watcher_item_marks",
+          "tableTo": "ticket_items",
           "columnsFrom": [
             "ticket_item_id"
           ],
-          "tableTo": "ticket_items",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "watcher_item_marks_device_fk": {
           "name": "watcher_item_marks_device_fk",
           "tableFrom": "watcher_item_marks",
+          "tableTo": "devices",
           "columnsFrom": [
             "done_by_device_id"
           ],
-          "tableTo": "devices",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -4346,54 +4358,54 @@
         "drawer_opens_till_id_tills_id_fk": {
           "name": "drawer_opens_till_id_tills_id_fk",
           "tableFrom": "drawer_opens",
+          "tableTo": "tills",
           "columnsFrom": [
             "till_id"
           ],
-          "tableTo": "tills",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "drawer_opens_printer_id_printers_id_fk": {
           "name": "drawer_opens_printer_id_printers_id_fk",
           "tableFrom": "drawer_opens",
+          "tableTo": "printers",
           "columnsFrom": [
             "printer_id"
           ],
-          "tableTo": "printers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "drawer_opens_sale_id_sales_id_fk": {
           "name": "drawer_opens_sale_id_sales_id_fk",
           "tableFrom": "drawer_opens",
+          "tableTo": "sales",
           "columnsFrom": [
             "sale_id"
           ],
-          "tableTo": "sales",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "drawer_opens_bill_payment_id_bill_payments_id_fk": {
           "name": "drawer_opens_bill_payment_id_bill_payments_id_fk",
           "tableFrom": "drawer_opens",
+          "tableTo": "bill_payments",
           "columnsFrom": [
             "bill_payment_id"
           ],
-          "tableTo": "bill_payments",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -4721,56 +4733,56 @@
         "products_catalogue_id_catalogues_id_fk": {
           "name": "products_catalogue_id_catalogues_id_fk",
           "tableFrom": "products",
+          "tableTo": "catalogues",
           "columnsFrom": [
             "catalogue_id"
           ],
-          "tableTo": "catalogues",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "products_category_id_categories_id_fk": {
           "name": "products_category_id_categories_id_fk",
           "tableFrom": "products",
+          "tableTo": "categories",
           "columnsFrom": [
             "category_id"
           ],
-          "tableTo": "categories",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "products_course_id_kitchen_courses_id_fk": {
           "name": "products_course_id_kitchen_courses_id_fk",
           "tableFrom": "products",
+          "tableTo": "kitchen_courses",
           "columnsFrom": [
             "course_id"
           ],
-          "tableTo": "kitchen_courses",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "products_parent_id_catalogue_id_products_id_catalogue_id_fk": {
           "name": "products_parent_id_catalogue_id_products_id_catalogue_id_fk",
           "tableFrom": "products",
+          "tableTo": "products",
           "columnsFrom": [
             "parent_id",
             "catalogue_id"
           ],
-          "tableTo": "products",
           "columnsTo": [
             "id",
             "catalogue_id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -4813,28 +4825,28 @@
         "location_catalogues_location_id_locations_id_fk": {
           "name": "location_catalogues_location_id_locations_id_fk",
           "tableFrom": "location_catalogues",
+          "tableTo": "locations",
           "columnsFrom": [
             "location_id"
           ],
-          "tableTo": "locations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "location_catalogues_catalogue_id_catalogues_id_fk": {
           "name": "location_catalogues_catalogue_id_catalogues_id_fk",
           "tableFrom": "location_catalogues",
+          "tableTo": "catalogues",
           "columnsFrom": [
             "catalogue_id"
           ],
-          "tableTo": "catalogues",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -4974,28 +4986,28 @@
         "recipe_lines_product_id_products_id_fk": {
           "name": "recipe_lines_product_id_products_id_fk",
           "tableFrom": "recipe_lines",
+          "tableTo": "products",
           "columnsFrom": [
             "product_id"
           ],
-          "tableTo": "products",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "recipe_lines_ingredient_id_ingredients_id_fk": {
           "name": "recipe_lines_ingredient_id_ingredients_id_fk",
           "tableFrom": "recipe_lines",
+          "tableTo": "ingredients",
           "columnsFrom": [
             "ingredient_id"
           ],
-          "tableTo": "ingredients",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5062,15 +5074,15 @@
         "purchase_invoice_vat_invoice_fk": {
           "name": "purchase_invoice_vat_invoice_fk",
           "tableFrom": "purchase_invoice_vat",
+          "tableTo": "purchase_invoices",
           "columnsFrom": [
             "purchase_invoice_id"
           ],
-          "tableTo": "purchase_invoices",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5334,15 +5346,15 @@
         "device_profiles_canvas_id_canvases_id_fk": {
           "name": "device_profiles_canvas_id_canvases_id_fk",
           "tableFrom": "device_profiles",
+          "tableTo": "canvases",
           "columnsFrom": [
             "canvas_id"
           ],
-          "tableTo": "canvases",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5351,6 +5363,93 @@
         "device_profiles_form_factor_ck": {
           "name": "device_profiles_form_factor_ck",
           "value": "\"device_profiles\".\"form_factor\" in ('till', 'phone-portrait', 'tablet-landscape', 'kds')"
+        }
+      }
+    },
+    "device_profile_printers": {
+      "name": "device_profile_printers",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "device_profile_id": {
+          "name": "device_profile_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "printer_id": {
+          "name": "printer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "device_profile_printers_profile_role_printer_key": {
+          "name": "device_profile_printers_profile_role_printer_key",
+          "columns": [
+            "device_profile_id",
+            "role",
+            "printer_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "device_profile_printers_device_profile_id_device_profiles_id_fk": {
+          "name": "device_profile_printers_device_profile_id_device_profiles_id_fk",
+          "tableFrom": "device_profile_printers",
+          "tableTo": "device_profiles",
+          "columnsFrom": [
+            "device_profile_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "device_profile_printers_printer_id_printers_id_fk": {
+          "name": "device_profile_printers_printer_id_printers_id_fk",
+          "tableFrom": "device_profile_printers",
+          "tableTo": "printers",
+          "columnsFrom": [
+            "printer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "device_profile_printers_role_ck": {
+          "name": "device_profile_printers_role_ck",
+          "value": "\"device_profile_printers\".\"role\" in ('receipt', 'payment_slip')"
         }
       }
     },
@@ -5514,15 +5613,15 @@
         "working_order_counters_node_fk": {
           "name": "working_order_counters_node_fk",
           "tableFrom": "working_order_counters",
+          "tableTo": "nodes",
           "columnsFrom": [
             "node_id"
           ],
-          "tableTo": "nodes",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5581,15 +5680,15 @@
         "bill_payment_lines_payment_fk": {
           "name": "bill_payment_lines_payment_fk",
           "tableFrom": "bill_payment_lines",
+          "tableTo": "bill_payments",
           "columnsFrom": [
             "bill_payment_id"
           ],
-          "tableTo": "bill_payments",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5679,6 +5778,20 @@
           "notNull": true,
           "autoincrement": false
         },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "state": {
           "name": "state",
           "type": "text",
@@ -5762,31 +5875,44 @@
         }
       },
       "foreignKeys": {
-        "bill_payment_refunds_payment_fk": {
-          "name": "bill_payment_refunds_payment_fk",
+        "bill_payment_refunds_device_id_devices_id_fk": {
+          "name": "bill_payment_refunds_device_id_devices_id_fk",
           "tableFrom": "bill_payment_refunds",
+          "tableTo": "devices",
           "columnsFrom": [
-            "bill_payment_id"
+            "device_id"
           ],
-          "tableTo": "bill_payments",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bill_payment_refunds_payment_fk": {
+          "name": "bill_payment_refunds_payment_fk",
+          "tableFrom": "bill_payment_refunds",
+          "tableTo": "bill_payments",
+          "columnsFrom": [
+            "bill_payment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "bill_payment_refunds_till_fk": {
           "name": "bill_payment_refunds_till_fk",
           "tableFrom": "bill_payment_refunds",
+          "tableTo": "tills",
           "columnsFrom": [
             "till_id"
           ],
-          "tableTo": "tills",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5913,6 +6039,20 @@
           "notNull": true,
           "autoincrement": false
         },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -5960,31 +6100,44 @@
         }
       },
       "foreignKeys": {
-        "bill_payments_working_order_fk": {
-          "name": "bill_payments_working_order_fk",
+        "bill_payments_device_id_devices_id_fk": {
+          "name": "bill_payments_device_id_devices_id_fk",
           "tableFrom": "bill_payments",
+          "tableTo": "devices",
           "columnsFrom": [
-            "working_order_id"
+            "device_id"
           ],
-          "tableTo": "working_orders",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bill_payments_working_order_fk": {
+          "name": "bill_payments_working_order_fk",
+          "tableFrom": "bill_payments",
+          "tableTo": "working_orders",
+          "columnsFrom": [
+            "working_order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "bill_payments_till_fk": {
           "name": "bill_payments_till_fk",
           "tableFrom": "bill_payments",
+          "tableTo": "tills",
           "columnsFrom": [
             "till_id"
           ],
-          "tableTo": "tills",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -6123,14 +6276,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "price_quantity": {
-          "name": "price_quantity",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1000
-        },
         "unit_price": {
           "name": "unit_price",
           "type": "integer",
@@ -6237,41 +6382,41 @@
         "sale_lines_sale_fk": {
           "name": "sale_lines_sale_fk",
           "tableFrom": "sale_lines",
+          "tableTo": "sales",
           "columnsFrom": [
             "sale_id"
           ],
-          "tableTo": "sales",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "sale_lines_parent_fk": {
           "name": "sale_lines_parent_fk",
           "tableFrom": "sale_lines",
+          "tableTo": "sale_lines",
           "columnsFrom": [
             "parent_line_id"
           ],
-          "tableTo": "sale_lines",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "sale_lines_corrects_fk": {
           "name": "sale_lines_corrects_fk",
           "tableFrom": "sale_lines",
+          "tableTo": "sale_lines",
           "columnsFrom": [
             "corrects_line_id"
           ],
-          "tableTo": "sale_lines",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -6333,15 +6478,15 @@
         "sale_settlements_sale_fk": {
           "name": "sale_settlements_sale_fk",
           "tableFrom": "sale_settlements",
+          "tableTo": "sales",
           "columnsFrom": [
             "sale_id"
           ],
-          "tableTo": "sales",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -6393,28 +6538,28 @@
         "sale_substitutions_substitution_fk": {
           "name": "sale_substitutions_substitution_fk",
           "tableFrom": "sale_substitutions",
+          "tableTo": "sales",
           "columnsFrom": [
             "substitution_sale_id"
           ],
-          "tableTo": "sales",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "sale_substitutions_substituted_fk": {
           "name": "sale_substitutions_substituted_fk",
           "tableFrom": "sale_substitutions",
+          "tableTo": "sales",
           "columnsFrom": [
             "substituted_sale_id"
           ],
-          "tableTo": "sales",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -6436,6 +6581,20 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "series_id": {
@@ -6607,67 +6766,80 @@
         "sales_till_id_tills_id_fk": {
           "name": "sales_till_id_tills_id_fk",
           "tableFrom": "sales",
+          "tableTo": "tills",
           "columnsFrom": [
             "till_id"
           ],
-          "tableTo": "tills",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "sales_device_id_devices_id_fk": {
+          "name": "sales_device_id_devices_id_fk",
+          "tableFrom": "sales",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "sales_series_id_invoice_series_id_fk": {
           "name": "sales_series_id_invoice_series_id_fk",
           "tableFrom": "sales",
+          "tableTo": "invoice_series",
           "columnsFrom": [
             "series_id"
           ],
-          "tableTo": "invoice_series",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "sales_corrects_fk": {
           "name": "sales_corrects_fk",
           "tableFrom": "sales",
+          "tableTo": "sales",
           "columnsFrom": [
             "corrects_sale_id"
           ],
-          "tableTo": "sales",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "sales_node_fk": {
           "name": "sales_node_fk",
           "tableFrom": "sales",
+          "tableTo": "nodes",
           "columnsFrom": [
             "node_id"
           ],
-          "tableTo": "nodes",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "sales_working_order_fk": {
           "name": "sales_working_order_fk",
           "tableFrom": "sales",
+          "tableTo": "working_orders",
           "columnsFrom": [
             "working_order_id"
           ],
-          "tableTo": "working_orders",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -6766,8 +6938,8 @@
           "columns": [
             "bill_payment_id"
           ],
-          "where": "\"tenders\".\"bill_payment_id\" is not null",
-          "isUnique": true
+          "isUnique": true,
+          "where": "\"tenders\".\"bill_payment_id\" is not null"
         },
         "tenders_sale_idx": {
           "name": "tenders_sale_idx",
@@ -6781,28 +6953,28 @@
         "tenders_sale_fk": {
           "name": "tenders_sale_fk",
           "tableFrom": "tenders",
+          "tableTo": "sales",
           "columnsFrom": [
             "sale_id"
           ],
-          "tableTo": "sales",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "tenders_bill_payment_fk": {
           "name": "tenders_bill_payment_fk",
           "tableFrom": "tenders",
+          "tableTo": "bill_payments",
           "columnsFrom": [
             "bill_payment_id"
           ],
-          "tableTo": "bill_payments",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -6885,15 +7057,15 @@
         "sale_voids_sale_fk": {
           "name": "sale_voids_sale_fk",
           "tableFrom": "sale_voids",
+          "tableTo": "sales",
           "columnsFrom": [
             "sale_id"
           ],
-          "tableTo": "sales",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -6966,6 +7138,20 @@
           "notNull": true,
           "autoincrement": false
         },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "recorded_at": {
           "name": "recorded_at",
           "type": "text",
@@ -6984,57 +7170,70 @@
         }
       },
       "foreignKeys": {
-        "unpaid_departures_party_fk": {
-          "name": "unpaid_departures_party_fk",
+        "unpaid_departures_device_id_devices_id_fk": {
+          "name": "unpaid_departures_device_id_devices_id_fk",
           "tableFrom": "unpaid_departures",
+          "tableTo": "devices",
           "columnsFrom": [
-            "party_id"
+            "device_id"
           ],
-          "tableTo": "parties",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "unpaid_departures_party_fk": {
+          "name": "unpaid_departures_party_fk",
+          "tableFrom": "unpaid_departures",
+          "tableTo": "parties",
+          "columnsFrom": [
+            "party_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "unpaid_departures_working_order_fk": {
           "name": "unpaid_departures_working_order_fk",
           "tableFrom": "unpaid_departures",
+          "tableTo": "working_orders",
           "columnsFrom": [
             "working_order_id"
           ],
-          "tableTo": "working_orders",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "unpaid_departures_sale_fk": {
           "name": "unpaid_departures_sale_fk",
           "tableFrom": "unpaid_departures",
+          "tableTo": "sales",
           "columnsFrom": [
             "sale_id"
           ],
-          "tableTo": "sales",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "unpaid_departures_till_fk": {
           "name": "unpaid_departures_till_fk",
           "tableFrom": "unpaid_departures",
+          "tableTo": "tills",
           "columnsFrom": [
             "till_id"
           ],
-          "tableTo": "tills",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -7078,15 +7277,15 @@
         "daily_close_chain_node_fk": {
           "name": "daily_close_chain_node_fk",
           "tableFrom": "daily_close_chain",
+          "tableTo": "nodes",
           "columnsFrom": [
             "node_id"
           ],
-          "tableTo": "nodes",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -7182,15 +7381,15 @@
         "daily_closes_node_fk": {
           "name": "daily_closes_node_fk",
           "tableFrom": "daily_closes",
+          "tableTo": "nodes",
           "columnsFrom": [
             "node_id"
           ],
-          "tableTo": "nodes",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -7288,36 +7487,36 @@
             "code",
             "case when \"sale_id\" is null then '' else \"sale_id\" end"
           ],
-          "where": "\"incidents\".\"acknowledged_at\" is null",
-          "isUnique": true
+          "isUnique": true,
+          "where": "\"incidents\".\"acknowledged_at\" is null"
         }
       },
       "foreignKeys": {
         "incidents_till_id_tills_id_fk": {
           "name": "incidents_till_id_tills_id_fk",
           "tableFrom": "incidents",
+          "tableTo": "tills",
           "columnsFrom": [
             "till_id"
           ],
-          "tableTo": "tills",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "incidents_sale_id_sales_id_fk": {
           "name": "incidents_sale_id_sales_id_fk",
           "tableFrom": "incidents",
+          "tableTo": "sales",
           "columnsFrom": [
             "sale_id"
           ],
-          "tableTo": "sales",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -7685,9 +7884,9 @@
   "views": {},
   "enums": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
+    "tables": {},
+    "columns": {}
   },
   "internal": {
     "indexes": {

@@ -158,6 +158,33 @@ describe("seedSales", () => {
     expect(compareDecimal(read.close.cash.tenderTotal, decimal("0.00"))).toBeGreaterThan(0);
   });
 
+  it("records every demo sale and its fiscal record as the demo seed's, with no device", async () => {
+    // Its own provisioner: the shared one's fixed `K` letter is a valid NIF for its first venue only.
+    const venue = await createDemoVenueProvisioner(() => suite.db, {
+      nifBase: 81_000_000,
+      nifFormat: "calculated",
+      invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
+    })();
+    const { count } = await seedSales(suite.db, {
+      venue: venueFor(venue),
+      locale: LOCALE,
+      days: 1,
+      products: PRODUCTS,
+    });
+    expect(count).toBeGreaterThan(0);
+
+    const pairs = (table: string) =>
+      suite.db.all<{ source: string | null; device_id: string | null }>(
+        sql`select source, device_id from ${sql.raw(table)}`,
+      );
+    const expected = Array.from({ length: count }, () => ({
+      source: "demo_seed",
+      device_id: null,
+    }));
+    expect(pairs("sales")).toEqual(expected);
+    expect(pairs("registros_facturacion")).toEqual(expected);
+  });
+
   it("refuses to file demo sales into a production environment, and writes nothing", async () => {
     const venue = await provisionVenue();
     vi.stubEnv("WAITRON_ENV", "production");

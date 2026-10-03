@@ -248,6 +248,7 @@ async function creditWholeInvoice(billId: string): Promise<void> {
       pin: "1234",
     });
     await recordCorrection(tx, venue.backend, {
+      origin: venue.cfg.origin,
       tillId: venue.cfg.tillId,
       nodeId: venue.cfg.nodeId,
       seriesId: brandSeriesId(series!.id),

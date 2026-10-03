@@ -30,6 +30,7 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
+  deviceOrigin,
 } from "@waitron/shared";
 import {
   failAttempting,
@@ -56,7 +57,7 @@ import type { CardProviderPool } from "./card-provider-pool.js";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./till-config.js";
 import { systemClock } from "./till-backend.js";
 import { createOpenOrder } from "./working-order.js";
 import { payWorkingOrderIntegrated } from "./till-sale.js";
@@ -69,6 +70,8 @@ import {
   watchedOrder,
   watchedDerivationCount,
 } from "./testing/watched-scrypt.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
+import { deviceRequestCfg, orderDeviceOrigin } from "./testing/session-device.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -117,7 +120,10 @@ const stripeSeat: CardProviderContribution = createStripeCardProvider((() => {
 }) as unknown as MakeStripe);
 
 interface Venue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
+  /** Two devices on the venue's till: payments start on `deviceId` unless a case says otherwise. */
+  deviceId: string;
+  otherDeviceId: string;
   menuItemId: string;
   zoneId: string;
   managerId: string;
@@ -170,7 +176,7 @@ async function setup(
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
+  const cfg = await deviceRequestCfg(suite.db, {
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -180,7 +186,7 @@ async function setup(
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  });
   const seeded = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -255,8 +261,14 @@ async function setup(
     },
     noopLog,
   );
+  const devices = [
+    await seedDevice(suite.db, { tillId: venue.tillId }),
+    await seedDevice(suite.db, { tillId: venue.tillId }),
+  ];
   return {
     cfg,
+    deviceId: devices[0]!.deviceId,
+    otherDeviceId: devices[1]!.deviceId,
     menuItemId: seeded.menuItemId,
     zoneId: seeded.zoneId,
     managerId: seeded.managerId,
@@ -287,7 +299,7 @@ async function strandPayment(
   v: Venue,
   orderId: string,
   intent: { status: string; amountReceived?: number },
-  opts: { amount?: string; mark?: string | null } = {},
+  opts: { amount?: string; mark?: string | null; deviceId?: string } = {},
 ): Promise<{ paymentId: string; piId: string }> {
   const paymentRef = randomUUID();
   const piId = `pi_stuck_${randomUUID()}`;
@@ -299,6 +311,7 @@ async function strandPayment(
   });
   await withTransaction(suite.db, async (tx) => {
     await insertAttempting(tx, {
+      origin: deviceOrigin(opts.deviceId ?? v.deviceId),
       workingOrderId: brandWorkingOrderId(orderId),
       provider: "stripe",
       paymentRef,
@@ -321,8 +334,10 @@ async function strandPayment(
 /** An `attempting` payment of `provider` on a marked order, with no PaymentIntent. */
 async function strandBarePayment(orderId: string, provider: string): Promise<string> {
   const paymentRef = randomUUID();
+  const origin = await orderDeviceOrigin(suite.db, orderId);
   await withTransaction(suite.db, (tx) =>
     insertAttempting(tx, {
+      origin,
       workingOrderId: brandWorkingOrderId(orderId),
       provider,
       paymentRef,
@@ -438,6 +453,52 @@ describe("GET /management-api/payments/stuck", () => {
 // --- resolving ------------------------------------------------------------------------------
 
 describe("POST /management-api/payments/stuck/:id/resolve", () => {
+  it("files the sale under the device that started the payment, not the dashboard", async () => {
+    // The payment was started on the venue's second device; nothing else names that device.
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const { paymentId } = await strandPayment(
+      v,
+      orderId,
+      { status: "succeeded", amountReceived: 150 },
+      { deviceId: v.otherDeviceId },
+    );
+
+    const res = await send(v, "POST", resolvePath(paymentId));
+
+    expect(res.status).toBe(200);
+    const expected = [{ source: "device", device_id: v.otherDeviceId }];
+    expect(
+      suite.db.all(sql`select source, device_id from sales where working_order_id = ${orderId}`),
+    ).toEqual(expected);
+    expect(
+      suite.db.all(sql`
+        select r.source, r.device_id from registros_facturacion r
+        join sales s on s.id = r.sale_id where s.working_order_id = ${orderId}`),
+    ).toEqual(expected);
+  });
+
+  it("refuses a stuck payment that names no device, asking nobody and filing nothing", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const { paymentId } = await strandPayment(v, orderId, {
+      status: "succeeded",
+      amountReceived: 150,
+    });
+    // A source with no device: the sale tables accept it, but only a device starts a payment.
+    await suite.db.execute(
+      sql`update payments set source = 'demo_seed', device_id = null where id = ${paymentId}`,
+    );
+    const retrieve = vi.spyOn(v.client, "retrievePaymentIntent");
+
+    const res = await send(v, "POST", resolvePath(paymentId));
+
+    expect(res.status).toBe(400);
+    expect(await errorOf(res)).toMatchObject({ code: "origin.invalid" });
+    expect(retrieve).not.toHaveBeenCalled();
+    expect(saleIdsFor(orderId)).toEqual([]);
+  });
+
   it("(a) files ONE sale for a payment Stripe captured, settles the order, and refuses a second resolve", async () => {
     const v = await setup();
     const orderId = await openOrder(v);
@@ -941,12 +1002,15 @@ async function strandBillPayment(
       state: "pending",
       requestedBy: v.managerId,
       tillId: v.cfg.tillId,
+      source: v.cfg.origin.source,
+      deviceId: v.cfg.origin.deviceId,
     })
     .returning({ id: billPayments.id });
   const billPaymentId = bill!.id;
   const key = { provider: "stripe", paymentRef: randomUUID() };
   const common = {
     ...key,
+    origin: deviceOrigin(v.deviceId),
     workingOrderId: brandWorkingOrderId(orderId),
     amount: decimal(amount),
     billPaymentId,
@@ -1734,6 +1798,8 @@ describe("the manager's lists, of rows written within one millisecond", () => {
           state: "pending",
           requestedBy: v.managerId,
           tillId: v.cfg.tillId,
+          source: v.cfg.origin.source,
+          deviceId: v.cfg.origin.deviceId,
           createdAt: AT,
         })
         .returning({ id: billPayments.id });
@@ -1753,6 +1819,8 @@ describe("the manager's lists, of rows written within one millisecond", () => {
         .values({
           id: id(),
           workingOrderId,
+          source: v.cfg.origin.source,
+          deviceId: v.cfg.origin.deviceId,
           provider: "stripe",
           paymentRef: randomUUID(),
           amount: 150,
@@ -1788,6 +1856,8 @@ describe("the manager's lists, of rows written within one millisecond", () => {
       await suite.db.insert(payments).values({
         id: id(),
         workingOrderId: bill!.workingOrderId,
+        source: v.cfg.origin.source,
+        deviceId: v.cfg.origin.deviceId,
         provider: "stripe",
         paymentRef: randomUUID(),
         amount: 150,
@@ -1825,6 +1895,8 @@ describe("the manager's lists, of rows written within one millisecond", () => {
           authorizedBy: v.managerId,
           requestedBy: v.managerId,
           tillId: v.cfg.tillId,
+          source: v.cfg.origin.source,
+          deviceId: v.cfg.origin.deviceId,
           state: "pending",
           createdAt: AT,
         })

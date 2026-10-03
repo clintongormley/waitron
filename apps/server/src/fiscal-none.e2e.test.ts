@@ -15,6 +15,7 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  deviceOrigin,
 } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
@@ -83,6 +84,8 @@ beforeAll(() => {
 
 interface GbVenue {
   tillId: TillId;
+  /** The device the admin's shift session is on, and the origin of every sale rung here. */
+  deviceId: string;
   nodeId: NodeId;
   standardSeriesId: SeriesId;
   rectificativeSeriesId: SeriesId;
@@ -160,6 +163,7 @@ async function setupGbVenue(): Promise<GbVenue> {
 
   return {
     tillId: brandTillId(venue.tillId),
+    deviceId: sessionDeviceId,
     nodeId,
     standardSeriesId: brandSeriesId(standard.id),
     rectificativeSeriesId: brandSeriesId(rectificative.id),
@@ -179,6 +183,7 @@ async function ringSale(venue: GbVenue): Promise<{ saleId: SaleId; backendId: st
   return asApp(async (tx) => {
     const { saleId, fiscal } = await recordSale(tx, backend, {
       tillId: venue.tillId,
+      origin: deviceOrigin(venue.deviceId),
       nodeId: venue.nodeId,
       seriesId: venue.standardSeriesId,
       locale: LOCALE,
@@ -254,6 +259,7 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
     await asApp((tx) =>
       recordCorrection(tx, backend, {
         tillId: venue.tillId,
+        origin: deviceOrigin(venue.deviceId),
         nodeId: venue.nodeId,
         seriesId: venue.rectificativeSeriesId,
         correctsSaleId: toCorrect.saleId,
@@ -278,6 +284,7 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
     await asApp((tx) =>
       recordSubstitution(tx, backend, {
         tillId: venue.tillId,
+        origin: deviceOrigin(venue.deviceId),
         nodeId: venue.nodeId,
         seriesId: venue.standardSeriesId,
         substitutedSaleIds: [toSubstitute.saleId],

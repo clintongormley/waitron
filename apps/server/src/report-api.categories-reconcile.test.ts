@@ -33,10 +33,11 @@ import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountReportApi } from "./report-api.js";
-import type { TillConfig } from "./till-config.js";
+import type {} from "./till-config.js";
 import { payWorkingOrder, recordTillSale } from "./till-sale.js";
 import { createOpenOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // Review Focus 3: on the till's sale paths a category report's gross is the sum of the issued sales'
 // totals, Uncategorised included, and its net is the VAT summary's bases, in both modes. Sales are
@@ -113,7 +114,7 @@ describe("the category report reconciles with the till's sales", () => {
       ),
       { db: suite.db, modules: ALL_MODULES },
     );
-    const cfg: TillConfig = {
+    const cfg = await deviceRequestCfg(suite.db, {
       tillId: brandTillId(venue.tillId),
       nodeId: brandNodeId(venue.nodeId),
       seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -123,7 +124,7 @@ describe("the category report reconciles with the till's sales", () => {
       tipsEnabled: false,
       simplifiedInvoiceLimit: null,
       orderFlow: "prepay",
-    };
+    });
 
     // Drinks > Softs; Water sits in Drinks itself; Bread and Olives have no category. Two rates, and
     // prices whose VAT does not divide evenly, so a net summed some other way would drift a cent.

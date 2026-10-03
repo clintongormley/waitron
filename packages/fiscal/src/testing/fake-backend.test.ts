@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { AppError, decimal, nodeId, saleId, seriesId, tillId } from "@waitron/shared";
+import { AppError, decimal, jobOrigin, nodeId, saleId, seriesId, tillId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleForFiscalRecord } from "../backend.js";
 import { FakeFiscalBackend } from "./fake-backend.js";
@@ -14,6 +14,7 @@ let backend: FakeFiscalBackend;
 function saleOn(node: typeof NODE_A, invoiceNumber: number): SaleForFiscalRecord {
   return {
     tillId: SNAPSHOT_TILL,
+    origin: jobOrigin("readiness_test"),
     nodeId: node,
     saleId: saleId(`11111111-2222-3333-4444-${String(invoiceNumber).padStart(12, "0")}`),
     seriesId: seriesId("99999999-8888-7777-6666-555555555555"),

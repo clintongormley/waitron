@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { AppError } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import { AppError, deviceOrigin } from "@waitron/shared";
+import type { DeviceId, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
@@ -27,6 +27,7 @@ import { seedTenant } from "../test/fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
 let tillId: TillId;
+let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 // `managerId` holds `sale.void` on its own role, so `managerSessionId` authorizes every green-path
@@ -45,7 +46,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ tillId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
   managerId = await seedPerson("manager");
   supervisorId = await seedPerson("supervisor");
   const staffId = await seedPerson("staff");
@@ -95,6 +96,7 @@ const steadyClock: TrustedClock = fixedClock(() => ({
 function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
     tillId,
+    origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,
     locale: "es-ES",
@@ -257,6 +259,8 @@ describe("recordVoid — numbering", () => {
       withTransaction(suite.db, async (tx) => {
         await tx.insert(sales).values({
           tillId,
+          source: "device",
+          deviceId,
           nodeId,
           seriesId,
           invoiceNumber: 1,

@@ -1615,11 +1615,14 @@ describe("made-here route wiring", () => {
           state: "pending",
           requestedBy: venue.operatorId,
           tillId: venue.deviceTillId,
+          source: "device",
+          deviceId: venue.deviceId,
         })
         .returning({ id: billPayments.id }),
     );
     await inTx(venue, (tx) =>
       insertCapturedPayment(tx, {
+        origin: venue.cfg.origin,
         workingOrderId: brandWorkingOrderId(orderId),
         provider: "fake",
         paymentRef: `background-${randomUUID()}`,

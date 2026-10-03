@@ -28,7 +28,7 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { addTabRound, listStationQueue } from "./working-order.js";
 import { createCourse } from "./kitchen.js";
@@ -38,6 +38,7 @@ import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 /**
  * Tabs end to end through a real `VerifactuBackend`: what paying a tab files, and that a refusal
@@ -81,7 +82,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 }
 
 interface SeededVenue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   /** 1.50 gross. */
   cafe: AvailableProduct;
   /** 2.00 gross, at café's VAT rate, so a two-line basket has one VAT group. */
@@ -125,7 +126,7 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
     { db, modules: ALL_MODULES },
   );
 
-  const cfg = tillConfigFromVenue(venue);
+  const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue));
   const { available, counter, tables } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -158,7 +159,7 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
 }
 
 async function seedTable(
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   label: string,
   db: Database = suite.db,
   zoneId?: string,

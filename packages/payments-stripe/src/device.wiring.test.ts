@@ -8,6 +8,7 @@ import {
   nodeId as brandNodeId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
+  deviceOrigin,
 } from "@waitron/shared";
 import { openIncidents, recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
@@ -41,6 +42,7 @@ const steadyClock: TrustedClock = {
 
 function buildInput(s: SeededForSale, settledAt: Date): RecordSaleInput {
   return {
+    origin: deviceOrigin(s.deviceId),
     tillId: brandTillId(s.tillId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
@@ -80,7 +82,7 @@ describe("on-device offline accept -> recordSale -> associate -> forward decline
       db: suite.db,
     });
     const paid = await provider.collect({
-      tillId: brandTillId(s.tillId),
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("10.00"),
       allowOffline: true,

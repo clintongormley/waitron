@@ -27,13 +27,14 @@ import type { ExtraSelection } from "@waitron/shared";
 import { takeBillPayment, type BillPaymentRequest } from "./bill-payments.js";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { OrderFlow, TillConfig } from "./till-config.js";
+import type { OrderFlow } from "./till-config.js";
 import { collectOrder, payWorkingOrderIntegrated, recordTillSale } from "./till-sale.js";
 import { addTabRound, parkOrder, placeOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // A release that ships a reduced rate of 4% from 1 January 2027, the shipped table otherwise.
 vi.mock("@waitron/catalogue/src/vat-rates.js", async (importOriginal) => {
@@ -155,7 +156,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
+  const cfg = await deviceRequestCfg(suite.db, {
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -165,7 +166,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow,
-  };
+  });
   suite.db.run(sql`update locations set order_flow = ${orderFlow} where id = ${cfg.locationId}`);
 
   const products = await withTransaction(suite.db, async (tx) => {
@@ -281,6 +282,7 @@ function stubProvider(onCollect: () => void): PaymentProvider {
       const settledAt = new Date();
       await withTransaction(suite.db, (tx) =>
         insertCapturedPayment(tx, {
+          origin: params.origin,
           workingOrderId: params.workingOrderId,
           provider: "stripe",
           paymentRef,

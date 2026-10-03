@@ -39,7 +39,7 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { createTable } from "./tables.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./till-config.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
@@ -63,6 +63,7 @@ import "./errors.js";
 import { splitBill } from "./bill-actions.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // What serving records, by quantity, on the lines of a party (spec §4, §12 item 5; plan D8, D18,
 // D19). Serving is an operational fact: it never touches a filed sale.
@@ -117,7 +118,7 @@ const DISHES = {
 type Dish = keyof typeof DISHES;
 
 interface Venue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   zoneId: string;
   offer(dish: Dish): string;
   /** The Steak's extras list, whose one pick is the sauce. */
@@ -160,7 +161,7 @@ async function setupVenue(): Promise<Venue> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
+  const cfg = await deviceRequestCfg(suite.db, {
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -170,7 +171,7 @@ async function setupVenue(): Promise<Venue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  });
   return inTx(async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Carta" });
     const category = await createCategory(tx, { name: "Platos" });
@@ -1128,6 +1129,8 @@ describe("a card refund pending on a bill", () => {
         receivedAt: new Date().toISOString(),
         requestedBy: ALEX,
         tillId: v.cfg.tillId,
+        source: v.cfg.origin.source,
+        deviceId: v.cfg.origin.deviceId,
       })
       .returning({ id: billPayments.id });
     await suite.db.insert(billPaymentRefunds).values({
@@ -1139,6 +1142,8 @@ describe("a card refund pending on a bill", () => {
       authorizedBy: ALEX,
       requestedBy: ALEX,
       tillId: v.cfg.tillId,
+      source: v.cfg.origin.source,
+      deviceId: v.cfg.origin.deviceId,
       state: "pending",
     });
   }

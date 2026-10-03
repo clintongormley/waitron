@@ -8,6 +8,7 @@ import {
   decimalToCents,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
+  deviceOrigin,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
@@ -56,6 +57,7 @@ beforeEach(async () => {
 function correctiveSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRecord {
   return {
     tillId: till.tillId,
+    origin: deviceOrigin(till.deviceId),
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
     // `seriesId` is never read by `recordCorrection` (it uses `seriesCode`/`invoiceNumber` for the
@@ -78,6 +80,7 @@ function correctiveSaleFor(saleId: string, invoiceNumber: number): SaleForFiscal
 function originalSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRecord {
   return {
     tillId: till.tillId,
+    origin: deviceOrigin(till.deviceId),
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
     seriesId: brandSeriesId(till.seriesId),
@@ -114,6 +117,8 @@ async function seedCorrectiveRow(
     .insert(sales)
     .values({
       tillId: till.tillId,
+      source: "device",
+      deviceId: till.deviceId,
       nodeId: till.nodeId,
       seriesId: rectificativeSeriesId,
       invoiceNumber,
@@ -182,6 +187,15 @@ async function registro(saleId: string) {
 }
 
 describe("recordCorrection against the real Veri*Factu backend", () => {
+  it("files the corrective's alta with the corrective sale's source and device", async () => {
+    const correctiveId = await correct(await recordOriginal());
+    const row = await registro(correctiveId);
+    expect({ source: row.source, deviceId: row.deviceId }).toEqual({
+      source: "device",
+      deviceId: till.deviceId,
+    });
+  });
+
   it("records the correction as an R5 / I rectificativa at the next chain position", async () => {
     const originalId = await recordOriginal();
     const correctiveId = await correct(originalId);

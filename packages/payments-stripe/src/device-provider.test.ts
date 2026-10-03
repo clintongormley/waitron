@@ -7,6 +7,7 @@ import {
   decimal,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
+  deviceOrigin,
 } from "@waitron/shared";
 import {
   PAYMENTS_MIGRATIONS,
@@ -36,9 +37,9 @@ function providerFor(client: FakeStripeDevice): StripeOnDeviceProvider {
   });
 }
 
-function collectParams(s: { tillId: string; workingOrderId: string }, allowOffline?: boolean) {
+function collectParams(s: { deviceId: string; workingOrderId: string }, allowOffline?: boolean) {
   return {
-    tillId: brandTillId(s.tillId),
+    origin: deviceOrigin(s.deviceId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
     amount: decimal("10.00"),
     ...(allowOffline === undefined ? {} : { allowOffline }),
@@ -51,6 +52,7 @@ describe("StripeOnDeviceProvider.collect after a Terminal PaymentIntent of the o
     await withTransaction(suite.db, async (tx) => {
       const key = { provider: "stripe", paymentRef: "terminal-stuck" };
       await insertAttempting(tx, {
+        origin: deviceOrigin(s.deviceId),
         ...key,
         workingOrderId: s.workingOrderId,
         amount: decimal("10.00"),

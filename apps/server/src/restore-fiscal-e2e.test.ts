@@ -47,6 +47,7 @@ import {
 } from "./restore.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import type { Logger } from "./logger.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 const RECOVERY_KEY = "s3cr3t-recovery-key-for-fiscal-restore-e2e";
 const BASELINE_MEDIA = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
@@ -80,6 +81,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     operationDescription: "Venta en establecimiento",
   });
   await db.insert(tills).values({ id: F.tillId, locationId: F.locationId, name: "Caja 1" });
+  await seedDevice(db, { tillId: F.tillId });
   await db.insert(nodes).values({ id: F.nodeId, locationId: F.locationId, name: "Node 1" });
   await db
     .insert(invoiceSeries)
@@ -100,6 +102,8 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
   await db.insert(sales).values({
     id: F.saleId,
     tillId: F.tillId,
+    source: "device",
+    deviceId: sql`(select id from devices where till_id = ${F.tillId})`,
     nodeId: F.nodeId,
     seriesId: F.seriesId,
     invoiceNumber: 4,
@@ -116,6 +120,8 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     .insert(registrosFacturacion)
     .values({
       tillId: F.tillId,
+      source: "device",
+      deviceId: sql`(select id from devices where till_id = ${F.tillId})`,
       nodeId: F.nodeId,
       sifId: F.sifId,
       saleId: F.saleId,

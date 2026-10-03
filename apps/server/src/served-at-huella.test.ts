@@ -35,7 +35,7 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
 import { createTable, createZone, listTables, setTablePlacement } from "./tables.js";
 import { addTabRound, advanceTicketItem, fireLines, type TicketState } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
@@ -44,6 +44,7 @@ import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { fireAll, openPartyTab, serveLine } from "./testing/serve-line.js";
 import "./errors.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // The fiscal firewall (CLAUDE.md §5): our own metadata never enters `computeHuella`. `served_at` is
 // a `working_order_lines` field the pay path never reads: `payWorkingOrder` files from the tab's
@@ -153,7 +154,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 interface Shop {
   db: Database;
   backend: FiscalBackend;
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   aguaId: string;
   cafeId: string;
   aguaMenuItemId: string;
@@ -178,7 +179,7 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
     db,
     modules: ALL_MODULES,
   });
-  const cfg = tillConfigFromVenue(venue);
+  const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue));
   await withTransaction(db, (tx) =>
     registerSif(tx, {
       nodeId: cfg.nodeId,

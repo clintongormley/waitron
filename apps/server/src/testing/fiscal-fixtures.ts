@@ -10,6 +10,8 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { cadenas, envios, registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { seedDevice } from "@waitron/db/testing/seed.js";
+import { sql } from "drizzle-orm";
 
 // Every row is written through its table definition, never raw SQL, so each column's `$defaultFn`
 // runs and the JSON and list columns are encoded.
@@ -74,6 +76,8 @@ export async function insertFiscalSale(db: Database, ids: FiscalIds): Promise<vo
   await db.insert(sales).values({
     id: ids.saleId,
     tillId: ids.tillId,
+    source: "device",
+    deviceId: sql`(select id from devices where till_id = ${ids.tillId})`,
     nodeId: ids.nodeId,
     seriesId: ids.seriesId,
     invoiceNumber: 1,
@@ -113,6 +117,7 @@ export async function seedFiscalParents(
       operationDescription: "Venta en establecimiento",
     });
     await db.insert(tills).values({ id: ids.tillId, locationId: ids.locationId, name: "Caja 1" });
+    await seedDevice(db, { tillId: ids.tillId });
     await db.insert(nodes).values({ id: ids.nodeId, locationId: ids.locationId, name: "Node 1" });
     await db.insert(invoiceSeries).values({ id: ids.seriesId, nodeId: ids.nodeId, code: "A" });
   }
@@ -178,6 +183,8 @@ export async function insertFiscalRegistro(
     .values({
       id: registroId,
       tillId: ids.tillId,
+      source: "device",
+      deviceId: sql`(select id from devices where till_id = ${ids.tillId})`,
       nodeId: ids.nodeId,
       sifId: ids.sifId,
       saleId: ids.saleId,

@@ -13,10 +13,12 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  deviceOrigin,
 } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
 import { applyVenue } from "./venue-apply.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
@@ -73,9 +75,15 @@ function request(taxId = "B12345674", adminEmail = "owner@example.test"): VenueR
 }
 
 /** A well-formed sale — the reconciled figures from `write-path-fixtures.ts`'s `saleInput`. */
-function saleInput(ids: { tillId: string; nodeId: string; seriesId: string }): RecordSaleInput {
+function saleInput(ids: {
+  tillId: string;
+  deviceId: string;
+  nodeId: string;
+  seriesId: string;
+}): RecordSaleInput {
   return {
     tillId: brandTillId(ids.tillId),
+    origin: deviceOrigin(ids.deviceId),
     nodeId: brandNodeId(ids.nodeId),
     seriesId: brandSeriesId(ids.seriesId),
     locale: "es-ES",
@@ -132,6 +140,7 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
     });
 
     const standardSeriesId = venue.seriesIds[0]!;
+    const { deviceId } = await seedDevice(suite.db, { tillId: venue.tillId });
 
     const { saleId, fiscal } = await withTransaction(suite.db, async (tx) => {
       return recordSale(
@@ -139,6 +148,7 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
         backend,
         saleInput({
           tillId: venue.tillId,
+          deviceId,
           nodeId: venue.nodeId,
           seriesId: standardSeriesId,
         }),

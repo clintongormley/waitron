@@ -9,7 +9,7 @@ import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
-import { seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode } from "../testing/seed.js";
 import { catalogues, products } from "./catalogue.js";
 import { invoiceSeries } from "./series.js";
 import { locations, tenants, tills } from "./tenants.js";
@@ -22,6 +22,7 @@ const AT = "2026-07-20T19:20:30+00:00";
 const DESCRIPTIONS_A = JSON.stringify({ es: "Café solo", ca: "Cafè sol" });
 
 let nodeA = "";
+let deviceA = "";
 let seriesA = "";
 let productA = "";
 
@@ -31,7 +32,7 @@ function insertSaleSql(opts: {
 }): ReturnType<typeof sql> {
   // `id` is named explicitly because `sales.id` is `$defaultFn(newId)` — a JavaScript generator
   // rather than a SQL DEFAULT, which a raw insert never reaches.
-  return sql`insert into sales (id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, working_order_id) values (${randomUUID()}, ${TILL_A1}, ${nodeA}, ${seriesA}, ${opts.invoiceNumber}, ${AT}, 120,
+  return sql`insert into sales (id, till_id, source, device_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, working_order_id) values (${randomUUID()}, ${TILL_A1}, 'device', ${deviceA}, ${nodeA}, ${seriesA}, ${opts.invoiceNumber}, ${AT}, 120,
       100, '[]', 'es', '["es","ca"]', 'verifactu', 'recorded', ${opts.workingOrderId}
     )`;
 }
@@ -62,6 +63,7 @@ describe("park & retrieve schema", () => {
     ]);
     await admin.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
     nodeA = await seedNode(admin, brandLocationId(LOCATION_A));
+    ({ deviceId: deviceA } = await seedDevice(admin, { tillId: TILL_A1 }));
     const [series] = await admin
       .insert(invoiceSeries)
       .values({ nodeId: nodeA, code: "FA", purpose: "standard" })

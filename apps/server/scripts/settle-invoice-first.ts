@@ -31,6 +31,7 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { scriptSessionDevice } from "./script-device.js";
@@ -116,6 +117,7 @@ export async function settleInvoiceFirst(
 
     const saleInput: RecordSaleInput = {
       tillId: till,
+      origin: jobOrigin("demo_seed"),
       nodeId: node,
       seriesId: stdSeries,
       locale: LOCALE,
@@ -163,6 +165,7 @@ export async function settleInvoiceFirst(
 
     const corrInput: RecordCorrectionInput = {
       tillId: till,
+      origin: jobOrigin("demo_seed"),
       nodeId: node,
       seriesId: rectSeries,
       correctsSaleId: sale.saleId,

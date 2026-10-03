@@ -42,6 +42,7 @@ import {
   seriesId as brandSeriesId,
   thousandthsToDecimal,
   tillId as brandTillId,
+  deviceOrigin,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -94,6 +95,8 @@ interface Venue {
   sessionCookie: string;
   /** The operator's session on a handheld, which never opens a cash drawer. */
   handheldCookie: string;
+  /** The handheld device `handheldCookie` names. */
+  handheldDeviceId: string;
   /** The operator's session on a handheld whose profile does not take cash. */
   noCashCookie: string;
   /** The till the enrolled device rings on. */
@@ -301,6 +304,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     sessionCookie: `${SESSION_COOKIE}=${session.token}`,
     deviceId: device.deviceId,
     handheldCookie: `${SESSION_COOKIE}=${await sessionOn(handheld.deviceId)}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`,
+    handheldDeviceId: handheld.deviceId,
     noCashCookie: `${SESSION_COOKIE}=${await sessionOn(noCash.deviceId)}; ${DEVICE_COOKIE}=${noCash.deviceId}.${noCash.token}`,
     deviceTillId: deviceRow!.till_id,
     printerId: seeded.printerId,
@@ -1781,6 +1785,8 @@ describe("retries and reused ids (plan D8, design §5.1)", () => {
         authorizedBy: randomUUID(),
         requestedBy: randomUUID(),
         tillId: venue.deviceTillId,
+        source: "device",
+        deviceId: venue.deviceId,
         state: "completed",
         completedAt: new Date().toISOString(),
       }),
@@ -1824,6 +1830,7 @@ describe("the single-payment routes on a bill holding bill payments (design §7)
     const [paymentRow] = await paymentRows(billId);
     await inTx((tx) =>
       insertCapturedPayment(tx, {
+        origin: deviceOrigin(venue.deviceId),
         workingOrderId: billId,
         provider: "simulator",
         paymentRef: randomUUID(),
@@ -1940,12 +1947,44 @@ async function insertBillPayment(
         receivedAt: new Date().toISOString(),
         requestedBy: venue.staffId,
         tillId: venue.deviceTillId,
+        source: "device",
+        deviceId: venue.deviceId,
         ...row,
       })
       .returning({ id: billPayments.id }),
   );
   return inserted!.id;
 }
+
+describe("the device a bill payment and its refund name", () => {
+  it("records the payment under the device that took it, and the refund under the one that gave it back", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+
+    const refunded = await request(
+      "POST",
+      `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        reason: "Cobrado de más",
+        override: { personId: venue.adminId, pin: "1234" },
+        appliedAmount: "20.00",
+        tipAmount: "0.00",
+      },
+      venue.handheldCookie,
+    );
+
+    expect(refunded.status).toBe(200);
+    expect(
+      suite.db.all(sql`select source, device_id from bill_payments where id = ${paymentId}`),
+    ).toEqual([{ source: "device", device_id: venue.deviceId }]);
+    expect(
+      suite.db.all(
+        sql`select source, device_id from bill_payment_refunds where bill_payment_id = ${paymentId}`,
+      ),
+    ).toEqual([{ source: "device", device_id: venue.handheldDeviceId }]);
+  });
+});
 
 describe("who can approve a refund (GET /api/refund-authorizers)", () => {
   async function addPerson(role: "staff" | "supervisor" | "manager", status = "active") {
@@ -2894,6 +2933,8 @@ describe("the ticket after a refund", () => {
         authorizedBy: venue.adminId,
         requestedBy: venue.adminId,
         tillId: venue.deviceTillId,
+        source: "device",
+        deviceId: venue.deviceId,
         state: "failed",
         failedAt: new Date().toISOString(),
       }),
@@ -2937,6 +2978,8 @@ describe("a payment no card provider stands behind", () => {
           receivedAt: new Date().toISOString(),
           requestedBy: venue.staffId,
           tillId: venue.deviceTillId,
+          source: "device",
+          deviceId: venue.deviceId,
         })
         .returning({ id: billPayments.id }),
     );

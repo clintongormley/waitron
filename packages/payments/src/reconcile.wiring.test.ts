@@ -6,6 +6,7 @@ import {
   decimal,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
+  deviceOrigin,
 } from "@waitron/shared";
 import { openIncidents } from "@waitron/core";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
@@ -32,7 +33,7 @@ describe("the orphan backstop, end to end", () => {
 
     // 1. Real capture through the provider — the money moves.
     const captured = await provider.collect({
-      tillId: brandTillId(seeded.tillId),
+      origin: deviceOrigin(seeded.deviceId),
       workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
       amount: decimal("12.50"),
     });

@@ -2,11 +2,7 @@ import Stripe from "stripe";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  decimal,
-  tillId as brandTillId,
-  workingOrderId as brandWorkingOrderId,
-} from "@waitron/shared";
+import { decimal, workingOrderId as brandWorkingOrderId, deviceOrigin } from "@waitron/shared";
 import {
   PAYMENTS_MIGRATIONS,
   getPaymentByRef,
@@ -76,7 +72,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     // The reader needs the PaymentIntent handed to `processPaymentIntent` before
     // `presentPaymentMethod` has anything to resolve, hence the delay before presenting.
     const collecting = provider.collect({
-      tillId: brandTillId(s.tillId),
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       readerRef: readerId,
@@ -100,7 +96,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
       poll: { maxAttempts: 40, intervalMs: 500 },
     });
     const collecting = provider.collect({
-      tillId: brandTillId(s.tillId),
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       readerRef: readerId,
@@ -140,6 +136,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     const key = { provider: "stripe", paymentRef: `sandbox-${s.workingOrderId}` };
     await suite.db.transaction(async (tx) => {
       await insertAttempting(tx, {
+        origin: deviceOrigin(s.deviceId),
         ...key,
         workingOrderId: s.workingOrderId,
         amount: decimal("12.10"),

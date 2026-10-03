@@ -13,11 +13,14 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { paymentPolicy } from "../src/schema/payment-policy.js";
 import type { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 
 export interface Seeded {
   tillId: string;
+  /** A device on that till: where the seeded order's payments are started. */
+  deviceId: string;
   nodeId: string;
   workingOrderId: string;
 }
@@ -35,7 +38,8 @@ export function freshNif(): string {
 }
 
 /**
- * Seeds tenant → location → till → node → open working_order and returns their ids.
+ * Seeds tenant → location → till (with a device) → node → open working_order and returns their
+ * ids.
  *
  * Written through the table definitions rather than as raw SQL: `id` and `created_at` are
  * `$defaultFn` generators only the insert BUILDER runs, and `invoice_locales` is a list the
@@ -63,7 +67,8 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
     .insert(workingOrders)
     .values({ tillId: till!.id, orderNumber: 1 })
     .returning({ id: workingOrders.id });
-  return { tillId: till!.id, nodeId: node!.id, workingOrderId: wo!.id };
+  const { deviceId } = await seedDevice(db, { tillId: till!.id });
+  return { tillId: till!.id, deviceId, nodeId: node!.id, workingOrderId: wo!.id };
 }
 
 const SEEDED_AT = new Date("2026-07-01T12:00:00Z").toISOString();
@@ -85,6 +90,8 @@ export async function seedSale(db: Database, seeded: Seeded): Promise<string> {
       .insert(sales)
       .values({
         tillId: seeded.tillId,
+        source: "device",
+        deviceId: seeded.deviceId,
         nodeId: seeded.nodeId,
         seriesId: series!.id,
         invoiceNumber: 1,
@@ -152,6 +159,8 @@ export async function seedBillPayment(db: Database, seeded: Seeded): Promise<str
       state: "pending",
       requestedBy: "11111111-1111-1111-1111-111111111111",
       tillId: seeded.tillId,
+      source: "device",
+      deviceId: seeded.deviceId,
     })
     .returning({ id: billPayments.id });
   return row!.id;

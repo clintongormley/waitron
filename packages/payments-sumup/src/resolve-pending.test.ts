@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { AppError, decimal } from "@waitron/shared";
+import { AppError, decimal, deviceOrigin } from "@waitron/shared";
 import {
   PAYMENTS_MIGRATIONS,
   getPaymentByRef,
@@ -41,6 +41,7 @@ async function setup(incidentRecorded = true) {
   ) => {
     await withTransaction(suite.db, (tx) =>
       insertAttempting(tx, {
+        origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
         provider: "sumup",
         paymentRef,
@@ -129,6 +130,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
     const { t, provider, state, raised } = await setup();
     await withTransaction(suite.db, (tx) =>
       insertAttempting(tx, {
+        origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
         provider: "sumup",
         paymentRef: "ghost",
@@ -157,6 +159,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
     const { t, provider, state, raised } = await setup(false);
     await withTransaction(suite.db, (tx) =>
       insertAttempting(tx, {
+        origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
         provider: "sumup",
         paymentRef: "ghost-dup",

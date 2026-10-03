@@ -156,6 +156,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
         pin: "1234",
       });
       await recordCorrection(tx, venue.backend, {
+        origin: venue.cfg.origin,
         tillId: venue.cfg.tillId,
         nodeId: venue.cfg.nodeId,
         seriesId: brandSeriesId(series!.id),
@@ -344,6 +345,8 @@ describe("collecting an invoice that carries a corrective invoice", () => {
       // No fiscal record is written for this row: it bypasses recordCorrection on purpose.
       await tx.insert(sales).values({
         tillId: venue.cfg.tillId,
+        source: venue.cfg.origin.source,
+        deviceId: venue.cfg.origin.deviceId,
         nodeId: venue.cfg.nodeId,
         seriesId: series!.id,
         invoiceNumber: await allocateInvoiceNumber(tx, series!.id),

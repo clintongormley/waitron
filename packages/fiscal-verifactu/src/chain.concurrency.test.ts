@@ -54,7 +54,7 @@ async function appendTogether(count: number): Promise<unknown[]> {
   return Promise.all(
     sales.map((saleId, i) =>
       withTransaction(suite.db, (tx) =>
-        appendToChain(tx, node.nodeId, altaFor(node.tillId, saleId, i + 1, i)),
+        appendToChain(tx, node.nodeId, altaFor(node, saleId, i + 1, i)),
       ),
     ),
   );
@@ -118,7 +118,7 @@ describe("appendToChain from many callers started together", () => {
     let secondStarted = false;
 
     const one = withTransaction(suite.db, async (tx) => {
-      const appended = await appendToChain(tx, node.nodeId, altaFor(node.tillId, first, 1, 1));
+      const appended = await appendToChain(tx, node.nodeId, altaFor(node, first, 1, 1));
       reached.open();
       await hold.waited;
       return appended;
@@ -126,7 +126,7 @@ describe("appendToChain from many callers started together", () => {
     // Started without awaiting `one`.
     const two = withTransaction(suite.db, async (tx) => {
       secondStarted = true;
-      return appendToChain(tx, node.nodeId, altaFor(node.tillId, second, 2, 2));
+      return appendToChain(tx, node.nodeId, altaFor(node, second, 2, 2));
     });
     const settled = Promise.allSettled([one, two]);
     try {

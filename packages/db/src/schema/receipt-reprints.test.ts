@@ -3,7 +3,7 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { receiptReprints } from "./receipt-reprints.js";
@@ -15,6 +15,7 @@ import { locations, tenants, tills } from "./tenants.js";
 
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL = "aaaaaaaa-0000-4000-8000-000000000011";
+let deviceA = "";
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
 
 describe("receipt reprint record", () => {
@@ -33,6 +34,7 @@ describe("receipt reprint record", () => {
     });
     await db.insert(tills).values({ id: TILL, locationId: LOCATION, name: "Till" });
     const nodeId = await seedNode(db, brandLocationId(LOCATION));
+    ({ deviceId: deviceA } = await seedDevice(db, { tillId: TILL }));
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "A" })
@@ -49,6 +51,8 @@ describe("receipt reprint record", () => {
       .insert(sales)
       .values({
         tillId: TILL,
+        source: "device",
+        deviceId: deviceA,
         nodeId,
         seriesId: series!.id,
         invoiceNumber: 1,

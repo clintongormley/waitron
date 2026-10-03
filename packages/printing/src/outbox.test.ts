@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { createPrinter, deactivatePrinter } from "./printers.js";
 import { canResendPrintJob, enqueuePrintJob, resendPrintJob } from "./outbox.js";
@@ -224,6 +224,9 @@ describe("resendPrintJob", () => {
   it("stores the sale a job is enqueued with, and every resend in its chain carries it", async () => {
     const cfg = await setup();
     const nodeId = await seedNode(suite.db, brandLocationId(cfg.locationId));
+    const { deviceId } = await seedDevice(suite.db, {
+      locationId: brandLocationId(cfg.locationId),
+    });
     await withTransaction(suite.db, async (tx) => {
       const [till] = await tx
         .insert(tills)
@@ -237,6 +240,8 @@ describe("resendPrintJob", () => {
         .insert(sales)
         .values({
           tillId: till!.id,
+          source: "device",
+          deviceId,
           nodeId,
           seriesId: series!.id,
           invoiceNumber: 1,

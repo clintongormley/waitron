@@ -14,6 +14,7 @@ import {
   table,
   tsString,
 } from "./columns.js";
+import { devices } from "./devices.js";
 import { workingOrders } from "./orders.js";
 import { tills } from "./tenants.js";
 
@@ -50,6 +51,13 @@ export const billPayments = table(
     state: billPaymentState("state").notNull(),
     requestedBy: id("requested_by").notNull(),
     tillId: id("till_id").notNull(),
+    // Plain text until the table is rebuilt with the source's CHECKs: a declared vocabulary with no
+    // CHECK in the database fails the schema conformance suite.
+    source: label("source"),
+    /* v8 ignore start */
+    // Added by `ALTER TABLE`, which writes no delete rule, so it is declared with none.
+    deviceId: id("device_id").references(() => devices.id),
+    /* v8 ignore stop */
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     receivedAt: tsString("received_at"),
     failedAt: tsString("failed_at"),
@@ -153,6 +161,13 @@ export const billPaymentRefunds = table(
     authorizedBy: id("authorized_by").notNull(),
     requestedBy: id("requested_by").notNull(),
     tillId: id("till_id").notNull(),
+    // Plain text until the table is rebuilt with the source's CHECKs: a declared vocabulary with no
+    // CHECK in the database fails the schema conformance suite.
+    source: label("source"),
+    /* v8 ignore start */
+    // Added by `ALTER TABLE`, which writes no delete rule, so it is declared with none.
+    deviceId: id("device_id").references(() => devices.id),
+    /* v8 ignore stop */
     state: billPaymentRefundState("state").notNull(),
     sentAt: tsString("sent_at"),
     sendCount: count("send_count").notNull().default(0),

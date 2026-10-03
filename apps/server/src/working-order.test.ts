@@ -45,7 +45,7 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
 import {
   abandonHeldOrder,
   addTabRound,
@@ -107,6 +107,7 @@ import { inTx, join, orderForParty, seat, setupPartyVenue, split } from "./testi
 import "./errors.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { placeGroups } from "./order-groups.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 const LOCALE = "es-ES";
 
@@ -127,7 +128,7 @@ beforeAll(() => {
 });
 
 interface SeededVenue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   /** The catalogue assigned to this venue's location — where the KDS routing tests add more products. */
   catalogueId: string;
   /** The `each`-priced "Café" product (VAT general/21%, category "Bebidas"). */
@@ -254,7 +255,7 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
       };
     });
 
-  const cfg: TillConfig = {
+  const cfg = await deviceRequestCfg(suite.db, {
     tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     // `parkOrder` reads neither series nor locale/invoiceLocales; fresh values keep the shape whole.
@@ -267,7 +268,7 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     // Defaults to prepay (park/list/retrieve/update/abandon don't dispatch on the mode); the KDS fire
     // tests pass "ticket_then_pay" so placeOrder takes the non-fiscal placing path.
     orderFlow,
-  };
+  });
   return {
     cfg,
     cafeId,
@@ -294,13 +295,13 @@ interface ProductLine {
  * Every product the venue's catalogue holds now, offered in its counter zone (`setupVenue`'s) from
  * the test helper's own menu at the product's own price. Call it after the catalogue is final.
  */
-function counterOffers(cfg: TillConfig): Promise<ZoneOffers> {
+function counterOffers(cfg: DeviceRequestConfig): Promise<ZoneOffers> {
   return withTransaction(db, (tx) => offerProducts(tx, cfg));
 }
 
 /** `parkOrder` for a basket named by product, sold through each product's counter-zone offer. */
 async function parkProducts(
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   req: { id: string; label?: string; lines: ProductLine[] },
 ): Promise<{ id: string; orderNumber: number }> {
   const offers = await counterOffers(cfg);
@@ -313,7 +314,7 @@ async function parkProducts(
 
 /** `updateHeldOrder` for a basket named by product, each line naming its counter-zone offer. */
 async function updateProducts(
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   id: string,
   req: {
     label?: string;
@@ -1201,7 +1202,7 @@ async function readOrder(id: string): Promise<{
  * against it (2 × 1.50 gross is 3.00 here, not the net 2.48 the fiscal line carries).
  */
 async function grossBasketTotal(
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   lines: { productId: string; quantity: string }[],
 ): Promise<string> {
   return withTransaction(db, async (tx) => {
@@ -1253,7 +1254,7 @@ async function setStatus(id: string, status: "settled" | "abandoned"): Promise<v
  * venue-wide (#259): a promoted node inherits the venue's open tabs even though they are
  * tagged with the dead node's id (swap spec §4.3). `node_id` is the foreign node's on purpose.
  */
-async function seedForeignNodeOrder(cfg: TillConfig): Promise<string> {
+async function seedForeignNodeOrder(cfg: DeviceRequestConfig): Promise<string> {
   const id = randomUUID();
   const otherNode = await seedNode(db, cfg.locationId);
   await db.execute(sql`
@@ -2491,7 +2492,7 @@ const line = (productId: string) => ({ productId, quantity: "1" });
 /** Create a sellable product, optionally filed in a category or routed by a product exception. */
 async function makeProduct(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   catalogueId: string,
   route: { categoryId?: string; stationId?: string },
 ): Promise<string> {
@@ -2514,7 +2515,7 @@ async function makeProduct(
  *  Returns the created station and the printer id (call sites use whichever they need). */
 async function attachedPrinter(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   station: { name: string; isDefault?: boolean },
   printerName: string,
 ): Promise<{ station: Awaited<ReturnType<typeof createStation>>; printerId: string }> {
@@ -2530,13 +2531,13 @@ async function attachedPrinter(
 }
 
 /** The helper's table-service zone, every current product offered in it. */
-function tableOffers(tx: Transaction, cfg: TillConfig): Promise<ZoneOffers> {
+function tableOffers(tx: Transaction, cfg: DeviceRequestConfig): Promise<ZoneOffers> {
   return offerProducts(tx, cfg, { zone: "tables" });
 }
 
 /** Insert an active dining table in the table-service zone and return its id (for the openTab →
  *  addRound path). */
-async function makeTable(tx: Transaction, cfg: TillConfig): Promise<string> {
+async function makeTable(tx: Transaction, cfg: DeviceRequestConfig): Promise<string> {
   const { zoneId } = await tableOffers(tx, cfg);
   const { rows } = await tx.execute<{ id: string }>(sql`
     insert into dining_tables (id, location_id, label, zone_id, created_at)
@@ -2549,7 +2550,7 @@ async function makeTable(tx: Transaction, cfg: TillConfig): Promise<string> {
 /** `addTabRound` for a round named by product, each line sold through its table-zone offer. */
 async function addRound(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   tabId: string,
   lines: (ProductLine & { courseId?: string | null; hold?: boolean })[],
 ): Promise<void> {
@@ -2560,7 +2561,7 @@ async function addRound(
 /** `createOpenOrder` for a basket named by product, sold through each product's counter-zone offer. */
 async function createOfferedOrder(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   id: string,
   lines: ProductLine[],
 ): ReturnType<typeof createOpenOrder> {
@@ -2575,7 +2576,7 @@ async function createOfferedOrder(
  *  without the fiscal machinery. Returns the order's id. */
 async function placeOrderWith(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   // `note` is the per-line KDS customisation (spec §2/§3, NON-FISCAL) — `createOpenOrder` validates
   // and persists it on the parent dish line, and `fireLines` snapshots it onto the ticket.
   lines: ProductLine[],
@@ -2604,7 +2605,7 @@ async function placeOrderWith(
  */
 async function fireContextless(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   productIds: string[],
 ): Promise<{ id: string }> {
   const id = randomUUID();
@@ -5095,7 +5096,7 @@ describe("correction slips on recall & void (A6)", () => {
    *  an optional course. Station routing is left to the venue default. */
   async function namedProduct(
     tx: Transaction,
-    cfg: TillConfig,
+    cfg: DeviceRequestConfig,
     catalogueId: string,
     name: string,
     courseId?: string,
@@ -5645,7 +5646,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
  *  shape `bumpCourseReady` must sweep in one UPDATE (`listStationQueue` would need two reads to see both). */
 async function firedCourseAcrossTwoStations(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   catalogueId: string,
 ): Promise<{ orderId: string; courseId: string }> {
   await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -6125,7 +6126,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
    *  `extras`, so the bill is built directly. Skips firing, so no station is required. */
   async function openExtrasTab(
     tx: Transaction,
-    cfg: TillConfig,
+    cfg: DeviceRequestConfig,
     tableId: string,
     lines: ProductLine[],
   ): Promise<string> {
@@ -6540,7 +6541,7 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
 // Exercised through `addTabRound`; the order paths run the same `priceOrderLines` code.
 describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   /** Open a fresh empty tab in the venue and return its id — the addTabRound host these cases fire on. */
-  async function openEmptyTab(tx: Transaction, cfg: TillConfig): Promise<string> {
+  async function openEmptyTab(tx: Transaction, cfg: DeviceRequestConfig): Promise<string> {
     const tableId = await makeTable(tx, cfg);
     const { tabId } = await openPartyTab(tx, cfg, { tableId });
     return tabId;
@@ -6906,7 +6907,7 @@ it("does not let an omitted payload waive a required extras list it cannot satis
  */
 describe("order path — extras and options", () => {
   interface Seeded {
-    cfg: TillConfig;
+    cfg: DeviceRequestConfig;
     dishId: string;
     wineId: string;
     extraListId: string;
@@ -8086,7 +8087,7 @@ describe("editing a saved order prices only what the edit adds", () => {
  * still stores a category of its own ("Copas"), which a variant never reads: its category is
  * always its parent's.
  */
-async function seedWine(tx: Transaction, cfg: TillConfig, catalogueId: string) {
+async function seedWine(tx: Transaction, cfg: DeviceRequestConfig, catalogueId: string) {
   const vinos = await createCategory(tx, { name: "Vinos" });
   const copas = await createCategory(tx, { name: "Copas" });
   const primero = await createCourse(tx, cfg, { name: "Primero", displayOrder: 1 });
@@ -8173,7 +8174,7 @@ async function fireableLines(tx: Transaction, orderId: string) {
 
 async function insertRoute(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   route: { zoneId?: string; productId?: string; categoryId?: string; stationId: string },
 ): Promise<void> {
   await createException(tx, cfg, {

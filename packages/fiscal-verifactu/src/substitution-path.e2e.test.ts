@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { invoiceSeries, sales, withTransaction } from "@waitron/db";
 import { computeHuella } from "@waitron/verifactu";
 import type { Counterparty, SaleForFiscalRecord } from "@waitron/fiscal";
-import { decimal, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
+import {
+  decimal,
+  saleId as brandSaleId,
+  seriesId as brandSeriesId,
+  deviceOrigin,
+} from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
@@ -64,6 +69,7 @@ function substitutionSaleFor(
 ): SaleForFiscalRecord {
   return {
     tillId: till.tillId,
+    origin: deviceOrigin(till.deviceId),
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
     // Never read by `recordSubstitution` (it uses `seriesCode`/`invoiceNumber` for NumSerieFactura);
@@ -86,6 +92,7 @@ function substitutionSaleFor(
 function ticketSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRecord {
   return {
     tillId: till.tillId,
+    origin: deviceOrigin(till.deviceId),
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
     seriesId: brandSeriesId(till.seriesId),
@@ -118,6 +125,8 @@ async function seedSubstitutionRow(invoiceNumber: number): Promise<string> {
     .insert(sales)
     .values({
       tillId: till.tillId,
+      source: "device",
+      deviceId: till.deviceId,
       nodeId: till.nodeId,
       seriesId: substitutionSeriesId,
       invoiceNumber,
@@ -190,6 +199,15 @@ async function registro(saleId: string) {
 }
 
 describe("recordSubstitution against the real Veri*Factu backend", () => {
+  it("files the F3's alta with the F3's source and device", async () => {
+    const substitutionId = await substitute([await recordTicket(1)]);
+    const row = await registro(substitutionId);
+    expect({ source: row.source, deviceId: row.deviceId }).toEqual({
+      source: "device",
+      deviceId: till.deviceId,
+    });
+  });
+
   it("records the substitution as an F3 alta at the next chain position", async () => {
     const ticketId = await recordTicket(1);
     const substitutionId = await substitute([ticketId]);

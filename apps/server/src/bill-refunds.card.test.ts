@@ -998,6 +998,8 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
           authorizedBy: venue.adminId,
           requestedBy: venue.operatorId,
           tillId: venue.deviceTillId,
+          source: "device",
+          deviceId: venue.deviceId,
           state: "pending",
         })
         .returning(),
@@ -1032,6 +1034,8 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
           authorizedBy: venue.adminId,
           requestedBy: venue.operatorId,
           tillId: venue.deviceTillId,
+          source: "device",
+          deviceId: venue.deviceId,
           state: "pending",
         })
         .returning(),
@@ -1140,6 +1144,8 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
           authorizedBy: venue.adminId,
           requestedBy: venue.operatorId,
           tillId: venue.deviceTillId,
+          source: "device",
+          deviceId: venue.deviceId,
           state: "pending",
         })
         .returning(),
@@ -1380,6 +1386,8 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
           authorizedBy: venue.adminId,
           requestedBy: venue.operatorId,
           tillId: venue.deviceTillId,
+          source: "device",
+          deviceId: venue.deviceId,
           state: "pending",
         })
         .returning(),
@@ -1705,6 +1713,8 @@ describe("a refund the provider here cannot answer for", () => {
           authorizedBy: venue.adminId,
           requestedBy: venue.operatorId,
           tillId: venue.deviceTillId,
+          source: "device",
+          deviceId: venue.deviceId,
           state: "pending",
         })
         .returning(),

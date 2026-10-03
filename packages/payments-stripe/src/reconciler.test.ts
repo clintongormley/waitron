@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimal } from "@waitron/shared";
+import { decimal, deviceOrigin } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS, insertCapturedPayment, insertInitiated } from "@waitron/payments";
 import { seedWorkingOrder, freshNif } from "@waitron/payments/test/seed.js";
 import { StripeReconciler } from "./reconciler.js";
@@ -35,12 +35,14 @@ function reconciler(
 /** A `captured` stripe payment on an ABANDONED working order — the auto-reversible orphan shape:
  * money we hold, no sale, and a working order that will never produce one. */
 async function abandonedOrphan(params: {
+  deviceId: string;
   workingOrderId: string;
   paymentRef: string;
   externalRef: string;
 }): Promise<void> {
   await withTransaction(suite.db, (tx) =>
     insertCapturedPayment(tx, {
+      origin: deviceOrigin(params.deviceId),
       workingOrderId: params.workingOrderId,
       provider: "stripe",
       paymentRef: params.paymentRef,
@@ -64,6 +66,7 @@ describe("StripeReconciler", () => {
     // No sale, but the working order is still open, so this is not an orphan — the clean case.
     await withTransaction(suite.db, (tx) =>
       insertCapturedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "stripe",
         paymentRef: "ref-terminal",
@@ -88,6 +91,7 @@ describe("StripeReconciler", () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     await withTransaction(suite.db, (tx) =>
       insertInitiated(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "stripe",
         paymentRef: "ref-hosted",
@@ -159,6 +163,7 @@ describe("StripeReconciler", () => {
   it("auto-reverses a hosted orphan by resolving its session to a payment intent", async () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     await abandonedOrphan({
+      deviceId: seeded.deviceId,
       workingOrderId: seeded.workingOrderId,
       paymentRef: "ref-hosted-orphan",
       externalRef: "cs_orphan",
@@ -183,6 +188,7 @@ describe("StripeReconciler", () => {
     // reversal.
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     await abandonedOrphan({
+      deviceId: seeded.deviceId,
       workingOrderId: seeded.workingOrderId,
       paymentRef: "ref-terminal-orphan",
       externalRef: "pi_terminal_orphan",
@@ -208,6 +214,7 @@ describe("StripeReconciler", () => {
     // The marker is stamped before the attempt, so a failed reversal is never attempted again.
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     await abandonedOrphan({
+      deviceId: seeded.deviceId,
       workingOrderId: seeded.workingOrderId,
       paymentRef: "ref-unpaid-orphan",
       externalRef: "cs_unpaid",

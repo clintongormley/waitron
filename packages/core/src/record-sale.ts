@@ -21,7 +21,15 @@ import {
   stringToCents,
   sumDecimals,
 } from "@waitron/shared";
-import type { Decimal, NodeId, SaleId, SeriesId, TillId, WorkingOrderId } from "@waitron/shared";
+import type {
+  Decimal,
+  NodeId,
+  SaleId,
+  SaleOrigin,
+  SeriesId,
+  TillId,
+  WorkingOrderId,
+} from "@waitron/shared";
 import type {
   FiscalBackend,
   FiscalRecordRef,
@@ -51,6 +59,8 @@ export interface RecordSaleTender {
 export interface RecordSaleInput {
   /** Where the sale rings; also the key incidents are recorded under. */
   tillId: TillId;
+  /** Where the sale came from, written to `sales.source` and `sales.device_id`. */
+  origin: SaleOrigin;
   /** The node that chains the sale. The named series must belong to it. */
   nodeId: NodeId;
   seriesId: SeriesId;
@@ -256,6 +266,8 @@ export async function recordSale(
     .insert(sales)
     .values({
       tillId: input.tillId,
+      source: input.origin.source,
+      deviceId: input.origin.deviceId,
       nodeId: input.nodeId,
       seriesId: input.seriesId,
       vatBreakdown,
@@ -319,6 +331,7 @@ export async function recordSale(
   // module's tables.
   const fiscal = await backend.recordSale(tx, {
     tillId: input.tillId,
+    origin: input.origin,
     nodeId: input.nodeId,
     saleId,
     seriesId: input.seriesId,

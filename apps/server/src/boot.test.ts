@@ -104,6 +104,7 @@ import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { Turns } from "./backup-turns.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 /**
  * The one test below that provisions a usable `fiscal.aeat` credential needs the AEAT transport to
@@ -2854,10 +2855,13 @@ describe("startServer, against a migrated venue directory", () => {
       tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
       orderNumber: 990_002,
     });
+    const { deviceId } = await seedDevice(sharedDb, { tillId: TILL_ENV.WAITRON_TILL_TILL_ID });
     const [payment] = await sharedDb
       .insert(billPayments)
       .values({
         workingOrderId: orderId,
+        source: "device",
+        deviceId,
         submissionId: randomUUID(),
         fingerprint: "stranded",
         kind: "contribution",

@@ -8,18 +8,19 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import type { DeviceId, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { seedBareSale, seedTenant } from "../test/fixtures.js";
 import { listOutstandingSales } from "./list-outstanding-sales.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
 let tillId: TillId;
+let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
 beforeEach(async () => {
-  ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ tillId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
 });
 
 function list() {
@@ -52,7 +53,7 @@ describe("listOutstandingSales", () => {
   it("lists an unsettled ordinary sale with amountDue = total", async () => {
     const saleId = await seedBareSale(
       suite.db,
-      { tillId, nodeId, seriesId },
+      { tillId, deviceId, nodeId, seriesId },
       { total: "70.00", invoiceNumber: 1 },
     );
     const out = await list();
@@ -69,12 +70,12 @@ describe("listOutstandingSales", () => {
   it("nets a correction into amountDue and hides the corrective itself", async () => {
     const originalId = await seedBareSale(
       suite.db,
-      { tillId, nodeId, seriesId },
+      { tillId, deviceId, nodeId, seriesId },
       { total: "70.00", invoiceNumber: 1 },
     );
     await seedBareSale(
       suite.db,
-      { tillId, nodeId, seriesId },
+      { tillId, deviceId, nodeId, seriesId },
       { total: "-5.00", invoiceNumber: 2, correctsSaleId: originalId },
     );
     const out = await list();
@@ -90,7 +91,7 @@ describe("listOutstandingSales", () => {
   it("hides a settled sale", async () => {
     const saleId = await seedBareSale(
       suite.db,
-      { tillId, nodeId, seriesId },
+      { tillId, deviceId, nodeId, seriesId },
       { total: "70.00", invoiceNumber: 1 },
     );
     await settleDirectly(saleId);
@@ -100,12 +101,12 @@ describe("listOutstandingSales", () => {
   it("keeps another sale outstanding when one sale is settled", async () => {
     const settledId = await seedBareSale(
       suite.db,
-      { tillId, nodeId, seriesId },
+      { tillId, deviceId, nodeId, seriesId },
       { total: "70.00", invoiceNumber: 1 },
     );
     const outstandingId = await seedBareSale(
       suite.db,
-      { tillId, nodeId, seriesId },
+      { tillId, deviceId, nodeId, seriesId },
       { total: "45.00", invoiceNumber: 2 },
     );
     await settleDirectly(settledId);
@@ -118,7 +119,7 @@ describe("listOutstandingSales", () => {
   it("hides a voided sale", async () => {
     const saleId = await seedBareSale(
       suite.db,
-      { tillId, nodeId, seriesId },
+      { tillId, deviceId, nodeId, seriesId },
       { total: "70.00", invoiceNumber: 1 },
     );
     await suite.db.insert(saleVoids).values({
@@ -133,13 +134,13 @@ describe("listOutstandingSales", () => {
     // A settled simplified ticket, then an F3 that substitutes it.
     const ticketId = await seedBareSale(
       suite.db,
-      { tillId, nodeId, seriesId },
+      { tillId, deviceId, nodeId, seriesId },
       { total: "70.00", invoiceNumber: 1 },
     );
     await settleDirectly(ticketId);
     const f3Id = await seedBareSale(
       suite.db,
-      { tillId, nodeId, seriesId },
+      { tillId, deviceId, nodeId, seriesId },
       { total: "70.00", invoiceNumber: 2 },
     );
     await suite.db

@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  decimal,
-  tillId as brandTillId,
-  workingOrderId as brandWorkingOrderId,
-} from "@waitron/shared";
+import { decimal, workingOrderId as brandWorkingOrderId, deviceOrigin } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS, getPaymentByRef } from "@waitron/payments";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { SUMUP_PROVIDER } from "./client.js";
@@ -68,7 +64,7 @@ d("SumUp live sandbox: collect against the paired Solo", () => {
 
     console.log("TAP THE CARD NOW");
     const result = await provider.collect({
-      tillId: brandTillId(s.tillId),
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("1.00"),
       readerRef: READER_ID!,

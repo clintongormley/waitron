@@ -53,6 +53,8 @@ async function seedAltaOn(db: Database, fecha: string): Promise<string> {
     .insert(sales)
     .values({
       tillId: venue.tillId,
+      source: "device",
+      deviceId: venue.deviceId,
       nodeId: venue.nodeId,
       seriesId: series!.id,
       invoiceNumber: sequence,
@@ -70,6 +72,8 @@ async function seedAltaOn(db: Database, fecha: string): Promise<string> {
     .insert(registrosFacturacion)
     .values({
       tillId: venue.tillId,
+      source: "device",
+      deviceId: venue.deviceId,
       nodeId: venue.nodeId,
       sifId,
       saleId: sale!.id,

@@ -545,6 +545,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const provider = new SimulatorPaymentProvider(suite.db);
     await inTx(v, (tx) =>
       insertCapturedPayment(tx, {
+        origin: v.cfg.origin,
         workingOrderId: id,
         provider: provider.provider,
         paymentRef: `sim-${randomUUID()}`,
@@ -726,6 +727,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       const provider = new SimulatorPaymentProvider(suite.db);
       await inTx(v, (tx) =>
         insertCapturedPayment(tx, {
+          origin: v.cfg.origin,
           workingOrderId: id,
           provider: provider.provider,
           paymentRef: `sim-${randomUUID()}`,

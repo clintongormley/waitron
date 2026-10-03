@@ -7,6 +7,7 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
+  deviceOrigin,
 } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
@@ -51,6 +52,7 @@ function buildInput(
   tender: { amount: string; settledAt: Date | null },
 ): RecordSaleInput {
   return {
+    origin: deviceOrigin(s.deviceId),
     tillId: brandTillId(s.tillId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
@@ -88,7 +90,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
     const provider = new FakePaymentProvider(suite.db);
 
     const paid = await provider.collect({
-      tillId: brandTillId(s.tillId),
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
     });
@@ -121,7 +123,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
     provider.failNextCollect();
 
     const paid = await provider.collect({
-      tillId: brandTillId(s.tillId),
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
     });

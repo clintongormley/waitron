@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, billPayments } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimal } from "@waitron/shared";
+import { decimal, deviceOrigin } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { MANUAL_PROVIDER, recordManualCardPayment, recordManualRefund } from "./manual.js";
 import { freshNif, seedWorkingOrder } from "../test/seed.js";
@@ -18,10 +18,27 @@ beforeEach(async () => {
 const SETTLED = new Date("2026-07-23T09:00:00Z");
 
 describe("recordManualCardPayment", () => {
+  it("stores the device the card payment was keyed on", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    const result = await suite.db.transaction((tx) =>
+      recordManualCardPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
+        workingOrderId: seeded.workingOrderId,
+        amount: decimal("12.10"),
+        settledAt: SETTLED,
+      }),
+    );
+    const rows = await suite.db.execute<{ source: string | null; device_id: string | null }>(
+      sql`select source, device_id from payments where payment_ref = ${result.paymentRef}`,
+    );
+    expect(rows.rows[0]).toEqual({ source: "device", device_id: seeded.deviceId });
+  });
+
   it("writes a captured row under the manual provider, with external_ref and a minted manual- ref", async () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     const result = await suite.db.transaction((tx) =>
       recordManualCardPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         amount: decimal("12.10"),
         settledAt: SETTLED,
@@ -57,6 +74,7 @@ describe("recordManualCardPayment", () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     const result = await suite.db.transaction((tx) =>
       recordManualCardPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         amount: decimal("5.00"),
         settledAt: SETTLED,
@@ -75,6 +93,7 @@ describe("recordManualRefund", () => {
     const authorizedBy = "11111111-1111-1111-1111-111111111111";
     const paid = await suite.db.transaction((tx) =>
       recordManualCardPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         amount: decimal("20.00"),
         settledAt: SETTLED,
@@ -117,6 +136,8 @@ describe("recordManualCardPayment for a bill payment", () => {
       .insert(billPayments)
       .values({
         workingOrderId: seeded.workingOrderId,
+        source: "device",
+        deviceId: seeded.deviceId,
         submissionId: "submission",
         fingerprint: "fingerprint",
         kind: "contribution",
@@ -130,6 +151,7 @@ describe("recordManualCardPayment for a bill payment", () => {
       .returning({ id: billPayments.id });
     const result = await suite.db.transaction((tx) =>
       recordManualCardPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         amount: decimal("12.10"),
         settledAt: SETTLED,

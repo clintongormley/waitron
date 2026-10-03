@@ -54,7 +54,7 @@ import { FakeSumUp } from "@waitron/payments-sumup/src/testing/fake-sumup.js";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
-import type { OrderFlow, TillConfig } from "./till-config.js";
+import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
 import type { ServiceMode } from "@waitron/module";
 import { requestBill } from "./bill-request.js";
 import {
@@ -80,7 +80,11 @@ import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { seedSessionDevice } from "./testing/session-device.js";
+import {
+  seedSessionDevice,
+  deviceRequestCfg,
+  orderDeviceOrigin,
+} from "./testing/session-device.js";
 
 // The integrated (split-transaction) card-pay orchestration, end to end on one venue: P1 commits a
 // walk-up before `collect`, because the provider's payment row has a foreign key to
@@ -144,7 +148,7 @@ function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConf
 type OfferedProduct = AvailableProduct & { menuItemId: string; zoneId: string };
 
 interface SeededVenue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   cafe: OfferedProduct;
 }
 
@@ -185,7 +189,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = tillConfigFromVenue(venue, orderFlow);
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, orderFlow));
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -289,7 +293,7 @@ async function preparationTicketCount(workingOrderId: string): Promise<number> {
 
 /** Create a receipt printer (cloud_poll) and point the till at it. `receipt_print_mode` defaults to
  *  `auto`, so a filed sale auto-enqueues its receipt via the print-on-sale hook. */
-async function makeReceiptPrinter(cfg: TillConfig): Promise<string> {
+async function makeReceiptPrinter(cfg: DeviceRequestConfig): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const { id } = await createPrinter(
       tx,
@@ -307,7 +311,10 @@ async function makeReceiptPrinter(cfg: TillConfig): Promise<string> {
 }
 
 /** The receipt payloads enqueued to `printerId`, as the shared `binary` column hands them back. */
-async function printJobPayloads(cfg: TillConfig, printerId: string): Promise<Uint8Array[]> {
+async function printJobPayloads(
+  cfg: DeviceRequestConfig,
+  printerId: string,
+): Promise<Uint8Array[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx
@@ -319,7 +326,7 @@ async function printJobPayloads(cfg: TillConfig, printerId: string): Promise<Uin
 }
 
 /** The count of `drawer_opens` rows. */
-async function drawerOpenCount(cfg: TillConfig): Promise<number> {
+async function drawerOpenCount(cfg: DeviceRequestConfig): Promise<number> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx.select().from(drawerOpens);
@@ -346,7 +353,7 @@ async function collectedAtSet(id: string): Promise<boolean> {
 /** The venue's default kitchen station id (`applyVenue` seeds one "Cocina" per location). Every
  *  fixture line here carries no product/category route, so `placeOrder` fires it to this
  *  station. */
-async function defaultStationId(cfg: TillConfig): Promise<string> {
+async function defaultStationId(cfg: DeviceRequestConfig): Promise<string> {
   const rows = suite.db.all<{ id: string }>(sql`
     select id from kitchen_stations where location_id = ${cfg.locationId} and is_default and active
   `);
@@ -451,7 +458,7 @@ async function rawPaymentsFor(
 }
 
 /** The venue's rectificative series. */
-function rectificativeSeries(cfg: TillConfig): string {
+function rectificativeSeries(cfg: DeviceRequestConfig): string {
   return suite.db.all<{ id: string }>(sql`
     select id from invoice_series where node_id = ${cfg.nodeId} and purpose = 'rectificative'
   `)[0]!.id;
@@ -459,7 +466,7 @@ function rectificativeSeries(cfg: TillConfig): string {
 
 /** Café's 1.50 invoice (a 1.24 base at 21%), reversed whole by a credit note through
  *  `recordCorrection`. */
-async function correctToZero(cfg: TillConfig, saleId: string): Promise<void> {
+async function correctToZero(cfg: DeviceRequestConfig, saleId: string): Promise<void> {
   const adminId = suite.db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!
     .id;
   const deviceId = await seedSessionDevice(suite.db, cfg);
@@ -470,6 +477,7 @@ async function correctToZero(cfg: TillConfig, saleId: string): Promise<void> {
       pin: "1234",
     });
     await recordCorrection(tx, backend, {
+      origin: cfg.origin,
       tillId: cfg.tillId,
       nodeId: cfg.nodeId,
       seriesId: brandSeriesId(rectificativeSeries(cfg)),
@@ -948,7 +956,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   /** Seed an OPEN order with a locked café line and a captured stripe payment whose `sale_id` is
    *  NULL. `capturedAmount` is the gross the card was charged. */
   async function seedLostCapture(
-    cfg: TillConfig,
+    cfg: DeviceRequestConfig,
     cafe: OfferedProduct,
     quantity: string,
     capturedAmount: string,
@@ -961,6 +969,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
         zoneId: cafe.zoneId,
       });
       await insertCapturedPayment(tx, {
+        origin: cfg.origin,
         workingOrderId: id,
         provider: "stripe",
         paymentRef: `pi-ref-${randomUUID()}`,
@@ -1062,6 +1071,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
     await withTransaction(suite.db, async (tx) => {
       await insertCapturedPayment(tx, {
+        origin: cfg.origin,
         workingOrderId: id,
         provider: "stripe",
         paymentRef: `pi-ref-${randomUUID()}`,
@@ -1200,7 +1210,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
   /** Park, then `placeOrder` issues the deferred invoice (open → placed), leaving one unsettled
    *  sale. Returns the order id and its sale id. */
   async function placeInvoiceFirst(
-    cfg: TillConfig,
+    cfg: DeviceRequestConfig,
     cafe: OfferedProduct,
     quantity = "1",
   ): Promise<{ id: string; saleId: string }> {
@@ -1427,6 +1437,8 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
         const now = clock.now();
         await tx.insert(sales).values({
           tillId: cfg.tillId,
+          source: cfg.origin.source,
+          deviceId: cfg.origin.deviceId,
           nodeId: cfg.nodeId,
           seriesId,
           invoiceNumber: await allocateInvoiceNumber(tx, seriesId),
@@ -1464,8 +1476,10 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
      *  `capturedAmount` is the gross the card was charged. */
     async function seedLostCaptureOnPlaced(id: string, capturedAmount: string): Promise<string> {
       const externalRef = `pi_lost_${randomUUID()}`;
+      const origin = await orderDeviceOrigin(suite.db, id);
       await withTransaction(suite.db, async (tx) => {
         await insertCapturedPayment(tx, {
+          origin,
           workingOrderId: id,
           provider: "stripe",
           paymentRef: `pi-ref-${randomUUID()}`,
@@ -1971,6 +1985,7 @@ describe("an order being paid by card cannot be changed from another device (pla
       await setMark(t.tabId, "2026-09-26T10:00:00.000Z");
       await withTransaction(suite.db, (tx) =>
         insertCapturedPayment(tx, {
+          origin: t.cfg.origin,
           workingOrderId: t.tabId,
           provider: "stripe",
           paymentRef: `pi-ref-${randomUUID()}`,
@@ -2032,6 +2047,7 @@ describe("an order being paid by card cannot be changed from another device (pla
         );
       }
       const payment = (workingOrderId: string) => ({
+        origin: t.cfg.origin,
         workingOrderId,
         provider: "sumup",
         paymentRef: randomUUID(),
@@ -2122,15 +2138,17 @@ describe("a party's bill request goes when a card or collect settles its last ow
   }
 
   /** The tab placed, which in an `invoice_first` zone issues its invoice and leaves it outstanding. */
-  async function placed(cfg: TillConfig, tabId: string): Promise<void> {
+  async function placed(cfg: DeviceRequestConfig, tabId: string): Promise<void> {
     await placeOrder({ db: suite.db, backend, clock }, cfg, tabId, OPERATOR, cfg.tillId);
     expect(await outstandingSalesFor()).toHaveLength(1);
   }
 
   /** A captured card payment of the tab's 1.50 that no sale was filed for. */
   async function lostCapture(tabId: string): Promise<void> {
+    const origin = await orderDeviceOrigin(suite.db, tabId);
     await withTransaction(suite.db, (tx) =>
       insertCapturedPayment(tx, {
+        origin,
         workingOrderId: tabId,
         provider: "stripe",
         paymentRef: `pi-ref-${randomUUID()}`,
@@ -2141,7 +2159,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
     );
   }
 
-  async function payByCard(cfg: TillConfig, tabId: string, log?: Logger): Promise<void> {
+  async function payByCard(cfg: DeviceRequestConfig, tabId: string, log?: Logger): Promise<void> {
     const { deps } = integratedDeps(cfg, suite.db);
     expect(
       (await payWorkingOrderIntegrated({ ...deps, log }, cfg, { id: tabId, lines: [] })).outcome,
@@ -2149,7 +2167,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
     expect((await orderState(tabId)).status).toBe("settled");
   }
 
-  async function payInCash(cfg: TillConfig, tabId: string, log?: Logger): Promise<void> {
+  async function payInCash(cfg: DeviceRequestConfig, tabId: string, log?: Logger): Promise<void> {
     await payWorkingOrder(
       { db: suite.db, backend, clock, log },
       cfg,
@@ -2159,7 +2177,11 @@ describe("a party's bill request goes when a card or collect settles its last ow
     expect((await orderState(tabId)).status).toBe("settled");
   }
 
-  async function collectInCash(cfg: TillConfig, tabId: string, log?: Logger): Promise<void> {
+  async function collectInCash(
+    cfg: DeviceRequestConfig,
+    tabId: string,
+    log?: Logger,
+  ): Promise<void> {
     await collectOrder(
       { db: suite.db, backend, clock, log },
       cfg,
@@ -2180,7 +2202,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
   }
 
   /** The party's stored request time, and whether the floor shows its table asking for the bill. */
-  async function request(cfg: TillConfig, partyId: string, tableId: string) {
+  async function request(cfg: DeviceRequestConfig, partyId: string, tableId: string) {
     return withTransaction(suite.db, async (tx) => {
       const [party] = await tx
         .select({ at: parties.billRequestedAt })
@@ -2200,7 +2222,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
   const paths: [
     string,
     ServiceMode,
-    (cfg: TillConfig, tabId: string, log?: Logger) => Promise<void>,
+    (cfg: DeviceRequestConfig, tabId: string, log?: Logger) => Promise<void>,
   ][] = [
     ["a card capture of an open bill", "table_tab", payByCard],
     ["a cash payment of an open bill", "table_tab", payInCash],

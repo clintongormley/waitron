@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   addDecimal,
   locationId as brandLocationId,
@@ -36,7 +36,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedTenant, seedDevice } from "@waitron/db/testing/seed.js";
 import type { TenderMethod } from "../src/types.js";
 
 /**
@@ -63,6 +63,7 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
     .values({ locationId, name: "Till 1" })
     .returning({ id: tills.id });
   const tillId = brandTillId(till!.id);
+  await seedDevice(db, { tillId });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const [series] = await db
     .insert(invoiceSeries)
@@ -88,6 +89,11 @@ export async function seedNodeAndSeries(
   return { nodeId, seriesId: brandSeriesId(series!.id) };
 }
 
+/** The device `seedVenue` or `seedTill` paired with `tillId`: the origin of every row rung there. */
+function deviceOfTill(tillId: string) {
+  return sql`(select id from devices where till_id = ${tillId})`;
+}
+
 // Till names are unique per location; seedVenue owns "Till 1".
 let tillSeq = 1;
 
@@ -97,6 +103,7 @@ export async function seedTill(
   name = `Till ${++tillSeq}`,
 ): Promise<TillId> {
   const [till] = await db.insert(tills).values({ locationId, name }).returning({ id: tills.id });
+  await seedDevice(db, { tillId: till!.id });
   return brandTillId(till!.id);
 }
 
@@ -177,6 +184,8 @@ export async function seedSale(
     .insert(sales)
     .values({
       tillId: seed.tillId,
+      source: "device",
+      deviceId: deviceOfTill(seed.tillId),
       nodeId: seed.nodeId,
       seriesId: seed.seriesId,
       invoiceNumber: opts.invoiceNumber,
@@ -277,6 +286,8 @@ export async function seedBillPayment(
       state: opts.state,
       requestedBy: PERSON,
       tillId: ref.tillId,
+      source: "device",
+      deviceId: deviceOfTill(ref.tillId),
       receivedAt: moved ? opts.at! : null,
       failedAt: opts.state === "failed" ? opts.at! : null,
     })
@@ -305,6 +316,8 @@ export async function seedBillRefund(
     authorizedBy: PERSON,
     requestedBy: PERSON,
     tillId: ref.tillId,
+    source: "device",
+    deviceId: deviceOfTill(ref.tillId),
     state: opts.state,
     completedAt: opts.state === "completed" ? opts.at! : null,
     failedAt: opts.state === "failed" ? opts.at! : null,

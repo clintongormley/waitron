@@ -45,7 +45,7 @@ import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { readOrderFlow } from "./till-config.js";
-import type { OrderFlow, TillConfig } from "./till-config.js";
+import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
 import {
   abandonHeldOrder,
   addTabRound,
@@ -78,6 +78,7 @@ import { overridePinAttempts } from "./till-api.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // The working-order verbs driven on a venue provisioned through `applyVenue`, with a real
 // `VerifactuBackend` on the settle path, so a case here can follow an order through
@@ -160,7 +161,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 type OfferedProduct = AvailableProduct & { menuItemId: string };
 
 interface SeededVenue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   available: AvailableProduct[];
   /** The venue's counter-default zone, whose mode matches `cfg.orderFlow`. */
   zoneId: string;
@@ -210,7 +211,7 @@ async function setupVenue(): Promise<SeededVenue> {
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = tillConfigFromVenue(venue);
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const available = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -237,7 +238,7 @@ async function setupVenue(): Promise<SeededVenue> {
 }
 
 async function offerAtCounter(
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   available: AvailableProduct[],
 ): Promise<SeededVenue> {
   const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));
@@ -466,7 +467,7 @@ async function ticketStateOf(id: string): Promise<string | null> {
  *  venue-apply.ts). No fixture product names a station, itself or through its category, so the
  *  routes `offerProducts` writes send every line here; it is the id the whole-ticket bump and the
  *  per-station queue address. */
-async function defaultStationId(cfg: TillConfig): Promise<string> {
+async function defaultStationId(cfg: DeviceRequestConfig): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     select id from kitchen_stations
     where location_id = ${cfg.locationId} and is_default and active
@@ -492,7 +493,10 @@ async function ticketItemIdsFor(orderId: string): Promise<string[]> {
  * Run one of the tx-based KDS verbs (advanceTicketItem/advanceTicket/listStationQueue) in a
  * `withTransaction` scope — they run on a CALLER-supplied transaction.
  */
-async function asTenant<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+async function asTenant<T>(
+  cfg: DeviceRequestConfig,
+  fn: (tx: Transaction) => Promise<T>,
+): Promise<T> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     return fn(tx);
@@ -505,7 +509,7 @@ async function asTenant<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>)
  * `working_orders.till_id` and `sales.till_id` FK onto `tills` — a fabricated uuid would fail
  * those.
  */
-async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
+async function addTill(cfg: DeviceRequestConfig, name: string): Promise<DeviceRequestConfig> {
   const id = randomUUID();
   await withTransaction(suite.db, async (tx) => {
     // Through the table, not a raw `insert`: `tills.created_at` is supplied by a `$defaultFn` in
@@ -523,7 +527,7 @@ async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
  * they are venue-wide (#259): a node reaches the venue's open tabs regardless of the
  * `node_id` they carry. `filing_module`/`tax_module` are nullable and unused for a listing-only node, so left out.
  */
-async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
+async function addNode(cfg: DeviceRequestConfig, name: string): Promise<DeviceRequestConfig> {
   const id = randomUUID();
   await withTransaction(suite.db, async (tx) => {
     // Through the table, for the reason {@link addTill} gives: `nodes.created_at` is a `$defaultFn`.
@@ -2266,14 +2270,14 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", ()
   });
 });
 
-async function setDefaultStationActive(cfg: TillConfig, active: boolean): Promise<void> {
+async function setDefaultStationActive(cfg: DeviceRequestConfig, active: boolean): Promise<void> {
   await suite.db.execute(sql`
     update kitchen_stations set active = ${active ? 1 : 0}
     where location_id = ${cfg.locationId} and is_default`);
 }
 
 /** A printer on the venue's default station, so a fire there enqueues a kitchen ticket. */
-async function kitchenPrinter(cfg: TillConfig): Promise<string> {
+async function kitchenPrinter(cfg: DeviceRequestConfig): Promise<string> {
   const station = await defaultStationId(cfg);
   return withTransaction(suite.db, async (tx) => {
     const { id } = await createPrinter(
@@ -2583,7 +2587,11 @@ describe("markCollected (the counter handover)", () => {
 
 /** Insert an active dining table in `zoneId` under `cfg`'s location and return its id — the `openTab`
  *  → `addTabRound` entry point. */
-async function addTable(tx: Transaction, cfg: TillConfig, zoneId: string): Promise<string> {
+async function addTable(
+  tx: Transaction,
+  cfg: DeviceRequestConfig,
+  zoneId: string,
+): Promise<string> {
   // Through the table, for the reason {@link addTill} gives — and here BOTH `dining_tables.id` and
   // `dining_tables.created_at` are `$defaultFn` columns, so a raw insert naming neither is refused
   // `NOT NULL constraint failed: dining_tables.id`.

@@ -37,7 +37,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hasCode, isAppError } from "@waitron/shared";
+import { hasCode, isAppError, jobOrigin } from "@waitron/shared";
 import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
@@ -147,6 +147,7 @@ async function ringSale(
 ): Promise<void> {
   const input: RecordSaleInput = {
     tillId: spec.till,
+    origin: jobOrigin("demo_seed"),
     nodeId: venue.nodeId,
     seriesId: venue.seriesId,
     locale: LOCALE,

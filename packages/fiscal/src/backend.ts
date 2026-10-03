@@ -1,5 +1,5 @@
 import "./errors.js";
-import type { Decimal, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import type { Decimal, NodeId, SaleId, SaleOrigin, SeriesId, TillId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import type { VatBreakdownLine } from "./vat-breakdown.js";
 
@@ -43,6 +43,8 @@ export interface Counterparty {
 export interface SaleForFiscalRecord {
   /** Where the sale rang. */
   tillId: TillId;
+  /** Where the sale came from: informational, never part of a fiscal record's hash. */
+  origin: SaleOrigin;
   /** The node recording this sale: the chain key, not the till. */
   nodeId: NodeId;
   saleId: SaleId;

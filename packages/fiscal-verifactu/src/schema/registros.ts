@@ -3,6 +3,7 @@ import { check, index, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   count,
   day,
+  devices,
   flag,
   id,
   json,
@@ -30,6 +31,14 @@ export const registrosFacturacion = table(
       .notNull()
       /* v8 ignore start */
       .references(() => tills.id),
+    /* v8 ignore stop */
+    // Where the sale came from: informational only, like `till_id`, and never hashed.
+    // Plain text until the table is rebuilt with the source's CHECKs: a declared vocabulary with no
+    // CHECK in the database fails the schema conformance suite.
+    source: label("source"),
+    /* v8 ignore start */
+    // Added by `ALTER TABLE`, which writes no delete rule, so it is declared with none.
+    deviceId: id("device_id").references(() => devices.id),
     /* v8 ignore stop */
     // The node that owns this record's chain: the chain key.
     nodeId: id("node_id")

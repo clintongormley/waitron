@@ -8,6 +8,7 @@ import {
   nodeId as brandNodeId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
+  deviceOrigin,
 } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
@@ -51,6 +52,7 @@ function buildInput(
   tender: { amount: string; settledAt: Date | null },
 ): RecordSaleInput {
   return {
+    origin: deviceOrigin(s.deviceId),
     tillId: brandTillId(s.tillId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
@@ -87,6 +89,7 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
     const paymentRef = randomUUID();
 
     const init = await provider.initiate({
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       paymentRef,

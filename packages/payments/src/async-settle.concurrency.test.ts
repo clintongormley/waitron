@@ -9,6 +9,7 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
+  deviceOrigin,
 } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
@@ -56,6 +57,7 @@ const steadyClock: TrustedClock = {
 
 function buildInput(s: SeededForSale, settledAt: Date | null): RecordSaleInput {
   return {
+    origin: deviceOrigin(s.deviceId),
     tillId: brandTillId(s.tillId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
@@ -117,6 +119,7 @@ describe("two simultaneous deliveries of the same settlement", () => {
   it("chains exactly one sale — the second delivery's UPDATE matches nothing once the first has committed", async () => {
     const s = await seedForSale(suite.db, backend, freshNif());
     const minted = await provider.initiate({
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       paymentRef: "pay-1",

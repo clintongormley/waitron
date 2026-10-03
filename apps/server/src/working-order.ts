@@ -181,7 +181,7 @@ import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
 import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { enqueueOriginalReceipt } from "./receipt-print.js";
@@ -4066,7 +4066,7 @@ export interface UpdateHeldOrderRequest {
 /** What {@link updateHeldOrder} needs to issue the bill's invoice when the save leaves it fully paid. */
 interface IssueOnSave {
   fiscal: TillSaleDeps;
-  saleCfg: TillConfig | null;
+  saleCfg: DeviceRequestConfig | null;
 }
 
 /** What `PUT /api/working-orders/:id/lines/:lineNo` changes on one line; an absent field is kept. */
@@ -5396,7 +5396,7 @@ export interface PlaceOrderResult {
  */
 export async function placeOrder(
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   id: string,
   operatorId: string,
   saleTillId: TillId,
@@ -5506,7 +5506,7 @@ export interface IssuedInvoice {
 export async function issueUnpaidInvoice(
   tx: Transaction,
   backend: FiscalBackend,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   invoice: PricedInvoice,
   operatorId: string,
   saleTillId: TillId,
@@ -5515,6 +5515,7 @@ export async function issueUnpaidInvoice(
   const language = await readReceiptLanguage(tx, cfg.locationId);
   const { saleId, fiscal } = await recordSale(tx, backend, {
     tillId: saleTillId,
+    origin: cfg.origin,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
     workingOrderId: brandWorkingOrderId(id),
@@ -5597,7 +5598,7 @@ export async function markOrderPlaced(
  */
 export async function cancelPlacedOrder(
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   id: string,
   reason: string,
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
@@ -5625,7 +5626,7 @@ export async function cancelPlacedOrder(
 
 async function cancelPlaced(
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   id: string,
   reason: string,
   operator: { personId: string; sessionId: string; attempts: PinAttempts },

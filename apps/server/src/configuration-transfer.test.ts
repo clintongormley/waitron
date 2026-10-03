@@ -66,7 +66,7 @@ import {
   saveAdjustmentSettings,
 } from "@waitron/adjustments";
 import { payments } from "@waitron/payments";
-import { decimal, nodeId, seriesId, tillId } from "@waitron/shared";
+import { decimal, nodeId, seriesId, tillId, deviceOrigin } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { systemClock } from "./till-backend.js";
@@ -77,6 +77,7 @@ import {
   importConfigurationTables,
   type ConfigurationBundle,
 } from "./configuration-transfer.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 
 // TWO databases: a transfer exports from a prepared venue's database and imports into a fresh
 // production database, and each holds one tenant. `suite` holds the source venue, `targetSuite` the
@@ -530,12 +531,14 @@ describe("configuration transfer database path", () => {
     expect(printerSettings.rows).toEqual([{ paper_width: "58mm", resolution: "203dpi" }]);
 
     const fiscal = ALL_MODULES.find((module) => module.fiscal?.id === "verifactu")!.fiscal!;
+    const origin = deviceOrigin(await seedSessionDevice(targetSuite.db, target));
     await withTransaction(targetSuite.db, (tx) =>
       recordSale(
         tx,
         fiscal.makeBackend({ db: targetSuite.db, clock: systemClock(), environment: "production" }),
         {
           tillId: tillId(target.tillId),
+          origin,
           nodeId: nodeId(target.nodeId),
           seriesId: seriesId(target.seriesIds[0]!),
           locale: "es-ES",

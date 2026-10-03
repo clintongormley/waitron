@@ -40,7 +40,7 @@ import type { ExtraSelection } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { systemClock } from "./till-backend.js";
-import type { OrderFlow, TillConfig } from "./till-config.js";
+import type { OrderFlow } from "./till-config.js";
 import {
   collectOrder,
   payWorkingOrder,
@@ -64,6 +64,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // A line takes the VAT class the zone's published menu version froze, when its price locks, and
 // issuance files that stored class's rate on every path. Every product is published at `reduced`
@@ -139,7 +140,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
+  const cfg = await deviceRequestCfg(suite.db, {
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -149,7 +150,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow,
-  };
+  });
   suite.db.run(sql`update locations set order_flow = ${orderFlow} where id = ${cfg.locationId}`);
 
   const products = await withTransaction(suite.db, async (tx) => {
@@ -310,6 +311,7 @@ function stubProvider(onCollect: () => Promise<void>): PaymentProvider {
       const settledAt = new Date();
       await withTransaction(suite.db, (tx) =>
         insertCapturedPayment(tx, {
+          origin: params.origin,
           workingOrderId: params.workingOrderId,
           provider: "stripe",
           paymentRef,
@@ -487,6 +489,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
         zoneId: v.counter.zoneId,
       });
       await insertCapturedPayment(tx, {
+        origin: v.cfg.origin,
         workingOrderId: id,
         provider: "stripe",
         paymentRef: `pi-${randomUUID()}`,

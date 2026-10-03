@@ -54,7 +54,7 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
 import { payWorkingOrder, receiptQr, recordTillSale, type TillSaleRequest } from "./till-sale.js";
 import { addTabRound, createOpenOrder, updateHeldOrder } from "./working-order.js";
 import { formatReceipt } from "./receipt-ticket.js";
@@ -64,6 +64,7 @@ import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { ZoneOffers } from "./testing/zone-offers.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // Exercise the sale path and the chained fiscal write end to end: provision a venue, seed a
 // catalogue, sell, and read the filed record back.
@@ -124,7 +125,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
  * `weight` product (24.90 €/kg, reduced/10%).
  */
 async function setupVenue(options: { variants?: boolean } = {}): Promise<{
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   available: AvailableProduct[];
   zoneId: string;
   waterOfferId: string;
@@ -167,7 +168,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = tillConfigFromVenue(venue);
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const catalogue = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const comida = await createCategory(tx, { name: "Comida" });
@@ -721,7 +722,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
   async function setupBareVenue(
     invoiceLocales: string[],
     customerName: Record<string, string>,
-  ): Promise<{ cfg: TillConfig; zoneId: string; menuItemId: string }> {
+  ): Promise<{ cfg: DeviceRequestConfig; zoneId: string; menuItemId: string }> {
     const venue = await applyVenue(
       planVenue(
         {
@@ -755,7 +756,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
       ),
       { db: suite.db, modules: ALL_MODULES },
     );
-    const cfg = tillConfigFromVenue(venue);
+    const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
     const productId = await withTransaction(suite.db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
       const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -779,7 +780,11 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     // `cfg.invoiceLocales` is deliberately WRONG: a re-key that read cfg rather than the location
     // would produce `ca-ES`, which the trigger refuses.
     const { cfg, zoneId, menuItemId } = await setupBareVenue(["es-ES"], { es: "Café" });
-    const driftedCfg: TillConfig = { ...cfg, invoiceLocales: ["ca-ES"], locale: "ca-ES" };
+    const driftedCfg = await deviceRequestCfg(suite.db, {
+      ...cfg,
+      invoiceLocales: ["ca-ES"],
+      locale: "ca-ES",
+    });
     const workingOrderId = randomUUID();
 
     const result = await payWorkingOrder({ db: suite.db, backend, clock }, driftedCfg, {
@@ -868,7 +873,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
  */
 describe("ordering extras and options — parent + child lines", () => {
   interface ModifierVenue {
-    cfg: TillConfig;
+    cfg: DeviceRequestConfig;
     /** The counter-default zone, which offers every product at its own price. */
     zoneId: string;
     /** A second zone, `table_tab`, offering the same menu, for the tabs' dining tables. */
@@ -946,7 +951,7 @@ describe("ordering extras and options — parent + child lines", () => {
       ),
       { db: suite.db, modules: ALL_MODULES },
     );
-    const cfg = tillConfigFromVenue(venue);
+    const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
     const seeded = await withTransaction(suite.db, async (tx) => {
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
       const cat = await createCatalogue(tx, { name: "Delicatessen" });

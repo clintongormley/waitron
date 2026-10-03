@@ -8,6 +8,7 @@ import {
   decimal,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
+  deviceOrigin,
 } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import {
@@ -49,7 +50,7 @@ async function collect(
   allowOffline?: boolean,
 ) {
   return provider.collect({
-    tillId: brandTillId(s.tillId),
+    origin: deviceOrigin(s.deviceId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
     amount: decimal(amount),
     ...(allowOffline === undefined ? {} : { allowOffline }),
@@ -137,7 +138,7 @@ describe("FakePaymentProvider.partialRefund", () => {
     const seeded = await seedTenant();
     const provider = new FakePaymentProvider(suite.db);
     const paid = await provider.collect({
-      tillId: brandTillId(seeded.tillId),
+      origin: deviceOrigin(seeded.deviceId),
       workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
       amount: decimal("20.00"),
     });
@@ -156,7 +157,7 @@ describe("FakePaymentProvider.capabilities", () => {
 describe("FakePaymentProvider.collect for a bill payment", () => {
   function collectFor(provider: FakePaymentProvider, s: Seeded, billPaymentId: string) {
     return provider.collect({
-      tillId: brandTillId(s.tillId),
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("10.00"),
       billPaymentId,
@@ -185,7 +186,7 @@ describe("FakePaymentProvider.collect for a bill payment", () => {
     provider.offlineNextCollect();
 
     const r = await provider.collect({
-      tillId: brandTillId(s.tillId),
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("10.00"),
       allowOffline: true,
@@ -418,6 +419,7 @@ describe("FakePaymentProvider.resolveAbandonedAttempt", () => {
     const s = await seedTenant();
     await suite.db.transaction((tx) =>
       insertAttempting(tx, {
+        origin: deviceOrigin(s.deviceId),
         workingOrderId: s.workingOrderId,
         provider: "fake",
         paymentRef,

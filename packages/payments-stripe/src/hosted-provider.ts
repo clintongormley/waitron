@@ -35,6 +35,7 @@ export class StripeHostedProvider implements AsyncPaymentProvider {
     });
     await withTransaction(this.opts.db, (tx) =>
       insertInitiated(tx, {
+        origin: params.origin,
         workingOrderId: params.workingOrderId,
         provider: PROVIDER,
         paymentRef: params.paymentRef,

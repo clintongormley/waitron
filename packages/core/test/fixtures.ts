@@ -5,12 +5,15 @@ import {
   tillId as brandTillId,
   stringToCents,
 } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import type { DeviceId, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { invoiceSeries, locations, nodes, sales, tenants, tills } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 export interface SeededTenant {
   tillId: TillId;
+  /** A device on that till: the origin of the sales a test records. */
+  deviceId: DeviceId;
   nodeId: NodeId;
   seriesId: SeriesId;
 }
@@ -23,7 +26,8 @@ function freshNif(): string {
 }
 
 /**
- * Makes sure the one taxpayer row is there, then seeds location -> till -> node -> invoice series.
+ * Makes sure the one taxpayer row is there, then seeds location -> till (with a device) -> node ->
+ * invoice series.
  * Each call mints its own node, so a second call gives a series owned by a different node.
  */
 export async function seedTenant(db: Database): Promise<SeededTenant> {
@@ -47,6 +51,7 @@ export async function seedTenant(db: Database): Promise<SeededTenant> {
     .values({ locationId, name: "Caja 1" })
     .returning({ id: tills.id });
   const tillId = brandTillId(till!.id);
+  const { deviceId } = await seedDevice(db, { tillId });
 
   const [node] = await db
     .insert(nodes)
@@ -60,7 +65,7 @@ export async function seedTenant(db: Database): Promise<SeededTenant> {
     .returning({ id: invoiceSeries.id });
   const seriesId = brandSeriesId(series!.id);
 
-  return { tillId, nodeId, seriesId };
+  return { tillId, deviceId, nodeId, seriesId };
 }
 
 /**
@@ -85,7 +90,7 @@ export async function seedRectificativeSeries(
  */
 export async function seedBareSale(
   db: Database,
-  seed: { tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
+  seed: { tillId: TillId; deviceId: DeviceId; nodeId: NodeId; seriesId: SeriesId },
   overrides: {
     total?: string;
     invoiceNumber?: number;
@@ -97,6 +102,8 @@ export async function seedBareSale(
     .insert(sales)
     .values({
       tillId: seed.tillId,
+      source: "device",
+      deviceId: seed.deviceId,
       nodeId: seed.nodeId,
       seriesId: seed.seriesId,
       invoiceNumber: overrides.invoiceNumber ?? 1,

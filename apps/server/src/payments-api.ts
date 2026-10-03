@@ -64,6 +64,7 @@ import {
   paymentAttemptIsLive,
   payWorkingOrderIntegrated,
 } from "./till-sale.js";
+import { storedDeviceOrigin } from "./request-config.js";
 
 /**
  * The routes never import a provider package. `fetch` is injected by tests; the live host omits it and the seats fall back to the global.
@@ -715,6 +716,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             orderStatus: workingOrders.status,
             attemptAt: workingOrders.paymentAttemptAt,
             tillId: workingOrders.tillId,
+            source: payments.source,
+            deviceId: payments.deviceId,
           })
           .from(payments)
           .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
@@ -727,8 +730,10 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         ) {
           throw new AppError("payment.not_stuck", { paymentId });
         }
+        // The sale is filed under the device that started the payment, never the dashboard.
+        const origin = storedDeviceOrigin(row);
         await requireConnected(tx, cardProviderById(deps.providers, row.provider));
-        return { ...row, attemptAt: row.attemptAt, personId };
+        return { ...row, attemptAt: row.attemptAt, personId, origin };
       });
 
       const { provider, resolved } = await resolveAtProvider(
@@ -765,7 +770,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           provider: withoutCollect(provider),
           log,
         },
-        { ...deps.cfg, tillId: brandTillId(stuck.tillId) },
+        { ...deps.cfg, tillId: brandTillId(stuck.tillId), origin: stuck.origin },
         { id: stuck.workingOrderId, lines: [] },
         stuck.personId,
       );

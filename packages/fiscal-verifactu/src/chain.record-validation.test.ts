@@ -4,8 +4,8 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
 import { sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimal, saleId as brandSaleId } from "@waitron/shared";
-import type { NodeId, SeriesId, TillId } from "@waitron/shared";
+import { decimal, saleId as brandSaleId, deviceOrigin } from "@waitron/shared";
+import type { DeviceId, NodeId, SeriesId, TillId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { VerifactuBackend } from "./backend.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -18,13 +18,14 @@ import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/writ
 // depends on two writers racing.
 let backend: VerifactuBackend;
 let tillId: TillId;
+let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
+  ({ tillId, deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -88,7 +89,12 @@ describe("a record AEAT could not accept never enters the chain", () => {
   // through `recordVoid`: that rebuilds its identity from the original alta's stored columns
   // (backend.ts), which this guard already checked. So the record is appended directly.
   it("refuses an anulación whose voided invoice number is illegal", async () => {
-    const bad = anulacionFor(tillId, brandSaleId("00000000-0000-4000-8000-000000000001"), 1, 1);
+    const bad = anulacionFor(
+      { tillId, deviceId },
+      brandSaleId("00000000-0000-4000-8000-000000000001"),
+      1,
+      1,
+    );
     const registro = {
       ...bad,
       input: { ...bad.input, NumSerieFacturaAnulada: "Serie A/1" },
@@ -220,6 +226,8 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
       await tx.insert(sales).values({
         id: saleId,
         tillId,
+        source: "device",
+        deviceId,
         nodeId,
         seriesId,
         invoiceNumber,
@@ -234,6 +242,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
       });
       await backend.recordSale(tx, {
         tillId,
+        origin: deviceOrigin(deviceId),
         nodeId,
         saleId: brandSaleId(saleId),
         seriesId,

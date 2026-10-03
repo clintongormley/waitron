@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { AppError, decimal } from "@waitron/shared";
+import { AppError, decimal, deviceOrigin } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
@@ -17,6 +17,7 @@ import {
 import { FakeSettlementReport } from "./testing/fake-settlement-report.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
 import type { Seeded } from "../test/seed.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
@@ -68,6 +69,7 @@ function deps(report: FakeSettlementReport, reverse = recordingReverse().fn): Re
 async function capture(seeded: Seeded, paymentRef: string, externalRef: string, amount = "10.00") {
   await withTransaction(suite.db, (tx) =>
     insertCapturedPayment(tx, {
+      origin: deviceOrigin(seeded.deviceId),
       workingOrderId: seeded.workingOrderId,
       provider: PROVIDER,
       paymentRef,
@@ -84,6 +86,7 @@ async function capture(seeded: Seeded, paymentRef: string, externalRef: string, 
 async function forwardedOffline(seeded: Seeded, paymentRef: string, externalRef: string) {
   await withTransaction(suite.db, async (tx) => {
     await insertAcceptedOffline(tx, {
+      origin: deviceOrigin(seeded.deviceId),
       workingOrderId: seeded.workingOrderId,
       provider: PROVIDER,
       paymentRef,
@@ -114,8 +117,10 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
   const wo2 = await suite.db.execute<{ id: string }>(sql`
     insert into working_orders (id, till_id, order_number, opened_at)
     values (${randomUUID()}, ${tillId}, 1, ${stamp}) returning id`);
+  const { deviceId } = await seedDevice(suite.db, { tillId });
   return {
     tillId,
+    deviceId,
     nodeId: node2.rows[0].id,
     workingOrderId: wo2.rows[0].id,
   };
@@ -251,6 +256,7 @@ describe("reconcilePayments", () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     await withTransaction(suite.db, (tx) =>
       insertInitiated(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: PROVIDER,
         paymentRef: "p-init",
@@ -341,6 +347,7 @@ describe("reconcilePayments", () => {
     // ext-2's local row settled outside PERIOD; the existence check is unbounded by period.
     await withTransaction(suite.db, (tx) =>
       insertCapturedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: PROVIDER,
         paymentRef: "p-elsewhere",

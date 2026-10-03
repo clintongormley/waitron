@@ -35,6 +35,7 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "../../src/config.js";
@@ -260,6 +261,7 @@ export async function seedSales(
 
       const input: RecordSaleInput = {
         tillId,
+        origin: jobOrigin("demo_seed"),
         nodeId,
         seriesId,
         locale: invoiceLocale,

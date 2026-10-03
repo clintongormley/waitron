@@ -22,7 +22,7 @@ import {
   stringToCents,
   sumDecimals,
 } from "@waitron/shared";
-import type { Decimal, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import type { Decimal, NodeId, SaleId, SaleOrigin, SeriesId, TillId } from "@waitron/shared";
 import type {
   FiscalBackend,
   FiscalRecordRef,
@@ -40,6 +40,8 @@ const ZERO = decimal("0");
 export interface RecordCorrectionInput {
   /** Where the corrective invoice rings; not checked against the series (`nodeId` is). */
   tillId: TillId;
+  /** Where the sale came from, written to `sales.source` and `sales.device_id`. */
+  origin: SaleOrigin;
   /**
    * The node that issues this corrective invoice and whose chain it extends. Checked against the
    * corrective series (`sale.series_wrong_node`) but deliberately NOT against the original sale's
@@ -266,6 +268,8 @@ export async function recordCorrection(
     .insert(sales)
     .values({
       tillId: input.tillId,
+      source: input.origin.source,
+      deviceId: input.origin.deviceId,
       nodeId: input.nodeId,
       seriesId: input.seriesId,
       vatBreakdown,
@@ -326,6 +330,7 @@ export async function recordCorrection(
     tx,
     {
       tillId: input.tillId,
+      origin: input.origin,
       nodeId: input.nodeId,
       saleId,
       seriesId: input.seriesId,

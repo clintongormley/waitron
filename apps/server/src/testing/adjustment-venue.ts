@@ -43,10 +43,11 @@ import { attachPrinterToStation } from "../station-printers.js";
 import { createTable } from "../tables.js";
 import { mountTillApi } from "../till-api.js";
 import { systemClock } from "../till-backend.js";
-import type { TillConfig } from "../till-config.js";
+import type { DeviceRequestConfig } from "../till-config.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";
+import { deviceRequestCfg } from "./session-device.js";
 
 /**
  * A provisioned venue for the adjustment suites: real Veri*Factu filing that never contacts AEAT, a
@@ -236,7 +237,7 @@ export interface AdjustmentVenue {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   /** The display language the till routes are mounted with; the same code as `cfg.locale`. */
   venueLocale: string;
   tables: ZoneOffers;
@@ -307,7 +308,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     ),
     { db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
+  const cfg = await deviceRequestCfg(db, {
     tillId: brandTillId(provisioned.tillId),
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
@@ -317,7 +318,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  });
   const seeded = await withTransaction(db, async (tx) => {
     const [station] = await tx
       .select({ id: kitchenStations.id })

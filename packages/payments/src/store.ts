@@ -8,7 +8,7 @@ import {
   decimalToCents,
   sumDecimals,
 } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
+import type { Decimal, DeviceOrigin } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { nowIso, workingOrders } from "@waitron/db";
 import { payments } from "./schema/payments.js";
@@ -35,6 +35,8 @@ interface Key {
 }
 
 interface NewPayment {
+  /** The device the payment was started on. */
+  origin: DeviceOrigin;
   workingOrderId: string;
   provider: string;
   paymentRef: string;
@@ -72,6 +74,8 @@ async function insertPayment(
   settledAt: string | null,
 ): Promise<void> {
   await tx.insert(payments).values({
+    source: params.origin.source,
+    deviceId: params.origin.deviceId,
     workingOrderId: params.workingOrderId,
     provider: params.provider,
     paymentRef: params.paymentRef,

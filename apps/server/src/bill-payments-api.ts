@@ -24,7 +24,7 @@ import {
   resolveCardCollector,
 } from "./till-api.js";
 import type { Run, TillApiDeps } from "./till-api.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
 import { madeHereSinkFor } from "./made-here.js";
 import { requestCfg } from "./request-config.js";
 import { isUuid, requireSession } from "./till-session.js";
@@ -195,9 +195,9 @@ function deviceSaleCfg<C extends TillConfig>(cfg: C, c: Context, device: DeviceB
  */
 export async function withSaleTillWhenIssuing<T>(
   c: Context,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   device: DeviceBinding,
-  write: (saleCfg: TillConfig | null) => Promise<T>,
+  write: (saleCfg: DeviceRequestConfig | null) => Promise<T>,
 ): Promise<T> {
   const sink = madeHereSinkFor(c);
   const before = new Set(sink);

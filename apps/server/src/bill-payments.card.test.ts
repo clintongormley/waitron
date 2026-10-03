@@ -231,6 +231,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
     vi.spyOn(venue.card, "collect").mockImplementationOnce(async (params) => {
       const settledAt = new Date();
       const row = {
+        origin: params.origin,
         workingOrderId: params.workingOrderId,
         provider: venue.card.provider,
         paymentRef: randomUUID(),

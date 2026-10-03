@@ -27,13 +27,14 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { payWorkingOrder } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // Each case provisions its own venue, so a readback count is that case's alone.
 const LOCALE = "es-ES";
@@ -88,7 +89,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 }
 
 interface Seeded {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   /** "Agua" — each, 1.50 gross, general(21%). */
   aguaId: string;
   /** "Jamón" — WEIGHT, 24.90/kg gross, reduced(10%). */
@@ -137,7 +138,7 @@ async function setupVenue(): Promise<Seeded> {
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = tillConfigFromVenue(venue);
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const seeded = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const comida = await createCategory(tx, { name: "Comida" });
@@ -166,7 +167,7 @@ async function setupVenue(): Promise<Seeded> {
   return { cfg, ...seeded };
 }
 
-function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+function asApp<T>(cfg: DeviceRequestConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     return fn(tx);

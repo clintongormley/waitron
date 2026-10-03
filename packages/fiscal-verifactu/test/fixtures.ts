@@ -14,7 +14,8 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { NodeId, SeriesId, TillId } from "@waitron/shared";
+import type { DeviceId, NodeId, SeriesId, TillId } from "@waitron/shared";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { registrosFacturacion } from "../src/schema/registros.js";
 import { registroSif } from "../src/schema/sif.js";
 import { registerSif } from "../src/registro-sif.js";
@@ -86,9 +87,12 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
   await db
     .insert(invoiceSeries)
     .values({ id: TENANT_A.seriesId, nodeId: TENANT_A.nodeId, code: "A" });
+  const { deviceId } = await seedDevice(db, { tillId: TENANT_A.tillId });
   await db.insert(sales).values({
     id: TENANT_A.saleId,
     tillId: TENANT_A.tillId,
+    source: "device",
+    deviceId,
     nodeId: TENANT_A.nodeId,
     seriesId: TENANT_A.seriesId,
     invoiceNumber: 1,
@@ -174,6 +178,7 @@ export async function seedSoldRegistro(
   },
 ): Promise<void> {
   const entorno = params.entorno === undefined ? "production" : params.entorno;
+  const { deviceId } = await seedDevice(db, { tillId: params.tillId });
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId: params.nodeId, code: `S${String(params.secuencia)}` })
@@ -183,6 +188,8 @@ export async function seedSoldRegistro(
     .insert(sales)
     .values({
       tillId: params.tillId,
+      source: "device",
+      deviceId,
       nodeId: params.nodeId,
       seriesId,
       invoiceNumber: params.secuencia,
@@ -200,6 +207,8 @@ export async function seedSoldRegistro(
     .insert(registrosFacturacion)
     .values({
       tillId: params.tillId,
+      source: "device",
+      deviceId,
       nodeId: params.nodeId,
       sifId: params.sifId,
       saleId: sale!.id,
@@ -228,6 +237,8 @@ export async function seedSoldRegistro(
 
 export interface SeededTillWithSif {
   tillId: TillId;
+  /** A device on that till, for a sale recorded with a device origin. */
+  deviceId: DeviceId;
   nodeId: NodeId;
   seriesId: SeriesId;
 }
@@ -300,7 +311,7 @@ export async function seedTenantWithSif(
   options: { nif?: string } = {},
 ): Promise<SeededTillWithSif> {
   const nif = options.nif ?? freshNif();
-  return db.transaction(async (tx) => {
+  const seeded = await db.transaction(async (tx) => {
     // The target is named rather than left bare so a `tenants_country_tax_id_key` collision — a
     // DIFFERENT cause — still raises.
     await tx
@@ -314,4 +325,6 @@ export async function seedTenantWithSif(
     // record walk-up sales that omit it.
     return { tillId, nodeId, seriesId };
   });
+  const { deviceId } = await seedDevice(db, { tillId: seeded.tillId });
+  return { ...seeded, deviceId };
 }

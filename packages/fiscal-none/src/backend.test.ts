@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decimal, nodeId, saleId, seriesId, tillId } from "@waitron/shared";
+import { decimal, nodeId, saleId, seriesId, tillId, deviceOrigin } from "@waitron/shared";
 import type { FiscalBackend, SaleForFiscalRecord } from "@waitron/fiscal";
 import { NoneBackend } from "./backend.js";
 
@@ -21,6 +21,7 @@ const EARLIER_SALE = saleId("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
 function sampleSale(): SaleForFiscalRecord {
   return {
     tillId: TILL,
+    origin: deviceOrigin("8ba7b810-9dad-11d1-80b4-00c04fd430c2"),
     nodeId: NODE,
     saleId: SALE,
     seriesId: seriesId("99999999-8888-7777-6666-555555555555"),

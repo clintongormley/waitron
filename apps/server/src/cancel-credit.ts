@@ -13,7 +13,7 @@ import {
   thousandthsToDecimal,
 } from "@waitron/shared";
 import type { SaleId, TillId } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./till-config.js";
 
 /** The invoice a working order issued, as {@link creditWholeInvoice} credits it. */
 export interface IssuedInvoice {
@@ -43,7 +43,7 @@ export async function readOrderInvoice(
 export async function creditWholeInvoice(
   tx: Transaction,
   deps: { backend: FiscalBackend; clock: TrustedClock },
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   invoice: IssuedInvoice,
   authz: AuthzInput,
   saleTillId: TillId,
@@ -59,6 +59,7 @@ export async function creditWholeInvoice(
   );
   await recordCorrection(tx, deps.backend, {
     tillId: saleTillId,
+    origin: cfg.origin,
     nodeId: cfg.nodeId,
     seriesId,
     correctsSaleId: invoice.id,

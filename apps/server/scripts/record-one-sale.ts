@@ -29,6 +29,7 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
 
 const LOCALE = "es-ES";
@@ -117,6 +118,7 @@ export async function recordOneSale(
 
     const input: RecordSaleInput = {
       tillId: till,
+      origin: jobOrigin("demo_seed"),
       nodeId: node,
       seriesId: series,
       locale: LOCALE,

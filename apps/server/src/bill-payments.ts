@@ -61,7 +61,8 @@ import {
   enqueueBillPaymentDrawer,
   enqueueSaleReceipt,
 } from "./receipt-print.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
+import { storedDeviceOrigin } from "./request-config.js";
 import {
   fireDishesAtPayment,
   readBillTenderLines,
@@ -632,7 +633,7 @@ export class SaleTillRequired extends Error {
 async function issueWhenFullyPaid(
   tx: Transaction,
   deps: TillSaleDeps,
-  cfg: TillConfig | null,
+  cfg: DeviceRequestConfig | null,
   workingOrderId: string,
   operatorId: string | undefined,
   options: { moneyMoved?: boolean; total?: Decimal },
@@ -683,6 +684,7 @@ async function issueWhenFullyPaid(
   const language = await readReceiptLanguage(tx, cfg.locationId);
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
     tillId: cfg.tillId,
+    origin: cfg.origin,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
     workingOrderId: brandWorkingOrderId(workingOrderId),
@@ -763,7 +765,7 @@ async function issueWhenFullyPaid(
 export async function issueIfFullyPaid(
   tx: Transaction,
   deps: TillSaleDeps,
-  cfg: TillConfig | null,
+  cfg: DeviceRequestConfig | null,
   workingOrderId: string,
   operatorId?: string,
   options: { moneyMoved: boolean } = { moneyMoved: false },
@@ -995,7 +997,7 @@ export async function findSubmission(
  */
 async function beginBillPayment(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
   operatorId: string,
@@ -1044,6 +1046,8 @@ async function beginBillPayment(
       state,
       requestedBy: operatorId,
       tillId: cfg.tillId,
+      source: cfg.origin.source,
+      deviceId: cfg.origin.deviceId,
       receivedAt: state === "received" ? now.toISOString() : null,
     })
     .returning();
@@ -1061,7 +1065,7 @@ async function beginBillPayment(
  */
 export async function takeBillPayment(
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
   operatorId: string,
@@ -1081,6 +1085,7 @@ export async function takeBillPayment(
     const { payment } = begun;
     if (req.method === "card") {
       await recordManualCardPayment(tx, {
+        origin: cfg.origin,
         workingOrderId,
         amount: centsToDecimal(payment.applied + payment.tip),
         settledAt: receivedAt,
@@ -1154,7 +1159,7 @@ export async function completeBillPayment(
   const issued = await issueWhenFullyPaid(
     tx,
     deps,
-    { ...cfg, tillId: brandTillId(payment!.tillId) },
+    { ...cfg, tillId: brandTillId(payment!.tillId), origin: storedDeviceOrigin(payment!) },
     payment!.workingOrderId,
     payment!.requestedBy,
     { moneyMoved: true },
@@ -1203,7 +1208,7 @@ const NOT_CHARGED: ReadonlySet<PaymentResultState> = new Set([
  */
 export async function takeReaderBillPayment(
   deps: ReaderBillPaymentDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
   operatorId: string,
@@ -1234,7 +1239,7 @@ export async function takeReaderBillPayment(
     const { payment } = begun;
 
     const result: PaymentResult = await deps.provider.collect({
-      tillId: cfg.tillId,
+      origin: cfg.origin,
       workingOrderId: brandWorkingOrderId(workingOrderId),
       amount: centsToDecimal(payment.applied + payment.tip),
       ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),

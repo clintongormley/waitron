@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, centsToDecimal, stringToCents } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SaleOrigin, SeriesId, TillId } from "@waitron/shared";
 import type { Counterparty, FiscalBackend, FiscalRecordRef, TrustedClock } from "@waitron/fiscal";
 import { checkedCounterparty } from "./counterparty.js";
 import { recordIncident } from "./incidents.js";
@@ -26,6 +26,8 @@ import type { RecordSaleLine } from "./record-sale.js";
 export interface RecordSubstitutionInput {
   /** Where the F3 rings; not checked against the series (`nodeId` is). */
   tillId: TillId;
+  /** Where the sale came from, written to `sales.source` and `sales.device_id`. */
+  origin: SaleOrigin;
   /**
    * The node that issues this F3 and whose chain it extends. Checked against the series but not
    * against the substituted tickets' nodes: an F3 references them only by identity
@@ -192,6 +194,8 @@ export async function recordSubstitution(
     .insert(sales)
     .values({
       tillId: input.tillId,
+      source: input.origin.source,
+      deviceId: input.origin.deviceId,
       nodeId: input.nodeId,
       seriesId: input.seriesId,
       vatBreakdown,
@@ -263,6 +267,7 @@ export async function recordSubstitution(
     tx,
     {
       tillId: input.tillId,
+      origin: input.origin,
       nodeId: input.nodeId,
       saleId,
       seriesId: input.seriesId,

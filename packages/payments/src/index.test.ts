@@ -1,7 +1,7 @@
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { is } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { decimal } from "@waitron/shared";
+import { decimal, deviceOrigin } from "@waitron/shared";
 import type { WorkingOrderId } from "@waitron/shared";
 import {
   associatePaymentWithSale,
@@ -82,6 +82,7 @@ describe("package public surface (./index.js)", () => {
     expect(typeof recordManualRefund).toBe("function");
 
     const params: ManualCardPaymentParams = {
+      origin: deviceOrigin("00000000-0000-4000-8000-000000000001"),
       workingOrderId: "w",
       amount: decimal("1.00"),
       settledAt: new Date("2026-07-23T09:00:00Z"),
@@ -122,6 +123,7 @@ describe("package public surface (./index.js)", () => {
       url: "https://pay/hosted-1",
     };
     const params: InitiateParams = {
+      origin: deviceOrigin("00000000-0000-4000-8000-000000000001"),
       workingOrderId: "w" as WorkingOrderId,
       amount: decimal("12.10"),
       paymentRef: "pay-1",
