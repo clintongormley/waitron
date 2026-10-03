@@ -190,6 +190,32 @@ describe("till-ticket-view", () => {
     expect(rows[2]!.textContent).not.toContain("×"); // 2 / 2 = 1 → no badge
   });
 
+  it("shows a weighted extra's filed physical amount and frozen unit without a pick-count badge", async () => {
+    const { el } = await mount({
+      lines: [
+        {
+          descriptions: { "es-ES": "Tostada" },
+          quantity: "1",
+          gross: "2.00",
+          parentLineNo: null,
+        },
+        {
+          descriptions: { "es-ES": "Jamón" },
+          quantity: "0.150",
+          gross: "0.03",
+          unitName: { es: "kg" },
+          unitPrecision: 3,
+          parentLineNo: 1,
+        },
+      ],
+      total: "2.03",
+    });
+    const rows = el.shadowRoot!.querySelectorAll(".line");
+    expect(rows[1]!.textContent).toContain("Jamón");
+    expect(rows[1]!.textContent).toContain("0.150 kg");
+    expect(rows[1]!.textContent).not.toContain("×");
+  });
+
   it("shows the taxable base per rate, plus the (allowed extra) cuota per rate (art. 7.1.f)", async () => {
     const { el } = await mount();
     const t = text(el);

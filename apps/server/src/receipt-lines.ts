@@ -42,7 +42,10 @@ export function ticketLinesFrom(
     ),
     // Frozen at filing: the receipt never re-reads the catalogue for these names.
     optionSnapshots: line.optionSnapshots,
-    quantity: trimQuantityForDisplay(line.quantity),
+    quantity:
+      line.parentLineNo != null && line.unitName != null && (line.unitPrecision ?? 0) > 0
+        ? line.quantity
+        : trimQuantityForDisplay(line.quantity),
     unitName: line.unitName ?? null,
     unitPrecision: line.unitPrecision ?? null,
     gross: line.lineGross,

@@ -216,10 +216,15 @@ export function formatReceipt({
       text(`  ${answer}`, 2);
     }
     for (const option of options) {
-      // No quantity prefix: an option is priced per dish. A "×N" badge shows a per-dish count above 1.
-      const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
+      // No quantity prefix: a count option uses a per-dish badge, while a weighed extra shows its filed amount.
       const name = lineName(option.descriptions, namesLocale);
-      const caption = perDish > 1 ? `  ${name} ${QTY_BADGE}${perDish}` : `  ${name}`;
+      let caption: string;
+      if (option.unitName == null) {
+        const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
+        caption = perDish > 1 ? `  ${name} ${QTY_BADGE}${perDish}` : `  ${name}`;
+      } else {
+        caption = `  ${name} ${option.quantity} ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`;
+      }
       row(caption, formatMoney(option.listGross ?? option.gross, locale), 2);
     }
     for (const line of [dish, ...options]) {
