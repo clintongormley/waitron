@@ -114,6 +114,7 @@ describe("configuration", () => {
       "diagnostics",
       "sync-enrolment",
       "stream",
+      "store",
       "adjustments",
       "composition",
       "fiscal-none",
