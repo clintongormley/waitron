@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vite";
-import { devServerProxy } from "../../scripts/dev-server-proxy.js";
+import { devPort, devServerProxy } from "../../scripts/dev-server-proxy.js";
 import { viteNpmNotices } from "../../scripts/npm-bundle-notices.mjs";
 
 export default defineConfig({
@@ -10,7 +10,7 @@ export default defineConfig({
   publicDir: fileURLToPath(new URL("../../packages/ui/brand/public", import.meta.url)),
   base: "/manage/",
   server: {
-    port: 5191,
+    port: devPort("WAITRON_DASHBOARD_VITE_PORT", 5191),
     // A surprise port would no longer match the browser's proxy — see apps/till/vite.config.ts.
     strictPort: true,
     proxy: {

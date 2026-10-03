@@ -65,7 +65,7 @@ export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardRes
   const env: SetupEnv = {
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_ENV: "dev",
-    WAITRON_HTTP_PORT: "8080",
+    WAITRON_HTTP_PORT: opts.httpPort || "8080",
   };
   writeFileSync(envPath, renderSetupEnvFile(env));
   log(`dev-onboard: wrote ${envPath} (setup mode — no venue bound)`);
@@ -86,22 +86,28 @@ async function main(): Promise<void> {
     console.log(`dev-onboard: removed ${venueDir}`);
   }
 
-  await devOnboard({
+  const result = await devOnboard({
     venueDir,
     envPath,
+    httpPort: process.env.WAITRON_HTTP_PORT,
     log: (line) => void console.log(line),
   });
+
+  const setupPort = process.env.WAITRON_SETUP_VITE_PORT?.trim() || "5192";
+  const serverPort = result.env.WAITRON_HTTP_PORT;
 
   console.log("");
   console.log("dev-onboard: migrated an UNPROVISIONED database — the box will boot in SETUP MODE.");
   console.log("");
   console.log(
-    "  wizard     http://localhost:5192   (the setup UI — apps/setup Vite dev server, open this)",
+    `  wizard     http://localhost:${setupPort}   (the setup UI — apps/setup Vite dev server, open this)`,
   );
   console.log(
-    "  server     https://localhost:8080   (self-signed cert — browser warning is expected)",
+    `  server     https://localhost:${serverPort}   (self-signed cert — browser warning is expected)`,
   );
-  console.log("  status     https://localhost:8080/setup-api/status   (provisioned: false)");
+  console.log(
+    `  status     https://localhost:${serverPort}/setup-api/status   (provisioned: false)`,
+  );
   console.log("");
   console.log(
     "Next: `pnpm dev` (or `pnpm --filter @waitron/server dev`) to boot in setup mode. First",
@@ -113,16 +119,16 @@ async function main(): Promise<void> {
     "gitignored) and serves HTTPS from it. Development does not advertise `waitron.local`. Verify with:",
   );
   console.log("");
-  console.log("  curl -sk https://127.0.0.1:8080/setup-api/status");
-  console.log('  curl -sk -o /dev/null -w "%{http_code}\\n" https://127.0.0.1:8080/');
+  console.log(`  curl -sk https://127.0.0.1:${serverPort}/setup-api/status`);
+  console.log(`  curl -sk -o /dev/null -w "%{http_code}\\n" https://127.0.0.1:${serverPort}/`);
   console.log(
-    '  curl -sk https://127.0.0.1:8080/setup-api/discovery         # {"hostname":"waitron.local","addresses":[...],...}',
+    `  curl -sk https://127.0.0.1:${serverPort}/setup-api/discovery         # {"hostname":"waitron.local","addresses":[...],...}`,
   );
   console.log(
-    "  curl -sk https://127.0.0.1:8080/setup-api/ca.crt -o /tmp/waitron-ca.crt   # the box CA",
+    `  curl -sk https://127.0.0.1:${serverPort}/setup-api/ca.crt -o /tmp/waitron-ca.crt   # the box CA`,
   );
   console.log(
-    '  curl -sk -o /dev/null -w "%{http_code}\\n" https://127.0.0.1:8080/setup/trust   # 200 (trust page)',
+    `  curl -sk -o /dev/null -w "%{http_code}\\n" https://127.0.0.1:${serverPort}/setup/trust   # 200 (trust page)`,
   );
 }
 

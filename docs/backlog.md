@@ -7489,9 +7489,10 @@ Each track is its own worktree so sessions do not edit the same files. Rules, ea
   §1) — see B9 → *Prune the comments*.
 - **Update this file as items land**, in the same PR.
 
-**Run path (local; no hardware, cloud, or AEAT cert):** `wa-wt demo <worktree-name>` → till
-<http://localhost:5190>, dashboard <http://localhost:5191>, setup <http://localhost:5192>, server
-:8080. The till enrols itself on first load in dev mode. Till PIN **5555**; dashboard
+**Run path (local; no hardware, cloud, or AEAT cert):** `wa-wt demo <worktree-name>` → default
+till <http://localhost:5190>, dashboard <http://localhost:5191>, setup <http://localhost:5192>,
+server :8080. `wa-wt ls` shows the shifted ports if a second stack runs. The till enrols itself on
+first load in dev mode. Till PIN **5555**; dashboard
 **owner@demo.waitron.local / dashPass123**. `dev:setup` seeds three menus (~44 products with images),
 a floor plan (5 zones / ~16 tables), staff on PIN 5555, and ~28 days of back-dated preproduction sales
 — English by default, Spanish via `WAITRON_SEED_LOCALE=es-ES`. `wa-wt onboarding <worktree-name>` for
@@ -7952,8 +7953,9 @@ while it holds decisions still open.
 | [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md) | server built (#721); the till side built by lane B item B15 (#956) | A4 |
 | [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | all three branches built (#732, P2b in #877, and P2c in #884); a real pairing at the box to go | A3 |
 
-**Dev stack from a worktree.** `wa-wt demo|onboarding <worktree-name>` and
-`wa-wt reset demo|onboarding [worktree-name]` — the rule is in CLAUDE.md §6; detail in
+**Dev stack from a worktree.** `wa-wt demo|onboarding <worktree-name>` starts up to two isolated
+stacks. `wa-wt ls` shows their ports; `wa-wt reset demo|onboarding <worktree-name>` rebuilds only
+the named venue. The rule is in CLAUDE.md §6; detail in
 [ui-review.md](ui-review.md) → *Running the stack from a worktree*.
 
 ## How to keep this file honest

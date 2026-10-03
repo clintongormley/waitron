@@ -8,20 +8,21 @@ corrects what is wrong or unintuitive, and the fixes land. This file records whe
 walkthrough survives a context clear.
 
 **Run path:** `pnpm dev:setup && pnpm dev` — till <http://localhost:5190>, dashboard
-<http://localhost:5191>, setup <http://localhost:5192>. The server on `:8080` uses HTTP without a
-development box leaf and HTTPS when one is present; each Vite proxy selects the same protocol. The till enrols itself on first load in dev
-mode — no code, no approval step. Till PIN **5555**; dashboard **owner@demo.waitron.local / dashPass123**.
+<http://localhost:5191>, setup <http://localhost:5192>. Those are the default ports; use `wa-wt ls`
+for a second worktree's URLs. The default server on `:8080` uses HTTP without a development box
+leaf and HTTPS when one is present; each Vite proxy selects the same protocol. The till enrols
+itself on first load in dev mode, with no code or approval step. Till PIN **5555**; dashboard
+**owner@demo.waitron.local / dashPass123**.
 
 **Running the stack from a worktree.** Start it with `wa-wt demo <worktree-name>` or
 `wa-wt onboarding <worktree-name>`
-(`~/workspace/tools/wa-wt`, since 2026-09-06), never with a bare `pnpm dev*`. **The dev database is
-one for every checkout**, and what makes it one is a shared STATE DIRECTORY rather than a container:
-`wa-wt` runs every worktree's `pnpm dev` and `pnpm dev:setup` with `WAITRON_STATE_DIR` set to the
-same `$HOME/workspace/.waitron-dev/box`, and the venue directory — two SQLite files on the host — is
-derived from it by `defaultDevVenueDir` (`apps/server/scripts/dev-setup.ts`). `apps/server/.env` is
-a per-DATABASE artefact (venue ids + the credentials key), not a per-checkout one, so a fresh
-worktree has none and `worktree.py new` does not copy it; `wa-wt` copies the current target's `.env`
-to the other checkouts and follows the log.
+(`~/workspace/tools/wa-wt`, since 2026-09-06), never with a bare `pnpm dev*`. The first port slot
+uses `$HOME/workspace/.waitron-dev/box`. Start another worktree with the same command while
+the first runs; `wa-wt` gives it shifted ports and a venue under its own state directory. The venue
+is a directory of SQLite files on the host. `wa-wt ls` names both instances and their URLs. Use
+`wa-wt logs <name>`, `wa-wt reset demo <name>`, and `wa-wt down <name>` to act on one while two run.
+The first stack's `apps/server/.env` is shared with other first-slot checkouts; the second keeps
+its own venue ids and credentials in its own `.env`.
 
 `docker-compose.yml` declares one service, `mailpit` — the practice email inbox. No container holds
 any part of the dev venue, so Compose has nothing a reset could clear. The reason to keep using
@@ -31,19 +32,20 @@ and 8025 ports. The same collision, back when this file declared a Postgres serv
 volume, is what left the stray `waitron-feat-onboarding-slice1b-setup-mode-boot_waitron-dev-db`
 volume behind. `wa-wt` brings it up under the fixed project `waitron`.
 
-Changing between demo and onboarding REMOVES the venue directory, preserves the shared development
-CA (`wa-wt` clears everything under the shared state directory except `tls`, then `dev:reset`
+Changing between demo and onboarding REMOVES the chosen instance's venue directory, preserves its
+development CA (`wa-wt` clears that instance's box state except `tls`, then `dev:reset`
 `rm -rf`s the venue directory — `resetVenueDir` in `apps/server/scripts/dev-setup.ts`), and rebuilds
 the selected target. Use `wa-wt reset demo [name]` or `wa-wt reset onboarding [name]` to rebuild
 without changing target. In demo mode the till re-enrols itself on first load after that — no code,
 no approval step.
 
-The print agent starts with the stack and connects to the local server on port 8080. It waits for
+The print agent starts with the stack and connects to that stack's server port. It waits for
 the server to listen, then uses HTTP or HTTPS to match the development box. With HTTPS, it reads
-the public CA from the shared box state, so you do not need a working port 80 listener. Its token
-and configuration live in the box state's `print-agent/` directory; switching worktrees retains
+the public CA from its box state, so you do not need a working port 80 listener. Its token and
+configuration live in that box state's `print-agent/` directory; restarting the instance retains
 them, while resetting the target clears them with the database. Once the box is provisioned as
-the primary, the agent enrols automatically. You can check its status at <http://localhost:9110>.
+the primary, the agent enrols automatically. You can check its status at <http://localhost:9110>
+for the first stack or <http://localhost:9210> for the second.
 
 `/health` reports `ok:false` on the dev venue because the fiscal drain has no AEAT credentials; the
 till and API serve normally regardless.

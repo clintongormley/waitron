@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vite";
-import { devServerProxy } from "../../scripts/dev-server-proxy.js";
+import { devPort, devServerProxy } from "../../scripts/dev-server-proxy.js";
 import { viteNpmNotices } from "../../scripts/npm-bundle-notices.mjs";
 
 export default defineConfig({
@@ -11,7 +11,7 @@ export default defineConfig({
   // Setup mode serves the wizard at the origin root (`mountSpa` with basePath "").
   base: "/",
   server: {
-    port: 5192,
+    port: devPort("WAITRON_SETUP_VITE_PORT", 5192),
     // Fail loudly rather than bump to a surprise port whose proxy no longer matches the browser —
     // see the till config for the full rationale.
     strictPort: true,

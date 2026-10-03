@@ -122,7 +122,7 @@ describe("createOriginAllowlist", () => {
     expect(await allow("https://gone.deli.test")).toBe(false);
   });
 
-  it("allows the three Vite dev origins only in devMode", async () => {
+  it("allows both stacks' Vite origins only in devMode", async () => {
     const base = {
       advertisedOrigin: "http://localhost:8080",
       readMembership: () => Promise.resolve(null),
@@ -134,6 +134,20 @@ describe("createOriginAllowlist", () => {
     expect(await createOriginAllowlist({ ...base, devMode: false })("http://localhost:5190")).toBe(
       false,
     );
+    for (const port of [5290, 5291, 5292]) {
+      expect(
+        await createOriginAllowlist({ ...base, devMode: true })(`http://localhost:${port}`),
+      ).toBe(true);
+      expect(
+        await createOriginAllowlist({ ...base, devMode: false })(`http://localhost:${port}`),
+      ).toBe(false);
+    }
+    expect(await createOriginAllowlist({ ...base, devMode: true })("http://localhost:5390")).toBe(
+      false,
+    );
+    const custom = { ...base, devMode: true, vitePorts: { till: "5390" } };
+    expect(await createOriginAllowlist(custom)("http://localhost:5390")).toBe(true);
+    expect(await createOriginAllowlist(custom)("http://localhost:5190")).toBe(false);
   });
   it("allows nothing for a contact address that does not parse", async () => {
     const allow = createOriginAllowlist({

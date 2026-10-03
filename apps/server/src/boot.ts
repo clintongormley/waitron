@@ -1307,6 +1307,11 @@ async function bootServer(
     advertisedOrigin: config.advertisedOrigin,
     readMembership: () => readNodeMembership(db),
     devMode: config.devMode,
+    vitePorts: {
+      till: process.env.WAITRON_TILL_VITE_PORT,
+      dashboard: process.env.WAITRON_DASHBOARD_VITE_PORT,
+      setup: process.env.WAITRON_SETUP_VITE_PORT,
+    },
     now: () => Date.now(),
   });
   app.use("/api/*", corsForVenue(allowOrigin));

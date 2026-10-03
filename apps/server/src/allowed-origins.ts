@@ -4,11 +4,12 @@ export interface AllowedOriginsDeps {
   advertisedOrigin: string;
   readMembership: () => Promise<SignedMembershipDocument | null>;
   devMode: boolean;
+  vitePorts?: { till?: string; dashboard?: string; setup?: string };
   now: () => number;
   ttlMs?: number;
 }
 
-const DEV_ORIGINS = ["http://localhost:5190", "http://localhost:5191", "http://localhost:5192"];
+const DEV_ORIGINS = [5190, 5191, 5192, 5290, 5291, 5292].map((port) => `http://localhost:${port}`);
 
 /** A contactUrl's origin, or null when it does not parse — a malformed address allows nothing. */
 function originOf(url: string): string | null {
@@ -40,6 +41,13 @@ export function createOriginAllowlist(
   deps: AllowedOriginsDeps,
 ): (origin: string) => Promise<boolean> {
   const ttl = deps.ttlMs ?? 30_000;
+  const devOrigins = deps.vitePorts
+    ? [
+        deps.vitePorts.till || "5190",
+        deps.vitePorts.dashboard || "5191",
+        deps.vitePorts.setup || "5192",
+      ].map((port) => `http://localhost:${port}`)
+    : DEV_ORIGINS;
   // The cache holds the in-flight PROMISE, not the resolved set, and its `at` is stamped
   // synchronously before the read is awaited: concurrent cold-cache callers coalesce onto one read,
   // and a slower older read can never overwrite a newer entry (single-flight). A failed read clears
@@ -47,7 +55,7 @@ export function createOriginAllowlist(
   let cached: { at: number; origins: Promise<Set<string>> } | undefined;
   return async (origin) => {
     if (origin === deps.advertisedOrigin) return true;
-    if (deps.devMode && DEV_ORIGINS.includes(origin)) return true;
+    if (deps.devMode && devOrigins.includes(origin)) return true;
     const t = deps.now();
     if (cached === undefined || t - cached.at > ttl) {
       const entry = { at: t, origins: loadOrigins(deps.readMembership) };

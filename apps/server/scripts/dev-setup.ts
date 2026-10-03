@@ -129,6 +129,7 @@ export interface DevSetupOptions {
   /** Must be the same dir the server resolves at boot, or boot never reads the fiscal-slot
    * `modules.json` written here. */
   stateDir: string;
+  httpPort?: string;
   log?: (line: string) => void;
 }
 
@@ -150,13 +151,14 @@ export function buildDevEnv(input: {
   credentialsKey: string;
   ids: DevVenueIds;
   seedLocale: SeedLocale;
+  httpPort?: string;
 }): DevEnv {
   const { venueDir, credentialsKey, ids, seedLocale } = input;
   return {
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_ENV: "dev",
     WAITRON_ONBOARDING_INTENT: "demo",
-    WAITRON_HTTP_PORT: "8080",
+    WAITRON_HTTP_PORT: input.httpPort || "8080",
     WAITRON_CREDENTIALS_KEY: credentialsKey,
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
     WAITRON_TILL_TILL_ID: ids.tillId,
@@ -419,6 +421,7 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
     credentialsKey: randomBytes(32).toString("base64"),
     ids,
     seedLocale,
+    httpPort: opts.httpPort,
   });
   writeFileSync(envPath, renderEnvFile(env));
   log(`dev-setup: wrote ${envPath}`);
@@ -453,6 +456,7 @@ async function main(): Promise<void> {
     venueDir,
     envPath,
     stateDir,
+    httpPort: process.env.WAITRON_HTTP_PORT,
     log: (line) => void console.log(line),
   });
 
@@ -463,23 +467,31 @@ async function main(): Promise<void> {
       : "dev-setup: provisioned a fresh preproduction venue.",
   );
   console.log("");
-  console.log("  till       http://localhost:5190");
-  console.log("  dashboard  http://localhost:5191");
-  console.log("  server     localhost:8080   (HTTP fresh; HTTPS with a preserved box leaf)");
+  const tillPort = process.env.WAITRON_TILL_VITE_PORT?.trim() || "5190";
+  const dashboardPort = process.env.WAITRON_DASHBOARD_VITE_PORT?.trim() || "5191";
+  const setupPort = process.env.WAITRON_SETUP_VITE_PORT?.trim() || "5192";
+  const serverPort = process.env.WAITRON_HTTP_PORT?.trim() || result.env.WAITRON_HTTP_PORT;
+  console.log(`  till       http://localhost:${tillPort}`);
+  console.log(`  dashboard  http://localhost:${dashboardPort}`);
+  console.log(
+    `  server     localhost:${serverPort}   (HTTP fresh; HTTPS with a preserved box leaf)`,
+  );
   // A provisioned box boots in trading mode, which mounts no `/setup-api` route, so the wizard `pnpm
   // dev` starts does nothing.
-  console.log("  setup      http://localhost:5192   (setup wizard — inactive in trading mode)");
+  console.log(
+    `  setup      http://localhost:${setupPort}   (setup wizard — inactive in trading mode)`,
+  );
   console.log("");
   console.log(`  demo PIN (every till login):   ${ADMIN_PIN}`);
   console.log(`  dashboard login (owner):       ${DEMO_ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
   console.log(`  locale:                        ${result.env.WAITRON_TILL_LOCALE}`);
   console.log("");
-  console.log("  Pick a pre-enrolled device at http://localhost:5190/?dev");
+  console.log(`  Pick a pre-enrolled device at http://localhost:${tillPort}/?dev`);
   console.log("    Mostrador (till) · Camarero 1 (handheld) · Pantalla Cocina (kitchen display)");
   console.log("    Pantalla Pase (watcher display)");
   console.log("");
   console.log(
-    "  Or knock from a FRESH browser at http://localhost:5190 — a manager then switches on",
+    `  Or knock from a FRESH browser at http://localhost:${tillPort} — a manager then switches on`,
   );
   console.log("  pairing mode in the dashboard and matches the number the till shows.");
   const salesDays = resolveSalesDays();

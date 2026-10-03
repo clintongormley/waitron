@@ -28,6 +28,26 @@ describe("development print agent", () => {
     });
   });
 
+  it("connects the shifted print agent to its own server", async () => {
+    const env = await prepareDevEnv({
+      WAITRON_STATE_DIR: stateDir,
+      WAITRON_HTTP_PORT: "8180",
+      WAITRON_SETUP_PORT: "9210",
+    });
+    expect(readEnv(env, "dev-machine")).toEqual({
+      serverUrl: "http://127.0.0.1:8180",
+      name: "dev-machine",
+      stateDir: join(stateDir, "print-agent"),
+      setupPort: 9210,
+    });
+  });
+
+  it("refuses an invalid server port before constructing a server URL", async () => {
+    await expect(
+      prepareDevEnv({ WAITRON_STATE_DIR: stateDir, WAITRON_HTTP_PORT: "0" }),
+    ).rejects.toThrow(/WAITRON_HTTP_PORT/);
+  });
+
   it("uses the box HTTPS leaf and caches its public CA without needing port 80", async () => {
     await mkdir(join(stateDir, "tls"));
     await writeFile(join(stateDir, "tls", "server.crt"), "leaf");
