@@ -1853,6 +1853,20 @@ describe("dashboard-app", () => {
     ).toEqual(["nav-sales", "nav-vat-return", "nav-adjustment-report", "nav-orders"]);
   });
 
+  it("opens Orders from its URL inside an expanded Reporting section", async () => {
+    history.replaceState(null, "", "/manage/orders");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-orders-screen")).not.toBeNull();
+    expect(location.pathname).toBe("/manage/orders");
+    const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-reports"]')!;
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    expect(navItem(el, "orders")!.getAttribute("aria-current")).toBe("page");
+    expect(navItem(el, "orders")!.checkVisibility()).toBe(true);
+  });
+
   it("keeps Overview above the Reporting section, under no heading", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
@@ -5043,6 +5057,20 @@ describe("the nav search", () => {
     expect(new URL(location.href).pathname).toBe("/manage/catalogue");
     expect(expandedHeaders(el)).toEqual(["nav-group-menu"]);
     expect(navItem(el, "catalogue")!.checkVisibility()).toBe(true);
+  });
+
+  it("opens Orders, chosen by a search, inside an expanded Reporting section", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    expect(expandedHeaders(el)).toEqual([]);
+
+    await search(el, "Orders");
+    await press(el, "Enter");
+
+    expect(el.shadowRoot!.querySelector("dashboard-orders-screen")).not.toBeNull();
+    expect(new URL(location.href).pathname).toBe("/manage/orders");
+    expect(expandedHeaders(el)).toEqual(["nav-group-reports"]);
+    expect(navItem(el, "orders")!.getAttribute("aria-current")).toBe("page");
+    expect(navItem(el, "orders")!.checkVisibility()).toBe(true);
   });
 
   it("does nothing on Enter when no page matches", async () => {
