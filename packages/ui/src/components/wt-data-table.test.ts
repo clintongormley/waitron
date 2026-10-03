@@ -1754,8 +1754,10 @@ test("a hidden column's filter remains in the panel and clear all restores every
   expect(root.querySelector(".filters-trigger")!.textContent).not.toContain("1");
 });
 
-test("a filtered heading marks only its active column and opens that panel section", async () => {
-  const el = await tableS({ columns: withStatus });
+test("a filtered heading marks only its active column and focuses that panel section", async () => {
+  const el = await tableS({
+    columns: [withStatus[0]!, { ...withStatus[1]!, key: "other-status" }, withStatus[1]!],
+  });
   const root = el.shadowRoot!;
   expect(root.querySelector("[data-filter-mark]")).toBeNull();
   await chooseOption(root.querySelector<WtCombobox>('[data-filter="status"]')!, "off");
@@ -1861,8 +1863,10 @@ test("opening Filters moves focus inside; Escape closes it without reaching a su
   parent.append(el);
   host.append(parent);
   await userEvent.click(trigger);
-  expect(root.activeElement).toBe(root.querySelector(".filter-section summary"));
+  const section = root.querySelector<HTMLDetailsElement>(".filter-section")!;
+  expect(root.activeElement).toBe(section.querySelector("summary"));
   await userEvent.keyboard("{Enter}");
+  expect(section.open).toBe(false);
   expect(rowKeysS(el)).toEqual(["1"]);
   await userEvent.keyboard("{Escape}");
   expect(root.querySelector(".filters-panel")!.matches(":popover-open")).toBe(false);
@@ -2043,6 +2047,9 @@ test("Tab stays inside the full-screen Filters panel on a phone", async () => {
     const root = el.shadowRoot!;
     root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
     const panel = root.querySelector<HTMLElement>(".filters-panel")!;
+    expect(root.activeElement).toBe(panel.querySelector(".filter-section summary"));
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(root.activeElement).toBe(panel.querySelector(".filters-close"));
     const combobox = panel.querySelectorAll<WtCombobox>("wt-combobox")[1]!;
     const last = combobox.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
     last.focus();

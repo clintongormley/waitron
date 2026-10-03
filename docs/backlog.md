@@ -2702,7 +2702,7 @@ filters. The units table's always-on checkboxes become a Select mode, as the pro
 has.
 
 **Filters panel initial focus — DONE (W39f, owner 2026-10-03).** Opening the panel focuses its first
-filter section, so a second Enter expands or collapses that section without clearing the filters.
+filter section, so a second Enter collapses that section without clearing the filters.
 
 **The table's Columns button becomes a Customise dialog (A249, owner 2026-10-03) — DONE.**
 `wt-data-table` has an icon button opening a dialog that lists every column with a show/hide eye.
