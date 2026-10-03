@@ -19,6 +19,11 @@ export class ListWriteQueue {
   readonly #pending = new Map<unknown, number>();
   readonly #refusals = new Map<unknown, number>();
 
+  /** Settles once every write queued so far has finished; never rejects. */
+  get idle(): Promise<void> {
+    return this.#chain;
+  }
+
   run(scope: unknown, task: () => Promise<void>): void {
     this.#pending.set(scope, (this.#pending.get(scope) ?? 0) + 1);
     // A write that throws must not reject the chain, or every write queued after it is skipped.

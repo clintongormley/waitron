@@ -556,6 +556,37 @@ describe("adding", () => {
   });
 });
 
+describe("settling", () => {
+  it("settles once a name left in its field has been saved, with no name still open", async () => {
+    let answer!: (value: { id: string }) => void;
+    const createCourse = vi.fn(() => new Promise<{ id: string }>((resolve) => (answer = resolve)));
+    const api = stubApi({ createCourse });
+    const { el } = await mount(api);
+    expect(el.unsaved).toBe(false);
+    await openNew(el);
+    expect(el.unsaved).toBe(true);
+    await typeName(el, "Sharing plates");
+    leaveField(el);
+    let settled = false;
+    void el.settled().then(() => (settled = true));
+    await settle(el);
+    expect([settled, createCourse.mock.calls.length]).toEqual([false, 1]);
+    answer({ id: "c9" });
+    await settle(el);
+    expect([settled, el.unsaved]).toEqual([true, false]);
+  });
+
+  it("settles with the name still open when its save is refused", async () => {
+    const api = stubApi({ createCourse: vi.fn().mockRejectedValue({ code: "course.name_taken" }) });
+    const { el } = await mount(api);
+    await openNew(el);
+    await typeName(el, "Starters");
+    leaveField(el);
+    await el.settled();
+    expect(el.unsaved).toBe(true);
+  });
+});
+
 describe("removing", () => {
   it("offers Remove in each course's menu, which deactivates the course and refreshes", async () => {
     const api = stubApi();

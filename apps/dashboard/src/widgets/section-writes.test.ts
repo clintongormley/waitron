@@ -168,3 +168,26 @@ it("still sends the writes queued behind one whose own step threw", async () => 
   await settle();
   expect(sent).toEqual(["after"]);
 });
+
+it("is idle once every write queued so far has finished, a refused one included", async () => {
+  const queue = new ListWriteQueue();
+  const first = deferred();
+  const second = deferred();
+  const finished: string[] = [];
+  queue.run("list", async () => {
+    await first.promise;
+    finished.push("first");
+  });
+  queue.run("list", async () => {
+    await second.promise;
+    finished.push("second");
+  });
+  let idle = false;
+  void queue.idle.then(() => (idle = true));
+  first.resolve();
+  await settle();
+  expect([finished, idle]).toEqual([["first"], false]);
+  second.reject(new Error("refused"));
+  await settle();
+  expect([finished, idle]).toEqual([["first"], true]);
+});

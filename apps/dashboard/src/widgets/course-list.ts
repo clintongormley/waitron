@@ -129,6 +129,16 @@ export class CourseList extends LitElement {
     void this.#load();
   }
 
+  /** Settles once every change made so far has been answered. */
+  async settled(): Promise<void> {
+    await this.#writes.idle;
+  }
+
+  /** Whether a name field is open: not yet left, or refused. */
+  get unsaved(): boolean {
+    return this.edit !== null;
+  }
+
   async #load(): Promise<void> {
     // A failed read is reported through the query controller's error callback.
     await this.#queries.watch("listCourses", [], (rows) => this.#show(rows)).catch(() => undefined);
