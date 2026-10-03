@@ -240,7 +240,7 @@ describe("till-floor-screen: what a seated party owes", () => {
     expect(card(el, "t4").querySelector(".total")!.textContent).toBe("44,00\u00a0€");
   });
 
-  it("writes what the party owes the Spanish way on the map and in the unplaced tray", async () => {
+  it("writes what the party owes the Spanish way in the unplaced tray, and hands the map the language", async () => {
     setLocale("es");
     const el = await mountFloor([
       seated(),

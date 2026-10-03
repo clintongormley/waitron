@@ -3410,7 +3410,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     seats or fewer, or with no seat count set, is so narrow that the party name shows only its
     first few letters ("T…" at two seats), and the table's label, its covers and its "to serve"
     chip spill past the token's edge; the map's token sizes (`sizeForCapacity`, `wt-floor-canvas`)
-    decide that; not queued.
+    decide that (owner, 2026-09-30, on C82's question: "wait on this"; not queued). A tab total
+    does not fit either: see the entry below on a four-digit total.
   - **Task 12 (#888).** `party.main_bill_stays` still reads "Move one of those instead" (pinned in
     `apps/till/src/i18n/codes.test.ts`); the plan asked for "move the other bills first or merge
     them".
@@ -3427,11 +3428,13 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   the formatter's no-break space before `€`) runs past the token's right edge; with the form before
   that change, `1234.50 €`, the amount still ran past the edge and `€` wrapped onto a second line.
   Measured with throwaway screenshot tests; screenshots in `~/waitron-campaign-c/w15-shots/`
-  (`map-*` and `old-form-map-dark-1280.png`, not in the repository). The token is
-  `packages/ui/src/components/wt-table-token.ts`, sized by capacity in
-  `packages/ui/src/components/wt-floor-canvas.ts`. Not measured: other shapes and capacities, and
-  amounts of five digits. **Next action:** decide how a total that is wider than its token is
-  drawn (smaller text, an ellipsis, or a wider minimum size), then fix it test-first.
+  (`map-*` and `old-form-map-dark-1280.png`, not in the repository). W15 did not measure other
+  shapes and capacities, or amounts of five digits. The cause is the one C82 recorded in the
+  Task 11 note above, which the owner put on hold: the token is
+  `packages/ui/src/components/wt-table-token.ts`, its size comes from `sizeForCapacity` in
+  `packages/ui/src/floor.ts`, and the size rules are in
+  `packages/ui/src/components/wt-floor-canvas.ts`. **Next action:** the owner decides whether this
+  changes "wait on this"; a fix that lets a small token hold what it shows would cover both.
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when
   this is designed. For now, orders remain at table/tab level and staff select items manually
   when splitting bills; seat assignment is not a prerequisite for the service workflow.
