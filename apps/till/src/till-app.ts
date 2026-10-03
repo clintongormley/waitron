@@ -1317,6 +1317,7 @@ export class TillApp extends LitElement {
   #handingOver = new Set<string>();
   /** Each Pay pressed on a waiting order; only the latest one's answer may load the basket. */
   #payWaitingRequest = 0;
+  #payWaitingLoading?: { id: string; request: number; unlock: () => void };
   /** Each pay, card payment, place, collect or hold sent from the counter basket, and each request to
    * open a bill payment on it that {@link TillApp.#onCounterBillPay} does not ignore outright, whether
    * or not the dialog then opens. */
@@ -2946,6 +2947,7 @@ export class TillApp extends LitElement {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     const unlock = this.#store.lockEdits();
     this.#endReloadLock = unlock;
+    this.#payWaitingLoading = { id, request, unlock };
     limit.signal.addEventListener("abort", unlock, { once: true });
     this.errorKey = undefined;
     try {
@@ -2963,6 +2965,7 @@ export class TillApp extends LitElement {
     } finally {
       limit.done();
       unlock();
+      if (this.#payWaitingLoading?.request === request) this.#payWaitingLoading = undefined;
     }
     await this.#refreshWaiting();
   }
@@ -5956,6 +5959,19 @@ export class TillApp extends LitElement {
     if (open === null) return;
     if (open.partyId === null) {
       this.#showCancelCredited(id, null);
+      if (this.#payWaitingLoading?.id === open.workingOrderId) {
+        this.#payWaitingRequest++;
+        this.#payWaitingLoading.unlock();
+        this.#payWaitingLoading = undefined;
+      }
+      if (this.#store.id === open.workingOrderId) {
+        this.#dismissStationChoices();
+        this.#store.clear();
+        this.stage = "order";
+        this.collectFlow = undefined;
+        this.counterLines = null;
+        this.cardOutcome = undefined;
+      }
       await this.#refreshAfterWrite("station", "refresh.station_after_cancel");
       // A read started after the session ended could show the next operator this cancel's failure
       // notice.

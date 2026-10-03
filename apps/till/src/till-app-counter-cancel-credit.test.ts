@@ -286,6 +286,129 @@ describe("till-app: cancelling and crediting an invoiced counter order", () => {
     expect(dialog(el)).toBeNull();
   });
 
+  it("clears an open basket for the cancelled order before a later list read answers", async () => {
+    const el = await signedIn({
+      retrievePlacedOrder: vi.fn().mockResolvedValue({
+        id: "wo-sent",
+        orderNumber: 12,
+        label: null,
+        revision: 2,
+        lines: [
+          {
+            productId: "coffee",
+            quantity: "1.000",
+            product: {
+              id: "coffee",
+              name: "Coffee",
+              customerName: { en: "Coffee" },
+              pricingUnit: "each",
+              unitPrice: "7.50",
+              vatClass: "general",
+              category: null,
+              allergens: null,
+            },
+          },
+        ],
+      }),
+    });
+    emit(waitingList(el)!, "pay-waiting-order", { id: "wo-sent", serviceMode: "invoice_first" });
+    await flush(el);
+    expect(counter(el).store.id).toBe("wo-sent");
+    expect(counter(el).store.lineCount).toBe(1);
+    expect(counter(el).stage).toBe("collect");
+
+    expect(offered(el)).not.toBeNull();
+    offered(el)!.click();
+    await flush(el);
+    expect(dialog(el)).not.toBeNull();
+    await typeReason(el, "Wrong order");
+    vi.mocked(api.getStationQueue).mockImplementation(() => new Promise(() => {}));
+    await confirmCancel(el);
+
+    expect(doneText(el)).toBe(t("cancel_credit.done_unnumbered"));
+    expect(counter(el).store.id).not.toBe("wo-sent");
+    expect(counter(el).store.lineCount).toBe(0);
+    expect(counter(el).stage).toBe("order");
+  });
+
+  it("does not load a cancelled order when its waiting-list Pay answer arrives late", async () => {
+    let answer!: (order: unknown) => void;
+    const el = await signedIn({
+      retrievePlacedOrder: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+    });
+    emit(waitingList(el)!, "pay-waiting-order", { id: "wo-sent", serviceMode: "invoice_first" });
+    await flush(el);
+    expect(counter(el).store.editsLocked).toBe(true);
+
+    offered(el)!.click();
+    await flush(el);
+    expect(dialog(el)).not.toBeNull();
+    await typeReason(el, "Wrong order");
+    await confirmCancel(el);
+    expect(doneText(el)).toBe(t("cancel_credit.done_unnumbered"));
+    expect(counter(el).store.editsLocked).toBe(false);
+
+    answer({
+      id: "wo-sent",
+      orderNumber: 12,
+      label: null,
+      revision: 2,
+      lines: [],
+    });
+    await flush(el);
+    expect(counter(el).store.id).not.toBe("wo-sent");
+    expect(counter(el).store.lineCount).toBe(0);
+    expect(counter(el).stage).toBe("order");
+    expect(counter(el).store.editsLocked).toBe(false);
+  });
+
+  it("keeps a pending Pay load for a different order after the cancel", async () => {
+    let answer!: (order: unknown) => void;
+    const el = await signedIn({
+      retrievePlacedOrder: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+    });
+    emit(waitingList(el)!, "pay-waiting-order", {
+      id: "wo-other",
+      serviceMode: "invoice_first",
+    });
+    await flush(el);
+    offered(el)!.click();
+    await flush(el);
+    await typeReason(el, "Wrong order");
+    await confirmCancel(el);
+
+    answer({ id: "wo-other", orderNumber: 13, label: null, revision: 2, lines: [] });
+    await flush(el);
+    expect(counter(el).store.id).toBe("wo-other");
+    expect(counter(el).stage).toBe("collect");
+  });
+
+  it("keeps a different basket when the waiting order is cancelled", async () => {
+    const el = await openCancel();
+    const store = counter(el).store;
+    store.loadFrom("wo-other", [
+      {
+        product: {
+          id: "coffee",
+          name: "Coffee",
+          customerName: { en: "Coffee" },
+          pricingUnit: "each",
+          unitPrice: "7.50",
+          vatClass: "general",
+          category: null,
+          allergens: null,
+        },
+        quantity: "1",
+      },
+    ]);
+    await typeReason(el, "Wrong order");
+    await confirmCancel(el);
+
+    expect(doneText(el)).toBe(t("cancel_credit.done_unnumbered"));
+    expect(store.id).toBe("wo-other");
+    expect(store.lineCount).toBe(1);
+  });
+
   it.each([
     ["kitchen queue", "station", "refresh.station_after_cancel"],
     ["waiting list", "waiting", "refresh.waiting_after_cancel"],
