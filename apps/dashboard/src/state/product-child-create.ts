@@ -1,6 +1,6 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 /** What the product editor can create without leaving itself. */
-export type ProductChildKind = "unit" | "category" | "extras" | "options";
+export type ProductChildKind = "unit" | "category" | "extras" | "options" | "courses";
 interface Effects {
   /** The row that was written. Only its `id` is read here. */
   accept(kind: ProductChildKind, value: { id: string }): void;

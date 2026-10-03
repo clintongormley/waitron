@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   CatalogueSummary,
   CategorySummary,
+  Course,
   DashboardApi,
   ExtraList,
   ExtraListInput,
@@ -1298,6 +1299,289 @@ describe("catalogue-screen", () => {
     await flush(el);
     expect(editor(el).currentValue.name).toBe("Borrador");
     expect(editor(el).currentValue.unitId).toBe("u2");
+  });
+
+  describe("the courses window", () => {
+    const venueCourses: Course[] = [
+      { id: "k1", name: "Entrantes", displayOrder: 0, active: true },
+      { id: "k2", name: "Principales", displayOrder: 1, active: true },
+    ];
+    const slowly = <T>(value: T): Promise<T> =>
+      new Promise((resolve) => setTimeout(() => resolve(value), 100));
+    /** The server's courses, which the window's writes change. A slow create is answered after a
+     * delay, as over a real network. */
+    function courseApi(overrides: Partial<DashboardApi> = {}, slowCreate = false) {
+      let rows = venueCourses.map((course) => ({ ...course }));
+      return stubApi({
+        listCourses: vi.fn(() => Promise.resolve(rows.map((course) => ({ ...course })))),
+        createCourse: vi.fn(
+          async ({ name, displayOrder }: { name: string; displayOrder: number }) => {
+            if (slowCreate) await slowly(null);
+            rows = [...rows, { id: "k-new", name, displayOrder, active: true }];
+            return { id: "k-new" };
+          },
+        ),
+        updateCourse: vi.fn().mockResolvedValue(undefined),
+        deactivateCourse: vi.fn((id: string) => {
+          rows = rows.filter((course) => course.id !== id);
+          return Promise.resolve();
+        }),
+        moveCourse: vi.fn(() => Promise.resolve(rows)),
+        ...overrides,
+      });
+    }
+    const coursesWindow = (el: CatalogueScreen) =>
+      el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-test=courses-dialog]")!;
+    const courseList = (el: CatalogueScreen) =>
+      el.shadowRoot!.querySelector<LitElement>("dashboard-course-list");
+    const inList = (el: CatalogueScreen, selector: string) =>
+      courseList(el)!.shadowRoot!.querySelector<HTMLElement>(selector)!;
+    const courseBox = (el: CatalogueScreen) =>
+      editor(el).shadowRoot!.querySelector<HTMLElement & { value: string }>(
+        'wt-combobox[name="product-course"]',
+      )!;
+    async function shownCourse(el: CatalogueScreen): Promise<string | undefined> {
+      const box = courseBox(el) as unknown as LitElement;
+      await box.updateComplete;
+      return box.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
+    }
+
+    /** Opens the product, types an unsaved name, then chooses Edit courses… with real clicks. */
+    async function openCourses(api: DashboardApi, courseId: string | null = null) {
+      (api.getProductEditor as ReturnType<typeof vi.fn>).mockResolvedValue({ ...value, courseId });
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      emit(editor(el).shadowRoot!.querySelector('[name="name"]')!, "wt-change", {
+        value: "Croquetas sin guardar",
+      });
+      await editor(el).updateComplete;
+      const kitchen = editor(el).shadowRoot!.querySelector<LitElement>('[data-section="kitchen"]')!;
+      await kitchen.updateComplete;
+      await userEvent.click(kitchen.shadowRoot!.querySelector<HTMLElement>("button.header")!);
+      const box = courseBox(el) as unknown as LitElement;
+      await box.updateComplete;
+      await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+      await box.updateComplete;
+      const row = [...box.shadowRoot!.querySelectorAll<HTMLElement>("li[role=option]")].find(
+        (option) => option.textContent!.trim() === t("editor.edit_courses"),
+      )!;
+      await userEvent.click(row);
+      await el.updateComplete;
+      await vi.waitFor(() =>
+        expect(courseList(el)?.shadowRoot!.querySelectorAll("tbody tr").length).toBeGreaterThan(0),
+      );
+      return el;
+    }
+    /** Opens the list's new row and types a name into it, leaving focus in the field. */
+    async function typeNewCourse(el: CatalogueScreen, name: string): Promise<void> {
+      await userEvent.click(inList(el, '[data-test="add-course"]'));
+      await courseList(el)!.updateComplete;
+      const field = inList(el, 'wt-input[name="course-name"]') as unknown as LitElement;
+      await field.updateComplete;
+      const input = field.shadowRoot!.querySelector("input")!;
+      input.value = name;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      input.focus();
+    }
+    async function addCourse(el: CatalogueScreen, name: string): Promise<void> {
+      await typeNewCourse(el, name);
+      await userEvent.keyboard("{Enter}");
+      await vi.waitFor(() => expect(inList(el, '[data-test="name-k-new"]')).not.toBeNull());
+    }
+    async function done(el: CatalogueScreen): Promise<void> {
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
+      await flush(el);
+      await flush(el);
+    }
+
+    it("opens from Edit courses… holding the course list, headed Courses, with one Done button", async () => {
+      const api = courseApi();
+      const el = await openCourses(api);
+      const dialog = coursesWindow(el) as HTMLElement & { open: boolean; heading: string };
+      expect(dialog.open).toBe(true);
+      expect(dialog.heading).toBe(t("kitchen.courses_title"));
+      expect(courseList(el)!.closest("[data-test=courses-dialog]")).toBe(dialog);
+      expect(
+        [...dialog.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
+      ).toEqual([t("action.done")]);
+      expect(editor(el).childOpen).toBe(true);
+    });
+
+    it("selects a course added in the window once Done closes it, keeping the product's unsaved edits", async () => {
+      const api = courseApi();
+      const el = await openCourses(api, "k1");
+      await addCourse(el, "Postres");
+      await done(el);
+      expect(coursesWindow(el).open).toBe(false);
+      expect(editor(el).open).toBe(true);
+      expect(editor(el).currentValue.courseId).toBe("k-new");
+      expect(editor(el).currentValue.name).toBe("Croquetas sin guardar");
+      expect(editor(el).courses.map(({ id }) => id)).toEqual(["k1", "k2", "k-new"]);
+      expect(await shownCourse(el)).toBe("Postres");
+      expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
+    });
+
+    it("waits for a course typed and left by pressing Done, then selects it", async () => {
+      const api = courseApi({}, true);
+      const create = vi.mocked(api.createCourse);
+      const el = await openCourses(api, "k1");
+      await typeNewCourse(el, "Postres");
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
+      await vi.waitFor(() => expect(coursesWindow(el).open).toBe(false));
+      await vi.waitFor(() => expect(editor(el).currentValue.courseId).toBe("k-new"));
+      expect(create).toHaveBeenCalledExactlyOnceWith({ name: "Postres", displayOrder: 2 });
+      expect(editor(el).courses.map(({ id }) => id)).toEqual(["k1", "k2", "k-new"]);
+      expect(await shownCourse(el)).toBe("Postres");
+      expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
+    });
+
+    it("stays open when a course left by pressing Done is refused, showing why beside its name", async () => {
+      const api = courseApi({
+        createCourse: vi.fn(() =>
+          slowly(null).then(() => Promise.reject({ code: "course.name_taken" })),
+        ),
+      });
+      const el = await openCourses(api, "k1");
+      await typeNewCourse(el, "Entrantes");
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
+      const field = () =>
+        inList(el, 'wt-input[name="course-name"]') as unknown as { error: string } | null;
+      await vi.waitFor(() => expect(field()?.error).toBe(codeMessage("course.name_taken")));
+      await flush(el);
+      expect(coursesWindow(el).open).toBe(true);
+      expect(editor(el).currentValue.courseId).toBe("k1");
+      // Escape still closes it, dropping the refused name.
+      await userEvent.keyboard("{Escape}");
+      await vi.waitFor(() => expect(editor(el).childOpen).toBe(false));
+      await flush(el);
+      expect(coursesWindow(el).open).toBe(false);
+      expect(editor(el).currentValue.courseId).toBe("k1");
+      expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
+    });
+
+    it("leaves a window opened for the next product alone when the last one's save lands", async () => {
+      const api = courseApi({}, true);
+      const create = vi.mocked(api.createCourse);
+      const el = await openCourses(api, "k1");
+      await typeNewCourse(el, "Postres");
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      emit(editor(el), "wt-create-related", { kind: "courses" });
+      await el.updateComplete;
+      await vi.waitFor(() => expect(create).toHaveBeenCalledOnce());
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await flush(el);
+      expect(coursesWindow(el).open).toBe(true);
+      expect(editor(el).childOpen).toBe(true);
+      expect(editor(el).currentValue.courseId).toBe("k1");
+    });
+
+    it("clears the product's course when the window removed it", async () => {
+      const api = courseApi();
+      const el = await openCourses(api, "k2");
+      inList(el, '[data-test="remove-k2"]').click();
+      await vi.waitFor(() => expect(inList(el, '[data-test="name-k2"]')).toBeNull());
+      await done(el);
+      expect(editor(el).currentValue.courseId).toBeNull();
+      expect(editor(el).currentValue.name).toBe("Croquetas sin guardar");
+      expect(await shownCourse(el)).toBe(t("product.no_course"));
+    });
+
+    it("keeps the product's course when the window neither added a course nor removed it", async () => {
+      const api = courseApi();
+      const el = await openCourses(api, "k2");
+      inList(el, '[data-test="remove-k1"]').click();
+      await vi.waitFor(() => expect(inList(el, '[data-test="name-k1"]')).toBeNull());
+      await done(el);
+      expect(editor(el).currentValue.courseId).toBe("k2");
+      expect(editor(el).courses.map(({ id }) => id)).toEqual(["k2"]);
+      expect(await shownCourse(el)).toBe("Principales");
+      expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
+    });
+
+    it("does not select a course added in the window and then removed there", async () => {
+      const api = courseApi();
+      const el = await openCourses(api, "k1");
+      await addCourse(el, "Postres");
+      inList(el, '[data-test="remove-k-new"]').click();
+      await vi.waitFor(() => expect(inList(el, '[data-test="name-k-new"]')).toBeNull());
+      await done(el);
+      expect(editor(el).currentValue.courseId).toBe("k1");
+    });
+
+    it("closes on Escape the same way, leaving the product editor open", async () => {
+      const api = courseApi();
+      const el = await openCourses(api, "k1");
+      await addCourse(el, "Postres");
+      let closes = 0;
+      coursesWindow(el).addEventListener("wt-close", () => closes++);
+      await userEvent.keyboard("{Escape}");
+      await vi.waitFor(() => expect(closes).toBe(1));
+      await flush(el);
+      await flush(el);
+      expect(coursesWindow(el).open).toBe(false);
+      expect(editor(el).open).toBe(true);
+      expect(editor(el).currentValue.courseId).toBe("k-new");
+      expect(editor(el).currentValue.name).toBe("Croquetas sin guardar");
+      expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
+    });
+
+    it("ignores the closed window's late close once another nested form is open", async () => {
+      const api = courseApi();
+      const el = await openCourses(api, "k1");
+      // Clicked in script, not through the browser: the native close is reported a task later, and
+      // the unit form has to be open by then.
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!.click();
+      await el.updateComplete;
+      await (coursesWindow(el) as unknown as LitElement).updateComplete;
+      emit(editor(el), "wt-create-related", { kind: "unit" });
+      await el.updateComplete;
+      const unitForm = el.shadowRoot!.querySelector("dashboard-unit-form")!;
+      expect(unitForm.open).toBe(true);
+      await closeReportsDelivered();
+      await flush(el);
+      expect([unitForm.open, coursesWindow(el).open, editor(el).childOpen]).toEqual([
+        true,
+        false,
+        true,
+      ]);
+    });
+
+    it("leaves alone a product opened while the closing window's refresh was in flight", async () => {
+      const api = courseApi();
+      const el = await openCourses(api, "k1");
+      await addCourse(el, "Postres");
+      let answer!: (rows: Course[]) => void;
+      vi.mocked(api.listCourses).mockImplementationOnce(
+        () => new Promise<Course[]>((resolve) => (answer = resolve)),
+      );
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
+      vi.mocked(api.getProductEditor).mockResolvedValue({ ...value, courseId: "k2" });
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      expect(editor(el).currentValue.courseId).toBe("k2");
+      answer([...venueCourses, { id: "k-new", name: "Postres", displayOrder: 2, active: true }]);
+      await flush(el);
+      expect(editor(el).courses.map(({ id }) => id)).toEqual(["k1", "k2", "k-new"]);
+      expect(editor(el).currentValue.courseId).toBe("k2");
+    });
+
+    it("reports a failed refresh of the courses as a load failure, and keeps the product's course", async () => {
+      const api = courseApi();
+      const el = await openCourses(api, "k1");
+      (api.listCourses as ReturnType<typeof vi.fn>).mockRejectedValueOnce({
+        code: "connection.failed",
+      });
+      await done(el);
+      expect(coursesWindow(el).open).toBe(false);
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+        codeMessage("connection.failed"),
+      );
+      expect(editor(el).currentValue.courseId).toBe("k1");
+    });
   });
 
   it("offers the new-category form, with its one name field, before the content languages load", async () => {

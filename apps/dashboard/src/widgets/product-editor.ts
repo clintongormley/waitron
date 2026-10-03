@@ -66,6 +66,8 @@ const SUMMARY_SEPARATOR = " · ";
  * can be mistaken for an attachment, whose value always carries a colon. */
 const CREATE_EXTRA_LIST = "create-extras";
 const CREATE_OPTION_LIST = "create-options";
+/** The course dropdown's last row: it opens the courses window rather than choosing a course. */
+const EDIT_COURSES = "edit-courses";
 
 /** The word for each kind, taken from the Modifiers screen's own tab labels so a list is called the
  * same thing wherever it is named. */
@@ -623,13 +625,21 @@ export class ProductEditor extends LitElement {
   selectRelated(kind: ProductChildKind, id: string): void {
     if (kind === "unit") this.change("unitId", id);
     if (kind === "category") this.change("primaryCategoryId", id);
+    if (kind === "courses") this.change("courseId", id);
     if (kind === "extras" || kind === "options") {
       if (this.draft.modifiers.some((ref) => ref.kind === kind && ref.id === id)) return;
       this.change("modifiers", [...this.draft.modifiers, { kind, id }]);
     }
   }
+  clearCourse(): void {
+    this.change("courseId", null);
+  }
   /** Both kinds of modifier list are added from the ONE combobox, so both return focus there. */
   returnRelatedFocus(kind: ProductChildKind): void {
+    if (kind === "courses") {
+      this.shadowRoot!.querySelector<HTMLElement>("[name=product-course]")?.focus();
+      return;
+    }
     const control = kind === "extras" || kind === "options" ? "modifier" : kind;
     this.shadowRoot!.querySelector<HTMLElement>(`[data-test=add-${control}]`)?.focus();
   }
@@ -778,14 +788,7 @@ export class ProductEditor extends LitElement {
           false,
           this.draft.name,
         )}
-        ${this.renderRouting(
-          "product-course",
-          t("product.course"),
-          this.blankChoice(t("product.no_course"), this.courses, this.inherited?.courseId),
-          this.courses,
-          this.draft.courseId,
-          (id) => this.change("courseId", id),
-        )}
+        ${this.renderCourse()}
       </div>
     </wt-disclosure>`;
   }
@@ -801,17 +804,15 @@ export class ProductEditor extends LitElement {
     return choices.find(({ id }) => id === parentId)?.name ?? t("editor.missing_choice");
   }
 
-  private renderRouting(
-    name: string,
-    label: string,
-    noneLabel: string,
-    choices: ProductRoutingChoice[],
-    selected: string | null,
-    change: (id: string | null) => void,
-  ) {
+  private renderCourse() {
+    const noneLabel = this.blankChoice(
+      t("product.no_course"),
+      this.courses,
+      this.inherited?.courseId,
+    );
     return html`<wt-combobox
-      name=${name}
-      label=${label}
+      name="product-course"
+      label=${t("product.course")}
       search="auto"
       searchPlaceholder=${t("categories.combobox_search")}
       noResultsLabel=${t("categories.combobox_no_results")}
@@ -819,13 +820,21 @@ export class ProductEditor extends LitElement {
       ?show-empty-option=${this.inherited === null}
       .options=${[
         { value: "", label: noneLabel },
-        ...choices.map((choice) => ({ value: choice.id, label: choice.name })),
+        ...this.courses.map((choice) => ({ value: choice.id, label: choice.name })),
+        { value: EDIT_COURSES, label: t("editor.edit_courses"), primary: true },
       ]}
-      .value=${selected ?? ""}
-      error=${this.error(name)}
+      .value=${this.draft.courseId ?? ""}
+      error=${this.error("product-course")}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
-        change(event.detail.value || null);
+        if (event.detail.value !== EDIT_COURSES) {
+          this.change("courseId", event.detail.value || null);
+          return;
+        }
+        // Assigned on the element: the combobox set its own value to the row, and Lit does not
+        // re-commit the unchanged binding above.
+        (event.currentTarget as HTMLElement & { value: string }).value = this.draft.courseId ?? "";
+        this.related(event, "courses");
       }}
     ></wt-combobox>`;
   }
