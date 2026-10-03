@@ -2352,10 +2352,15 @@ export async function removeFromLine(
   const removedQuantity = (item: (typeof childItems)[number]) =>
     removed === null
       ? item.firedQuantity
-      : removed *
-        perDishOptionQuantity(
-          thousandthsToDecimal(item.lineQuantity),
-          thousandthsToDecimal(target.quantity),
+      : decimalToThousandths(
+          multiplyDecimal(
+            thousandthsToDecimal(removed),
+            divideDecimal(
+              thousandthsToDecimal(item.lineQuantity),
+              thousandthsToDecimal(target.quantity),
+              3,
+            ),
+          ),
         );
   const voided =
     target.firedAt !== null

@@ -5707,6 +5707,74 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
 });
 
 describe("a cancel's extras cascade (FIX 2)", () => {
+  it("voids the physical 50 g child amount when one of two fired dishes is cancelled", async () => {
+    const { cfg, cafeId, catalogueId, kgUnitId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const extrasStation = await createStation(tx, cfg, { name: "Emplatado" });
+      const extrasCategory = await createCategory(tx, { name: "Extras" });
+      await setClaim(tx, cfg, extrasCategory.id, { kind: "station", stationId: extrasStation.id });
+      const extra = await createProduct(tx, {
+        catalogueId,
+        categoryId: extrasCategory.id,
+        name: "Jamón",
+        unitId: kgUnitId,
+        unitPrice: "0.27",
+        vatClass: "general",
+      });
+      const list = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Jamón list",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 3,
+          active: true,
+          items: [
+            {
+              productId: extra.id,
+              portion: "0.050",
+              maxQuantity: 3,
+              preselected: false,
+              price: null,
+            },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
+      await addRound(tx, cfg, tabId, [
+        {
+          productId: cafeId,
+          quantity: "2",
+          extras: [{ listId: list.id, picks: [{ productId: extra.id, quantity: 1 }] }],
+        },
+      ]);
+      const fired = await tx.execute<{
+        quantity: number;
+        made_here: number;
+        fired_at: string | null;
+      }>(sql`
+        select ti.quantity, ti.made_here, ti.fired_at from ticket_items ti
+        join working_order_lines wol on wol.id = ti.working_order_line_id
+        where wol.working_order_id = ${tabId} and wol.parent_line_id is not null`);
+      expect(fired.rows).toHaveLength(1);
+      expect(fired.rows[0]).toMatchObject({ quantity: 100, made_here: 0 });
+      expect(fired.rows[0]!.fired_at).not.toBeNull();
+
+      await cancelLine(tx, cfg, tabId, 1, "1");
+
+      const notices = await tx.execute<{ quantity: number }>(sql`
+        select quantity from kitchen_notices
+        where working_order_id = ${tabId} and kind = 'void'
+        order by quantity`);
+      expect(notices.rows.map((row) => row.quantity)).toEqual([50, 1000]);
+    });
+  });
+
   it("splits a 50 g child with its dish without changing either frozen price", async () => {
     const { cfg, cafeId, catalogueId, kgUnitId } = await setupVenue();
     await withTransaction(db, async (tx) => {
