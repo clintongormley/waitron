@@ -87,8 +87,9 @@ function billRefusalText(error: unknown): string {
 }
 
 /**
- * Reader status reads in flight from every Payments screen, open or closed: a read can wait 250 s on
- * a silent card provider, and the browser opens only six connections to the box (backlog A260).
+ * At most two reader status reads at once, shared by every Payments screen in this tab, open or
+ * closed: a read can wait `CARD_PROVIDER_READ_LIMIT_MS` on a silent card provider, and the browser
+ * opens only six connections to the box (backlog A260).
  */
 let statusSlotsFree = 2;
 const statusSlotWaiters: (() => void)[] = [];
@@ -340,11 +341,6 @@ export class PaymentsScreen extends LitElement {
     },
   );
 
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this.#statusVersion++;
-  }
-
   override connectedCallback(): void {
     super.connectedCallback();
     // So each panel's `displayNameKey` resolves even before its module has registered its strings.
@@ -369,6 +365,11 @@ export class PaymentsScreen extends LitElement {
         this.billRefundLoadError = null;
       })
       .catch(() => undefined);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#statusVersion++;
   }
 
   #simulator(): boolean {

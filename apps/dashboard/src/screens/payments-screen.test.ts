@@ -117,6 +117,10 @@ async function mount(
   return { ...mounted, api };
 }
 
+function liveApi(overrides: Partial<DashboardApi> = {}): DashboardApi & { liveData: LiveData } {
+  return Object.assign(stubApi(overrides), { liveData: new LiveData() });
+}
+
 const q = (el: PaymentsScreen, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector);
 
@@ -1529,10 +1533,6 @@ describe("the readers table at phone width", () => {
 describe("the providers and readers once the server answers again", () => {
   const down = { code: "connection.failed" };
 
-  function liveApi(overrides: Partial<DashboardApi> = {}): DashboardApi & { liveData: LiveData } {
-    return Object.assign(stubApi(overrides), { liveData: new LiveData() });
-  }
-
   it("fills in a screen opened while its reads failed, and takes the failure's message away", async () => {
     const api = liveApi({
       listPaymentProviders: vi.fn().mockRejectedValueOnce(down).mockResolvedValue(PROVIDERS),
@@ -1721,8 +1721,8 @@ describe("the readers' status reads", () => {
   const readers = (count: number): ReaderRow[] =>
     Array.from({ length: count }, (_, i) => ({ ...READERS[0]!, id: `r-${i + 1}` }));
 
-  // The limit is shared by every Payments screen, so a read a case leaves waiting would hold a slot
-  // in the next case.
+  // The slots are shared, so screens go first: a queued read then gives up. Answering first would let
+  // it start a request nobody answers, holding both slots into the next case.
   const unanswered: (() => void)[] = [];
   afterEach(() => {
     cleanupWidgets();
@@ -1791,13 +1791,10 @@ describe("the readers' status reads", () => {
 
   it("starts no third read when a refresh asks again while two are still waiting", async () => {
     const held = heldStatuses();
-    const api = Object.assign(
-      stubApi({
-        listReaders: vi.fn().mockResolvedValueOnce(readers(4)).mockResolvedValue(readers(5)),
-        readerStatus: held.readerStatus,
-      }),
-      { liveData: new LiveData() },
-    );
+    const api = liveApi({
+      listReaders: vi.fn().mockResolvedValueOnce(readers(4)).mockResolvedValue(readers(5)),
+      readerStatus: held.readerStatus,
+    });
     const { el } = await mount(api);
     expect(held.readerStatus).toHaveBeenCalledTimes(2);
 

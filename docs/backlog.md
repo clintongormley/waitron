@@ -1264,7 +1264,7 @@ Mailpit over HTTP with no limit of their own (`apps/server/src/mailpit-client.ts
 container on the box itself (`deploy/compose.yml`, the `mailpit` service), not an outside service,
 so they keep 30 seconds. One read that would wait on a card provider, the alerts list, today fails
 before it reaches one (A258). The Payments screen asks at most two readers for their status at a
-time (A260).
+time in each browser tab (A260).
 
 **A low card-reader battery is never alerted: the alerts list asks the card provider inside a
 transaction, and the provider's key read is refused (A258, found while checking lane A's W18c,
@@ -1300,7 +1300,7 @@ The SumUp pairing dialog (`#pollTick`, `packages/payments-sumup/src/dashboard/su
 line 132) treats any failed status read as a failed pairing: it says "Pairing did not work. Check
 the code and try again." and unpairs the reader, even when the read only ran out of time and the
 pairing may have gone through. The Payments screen's reader details (`#loadStatuses`,
-`apps/dashboard/src/screens/payments-screen.ts`, line 405) marks the row as an error and shows its
+`apps/dashboard/src/screens/payments-screen.ts`) marks the row as an error and shows its
 generic no-details text and "Unknown". Both predate W18c: they catch every rejection without its
 code. Measured by the review: injecting `{ code: "connection.timed_out" }` into the existing
 rejection fixtures left both screens' generic-message assertions passing
@@ -1310,14 +1310,21 @@ unpairs the row when a poll is rejected"; `apps/dashboard/src/screens/payments-s
 code and show `codeMessage(code)`, and decide separately whether a timed-out poll should unpair.
 
 **Several card readers' status reads at once can use up the browser's connections to the box
-(A260, found by W18c's review, 2026-10-03) — DONE (W18c, owner's option (b)): at most two reader status reads are in
-flight from every Payments screen together, including one closed while its reads still wait; a
-load a refresh has replaced, or a closed screen, asks no further readers (`takeStatusSlot`,
-`apps/dashboard/src/screens/payments-screen.ts`). Guard: the "readers' status reads" cases in
-`apps/dashboard/src/screens/payments-screen.test.ts`; at least one of them failed under each of
-four changes tried one at a time: the limit raised to 99, the replaced-load check removed, the
-closed-screen check removed, the slot never given back. Not
-measured in a browser with the limit in place, and other screens' reads are not limited.** What it was: with five or more active card
+(A260, found by W18c's review, 2026-10-03) — DONE (lane A's W18c, owner's option (b)).** At most
+two of the readers table's status reads are in flight at once from every Payments screen in one
+browser tab, including one closed while its reads still wait (`takeStatusSlot`,
+`apps/dashboard/src/screens/payments-screen.ts`); a load a refresh has replaced, or a closed screen,
+starts no further status read (the `isConnected` check in `#loadStatuses`). Limits: each tab has its
+own two, and the review measured three tabs of the real screen in headless Chromium against held
+HTTP/1.1 responses: six status requests reached the server, and an unrelated read was still
+unanswered after 3000 ms until one status request was released. The SumUp pairing dialog's status
+reads (`#pollTick` and `#unpairOrphan`, `packages/payments-sumup/src/dashboard/sumup-add-reader.ts`)
+are outside the limit, other screens' reads are not limited, and it was not measured in a real
+browser against a real silent provider. Guard: the "readers' status reads" cases in
+`apps/dashboard/src/screens/payments-screen.test.ts`; at least one of them failed under each of five
+changes tried one at a time: the limit raised to 99, the replaced-load check removed, the
+closed-screen version bump removed, the slot never given back, and the `isConnected` check removed.
+What it was: with five or more active card
 readers and a stalled provider, the Payments screen's status reads (one per active reader, all at
 once, `#loadStatuses` in `apps/dashboard/src/screens/payments-screen.ts`) can hold every connection
 the browser allows to the box for up to 250 seconds, so other dashboard requests wait behind them.
