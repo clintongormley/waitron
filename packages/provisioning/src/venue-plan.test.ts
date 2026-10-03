@@ -201,6 +201,14 @@ describe("planVenue", () => {
     expect(node).toMatchObject({ filingModule: "verifactu", taxModule: "vat" });
   });
 
+  it("plans a short day cutover in the same stored form as its long form", () => {
+    const short = planVenue(
+      request({ location: { ...request().location, dayCutover: "06:00" } }),
+      MODULES,
+    ).find((action) => action.kind === "create-location");
+    expect(short).toMatchObject({ dayCutover: "06:00:00" });
+  });
+
   it("emits a standard series and a rectificative series with the requested codes", () => {
     const series = planVenue(request(), MODULES).filter((a) => a.kind === "create-series");
     expect(series).toEqual([

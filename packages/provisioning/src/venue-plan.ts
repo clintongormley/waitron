@@ -99,6 +99,11 @@ export type VenueAction =
    * `summary` is the seed's own one-line description, so the plan summary reads without the list. */
   | { kind: "seed-module"; module: string; summary: string };
 
+/** Keep the two accepted spellings equal when an existing venue is provisioned again. */
+export function normalizeDayCutover(value: string): string {
+  return /^\d{2}:\d{2}$/.test(value) ? `${value}:00` : value;
+}
+
 /**
  * Pure: request → the flat action list applyVenue runs, or a throw.
  *
@@ -112,6 +117,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
   const country = request.country.trim().toUpperCase();
   const taxId = request.taxId.trim().toUpperCase();
   const locales = request.location.invoiceLocales;
+  const dayCutover = normalizeDayCutover(request.location.dayCutover);
   if (locales.length < 1 || locales.length > 2) {
     throw new AppError("provisioning.invalid_locales", { count: locales.length });
   }
@@ -174,7 +180,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
       city: request.location.city,
       province: request.location.province,
       timeZone: request.location.timeZone,
-      dayCutover: request.location.dayCutover,
+      dayCutover,
     },
     { kind: "create-till", name: request.tillName },
     {
