@@ -343,13 +343,17 @@ the 2026-09-30 folders design; what remains:
   `daily-close-z-demo.ts`, `modelo-303-demo.ts`) and `apps/server/src/fiscal-readiness-runner.ts`
   file sales without the issuance pass, so seeded demo lines carry no product id, classification or
   gross, and the Sales screen's category report shows every seeded line under Not recorded.
-- **The category sales report (#738).** The at-time-of-sale report is fetched again whenever the
-  catalogue is edited: the dashboard declares a live query's dependencies per query NAME
-  (`apps/dashboard/src/api/live-queries.ts`) and `getCategorySales` serves both modes. Fix: one
-  query name per mode. `wt-button` disables only its inner `<button>`, so a scripted click on the
-  host still reaches a click handler; the Sales screen's print handler checks for itself, other
-  screens relying on `?disabled` alone have not been checked. The spec (§6) wanted the category
-  analysis printable with the daily close, but no daily-close print exists.
+- **The category sales report (#738).** Done (W10): the at-time-of-sale report no longer
+  refetches when the catalogue is edited — `dependenciesOf` (`apps/dashboard/src/api/live-queries.ts`)
+  gives that mode the sale tables and `locations` alone, rather than a second query name, so the
+  Sales screen's calls kept their shape. Still open: the current mode's list names
+  `content_languages`, which nothing on the report's path has read since #968 removed
+  `readContentLanguages` from `currentClassifications`, so a content-language change refetches it
+  for nothing; `live-queries.test.ts` pins that list. `wt-button` disables only its inner
+  `<button>`, so a scripted click on the host still reaches a click handler; the Sales screen's
+  print handler checks for itself, other screens relying on `?disabled` alone have not been
+  checked. The spec (§6) wanted the category analysis printable with the daily close, but no
+  daily-close print exists.
 - **Photo-holding tables are named by hand in several places in `packages/media`** (the triggers,
   `listImageUsages`, `countUsages`, the live-query dependencies, the `before` lists in
   `module.ts`, the `ImageUsage` unions), and only a comment keeps `countUsages` and

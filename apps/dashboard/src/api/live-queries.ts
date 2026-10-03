@@ -270,6 +270,28 @@ export type DashboardQueryName = keyof typeof QUERY_DEPENDENCIES;
 type Arguments<N extends DashboardQueryName> = Parameters<DashboardApi[N]>;
 type Result<N extends DashboardQueryName> = Awaited<ReturnType<DashboardApi[N]>>;
 
+const CURRENT_CLASSIFICATION_READS: readonly string[] = [
+  "products",
+  "categories",
+  "category_details",
+  "content_languages",
+];
+
+function dependenciesOf<N extends DashboardQueryName>(
+  name: N,
+  args: Arguments<N>,
+): readonly string[] {
+  // At time of sale names each line's category from the snapshot the line recorded
+  // (`computeCategorySales`, packages/reporting/src/category-sales.ts), so no catalogue edit moves
+  // it. A subset of the declared list, so `scripts/live-subscriptions.test.ts` still covers it.
+  if (name === "getCategorySales" && (args as readonly unknown[])[2] === "at_time_of_sale") {
+    return QUERY_DEPENDENCIES.getCategorySales.filter(
+      (type) => !CURRENT_CLASSIFICATION_READS.includes(type),
+    );
+  }
+  return QUERY_DEPENDENCIES[name];
+}
+
 export function dashboardQuery<N extends DashboardQueryName>(
   api: DashboardApi,
   name: N,
@@ -278,7 +300,7 @@ export function dashboardQuery<N extends DashboardQueryName>(
   let initial = true;
   return {
     key: JSON.stringify([name, args]),
-    dependencies: QUERY_DEPENDENCIES[name].map((type) => ({ type })),
+    dependencies: dependenciesOf(name, args).map((type) => ({ type })),
     read: () => {
       const client = initial ? api : (api.background ?? api);
       initial = false;
