@@ -172,7 +172,7 @@ describe("a correction is filed at the cent amounts its rows store", () => {
     expect(s.desglose?.map((d) => d.BaseImponibleOimporteNoSujeto)).toEqual(["-0.83"]);
     // `expectFiledAsStored` checks the huella only against the record's own fields; only a pinned
     // literal catches a two-decimal correction filing different amounts.
-    expect(s.huella).toBe("4264CA0E302E2593216EDB8B133C26A49EAFA05BBB92E6457BC4654FD0A80832");
+    expect(s.huella).toBe("76247AD40A37467C3228CB701C0E7200F681134C217B628328E2441FAEEE19F2");
     expectFiledAsStored(s);
   });
 });

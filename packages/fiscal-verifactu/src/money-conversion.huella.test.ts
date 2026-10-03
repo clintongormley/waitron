@@ -20,7 +20,8 @@ import type { RegistroRow } from "./registro-row.js";
  *
  * Every expected value below is a LITERAL captured by running this file against the code BEFORE
  * the conversion. Computing them instead would run the very arithmetic under test. A failure here
- * after the conversion is a real rounding difference: fix the code, never these literals.
+ * after the conversion is a real rounding difference: fix the code, never these literals. The two
+ * huellas were re-captured when the minted NIFs gained correct check letters (receipt: that commit).
  */
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -75,7 +76,7 @@ describe("the money conversion moves no byte of a fiscal record", () => {
         CuotaRepercutida: "0.21",
       }),
     ]);
-    expect(row.huella).toBe("A1AF497FA4C00C9AD38004429A5901133312F97335BD76E216C917D0C93D8626");
+    expect(row.huella).toBe("8F505DD0867F7F2938C45AB9CB835B20F1027C8DA02AA9D038CADEED7E23FEFD");
     expect(computeHuella(fromRegistroRow(row))).toBe(row.huella);
   });
 
@@ -135,7 +136,7 @@ describe("the money conversion moves no byte of a fiscal record", () => {
         CuotaRepercutida: "0.01",
       }),
     ]);
-    expect(row.huella).toBe("649EADFDC7E12F782A58439BD7017C17D30FE65F5036C7A6BC9486107083CAE8");
+    expect(row.huella).toBe("3B86F61A964E59AB0E9A0DF0B48E1B0DE2C7A1382B352A8AA9284C5C921EBCC3");
     expect(computeHuella(fromRegistroRow(row))).toBe(row.huella);
   });
 });

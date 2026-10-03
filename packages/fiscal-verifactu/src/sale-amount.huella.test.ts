@@ -192,7 +192,7 @@ describe("an ordinary sale is filed at the cent amounts its rows store", () => {
     expect(s.cuotaTotal).toBe("0.21");
     // `expectFiledAsStored` checks the huella only against the record's own fields; only a pinned
     // literal catches a two-decimal sale filing different amounts.
-    expect(s.huella).toBe("B4540FA16F516868E59C7F895024E07FCE49F16D776F2E51B3AC43BDE4C51B3F");
+    expect(s.huella).toBe("01FA0378A1F5C69449F98990DDA088954D38B699D46CB7CAB31D1F344374D9F5");
     expectFiledAsStored(s);
   });
 });
@@ -220,7 +220,7 @@ describe("a substitution is filed at the cent amounts its rows store", () => {
 
     expect(s.importeTotal).toBe("1.21");
     expect(s.cuotaTotal).toBe("0.21");
-    expect(s.huella).toBe("0CFB9F8B25EA37EC4CE747A3F30E6D8ACEC29C083F23FEB11A4CCD03989D1C5F");
+    expect(s.huella).toBe("9543ABD48DF033B023EB35B38D85D83B8064E453317418683A19D6B17C323C90");
     expectFiledAsStored(s);
   });
 });
