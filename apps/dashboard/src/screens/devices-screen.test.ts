@@ -447,6 +447,17 @@ describe("devices-screen", () => {
     expect(text(el, "[data-test=device-station-pass]")).toBe("Punto de seguimiento: Pass");
   });
 
+  it("identifies a kitchen screen whose watcher has been removed", async () => {
+    const removed = { ...devices[0]!, id: "removed", stationId: null, watcherId: "w1" };
+    const api = stubApi({
+      listDevices: vi.fn().mockResolvedValue([removed]),
+      listWatchers: vi.fn().mockResolvedValue([]),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    expect(text(el, "[data-test=device-station-removed]")).toBe("Punto de seguimiento eliminado");
+  });
+
   it("resolves a null profile/station to the neutral placeholder and a null last-seen to Never", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
