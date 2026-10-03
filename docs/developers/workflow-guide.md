@@ -39,8 +39,8 @@ message described none of them. Before committing in a shared worktree, check th
 `git diff --cached --name-only` is empty before you stage, or pass the paths to the commit itself
 (`git commit -- <paths>`). Tests collide too: a run started while another agent ran Vitest in the
 same package of the same worktree printed `no tests` or nothing, and passed when re-run
-(2026-09-29; [testing-guide.md](testing-guide.md)). On 2026-10-03 a reviewer of this
-branch ran one check in a disposable repository: a commit took two paths staged separately into the
+(2026-09-29; [testing-guide.md](testing-guide.md)). On 2026-10-03 a reviewer of
+#1139 ran one check in a disposable repository: a commit took two paths staged separately into the
 index. Nothing else here was re-run.
 
 ## Commits, pull requests and merging

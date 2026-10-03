@@ -7081,9 +7081,10 @@ Open:
   1b), not through the supervisor.
 
 **A130, A133 and A135 — a sale can wait behind Litestream's own checkpoint (DONE: A130 #868, A133
-#889, A135 #907 and #917).** The pause test's one failure on `main` (run 36559470238) was the CI
-runner's disk, not the bucket, and the stream tests' CI step now sets `TMPDIR=/dev/shm`. The figures
-are in [testing-guide.md](developers/testing-guide.md), "A sale can wait behind Litestream's own
+#889, A135 #907 and #917).** A probe that reproduced the pause test's one failure on `main` (run
+36559470238) on one runner in 20 found the CI runner's disk stalling, not the bucket, and the stream
+tests' CI step now sets `TMPDIR=/dev/shm`. The figures are in
+[testing-guide.md](developers/testing-guide.md), "A sale can wait behind Litestream's own
 checkpoint".
 - **How A133's probe ran** (a throwaway branch, since deleted; workflow run 36615242523, 12
   GitHub-hosted runners): it booted the real server on a provisioned venue and sold through

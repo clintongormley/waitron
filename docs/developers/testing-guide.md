@@ -819,7 +819,7 @@ unset `AI_AGENT` and `CLAUDECODE` for the run (std-env checks others too): the o
 with either set and shown with neither; passing
 `--reporter=default` instead has not been measured.
 
-## Under the default, verbose or dot reporter, a run that shows no `Tests` count is no evidence that anything passed
+## A run that shows no `Tests` count is no evidence that anything passed
 
 Measured 2026-10-03 with Vitest 4.1.11 in `packages/shared`: `vitest run src/capitalise.test.ts
 --reporter=basic` printed no `Tests` line and exited 1, because `basic` is not a Vitest 4 reporter;
@@ -832,11 +832,13 @@ three lines are blank and `tail -3` showed only those, while the pipe's exit sta
 (a glob such as `packages/*/drizzle/`) ends the comment early, so the file fails to parse and every
 suite reports `Tests no tests` (2026-09-23); and a run started while another agent ran Vitest in the
 same package of the same worktree printed `no tests` or nothing, and passed when re-run
-(2026-09-29). Under those reporters, read the count; treat a missing or zero count as a broken run
-and look at the INPUT — the command, the file, what else is running — before the filter. Not every
-reporter prints the count: `--reporter=hanging-process` ran a test, printed nothing and exited 0
-(run 2026-10-03 in `packages/shared`), so with a reporter other than the default, verbose or dot
-one, read that reporter's own result.
+(2026-09-29). Under a reporter that prints the count (`dot` is the one measured here), read the
+count; treat a missing or zero count as a broken run and look at the INPUT — the command, the file,
+what else is running — before the filter. Not every reporter prints the count:
+`--reporter=hanging-process` ran a test, printed nothing and exited 0 (run 2026-10-03 in
+`packages/shared`), and it is not the only one (a reviewer of #1139 ran other built-in reporters
+that day that printed none), so with a reporter that does not print a count, read that reporter's
+own result.
 
 **Shelling out to git from a test**
 
@@ -998,10 +1000,14 @@ such file today, and [ci-and-gates.md](ci-and-gates.md) records what naming it w
 
 ## Prove a guard by deletion, and confirm a negative control fails for the reason you think.
 
-A deletion proof says nothing about what the guard wrongly REFUSES; that needs a case in the other
-direction. A write-queue re-entrancy guard written as a flag passed every case in its own file,
-including the one about queued callers (whose three callers are dispatched in ONE tick, before any
-body starts, so the flag is still false when each checks it), and turned every concurrent request in
+Delete the guarded code, run the guard, and check that it fails with the message the guard was
+written to report, not some other breakage.
+
+## A proof by deletion says nothing about what the guard wrongly REFUSES, and that needs its own case.
+
+A write-queue re-entrancy guard written as a flag passed every case in its own file, including the
+one about queued callers (whose three callers are dispatched in ONE tick, before any body starts, so
+the flag is still false when each checks it), and turned every concurrent request in
 `packages/payments` into a 500. The distinction the flag could not make — nested INSIDE a running
 body, versus merely waiting BEHIND one — is now read from asynchronous context, and the missing case
 is the second caller in `packages/store/src/write-queue.test.ts` ("serves a caller that arrives after
@@ -1047,7 +1053,7 @@ Each way of swapping the old version in and back out cost work:
 - Two agents that pick the same hand-named folder under `/tmp` write over each other's files;
   `mktemp -d` gives each a folder of its own.
 
-On 2026-10-03 a reviewer of this branch ran two checks in a disposable repository: a stash made in
+On 2026-10-03 a reviewer of #1139 ran two checks in a disposable repository: a stash made in
 one worktree appeared in the other's `git stash list`, and the remedy worked — a detached
 `git worktree add` held the old content while the original working file kept its uncommitted edit.
 Nothing else here was re-run.

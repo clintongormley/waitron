@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
  * or below one a database has already recorded is a migration that will never run — silently, with
  * no error.
  *
- * In `drizzle-orm@0.45.2`, `sqlite-core/dialect.js` is the dialect that runs
+ * In `drizzle-orm@0.45.3`, `sqlite-core/dialect.js` is the dialect that runs
  * (`packages/db/src/migrate.ts` imports `drizzle-orm/better-sqlite3/migrator`).
  * `SQLiteSyncDialect.migrate` takes the watermark with
  * `SELECT id, hash, created_at FROM <table> ORDER BY created_at DESC LIMIT 1` (lines 653-655)
@@ -73,8 +73,8 @@ describe("every migration set's journal is strictly increasing", () => {
         true,
       );
     }
-    // Loose floors, under today's numbers. The entry floor is a total over every set because half the
-    // sets carry a single entry or none.
+    // Loose floors, under today's numbers. The entry floor is a total over every set because a set may
+    // carry a single entry or none.
     expect(MANIFEST.length).toBeGreaterThanOrEqual(10);
     const entryTotal = MANIFEST.reduce((total, set) => total + journalEntries(set.from).length, 0);
     expect(entryTotal).toBeGreaterThanOrEqual(8);

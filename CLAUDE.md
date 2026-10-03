@@ -243,7 +243,8 @@ hook, or how tests are scheduled:
   leaves `synchronous` at full. Cost: it timed out in CI five times. Nothing guards it. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
 - **The stream loop and pause tests' CI step sets `TMPDIR=/dev/shm`, in CI only.** Cost: a main run
-  failed the pause test's 1000 ms bound when a disk stall held one commit for about a second. Guard: `scripts/ci-workflow.test.mjs`, weaker than
+  failed the pause test's bound of at least 1000 ms; a probe reproduced it on one runner in 20,
+  catching a disk stall that held one commit for about a second. Guard: `scripts/ci-workflow.test.mjs`, weaker than
   its name — it reads `ci.yml` as text, so a step an `if:` switches off, or a `run:` that sets
   `TMPDIR` again, passes; and it never reads the step's test files, so one that makes its scratch
   somewhere other than `tmpdir()` passes too. Receipt: [testing-guide.md](docs/developers/testing-guide.md),
@@ -773,9 +774,10 @@ browser test** — most of these rules exist because a test passed while proving
 - **Under an AI agent (`AI_AGENT` or `CLAUDECODE` set), Vitest hides a passing test's console
   output**; unset both to see it. See
   [testing-guide.md](docs/developers/testing-guide.md#vitest-hides-a-passing-tests-console-output-under-an-ai-agent).
-- **Under the default, verbose or dot reporter, a run that shows no `Tests` count is no evidence
-  that anything passed, whatever its exit status.** Read the count, never a blank output or the exit
-  status of a pipe. Cost: an unknown reporter name was read as a clean pass, and a `*/` inside a doc
+- **A Vitest run that shows no `Tests` count is no evidence that anything passed, whatever its exit
+  status** — an unknown `--reporter` name prints none, and some real reporters never print one
+  (`hanging-process` printed nothing, measured 2026-10-03); under those, read the reporter's own
+  result. Read the count, never a blank output or the exit status of a pipe. Cost: an unknown reporter name was read as a clean pass, and a `*/` inside a doc
   comment and a run beside another agent's in the same package each reported no tests without saying
   why. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md).
@@ -896,7 +898,8 @@ browser test** — most of these rules exist because a test passed while proving
   a regular expression, and an import-like string can still fake an edge.
 - **Vitest 4 ships no default coverage excludes at all.** What scopes a package's report now is its own `coverage.include`.
   `include`/`exclude` still replace rather than merge, and a config measuring nothing still exits 0
-  with the thresholds intact, so read the per-file table rather than the exit code.
+  with the thresholds intact, so read the per-file table rather than the exit code. See
+  [testing-guide.md](docs/developers/testing-guide.md).
 - **A package config must name its own source tree in `coverage.include`, or an untested file stops
   being counted.** Without one, Vitest 4 counts only the files a test loaded, so a file nobody
   imports is invisible rather than a zero in the denominator: it can never pull the ratio down, and
@@ -916,7 +919,8 @@ browser test** — most of these rules exist because a test passed while proving
   opened it. Open it and LOOK, in both themes and at phone width. A browser-mode package has the
   harness already; `apps/server`'s string-rendered pages have none, so write the rendered string to a
   file and open it with the workspace's playwright Chromium.
-- **`toMatchObject` checks only the keys you list**; a key you never list is never checked at all.
+- **`toMatchObject` checks only the keys you list**; a key you never list is never checked at all. See
+  [testing-guide.md](docs/developers/testing-guide.md).
 - **A default you did not state is not a value you tested**, and a library default can be computed
   from the RUNNING runtime, where reading the types tells you the wrong answer. State it at every call
   site that shares it — the two ends of one ceremony drift apart while each looks right. Guard: the
@@ -1018,7 +1022,7 @@ browser test** — most of these rules exist because a test passed while proving
 
 The commands, the dev stack and the receipts are in
 [workflow-guide.md](docs/developers/workflow-guide.md). **Model selection is not a waitron rule** —
-it lives in the global `~/.claude/CLAUDE.md` and is shared by every repo. When CODEX drives, the roles reverse and Codex implements — so establish who is driving
+it lives in the global `~/.claude/CLAUDE.md` and is shared by every repo. When CODEX drives, the roles reverse: Codex implements and Claude reviews — so establish who is driving
 before treating an implementation as a rule violation.
 
 - **Never commit directly to `main`.** Feature work happens in a worktree

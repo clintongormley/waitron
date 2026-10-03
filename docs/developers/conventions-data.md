@@ -1475,7 +1475,7 @@ against such an edit: the 2026-10-02 one passed `scripts/migrations-match-schema
 
 Never from a position in the journal file, so an entry whose `when` sits AT OR BELOW one the database
 already recorded never runs, and DRIZZLE raises nothing — it applies part of a set and returns
-cleanly. The dialect that runs is `sqlite-core`: in `drizzle-orm@0.45.2/sqlite-core/dialect.js`,
+cleanly. The dialect that runs is `sqlite-core`: in `drizzle-orm@0.45.3/sqlite-core/dialect.js`,
 `SQLiteSyncDialect.migrate` takes the watermark with
 `SELECT id, hash, created_at FROM <table> ORDER BY created_at DESC LIMIT 1` at lines 653-655 and
 applies a migration only when
@@ -1514,8 +1514,8 @@ that every journal is on disk.
 Drizzle's migrator splits each file on `--> statement-breakpoint` and keeps every piece, empty ones
 included (`drizzle-orm` 0.45.3, `migrator.js`, the `query.split(...)` in `readMigrationFiles`), and
 this engine refuses an empty statement: measured 2026-10-03 on `node:sqlite`, Node v26.7.0,
-`prepare("")` and `prepare("\n")` each threw `statement has been finalized`, while
-`prepare("create table t(a)\n")` ran. So a hand-written migration whose last statement ends in a
+`prepare("").run()` and `prepare("\n").run()` each threw `statement has been finalized`, while
+`prepare("create table t(a)\n").run()` ran. So a hand-written migration whose last statement ends in a
 breakpoint fails with that message, which names nothing in the file (2026-10-01).
 
 ## A generated table rebuild can copy a new column out of the old table

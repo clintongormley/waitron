@@ -200,6 +200,8 @@ describe("pre-push fast checks", () => {
         const skipLines = result.stdout.split("\n").filter((line) => line.includes("--no-verify"));
         expect(skipLines).toHaveLength(1);
         expect(skipLines[0]).toContain("owner only");
+        expect(skipLines[0]).toContain("in an emergency");
+        expect(skipLines[0]).toContain("agents never");
       },
       { fail: "lint" },
     );
