@@ -1703,6 +1703,22 @@ test("a hovered disabled option does not paint the hover background a choosable 
   expect(getComputedStyle(rye!).backgroundColor).toBe("rgb(4, 5, 6)");
 });
 
+test("a disabled primary row draws its label and icon in the muted token, not the primary one", async () => {
+  const el = await mountWith('<wt-combobox label="Members"></wt-combobox>', [
+    { value: "new-staff", label: "New member…", icon: "leaf", primary: true, disabled: true },
+    { value: "new-station", label: "New station…", icon: "leaf", primary: true },
+  ]);
+  host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-primary-text", "rgb(7, 8, 9)");
+  await userEvent.click(fieldParts(el).trigger);
+  const [disabled, enabled] = optionRows(el);
+  expect(disabled!.getAttribute("aria-disabled")).toBe("true");
+  expect(getComputedStyle(disabled!).color).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(disabled!.querySelector("wt-icon")!).color).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(enabled!).color).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(enabled!.querySelector("wt-icon")!).color).toBe("rgb(7, 8, 9)");
+});
+
 test("clicking a disabled option chooses nothing, sends no change and leaves the list open", async () => {
   const el = await mountWith('<wt-combobox label="Product"></wt-combobox>', WITH_DISABLED);
   const changes = changesOf(el);

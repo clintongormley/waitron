@@ -15,8 +15,9 @@ export interface ComboboxOption {
   group?: string;
   /** A row that sends `wt-combobox-action` and never becomes the value. */
   action?: true;
-  /** Draws the row's label and icon in `--wt-color-primary-text`, so a row that makes or opens
-   * something, rather than choosing a value, does not read as one more item of the list. */
+  /** Draws the row's label and icon in `--wt-color-primary-text` unless the row is disabled, so a
+   * row that makes or opens something, rather than choosing a value, does not read as one more
+   * item of the list. */
   primary?: true;
   /** A second, muted line under the label in the open list, and the row's accessible description.
    * The closed field shows the label alone. */
@@ -208,7 +209,8 @@ export class WtCombobox extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      .option[aria-disabled="true"] {
+      .option[aria-disabled="true"],
+      .option[aria-disabled="true"] .icon {
         color: var(--wt-color-text-muted);
         cursor: not-allowed;
       }
@@ -231,8 +233,8 @@ export class WtCombobox extends LitElement {
       }
 
       /* The icon names its own colour, so it is painted here too rather than inheriting. */
-      .option.primary,
-      .option.primary .icon {
+      .option.primary:not([aria-disabled="true"]),
+      .option.primary:not([aria-disabled="true"]) .icon {
         color: var(--wt-color-primary-text);
       }
 
