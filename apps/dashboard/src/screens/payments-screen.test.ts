@@ -1,8 +1,14 @@
 import { page } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { html } from "lit";
 import type { CardProviderPanel } from "@waitron/dashboard-kit";
-import { LiveData, registerCatalogue, tableNoMatches } from "@waitron/dashboard-kit";
+import {
+  createRequest,
+  LiveData,
+  registerCatalogue,
+  tableNoMatches,
+  type FetchLike,
+} from "@waitron/dashboard-kit";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
@@ -109,6 +115,10 @@ async function mount(
   });
   await flush(mounted.el);
   return { ...mounted, api };
+}
+
+function liveApi(overrides: Partial<DashboardApi> = {}): DashboardApi & { liveData: LiveData } {
+  return Object.assign(stubApi(overrides), { liveData: new LiveData() });
 }
 
 const q = (el: PaymentsScreen, selector: string) =>
@@ -348,6 +358,55 @@ describe("payments-screen", () => {
 
     expect(q(el, "[role=alert]")).not.toBeNull();
     expect(q(el, "[role=alert]")?.textContent).not.toContain("server.internal");
+  });
+
+  it("says a read that ran out of time is taking too long, not that the connection failed", async () => {
+    // A fetch that never answers on its own, and rejects as a real fetch does when it is aborted.
+    const fetchImpl = vi.fn<FetchLike>(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () =>
+            reject(new DOMException("The operation was aborted.", "AbortError")),
+          );
+        }),
+    );
+    const request = createRequest({ fetchImpl });
+    const api = stubApi({
+      listPaymentProviders: vi.fn(() =>
+        request<PaymentProviderRow[]>("/management-api/payments/providers", "GET"),
+      ),
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const mounting = mount(api);
+      await vi.advanceTimersByTimeAsync(30_000);
+      const { el } = await mounting;
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+
+      expect(q(el, "[role=alert]")?.textContent).toBe(
+        "Waitron is taking too long to answer. Try again in a moment.",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still says the connection failed when a read cannot reach the server", async () => {
+    const request = createRequest({
+      fetchImpl: vi.fn<FetchLike>().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const { el } = await mount(
+      stubApi({
+        listPaymentProviders: vi.fn(() =>
+          request<PaymentProviderRow[]>("/management-api/payments/providers", "GET"),
+        ),
+      }),
+    );
+
+    expect(q(el, "[role=alert]")?.textContent).toBe(
+      "This browser could not connect to Waitron. Check your connection and try again.",
+    );
   });
 
   it("surfaces a payment.provider_in_use rejection as its localized copy", async () => {
@@ -1474,10 +1533,6 @@ describe("the readers table at phone width", () => {
 describe("the providers and readers once the server answers again", () => {
   const down = { code: "connection.failed" };
 
-  function liveApi(overrides: Partial<DashboardApi> = {}): DashboardApi & { liveData: LiveData } {
-    return Object.assign(stubApi(overrides), { liveData: new LiveData() });
-  }
-
   it("fills in a screen opened while its reads failed, and takes the failure's message away", async () => {
     const api = liveApi({
       listPaymentProviders: vi.fn().mockRejectedValueOnce(down).mockResolvedValue(PROVIDERS),
@@ -1659,5 +1714,158 @@ describe("the providers and readers once the server answers again", () => {
     await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(2));
     await flush(el);
     expect(api.readerStatus).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("the readers' status reads", () => {
+  const readers = (count: number): ReaderRow[] =>
+    Array.from({ length: count }, (_, i) => ({ ...READERS[0]!, id: `r-${i + 1}` }));
+
+  // The slots are shared, so screens go first: a queued read then gives up. Answering first would let
+  // it start a request nobody answers, holding both slots into the next case.
+  const unanswered: (() => void)[] = [];
+  afterEach(() => {
+    cleanupWidgets();
+    for (const answer of unanswered.splice(0)) answer();
+  });
+
+  function heldStatuses(): {
+    readerStatus: Mock<(id: string) => Promise<ReaderStatusView>>;
+    answer: (id: string) => void;
+  } {
+    const waiting: { id: string; resolve: () => void }[] = [];
+    const readerStatus = vi.fn(
+      (id: string) =>
+        new Promise<ReaderStatusView>((resolve) => {
+          const entry = { id, resolve: () => resolve({ online: true } as ReaderStatusView) };
+          waiting.push(entry);
+          unanswered.push(entry.resolve);
+        }),
+    );
+    return {
+      readerStatus,
+      answer: (id) => {
+        for (const entry of waiting.filter((e) => e.id === id)) {
+          waiting.splice(waiting.indexOf(entry), 1);
+          entry.resolve();
+        }
+      },
+    };
+  }
+
+  it("asks at most two readers at a time, so a silent card provider cannot hold every connection to the box", async () => {
+    const held = heldStatuses();
+    const { el } = await mount(
+      stubApi({
+        listReaders: vi.fn().mockResolvedValue(readers(6)),
+        readerStatus: held.readerStatus,
+      }),
+    );
+    await flush(el);
+    expect(held.readerStatus.mock.calls.map(([id]) => id)).toEqual(["r-1", "r-2"]);
+
+    held.answer("r-1");
+    await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledTimes(3));
+    await flush(el);
+    expect(held.readerStatus).toHaveBeenCalledTimes(3);
+    expect(qCell(el, "[data-test=reader-status-r-1]")?.textContent).toBe("Online");
+  });
+
+  it("asks every active reader in the end", async () => {
+    const held = heldStatuses();
+    const { el } = await mount(
+      stubApi({
+        listReaders: vi.fn().mockResolvedValue(readers(6)),
+        readerStatus: held.readerStatus,
+      }),
+    );
+    for (let i = 1; i <= 6; i++) {
+      await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledWith(`r-${i}`));
+      held.answer(`r-${i}`);
+    }
+    await vi.waitFor(() =>
+      expect(qCell(el, "[data-test=reader-status-r-6]")?.textContent).toBe("Online"),
+    );
+    expect(held.readerStatus).toHaveBeenCalledTimes(6);
+  });
+
+  it("starts no third read when a refresh asks again while two are still waiting", async () => {
+    const held = heldStatuses();
+    const api = liveApi({
+      listReaders: vi.fn().mockResolvedValueOnce(readers(4)).mockResolvedValue(readers(5)),
+      readerStatus: held.readerStatus,
+    });
+    const { el } = await mount(api);
+    expect(held.readerStatus).toHaveBeenCalledTimes(2);
+
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(held.readerStatus).toHaveBeenCalledTimes(2);
+
+    held.answer("r-1");
+    held.answer("r-2");
+    await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledTimes(4));
+    await flush(el);
+    expect(held.readerStatus.mock.calls.map(([id]) => id)).toEqual(["r-1", "r-2", "r-1", "r-2"]);
+  });
+
+  it("starts no third read when the screen is closed and opened again while two are still waiting", async () => {
+    const held = heldStatuses();
+    const api = stubApi({
+      listReaders: vi.fn().mockResolvedValue(readers(4)),
+      readerStatus: held.readerStatus,
+    });
+    const first = await mount(api);
+    expect(held.readerStatus).toHaveBeenCalledTimes(2);
+
+    first.host.remove();
+    const { el } = await mount(api);
+    await flush(el);
+    expect(held.readerStatus).toHaveBeenCalledTimes(2);
+
+    held.answer("r-1");
+    held.answer("r-2");
+    await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledTimes(4));
+    await flush(el);
+    expect(held.readerStatus.mock.calls.map(([id]) => id)).toEqual(["r-1", "r-2", "r-1", "r-2"]);
+  });
+
+  it("starts no read for a screen closed while an action on it was still being answered", async () => {
+    const held = heldStatuses();
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { el, host } = await mount(
+      stubApi({
+        listReaders: vi.fn().mockResolvedValue(readers(1)),
+        readerStatus: held.readerStatus,
+        disableReader: vi.fn().mockReturnValueOnce(pending),
+      }),
+    );
+    expect(held.readerStatus).toHaveBeenCalledTimes(1);
+    qCell(el, "[data-test=disable-r-1]")!.click();
+
+    host.remove();
+    release();
+    await flush(el);
+    expect(held.readerStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks its readers again when a closed screen is put back on the page", async () => {
+    const held = heldStatuses();
+    const { el, host } = await mount(
+      stubApi({
+        listReaders: vi.fn().mockResolvedValue(readers(1)),
+        readerStatus: held.readerStatus,
+      }),
+    );
+    held.answer("r-1");
+    await flush(el);
+
+    host.remove();
+    document.body.appendChild(host);
+    await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledTimes(2));
   });
 });

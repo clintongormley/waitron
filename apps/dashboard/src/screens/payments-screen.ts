@@ -86,6 +86,28 @@ function billRefusalText(error: unknown): string {
   return codeMessage(code);
 }
 
+/**
+ * At most two reader status reads at once, shared by every Payments screen in this tab, open or
+ * closed: a read can wait `CARD_PROVIDER_READ_LIMIT_MS` on a silent card provider, and the browser
+ * opens only six connections to the box (backlog A260).
+ */
+let statusSlotsFree = 2;
+const statusSlotWaiters: (() => void)[] = [];
+
+async function takeStatusSlot(): Promise<void> {
+  if (statusSlotsFree > 0) {
+    statusSlotsFree--;
+    return;
+  }
+  await new Promise<void>((resolve) => statusSlotWaiters.push(resolve));
+}
+
+function releaseStatusSlot(): void {
+  const next = statusSlotWaiters.shift();
+  if (next) next();
+  else statusSlotsFree++;
+}
+
 /** Provider forms come through CARD_PROVIDER_PANELS; this screen never imports a provider package. */
 @customElement("dashboard-payments-screen")
 export class PaymentsScreen extends LitElement {
@@ -345,6 +367,11 @@ export class PaymentsScreen extends LitElement {
       .catch(() => undefined);
   }
 
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#statusVersion++;
+  }
+
   #simulator(): boolean {
     return this.mode === "demo" || this.mode === "prepare";
   }
@@ -403,6 +430,8 @@ export class PaymentsScreen extends LitElement {
 
   /** One reader's failed status marks only that row, never the whole screen. */
   async #loadStatuses(readers: ReaderRow[], background = false): Promise<void> {
+    // An action that finishes after the screen closed still reloads it, and its slots are shared.
+    if (!this.isConnected) return;
     const client = background ? (this.api.background ?? this.api) : this.api;
     const version = ++this.#statusVersion;
     this.refreshing = true;
@@ -410,13 +439,17 @@ export class PaymentsScreen extends LitElement {
       readers
         .filter((r) => r.active)
         .map(async (reader) => {
+          await takeStatusSlot();
           try {
+            if (version !== this.#statusVersion) return;
             const status = await client.readerStatus(reader.id);
             if (version === this.#statusVersion)
               this.statuses = new Map(this.statuses).set(reader.id, status);
           } catch {
             if (version === this.#statusVersion)
               this.statuses = new Map(this.statuses).set(reader.id, "error");
+          } finally {
+            releaseStatusSlot();
           }
         }),
     );
