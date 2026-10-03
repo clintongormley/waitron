@@ -2418,6 +2418,38 @@ describe("till-table-order-screen", () => {
       });
     });
 
+    it("reopens a 0.150 kg child as three 0.050 kg picks per dish", async () => {
+      const weighted: OfferedModifier = {
+        ...extrasList,
+        items: [{ ...extraItem("p-cheese", "Jamón", false), portion: "0.050", price: "0.01" }],
+      };
+      const dish: TillProduct = { ...burger, offeredModifiers: [weighted] };
+      const child: TabLine = {
+        ...cheeseChild,
+        name: "Jamón",
+        quantity: "0.300",
+        priceQuantity: "0.050",
+        unitPriceGross: "0.01",
+      };
+      const { el } = await mount({
+        products: [dish],
+        lines: [{ ...burgerLine, quantity: "2.000" }, child],
+        revision: 3,
+      });
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      expect(
+        picker
+          .shadowRoot!.querySelector('[data-test="pick-list-extras-p-cheese-count"]')!
+          .textContent!.trim(),
+      ).toBe("3");
+      const seen = captureChange(el);
+      picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      expect(seen.event!.detail.patch).toMatchObject({
+        extras: [{ listId: "list-extras", picks: [{ productId: "p-cheese", quantity: 3 }] }],
+      });
+    });
+
     describe("a line holding an answer to a list the dish no longer offers", () => {
       const snapshot = (list: string, label: string) => ({
         listName: { es: list },

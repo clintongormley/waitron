@@ -13,6 +13,7 @@ import {
   compareDecimal,
   decimal,
   formatMoney,
+  multiplyDecimal,
   subtractDecimal,
   perDishOptionQuantity,
   type Decimal,
@@ -2097,7 +2098,10 @@ export class TillTableOrderScreen extends LitElement {
         listId: child.listId,
         name: this.#nameForLine(child),
         price: child.unitPriceGross,
-        quantity: perDishOptionQuantity(child.quantity, line.quantity),
+        quantity: perDishOptionQuantity(
+          child.quantity,
+          multiplyDecimal(decimal(line.quantity), decimal(child.priceQuantity ?? "1")),
+        ),
       };
       const [kept] = deriveExtraSelections(offered, [held]).extras;
       // A pick no offered list carries still stands on the line. When the edit sends extras it would

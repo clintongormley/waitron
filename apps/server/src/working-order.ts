@@ -3158,6 +3158,8 @@ export interface TabLine {
    * tells the two apart. */
   parentLineNo: number | null;
   quantity: string;
+  /** Physical amount represented by one priced portion, frozen with the line. */
+  priceQuantity: string;
   /** Decimal places the line's unit takes, frozen at add time (0 = sold by the unit). */
   unitPrecision: number | null;
   unitPriceGross: string;
@@ -3208,6 +3210,7 @@ export async function readTabLines(
       id: workingOrderLines.id,
       parentLineId: workingOrderLines.parentLineId,
       quantity: workingOrderLines.quantity,
+      priceQuantity: workingOrderLines.priceQuantity,
       unitPrecision: workingOrderLines.unitPrecision,
       unitPriceGross: workingOrderLines.unitPriceGross,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
@@ -3248,6 +3251,7 @@ export async function readTabLines(
       productId: row.productId,
       parentLineNo: row.parentLineId === null ? null : (lineNoById.get(row.parentLineId) ?? null),
       quantity: thousandthsToDecimal(row.quantity),
+      priceQuantity: thousandthsToDecimal(row.priceQuantity),
       unitPrecision: row.unitPrecision,
       unitPriceGross: centsToDecimal(row.unitPriceGross),
       ...(row.listUnitPriceGross === null
