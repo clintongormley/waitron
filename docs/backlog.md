@@ -1391,7 +1391,7 @@ exist. The options list editor gives its Default heading the same two rules
 options probably shows the same fault; that has not been opened to check. A198's Chromium checks did
 not cover an empty table; the fix adds that case for both editors.
 
-**The number field with − and + is still too wide (A263, owner 2026-10-03) — DONE. (The owner chose
+**The number field with − and + is still too wide (A263, owner 2026-10-03) — DONE (#1151). (The owner chose
 option C: 24px plain − and + either side of a centred number, and clearable Minimum and Maximum
 choices that show the placeholder "None" while empty; a maximum of 0 is refused by the form and the
 request check, and the database CHECK is unchanged.)**
@@ -1444,6 +1444,20 @@ the backup screen, the extras list editor and the venue operations screen).
 The stepper's row and the tap-target paragraph in design-system.md, and the primitive's axe and
 token-painting tests, changed with it.
 
+**What #1151 left open (2026-10-03):**
+- **The database still accepts a maximum of 0.** The CHECK on `extra_lists` allows `max_picks = 0`
+  when `min_picks` is 0, and configuration transfer copies stored lists without the request check,
+  so a stored 0 can still arrive; the form then shows the 0 and refuses to save until it is
+  changed. Refusing it in the database is a table rebuild (CLAUDE.md §3's rebuild rule). OPEN,
+  unqueued: the owner has not asked for it.
+- **A very long number is cut off in the narrower box.** The request check accepts up to
+  2147483647, which needs about 82px against the 66px between the buttons (measured by #1151's
+  review); three digits need about 26px. Left alone because widening the box would undo the size
+  the owner approved. OPEN, unqueued.
+- At 390px the extras table's Price column runs past its scroll area's right edge until scrolled;
+  #1151's review measured it on main before the change (452px against a 373px area) and smaller
+  after it (388px). OPEN, unqueued; A264 (lane D's W49) changes the same table's columns.
+
 **The extras list editor's columns move as products are added (A264, owner 2026-10-03) — OPEN,
 queued in lane D as part of W49.** The owner, on two screenshots of the editor before and after adding a second product:
 _"the layout jumps as you add different extras options"_. Adding "Croquetas" beside "Bravas" moved
@@ -1466,7 +1480,7 @@ still named for screen readers. Do it with A262 and A264: dropping the text chan
 Preselected column needs to be.
 
 **An extra's maximum quantity can be left blank for no limit (A266, owner 2026-10-03) — OPEN,
-queued in lane D as W54, after A263 lands.** While designing A263 the owner asked for the extras
+queued in lane D as W54 (A263 landed as #1151).** While designing A263 the owner asked for the extras
 table's per-item Maximum quantity to work like Maximum choices: blank means no limit, and − goes
 2 → 1 → blank. Today it cannot be blank anywhere: the column is `not null`, defaults to 1 and has a
 CHECK of at least 1 (`max_quantity`, `packages/catalogue/src/schema/extras.ts`), the request
