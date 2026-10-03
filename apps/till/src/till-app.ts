@@ -5956,6 +5956,14 @@ export class TillApp extends LitElement {
     if (open === null) return;
     if (open.partyId === null) {
       this.#showCancelCredited(id, null);
+      if (this.#store.id === open.workingOrderId) {
+        this.#dismissStationChoices();
+        this.#store.clear();
+        this.stage = "order";
+        this.collectFlow = undefined;
+        this.counterLines = null;
+        this.cardOutcome = undefined;
+      }
       await this.#refreshAfterWrite("station", "refresh.station_after_cancel");
       // A read started after the session ended could show the next operator this cancel's failure
       // notice.
