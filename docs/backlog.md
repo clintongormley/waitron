@@ -2856,7 +2856,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
         that never answers leaves the dialog busy with no result shown though the cancel has
         finished. Found by reading while reviewing B34, which changed the counter path to show its
         result first; not reproduced on the table path.
-    - **Done by B34 (owner, 2026-10-02): a counter order invoiced when it was placed and still
+    - **Done by B34 (#1077, 2026-10-03; owner, 2026-10-02): a counter order invoiced when it was placed and still
       unpaid can be cancelled with a credit note at the till.** It is the same action as B32's on a
       table's bill. On the counter's waiting list (`apps/till/src/widgets/counter-waiting.ts`), an
       order that is placed and whose invoice was issued shows "Cancel and credit" after Pay and
@@ -2908,12 +2908,12 @@ The original walkthrough is retained under *Detail → Setup wizard*.
         action: `#onConfirmPayment`, the card path `#collectCard`, `#onPlaceOrder`,
         `#onCollectOrder`, `#onFindBillPay`, `#onMarkCollected`, and `#onHandOverOrder`, which
         checks the session before its kitchen-queue read but not between that read and the
-        waiting-list read. The B34 cancel path got that check on this branch, after a review
+        waiting-list read. The B34 cancel path got that check in #1077, after a review
         reproduced the problem there in real Chromium. Second, `#onConfirmPayment`,
         `#collectCard`, `#onPlaceOrder`, `#onCollectOrder` and `#onFindBillPay` wait for their list
         reads before clearing the flag that marks the basket busy (`submitting` or `placing`), and
         the reads have no time limit, so a read that never answers would leave the basket blocked:
-        no next sale, no Pay, no Cancel and credit. The B34 cancel path was changed on this branch
+        no next sale, no Pay, no Cancel and credit. The B34 cancel path was changed in #1077
         to show its result before reading the lists.
       Unlike the table's button, the counter's does not check for a payment on the order. Two ways
       of giving a placed counter order a bill payment were tried while building B34 and both were
