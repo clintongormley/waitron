@@ -720,3 +720,69 @@ it("takes a failed opening read's message away when Retry then loads the status"
   await flush(el);
   expect(cloudError(el)).toBeNull();
 });
+
+it("keeps what the person's action showed when a status read started before it answers afterwards", async () => {
+  setLocale("en");
+  let statusReads = 0;
+  let releaseRead!: () => void;
+  const api = new DashboardApi("", async (url) => {
+    if (String(url).endsWith("/check"))
+      return Response.json({
+        ...awaitingCloud,
+        state: "awaiting_local",
+        organisationId,
+        legalBusinessId,
+        organisationName: "Café Sol",
+        legalBusinessName: "Sol SL",
+      });
+    if (++statusReads === 2) {
+      await new Promise<void>((resolve) => (releaseRead = resolve));
+      return Response.json(awaitingCloud);
+    }
+    return Response.json(awaitingCloud);
+  });
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect.poll(() => el.shadowRoot!.querySelector("#check")).not.toBeNull();
+  api.liveData.refresh();
+  await expect.poll(() => statusReads).toBe(2);
+  click(el, "check");
+  await expect.poll(() => el.shadowRoot!.querySelector("#confirm")).not.toBeNull();
+  releaseRead();
+  await flush(el);
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("#confirm")).not.toBeNull();
+  expect(el.shadowRoot!.textContent).toContain("Sol SL");
+});
+
+it("asks again before stopping Cloud access after a background read saw it stopped and then active", async () => {
+  setLocale("en");
+  let installationState = "active";
+  const api = new DashboardApi("", async () =>
+    Response.json({
+      state: "complete",
+      configured: true,
+      isPrimary: true,
+      code: "",
+      legalBusinessName: "Sol SL",
+      installation: {
+        state: installationState,
+        revision: 2,
+        lastContactAt: null,
+        leaseExpiresAt: null,
+        services: [],
+      },
+    }),
+  );
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect.poll(() => el.shadowRoot!.querySelector("#stop-access")).not.toBeNull();
+  click(el, "stop-access");
+  await expect.poll(() => el.shadowRoot!.querySelector("#confirm-stop")).not.toBeNull();
+  installationState = "revoked";
+  api.liveData.refresh();
+  await expect.poll(() => el.shadowRoot!.querySelector("#confirm-stop")).toBeNull();
+  installationState = "active";
+  api.liveData.refresh();
+  await expect.poll(() => el.shadowRoot!.querySelector("#refresh")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("#confirm-stop")).toBeNull();
+  expect(el.shadowRoot!.querySelector("#stop-access")).not.toBeNull();
+});

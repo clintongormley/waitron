@@ -4,8 +4,9 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import { QueryController } from "@waitron/dashboard-kit";
 import type { CloudConnectionStatus, DashboardApi } from "../api/client.js";
-import { DashboardQueries } from "../api/query-controller.js";
+import { dashboardQuery } from "../api/live-queries.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 @customElement("dashboard-cloud-services-screen")
@@ -64,9 +65,11 @@ export class CloudServicesScreen extends LitElement {
   #clock: ReturnType<typeof setTimeout> | undefined;
   /** The status read's own failure, kept apart from `error` so its recovery never clears an action's. */
   @state() private readError: string | undefined;
-  readonly #queries = new DashboardQueries(
+  /** Counts applied action results, so a read that started before one cannot replace it. */
+  #actionResults = 0;
+  readonly #queries = new QueryController(
     this,
-    () => this.api,
+    () => this.api.liveData,
     (error) => {
       this.readError = codeOf(error);
     },
@@ -76,12 +79,25 @@ export class CloudServicesScreen extends LitElement {
     this.busy = false;
     this.confirmingStop = false;
     const generation = this.#generation;
+    const query = dashboardQuery(this.api, "getCloudStatus", []);
     void this.#queries
-      .watch("getCloudStatus", [], (status) => {
-        this.readError = undefined;
-        if (this.busy) return;
-        this.status = status;
-      })
+      .watch(
+        "getCloudStatus",
+        {
+          ...query,
+          key: `${query.key}:action-stamped`,
+          read: async () => {
+            const actionResults = this.#actionResults;
+            return { actionResults, status: await query.read() };
+          },
+        },
+        ({ actionResults, status }) => {
+          this.readError = undefined;
+          if (this.busy || actionResults !== this.#actionResults) return;
+          this.status = status;
+          if (status.installation?.state === "revoked") this.confirmingStop = false;
+        },
+      )
       // Only the opening read takes focus: a background read fails again on every retry.
       .catch(() => this.#focusError(generation));
   }
@@ -104,6 +120,7 @@ export class CloudServicesScreen extends LitElement {
     try {
       const result = await request();
       if (generation === this.#generation) {
+        this.#actionResults++;
         this.status = result;
         if (result.installation?.state === "revoked") this.confirmingStop = false;
         this.requestUnavailable = false;
