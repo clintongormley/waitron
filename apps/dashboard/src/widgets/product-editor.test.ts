@@ -1305,6 +1305,11 @@ it("offers Uncategorised as the main category, and saves it as none", async () =
     label: t("categories.uncategorised"),
   });
   await pickIn(el, "primary", { value: "" });
+  const categoryText = combobox(el, "primary")!.shadowRoot!.querySelector<HTMLElement>(
+    ".trigger .value",
+  )!;
+  expect(categoryText.classList.contains("placeholder")).toBe(false);
+  expect(getComputedStyle(categoryText).fontStyle).toBe("normal");
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
@@ -2767,6 +2772,14 @@ it("hints what a variant will actually use where its parent names nothing there"
   });
   expect(combobox(el, "primary")!.placeholder).toBe(t("categories.uncategorised"));
   expect(combobox(el, "product-course")!.placeholder).toBe(t("product.no_course"));
+  for (const name of ["primary", "product-course"]) {
+    expect(
+      combobox(el, name)!
+        .shadowRoot!.querySelector(".trigger .value")!
+        .classList.contains("placeholder"),
+      name,
+    ).toBe(true);
+  }
   expect(combobox(el, "tax")!.placeholder).toBe("retired");
   expect(hint(el, "allergens-hint")).toBe(
     `${t("modifiers.allergens")}: ${t("editor.allergens_none")}`,
@@ -3189,7 +3202,7 @@ async function shownIn(el: ProductEditor, name: string): Promise<string | undefi
   return box.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
 }
 
-it("picks the default course from a shared dropdown, with none as its prompt and a row", async () => {
+it("picks the default course from a shared dropdown, with none as a chosen value and a row", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, courseId: "course-2" },
@@ -3218,6 +3231,9 @@ it("picks the default course from a shared dropdown, with none as its prompt and
   await el.updateComplete;
   expect(el.currentValue.courseId).toBeNull();
   expect(await shownIn(el, "product-course")).toBe(t("product.no_course"));
+  const courseText = course.shadowRoot!.querySelector<HTMLElement>(".trigger .value")!;
+  expect(courseText.classList.contains("placeholder")).toBe(false);
+  expect(getComputedStyle(courseText).fontStyle).toBe("normal");
   el.fieldErrors = { "product-course": "That one is gone" };
   await el.updateComplete;
   expect(course.error).toBe("That one is gone");

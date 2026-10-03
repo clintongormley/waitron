@@ -266,6 +266,8 @@ export class WtCombobox extends LitElement {
   @property() searchPlaceholder = "Search";
   @property({ type: Boolean, reflect: true }) multiple = false;
   @property() value = "";
+  /** Treat an offered empty-string option as a selection, while its value remains empty. */
+  @property({ type: Boolean, attribute: "show-empty-option" }) showEmptyOption = false;
   @property({ attribute: false }) values: string[] = [];
   @property() placeholder = "";
   @property({ attribute: false }) countLabel: (count: number) => string = (count) =>
@@ -351,9 +353,7 @@ export class WtCombobox extends LitElement {
       }
       return this.countLabel(this.values.length);
     }
-    // An empty value means nothing is selected, so an option whose own value is "" never displaces
-    // the placeholder.
-    if (this.value === "") return "";
+    if (this.value === "" && !this.showEmptyOption) return "";
     return this.options.find((o) => !o.action && o.value === this.value)?.label ?? "";
   }
 

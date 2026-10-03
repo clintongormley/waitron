@@ -18,6 +18,8 @@ export interface CategoryFieldOptions {
   value: string | null;
   /** What choosing no category means here: Uncategorised, the top level, or the parent's. */
   noneLabel: string;
+  /** Whether the empty choice names a chosen value rather than an inherited hint. */
+  showNoneAsValue?: boolean;
   /** Categories that may not be chosen, such as the one being deleted. */
   exclude?: ReadonlySet<string>;
   error?: string;
@@ -37,6 +39,7 @@ export function categoryField(options: CategoryFieldOptions) {
     name=${options.name}
     label=${options.label}
     placeholder=${options.noneLabel}
+    ?show-empty-option=${options.showNoneAsValue ?? false}
     searchPlaceholder=${t("categories.combobox_search")}
     noResultsLabel=${t("categories.combobox_no_results")}
     .disabled=${options.disabled}

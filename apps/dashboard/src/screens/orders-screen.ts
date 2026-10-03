@@ -313,6 +313,7 @@ export class OrdersScreen extends LitElement {
           name="staff"
           label=${t("orders.staff")}
           search="auto"
+          show-empty-option
           .error=${errorFor("staff")}
           .options=${[{ value: "", label: t("orders.staff_anyone") }, ...this.staff.map((person) => ({ value: person.id, label: person.name ?? t("orders.staff_unknown") }))]}
           .value=${this.filter.staff ?? ""}

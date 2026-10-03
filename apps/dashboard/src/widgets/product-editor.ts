@@ -740,6 +740,7 @@ export class ProductEditor extends LitElement {
         categories: this.categories,
         value: this.draft.primaryCategoryId,
         noneLabel: parentCategory ?? t("categories.uncategorised"),
+        showNoneAsValue: parent === null,
         error: this.error("primary"),
         disabled: this.suspended,
         change: (id) => this.change("primaryCategoryId", id),
@@ -815,6 +816,7 @@ export class ProductEditor extends LitElement {
       searchPlaceholder=${t("categories.combobox_search")}
       noResultsLabel=${t("categories.combobox_no_results")}
       placeholder=${noneLabel}
+      ?show-empty-option=${this.inherited === null}
       .options=${[
         { value: "", label: noneLabel },
         ...choices.map((choice) => ({ value: choice.id, label: choice.name })),
