@@ -6,6 +6,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, isAppError } from "@waitron/shared";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
+import { checkOwnPasswordAhead } from "./own-password-ahead.js";
 import {
   fireControlMode,
   readNodeMembership,
@@ -46,6 +47,7 @@ import {
   updatePersonDetails,
   verifyOwnCredentials,
   type PersonRoleValue,
+  type SecretCheck,
   type TotpKeyRing,
 } from "@waitron/identity";
 import type { IssuedAccountAction } from "@waitron/identity";
@@ -530,15 +532,19 @@ export function mountManagementApi(
     deps.accountActionRateLimiters?.completion ?? createAccountActionRateLimiter();
   const googleCodeExchange = deps.googleCodeExchange ?? exchangeGoogleCode;
   const googleFlowCookie = "waitron_google_flow";
-  const withCredentialChange = <T>(
+  const withCredentialChange = async <T>(
     sessionId: string,
-    fn: (tx: Transaction) => Promise<T>,
-  ): Promise<T> =>
-    withTransaction(deps.db, async (tx) => {
+    currentPassword: string | undefined,
+    fn: (tx: Transaction, checked: SecretCheck | undefined) => Promise<T>,
+  ): Promise<T> => {
+    const checked = await checkOwnPasswordAhead(deps.db, credentialChangeThrottle, sessionId, {
+      currentPassword,
+    });
+    return withTransaction(deps.db, async (tx) => {
       const { personId } = await resolveManagementSession(tx, sessionId);
       const finish = credentialChangeThrottle.begin(personId);
       try {
-        const result = await fn(tx);
+        const result = await fn(tx, checked);
         finish("success");
         return result;
       } catch (error) {
@@ -550,6 +556,7 @@ export function mountManagementApi(
         throw error;
       }
     });
+  };
   const bindGoogleFlow = (c: Context, state: string): void => {
     setCookie(c, googleFlowCookie, state, {
       httpOnly: true,
@@ -583,14 +590,15 @@ export function mountManagementApi(
       if (deps.googleOidc === undefined) throw new AppError("google.invalid", {});
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
-      const out = await withCredentialChange(sessionId, async (tx) => {
+      const currentPassword =
+        typeof body.currentPassword === "string" ? body.currentPassword : undefined;
+      const out = await withCredentialChange(sessionId, currentPassword, async (tx, checked) => {
         return beginGoogleLink(tx, {
           managementSessionId: sessionId,
-          ...(typeof body.currentPassword === "string"
-            ? { currentPassword: body.currentPassword }
-            : {}),
+          ...(currentPassword === undefined ? {} : { currentPassword }),
           ...(typeof body.totp === "string" ? { totp: body.totp } : {}),
           keyRing: credentialKeyRing,
+          checked,
           clientId: deps.googleOidc!.clientId,
           redirectUri: deps.googleOidc!.redirectUri,
         });
@@ -2044,12 +2052,14 @@ export function mountManagementApi(
       if (typeof body.currentPassword !== "string") {
         throw new AppError("management.request_invalid", { field: "currentPassword" });
       }
-      const out = await withCredentialChange(sessionId, async (tx) => {
+      const currentPassword = body.currentPassword;
+      const out = await withCredentialChange(sessionId, currentPassword, async (tx, checked) => {
         await verifyOwnCredentials(tx, {
           managementSessionId: sessionId,
-          currentPassword: body.currentPassword as string,
+          currentPassword,
           ...(typeof body.totp === "string" ? { totp: body.totp } : {}),
           keyRing: credentialKeyRing,
+          checked,
         });
         return beginPasskeyRegistration(tx, {
           managementSessionId: sessionId,

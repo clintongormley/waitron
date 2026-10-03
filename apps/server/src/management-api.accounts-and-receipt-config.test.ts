@@ -10,9 +10,9 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { withTransaction, type Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { encryptTotpSecret, hashPassword, hashPin, persons } from "@waitron/identity";
@@ -28,6 +28,28 @@ import {
 } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
+
+// Records each key derivation while a test watches: inside one of the request's transactions in
+// `order`, outside them in `outside`. Otherwise the real `scrypt`.
+const derivation = vi.hoisted(() => ({
+  watching: false,
+  inRequestTransaction: false,
+  order: [] as string[],
+  outside: 0,
+}));
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  return {
+    ...actual,
+    scrypt: (...args: unknown[]) => {
+      if (derivation.watching) {
+        if (derivation.inRequestTransaction) derivation.order.push("key derived in a transaction");
+        else derivation.outside += 1;
+      }
+      return (actual.scrypt as (...forwarded: unknown[]) => void)(...args);
+    },
+  };
+});
 
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse";
@@ -1733,3 +1755,165 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     }
   });
 });
+
+describe("Management API — a credential change checks the current password before the write lock is taken", () => {
+  const json = { "content-type": "application/json" };
+  const routes = [
+    { name: "passkey registration options", path: "/management-api/passkey/register/options" },
+    { name: "starting a Google link", path: "/management-api/session/me/google" },
+  ];
+
+  it.each(routes)("lets another writer commit while $name derives the key", async ({ path }) => {
+    await setupTenant();
+    const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const { result, order, outside } = await writerBesideRequest(async () =>
+      app.request(path, {
+        method: "POST",
+        headers: { cookie, ...json },
+        body: JSON.stringify({ currentPassword: PASSWORD }),
+      }),
+    );
+
+    expect(result.status).toBe(200);
+    expect(order).toEqual(["writer", "request's transaction"]);
+    expect(outside).toBe(1);
+  });
+
+  it("refuses a current password that was changed while its key was being derived", async () => {
+    const { managerId } = await setupTenant();
+    const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const res = await whileChangingOnLockRequest(
+      async (tx) => {
+        await tx
+          .update(persons)
+          .set({ passwordHash: hashPassword("changed elsewhere") })
+          .where(eq(persons.id, managerId));
+      },
+      async () =>
+        app.request("/management-api/session/me/google", {
+          method: "POST",
+          headers: { cookie, ...json },
+          body: JSON.stringify({ currentPassword: PASSWORD }),
+        }),
+    );
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
+    const states = await suite.db.execute<{ count: number }>(
+      sql`select count(*) as count from google_oidc_states`,
+    );
+    expect(states.rows[0]!.count).toBe(0);
+  });
+
+  it("derives no key for a credential change the slow-down refuses", async () => {
+    await setupTenant();
+    const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
+    const cookie = await login(app, MANAGER_EMAIL);
+    const startLink = async (currentPassword: string) =>
+      app.request("/management-api/session/me/google", {
+        method: "POST",
+        headers: { cookie, ...json },
+        body: JSON.stringify({ currentPassword }),
+      });
+    for (let i = 0; i < 4; i++) expect((await startLink("not the password")).status).toBe(401);
+
+    const { result, order, outside } = await watchingDerivations(() => startLink(PASSWORD));
+
+    expect(result.status).toBe(429);
+    expect({ order, outside }).toEqual({ order: [], outside: 0 });
+  });
+});
+
+/** Runs `request`, recording each key it derives, inside or outside a transaction. */
+async function watchingDerivations<T>(
+  request: () => Promise<T>,
+): Promise<{ result: T; order: string[]; outside: number }> {
+  const order: string[] = [];
+  Object.assign(derivation, { watching: true, order, outside: 0 });
+  try {
+    const result = await request();
+    return { result, order, outside: derivation.outside };
+  } finally {
+    derivation.watching = false;
+  }
+}
+
+/**
+ * Runs `request` while, on the next turn of the event loop, another writer commits a transaction.
+ * Returns the request's result and, in order: when the writer committed, when each of the request's
+ * transactions committed, and each key the request derived while holding the write lock; and how
+ * many keys it derived outside its transactions.
+ */
+async function writerBesideRequest<T>(
+  request: () => Promise<T>,
+): Promise<{ result: T; order: string[]; outside: number }> {
+  let writerAsking = false;
+  const original = suite.db.withWriteLock;
+  const spy = vi.spyOn(suite.db, "withWriteLock").mockImplementation((body) =>
+    writerAsking
+      ? original(body)
+      : original(async () => {
+          derivation.inRequestTransaction = true;
+          try {
+            return await body();
+          } finally {
+            derivation.inRequestTransaction = false;
+            derivation.order.push("request's transaction");
+          }
+        }),
+  );
+  try {
+    return await watchingDerivations(async () => {
+      const writer = new Promise<void>((resolve, reject) => {
+        setImmediate(() => {
+          writerAsking = true;
+          const committed = withTransaction(suite.db, (tx) => tx.execute(sql`select 1`));
+          writerAsking = false;
+          committed.then(() => {
+            derivation.order.push("writer");
+            resolve();
+          }, reject);
+        });
+      });
+      const [result] = await Promise.all([request(), writer]);
+      return result;
+    });
+  } finally {
+    spy.mockRestore();
+  }
+}
+
+/**
+ * Holds the write lock, runs `request`, and makes `change` in the held transaction once the request
+ * asks for the lock — so a check the request took before that saw the row as it was.
+ */
+async function whileChangingOnLockRequest<T>(
+  change: (tx: Transaction) => Promise<void>,
+  request: () => Promise<T>,
+): Promise<T> {
+  let lockRequested!: () => void;
+  const requested = new Promise<void>((resolve) => {
+    lockRequested = resolve;
+  });
+  const held = withTransaction(suite.db, async (tx) => {
+    await requested;
+    await change(tx);
+  });
+  const original = suite.db.withWriteLock;
+  const spy = vi.spyOn(suite.db, "withWriteLock").mockImplementation((body) => {
+    const queued = original(body);
+    lockRequested();
+    return queued;
+  });
+  try {
+    return await request();
+  } finally {
+    spy.mockRestore();
+    lockRequested();
+    await held;
+  }
+}

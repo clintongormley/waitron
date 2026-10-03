@@ -1,5 +1,6 @@
 import { PIN_THROTTLE_IDLE_MS } from "@waitron/identity";
 import { describe, expect, it } from "vitest";
+import { isAppError } from "@waitron/shared";
 import { createPasswordThrottle, passwordThrottleBucket } from "./password-throttle.js";
 
 describe("password login backoff", () => {
@@ -325,5 +326,106 @@ describe("password login backoff under a flood of made-up addresses", () => {
     expect(() => throttle.begin(emails[0]!)).toThrowError(refusal(2));
     throttle.begin(REAL)("invalid");
     expect(throttle.tracked()).toBe(1000);
+  });
+
+  describe("asking whether an attempt would be refused", () => {
+    /** Whether `begin` refuses `email` now; an admitted attempt is finished as an error. */
+    function beginRefuses(throttle: Throttle, email: string): boolean {
+      try {
+        throttle.begin(email)("error");
+        return false;
+      } catch (error) {
+        if (isAppError(error) && error.code === "password.throttled") return true;
+        throw error;
+      }
+    }
+
+    it("answers as begin would for a new address, one in flight, one waiting and one whose wait is over", () => {
+      let now = 0;
+      const throttle = createPasswordThrottle(() => now, SECRET);
+      expect(throttle.wouldRefuse(REAL)).toBe(false);
+      expect(beginRefuses(throttle, REAL)).toBe(false);
+
+      const finish = throttle.begin(REAL);
+      expect(throttle.wouldRefuse(REAL)).toBe(true);
+      expect(beginRefuses(throttle, REAL)).toBe(true);
+      finish("error");
+
+      fail(throttle, REAL, 4);
+      now = 1999;
+      expect(throttle.wouldRefuse(REAL)).toBe(true);
+      expect(beginRefuses(throttle, REAL)).toBe(true);
+      now = 2000;
+      expect(throttle.wouldRefuse(REAL)).toBe(false);
+      expect(beginRefuses(throttle, REAL)).toBe(false);
+    });
+
+    it("answers as begin would for an address forgotten into its counter, before and after the counter goes idle", () => {
+      let now = 0;
+      const throttle = createPasswordThrottle(() => now, SECRET);
+      fail(throttle, REAL, 4);
+      forgetAll(throttle, "a");
+      now = 500;
+      expect(throttle.wouldRefuse(REAL)).toBe(true);
+      expect(beginRefuses(throttle, REAL)).toBe(true);
+
+      const [other] = neighbours();
+      fail(throttle, other!, 4);
+      forgetAll(throttle, "b");
+      now = PIN_THROTTLE_IDLE_MS + 500;
+      expect(throttle.wouldRefuse(other!)).toBe(false);
+      expect(beginRefuses(throttle, other!)).toBe(false);
+    });
+
+    it("changes nothing: what it tracks, and every later attempt, are as if it had never been asked", () => {
+      let now = 0;
+      const asked = createPasswordThrottle(() => now, SECRET);
+      const control = createPasswordThrottle(() => now, SECRET);
+      const [neighbour] = neighbours();
+      const IDLE = "goes-idle@example.com";
+      const emails = [REAL, neighbour!, IDLE];
+      const ask = () => {
+        const before = asked.tracked();
+        for (const email of [...emails, "never-seen@example.com"]) asked.wouldRefuse(email);
+        expect(asked.tracked()).toBe(before);
+      };
+      const onBoth = (step: (throttle: Throttle) => void) => {
+        ask();
+        step(asked);
+        step(control);
+        ask();
+      };
+      const history = (throttle: Throttle): string[] => {
+        const start = now;
+        const seen: string[] = [];
+        for (const offset of [0, 1_000, 2_000, 5_000, 70_000]) {
+          now = start + offset;
+          for (const email of emails) {
+            try {
+              throttle.begin(email)("invalid");
+              seen.push(`${email} admitted`);
+            } catch (error) {
+              seen.push(
+                `${email} refused ${JSON.stringify((error as { params: unknown }).params)}`,
+              );
+            }
+          }
+        }
+        now = start;
+        return seen;
+      };
+
+      onBoth((throttle) => fail(throttle, IDLE, 4));
+      // IDLE is idle from here: the next `begin` forgets it, and asking must not.
+      now = PIN_THROTTLE_IDLE_MS;
+      onBoth((throttle) => fail(throttle, REAL, 4));
+      onBoth((throttle) => forgetAll(throttle, "a"));
+      onBoth((throttle) => fail(throttle, neighbour!, 1));
+      ask();
+
+      const askedHistory = history(asked);
+      expect(askedHistory).toEqual(history(control));
+      expect(askedHistory.filter((line) => line.includes("refused")).length).toBeGreaterThan(0);
+    });
   });
 });
