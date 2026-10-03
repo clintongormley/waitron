@@ -3219,7 +3219,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       screen's Unpaid filter shows the same debts. The till-cancel question was C126, now built:
       see its entry below.
     - **The till's departure dialog lists a presented bill credited to nothing as owing its full
-      amount — DONE (W26, 2026-10-03).** `GET /api/parties/:id/bills` now gives each bill with a
+      amount — DONE (W26, #1136, 2026-10-03).** `GET /api/parties/:id/bills` now gives each bill with a
       filed sale an `amountDue`, its invoice's total plus its credit notes, read through
       `readIssuedSales` as the departure reads it, and the dialog lists each bill at that, so a
       bill credited to nothing drops out of the list and the button's total.
