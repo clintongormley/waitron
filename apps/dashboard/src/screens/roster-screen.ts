@@ -129,6 +129,7 @@ export class RosterScreen extends LitElement {
   @state() private errorKey: string | null = null;
   // Set synchronously on entry, so a double-fired event files at most one mutation.
   @state() private busy = false;
+  #locationsLoaded = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -153,6 +154,7 @@ export class RosterScreen extends LitElement {
           this.staff = value;
         }),
         this.#queries.watch("getLocations", [], async (locations) => {
+          this.#locationsLoaded = true;
           this.locations = locations;
           if (locations.length === 0) {
             this.locationId = "";
@@ -289,11 +291,7 @@ export class RosterScreen extends LitElement {
   override render(): TemplateResult {
     return html`
       <h1>${t("roster.title")}</h1>
-      ${
-        this.locations.length === 0
-          ? html`<p class="prompt" data-test="no-location">${t("roster.no_location")}</p>`
-          : this.#renderGrid()
-      }
+      ${this.#renderMain()}
       <dashboard-shift-dialog
         .open=${this.dialogOpen}
         .day=${this.dialogDay}
@@ -306,6 +304,17 @@ export class RosterScreen extends LitElement {
         @wt-close=${() => (this.dialogOpen = false)}
       ></dashboard-shift-dialog>
     `;
+  }
+
+  #renderMain(): TemplateResult {
+    if (this.locations.length > 0) return this.#renderGrid();
+    // Until locations have loaded, an empty list means unknown, not none.
+    if (!this.#locationsLoaded && this.errorKey !== null) return this.#renderError(this.errorKey);
+    return html`<p class="prompt" data-test="no-location">${t("roster.no_location")}</p>`;
+  }
+
+  #renderError(errorKey: string): TemplateResult {
+    return html`<p class="error" role="alert" data-test="error">${codeMessage(errorKey)}</p>`;
   }
 
   #renderGrid(): TemplateResult {
@@ -375,11 +384,7 @@ export class RosterScreen extends LitElement {
             </div>`
           : nothing
       }
-      ${
-        this.errorKey
-          ? html`<p class="error" role="alert" data-test="error">${codeMessage(this.errorKey)}</p>`
-          : nothing
-      }
+      ${this.errorKey ? this.#renderError(this.errorKey) : nothing}
     `;
   }
 

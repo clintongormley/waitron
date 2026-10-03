@@ -80,6 +80,7 @@ export class PlannedActualScreen extends LitElement {
   @state() private rows: PlannedVsActualRow[] = [];
   @state() private errorKey: string | null = null;
   #names = new Map<string, string>();
+  #locationsLoaded = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -96,6 +97,7 @@ export class PlannedActualScreen extends LitElement {
           this.requestUpdate();
         }),
         this.#queries.watch("getLocations", [], async (locations) => {
+          this.#locationsLoaded = true;
           this.locations = locations;
           if (locations.length === 0) {
             this.locationId = "";
@@ -169,12 +171,19 @@ export class PlannedActualScreen extends LitElement {
   override render(): TemplateResult {
     return html`
       <h1>${t("planned.title")}</h1>
-      ${
-        this.locations.length === 0
-          ? html`<p class="muted" data-test="no-location">${t("planned.no_location")}</p>`
-          : this.#renderBody()
-      }
+      ${this.#renderMain()}
     `;
+  }
+
+  #renderMain(): TemplateResult {
+    if (this.locations.length > 0) return this.#renderBody();
+    // Until locations have loaded, an empty list means unknown, not none.
+    if (!this.#locationsLoaded && this.errorKey !== null) return this.#renderError(this.errorKey);
+    return html`<p class="muted" data-test="no-location">${t("planned.no_location")}</p>`;
+  }
+
+  #renderError(errorKey: string): TemplateResult {
+    return html`<p class="error" role="alert" data-test="error">${codeMessage(errorKey)}</p>`;
   }
 
   #renderBody(): TemplateResult {
@@ -226,11 +235,7 @@ export class PlannedActualScreen extends LitElement {
               </tbody>
             </table>`
       }
-      ${
-        this.errorKey
-          ? html`<p class="error" role="alert" data-test="error">${codeMessage(this.errorKey)}</p>`
-          : nothing
-      }
+      ${this.errorKey ? this.#renderError(this.errorKey) : nothing}
     `;
   }
 }

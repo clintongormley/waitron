@@ -264,7 +264,11 @@ export class PaymentsScreen extends LitElement {
   #discoveryVersion = 0;
   #statusVersion = 0;
   #pairSucceeded = false;
+  #statusesDue = true;
+  #statusIds: string | undefined;
   @state() private errorKey: string | null = null;
+  /** Whether `errorKey` is a list read's failure, the only message the read's recovery may clear. */
+  #readErrorShown = false;
   @state() private stuck: StuckPaymentRow[] = [];
   @state() private stuckLoadError: string | null = null;
   @state() private confirmingStuck: StuckPaymentRow | null = null;
@@ -288,6 +292,16 @@ export class PaymentsScreen extends LitElement {
     () => this.api,
     (error) => {
       this.stuckLoadError = codeOf(error);
+    },
+  );
+  readonly #listQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
+    },
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
     },
   );
   readonly #billPaymentQuery = new DashboardQueries(
@@ -345,24 +359,50 @@ export class PaymentsScreen extends LitElement {
 
   /** Disarms the two-tap Disconnect, since the armed row may no longer exist. */
   async #load(): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     this.armedDisconnectId = null;
-    try {
-      const [providers, readers] = await Promise.all([
-        this.api.listPaymentProviders(),
-        this.api.listReaders(),
-      ]);
-      this.providers = providers;
-      this.readers = readers;
-      this.statuses = new Map();
-      void this.#loadStatuses(readers);
-    } catch (error) {
-      this.errorKey = codeOf(error);
-    }
+    this.#statusesDue = true;
+    // After this load's first readers read fails, only an automatic retry can succeed in its place.
+    let attended = true;
+    await Promise.allSettled([
+      this.#listQueries.watch("listPaymentProviders", [], (providers) => {
+        this.providers = providers;
+        const armed = this.armedDisconnectId;
+        if (!providers.some((p) => p.providerId === armed && p.state === "connected"))
+          this.armedDisconnectId = null;
+      }),
+      this.#listQueries
+        .watch("listReaders", [], (readers) => {
+          this.readers = readers;
+          // A status may ask the provider itself, so a background refresh asks again only when the
+          // set of active readers changed.
+          const ids = JSON.stringify(
+            readers
+              .filter((r) => r.active)
+              .map((r) => r.id)
+              .sort(),
+          );
+          const due = this.#statusesDue;
+          if (!due && ids === this.#statusIds) return;
+          if (due) this.statuses = new Map();
+          this.#statusesDue = false;
+          this.#statusIds = ids;
+          void this.#loadStatuses(readers, !due || !attended);
+        })
+        .catch(() => {
+          attended = false;
+        }),
+    ]);
+  }
+
+  #showError(code: string | null, fromRead = false): void {
+    this.errorKey = code;
+    this.#readErrorShown = fromRead;
   }
 
   /** One reader's failed status marks only that row, never the whole screen. */
-  async #loadStatuses(readers: ReaderRow[]): Promise<void> {
+  async #loadStatuses(readers: ReaderRow[], background = false): Promise<void> {
+    const client = background ? (this.api.background ?? this.api) : this.api;
     const version = ++this.#statusVersion;
     this.refreshing = true;
     await Promise.all(
@@ -370,7 +410,7 @@ export class PaymentsScreen extends LitElement {
         .filter((r) => r.active)
         .map(async (reader) => {
           try {
-            const status = await this.api.readerStatus(reader.id);
+            const status = await client.readerStatus(reader.id);
             if (version === this.#statusVersion)
               this.statuses = new Map(this.statuses).set(reader.id, status);
           } catch {
@@ -385,12 +425,12 @@ export class PaymentsScreen extends LitElement {
   async #mutate(action: () => Promise<unknown>): Promise<void> {
     if (this.busy) return;
     this.busy = true;
-    this.errorKey = null;
+    this.#showError(null);
     try {
       await action();
       await this.#load();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     } finally {
       this.busy = false;
     }

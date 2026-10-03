@@ -573,3 +573,216 @@ for (const shown of ["complete", "awaiting_cloud"] as const)
       setLocale(before);
     }
   });
+
+const awaitingCloud = {
+  state: "awaiting_cloud",
+  configured: true,
+  isPrimary: true,
+  requestId,
+  code: "12345678",
+  expiresAt: "2099-01-01T12:00:00Z",
+};
+const isStatus = (url: unknown) => String(url).endsWith("/management-api/cloud/status");
+const cloudError = (el: CloudServicesScreen) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=cloud-error]");
+
+it("fills in a screen opened while the server could not be reached once it answers again, and the message goes", async () => {
+  setLocale("en");
+  let reachable = false;
+  const api = new DashboardApi("", async () => {
+    if (!reachable) throw new TypeError("Failed to fetch");
+    return Response.json(awaitingCloud);
+  });
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect
+    .poll(() => cloudError(el)?.textContent?.trim())
+    .toBe(codeMessage("connection.failed"));
+  reachable = true;
+  api.liveData.refresh();
+  await expect.poll(() => el.shadowRoot!.textContent).toContain("12345678");
+  expect(cloudError(el)).toBeNull();
+});
+
+it("keeps an action's connection failure when the status read's failure recovers", async () => {
+  setLocale("en");
+  let reachable = true;
+  let statusReads = 0;
+  const api = new DashboardApi("", async (url) => {
+    if (!reachable || !isStatus(url)) throw new TypeError("Failed to fetch");
+    statusReads++;
+    return Response.json(awaitingCloud);
+  });
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect.poll(() => el.shadowRoot!.querySelector("#check")).not.toBeNull();
+  reachable = false;
+  api.liveData.refresh();
+  await expect.poll(() => cloudError(el)).not.toBeNull();
+  click(el, "check");
+  await flush(el);
+  reachable = true;
+  api.liveData.refresh();
+  await expect.poll(() => statusReads).toBe(2);
+  await flush(el);
+  await flush(el);
+  expect(cloudError(el)?.textContent?.trim()).toBe(codeMessage("connection.failed"));
+});
+
+it("keeps Start again after an unavailable request when the status is read again in the background", async () => {
+  setLocale("en");
+  let statusReads = 0;
+  const api = new DashboardApi("", async (url) => {
+    if (String(url).endsWith("/check"))
+      return Response.json(
+        { error: { code: "cloud.request_unavailable", params: {} } },
+        { status: 409 },
+      );
+    statusReads++;
+    return Response.json(awaitingCloud);
+  });
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect.poll(() => el.shadowRoot!.querySelector("#check")).not.toBeNull();
+  click(el, "check");
+  await expect.poll(() => el.shadowRoot!.querySelector("#restart")).not.toBeNull();
+  api.liveData.refresh();
+  await expect.poll(() => statusReads).toBe(2);
+  await flush(el);
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("#restart")).not.toBeNull();
+});
+
+it("does not move focus to a failure of a status read made in the background", async () => {
+  setLocale("en");
+  let reachable = true;
+  const api = new DashboardApi("", async () => {
+    if (!reachable) throw new TypeError("Failed to fetch");
+    return Response.json(awaitingCloud);
+  });
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect.poll(() => el.shadowRoot!.querySelector("#check")).not.toBeNull();
+  reachable = false;
+  api.liveData.refresh();
+  await expect.poll(() => cloudError(el)).not.toBeNull();
+  await flush(el);
+  expect(el.shadowRoot!.activeElement).toBeNull();
+});
+
+it("keeps the screen the person acted on while their action runs, whatever a background read answers", async () => {
+  setLocale("en");
+  let statusReads = 0;
+  let releaseRead!: () => void;
+  let releaseCheck!: () => void;
+  const api = new DashboardApi("", async (url) => {
+    if (String(url).endsWith("/check")) {
+      await new Promise<void>((resolve) => (releaseCheck = resolve));
+      return Response.json({
+        ...awaitingCloud,
+        state: "awaiting_local",
+        organisationId,
+        legalBusinessId,
+        organisationName: "Café Sol",
+        legalBusinessName: "Sol SL",
+      });
+    }
+    if (++statusReads === 2) {
+      await new Promise<void>((resolve) => (releaseRead = resolve));
+      return Response.json({ state: "not_connected", configured: true, isPrimary: true, code: "" });
+    }
+    return Response.json(awaitingCloud);
+  });
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect.poll(() => el.shadowRoot!.querySelector("#check")).not.toBeNull();
+  api.liveData.refresh();
+  await expect.poll(() => statusReads).toBe(2);
+  click(el, "check");
+  await flush(el);
+  releaseRead();
+  await flush(el);
+  await flush(el);
+  expect(el.shadowRoot!.textContent).toContain("12345678");
+  expect(el.shadowRoot!.querySelector("#connect")).toBeNull();
+  releaseCheck();
+  await expect.poll(() => el.shadowRoot!.querySelector("#confirm")).not.toBeNull();
+  expect(el.shadowRoot!.textContent).toContain("Sol SL");
+});
+
+it("takes a failed opening read's message away when Retry then loads the status", async () => {
+  setLocale("en");
+  let reachable = false;
+  const api = new DashboardApi("", async () => {
+    if (!reachable) throw new TypeError("Failed to fetch");
+    return Response.json(awaitingCloud);
+  });
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect.poll(() => cloudError(el)).not.toBeNull();
+  reachable = true;
+  click(el, "retry");
+  await expect.poll(() => el.shadowRoot!.textContent).toContain("12345678");
+  await flush(el);
+  expect(cloudError(el)).toBeNull();
+});
+
+it("keeps what the person's action showed when a status read started before it answers afterwards", async () => {
+  setLocale("en");
+  let statusReads = 0;
+  let releaseRead!: () => void;
+  const api = new DashboardApi("", async (url) => {
+    if (String(url).endsWith("/check"))
+      return Response.json({
+        ...awaitingCloud,
+        state: "awaiting_local",
+        organisationId,
+        legalBusinessId,
+        organisationName: "Café Sol",
+        legalBusinessName: "Sol SL",
+      });
+    if (++statusReads === 2) {
+      await new Promise<void>((resolve) => (releaseRead = resolve));
+      return Response.json(awaitingCloud);
+    }
+    return Response.json(awaitingCloud);
+  });
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect.poll(() => el.shadowRoot!.querySelector("#check")).not.toBeNull();
+  api.liveData.refresh();
+  await expect.poll(() => statusReads).toBe(2);
+  click(el, "check");
+  await expect.poll(() => el.shadowRoot!.querySelector("#confirm")).not.toBeNull();
+  releaseRead();
+  await flush(el);
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("#confirm")).not.toBeNull();
+  expect(el.shadowRoot!.textContent).toContain("Sol SL");
+});
+
+it("asks again before stopping Cloud access after a background read saw it stopped and then active", async () => {
+  setLocale("en");
+  let installationState = "active";
+  const api = new DashboardApi("", async () =>
+    Response.json({
+      state: "complete",
+      configured: true,
+      isPrimary: true,
+      code: "",
+      legalBusinessName: "Sol SL",
+      installation: {
+        state: installationState,
+        revision: 2,
+        lastContactAt: null,
+        leaseExpiresAt: null,
+        services: [],
+      },
+    }),
+  );
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect.poll(() => el.shadowRoot!.querySelector("#stop-access")).not.toBeNull();
+  click(el, "stop-access");
+  await expect.poll(() => el.shadowRoot!.querySelector("#confirm-stop")).not.toBeNull();
+  installationState = "revoked";
+  api.liveData.refresh();
+  await expect.poll(() => el.shadowRoot!.querySelector("#confirm-stop")).toBeNull();
+  installationState = "active";
+  api.liveData.refresh();
+  await expect.poll(() => el.shadowRoot!.querySelector("#refresh")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("#confirm-stop")).toBeNull();
+  expect(el.shadowRoot!.querySelector("#stop-access")).not.toBeNull();
+});

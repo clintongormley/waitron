@@ -422,4 +422,48 @@ describe("planned-actual-screen — recovery after the server answers again", ()
     expect(el.shadowRoot!.textContent).toContain("Ana");
     await vi.waitFor(() => expect(errorText(el)).toBeUndefined());
   });
+
+  it("shows a failed locations read's message, not the no-location prompt, until it succeeds", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        getLocations: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "connection.failed" })
+          .mockResolvedValue(locations),
+      }),
+      { liveData },
+    );
+    const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
+      api,
+    });
+    await vi.waitFor(() => expect(errorText(el)).toBe(codeMessage("connection.failed")));
+    expect(el.shadowRoot!.querySelector("[data-test=no-location]")).toBeNull();
+
+    liveData.refresh();
+
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("240"));
+    expect(el.shadowRoot!.querySelector("[data-test=no-location]")).toBeNull();
+    await vi.waitFor(() => expect(errorText(el)).toBeUndefined());
+  });
+
+  it("keeps the no-location prompt for a list that loaded empty when a later read fails", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi({ getLocations: vi.fn().mockResolvedValue([]) }), {
+      liveData,
+    });
+    const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
+      api,
+    });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=no-location]")).not.toBeNull(),
+    );
+    vi.mocked(api.getLocations).mockRejectedValue({ code: "connection.failed" });
+    liveData.refresh();
+    await vi.waitFor(() =>
+      expect((el as unknown as { errorKey: string | null }).errorKey).toBe("connection.failed"),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=no-location]")).not.toBeNull();
+  });
 });

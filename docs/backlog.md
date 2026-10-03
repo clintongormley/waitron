@@ -1158,26 +1158,37 @@ message only if it is still the one the failed read set, a yes/no flag always (M
 set by the read in `#openMenuForm`, which a recovery clears too). Profile, Recipe, the two order
 dialogs and the catalogue's placement step, not among the 20, take the same callback. Screens whose
 first load stopped before starting its later reads (Products, Printers, Modifiers, Content
-languages, Approvals, Sales' business day) start them on recovery. Measured on the merged head
+languages, Approvals, Sales' business day) start them on recovery (Sales' business day: since lane
+A's W18, 2026-10-03, it also stays watched until it answers). Measured on the merged head
 (`41f138d45`) with a 20 s outage: all 34 screens recover, and 32 of 34 opened during the outage;
 measured only before the review's fixes: a 90 s outage recovers and an unsaved form edit is kept.
-Not covered — below, "Screens that load outside the
-shared queries never retry".
+Not covered — below, A224.
 
-**Screens that load outside the shared queries never retry (A224, from A206's review, 2026-10-02) —
-OPEN.** A206 fixed every read made through the shared query layer. A screen opened while the server
-is down and loading through a one-off request stays on its message until the page is refreshed:
-Payments (`listPaymentProviders`/`listReaders` in `#load`), Cloud services, and Profile's language
-list (`getLocales`). Also from that review: no read has a time limit, so a request that never
-answers keeps its read loading for ever; and where a save's failure is shown in the same field as a
-read's, a save that failed with `connection.failed` during the outage loses its message when the
-reads recover. Most of the screens where that happens store the message as a code; Profile and the
-reprint dialog store its text. Units compares the error itself and keeps it, and the placement step
-keeps a save's failures in a list of their own. Sales releases its `getSalesOverview` watch in a
-`finally`, so if only that read fails while the daily-close read succeeds, no recovery is announced
-and the business day is not loaded until the screen is reopened — traced by reading, not tested.
-Roster and Planned vs actual show their "no locations" prompt instead of the error when the
-locations read fails.
+**Dashboard reads have no time limit, and a save's lost-connection message can vanish when reads
+recover (A224, from A206's review, 2026-10-02) — PARTLY DONE (lane A's W18).** Done: Payments'
+providers and readers, Cloud services' status and Profile's language list now load through the
+shared queries, so a screen opened while the server is down fills in once it is back. Payments asks
+for each reader's status again only when the set of active readers changes, after a change the
+operator made, or from its refresh button, because a status can ask the card provider. On Payments
+and Cloud services, a failed action's message stays when the reads recover, and Cloud services
+ignores a status read that started before a successful action's answer was shown and answered after
+it. Sales keeps watching the business-day read until it has answered, so it loads when only that
+read failed. Roster and Planned vs actual show the error, not their "no locations" prompt, when the
+locations read fails before it has ever answered. **Still open:** no read has a time limit, so a
+request that never answers keeps its read loading for ever, and the live connection does not re-read
+a read still marked loading (`packages/dashboard-kit/src/live-data.ts`, `#schedule`). And where a
+save's failure is shown in the same field as a read's, a save that failed with `connection.failed`
+during the outage loses its message when the reads recover: most screens store the message as a
+code, Profile and the reprint dialog store its text. Units compares the error itself and keeps it,
+the placement step keeps a save's failures in a list of their own, and Payments and Cloud services
+now keep it too. Both need a choice (asked of the owner 2026-10-03): the limit's value, and whether
+each screen tracks where its message came from.
+
+**Empty-state text shows beside a failed read on Payments and Cloud services (A243, seen 2026-10-03
+while checking lane A's W18) — OPEN.** While its read is failing, Payments still says "No card
+readers yet." under an empty table, and Cloud services says "Checking Cloud connection…" under the
+failure message; the same on `main` before W18. It is the kind of empty-state text W18 removed from
+Roster and Planned vs actual.
 
 **The WAITRON wordmark is nearly invisible in the dashboard's banner in dark mode (A225, seen
 2026-10-02 while checking A206) — OPEN, not investigated.** The dark lettering of the lockup sits on

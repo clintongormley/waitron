@@ -270,8 +270,7 @@ export class ProfileScreen extends LitElement {
           this.googleConfigured = value.configured;
           this.privacyNoticeUrl = value.privacyNoticeUrl ?? "";
         }),
-        this.api.getLocales().then((locales) => {
-          if (!this.isConnected) return;
+        this.#queries.watch("getLocales", [], (locales) => {
           this.locales = locales.locales;
           this.venueLocale = locales.venueDefault;
         }),

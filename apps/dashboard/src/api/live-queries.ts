@@ -47,6 +47,8 @@ export const QUERY_DEPENDENCIES = {
   // The venue's card readers, plus the per-reader device count aggregated over `device_card_readers`,
   // so a reader added/retired OR a device re-pointed refreshes the list.
   listReaders: ["card_readers", "device_card_readers"],
+  // The route reads `tenant_credentials`, which no module declares as a live resource.
+  listPaymentProviders: [],
   listStuckPayments: ["payments", "working_orders", "tills"],
   listStuckBillPayments: ["bill_payments", "payments", "working_orders", "tills"],
   listStuckBillRefunds: [
@@ -256,12 +258,16 @@ export const QUERY_DEPENDENCIES = {
   listIngredients: ["ingredients"],
   listStatuses: ["table_service_statuses"],
   getProfile: ["persons", "webauthn_credentials"],
+  // The venue's name; the language list itself is fixed.
+  getLocales: ["tenants"],
   getGoogleConfig: ["google_config"],
   getEmailInbox: ["email_inbox"],
   // `removable` reads whether the machine has a `nodes` row here, so a new row moves it too.
   listServers: ["node_membership", "nodes"],
   getBackupStatus: ["backup_status"],
   getStreamSettings: ["backup_status"],
+  // The answer is built from the box's own files and the process's role, not from any table.
+  getCloudStatus: [],
   listAlerts: ["incidents"],
   listHandledAlerts: ["incidents", "persons"],
 } as const;
