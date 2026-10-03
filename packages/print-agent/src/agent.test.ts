@@ -1694,6 +1694,45 @@ describe("createAgent — start/stop and logging", () => {
     expect(host.sleeps).toEqual([]);
   });
 
+  it("delivers a fast scan without starting passes back to back", async () => {
+    const device = { transport: "usb" as const, name: "USB-80", localKey: "SN-9" };
+    const scan = vi.fn(async () => [device]);
+    const host = fakeHost({
+      config: CONFIG,
+      token: "a1.s",
+      scan,
+      now: Date.now,
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    });
+    let agent!: ReturnType<typeof createAgent>;
+    const sent: AgentInventory[] = [];
+    const pulls = vi.fn(async (_url: string, _token: string, inventory: AgentInventory) => {
+      sent.push(inventory);
+      if (pulls.mock.calls.length > 10) agent.stop();
+      return okR<PullReply>({
+        nodeId: "n1",
+        servers: [],
+        jobs: [],
+        discoveryUntil: Date.now() + 10_000,
+      });
+    });
+    const c = client({ pullJobs: pulls });
+    agent = createAgent({ host, client: c });
+    await agent.runOnce(); // opens discovery before the timed loop begins
+    const loop = agent.start();
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      expect(pulls.mock.calls.length - 1).toBeLessThanOrEqual(2);
+      expect(scan).toHaveBeenCalledTimes(1);
+      expect(
+        sent.some((inventory) => inventory.scanned.some((item) => item.localKey === "SN-9")),
+      ).toBe(true);
+    } finally {
+      agent.stop();
+      await loop;
+    }
+  });
+
   it("logs on a phase change, not on every tick", async () => {
     const host = fakeHost({ config: CONFIG, token: "a1.s" });
     const agent = createAgent({ host, client: client() });
