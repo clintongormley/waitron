@@ -6619,9 +6619,8 @@ change what deleting a person does.
   activity), so the screen then offers no key until it is reopened.
 - The edit-settings form can meet `backup.recovery_key_exists` when a rotate (from another tab or
   admin) lands after it fetched the key.
-- The "key rotated" date `rotate` writes is dropped by a later `apply`, because `readApplyBody`
-  always passes `keyRotatedAt: undefined`; the value is what the Backups screen shows as the date the
-  key was rotated.
+- DONE: A later `apply` keeps the "key rotated" date that `rotate` wrote to `backup.env`, including
+  when the key was rotated before an archive destination was configured.
 - The owner's call: `rotate` with a destination loaded rebuilds `backup.env` from the running
   settings rather than keeping the file's other lines, so a destination added to the file by hand
   and not yet loaded is dropped.

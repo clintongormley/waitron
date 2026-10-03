@@ -14,6 +14,7 @@ import {
 } from "./backup-config.js";
 import {
   backupEnvRecord,
+  readBackupKeyRotatedAt,
   writeBackupEnv,
   writeRecoveryKey,
   type BackupEnvInput,
@@ -136,12 +137,13 @@ function readRetention(raw: unknown): { count: number; days: number } {
   return { count: r.count, days: r.days };
 }
 
-/** `keyRotatedAt` is unset: only `rotate` stamps it. `recoveryKey` is `undefined` when absent, because
- * a box that already holds a key reuses it. A refusal names the offending field, never its value — it
- * could be the key. */
+/** `recoveryKey` is `undefined` when absent, because a box that already holds a key reuses it.
+ * A refusal names the offending field, never its value — it could be the key. */
 async function readApplyBody(
   c: Context,
-): Promise<Omit<BackupEnvInput, "recoveryKey"> & { recoveryKey: string | undefined }> {
+): Promise<
+  Omit<BackupEnvInput, "recoveryKey" | "keyRotatedAt"> & { recoveryKey: string | undefined }
+> {
   const body = await readJsonBody<{
     destinationDir?: unknown;
     recoveryKey?: unknown;
@@ -162,7 +164,6 @@ async function readApplyBody(
     recoveryKey: body.recoveryKey,
     schedule: readSchedule(body.schedule),
     retention: readRetention(body.retention),
-    keyRotatedAt: undefined,
   };
 }
 
@@ -279,7 +280,8 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         if (recoveryKey === undefined) {
           throw new AppError("backup.request_invalid", { field: "recoveryKey" });
         }
-        const input: BackupEnvInput = { ...body, recoveryKey };
+        const keyRotatedAt = await readBackupKeyRotatedAt(deps.stateDir);
+        const input: BackupEnvInput = { ...body, recoveryKey, keyRotatedAt };
         assertStorableKey(input.recoveryKey);
         // Dry-validate the EXACT record we are about to write, so the route rejects exactly what boot
         // would BEFORE touching disk.
