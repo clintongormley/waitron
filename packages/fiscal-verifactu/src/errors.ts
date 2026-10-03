@@ -118,9 +118,9 @@ declare module "@waitron/shared" {
 
     /**
      * `./drain.ts`'s `handleDuplicate` (error 3000): AEAT's own copy of this identity is `Anulada`,
-     * so the invoice number is burned and this record can never become a confirmed accept. Halts
-     * the record and its chain's successors. No `codigo`/`mensaje` params: they would only ever
-     * repeat 3000.
+     * and the record is a sale, or a cancellation whose fingerprint differs from the one AEAT
+     * holds or for which AEAT returns no record. Halts the record and its chain's successors. No
+     * `codigo`/`mensaje` params: they would only ever repeat 3000.
      */
     "fiscal.duplicado_anulado": { registroId: string };
 

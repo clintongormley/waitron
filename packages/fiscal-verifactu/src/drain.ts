@@ -220,7 +220,8 @@ async function drainDue(
       });
       // `@waitron/verifactu` leaves the wait undefined when AEAT's reply has no usable one. The
       // reply above is saved either way; nothing more is sent this pass, and the gate keeps the
-      // last wait AEAT did give.
+      // last wait AEAT did give, or `TIEMPO_ESPERA_INICIAL_SEG` when none is stored or the stored
+      // one is 0.
       if (respuesta.TiempoEsperaEnvio === undefined) break;
       t = respuesta.TiempoEsperaEnvio;
       if (dueCount < maxPorEnvio) break;
@@ -719,8 +720,8 @@ async function raiseIncident(
 }
 
 /**
- * Route B (error 3000, `duplicate_unknown`): AEAT reported a duplicate without saying what it
- * holds, so a targeted consulta for this one record resolves it. Only the `Huella` is compared:
+ * Route B (error 3000; `handleDuplicate` says which cases): a targeted consulta for this one record
+ * resolves it. Only the `Huella` is compared:
  * it already summarises every hashed field.
  *
  * `Ejercicio`/`Periodo` come from `fecha_expedicion_factura`: our records never carry a separate
@@ -744,16 +745,23 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean> {
 }
 
 /**
- * The two error-3000 duplicate cases:
+ * The error-3000 duplicate cases:
  *
- *   - Route A (`duplicate_annulled`): AEAT's own copy of this identity is `Anulada`. This record
- *     can never become a confirmed accept under this identity, so it halts with its own incident
- *     rather than retrying forever.
- *   - Route B (`duplicate_unknown`): a matching huella means AEAT already holds OUR record, so it
- *     resolves to `aceptado`; reading it as a rejection would be wrong. A differing huella means
- *     the identity collided with something that is not our record, and it halts.
+ *   - Route A (`duplicate_annulled` on an alta): AEAT's own copy of this identity is `Anulada`. This
+ *     record can never become a confirmed accept under this identity, so it halts with
+ *     `fiscal.duplicado_anulado` rather than retrying forever.
+ *   - Route B (`duplicate_unknown`, or `duplicate_annulled` on an anulación): a consulta reads the
+ *     record AEAT holds under this identity. A huella equal to the row's own means AEAT already
+ *     holds OUR record, so it resolves to `aceptado`. A differing huella, or AEAT returning no record
+ *     for it, halts: on an anulación with `fiscal.duplicado_anulado`, otherwise with
+ *     `fiscal.huella_divergente`. An anulación belongs here because `Anulada` on a resent anulación
+ *     is most likely AEAT holding that very anulación: the verifactu library's live preproduction
+ *     check asserts that the final consulta "reports the invoice as `Anulado` with the cancellation
+ *     record's hash" (`sources/README.md`; the "final cancelled-record consulta" stage in
+ *     `scripts/live-aeat.mjs`), no recorded run of it is cited here, and the library's fake does the
+ *     same.
  *
- * Both halting outcomes also halt this chain's successors, as a rejection does: AEAT has not
+ * Every halting outcome also halts this chain's successors, as a rejection does: AEAT has not
  * confirmed the huella their `RegistroAnterior` points at.
  */
 async function handleDuplicate(
@@ -766,35 +774,23 @@ async function handleDuplicate(
   result: DrainResult,
   halted: Set<string>,
 ): Promise<void> {
-  if (efectivo === "duplicate_annulled") {
-    await setEstado(tx, row.id, "detenido", now, { csv, incidencia: true });
-    await raiseIncident(
-      tx,
-      row,
-      "error",
-      new AppError("fiscal.duplicado_anulado", { registroId: row.id }),
-      now,
-      result,
-    );
-    const haltedIds = await haltSuccessors(tx, row, now);
-    for (const id of haltedIds) halted.add(id);
-    result.recordsHalted += 1 + haltedIds.length;
-    return;
-  }
-
-  // duplicate_unknown -> Route B: consult, compare huella.
-  const matched = await routeB(client, row);
-  if (matched) {
-    await setEstado(tx, row.id, "aceptado", now, { csv, confirmadoEn: now });
-    result.recordsAccepted += 1;
-    return;
+  const annulled = efectivo === "duplicate_annulled";
+  if (!annulled || row.tipo_registro === "anulacion") {
+    const matched = await routeB(client, row);
+    if (matched) {
+      await setEstado(tx, row.id, "aceptado", now, { csv, confirmadoEn: now });
+      result.recordsAccepted += 1;
+      return;
+    }
   }
   await setEstado(tx, row.id, "detenido", now, { csv, incidencia: true });
   await raiseIncident(
     tx,
     row,
     "error",
-    new AppError("fiscal.huella_divergente", { registroId: row.id }),
+    new AppError(annulled ? "fiscal.duplicado_anulado" : "fiscal.huella_divergente", {
+      registroId: row.id,
+    }),
     now,
     result,
   );

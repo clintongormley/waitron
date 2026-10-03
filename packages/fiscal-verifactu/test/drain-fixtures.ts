@@ -125,7 +125,9 @@ export async function insertPendingAlta(
   ];
   // Chained as `appendToChain` chains a real record: the first on a node is the chain start, every
   // later one names its predecessor. The fake AEAT answers a repeated first record for the same
-  // issuer and software identity with warning 2007, as AEAT itself was observed to.
+  // issuer and software identity with warning 2007, as AEAT did in the verifactu library's
+  // preproduction run 36350894099 (its `COMPLIANCE-AUDIT.md`, "Complete live result, 27 September
+  // 2026").
   const head = await db.execute<{
     id_emisor_factura: string;
     num_serie_factura: string;
