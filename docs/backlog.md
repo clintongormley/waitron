@@ -1754,13 +1754,13 @@ category; it was missing only for a variant saved Inactive and for a product wit
 editor with no prompt, so a variant added and not saved is lost silently — the likeliest cause; ask
 the owner if it recurs.
 
-**A variant always has its product's unit (A222, owner 2026-10-02) — DONE.**
+**A variant always has its product's unit (A222, owner 2026-10-02) — DONE (#1101).**
 The owner: _"currently variants can have different units from their parents. i think that's a bad idea"_.
 A variant's page offers its own unit today (`renderUnit` in `product-editor.ts`, whose blank
 choice is the parent's unit). **Wanted:** a variant takes its product's unit and cannot set one; the
 field goes from the variant's page and the variant window, the server refuses or ignores a
 variant's unit, and variants holding a unit of their own are cleared (allowed before go-live,
-§3). (2026-10-03: not cleared, pending the owner's OK; see "Left open" below.) The unit decides
+§3). (2026-10-03: not cleared — the owner chose no clearing migration; see "Left open" below.) The unit decides
 how a line's quantity and price are worked out, which reaches a sale
 record, so this takes the full review path (risk trigger: fiscal invariants); trace every reader
 of a variant's `unitId` first. A203 (extras as a fixed portion) allows for a variant's own unit
@@ -1776,9 +1776,8 @@ beside the price as fixed text, with no unit button or dropdown. Unit management
 a variant still stores, and deleting a unit deletes such rows. The variant window already offered
 no unit.
 **Left open:**
-- No migration clears the unit rows variants already store. This carries the owner's A209 answer
-  for categories (no data-migration code before go-live, CLAUDE.md §3) over to units, and awaits
-  the owner's OK; the alternative is a one-statement clearing migration. The product, menu and unit
+- No migration clears the unit rows variants already store: the owner chose this on 2026-10-03,
+  as for A209's categories (no data-migration code before go-live, CLAUDE.md §3). The product, menu and unit
   reads ignore such a row, and the next save of the variant's own page, or its unit's deletion,
   removes it.
 - A menu published before this keeps a variant's own unit, frozen in its published copy, until the
@@ -4838,6 +4837,15 @@ characters. Left open:
 
 ### B9. CI and test infra
 
+- **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254
+  attempt 1, job 111163230954, 2026-10-03; passed on re-run; not fixed).** In
+  `apps/server/src/stream-pause.e2e.test.ts` step 6, the call to the bucket made just after
+  `s3.pause()` answered before the bound, so the assertion at line 540 read
+  `expected 'answered' to be 'unanswered'`. A possible cause, not tested: `pause()` in
+  `apps/server/src/testing/s3-test-server.ts` sends `SIGSTOP` and returns without waiting for the
+  process to be stopped, so a call can be answered in between. The PR did not change either file.
+  Next action: reproduce it (repeat the job, or the step in a loop), then have `pause()` wait until
+  the process reports itself stopped (on Linux, state `T` in `/proc/<pid>/stat`) before returning.
 - **The stream pause test's last restore failed once in CI, about 31 s after the stream resumed
   (PR #1055, run 37042034082, job 110955048468, 2026-10-02; not fixed).** In
   `apps/server/src/stream-pause.e2e.test.ts` step 10, the probe that restores the generation to
