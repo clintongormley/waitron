@@ -3,7 +3,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, submitOnEnter, type ComboboxOption } from "@waitron/ui";
 import { resolveContentText } from "@waitron/shared";
 import { DIETARY_LABELS } from "@waitron/catalogue/src/dietary-declarations.js";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
@@ -1348,19 +1348,24 @@ export class ProductEditor extends LitElement {
   private renderModifiers() {
     const attached = this.draft.modifiers;
     const held = new Set(attached.map(modifierKey));
-    const offered = (kind: ProductModifierRef["kind"]) =>
-      (kind === "extras" ? this.extraLists : this.optionLists)
-        .filter((list) => !held.has(modifierKey({ kind, id: list.id })))
-        .map((list) => ({
-          value: modifierKey({ kind, id: list.id }),
-          label: kindLabel(list.name, kind),
-        }));
-    const options = [
-      { value: CREATE_EXTRA_LIST, label: t("editor.create_extra_list") },
-      { value: CREATE_OPTION_LIST, label: t("editor.create_option_list") },
-      ...offered("extras"),
-      ...offered("options"),
-    ];
+    const offered = (kind: ProductModifierRef["kind"]): ComboboxOption[] => {
+      const group = t(KIND_TITLE[kind]);
+      const create =
+        kind === "extras"
+          ? { value: CREATE_EXTRA_LIST, label: t("editor.create_extra_list") }
+          : { value: CREATE_OPTION_LIST, label: t("editor.create_option_list") };
+      return [
+        ...(kind === "extras" ? this.extraLists : this.optionLists)
+          .filter((list) => !held.has(modifierKey({ kind, id: list.id })))
+          .map((list) => ({
+            value: modifierKey({ kind, id: list.id }),
+            label: kindLabel(list.name, kind),
+            group,
+          })),
+        { ...create, group, icon: "plus", primary: true },
+      ];
+    };
+    const options = [...offered("extras"), ...offered("options")];
     return html`<div class="group" data-section="modifiers">
       <span class="group-label">${t("editor.modifiers")}</span>
       ${

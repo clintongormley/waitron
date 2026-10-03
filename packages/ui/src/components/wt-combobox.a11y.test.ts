@@ -188,6 +188,54 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
     await expectNoA11yViolations(host);
   });
 
+  const WITH_PRIMARY: ComboboxOption[] = [
+    { value: "pan", label: "Pan extra", group: "Extras" },
+    { value: "new-extras", label: "Nueva lista de extras…", group: "Extras", primary: true },
+    { value: "coccion", label: "Punto", group: "Opciones" },
+    { value: "new-options", label: "Nueva lista de opciones…", group: "Opciones", primary: true },
+  ];
+
+  test("open, with a primary row in each group", async () => {
+    const el = await openThemed('<wt-combobox label="Modificadores"></wt-combobox>', theme, [
+      ...WITH_PRIMARY.slice(0, 2).map((option) => ({ ...option, icon: "leaf" })),
+      ...WITH_PRIMARY.slice(2),
+    ]);
+    // Without this the scan could pass on a list that painted no row in the primary colour.
+    const [plain, primary] = el.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]');
+    expect(getComputedStyle(primary!).color).not.toBe(getComputedStyle(plain!).color);
+    await expectNoA11yViolations(host);
+  });
+
+  test("open, with the cursor over a primary row", async () => {
+    const el = await openThemed(
+      '<wt-combobox label="Modificadores" search="never"></wt-combobox>',
+      theme,
+      WITH_PRIMARY,
+    );
+    const [plain, row] = el.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]');
+    await userEvent.hover(row!);
+    expect(row!.matches(":hover")).toBe(true);
+    expect(getComputedStyle(row!).backgroundColor).toBe(getComputedStyle(host).backgroundColor);
+    expect(getComputedStyle(row!).color).not.toBe(getComputedStyle(plain!).color);
+    await expectNoA11yViolations(host);
+  });
+
+  test("opened from the keyboard, with a primary row active", async () => {
+    const el = (await mountThemed(
+      '<wt-combobox label="Modificadores" search="never"></wt-combobox>',
+      theme,
+    )) as WtCombobox;
+    el.options = WITH_PRIMARY;
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>(".trigger")!.focus();
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+    const active = el.shadowRoot!.querySelector(".option.active")!;
+    expect(active.textContent!.trim()).toBe("Nueva lista de extras…");
+    const plain = el.shadowRoot!.querySelector('[role="option"]')!;
+    expect(getComputedStyle(active).color).not.toBe(getComputedStyle(plain).color);
+    await expectNoA11yViolations(host);
+  });
+
   test("open, with an action row", async () => {
     await openThemed('<wt-combobox label="Unidad" value="kg"></wt-combobox>', theme, [
       { value: "kg", label: "Kilogramo" },

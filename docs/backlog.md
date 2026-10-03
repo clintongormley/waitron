@@ -1435,13 +1435,13 @@ and hides them again. Each product opens with them hidden. The table still shows
 reported problem or a just-added unsaved variant would sit on a hidden row, and the link then reads
 "Hide inactive". A Remove that leaves no row on screen puts focus on the link.
 
-**"New extras list…" and "New options list…" leave the modifier dropdown's list (A218) — DECIDED,
-ready to build.** The owner: _"i don't like the new extras list and new options list in the
+**"New extras list…" and "New options list…" leave the modifier dropdown's list (A218) — DONE
+(this PR).** The owner: _"i don't like the new extras list and new options list in the
 modifiers dropdown. how else could we organise those? at the very least they should be at the end
 of the list, separated from the others with a line. could we make it a single "add new
 modifier"? although then we'd need a second click to choose which, or to open a modal with two
-tabs or something"_. Today the two actions (`editor.create_extra_list`,
-`editor.create_option_list`) are the first two choices in "Add extras or options", above the
+tabs or something"_. Before A218 the two actions (`editor.create_extra_list`,
+`editor.create_option_list`) were the first two choices in "Add extras or options", above the
 lists themselves. **The minimum:** they move to the end, after a dividing line, which
 `wt-combobox` cannot draw today (it has group headings, no divider). Mock up the alternatives for
 the owner: that minimum; one "New modifier…" choice opening a window with Extras and Options
@@ -1450,6 +1450,14 @@ tabs; and a "New modifier" button beside the dropdown instead of inside it.
 group headings (`wt-combobox`'s existing `group`), and each group ends with its own make-new
 choice, "+ New extras list…" and "+ New options list…", drawn in the primary blue so it does not
 read as a list. No divider is needed.
+Built: "Add extras or options" lists the extras lists under an "Extras" heading and the options
+lists under "Options", each group ending with its make-new choice, drawn with a plus icon in the
+primary blue. A group whose lists are all attached, or that has none, still shows its heading and
+its make-new choice. The blue comes from a new opt-in on `wt-combobox` options, `primary`, which
+paints the row in a new token, `--wt-color-primary-text`: the primary colour itself was too faint
+on a hovered row in the light theme for axe (4.32:1). **Open:** each list still reads "Extra bread
+· Extras", and under its heading the " · Extras" is now said twice; and the price heading's "Add
+unit…" row could take the same blue.
 
 **With variants, Pricing folds and Variants becomes its own section (A219) — DONE (#1065).**
 The owner: _"when we have variants the vat and base price and status filter are overwhelming.

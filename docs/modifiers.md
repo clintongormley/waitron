@@ -63,9 +63,10 @@ instead. An extras entry is either preselected or not — there is no starting q
 Open the product in **Products** and use its **Modifiers** section, which is always on screen rather
 than folded away. One control adds either kind, and the section holds both kinds in a single ordered
 list; each row shows the list's staff name and which kind it is. Drag a row by the handle at its
-start to move it, or focus the handle and use the up and down arrow keys. That same control offers
-**New extras list…** and **New options list…**, so you can build a list without abandoning the
-product you are editing.
+start to move it, or focus the handle and use the up and down arrow keys. That same control lists
+extras lists under an **Extras** heading and options lists under **Options**, and each group ends
+with its own choice to make a new one, **New extras list…** or **New options list…**, so you can
+build a list without abandoning the product you are editing.
 
 Every menu offer carries the product's extras and options lists in the order you set here.
 An extra uses its list entry's price when you set one, otherwise its product's own price.

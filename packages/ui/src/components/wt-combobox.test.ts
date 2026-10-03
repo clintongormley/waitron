@@ -1713,6 +1713,48 @@ test("a group split by an ungrouped option starts a new heading when it resumes"
   expect(optionRows(el).map((row) => row.textContent!.trim())).toEqual(["Ana", "Nobody", "Luis"]);
 });
 
+const WITH_PRIMARY: ComboboxOption[] = [
+  { value: "ana", label: "Ana", group: "Staff" },
+  { value: "new-staff", label: "New member…", group: "Staff", icon: "check", primary: true },
+  { value: "bar", label: "Bar", group: "Stations" },
+];
+
+test("a primary row paints its label and icon in the primary token, hovered or not, and no other row does", async () => {
+  const el = await mountWith('<wt-combobox label="Members"></wt-combobox>', WITH_PRIMARY);
+  host.style.setProperty("--wt-color-primary-text", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-bg", "rgb(4, 5, 6)");
+  await userEvent.click(fieldParts(el).trigger);
+  const [plain, primary, other] = optionRows(el);
+  expect(getComputedStyle(primary!).color).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(primary!.querySelector("wt-icon")!).color).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(plain!).color).not.toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(other!).color).not.toBe("rgb(1, 2, 3)");
+  await userEvent.hover(primary!);
+  expect(getComputedStyle(primary!).backgroundColor).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(primary!).color).toBe("rgb(1, 2, 3)");
+});
+
+test("an action row is not painted in the primary token unless it asks to be", async () => {
+  const el = await mountWith('<wt-combobox label="Unit"></wt-combobox>', [
+    { value: "kg", label: "Kilogram" },
+    { value: "add-unit", label: "Add unit…", action: true },
+  ]);
+  host.style.setProperty("--wt-color-primary-text", "rgb(1, 2, 3)");
+  await userEvent.click(fieldParts(el).trigger);
+  expect(getComputedStyle(optionRows(el)[1]!).color).not.toBe("rgb(1, 2, 3)");
+});
+
+test("a primary row sharing a group sits last inside that group", async () => {
+  const el = await mountWith('<wt-combobox label="Members"></wt-combobox>', WITH_PRIMARY);
+  await userEvent.click(fieldParts(el).trigger);
+  const groups = [...el.shadowRoot!.querySelectorAll<HTMLElement>('[role="group"]')];
+  expect(
+    groups.map((group) =>
+      [...group.querySelectorAll('[role="option"]')].map((row) => row.textContent!.trim()),
+    ),
+  ).toEqual([["Ana", "New member…"], ["Bar"]]);
+});
+
 const WITH_ACTION: ComboboxOption[] = [
   { value: "kg", label: "Kilogram" },
   { value: "add-unit", label: "Add unit…", action: true },
