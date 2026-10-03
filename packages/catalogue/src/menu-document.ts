@@ -1005,8 +1005,19 @@ export function diffEntries(
   }
   for (const [key, { listId, listName, item }] of next.extraItemsByList) {
     const was = prev.extraItemsByList.get(key)?.item;
+    if (was === undefined) continue;
+    if (was.portion !== item.portion)
+      push({
+        kind: "extra_portion_changed",
+        productId: item.productId,
+        name: item.name,
+        listId,
+        listName,
+        from: { portion: was.portion, abbreviation: was.unit?.abbreviation ?? {} },
+        to: { portion: item.portion, abbreviation: item.unit?.abbreviation ?? {} },
+        source: "shared_product",
+      });
     if (
-      was === undefined ||
       same(
         [was.unit?.id, was.unit?.abbreviation, was.unit?.precision],
         [item.unit?.id, item.unit?.abbreviation, item.unit?.precision],

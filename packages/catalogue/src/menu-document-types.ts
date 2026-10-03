@@ -152,6 +152,15 @@ export type MenuChange = {
       to: { abbreviation: Record<string, string>; precision: number };
     }
   | {
+      kind: "extra_portion_changed";
+      productId: string;
+      name: string;
+      listId: string;
+      listName: string;
+      from: { portion: string; abbreviation: Record<string, string> };
+      to: { portion: string; abbreviation: Record<string, string> };
+    }
+  | {
       kind: "section_added" | "section_removed";
       sectionId: string;
       name: string;

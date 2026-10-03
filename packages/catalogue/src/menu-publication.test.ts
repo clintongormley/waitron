@@ -750,6 +750,89 @@ describe("menuStatus", () => {
       ]);
     });
 
+    it("attributes a portion edit only to menus offering that extras list", async () => {
+      const f = await menusFixture(fx.db);
+      const lunchOnly = await app(async (tx) => {
+        const list = await createExtraList(
+          tx,
+          {
+            name: "Soup extras",
+            minPicks: 0,
+            maxPicks: 2,
+            items: [{ productId: f.extraLemon, price: "0.40" }],
+          },
+          "en",
+        );
+        await writeProductModifiers(tx, f.soup, [{ kind: "extras", id: list.id }]);
+        return list.id;
+      });
+      await publish(f.lunch);
+      await publish(f.dinner);
+      await fx.db
+        .update(extraListItems)
+        .set({ portion: 2000 })
+        .where(eq(extraListItems.listId, f.extrasList));
+      await fx.db
+        .update(extraListItems)
+        .set({ portion: 3000 })
+        .where(eq(extraListItems.listId, lunchOnly));
+
+      expect(
+        (await app((tx) => previewMenu(tx, f.lunch))).changes.filter(
+          (change) => change.kind === "extra_portion_changed",
+        ),
+      ).toEqual([
+        expect.objectContaining({ listId: f.extrasList, alsoOn: ["Dinner Menu"] }),
+        expect.objectContaining({ listId: lunchOnly }),
+      ]);
+      expect(
+        (await app((tx) => previewMenu(tx, f.lunch))).changes.find(
+          (change) => change.kind === "extra_portion_changed" && change.listId === lunchOnly,
+        ),
+      ).not.toHaveProperty("alsoOn");
+    });
+
+    it("attributes a unit edit only to menus offering that extras list", async () => {
+      const f = await menusFixture(fx.db);
+      const lunchOnly = await app(async (tx) => {
+        const list = await createExtraList(
+          tx,
+          {
+            name: "Soup extras",
+            minPicks: 0,
+            maxPicks: 2,
+            items: [{ productId: f.extraLemon, price: "0.40" }],
+          },
+          "en",
+        );
+        await writeProductModifiers(tx, f.soup, [{ kind: "extras", id: list.id }]);
+        return list.id;
+      });
+      await publish(f.lunch);
+      await publish(f.dinner);
+      await app(async (tx) => {
+        const unit = await createUnit(
+          tx,
+          { name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+          "en",
+        );
+        await updateProduct(tx, f.extraLemon, { unitId: unit.id });
+      });
+
+      const changes = (await app((tx) => previewMenu(tx, f.lunch))).changes.filter(
+        (change) => change.kind === "extra_unit_changed",
+      );
+      expect(changes).toEqual([
+        expect.objectContaining({ listId: f.extrasList, alsoOn: ["Dinner Menu"] }),
+        expect.objectContaining({ listId: lunchOnly }),
+      ]);
+      expect(
+        changes.find(
+          (change) => change.kind === "extra_unit_changed" && change.listId === lunchOnly,
+        ),
+      ).not.toHaveProperty("alsoOn");
+    });
+
     it("flags both for Extra lemon deleted, naming the product and each dish's extras", async () => {
       const f = await published();
       await app((tx) => deactivateProduct(tx, f.extraLemon));

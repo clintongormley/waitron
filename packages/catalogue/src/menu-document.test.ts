@@ -959,6 +959,65 @@ describe("diffMenuDocuments", () => {
     });
   });
 
+  it("names each list's portion change when the extra is also a dish", async () => {
+    const f = await menusFixture(fx.db);
+    const secondList = await app(async (tx) => {
+      const list = await createExtraList(
+        tx,
+        {
+          name: "Soup extras",
+          minPicks: 0,
+          maxPicks: 2,
+          items: [{ productId: f.extraLemon, price: "0.40" }],
+        },
+        "en",
+      );
+      await writeProductModifiers(tx, f.soup, [{ kind: "extras", id: list.id }]);
+      await addMember(tx, f.lunchRoot, product(f.extraLemon));
+      return list.id;
+    });
+    const live = await build(f.lunch);
+    await fx.db
+      .update(extraListItems)
+      .set({ portion: 2000 })
+      .where(
+        and(eq(extraListItems.listId, f.extrasList), eq(extraListItems.productId, f.extraLemon)),
+      );
+    await fx.db
+      .update(extraListItems)
+      .set({ portion: 3000 })
+      .where(
+        and(eq(extraListItems.listId, secondList), eq(extraListItems.productId, f.extraLemon)),
+      );
+
+    expect(
+      diffMenuDocuments(live, await build(f.lunch)).filter(
+        (change) => change.kind === "extra_portion_changed",
+      ),
+    ).toEqual([
+      {
+        kind: "extra_portion_changed",
+        productId: f.extraLemon,
+        name: "Extra lemon",
+        listId: f.extrasList,
+        listName: "Extras",
+        from: { portion: "1.000", abbreviation: EACH_UNIT.abbreviation },
+        to: { portion: "2.000", abbreviation: EACH_UNIT.abbreviation },
+        source: "shared_product",
+      },
+      {
+        kind: "extra_portion_changed",
+        productId: f.extraLemon,
+        name: "Extra lemon",
+        listId: secondList,
+        listName: "Soup extras",
+        from: { portion: "1.000", abbreviation: EACH_UNIT.abbreviation },
+        to: { portion: "3.000", abbreviation: EACH_UNIT.abbreviation },
+        source: "shared_product",
+      },
+    ]);
+  });
+
   it("names a unit change on both lists when the extra is also sold as a dish", async () => {
     const f = await menusFixture(fx.db);
     const secondList = await app(async (tx) => {
