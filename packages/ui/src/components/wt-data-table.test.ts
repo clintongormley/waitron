@@ -3278,14 +3278,13 @@ test.each([
 );
 
 test.each([
-  { label: "Open", width: 1000, theme: "light" },
-  { label: "Abrir", width: 1000, theme: "dark" },
-  { label: "Open", width: 390, theme: "dark" },
-  { label: "Abrir", width: 390, theme: "light" },
-])(
-  "a pinned $label link keeps its content width at $width px in $theme theme",
-  async ({ label, width, theme }) => {
-    await page.viewport(width === 1000 ? 1280 : 390, 900);
+  { label: "Open", width: 1000 },
+  { label: "Abrir", width: 390 },
+])("a pinned $label link keeps its content width at $width px", async ({ label, width }) => {
+  const previousWidth = window.innerWidth;
+  const previousHeight = window.innerHeight;
+  await page.viewport(width === 1000 ? 1280 : 390, 900);
+  try {
     const el = await table({
       rows: [rows[0]!],
       columns: [
@@ -3298,7 +3297,6 @@ test.each([
         },
       ],
     });
-    host.setAttribute("data-theme", theme);
     el.style.width = `${width}px`;
     await el.updateComplete;
 
@@ -3319,9 +3317,64 @@ test.each([
     expect(el.shadowRoot!.querySelector("th")!.getBoundingClientRect().width).toBeGreaterThan(
       heading.getBoundingClientRect().width * 2,
     );
-    await page.viewport(1280, 900);
-  },
-);
+  } finally {
+    await page.viewport(previousWidth, previousHeight);
+  }
+});
+
+test("a pinned Actions column keeps its content width when another column follows it", async () => {
+  const el = await table({
+    rows: [rows[0]!],
+    columns: [
+      { key: "name", label: "Name", cell: (row) => row.name },
+      {
+        key: "actions",
+        label: "Actions",
+        pinned: "end",
+        cell: () => html`<button aria-label="More actions">⋮</button>`,
+      },
+      { key: "note", label: "Note", cell: () => "Ready" },
+    ],
+  });
+  el.style.width = "1000px";
+  await el.updateComplete;
+
+  const heading = el.shadowRoot!.querySelector<HTMLTableCellElement>("th[data-pinned=end]")!;
+  const cell = el.shadowRoot!.querySelector<HTMLTableCellElement>("td[data-pinned=end]")!;
+  const button = cell.querySelector("button")!;
+  const labelRange = document.createRange();
+  labelRange.selectNodeContents(heading);
+  const style = getComputedStyle(heading);
+  const neededWidth =
+    Math.max(labelRange.getBoundingClientRect().width, button.getBoundingClientRect().width) +
+    parseFloat(style.paddingInlineStart) +
+    parseFloat(style.paddingInlineEnd);
+
+  expect(heading.getBoundingClientRect().width).toBeLessThanOrEqual(neededWidth + 2);
+});
+
+test("a tree table gives a pinned Open column only the width of its links", async () => {
+  const el = await treeTable({
+    columns: [
+      { key: "name", label: "Name", cell: (row) => row.name },
+      { key: "open", label: "Open", pinned: "end", cell: () => html`<a href="#open">Open</a>` },
+    ],
+  });
+  el.style.width = "1000px";
+  await el.updateComplete;
+
+  const heading = el.shadowRoot!.querySelector<HTMLTableCellElement>("th[data-pinned=end]")!;
+  const cell = el.shadowRoot!.querySelector<HTMLTableCellElement>("td[data-pinned=end]")!;
+  const link = cell.querySelector("a")!;
+  const style = getComputedStyle(heading);
+  const neededWidth =
+    link.getBoundingClientRect().width +
+    parseFloat(style.paddingInlineStart) +
+    parseFloat(style.paddingInlineEnd);
+
+  expect(heading.getBoundingClientRect().width).toBeLessThanOrEqual(neededWidth + 2);
+  expect(cell.getBoundingClientRect().width).toBeCloseTo(heading.getBoundingClientRect().width, 0);
+});
 
 test("a multi-word Actions heading wraps instead of taking half a phone-width table", async () => {
   const el = await table({

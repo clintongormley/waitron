@@ -1082,8 +1082,8 @@ was intended for every filter; this uses one stable width per filter. A filter w
 exceeds the available phone width fills its row, and that choice is cut short in the closed control.
 
 **A table's pinned Actions column keeps one narrow width (A195, owner 2026-10-02) — DONE.**
-`wt-data-table` gives a pinned last column only the space its heading or cell content needs, including
-the `actions` column; other columns take the spare width. The one-row Chromium test measures the column with both “Actions” and
+`wt-data-table` gives its `actions` column only the space its heading or cell content needs; other
+columns take the spare width. The one-row Chromium test measures the column with both “Actions” and
 “Acciones”, and the table and accessibility suites passed. Rendered one-row tables were inspected
 at 1280px and 390px, in English and Spanish labels and both themes. A198's options list form uses
 its own table (`apps/dashboard/src/widgets/option-list-form.ts:580`), so it cannot reuse the shared
