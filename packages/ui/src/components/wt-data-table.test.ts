@@ -1731,6 +1731,38 @@ test("each filter is a compact dropdown named by its label, showing its all opti
   expect(shown()).toBe("Inactive");
 });
 
+test("a table filter keeps the width of its longest choice as the selection changes", async () => {
+  const status = withStatus[1]!;
+  const el = await tableS({
+    columns: [
+      withStatus[0]!,
+      {
+        ...status,
+        filter: {
+          ...status.filter!,
+          options: [status.filter!.options[0]!, { value: "off", label: "Awaiting review" }],
+        },
+      },
+    ],
+  });
+  const filter = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
+  await filter.updateComplete;
+  const width = filter.getBoundingClientRect().width;
+  await chooseOption(filter, "active");
+  await el.updateComplete;
+  await filter.updateComplete;
+  expect(filter.getBoundingClientRect().width).toBeCloseTo(width, 0);
+  await chooseOption(filter, "off");
+  await el.updateComplete;
+  await filter.updateComplete;
+  expect(filter.getBoundingClientRect().width).toBeCloseTo(width, 0);
+  expect(
+    filter.shadowRoot!.querySelector<HTMLElement>(".trigger .value")!.scrollWidth,
+  ).toBeLessThanOrEqual(
+    filter.shadowRoot!.querySelector<HTMLElement>(".trigger .value")!.clientWidth,
+  );
+});
+
 test("the all filter option is painted as a chosen value", async () => {
   const el = await tableS({ columns: withStatus });
   const filter = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;

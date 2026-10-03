@@ -77,6 +77,24 @@ export class WtCombobox extends LitElement {
         cursor: pointer;
       }
 
+      :host([stable-width]) .trigger {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+
+      :host([stable-width]) .value,
+      :host([stable-width]) .width-option {
+        grid-row: 1;
+        grid-column: 1;
+      }
+
+      .width-option {
+        height: 0;
+        overflow: hidden;
+        visibility: hidden;
+        text-wrap: nowrap;
+      }
+
       /* nowrap comes from text-wrap here because no-hardcoded-chrome.test.ts's keyword-colour scan
          rejects the older shorthand, whose property name begins with a colour keyword. */
       .value {
@@ -268,6 +286,8 @@ export class WtCombobox extends LitElement {
   @property() value = "";
   /** Treat an offered empty-string option as a selection, while its value remains empty. */
   @property({ type: Boolean, attribute: "show-empty-option" }) showEmptyOption = false;
+  /** Reserve each option label's width when every possible trigger text is an offered label. */
+  @property({ type: Boolean, reflect: true, attribute: "stable-width" }) stableWidth = false;
   @property({ attribute: false }) values: string[] = [];
   @property() placeholder = "";
   @property({ attribute: false }) countLabel: (count: number) => string = (count) =>
@@ -835,6 +855,16 @@ export class WtCombobox extends LitElement {
             @keydown=${this.onTriggerKeydown}
           >
             <span class=${selectedText ? "value" : "value placeholder"}>${shownText}</span>
+            ${
+              this.stableWidth
+                ? this.options
+                    .filter((option) => !option.action)
+                    .map(
+                      (option) =>
+                        html`<span class="width-option" aria-hidden="true">${option.label}</span>`,
+                    )
+                : nothing
+            }
             <wt-icon class="chevron" name="chevron-down"></wt-icon>
           </button>
         </div>
