@@ -1416,7 +1416,8 @@ idea. maybe we shouldn't allow editing that"_): a variant's page shows its produ
 text, with no Change. That retires the variant's own category everywhere — the server's
 resolution of a variant's reported category (`variant.effective`, which the Products list and
 reporting read) becomes "always the product's", and variants holding a category of their own are
-cleared (allowed before go-live, §3). Trace every consumer of a variant's `categoryId` first,
+cleared (allowed before go-live, §3). (2026-10-03: the owner decided against clearing them; see
+"Left open" below.) Trace every consumer of a variant's `categoryId` first,
 among them the Products list's main-category cell on a variant (A221, `apps/dashboard/src/widgets/product-list.ts`), which
 compares the variant's effective main category with its product's and should then always stay
 empty.

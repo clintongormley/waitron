@@ -39,7 +39,7 @@ sees, and filling in a kitchen name does not change what the diner reads. While 
 blank, its field shows the name that will be used instead.
 
 You can also add a customer-facing description, under **Descriptors**, and a photo, which sits
-beside the name at the top of the editor.
+beside the name, below the category path.
 
 ## Give the product a main category
 
