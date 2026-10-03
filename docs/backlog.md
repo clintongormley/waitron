@@ -6764,8 +6764,7 @@ job runs only on the primary — kept by design (owner, 2026-09-24).
   provider that refuses it with a status other than 501 fails the day's prune
   (`stream.prune_failed`). `probeBucket` deletes one object at a time, so it cannot reveal such a
   provider; having it delete its test object through `deleteMany` would.
-- `@waitron/store` is missing from the English-only guard's `GENERIC_PACKAGES`
-  (`packages/db/src/english-only.ts`), so it is never scanned.
+- Done by W31: the English-only guard scans `@waitron/store`, including its tests.
 - Nothing in the package has been run against a real provider's bucket: the unit tests drive the
   real S3 client over a scripted network, and the loop test drives it against versitygw.
 - `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe (its fixture

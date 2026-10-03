@@ -8,9 +8,7 @@ import { connectionPair } from "./connections.js";
 const open = () => {
   const connection = new DatabaseSync(":memory:");
   connection.exec("pragma recursive_triggers = on");
-  connection.exec(
-    `create table registros_facturacion (id integer primary key, huella text not null)`,
-  );
+  connection.exec(`create table immutable_records (id integer primary key, digest text not null)`);
   connection.exec(`create table tables_ (id integer primary key, name text not null)`);
   connections.push(connection);
   return drizzleNodeSqlite(connectionPair(connection, connection), { schema: {} });
@@ -22,7 +20,7 @@ afterEach(() => {
 });
 
 const seed = (db: NodeSqliteDatabase<Record<string, never>>) => {
-  db.run(sql`insert into registros_facturacion (id, huella) values (1, 'first')`);
+  db.run(sql`insert into immutable_records (id, digest) values (1, 'first')`);
 };
 
 /**
@@ -49,54 +47,54 @@ describe("installAppendOnlyTriggers", () => {
   it("refuses an update to a ledger table", () => {
     const db = open();
     seed(db);
-    installAppendOnlyTriggers(db, ["registros_facturacion"]);
+    installAppendOnlyTriggers(db, ["immutable_records"]);
 
-    expect(refusal(() => db.run(sql`update registros_facturacion set huella = 'x'`)).message).toBe(
-      "registros_facturacion is append-only",
+    expect(refusal(() => db.run(sql`update immutable_records set digest = 'x'`)).message).toBe(
+      "immutable_records is append-only",
     );
-    expect(db.get(sql`select huella from registros_facturacion where id = 1`)).toEqual({
-      huella: "first",
+    expect(db.get(sql`select digest from immutable_records where id = 1`)).toEqual({
+      digest: "first",
     });
   });
 
   it("refuses a delete from a ledger table", () => {
     const db = open();
     seed(db);
-    installAppendOnlyTriggers(db, ["registros_facturacion"]);
+    installAppendOnlyTriggers(db, ["immutable_records"]);
 
-    expect(refusal(() => db.run(sql`delete from registros_facturacion`)).message).toBe(
-      "registros_facturacion is append-only",
+    expect(refusal(() => db.run(sql`delete from immutable_records`)).message).toBe(
+      "immutable_records is append-only",
     );
-    expect(db.all(sql`select id from registros_facturacion`)).toHaveLength(1);
+    expect(db.all(sql`select id from immutable_records`)).toHaveLength(1);
   });
 
   it("refuses an insert that replaces a row already there", () => {
     const db = open();
     seed(db);
-    installAppendOnlyTriggers(db, ["registros_facturacion"]);
+    installAppendOnlyTriggers(db, ["immutable_records"]);
 
     expect(
       refusal(() =>
-        db.run(sql`insert or replace into registros_facturacion (id, huella) values (1, 'x')`),
+        db.run(sql`insert or replace into immutable_records (id, digest) values (1, 'x')`),
       ).message,
-    ).toBe("registros_facturacion is append-only");
-    expect(db.get(sql`select huella from registros_facturacion where id = 1`)).toEqual({
-      huella: "first",
+    ).toBe("immutable_records is append-only");
+    expect(db.get(sql`select digest from immutable_records where id = 1`)).toEqual({
+      digest: "first",
     });
   });
 
   it("refuses an insert that updates the row it conflicts with", () => {
     const db = open();
     seed(db);
-    installAppendOnlyTriggers(db, ["registros_facturacion"]);
+    installAppendOnlyTriggers(db, ["immutable_records"]);
 
     expect(
       refusal(() =>
         db.run(
-          sql`insert into registros_facturacion (id, huella) values (1, 'x') on conflict (id) do update set huella = 'x'`,
+          sql`insert into immutable_records (id, digest) values (1, 'x') on conflict (id) do update set digest = 'x'`,
         ),
       ).message,
-    ).toBe("registros_facturacion is append-only");
+    ).toBe("immutable_records is append-only");
   });
 
   // SQLITE_CONSTRAINT_TRIGGER (1811). A caller that has to tell this refusal from a unique-index or
@@ -104,23 +102,23 @@ describe("installAppendOnlyTriggers", () => {
   it("refuses under the trigger result code", () => {
     const db = open();
     seed(db);
-    installAppendOnlyTriggers(db, ["registros_facturacion"]);
+    installAppendOnlyTriggers(db, ["immutable_records"]);
 
-    expect(refusal(() => db.run(sql`delete from registros_facturacion`)).errcode).toBe(1811);
+    expect(refusal(() => db.run(sql`delete from immutable_records`)).errcode).toBe(1811);
   });
 
   it("lets a new row be appended", () => {
     const db = open();
     seed(db);
-    installAppendOnlyTriggers(db, ["registros_facturacion"]);
+    installAppendOnlyTriggers(db, ["immutable_records"]);
 
-    db.run(sql`insert into registros_facturacion (id, huella) values (2, 'second')`);
-    expect(db.all(sql`select id from registros_facturacion`)).toHaveLength(2);
+    db.run(sql`insert into immutable_records (id, digest) values (2, 'second')`);
+    expect(db.all(sql`select id from immutable_records`)).toHaveLength(2);
   });
 
   it("leaves a table it was not given alone", () => {
     const db = open();
-    installAppendOnlyTriggers(db, ["registros_facturacion"]);
+    installAppendOnlyTriggers(db, ["immutable_records"]);
 
     db.run(sql`insert into tables_ (id, name) values (1, 'one')`);
     db.run(sql`update tables_ set name = 'two'`);
@@ -130,11 +128,11 @@ describe("installAppendOnlyTriggers", () => {
   it("can be run again over a database that already carries the triggers", () => {
     const db = open();
     seed(db);
-    installAppendOnlyTriggers(db, ["registros_facturacion"]);
-    installAppendOnlyTriggers(db, ["registros_facturacion"]);
+    installAppendOnlyTriggers(db, ["immutable_records"]);
+    installAppendOnlyTriggers(db, ["immutable_records"]);
 
-    expect(refusal(() => db.run(sql`delete from registros_facturacion`)).message).toBe(
-      "registros_facturacion is append-only",
+    expect(refusal(() => db.run(sql`delete from immutable_records`)).message).toBe(
+      "immutable_records is append-only",
     );
   });
 

@@ -38,6 +38,7 @@ export const GENERIC_PACKAGES = [
   "diagnostics",
   "sync-enrolment",
   "stream",
+  "store",
   "adjustments",
   "composition",
   "fiscal-none",
