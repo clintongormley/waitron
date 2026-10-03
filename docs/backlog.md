@@ -2667,8 +2667,8 @@ earlier missing chooser was not reproduced; no separate chooser change was made.
 **A Demo bar on the till and dashboard (A246, owner 2026-10-03) — DONE in W36.** In Demo and
 Preparation, the shared bar links to the dashboard, device page and Email inbox. The dashboard's
 Email inbox link lives there, and the till's device setup and approval screens link directly to
-Settings → Devices so a manager can approve the device. Live keeps its existing mode label. The
-W37 adds the pretend printer link beside Email inbox.
+Settings → Devices so a manager can approve the device. Live keeps its existing mode label.
+W37 added the pretend printer link beside Email inbox.
 
 **Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
 apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A
