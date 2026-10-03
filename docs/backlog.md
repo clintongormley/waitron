@@ -1553,8 +1553,17 @@ and the kitchen ticket's `extraLabel` must print an amount, with the unit's abbr
 amounts reach a sale record, so this takes the full review path (risk trigger: fiscal invariants).
 
 The [A203 design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md) and
-[implementation plan](superpowers/plans/2026-10-03-extra-fixed-portion.md) are drafted for owner
-review. The build remains open and awaits approval of those documents.
+[implementation plan](superpowers/plans/2026-10-03-extra-fixed-portion.md) were approved on
+2026-10-03. The build remains open while A203 is in progress.
+
+**The extras editor's “Preselected” heading stacks one letter per line on a desktop — OPEN,
+unqueued (found during A203 visual review, 2026-10-03).** In the Add extras list dialog at
+1280 px, the table gives the heading a switch-width column and lets its text break anywhere, so
+you read it vertically while the rest of the headings stay on one or two lines. The rule is also
+on `origin/main` (`apps/dashboard/src/widgets/extra-list-form.ts:120-130`); the browser test at
+`apps/dashboard/src/widgets/extra-list-form.test.ts:1093-1095` holds the narrow column. Give the
+heading a readable layout on desktop and phone without squeezing the product or price fields, and
+update that layout assertion when the change is authorised. A203 does not change this column.
 
 **A menu's hours per location, and a publish date for a new version (A204, owner 2026-10-02) —
 OPEN, not designed.** The owner: _"we should be able to specify what times of of which days each
