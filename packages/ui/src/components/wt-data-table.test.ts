@@ -1809,15 +1809,14 @@ test("the search box and each filter dropdown carry a semantic name", async () =
   );
 });
 
-test("the search box draws the focus ring, and a filter dropdown the 2px primary line, when focused", async () => {
+test("the search box draws a primary border, and a filter dropdown the 2px primary line, when focused", async () => {
   const el = await tableS({ searchable: true, columns: withStatus });
-  host.style.setProperty("--wt-focus-ring", "3px solid rgb(4, 5, 6)");
   host.style.setProperty("--wt-color-primary", "rgb(7, 8, 9)");
   const search = el.shadowRoot!.querySelector<HTMLElement>(".table-search")!;
   search.focus();
   expect(search.matches(":focus-visible")).toBe(true);
-  expect(getComputedStyle(search).outlineColor).toBe("rgb(4, 5, 6)");
-  expect(getComputedStyle(search).outlineStyle).toBe("solid");
+  expect(getComputedStyle(search).borderColor).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(search).outlineStyle).toBe("none");
   const filter = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
   filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!.focus();
   expect(getComputedStyle(filter.shadowRoot!.querySelector(".field")!).boxShadow).toBe(
@@ -3163,6 +3162,18 @@ test("the chooser's button and boxes draw the focus ring when focused", async ()
     expect(getComputedStyle(control).outlineColor).toBe("rgb(4, 5, 6)");
     expect(getComputedStyle(control).outlineStyle).toBe("solid");
   }
+});
+
+test("a focused table search marks its existing border without an outer ring", async () => {
+  const el = await table({ searchable: true, searchLabel: "Search users" });
+  host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-primary", "rgb(4, 5, 6)");
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  expect(getComputedStyle(search).borderColor).toBe("rgb(1, 2, 3)");
+  search.focus();
+  expect(search.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(search).borderColor).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(search).outlineStyle).toBe("none");
 });
 
 const wide = "A long cell that keeps its table wider than the box around it";

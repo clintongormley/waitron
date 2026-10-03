@@ -553,7 +553,8 @@ is `choosable`, a tree has an `expandAllLabel`, or the screen puts a control in 
 `toolbar-end` slot.
 The search box appears only when `searchable` is set; each column with a `filter` gets one compact
 `wt-combobox` (`hide-label`, `search="auto"`) whose "all" row is also its placeholder, whether or not the table is `searchable`, and a row must pass every active filter and the search to show. The
-search box is named `search` and each dropdown `<column key>-filter`. The search box grows to fill
+search box is named `search` and each dropdown `<column key>-filter`. On focus, the search box's
+existing border turns primary blue without an outer ring. The search box grows to fill
 the line and the dropdowns sit after it at their natural width; when the two cannot share a line
 with the search box at least eight tap targets wide, the dropdowns wrap onto the line below and the
 search box takes its line alone (the table's tests measure a stacked toolbar at 360px and a single

@@ -243,6 +243,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
         font: inherit;
       }
 
+      /* Its primary border marks focus; an outer outline would draw a second line. */
+      .table-search:focus-visible {
+        border-color: var(--wt-color-primary);
+        outline: none;
+      }
+
       .table-filters {
         display: flex;
         flex-wrap: wrap;
