@@ -1833,4 +1833,42 @@ describe("the readers' status reads", () => {
     await flush(el);
     expect(held.readerStatus.mock.calls.map(([id]) => id)).toEqual(["r-1", "r-2", "r-1", "r-2"]);
   });
+
+  it("starts no read for a screen closed while an action on it was still being answered", async () => {
+    const held = heldStatuses();
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { el, host } = await mount(
+      stubApi({
+        listReaders: vi.fn().mockResolvedValue(readers(1)),
+        readerStatus: held.readerStatus,
+        disableReader: vi.fn().mockReturnValueOnce(pending),
+      }),
+    );
+    expect(held.readerStatus).toHaveBeenCalledTimes(1);
+    qCell(el, "[data-test=disable-r-1]")!.click();
+
+    host.remove();
+    release();
+    await flush(el);
+    expect(held.readerStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks its readers again when a closed screen is put back on the page", async () => {
+    const held = heldStatuses();
+    const { el, host } = await mount(
+      stubApi({
+        listReaders: vi.fn().mockResolvedValue(readers(1)),
+        readerStatus: held.readerStatus,
+      }),
+    );
+    held.answer("r-1");
+    await flush(el);
+
+    host.remove();
+    document.body.appendChild(host);
+    await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledTimes(2));
+  });
 });

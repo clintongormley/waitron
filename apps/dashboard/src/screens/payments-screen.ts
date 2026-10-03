@@ -429,6 +429,8 @@ export class PaymentsScreen extends LitElement {
 
   /** One reader's failed status marks only that row, never the whole screen. */
   async #loadStatuses(readers: ReaderRow[], background = false): Promise<void> {
+    // An action that finishes after the screen closed still reloads it, and its slots are shared.
+    if (!this.isConnected) return;
     const client = background ? (this.api.background ?? this.api) : this.api;
     const version = ++this.#statusVersion;
     this.refreshing = true;
