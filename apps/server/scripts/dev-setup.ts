@@ -475,6 +475,7 @@ async function main(): Promise<void> {
   console.log("");
   console.log("  Pick a pre-enrolled device at http://localhost:5190/?dev");
   console.log("    Mostrador (till) · Camarero 1 (handheld) · Pantalla Cocina (kitchen display)");
+  console.log("    Pantalla Pase (watcher display)");
   console.log("");
   console.log(
     "  Or knock from a FRESH browser at http://localhost:5190 — a manager then switches on",
