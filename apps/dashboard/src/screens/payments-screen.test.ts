@@ -2,7 +2,13 @@ import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
 import type { CardProviderPanel } from "@waitron/dashboard-kit";
-import { LiveData, registerCatalogue, tableNoMatches } from "@waitron/dashboard-kit";
+import {
+  createRequest,
+  LiveData,
+  registerCatalogue,
+  tableNoMatches,
+  type FetchLike,
+} from "@waitron/dashboard-kit";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
@@ -348,6 +354,55 @@ describe("payments-screen", () => {
 
     expect(q(el, "[role=alert]")).not.toBeNull();
     expect(q(el, "[role=alert]")?.textContent).not.toContain("server.internal");
+  });
+
+  it("says a read that ran out of time is taking too long, not that the connection failed", async () => {
+    // A fetch that never answers on its own, and rejects as a real fetch does when it is aborted.
+    const fetchImpl = vi.fn<FetchLike>(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () =>
+            reject(new DOMException("The operation was aborted.", "AbortError")),
+          );
+        }),
+    );
+    const request = createRequest({ fetchImpl });
+    const api = stubApi({
+      listPaymentProviders: vi.fn(() =>
+        request<PaymentProviderRow[]>("/management-api/payments/providers", "GET"),
+      ),
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const mounting = mount(api);
+      await vi.advanceTimersByTimeAsync(30_000);
+      const { el } = await mounting;
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+
+      expect(q(el, "[role=alert]")?.textContent).toBe(
+        "Waitron is taking too long to answer. Try again in a moment.",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still says the connection failed when a read cannot reach the server", async () => {
+    const request = createRequest({
+      fetchImpl: vi.fn<FetchLike>().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const { el } = await mount(
+      stubApi({
+        listPaymentProviders: vi.fn(() =>
+          request<PaymentProviderRow[]>("/management-api/payments/providers", "GET"),
+        ),
+      }),
+    );
+
+    expect(q(el, "[role=alert]")?.textContent).toBe(
+      "This browser could not connect to Waitron. Check your connection and try again.",
+    );
   });
 
   it("surfaces a payment.provider_in_use rejection as its localized copy", async () => {

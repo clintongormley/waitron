@@ -1427,6 +1427,9 @@ export interface OrderDetailDto {
   }[];
 }
 
+// Above Stripe's worst case, three 80-second attempts (stripe 22.6.2, esm/stripe.esm.node.js:98, :178).
+const CARD_PROVIDER_READ_LIMIT_MS = 250_000;
+
 export class DashboardApi {
   readonly liveData = new LiveData();
   #background?: DashboardApi;
@@ -3128,13 +3131,20 @@ export class DashboardApi {
   }
 
   readerStatus(id: string): Promise<ReaderStatusView> {
-    return this.#request<ReaderStatusView>(`/management-api/payments/readers/${id}/status`, "GET");
+    return this.#request<ReaderStatusView>(
+      `/management-api/payments/readers/${id}/status`,
+      "GET",
+      undefined,
+      { timeLimitMs: CARD_PROVIDER_READ_LIMIT_MS },
+    );
   }
 
   availableReaders(providerId: string): Promise<AvailableReader[]> {
     return this.#request<AvailableReader[]>(
       `/management-api/payments/providers/${encodeURIComponent(providerId)}/available-readers`,
       "GET",
+      undefined,
+      { timeLimitMs: CARD_PROVIDER_READ_LIMIT_MS },
     );
   }
 

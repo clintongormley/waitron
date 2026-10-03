@@ -164,7 +164,7 @@ describe("observed resources", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(1);
-    expect(observed.snapshot.error).toEqual({ code: "connection.failed" });
+    expect(observed.snapshot.error).toEqual({ code: "connection.timed_out" });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     answers[1]!(new Response("[1,2]", { status: 200 }));
     await vi.advanceTimersByTimeAsync(0);

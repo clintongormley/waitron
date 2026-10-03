@@ -49,6 +49,9 @@ export interface SumUpConnectPayload {
   merchantCode?: string;
 }
 
+// Above SumUp's worst case, two calls in turn of 20 seconds each (`timeoutMs`, src/sumup-client.ts:85).
+const SUMUP_STATUS_READ_LIMIT_MS = 50_000;
+
 /** The SumUp routes as a small class over an injected {@link DashboardRequest}. The connect form and
  * the add-reader dialog each build one from the `request` the panel passes them. */
 export class SumUpPaymentsClient {
@@ -79,7 +82,12 @@ export class SumUpPaymentsClient {
 
   /** `GET /management-api/payments/readers/:id/status` — the reader's live status (online + pairing). */
   readerStatus(id: string): Promise<ReaderStatus> {
-    return this.#request<ReaderStatus>(`/management-api/payments/readers/${id}/status`, "GET");
+    return this.#request<ReaderStatus>(
+      `/management-api/payments/readers/${id}/status`,
+      "GET",
+      undefined,
+      { timeLimitMs: SUMUP_STATUS_READ_LIMIT_MS },
+    );
   }
 
   /** `POST /management-api/payments/readers/:id/unpair` — unpair the reader row. */
