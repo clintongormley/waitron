@@ -6080,6 +6080,21 @@ starts passes at least one polling interval apart, while sending a finished pass
 next pull. A 250 ms fast-scan case checks delivery without repeat passes; a controlled-clock case
 checks that an empty scan starts again at the next interval.
 
+**Comments and docs still name drizzle-orm 0.45.2; 0.45.3 is installed — OPEN (found 2026-10-03 by
+#1139's review).** #1139 updated `scripts/journal-monotonic.test.ts` and one citation in
+`docs/developers/conventions-data.md`, and checked their line numbers against 0.45.3. Still naming
+0.45.2: `apps/server/src/restore-fiscal-e2e.test.ts:310` and
+`packages/store/src/node-sqlite-adapter.ts:34`, where the review found only the number stale; and
+`packages/db/src/testing/schema-conformance.ts:226`, `docs/developers/conventions-data.md:280` and
+this file (the 0.45.2 unnamed-`unique()` note in Track C), none of them re-checked against 0.45.3.
+**Next action:** read each claim against the installed 0.45.3, then update the number or the claim.
+
+**`--no-verify`: the docs say "Claude never", the hook says "agents never" — OWNER'S CALL (found
+2026-10-03 by #1139's review).** `CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` say "Claude
+never pushes with `--no-verify`"; the hook's hint (`.husky/pre-push`) says "agents never". Codex
+sometimes drives and reads `CLAUDE.md`, so the docs may need "no agent". **Next action:** the owner
+decides whether the rule covers every agent, then the two docs follow.
+
 **Comments and test titles still cite sections of specs that were deleted — OPEN (2026-09-26).**
 The docs prune that day deleted every spec and plan for built work (#711 and the direct docs commits
 before it). A pointer that names only a SECTION ("spec §3.2", "design §3", "(till-reroute §3.6)")
