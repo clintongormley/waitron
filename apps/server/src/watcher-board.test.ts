@@ -13,8 +13,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createStation } from "./kitchen.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { bumpGroupReady, markGroupAway } from "./order-groups.js";
-import { placeGroups } from "./order-groups.js";
+import { bumpGroupReady, markGroupAway, placeGroups } from "./order-groups.js";
 import { createZone } from "./tables.js";
 import { routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import {
@@ -35,10 +34,12 @@ import { moveGuests } from "./table-actions.js";
 import { createWatcher, removeWatcher } from "./watchers.js";
 import { listWatcherQueue, markWatcherItems } from "./watcher-board.js";
 import {
+  addTabRound,
   carveOffLines,
   listExpoQueue,
   listStationQueue,
   listTablesWithState,
+  updateOrderLine,
 } from "./working-order.js";
 import "./errors.js";
 
@@ -509,6 +510,56 @@ describe("watcher board", () => {
       ),
     );
     expect((await inTx(v, (tx) => listWatcherQueue(tx, v.cfg, watcherId))).orders).toEqual([]);
+  });
+
+  it("shows a changed dish again when an edit replaces its marked kitchen record", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const watcherId = await inTx(
+      v,
+      async (tx) =>
+        (
+          await createWatcher(tx, v.cfg, {
+            name: "Pass",
+            everyStation: true,
+            stationIds: [],
+            everyZone: true,
+            zoneIds: [],
+            runsPass: false,
+          })
+        ).id,
+    );
+    const party = await seat(v, await v.table("Edited table"));
+    await inTx(v, (tx) =>
+      addTabRound(tx, v.cfg, party.tabId, [{ menuItemId: v.item("Burger"), quantity: "1" }]),
+    );
+    const [old] = await inTx(v, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+    );
+    await inTx(v, (tx) =>
+      markWatcherItems(tx, v.cfg, watcherId, [old!.id], true, { personId: OPERATOR }, new Date()),
+    );
+    expect((await inTx(v, (tx) => listWatcherQueue(tx, v.cfg, watcherId))).orders).toEqual([]);
+    const [bill] = await inTx(v, (tx) =>
+      tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, party.tabId)),
+    );
+    await inTx(v, (tx) =>
+      updateOrderLine(tx, v.cfg, party.tabId, 1, { note: "No salt" }, bill!.revision, OPERATOR),
+    );
+    const [changed] = await inTx(v, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+    );
+    expect(changed!.id).not.toBe(old!.id);
+    expect(
+      await inTx(v, (tx) =>
+        tx.select().from(watcherItemMarks).where(eq(watcherItemMarks.watcherId, watcherId)),
+      ),
+    ).toEqual([]);
+    expect(
+      (await inTx(v, (tx) => listWatcherQueue(tx, v.cfg, watcherId))).orders[0]!.groups[0]!.items,
+    ).toMatchObject([{ id: changed!.id, note: "No salt" }]);
   });
 
   it("shows split extras with their maker and leaves no-preparation parents out", async () => {
