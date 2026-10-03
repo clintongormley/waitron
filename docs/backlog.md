@@ -3740,6 +3740,19 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `params`. It came in with #296 (`fabdb224d`). Fix: move it onto the request helper's
   `as: "blob"` option, which the VAT return download uses.
 
+- **Does setup need to create a till at all? (A238) — OPEN (owner, 2026-10-03).** Every setup
+  creates one till: Demo names it "Caja 1" itself, and Prepare and Live ask for a "Till name"
+  (`packages/provisioning/src/venue-plan.ts`, `create-till`; `applyVenue` refuses a plan without
+  one). The box saves that till's id as its default. Requests from a paired device use the
+  device's own till instead (`deviceTillCfg`, `apps/server/src/device-session.ts`). Accepting a
+  counter till device creates a new till for it (`createRegister`, `apps/server/src/device.ts`),
+  so the setup till usually ends up with no screen behind it. The owner expected a Prepare or Live
+  venue to start with no devices and add each one. Seen using the default so far: the demo's
+  sample sales, the fiscal test sale before going live, two kitchen alerts, and the Prepare to
+  Live configuration transfer. About 20 server sites read it, and not all have been traced.
+  Decide between: no setup till at all; keep one but stop asking for its name; or leave it. An
+  investigation is running (2026-10-03); its findings go here.
+
 - **Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29).** A page saying
   what the section is for and what is in it, opened by the section's header. It was the answer to
   C35's question about the header of the section you are on; A161 (#979) has since answered that
