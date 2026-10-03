@@ -1042,7 +1042,7 @@ and `-text` and `--wt-font-family-google`, and the dashboard bundles Google Sans
 weight 500), registered on `document.fonts`. The Google page's own button is that same button, so
 that page has no blue button. `deploy/third-party/README.md` carries the font's SIL Open Font
 License notice (`google-sans/OFL.txt`) and Google's trademark line for the "G". It changed two
-existing assertions in `apps/dashboard/src/screens/login-screen.test.ts` (owner to review): the
+existing assertions in `apps/dashboard/src/screens/login-screen.test.ts`, both approved by the owner on 2026-10-03: the
 Google page now has 0 primary buttons, not 1, and the Google icon among the other ways in is
 `--wt-google-mark-size` wide, not `--wt-font-size-lg`. Kept from the house rather than Google's
 drawing: the 44px tap height (Google's drawing is 40px; its text allows scaling), the full card
