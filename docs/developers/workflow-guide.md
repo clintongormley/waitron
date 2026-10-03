@@ -30,6 +30,19 @@ deliberate*). `/land-branch` runs `pnpm install` right after `git pull --ff-only
 run it yourself after any other pull. The hook skips a push that only deletes refs (all-zero local
 sha) and fails closed when stdin is empty.
 
+**Every agent that edits files or runs tests works in its own worktree, or the agents take turns.**
+The index belongs to the worktree, not to an agent: `git add <my paths>` adds to an index another
+agent may already have written to (a `git mv` stages its rename at once), and `git commit` commits
+the whole index. On 2026-09-21, on `feat/sqlite-slice1-flip`, a commit meant to hold two
+`packages/db` files also carried three renames from two other agents' unfinished work, and its
+message described none of them. Before committing in a shared worktree, check that
+`git diff --cached --name-only` is empty before you stage, or pass the paths to the commit itself
+(`git commit -- <paths>`). Tests collide too: a run started while another agent ran Vitest in the
+same package of the same worktree printed `no tests` or nothing, and passed when re-run
+(2026-09-29; [testing-guide.md](testing-guide.md)). On 2026-10-03 a reviewer of this
+branch ran one check in a disposable repository: a commit took two paths staged separately into the
+index. Nothing else here was re-run.
+
 ## Commits, pull requests and merging
 
 **Every commit needs `git commit -s`**; CI's `dco` job walks the whole PR range. **A PR that goes
@@ -201,9 +214,9 @@ What does NOT remove that directory is the common case: switching between worktr
 target. A target change removes it, and so does `wa-wt reset` (read the script before assuming that
 is the whole list — `ensure_env` has a third path). What `dev:setup` leaves behind is seeded, so
 between removals the directory keeps demo rows written weeks and branches ago. A branch's migrations can then be unable to run over them:
-migrations here carry no data-preservation code on purpose (`CLAUDE.md` §3 — schema changes drop and
-recreate until Waitron is in production), so one that adds a column no existing row can fill stops
-the boot dead inside `applyMigrations`. Vite keeps serving the pages, so the dashboard still loads
+migrations here carry no data-preservation code on purpose (`CLAUDE.md` §3 — no
+backwards-compatibility or data-migration code until Waitron is in production), so one that adds a
+column no existing row can fill stops the boot dead inside `applyMigrations`. Vite keeps serving the pages, so the dashboard still loads
 while its calls fail — vite logs each one as `http proxy error … ECONNREFUSED`. On screen it shows
 nothing: `#probeSession` (`apps/dashboard/src/dashboard-app.ts`) catches the rejection and drops to
 the login screen without a banner. The failure only becomes words at sign-in, where no code comes

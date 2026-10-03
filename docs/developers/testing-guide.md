@@ -246,6 +246,17 @@ this workspace carry that pin, so the cost is paid widely. This is recorded as a
 reason to change anything: the alternative that would recover it, `isolate: false`, would newly share
 module state between test files, which the upgrade deliberately did not do.
 
+### A package that pins one worker inside one of several projects numbers its `groupOrder`s from 1, never 0
+
+Vitest 4 lifts a `groupOrder: 0` project that runs one isolated worker out of its group and appends
+it after every other group, so a database project numbered 0 runs AFTER the browser project it was
+ordered before. Two of the lift's three conditions are DEFAULTS — `groupOrder` is 0 when unset and
+isolation is on — so stating no `groupOrder` at all does not avoid it. The condition a package can
+actually be outside is the third: `packages/media` and `apps/dashboard` split into projects too, and
+are unaffected because neither pins a project-level `maxWorkers: 1`. Measured on `packages/bookings`
+against the same run on Vitest 3. Guard: `scripts/bookings-test-budget.test.ts`, which pins bookings
+alone.
+
 ### A package's `coverage.include` does not mean "this package's src"
 
 Measured on 4.1.11, reading both installed copies. `include: ["src/**/*.ts"]` is matched by
@@ -256,7 +267,9 @@ external check — and in 4.1.11 that check is
 separator. So for a package whose directory were called `packages/sync`, a file at
 `packages/sync-enrolment/src/migration-tables.ts` would not be judged external — its path starts
 with the `packages/sync` root — and the include would then match it on its `src/…/*.ts` segment, so
-it would land in that package's report.
+it would land in that package's report. When `packages/sync` existed (#437, 2026-09-19), its
+report counted 114 statements at 81.57% with sync-enrolment's files in it, and 91 at 100% once they
+were excluded.
 
 `packages/ui` imports `packages/ui-core`, so its coverage config explicitly excludes
 `**/ui-core/**`. Each package's CI job measures its own implementation. When changing
@@ -806,6 +819,25 @@ unset `AI_AGENT` and `CLAUDECODE` for the run (std-env checks others too): the o
 with either set and shown with neither; passing
 `--reporter=default` instead has not been measured.
 
+## Under the default, verbose or dot reporter, a run that shows no `Tests` count is no evidence that anything passed
+
+Measured 2026-10-03 with Vitest 4.1.11 in `packages/shared`: `vitest run src/capitalise.test.ts
+--reporter=basic` printed no `Tests` line and exited 1, because `basic` is not a Vitest 4 reporter;
+the same command with `--reporter=dot` printed `Tests 6 passed (6)` and exited 0. The logged command
+was `vitest run <file> --reporter=basic 2>&1 | tail -3`, so stderr was in the pipe too. An unknown
+reporter is a start-up error that Vitest prints followed by `console.error("\n\n")`, so the last
+three lines are blank and `tail -3` showed only those, while the pipe's exit status was `tail`'s, 0
+(read from the installed source, not run) — which is how it was once read as a clean pass
+(2026-09-22). Two other causes were logged, not re-measured here: a `*/` inside a `/** … */` comment
+(a glob such as `packages/*/drizzle/`) ends the comment early, so the file fails to parse and every
+suite reports `Tests no tests` (2026-09-23); and a run started while another agent ran Vitest in the
+same package of the same worktree printed `no tests` or nothing, and passed when re-run
+(2026-09-29). Under those reporters, read the count; treat a missing or zero count as a broken run
+and look at the INPUT — the command, the file, what else is running — before the filter. Not every
+reporter prints the count: `--reporter=hanging-process` ran a test, printed nothing and exited 0
+(run 2026-10-03 in `packages/shared`), so with a reporter other than the default, verbose or dot
+one, read that reporter's own result.
+
 **Shelling out to git from a test**
 
 ## A test that shells out to `git` must clear `GIT_DIR` and its family
@@ -832,7 +864,22 @@ This is CLAUDE.md §1's "a measurement taken where both answers look alike measu
 helper attached: a phone-width screenshot taken through the wrong helper looks like a phone-width
 screenshot of a layout that copes, and is a desktop-width screenshot of one that may not. It cost two
 separate agents on one branch. State the width you measured, not the width you asked for — read
-`window.innerWidth` inside the test and put it in the report.
+`window.innerWidth` inside the test and put it in the report. A saved PNG's pixel width is not
+evidence either: one session logged PNGs 333 and 1024 px wide after `page.viewport(390, …)` and
+`page.viewport(1280, …)`, the frame scaled to the outer page (2026-09-26).
+
+## A screenshot is saved only to a path Vite's `server.fs` configuration allows
+
+`page.screenshot({ path: "/tmp/x.png" })` fails with `Access denied to "/tmp/x.png"`. In
+`@vitest/browser-playwright` 4.1.11 the command behind it, `takeScreenshot` (`dist/index.js`),
+passes the save path to `assertBrowserFileAccess`, which is Vite's `server.fs` allow check. The
+workspace is allowed by default and `/tmp` is refused: on 2026-10-03 a reviewer saved a real
+Chromium screenshot to `../../../review-shot.png` from `packages/ui` (outside the package, inside
+the workspace), and the installed `assertBrowserFileAccess` with a real Vite config allowed a
+sibling package's path and refused `/tmp/x.png`. Two sessions lost time to it a day apart
+(2026-09-28 and 2026-09-29). Give a path relative to the test file (`look/a.png`, which lands beside
+it), move the PNGs out after the run, and delete that folder and any `__screenshots__/<file>` it
+left.
 
 A second thing a widget harness does not inherit: icons are registered in each app's `main.ts`, which
 a harness mounting one widget never loads, so `wt-icon` renders an empty box and a grip handle looks
@@ -951,6 +998,15 @@ such file today, and [ci-and-gates.md](ci-and-gates.md) records what naming it w
 
 ## Prove a guard by deletion, and confirm a negative control fails for the reason you think.
 
+A deletion proof says nothing about what the guard wrongly REFUSES; that needs a case in the other
+direction. A write-queue re-entrancy guard written as a flag passed every case in its own file,
+including the one about queued callers (whose three callers are dispatched in ONE tick, before any
+body starts, so the flag is still false when each checks it), and turned every concurrent request in
+`packages/payments` into a 500. The distinction the flag could not make — nested INSIDE a running
+body, versus merely waiting BEHIND one — is now read from asynchronous context, and the missing case
+is the second caller in `packages/store/src/write-queue.test.ts` ("serves a caller that arrives after
+another body has already started").
+
 ## A proof-by-deletion belongs to the SHAPE of the code it was taken against.
 
 Restructure that code and the deletion can stop failing, with every test still green and nothing
@@ -968,6 +1024,34 @@ deleted on 2026-09-22 with the database engine it ran against (read it with
 `git show aabdde6a8^:packages/db/src/job-claim.pg.test.ts`). Today's `job-claim.ts` has no locking
 clause to delete.
 
+## Measure the old version in a throwaway worktree, never by swapping files in the working one
+
+Each way of swapping the old version in and back out cost work:
+
+- `git stash push -- <path>` makes no stash entry when that path has no uncommitted change, and the
+  stash list is shared by every worktree of the repository, so the `git stash pop` that follows
+  takes whatever entry was already there. On 2026-09-18 that was the owner's work in progress,
+  applied with conflicts into a campaign worktree; it survived only because the pop failed and kept
+  the entry.
+- `git checkout <path>` restores from the index, so it throws away an unstaged rewrite of the
+  same file along with the probe, silently and with exit 0. On 2026-09-18, during review fixes on
+  #413, it reverted a rewritten test file to its committed version.
+- A swap back to `HEAD` meant deleting new, untracked files by hand so the baseline run would not
+  see them, and a snapshot built from `git status`'s modified lines alone had nothing to restore
+  them from. On 2026-09-22, on the F1 flip branch,
+  three new test files were lost this way.
+- A probe appended with Python's `rstrip()` and then removed leaves the file without its final
+  newline, which `prettier --check` fails while `git diff` shows the last line removed and
+  re-added with the same text, marked only by `\ No newline at end of file` (F1 branch,
+  2026-09-22).
+- Two agents that pick the same hand-named folder under `/tmp` write over each other's files;
+  `mktemp -d` gives each a folder of its own.
+
+On 2026-10-03 a reviewer of this branch ran two checks in a disposable repository: a stash made in
+one worktree appeared in the other's `git stash list`, and the remedy worked — a detached
+`git worktree add` held the old content while the original working file kept its uncommitted edit.
+Nothing else here was re-run.
+
 ## Vitest 4 ships no default coverage excludes, and `include`/`exclude` replace rather than merge.
 
 `coverageConfigDefaults.exclude` is `[]` in 4.1.11 and the object has no `all` key; in 3.2.7 it was a
@@ -982,6 +1066,15 @@ so it still stands. The root config's first version measured `All files | 0 | 0 
 `include` pointed inside a dot-directory the default list swallowed. Whenever a config's numbers
 could plausibly be nothing, read the per-file table, not the exit code. (The root config now carries
 no `exclude`.)
+
+## Use the `/* v8 ignore start */` … `/* v8 ignore stop */` pair, not `/* v8 ignore next */`
+
+Measured both ways for #437 (2026-09-19) on `packages/sync-enrolment/src/migration-tables.ts` as it
+stood then, with two guard pairs (#511 later added a third), under `@vitest/coverage-v8@4.1.11`: with
+the pair the package read 2 of 2 branches and passed; with the same two guards marked `next` it read
+4 of 6 and failed the package's branch bar. Whether `next` can ever work is not established — the
+provider's `ast-v8-to-istanbul@1.0.6` does parse `next` hints — but it did not here, and it fails
+silently, with no message naming the marker. Nothing guards it.
 
 ## `errors.ts` reachability is guarded once, in `scripts/errors-reachable.test.ts`,
 
