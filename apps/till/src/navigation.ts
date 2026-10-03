@@ -3,7 +3,14 @@ import type { UrlPathConfig } from "@waitron/ui";
 export const tillPath: UrlPathConfig = {
   basePath: "/tabs",
   primary: "till-tab",
-  children: { "*": { "till-zone": "zone", "till-view": "view", "till-station": "station" } },
+  children: {
+    "*": {
+      "till-zone": "zone",
+      "till-view": "view",
+      "till-station": "station",
+      "till-watcher": "watcher",
+    },
+  },
 };
 
 export type TillDestination = "schedule" | "station" | "expo" | "allergens";

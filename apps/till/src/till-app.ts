@@ -1547,7 +1547,9 @@ export class TillApp extends LitElement {
       this.#url.write(
         {
           "till-tab": key,
-          ...(retainDestination ? {} : { "till-view": null, "till-station": null }),
+          ...(retainDestination
+            ? {}
+            : { "till-view": null, "till-station": null, "till-watcher": null }),
         },
         replace,
       );
@@ -1568,6 +1570,7 @@ export class TillApp extends LitElement {
       {
         "till-view": destination,
         "till-station": destination === "station" ? this.#url.read("till-station") : null,
+        "till-watcher": destination === "expo" ? this.#url.read("till-watcher") : null,
       },
       true,
     );
@@ -6707,7 +6710,7 @@ export class TillApp extends LitElement {
   #pushDrill(drill: Drill): void {
     if (isTillDestination(drill.kind)) {
       if (!this.#allowsDestination(drill.kind)) return;
-      this.#url.write({ "till-view": drill.kind, "till-station": null });
+      this.#url.write({ "till-view": drill.kind, "till-station": null, "till-watcher": null });
     }
     this.#dismissStationChoices();
     diag.record("info", "nav", { screen: drill.kind });
@@ -6718,7 +6721,7 @@ export class TillApp extends LitElement {
   #popDrill(): void {
     this.#dismissStationChoices();
     if (isTillDestination(this.drill?.kind))
-      this.#url.write({ "till-view": null, "till-station": null });
+      this.#url.write({ "till-view": null, "till-station": null, "till-watcher": null });
     diag.record("info", "nav", { screen: this.activeTabKey });
     this.drill = undefined;
   }

@@ -1173,6 +1173,29 @@ describe("TillApi", () => {
     expect(r).toEqual(queue);
   });
 
+  it("reads watcher summaries and a watcher board, then sends a Done mark", async () => {
+    const watchers = [{ id: "pass", name: "Pass", runsPass: true }];
+    const board = { watcher: { ...watchers[0], active: true }, orders: [] };
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(watchers))
+      .mockResolvedValueOnce(jsonResponse(board))
+      .mockResolvedValueOnce(jsonResponse({}));
+    const api = new TillApi("", fetchStub);
+    expect(await api.listWatchers()).toEqual(watchers);
+    expect(await api.getWatcherQueue("pass")).toEqual(board);
+    await api.markWatcherDone("pass", ["ti-1"], true);
+    expect(fetchStub.mock.calls.map(([url, init]) => [url, init.method])).toEqual([
+      ["/api/watchers", "GET"],
+      ["/api/watchers/pass/queue", "GET"],
+      ["/api/watchers/pass/done", "POST"],
+    ]);
+    expect(JSON.parse(fetchStub.mock.calls[2]![1].body)).toEqual({
+      ticketItemIds: ["ti-1"],
+      done: true,
+    });
+  });
+
   it("bumpCourseReady POSTs an empty object to the order+course /ready route (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 

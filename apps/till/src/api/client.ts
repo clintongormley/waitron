@@ -1479,6 +1479,26 @@ export interface ExpoOrder {
   worstBand: TimingBand;
 }
 
+export interface WatcherSummary {
+  id: string;
+  name: string;
+  runsPass: boolean;
+}
+export interface WatcherCourse extends ExpoCourse {
+  allReady: boolean;
+}
+export interface WatcherGroup extends ExpoGroup {
+  allReady: boolean;
+}
+export interface WatcherOrder extends Omit<ExpoOrder, "courses" | "groups"> {
+  courses: WatcherCourse[];
+  groups: WatcherGroup[];
+}
+export interface WatcherBoard {
+  watcher: WatcherSummary & { active: boolean };
+  orders: WatcherOrder[];
+}
+
 /**
  * `POST /api/pay` outcome. Unlike {@link TillSaleResult}'s throw-or-ticket shape, a decline, stall or
  * offline refusal is DATA, never a thrown `{ code }` — nothing may block a sale on anything but the
@@ -2296,8 +2316,25 @@ export class TillApi {
    * into groups for a seated party's bill, ACROSS all stations, oldest first. See {@link ExpoOrder}
    * for what the server excludes.
    */
-  getExpoQueue(): Promise<ExpoOrder[]> {
-    return this.#request<ExpoOrder[]>("/api/expo/queue", "GET");
+  getExpoQueue(options: ReadOptions = {}): Promise<ExpoOrder[]> {
+    return this.#request<ExpoOrder[]>("/api/expo/queue", "GET", undefined, options.signal);
+  }
+
+  listWatchers(): Promise<WatcherSummary[]> {
+    return this.#request<WatcherSummary[]>("/api/watchers", "GET");
+  }
+
+  getWatcherQueue(id: string, options: ReadOptions = {}): Promise<WatcherBoard> {
+    return this.#request<WatcherBoard>(
+      `/api/watchers/${id}/queue`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  async markWatcherDone(id: string, ticketItemIds: string[], done: boolean): Promise<void> {
+    await this.#request<void>(`/api/watchers/${id}/done`, "POST", { ticketItemIds, done });
   }
 
   /**

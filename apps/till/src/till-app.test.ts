@@ -9349,6 +9349,26 @@ describe("remembered dietary filters", () => {
 });
 
 describe("persistent till destinations", () => {
+  it("restores a selected watcher on Expo and clears it on another tab", async () => {
+    history.replaceState(null, "", "/tabs/counter/view/expo/watcher/pass");
+    const { el } = await mountApp({
+      listWatchers: vi.fn().mockResolvedValue([{ id: "pass", name: "Pass", runsPass: true }]),
+      getWatcherQueue: vi
+        .fn()
+        .mockResolvedValue({
+          watcher: { id: "pass", name: "Pass", runsPass: true, active: true },
+          orders: [],
+        }),
+    });
+    await toCounter(el);
+    const expo = el.shadowRoot!.querySelector("till-expo-screen")!;
+    await flush(el);
+    expect(expo.shadowRoot!.textContent).toContain("Nada pendiente aquí");
+    expect(location.pathname).toBe("/tabs/counter/view/expo/watcher/pass");
+    selectTab(el, "floor");
+    await flush(el);
+    expect(location.pathname).not.toContain("watcher/pass");
+  });
   async function traverse(direction: "back" | "forward", el: TillApp) {
     const moved = new Promise<void>((resolve) =>
       window.addEventListener("popstate", () => resolve(), { once: true }),

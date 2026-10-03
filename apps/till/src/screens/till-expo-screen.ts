@@ -1,6 +1,6 @@
 import { queueCrossRefs } from "../widgets/queue-crossrefs.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
-import { ContentLanguageController } from "@waitron/ui";
+import { ContentLanguageController, UrlStateController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { TickingClock, baseStyles } from "@waitron/ui";
@@ -10,6 +10,8 @@ import { codeMessage } from "../i18n/codes.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "../widgets/diet-badges.js";
 import { dishLine, snapshotDescriptionFor } from "../widgets/dish-format.js";
+import { tillPath } from "../navigation.js";
+import "../widgets/stale-since.js";
 import type {
   ExpoCourse,
   ExpoGroup,
@@ -18,6 +20,9 @@ import type {
   GroupCommand,
   QueueParty,
   TillApi,
+  WatcherSummary,
+  WatcherCourse,
+  WatcherGroup,
 } from "../api/client.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
 
@@ -30,12 +35,14 @@ function groupOrder(group: ExpoGroup): number {
   return group.position ?? Number.NEGATIVE_INFINITY;
 }
 
+const REFRESH_MS = 15_000;
+const READ_LIMIT_MS = 25_000;
+
 /**
  * The TILL EXPO / PASS display: a card per open order, its items grouped BY COURSE across stations,
  * or by group for a seated party's bill.
  *
- * A fully-away course or group DROPS OFF the board: the server keeps the order while any item is not
- * away and returns all its items, so the SCREEN filters `course.away` and `group.away`.
+ * All stations hides fully-away courses and groups; a watcher retains them until its own Done.
  *
  * AGE. An expo order's items can span several stations, each with its own thresholds, so each item is
  * classified against its OWN `queuedAt`/`thresholds`. The server's `ExpoItem.band`/`ExpoOrder.worstBand`
@@ -68,6 +75,22 @@ export class TillExpoScreen extends LitElement {
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-3);
+      }
+
+      .chooser,
+      .selection,
+      .done-notice {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+      .stale {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+      }
+      .stale[data-stale] {
+        color: var(--wt-color-danger);
       }
 
       .title {
@@ -418,6 +441,27 @@ export class TillExpoScreen extends LitElement {
   @property({ type: Boolean }) embedded = false;
 
   @state() private orders: ExpoOrder[] = [];
+  @state() private watchers: WatcherSummary[] = [];
+  @state() private selected: string | null = null;
+  @state() private choosing = false;
+  @state() private watcherRemoved = false;
+  @state() private watcherRunsPass = false;
+  @state() private doneErrorCode?: string;
+  @state() private doneNotice?: { ids: string[]; dish: string };
+  @state() private stale = false;
+  #lastGoodAt = new Date();
+  #refreshTimer?: ReturnType<typeof setInterval>;
+  #undoTimer?: ReturnType<typeof setTimeout>;
+  readonly #refreshReads = new Set<AbortController>();
+  #request = 0;
+  #appliedRequest = 0;
+  readonly #url = new UrlStateController(
+    this,
+    () => {
+      if (!this.embedded && this.#url.read("till-view") === "expo") void this.#restoreSelection();
+    },
+    tillPath,
+  );
   /**
    * UNLIKE the fire/ready/away levers, a failed reprint is not swallowed: it changes no order state, so a
    * reload reconciles nothing and a silent failure would leave the expediter no signal.
@@ -433,16 +477,120 @@ export class TillExpoScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    if (this.embedded) void this.#reload();
+    else void this.#loadWatchers();
+    this.#refreshTimer = setInterval(() => void this.#refresh(), REFRESH_MS);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    clearInterval(this.#refreshTimer);
+    clearTimeout(this.#undoTimer);
+    for (const read of this.#refreshReads) read.abort();
+    this.#refreshReads.clear();
+  }
+
+  async #loadWatchers(): Promise<void> {
+    try {
+      this.watchers = await this.api.listWatchers();
+    } catch {
+      this.watchers = [];
+    }
+    this.#restoreSelection();
+  }
+
+  #restoreSelection(): void {
+    const requested =
+      this.#url.read("till-view") === "expo" ? this.#url.read("till-watcher") : null;
+    if (this.watchers.length === 0) this.#select("all", true);
+    else if (requested === "all" || this.watchers.some((watcher) => watcher.id === requested))
+      this.#select(requested!, true);
+    else {
+      this.selected = null;
+      this.choosing = true;
+    }
+  }
+
+  #select(id: string, restored = false): void {
+    if (id !== this.selected) {
+      this.orders = [];
+      this.doneNotice = undefined;
+      clearTimeout(this.#undoTimer);
+    }
+    this.selected = id;
+    this.choosing = false;
+    this.watcherRemoved = false;
+    if (!restored && !this.embedded && this.#url.read("till-view") === "expo")
+      this.#url.write({ "till-watcher": id });
     void this.#reload();
   }
 
-  async #reload(): Promise<void> {
+  async #refresh(): Promise<void> {
+    if (this.choosing || this.selected === null) return;
+    const read = new AbortController();
+    const limit = setTimeout(() => read.abort(), READ_LIMIT_MS);
+    this.#refreshReads.add(read);
     try {
-      this.orders = await this.api.getExpoQueue();
+      await this.#reload(read.signal);
+    } finally {
+      clearTimeout(limit);
+      this.#refreshReads.delete(read);
+    }
+  }
+
+  async #reload(signal?: AbortSignal): Promise<void> {
+    const request = ++this.#request;
+    try {
+      const result =
+        this.selected === null || this.selected === "all"
+          ? await this.api.getExpoQueue({ signal })
+          : await this.api.getWatcherQueue(this.selected, { signal });
+      if (request < this.#appliedRequest || !this.isConnected) return;
+      this.#appliedRequest = request;
+      if (Array.isArray(result)) this.orders = result;
+      else {
+        this.orders = result.orders;
+        this.watcherRemoved = !result.watcher.active;
+        this.watcherRunsPass = result.watcher.runsPass;
+      }
+      this.stale = false;
+      this.#lastGoodAt = new Date();
       this.tableChanged = this.#tableChangedNext;
       this.#tableChangedNext = null;
-    } catch {
-      // Non-fatal — leave the last-known board; the next reload reconciles.
+    } catch (error) {
+      if (request > this.#appliedRequest) {
+        if ((error as { code?: string }).code === "watcher.not_found") this.watcherRemoved = true;
+        this.stale = true;
+      }
+    }
+  }
+
+  async #done(ids: string[], dish: string): Promise<void> {
+    if (this.selected === null || this.selected === "all") return;
+    this.doneErrorCode = undefined;
+    try {
+      await this.api.markWatcherDone(this.selected, ids, true);
+      this.doneNotice = { ids, dish };
+      clearTimeout(this.#undoTimer);
+      this.#undoTimer = setTimeout(() => {
+        this.doneNotice = undefined;
+      }, 10_000);
+      await this.#reload();
+    } catch (error) {
+      this.doneErrorCode = (error as { code?: string }).code ?? "server.internal";
+    }
+  }
+
+  async #undo(): Promise<void> {
+    const notice = this.doneNotice;
+    if (!notice || this.selected === null || this.selected === "all") return;
+    this.doneNotice = undefined;
+    clearTimeout(this.#undoTimer);
+    try {
+      await this.api.markWatcherDone(this.selected, notice.ids, false);
+      await this.#reload();
+    } catch (error) {
+      this.doneErrorCode = (error as { code?: string }).code ?? "server.internal";
     }
   }
 
@@ -501,7 +649,37 @@ export class TillExpoScreen extends LitElement {
                 </wt-button>
               </header>`
         }
-        ${this.#overdueBadge()}
+        ${
+          this.choosing
+            ? html`<p>${t("expo.choose")}</p>
+                <div class="chooser">
+                  <wt-button data-watcher="all" @click=${() => this.#select("all")}
+                    >${t("expo.all_stations")}</wt-button
+                  >
+                  ${this.watchers.map((watcher) => html`<wt-button data-watcher=${watcher.id} @click=${() => this.#select(watcher.id)}>${watcher.name}</wt-button>`)}
+                </div>`
+            : nothing
+        }
+        ${
+          !this.embedded && this.selected !== null && this.watchers.length > 0 && !this.choosing
+            ? html`<div class="selection">
+                <strong
+                  >${this.selected === "all" ? t("expo.all_stations") : this.watchers.find((watcher) => watcher.id === this.selected)?.name}</strong
+                ><wt-button
+                  data-change
+                  variant="secondary"
+                  @click=${() => {
+                    this.choosing = true;
+                  }}
+                  >${t("expo.change")}</wt-button
+                >
+              </div>`
+            : nothing
+        }
+        ${this.choosing ? nothing : this.#overdueBadge()}
+        ${this.choosing ? nothing : html`<p class="stale" role="status" ?data-stale=${this.stale}>${this.stale ? html`<till-stale-since .since=${this.#lastGoodAt}></till-stale-since>` : nothing}</p>`}
+        ${this.doneNotice && !this.choosing ? html`<p class="done-notice" role="status">${t("expo.marked_done").replace("{dish}", this.doneNotice.dish)} <wt-button data-undo variant="secondary" @click=${() => void this.#undo()}>${t("expo.undo")}</wt-button></p>` : nothing}
+        ${this.doneErrorCode ? html`<p class="error" role="alert">${codeMessage(this.doneErrorCode)}</p>` : nothing}
         ${
           this.reprintErrorCode
             ? html`<p class="error" role="alert">${codeMessage(this.reprintErrorCode)}</p>`
@@ -515,13 +693,17 @@ export class TillExpoScreen extends LitElement {
                 ${t("station.table_changed")}
               </p>`
         }
-        ${this.orders.length === 0 ? this.#empty() : this.#board()}
+        ${this.choosing ? nothing : this.watcherRemoved ? html`<p role="alert">${t("expo.watcher_removed")}</p>` : this.orders.length === 0 ? this.#empty() : this.#board()}
       </section>
     `;
   }
 
   #empty(): TemplateResult {
-    return html`<p class="empty">${t("expo.empty")}</p>`;
+    return html`<p class="empty">${t(this.#isWatcher() ? "expo.watcher_empty" : "expo.empty")}</p>`;
+  }
+
+  #isWatcher(): boolean {
+    return this.selected !== null && this.selected !== "all";
   }
 
   #board(): TemplateResult {
@@ -543,6 +725,21 @@ export class TillExpoScreen extends LitElement {
               this.#groupSection(order, order.party!, group),
             )
       }
+      ${
+        this.#isWatcher()
+          ? html`<wt-button
+              data-all-done=${order.orderId}
+              @click=${() =>
+                void this.#done(
+                  (order.party === undefined ? order.courses : (order.groups ?? [])).flatMap(
+                    (section) => section.items.map((item) => item.id),
+                  ),
+                  `#${order.orderNumber}`,
+                )}
+              >${t("expo.all_done")}</wt-button
+            >`
+          : nothing
+      }
       ${this.#reprintAction(order)}
     </article>`;
   }
@@ -560,13 +757,13 @@ export class TillExpoScreen extends LitElement {
 
   #visibleCourses(order: ExpoOrder): ExpoCourse[] {
     return order.courses
-      .filter((course) => !course.away)
+      .filter((course) => this.#isWatcher() || !course.away)
       .sort((a, b) => courseOrder(a) - courseOrder(b));
   }
 
   #visibleGroups(order: ExpoOrder): ExpoGroup[] {
     return (order.groups ?? [])
-      .filter((group) => !group.away)
+      .filter((group) => this.#isWatcher() || !group.away)
       .sort((a, b) => groupOrder(a) - groupOrder(b));
   }
 
@@ -587,7 +784,7 @@ export class TillExpoScreen extends LitElement {
             </div>`
       }
       <ul class="items">
-        ${group.items.map((item) => html`<li>${this.#item(item)}</li>`)}
+        ${group.items.map((item) => html`<li>${this.#item(item, this.#isWatcher())}${this.#isWatcher() ? this.#doneButton(item) : nothing}</li>`)}
       </ul>
       ${group.groupId === null ? nothing : this.#groupLever(order, party, group, group.groupId, name)}
     </div>`;
@@ -601,6 +798,7 @@ export class TillExpoScreen extends LitElement {
     groupId: string,
     name: string,
   ): TemplateResult | typeof nothing {
+    if (this.#isWatcher() && (!this.#runsPass() || group.away)) return nothing;
     if (group.state === "held") {
       if (this.fireControl !== "expo") return nothing;
       return html`<button
@@ -615,15 +813,25 @@ export class TillExpoScreen extends LitElement {
         ${t("expo.fire")}
       </button>`;
     }
-    if (group.items.every((item) => item.state === "ready")) {
+    if (
+      this.#isWatcher()
+        ? (group as WatcherGroup).allReady
+        : group.items.every((item) => item.state === "ready")
+    ) {
       return html`<button
         class="lever away"
         data-group-away=${groupId}
         aria-label=${`${t("expo.away")} ${name}`}
         @click=${() =>
-          void this.#groupAct(order, party, (command) =>
-            this.api.markGroupAway(party.id, groupId, command),
-          )}
+          void this.#groupAct(order, party, async (command) => {
+            const result = await this.api.markGroupAway(party.id, groupId, command);
+            if (this.#isWatcher())
+              await this.#done(
+                group.items.map((item) => item.id),
+                name,
+              );
+            return result;
+          })}
       >
         ${t("expo.away")}
       </button>`;
@@ -645,7 +853,7 @@ export class TillExpoScreen extends LitElement {
     return html`<div class="course" data-course=${course.courseId ?? "none"}>
       ${course.courseName ? html`<div class="course-head">${course.courseName}</div>` : nothing}
       <ul class="items">
-        ${course.items.map((item) => html`<li>${this.#item(item)}</li>`)}
+        ${course.items.map((item) => html`<li>${this.#item(item, this.#isWatcher())}${this.#isWatcher() ? this.#doneButton(item) : nothing}</li>`)}
       </ul>
       ${this.#lever(order, course)}
     </div>`;
@@ -653,9 +861,9 @@ export class TillExpoScreen extends LitElement {
 
   /** A FORGOTTEN item is flagged with a text label, not a second border colour, which would compete with
    *  the item's own kitchen-state border for the same CSS property. */
-  #item(item: ExpoItem): TemplateResult {
+  #item(item: ExpoItem, watcher = false): TemplateResult {
     const held = item.firedAt === null;
-    const forgotten = this.#itemBand(item) === "forgotten";
+    const forgotten = !(watcher && item.awayAt !== null) && this.#itemBand(item) === "forgotten";
     const label = dishLine(
       { quantity: item.qty, unitName: item.unitName, soldInEach: item.soldInEach },
       item.name,
@@ -665,6 +873,7 @@ export class TillExpoScreen extends LitElement {
         <span class="item-name">${label}</span>
         <span class="item-station">${item.stationName}</span>
         <span class="item-state">${t(`station.state.${item.state}` as const)}</span>
+        ${watcher && item.awayAt !== null ? html`<span>${t("expo.sent_out")}</span>` : nothing}
         ${
           forgotten
             ? html`<span class="item-forgotten-flag" data-forgotten
@@ -678,6 +887,19 @@ export class TillExpoScreen extends LitElement {
         `item-diet-${item.id}`,
       )}
     </span>`;
+  }
+
+  #doneButton(item: ExpoItem): TemplateResult {
+    return html`<wt-button
+      data-done=${item.id}
+      aria-label=${t("expo.done_dish").replace("{dish}", item.name)}
+      @click=${() => void this.#done([item.id], item.name)}
+      >${t("expo.done")}</wt-button
+    >`;
+  }
+
+  #runsPass(): boolean {
+    return this.watcherRunsPass;
   }
 
   #customisation(item: ExpoItem): TemplateResult | typeof nothing {
@@ -735,6 +957,7 @@ export class TillExpoScreen extends LitElement {
    * Lit fixes an attribute NAME at template-compile time, so one binding cannot name three attributes.
    */
   #lever(order: ExpoOrder, course: ExpoCourse): TemplateResult | typeof nothing {
+    if (this.#isWatcher() && (!this.#runsPass() || course.away)) return nothing;
     if (course.courseId === null) return nothing;
     const courseId = course.courseId;
     const name = course.courseName ?? "";
@@ -749,12 +972,24 @@ export class TillExpoScreen extends LitElement {
         ${t("expo.fire")}
       </button>`;
     }
-    if (course.items.every((item) => item.state === "ready")) {
+    if (
+      this.#isWatcher()
+        ? (course as WatcherCourse).allReady
+        : course.items.every((item) => item.state === "ready")
+    ) {
       return html`<button
         class="lever away"
         data-away=${courseId}
         aria-label=${`${t("expo.away")} ${name}`}
-        @click=${() => void this.#act(() => this.api.markCourseAway(order.orderId, courseId))}
+        @click=${() =>
+          void this.#act(async () => {
+            await this.api.markCourseAway(order.orderId, courseId);
+            if (this.#isWatcher())
+              await this.#done(
+                course.items.map((item) => item.id),
+                name,
+              );
+          })}
       >
         ${t("expo.away")}
       </button>`;
@@ -782,7 +1017,11 @@ export class TillExpoScreen extends LitElement {
     const sections =
       order.party === undefined ? this.#visibleCourses(order) : this.#visibleGroups(order);
     return worstBand(
-      sections.flatMap((section) => section.items.map((item) => this.#itemBand(item))),
+      sections.flatMap((section) =>
+        section.items
+          .filter((item) => !this.#isWatcher() || item.awayAt === null)
+          .map((item) => this.#itemBand(item)),
+      ),
     );
   }
 
