@@ -150,6 +150,28 @@ describe("units-screen", () => {
     expect(table.shadowRoot!.querySelector("[data-test=select-p1]")).not.toBeNull();
   });
 
+  it("shows the selected product count and Cancel while selecting", async () => {
+    setLocale("en-GB");
+    const el = await mount(inUseApi());
+    const dialog = await openInUseModal(el);
+    await enableProductSelection(el, dialog);
+    expect(dialog.querySelector("[data-test=selected-count]")!.textContent).toBe("0 selected");
+    dialog
+      .querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!
+      .click();
+    await el.updateComplete;
+    expect(dialog.querySelector("[data-test=selected-count]")!.textContent).toBe("1 selected");
+    const cancel = dialog.querySelector<HTMLElement>("[data-test=select-products]")!;
+    expect(cancel.textContent?.trim()).toBe("Cancel selection");
+    cancel.click();
+    await el.updateComplete;
+    expect(dialog.querySelector("[data-test=selected-count]")).toBeNull();
+    expect(dialog.querySelector("wt-data-table")!.selectable).toBe(false);
+    await enableProductSelection(el, dialog);
+    expect(dialog.querySelector("[data-test=selected-count]")!.textContent).toBe("0 selected");
+  });
+
   it("lists localized units and searches them by name and abbreviation", async () => {
     setLocale("es-ES");
     const el = await mount();

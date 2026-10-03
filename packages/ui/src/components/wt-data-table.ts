@@ -623,6 +623,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    if (
+      this.rows.length === 0 ||
+      this.loading ||
+      this.errorMessage !== "" ||
+      !this.columns.some((column) => column.filter)
+    )
+      this.filtersOpen = false;
     if (changed.has("viewKey") || changed.has("rememberExpanded")) this.#remembered = null;
     if (
       this.initiallyCollapsed &&
@@ -858,7 +865,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.filtersPanel.style.top = `${Math.max(8, Math.min(anchor.top, innerHeight - box.height - 8))}px`;
   }
 
-  #toggleFilters(): void {
+  #toggleFilters(event?: MouseEvent): void {
+    event?.preventDefault();
     if (this.filtersPanel.matches(":popover-open")) {
       this.filtersPanel.hidePopover();
       this.filtersOpen = false;
@@ -1403,6 +1411,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 type="button"
                 class="filters-trigger"
                 aria-expanded=${this.filtersOpen}
+                popovertarget="filters-panel"
                 @click=${this.#toggleFilters}
               >
                 ${this.filtersLabel}${
@@ -1410,6 +1419,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 }
               </button>
               <div
+                id="filters-panel"
                 class="filters-panel"
                 popover
                 role="group"
@@ -1418,6 +1428,26 @@ export class WtDataTable<Row = unknown> extends LitElement {
                   this.filtersOpen = event.newState === "open";
                 }}
                 @keydown=${(event: KeyboardEvent) => {
+                  if (event.key === "Tab" && this.filtersPanel.hasAttribute("data-fullscreen")) {
+                    const first =
+                      this.filtersPanel.querySelector<HTMLButtonElement>(".filters-clear-all");
+                    const finalSection = [
+                      ...this.filtersPanel.querySelectorAll<HTMLDetailsElement>(".filter-section"),
+                    ].at(-1);
+                    const last = finalSection?.open
+                      ? finalSection
+                          .querySelector<HTMLElement>(".table-filter")
+                          ?.shadowRoot?.querySelector<HTMLButtonElement>(".trigger")
+                      : finalSection?.querySelector<HTMLElement>("summary");
+                    const origin = event.composedPath()[0];
+                    if (event.shiftKey && origin === first && last) {
+                      event.preventDefault();
+                      last.focus();
+                    } else if (!event.shiftKey && origin === last && first) {
+                      event.preventDefault();
+                      first.focus();
+                    }
+                  }
                   if (
                     event.key !== "Escape" ||
                     event.defaultPrevented ||

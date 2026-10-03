@@ -1799,6 +1799,35 @@ test("the Filters trigger closes its open panel", async () => {
   expect(trigger.getAttribute("aria-expanded")).toBe("false");
 });
 
+test("a pointer click on the open Filters trigger closes the panel", async () => {
+  const previousWidth = innerWidth;
+  const previousHeight = innerHeight;
+  await page.viewport(1280, 900);
+  try {
+    const el = await tableS({ columns: withStatus });
+    const root = el.shadowRoot!;
+    const trigger = root.querySelector<HTMLButtonElement>(".filters-trigger")!;
+    await userEvent.click(trigger);
+    expect(root.querySelector(".filters-panel")!.matches(":popover-open")).toBe(true);
+    await userEvent.click(trigger);
+    expect(root.querySelector(".filters-panel")!.matches(":popover-open")).toBe(false);
+  } finally {
+    await page.viewport(previousWidth, previousHeight);
+  }
+});
+
+test("restoring source rows does not announce a closed Filters panel as expanded", async () => {
+  const el = await tableS({ columns: withStatus });
+  const root = el.shadowRoot!;
+  root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+  el.rows = [];
+  await el.updateComplete;
+  el.rows = rowsS;
+  await el.updateComplete;
+  expect(root.querySelector(".filters-panel")!.matches(":popover-open")).toBe(false);
+  expect(root.querySelector(".filters-trigger")!.getAttribute("aria-expanded")).toBe("false");
+});
+
 test("a press outside the Filters panel closes it and updates its trigger", async () => {
   const previousWidth = innerWidth;
   const previousHeight = innerHeight;
@@ -1993,6 +2022,50 @@ test("an open Filters panel remains reachable when the viewport becomes a phone"
     expect(
       root.querySelector<HTMLButtonElement>(".filters-close")!.getBoundingClientRect().right,
     ).toBeLessThanOrEqual(390);
+  } finally {
+    await page.viewport(previousWidth, previousHeight);
+  }
+});
+
+test("Tab stays inside the full-screen Filters panel on a phone", async () => {
+  const previousWidth = innerWidth;
+  const previousHeight = innerHeight;
+  await page.viewport(390, 900);
+  try {
+    const el = await tableS({
+      columns: [...withStatus, { ...withStatus[1]!, key: "other-status" }],
+    });
+    const root = el.shadowRoot!;
+    root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+    const panel = root.querySelector<HTMLElement>(".filters-panel")!;
+    const combobox = panel.querySelectorAll<WtCombobox>("wt-combobox")[1]!;
+    const last = combobox.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
+    last.focus();
+    await userEvent.keyboard("{Tab}");
+    expect(panel.contains(root.activeElement)).toBe(true);
+    expect(root.activeElement).toBe(panel.querySelector(".filters-clear-all"));
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(root.activeElement).toBe(combobox);
+  } finally {
+    await page.viewport(previousWidth, previousHeight);
+  }
+});
+
+test("Tab wraps from a collapsed final filter section on a phone", async () => {
+  const previousWidth = innerWidth;
+  const previousHeight = innerHeight;
+  await page.viewport(390, 900);
+  try {
+    const el = await tableS({ columns: withStatus });
+    const root = el.shadowRoot!;
+    root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+    const panel = root.querySelector<HTMLElement>(".filters-panel")!;
+    const section = panel.querySelector<HTMLDetailsElement>("details.filter-section")!;
+    section.open = false;
+    const summary = section.querySelector<HTMLElement>("summary")!;
+    summary.focus();
+    await userEvent.keyboard("{Tab}");
+    expect(root.activeElement).toBe(panel.querySelector(".filters-clear-all"));
   } finally {
     await page.viewport(previousWidth, previousHeight);
   }

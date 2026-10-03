@@ -514,8 +514,22 @@ export class UnitsScreen extends LitElement {
                       this.selectingProducts = !this.selectingProducts;
                       if (!this.selectingProducts) this.selectedProducts = [];
                     }}
-                    >${t(this.selectingProducts ? "units.done_selecting" : "units.select")}</wt-button
+                    >${t(this.selectingProducts ? "units.cancel_selection" : "units.select")}</wt-button
                   >
+                  ${
+                    this.selectingProducts
+                      ? html`<span data-test="selected-count" aria-live="polite"
+                          >${
+                            this.selectedProducts.length === 1
+                              ? t("units.selected_one")
+                              : t("units.selected_count").replace(
+                                  "{count}",
+                                  String(this.selectedProducts.length),
+                                )
+                          }</span
+                        >`
+                      : nothing
+                  }
                   <wt-input
                     class="in-use-search"
                     data-test="in-use-search"
