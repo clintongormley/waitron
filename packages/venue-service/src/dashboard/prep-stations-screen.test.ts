@@ -1791,6 +1791,42 @@ it("reports an initial routing load failure and recovers when live data refreshe
   expect(q(el, '[role="alert"]')).toBeNull();
 });
 
+it("keeps a failed save's message through a later failed refresh and the recovery", async () => {
+  setLocale("en");
+  const liveData = new LiveData();
+  const withTerrace = {
+    ...view,
+    stations: [
+      ...view.stations,
+      { ...view.stations[0]!, id: "terrace", name: "Terrace", isDefault: false, displayOrder: 2 },
+    ],
+  };
+  const load = vi.fn().mockResolvedValue(withTerrace);
+  const a = api({
+    liveData,
+    load,
+    setDefaultStation: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+  });
+  const el = await mount(a);
+  load.mockRejectedValue({ code: "connection.failed" });
+  liveData.refresh();
+  await vi.waitFor(() =>
+    expect(q(el, '[role="alert"]')?.textContent).toContain("could not be loaded"),
+  );
+  q(el, '[data-test="default-terrace"]')!.click();
+  await vi.waitFor(() =>
+    expect(q(el, '[role="alert"]')?.textContent).toContain("could not be saved"),
+  );
+  liveData.refresh();
+  await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(3));
+  await settle(el);
+  load.mockResolvedValue(withTerrace);
+  liveData.refresh();
+  await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(4));
+  await settle(el);
+  expect(q(el, '[role="alert"]')?.textContent).toContain("could not be saved");
+});
+
 it("shows an inactive station refusal from exception preview without calling its write", async () => {
   setLocale("en");
   const a = api({

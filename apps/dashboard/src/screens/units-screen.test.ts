@@ -885,6 +885,29 @@ describe("units-screen", () => {
     );
   });
 
+  it("keeps a failed delete's connection message through a later failed refresh and the recovery", async () => {
+    const api = stubApi({ deleteUnit: vi.fn().mockRejectedValue({ code: "connection.failed" }) });
+    const el = await mount(api);
+    vi.mocked(api.background.listUnits).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull());
+    el.shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=delete-u1]")!
+      .click();
+    await vi.waitFor(() => expect(api.deleteUnit).toHaveBeenCalledOnce());
+    await flush(el);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.background.listUnits).toHaveBeenCalledTimes(2));
+    await flush(el);
+    vi.mocked(api.background.listUnits).mockResolvedValue(units);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.background.listUnits).toHaveBeenCalledTimes(3));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+      codeMessage("connection.failed"),
+    );
+  });
+
   it("edits a unit from its row action and replaces only that row with the saved unit", async () => {
     setLocale("es-ES");
     const saved: Unit = { ...units[0]!, name: { es: "pieza", en: "piece" } };
