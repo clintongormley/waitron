@@ -218,6 +218,7 @@ export class SectionDetailsForm extends LitElement {
               this.#dismiss("names", ...changed.map((language) => `names-${language}`));
             },
             this.internalName,
+            this.languages.defaultLanguage,
           )}
           <span class="field-error">${errors.names ?? nothing}</span>
         </fieldset>

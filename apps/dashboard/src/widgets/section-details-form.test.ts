@@ -379,3 +379,37 @@ it("leaves the colour caption out of the group-label look the names heading take
   expect(captionStyle.marginBottom).not.toBe("0px");
   expect(captionStyle.marginBottom).toBe(headingStyle.marginBottom);
 });
+it("hints each blank customer-facing name with the default language's name, then the internal name, as they are typed", async () => {
+  const { el } = await mountWidget<HTMLElementTagNameMap["dashboard-section-details-form"]>(
+    "dashboard-section-details-form",
+    {
+      open: true,
+      languages: { defaultLanguage: "en", languages: ["en", "es"] },
+      value: {
+        id: "s",
+        internalName: "Starters",
+        names: {},
+        image: null,
+        color: null,
+        members: [],
+      },
+    },
+  );
+  const input = (name: string) =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name="${name}"]`)!;
+  const type = async (name: string, value: string) => {
+    input(name).dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+  };
+  const hints = () => ["names-en", "names-es"].map((name) => input(name).placeholder);
+
+  expect(hints()).toEqual(["Starters", "Starters"]);
+  await type("names-en", "To begin");
+  expect(hints()).toEqual(["Starters", "To begin"]);
+  await type("internalName", "First courses");
+  expect(hints()).toEqual(["First courses", "To begin"]);
+  await type("names-en", "");
+  expect(hints()).toEqual(["First courses", "First courses"]);
+});
