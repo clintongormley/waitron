@@ -221,6 +221,12 @@ export class TillTabShell extends LitElement {
                         : nothing
                     }
                     <wt-button
+                      class="printers"
+                      variant="secondary"
+                      @click=${() => this.#emit("open-printers")}
+                      >${t("printers.open")}</wt-button
+                    >
+                    <wt-button
                       class="allergens"
                       variant="secondary"
                       @click=${() => this.#emit("open-allergens")}

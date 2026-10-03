@@ -1356,8 +1356,29 @@ export interface DeviceIdentity {
   watcherId?: string | null;
   /** The `tills` row a sale-capable device rings against; `null` for a `kds_station`. */
   tillId?: string | null;
-  /** The per-device receipt printer; `null` when none. */
+  /** The device's current receipt printer; `null` when none. */
+  receiptPrinterId: string | null;
+  /** The device's current payment slip printer; `null` when none. */
+  paymentSlipPrinterId: string | null;
+  /** The switched-on printers the device's profile lists for each kind of printing, in list order. */
+  printerChoices: { receipt: PrinterChoice[]; paymentSlip: PrinterChoice[] };
+}
+
+export interface PrinterChoice {
+  id: string;
+  name: string;
+}
+
+/** A device's printer switch: a field left out is left as it is. */
+export interface DevicePrintersChange {
   receiptPrinterId?: string | null;
+  paymentSlipPrinterId?: string | null;
+}
+
+/** `PUT /api/device/printers` success: the device's current printers as stored. */
+export interface DevicePrinters {
+  receiptPrinterId: string | null;
+  paymentSlipPrinterId: string | null;
 }
 
 /**
@@ -2265,6 +2286,14 @@ export class TillApi {
    */
   getDeviceIdentity(): Promise<DeviceIdentity> {
     return this.#request<DeviceIdentity>("/api/device/me", "GET");
+  }
+
+  /**
+   * Switch the session's device's current printers → `PUT /api/device/printers`. Send only the field
+   * that changed: the server refuses a switched-off printer, which a device may still be on.
+   */
+  setDevicePrinters(change: DevicePrintersChange): Promise<DevicePrinters> {
+    return this.#request<DevicePrinters>("/api/device/printers", "PUT", change);
   }
 
   /**

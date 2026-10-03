@@ -420,3 +420,14 @@ it("words a device that is not a till for any action, naming no cancel or credit
   expect(codeMessage("device.till_required", "en")).not.toMatch(/cancel|credit/i);
   expect(codeMessage("device.till_required", "es")).not.toMatch(/cancel|anul|abon|rectific/i);
 });
+
+it("says in both languages that a printer cannot be chosen for this device, naming no identifier", () => {
+  const generic = {
+    en: codeMessage("server.internal", "en"),
+    es: codeMessage("server.internal", "es"),
+  };
+  expect(codeMessage("device.binding_invalid", "en")).not.toBe(generic.en);
+  expect(codeMessage("device.binding_invalid", "es")).not.toBe(generic.es);
+  expect(codeMessage("device.binding_invalid", "en")).toMatch(/printer/i);
+  expect(codeMessage("device.binding_invalid", "es")).toMatch(/impresora/i);
+});

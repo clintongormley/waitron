@@ -358,6 +358,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This device isn't set up — ask to join this venue",
     es: "Este dispositivo no está configurado. Solicita el alta en este local",
   },
+  "device.binding_invalid": {
+    en: "That printer is not available to this device. Choose another",
+    es: "Esa impresora no está disponible para este dispositivo. Elige otra",
+  },
   "device.cash_not_allowed": {
     en: "This device does not take cash. Take cash at a till.",
     es: "Este dispositivo no cobra en efectivo. Cobra en efectivo en una caja.",

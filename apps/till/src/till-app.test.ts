@@ -28,6 +28,7 @@ import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillStationScreen } from "./screens/till-station-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
+import type { TillPrintersDialog } from "./widgets/printers-dialog.js";
 import type { TillStationQueue } from "./widgets/station-queue.js";
 import type { TillCounterWaiting } from "./widgets/counter-waiting.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
@@ -2967,7 +2968,7 @@ describe("till-app", () => {
       tender: { method: "card", charged: "3.00", tip: "0.00", reference: null },
     };
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, capabilities: [] }),
+      getTill: vi.fn().mockResolvedValue({ ...till, capabilities: ["open-cash-drawer"] }),
       recordSale: vi.fn().mockResolvedValue(filed),
     });
     const c = await toCounter(el);
@@ -2995,14 +2996,14 @@ describe("till-app", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
-  it("a handheld hides the manual drawer action and ignores a forged open-drawer event even with the capability", async () => {
+  it("a handheld whose profile allows the drawer shows Open drawer, and it opens the drawer", async () => {
     const openDrawer = vi.fn().mockResolvedValue(undefined);
     const recordSale = vi.fn().mockResolvedValue(saleResult);
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({
         ...till,
         canvas: phoneCanvasDef,
-        capabilities: ["open-cash-drawer", "print-receipt"],
+        capabilities: ["open-cash-drawer", "print-receipt", "take-cash"],
       }),
       getDeviceIdentity: vi
         .fn()
@@ -3026,11 +3027,20 @@ describe("till-app", () => {
     emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "20.00" });
     await flush(el);
     expect(recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "20.00" }, "wo-7");
-    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=open-drawer]")).toBeNull();
-
-    emit(ticket(el)!, "open-drawer");
+    ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=open-drawer]")!.click();
     await flush(el);
-    expect(openDrawer).not.toHaveBeenCalled();
+    expect(openDrawer).toHaveBeenCalledTimes(1);
+    expect(openDrawer).toHaveBeenCalledWith();
+  });
+
+  it("a till whose profile does not allow the drawer shows no Open drawer on the ticket", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, capabilities: ["print-receipt", "take-cash"] }),
+    });
+    await toTicket(el);
+
+    expect(ticket(el)).not.toBeNull();
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=open-drawer]")).toBeNull();
   });
 
   it("too many wrong override PINs keep the dialog open, telling the operator to wait", async () => {
@@ -12250,5 +12260,149 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     const notice = el.shadowRoot!.querySelector<HTMLElement>('[data-refresh-notice="waiting"]')!;
     expect(notice.hasAttribute("data-active")).toBe(true);
     expect(notice.textContent).toContain(t("refresh.waiting"));
+  });
+});
+
+describe("the device's printers, switched from the header", () => {
+  const P1 = { id: "P1", name: "Counter printer" };
+  const P2 = { id: "P2", name: "Bar printer" };
+  const S1 = { id: "S1", name: "Counter slip printer" };
+  const S2 = { id: "S2", name: "Portable slip printer" };
+  const identity = {
+    deviceId: "till-dev",
+    name: "Till 1",
+    formFactor: "till",
+    stationId: null,
+    // A switched-off receipt printer the device stays on: it is not among the choices.
+    receiptPrinterId: "P-off",
+    paymentSlipPrinterId: "S1",
+    printerChoices: { receipt: [P1, P2], paymentSlip: [S1, S2] },
+  };
+  const printersDialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillPrintersDialog>("till-printers-dialog");
+
+  async function openPrinters(overrides: Record<string, unknown> = {}) {
+    const { el } = await mountApp({
+      getDeviceIdentity: vi.fn().mockResolvedValue(identity),
+      ...overrides,
+    });
+    await toCounter(el);
+    expect(printersDialog(el)).toBeNull();
+    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
+    await flush(el);
+    return el;
+  }
+
+  it("opens the dialog with the device's current printers and the profile's choices", async () => {
+    const el = await openPrinters();
+
+    const dialog = printersDialog(el)!;
+    expect(dialog.open).toBe(true);
+    expect(dialog.receipt).toEqual({ current: "P-off", choices: [P1, P2] });
+    expect(dialog.paymentSlip).toEqual({ current: "S1", choices: [S1, S2] });
+    expect(dialog.error).toBeNull();
+  });
+
+  it("sends only the printer changed and shows the one the server stored", async () => {
+    const setDevicePrinters = vi
+      .fn()
+      .mockResolvedValue({ receiptPrinterId: "P-off", paymentSlipPrinterId: "S2" });
+    const el = await openPrinters({ setDevicePrinters });
+
+    emit(printersDialog(el)!, "printers-change", { paymentSlipPrinterId: "S2" });
+    await flush(el);
+
+    expect(setDevicePrinters).toHaveBeenCalledTimes(1);
+    expect(setDevicePrinters.mock.calls[0]).toEqual([{ paymentSlipPrinterId: "S2" }]);
+    const dialog = printersDialog(el)!;
+    expect(dialog.paymentSlip).toEqual({ current: "S2", choices: [S1, S2] });
+    expect(dialog.receipt).toEqual({ current: "P-off", choices: [P1, P2] });
+    expect(dialog.error).toBeNull();
+  });
+
+  it("keeps the dialog open with the refusal when the server refuses the printer", async () => {
+    const setDevicePrinters = vi.fn().mockRejectedValue({
+      field: "receiptPrinterId",
+      code: "device.binding_invalid",
+      status: 400,
+    });
+    const el = await openPrinters({ setDevicePrinters });
+
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    await flush(el);
+
+    const dialog = printersDialog(el)!;
+    expect(dialog).not.toBeNull();
+    expect(dialog.error).toEqual({ code: "device.binding_invalid", field: "receiptPrinterId" });
+    expect(dialog.receipt).toEqual({ current: "P-off", choices: [P1, P2] });
+  });
+
+  it("opens on the printers boot read when reading the device again fails", async () => {
+    const getDeviceIdentity = vi
+      .fn()
+      .mockResolvedValueOnce(identity)
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    const el = await openPrinters({ getDeviceIdentity });
+
+    expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+    const dialog = printersDialog(el)!;
+    expect(dialog.receipt).toEqual({ current: "P-off", choices: [P1, P2] });
+    expect(dialog.paymentSlip).toEqual({ current: "S1", choices: [S1, S2] });
+  });
+
+  it("offers what the device answers when the dialog opens, not what it answered at boot", async () => {
+    const getDeviceIdentity = vi
+      .fn()
+      .mockResolvedValueOnce(identity)
+      .mockResolvedValue({
+        ...identity,
+        receiptPrinterId: "P2",
+        printerChoices: { receipt: [P2], paymentSlip: [S1, S2] },
+      });
+    const el = await openPrinters({ getDeviceIdentity });
+
+    expect(printersDialog(el)!.receipt).toEqual({ current: "P2", choices: [P2] });
+  });
+
+  it("opens with no printer when the device could never be read", async () => {
+    const el = await openPrinters({
+      getDeviceIdentity: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+
+    const dialog = printersDialog(el)!;
+    expect(dialog.receipt).toEqual({ current: null, choices: [] });
+    expect(dialog.paymentSlip).toEqual({ current: null, choices: [] });
+  });
+
+  it("shows a switch that got no answer as a failure naming no printer", async () => {
+    const el = await openPrinters({
+      setDevicePrinters: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+
+    emit(printersDialog(el)!, "printers-change", { paymentSlipPrinterId: "S2" });
+    await flush(el);
+
+    const dialog = printersDialog(el)!;
+    expect(dialog.error).toEqual({ code: "server.internal" });
+    expect(dialog.paymentSlip).toEqual({ current: "S1", choices: [S1, S2] });
+  });
+
+  it("closes the dialog when the operator logs out", async () => {
+    const el = await openPrinters();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+
+    expect(lock(el)).not.toBeNull();
+    expect(printersDialog(el)).toBeNull();
+  });
+
+  it("closes the dialog when it asks to close", async () => {
+    const el = await openPrinters();
+
+    emit(printersDialog(el)!, "close");
+    await flush(el);
+
+    expect(printersDialog(el)).toBeNull();
   });
 });

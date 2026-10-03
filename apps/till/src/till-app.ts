@@ -122,6 +122,8 @@ import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/tab-shell.js";
 import "./widgets/find-bill-dialog.js";
+import "./widgets/printers-dialog.js";
+import type { PrinterSlot, PrintersChangeDetail } from "./widgets/printers-dialog.js";
 import type { FindBillPayDetail } from "./widgets/find-bill-dialog.js";
 import "./widgets/card-grid.js";
 import type { StringKey } from "./i18n/strings.js";
@@ -212,7 +214,7 @@ import type { BasketRefusal, OrderLine } from "./state/working-order.js";
 import type { StoredLines } from "./widgets/basket.js";
 import { adjustableListing } from "./state/adjust-target.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
-import type { DevDeviceList } from "./api/client.js";
+import type { DevDeviceList, DeviceIdentity } from "./api/client.js";
 import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
 import type {
@@ -1139,7 +1141,7 @@ export class TillApp extends LitElement {
   @state() private drill?: Drill;
   /** An enrolled KDS display: no login, boots straight into its queue. Set only by {@link #boot}. */
   @state() private deviceMode = false;
-  /** An enrolled handheld: narrower menu columns, and never the cash drawer. */
+  /** An enrolled handheld: narrower menu columns. */
   @state() private handheldMode = false;
   /**
    * The device front door {@link #boot} chose, shown ahead of the lock screen and shell: `"chooser"` in
@@ -1498,6 +1500,15 @@ export class TillApp extends LitElement {
   /** An error code shown inside the open override dialog; cleared before each attempt so a repeat
    * re-shows. */
   @state() private overrideError: string | null = null;
+  /** The device's current printers and its profile's choices, as the server last said. */
+  @state() private devicePrinters: { receipt: PrinterSlot; paymentSlip: PrinterSlot } = {
+    receipt: { current: null, choices: [] },
+    paymentSlip: { current: null, choices: [] },
+  };
+  @state() private printersOpen = false;
+  @state() private printersError: { code: string; field?: string } | null = null;
+  /** `GET /api/device/me` as last read, which the printers dialog falls back to. */
+  #heldIdentity?: DeviceIdentity;
   /** The open cancel, give-away or discount dialog, with what the server last answered it. */
   @state() private adjusting: Adjusting | null = null;
   /** The people who can approve the adjustment being confirmed; set, their PIN prompt is open. */
@@ -1723,6 +1734,7 @@ export class TillApp extends LitElement {
     this.initialDeviceWatcher = undefined;
     this.#deviceKind = "till";
     this.deviceName = undefined;
+    this.#heldIdentity = undefined;
     const previousDeviceId = this.deviceId;
     this.deviceId = undefined;
     this.frontDoor = undefined;
@@ -1749,6 +1761,7 @@ export class TillApp extends LitElement {
         this.makeNow = [];
       this.deviceName = identity.name;
       this.deviceId = identity.deviceId;
+      this.#heldIdentity = identity;
       this.#restoreMakeNow();
       const kind = kindOfFormFactor(identity.formFactor);
       this.#deviceKind = kind ?? "till";
@@ -3477,9 +3490,6 @@ export class TillApp extends LitElement {
    * policy changes mid-shift; `authorization.not_permitted` opens the supervisor override.
    */
   async #onOpenDrawer(): Promise<void> {
-    // A handheld carries a pocket float rather than a register. Keep this independent of its profile's
-    // print/drawer capabilities so a synthetic event cannot reach the manual drawer route.
-    if (this.handheldMode) return;
     this.errorKey = undefined;
     try {
       await this.api.openDrawer();
@@ -3489,6 +3499,47 @@ export class TillApp extends LitElement {
       } else {
         this.errorKey = drawerErrorKey((error as { code?: string }).code);
       }
+    }
+  }
+
+  /** Reads the device again first, so a profile list changed since boot is offered; a failed read
+   * opens on the device as boot read it. */
+  async #onOpenPrinters(): Promise<void> {
+    try {
+      this.#heldIdentity = await this.api.getDeviceIdentity();
+    } catch {
+      // Opens on the identity held.
+    }
+    const identity = this.#heldIdentity;
+    if (identity !== undefined) {
+      this.devicePrinters = {
+        receipt: { current: identity.receiptPrinterId, choices: identity.printerChoices.receipt },
+        paymentSlip: {
+          current: identity.paymentSlipPrinterId,
+          choices: identity.printerChoices.paymentSlip,
+        },
+      };
+    }
+    this.printersError = null;
+    this.printersOpen = true;
+  }
+
+  async #onPrintersChange(event: CustomEvent<PrintersChangeDetail>): Promise<void> {
+    this.printersError = null;
+    try {
+      const stored = await this.api.setDevicePrinters(event.detail);
+      if (this.#heldIdentity !== undefined)
+        this.#heldIdentity = { ...this.#heldIdentity, ...stored };
+      this.devicePrinters = {
+        receipt: { ...this.devicePrinters.receipt, current: stored.receiptPrinterId },
+        paymentSlip: { ...this.devicePrinters.paymentSlip, current: stored.paymentSlipPrinterId },
+      };
+    } catch (error) {
+      const { code, field } = error as { code?: unknown; field?: unknown };
+      this.printersError = {
+        code: typeof code === "string" ? code : "server.internal",
+        ...(typeof field === "string" ? { field } : {}),
+      };
     }
   }
 
@@ -6318,6 +6369,7 @@ export class TillApp extends LitElement {
     this.#closeDeparting();
     this.#closeCancelCrediting();
     this.findingBill = false;
+    this.printersOpen = false;
     this.#operatorSession++;
   }
 
@@ -7162,7 +7214,7 @@ export class TillApp extends LitElement {
           .canPrintReceipt=${
             this.deviceId === undefined || this.capabilities.includes("print-receipt")
           }
-          .canOpenDrawer=${!this.handheldMode}
+          .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
           .simulated=${this.onboardingIntent === "demo" || this.onboardingIntent === "prepare"}
         ></till-ticket-view>`;
       case "schedule":
@@ -7322,6 +7374,7 @@ export class TillApp extends LitElement {
         @back-to-floor=${() => this.#onBackToFloor()}
         @back-to-counter=${() => this.#onBackToCounter()}
         @open-allergens=${() => this.#onOpenAllergens()}
+        @open-printers=${() => void this.#onOpenPrinters()}
         @close-allergens=${() => this.#onCloseAllergens()}
         @logout=${() => void this.#onLogout()}
         @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
@@ -7364,6 +7417,19 @@ export class TillApp extends LitElement {
           @wt-close=${() => (this.submittedNotice = null)}
         ></wt-toast>
         <till-make-now .items=${this.makeNow} @dismiss=${this.#dismissMakeNow}></till-make-now>
+        ${
+          this.printersOpen
+            ? html`<till-printers-dialog
+                .open=${true}
+                .receipt=${this.devicePrinters.receipt}
+                .paymentSlip=${this.devicePrinters.paymentSlip}
+                .error=${this.printersError}
+                @printers-change=${(event: CustomEvent<PrintersChangeDetail>) =>
+                  void this.#onPrintersChange(event)}
+                @close=${() => (this.printersOpen = false)}
+              ></till-printers-dialog>`
+            : nothing
+        }
         ${
           this.findingBill
             ? html`<till-find-bill-dialog
