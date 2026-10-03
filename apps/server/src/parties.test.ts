@@ -1248,13 +1248,12 @@ describe("merged parties keep their bills", () => {
 });
 
 describe("a merged party's invoiced bill, collected at the till (spec §12 item 9)", () => {
-  it("is owed on the surviving visit and blocks Finish until the till collects it under the invoice filed at placing", async () => {
+  it("is owed on the surviving party and blocks Finish until the till collects it under the invoice filed at placing", async () => {
     const venue = await provisionBillVenue(suite.db);
     const invoiceFirst = await inTx(suite, (tx) =>
       offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
     );
     const s = await seatedWith(venue);
-    // Placed in an invoice-first zone, so its invoice is filed before it reaches the party.
     const billId = await placedCounterBillMovedTo(venue, invoiceFirst.zoneId, s);
     const filed = await inTx(suite, (tx) =>
       tx
@@ -1342,6 +1341,8 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
         .where(eq(sales.workingOrderId, billId)),
     );
     expect(settled).toEqual([{ id: filed[0]!.id, settledAt: expect.any(String) }]);
+    // The device's till is not the box's configured one, so the two cannot be confused below.
+    expect(venue.deviceTillId).not.toBe(venue.cfg.tillId);
     // Stored in whole cents; the sale keeps the till it was invoiced on.
     expect(await tendersOfBill(venue, billId)).toEqual([
       {
@@ -1375,6 +1376,14 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
       },
     );
     expect(finished).toEqual({ status: 200, json: { state: "closed" } });
+    expect(await partyRow(suite, t.partyId)).toMatchObject({
+      state: "closed",
+      closedBy: venue.operatorId,
+    });
+    for (const table of [s.tableId, t.tableId]) {
+      expect(await inTx(suite, (tx) => partyForTable(tx, table))).toBeNull();
+    }
+    expect((await membershipsOf(t.partyId)).every((m) => m.leftAt !== null)).toBe(true);
   });
 });
 
