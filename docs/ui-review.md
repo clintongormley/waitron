@@ -44,7 +44,8 @@ the server to listen, then uses HTTP or HTTPS to match the development box. With
 the public CA from its box state, so you do not need a working port 80 listener. Its token and
 configuration live in that box state's `print-agent/` directory; restarting the instance retains
 them, while resetting the target clears them with the database. Once the box is provisioned as
-the primary, the agent enrols automatically. You can check its status at <http://localhost:9110>.
+the primary, the agent enrols automatically. You can check its status at <http://localhost:9110>
+for the first stack or <http://localhost:9210> for the second.
 
 `/health` reports `ok:false` on the dev venue because the fiscal drain has no AEAT credentials; the
 till and API serve normally regardless.

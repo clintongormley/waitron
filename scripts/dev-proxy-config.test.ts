@@ -103,6 +103,20 @@ describe("development server proxy", () => {
     }
   });
 
+  it("refuses an invalid listener port instead of silently choosing a random one", async () => {
+    const original = process.env.WAITRON_TILL_VITE_PORT;
+    try {
+      process.env.WAITRON_TILL_VITE_PORT = "0";
+      const configPath = join(REPO_ROOT, "apps", "till", "vite.config.ts");
+      await expect(import(`${pathToFileURL(configPath).href}?port=zero`)).rejects.toThrow(
+        /WAITRON_TILL_VITE_PORT/,
+      );
+    } finally {
+      if (original === undefined) delete process.env.WAITRON_TILL_VITE_PORT;
+      else process.env.WAITRON_TILL_VITE_PORT = original;
+    }
+  });
+
   it("covers every proxy route in every Vite front-end", async () => {
     const frontEnds = proxyFrontEnds();
     expect(frontEnds.map(({ app }) => app).sort()).toEqual(Object.keys(EXPECTED_ROUTES).sort());

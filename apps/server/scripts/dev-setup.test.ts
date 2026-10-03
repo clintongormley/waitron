@@ -112,6 +112,17 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
     locationId: "55555555-5555-5555-5555-555555555555",
   };
 
+  it("writes the shifted server port into a second stack's env", () => {
+    const env = buildDevEnv({
+      venueDir: "/tmp/second-venue",
+      credentialsKey: sampleEnv.WAITRON_CREDENTIALS_KEY,
+      ids,
+      seedLocale: "en",
+      httpPort: "8180",
+    });
+    expect(env.WAITRON_HTTP_PORT).toBe("8180");
+  });
+
   it("sets WAITRON_ENV=dev so the switcher is on under pnpm dev", () => {
     const env = buildDevEnv({
       venueDir: "/var/lib/waitron/venue",

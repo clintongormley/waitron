@@ -176,6 +176,8 @@ describes that venue (venue ids, credentials key), so `wa-wt` copies its newest 
 worktree that takes the first slot. Starting a second worktree while the first runs gives it ports
 5290, 5291, 5292, 8180 and 9210 for till, dashboard, setup, server and print agent. Its own
 `$HOME/workspace/.waitron-dev/instances/<name>/box/venue` and `.env` are provisioned separately.
+`WAITRON_MANAGEMENT_ORIGIN` points at `http://localhost:5291`, so passkeys and account links stay
+with that venue. Provisioning writes its shifted server port to that checkout's `.env`.
 The two venues are directories of SQLite files on the host, not containers.
 
 For side-by-side visual checks, start the first worktree, then start the second without taking the

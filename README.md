@@ -80,7 +80,7 @@ pnpm dev
 
 starts all three processes in parallel:
 
-| Process   | URL                                             |
+| Process   | Default URL                                     |
 | --------- | ----------------------------------------------- |
 | Till      | http://localhost:5190                           |
 | Dashboard | http://localhost:5191                           |

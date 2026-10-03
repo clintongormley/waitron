@@ -7,6 +7,16 @@ import { fileURLToPath } from "node:url";
 
 const DEFAULT_SERVER_STATE = fileURLToPath(new URL("../../server/src/state", import.meta.url));
 
+export function devServerPort(env: NodeJS.ProcessEnv): number {
+  const raw = env.WAITRON_HTTP_PORT?.trim();
+  if (!raw) return 8080;
+  const port = Number(raw);
+  if (!/^\d+$/.test(raw) || !Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error("WAITRON_HTTP_PORT must be a port from 1 to 65535");
+  }
+  return port;
+}
+
 export function serverIsListening(port: number): Promise<boolean> {
   return new Promise((done) => {
     const socket = createConnection({ host: "127.0.0.1", port });
@@ -45,6 +55,6 @@ export async function prepareDevEnv(env: NodeJS.ProcessEnv): Promise<NodeJS.Proc
   return {
     ...env,
     WAITRON_STATE_DIR: stateDir,
-    WAITRON_SERVER_URL: `${hasLeaf ? "https" : "http"}://127.0.0.1:${Number(env.WAITRON_HTTP_PORT || 8080)}`,
+    WAITRON_SERVER_URL: `${hasLeaf ? "https" : "http"}://127.0.0.1:${devServerPort(env)}`,
   };
 }

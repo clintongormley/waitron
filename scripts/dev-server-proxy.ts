@@ -5,6 +5,16 @@ import type { ProxyOptions } from "vite";
 
 const DEFAULT_STATE_DIR = fileURLToPath(new URL("../apps/server/src/state", import.meta.url));
 
+export function devPort(variable: string, fallback: number): number {
+  const raw = process.env[variable]?.trim();
+  if (!raw) return fallback;
+  const port = Number(raw);
+  if (!/^\d+$/.test(raw) || !Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(`${variable} must be a port from 1 to 65535`);
+  }
+  return port;
+}
+
 function resolvedStateDir(): string {
   const configured = process.env.WAITRON_STATE_DIR?.trim();
   if (configured === undefined || configured === "") return DEFAULT_STATE_DIR;
@@ -19,7 +29,7 @@ export function devServerProxy(
   const hasLeaf =
     existsSync(join(stateDir, "tls", "server.crt")) &&
     existsSync(join(stateDir, "tls", "server.key"));
-  const port = Number(process.env.WAITRON_HTTP_PORT || 8080);
+  const port = devPort("WAITRON_HTTP_PORT", 8080);
   return hasLeaf
     ? { target: `https://127.0.0.1:${port}`, secure: false }
     : { target: `http://127.0.0.1:${port}` };

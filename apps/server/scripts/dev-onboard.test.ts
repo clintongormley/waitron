@@ -89,6 +89,15 @@ describe("devOnboard against a real venue directory", () => {
     expect(Object.keys(written).some((k) => k.startsWith("WAITRON_TILL_"))).toBe(false);
   });
 
+  it("writes the shifted server port for a second setup stack", async () => {
+    const shifted = await devOnboard({
+      venueDir: join(workDir, "shifted-venue"),
+      envPath: join(workDir, "shifted.env"),
+      httpPort: "8180",
+    });
+    expect(shifted.env.WAITRON_HTTP_PORT).toBe("8180");
+  });
+
   it("migrates the venue file the written .env names, not somewhere else", async () => {
     const present = await inVenue(async (db) => {
       const { rows } = await db.execute<{ name: string }>(

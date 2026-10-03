@@ -42,6 +42,12 @@ describe("development print agent", () => {
     });
   });
 
+  it("refuses an invalid server port before constructing a server URL", async () => {
+    await expect(
+      prepareDevEnv({ WAITRON_STATE_DIR: stateDir, WAITRON_HTTP_PORT: "0" }),
+    ).rejects.toThrow(/WAITRON_HTTP_PORT/);
+  });
+
   it("uses the box HTTPS leaf and caches its public CA without needing port 80", async () => {
     await mkdir(join(stateDir, "tls"));
     await writeFile(join(stateDir, "tls", "server.crt"), "leaf");

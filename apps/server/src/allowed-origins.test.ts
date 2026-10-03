@@ -145,6 +145,9 @@ describe("createOriginAllowlist", () => {
     expect(await createOriginAllowlist({ ...base, devMode: true })("http://localhost:5390")).toBe(
       false,
     );
+    const custom = { ...base, devMode: true, vitePorts: { till: "5390" } };
+    expect(await createOriginAllowlist(custom)("http://localhost:5390")).toBe(true);
+    expect(await createOriginAllowlist(custom)("http://localhost:5190")).toBe(false);
   });
   it("allows nothing for a contact address that does not parse", async () => {
     const allow = createOriginAllowlist({
