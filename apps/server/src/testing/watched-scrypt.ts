@@ -36,9 +36,12 @@ const passwords = {
   outside: 0,
 };
 
+let failing: string | null = null;
+
 /** `node:crypto` with a `scrypt` that the watchers below can see; otherwise the real `scrypt`. */
 export function watchedCrypto(actual: Crypto): Crypto {
   const scrypt = (secret: string, salt: Buffer, keyLength: number, done: Done) => {
+    if (secret === failing) throw new Error("scrypt failed (test fault)");
     if (passwords.watching) {
       if (passwords.inRequestTransaction) passwords.order.push("key derived in a transaction");
       else passwords.outside += 1;
@@ -243,4 +246,17 @@ export async function whileSuspendingOnLockRequest<T>(
     },
     request,
   );
+}
+
+/** Runs `request` while every key derivation of `secret` throws as it starts. */
+export async function failingDerivationsOf<T>(
+  secret: string,
+  request: () => Promise<T>,
+): Promise<T> {
+  failing = secret;
+  try {
+    return await request();
+  } finally {
+    failing = null;
+  }
 }

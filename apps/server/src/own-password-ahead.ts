@@ -22,7 +22,8 @@ type Change<I, T> = (
  * `input` is built again inside the transaction, after the session is resolved and the throttle has
  * begun, so a request it refuses is refused there in the same order as without a check. There is no
  * check, and no turn, when the change would not reach one: `input` or the session refuses, the
- * throttle would refuse, or `checksPassword` says no.
+ * throttle would refuse, or `checksPassword` says no. A check that fails hands the change none,
+ * still in turn: it refuses what it would refuse first, and otherwise derives the key itself.
  */
 export function ownPasswordChanges(
   db: Database,
@@ -87,7 +88,7 @@ export function ownPasswordChanges(
     return inTurn(throttle, personId, async () => {
       const checked = throttle.wouldRefuse(personId)
         ? undefined
-        : await checkOwnPassword(db, { personId, currentPassword });
+        : await checkOwnPassword(db, { personId, currentPassword }).catch(() => undefined);
       return inTransaction(managementSessionId, input, change, checked);
     });
   };

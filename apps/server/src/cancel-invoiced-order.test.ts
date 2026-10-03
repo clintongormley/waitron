@@ -48,7 +48,7 @@ import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { payWorkingOrderIntegrated } from "./till-sale.js";
 import "./errors.js";
-import { watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
+import { failingDerivationsOf, watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -1056,6 +1056,22 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     expect((await wrong(id)).status).toBe(401);
     const right = cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN }, venue.cookie, app);
     expect((await right(id)).status).toBe(200);
+  });
+
+  it("refuses a cancel of a cancelled order as before when deriving the override PIN's key fails", async () => {
+    const cancelled = await placed([{ name: "Caña", quantity: "1" }]);
+    expect(
+      (await cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN })(cancelled)).status,
+    ).toBe(200);
+
+    const refused = await failingDerivationsOf("4040", () =>
+      cancelWith({ personId: supervisorId, pin: "4040" })(cancelled),
+    );
+
+    expect({ status: refused.status, code: refused.json.code }).toEqual({
+      status: 409,
+      code: "working_order.not_placed",
+    });
   });
 
   function noInvoiceZone(name: string) {

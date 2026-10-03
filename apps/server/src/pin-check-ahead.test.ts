@@ -8,9 +8,14 @@ import {
   PIN_THROTTLE_FREE_ATTEMPTS,
 } from "@waitron/identity";
 import { seedPerson, seedTill } from "@waitron/identity/test/fixtures.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { keysInTurn } from "./attempt-turns.js";
 import { overrideToCheck, withPinCheckAhead } from "./pin-check-ahead.js";
+import { failingDerivationsOf } from "./testing/watched-scrypt.js";
+
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -74,6 +79,25 @@ describe("withPinCheckAhead", () => {
     );
 
     expect(checked).toEqual({ personId, matches: true });
+    expect(keysInTurn(attempts.throttle)).toBe(0);
+  });
+
+  it("hands the transaction no check, still in turn, when the check fails", async () => {
+    const personId = await seedPerson(suite.db, "supervisor");
+    const attempts = { throttle: createPinThrottle(), slot: "override:till" };
+    const seen: { check: unknown; turns: number }[] = [];
+
+    const result = await failingDerivationsOf("4040", () =>
+      withPinCheckAhead(suite.db, { personId, pin: "4040" }, attempts, async (check) => {
+        seen.push({ check, turns: keysInTurn(attempts.throttle) });
+        return "answered";
+      }),
+    );
+
+    expect({ result, seen }).toEqual({
+      result: "answered",
+      seen: [{ check: undefined, turns: 1 }],
+    });
     expect(keysInTurn(attempts.throttle)).toBe(0);
   });
 

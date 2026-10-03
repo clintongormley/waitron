@@ -17,7 +17,9 @@ import { inTurn } from "./attempt-turns.js";
  * so the key is not derived under the write lock. Attempts on the same person and slot take turns
  * from the check until their transaction settles, so each is checked only once the outcomes before
  * it are counted. No check, and no turn, when there is no credential or the wrong-PIN limit would
- * refuse first: the transaction then answers as it would without this.
+ * refuse first: the transaction then answers as it would without this. A check that fails hands the
+ * transaction none, still in turn: it refuses what it would refuse first, and otherwise derives the
+ * key itself.
  */
 export async function withPinCheckAhead<T>(
   db: Database,
@@ -28,9 +30,12 @@ export async function withPinCheckAhead<T>(
   const refused = (personId: string) => attempts.throttle.wouldRefuse(attempts.slot, personId);
   if (credential === undefined || refused(credential.personId)) return transaction(undefined);
   const { personId, pin } = credential;
-  return inTurn(attempts.throttle, JSON.stringify([attempts.slot, personId]), async () =>
-    transaction(refused(personId) ? undefined : await checkPin(db, personId, pin)),
-  );
+  return inTurn(attempts.throttle, JSON.stringify([attempts.slot, personId]), async () => {
+    const checked = refused(personId)
+      ? undefined
+      : await checkPin(db, personId, pin).catch(() => undefined);
+    return transaction(checked);
+  });
 }
 
 /**

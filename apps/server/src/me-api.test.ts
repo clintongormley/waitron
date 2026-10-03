@@ -34,6 +34,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { wrongTotpCode } from "./testing/authenticator.js";
 import "./errors.js";
 import {
+  failingDerivationsOf,
   watchingDerivations,
   writerBesideRequest,
   whileChangingOnLockRequest,
@@ -1301,6 +1302,31 @@ describe("mountMeApi — the current password is checked before the write lock i
       expect(outside).toBe(1);
     },
   );
+
+  it("refuses a malformed profile as before when deriving the current password's key fails", async () => {
+    const personId = await personWithPassword();
+    const cookie = await cookieFor(personId);
+
+    const res = await failingDerivationsOf("a password whose key cannot be derived", () =>
+      send(mountApp(), "PUT", "/management-api/session/me/profile", {
+        cookie,
+        body: {
+          displayName: " ",
+          firstNames: "Alex",
+          lastNames: "Rivera",
+          telephone: null,
+          email: `changed-${personId}@example.com`,
+          locale: "en-GB",
+          currentPassword: "a password whose key cannot be derived",
+        },
+      }),
+    );
+
+    expect({ status: res.status, body: await res.json() }).toEqual({
+      status: 400,
+      body: { error: { code: "profile.invalid", params: { field: "displayName" } } },
+    });
+  });
 
   it("refuses a current password that was changed while its key was being derived", async () => {
     const personId = await personWithPassword();
