@@ -1565,4 +1565,60 @@ describe("the providers and readers once the server answers again", () => {
     await vi.waitFor(() => expect(q(el, "[data-test=disconnect-acme]")).not.toBeNull());
     expect(q(el, "[data-test=disconnect-acme]")!.textContent).toBe(t("payments.disconnect"));
   });
+
+  it("keeps an action's connection failure through a later failed and recovered list read", async () => {
+    const api = liveApi({
+      listReaders: vi
+        .fn()
+        .mockResolvedValueOnce(READERS)
+        .mockRejectedValueOnce(down)
+        .mockResolvedValue(READERS),
+      disconnectPaymentProvider: vi.fn().mockRejectedValue(down),
+    });
+    const { el } = await mount(api);
+    q(el, "[data-test=disconnect-acme]")!.click();
+    await flush(el);
+    q(el, "[data-test=disconnect-acme]")!.click();
+    await flush(el);
+    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed"));
+
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(2));
+    await flush(el);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(3));
+    await flush(el);
+    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed"));
+  });
+
+  it("asks for reader status through the background client when a background refresh changes the active readers", async () => {
+    const background = stubApi({
+      listReaders: vi.fn().mockResolvedValue([...READERS, { ...READERS[0], id: "r-2" }]),
+    });
+    const api = liveApi({ background } as Partial<DashboardApi>);
+    const { el } = await mount(api);
+    expect(api.readerStatus).toHaveBeenCalledTimes(1);
+
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(background.readerStatus).toHaveBeenCalledWith("r-2"));
+    await flush(el);
+    expect(api.readerStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not ask the readers for their status again when a background refresh lists them in another order", async () => {
+    const second: ReaderRow = { ...READERS[0]!, id: "r-2", name: "Terrace" };
+    const api = liveApi({
+      listReaders: vi
+        .fn()
+        .mockResolvedValueOnce([...READERS, second])
+        .mockResolvedValue([second, ...READERS]),
+    });
+    const { el } = await mount(api);
+    expect(api.readerStatus).toHaveBeenCalledTimes(2);
+
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(api.readerStatus).toHaveBeenCalledTimes(2);
+  });
 });

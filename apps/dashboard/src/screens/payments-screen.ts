@@ -297,7 +297,9 @@ export class PaymentsScreen extends LitElement {
   readonly #listQueries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => this.#showError(codeOf(error), true),
+    (error) => {
+      if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
+    },
     () => {
       if (this.#readErrorShown) this.#showError(null);
     },
@@ -371,12 +373,18 @@ export class PaymentsScreen extends LitElement {
         this.readers = readers;
         // A status may ask the provider itself, so a background refresh asks again only when the
         // set of active readers changed.
-        const ids = JSON.stringify(readers.filter((r) => r.active).map((r) => r.id));
-        if (!this.#statusesDue && ids === this.#statusIds) return;
-        if (this.#statusesDue) this.statuses = new Map();
+        const ids = JSON.stringify(
+          readers
+            .filter((r) => r.active)
+            .map((r) => r.id)
+            .sort(),
+        );
+        const background = !this.#statusesDue;
+        if (background && ids === this.#statusIds) return;
+        if (!background) this.statuses = new Map();
         this.#statusesDue = false;
         this.#statusIds = ids;
-        void this.#loadStatuses(readers);
+        void this.#loadStatuses(readers, background);
       }),
     ]);
   }
@@ -387,7 +395,8 @@ export class PaymentsScreen extends LitElement {
   }
 
   /** One reader's failed status marks only that row, never the whole screen. */
-  async #loadStatuses(readers: ReaderRow[]): Promise<void> {
+  async #loadStatuses(readers: ReaderRow[], background = false): Promise<void> {
+    const client = background ? (this.api.background ?? this.api) : this.api;
     const version = ++this.#statusVersion;
     this.refreshing = true;
     await Promise.all(
@@ -395,7 +404,7 @@ export class PaymentsScreen extends LitElement {
         .filter((r) => r.active)
         .map(async (reader) => {
           try {
-            const status = await this.api.readerStatus(reader.id);
+            const status = await client.readerStatus(reader.id);
             if (version === this.#statusVersion)
               this.statuses = new Map(this.statuses).set(reader.id, status);
           } catch {
