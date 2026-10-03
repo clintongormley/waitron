@@ -5517,7 +5517,6 @@ export async function cancelPlacedOrder(
   if (reason.trim() === "") {
     throw new AppError("working_order.reason_required", { workingOrderId: id });
   }
-  // Only an order with an invoice has its override checked.
   const toCheck =
     (await readOrderInvoice(deps.db, id)) === undefined
       ? undefined

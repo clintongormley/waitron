@@ -658,7 +658,6 @@ export function mountManagementApi(
       const finishAttempt = passwordThrottle.begin(email);
       let session;
       try {
-        // Derived before the transaction so the key's derivation does not hold the write lock.
         const checked = await checkManagerPassword(deps.db, { email }, password);
         session = await withTransaction(deps.db, async (tx) => {
           const opened = await loginManager(tx, {

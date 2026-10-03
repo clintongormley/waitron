@@ -855,8 +855,8 @@ only for its own write. Sites that follow it include `tryReadDevice`
 `readAgentJoinStatus` (`apps/server/src/join-requests.ts`), which read inside one transaction and
 verify after it closes.
 
-The PIN, manager-password and own-password checks follow it in two halves (W1). The route first calls
-`checkPin` (`packages/identity/src/credential.ts`), `checkManagerPassword`
+The PIN, manager-password and own-password checks follow it in two halves (#1113). The route first
+calls `checkPin` (`packages/identity/src/credential.ts`), `checkManagerPassword`
 (`packages/identity/src/manager-login.ts`) or `checkOwnPassword` (`packages/identity/src/profile.ts`)
 with no transaction open, and hands the result to the check inside its transaction
 (`verifyPersonCredential`, `authorize`'s override, `loginWithPin`, `loginManager`, `loginManagerById`,
@@ -864,11 +864,19 @@ the profile changes). That inner check re-reads the row and reuses the result on
 it, for the same person and secret, against the same stored hash
 (`packages/identity/src/secret-check.ts`); otherwise it derives inside the transaction exactly as
 before. A wrong-PIN or wrong-password limit that sat inside the transaction stays there, ahead of the
-reuse. The server's early halves are `apps/server/src/pin-check-ahead.ts`,
-`apps/server/src/own-password-ahead.ts` and the routes in `management-api.ts`, `promote-api.ts`,
-`mirror-bundle-api.ts` and `payments-api.ts`; each runs the early check only when the transaction will
-check the secret. **Weaker than it looks:** nothing makes a route pass a result, so a new route that
-forgets the early half still derives under the write lock, and no guard notices. The tests that see
+reuse. The server's early halves include `withPinCheckAhead` (`apps/server/src/pin-check-ahead.ts`),
+`ownPasswordChanges` (`apps/server/src/own-password-ahead.ts`), `pinGated`
+(`apps/server/src/payments-api.ts`) and direct `checkPin` and `checkManagerPassword` calls in the
+sign-in, promote and mirror-bundle routes; `grep -rn 'checkPin\|checkManagerPassword\|checkOwnPassword' apps/server/src` finds
+every call. Each runs the early check when what the route can read before the transaction says the
+secret will be checked, so a request the transaction refuses before its own check (an order already
+cancelled, a profile save that changes the email and blanks the name) has derived a key for nothing. `withPinCheckAhead` and
+`ownPasswordChanges` ask the throttle's `wouldRefuse`, which changes no state, and attempts on the
+same throttle key take turns, outside the write lock, from the early check until the request's
+transaction finishes (`inTurn`, `apps/server/src/attempt-turns.ts`), so attempts sent at once are
+each checked only after the outcomes before them are counted. `inTurn` must never be awaited inside
+a transaction. **Weaker than it looks:** nothing makes a route pass a result or take turns, so a new
+route that forgets the early half still derives under the write lock, and no guard notices. The tests that see
 it are per route: each converted route has a case in which another writer commits while the key is
 derived, and it fails if a key is derived while the request's own transaction holds the lock.
 

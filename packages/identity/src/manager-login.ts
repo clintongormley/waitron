@@ -35,12 +35,12 @@ type PersonLoginRow = Awaited<ReturnType<typeof selectPersonLogin>>[number];
 
 /** The row {@link loginManager} (by `email`) or {@link loginManagerById} (by `personId`) signs in. */
 async function findPersonLogin(
-  tx: Transaction,
+  db: Database | Transaction,
   who: { email: string } | { personId: string },
 ): Promise<PersonLoginRow | undefined> {
   // `loginEmailKey()` is the SAME expression `persons_tenant_email_uq` is declared over, so the
   // address that signs in is exactly the one the index treats as taken.
-  const [person] = await selectPersonLogin(tx).where(
+  const [person] = await selectPersonLogin(db).where(
     "email" in who
       ? eq(loginEmailKey(), foldForUniqueness(normalizeEmail(who.email)))
       : eq(persons.id, who.personId),

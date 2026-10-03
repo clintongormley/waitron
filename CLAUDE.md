@@ -520,7 +520,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   to `Transaction`. A secret check should be the exception: it takes the `Database` and derives its
   key with no transaction open. The PIN, manager-login and profile checks do so through identity's
   `checkPin`, `checkManagerPassword` and `checkOwnPassword`, whose result the check inside the
-  transaction reuses only while the row is unchanged — weaker than it looks: those inner checks still
+  transaction reuses only while the person, the secret and the stored hash it was derived against
+  are the same — weaker than it looks: those inner checks still
   take a `tx` and derive inside it when handed no result, so a new route that forgets the early check
   holds the lock again and nothing notices ([conventions-data.md](docs/developers/conventions-data.md)).
   **Splitting one logical change across transactions is a commented decision, never a default.**
