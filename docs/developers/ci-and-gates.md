@@ -96,8 +96,9 @@ head. A green hook proves only its own checks; it is not evidence of package tes
 Owner decision 2026-09-12: stop duplicating mandatory package coverage locally before waiting for CI.
 The shell regressions in `scripts/pre-push.test.mjs` exercise scope and failure behavior.
 
-Bypassing the hook with `--no-verify` is for emergencies; the failure still has to be fixed because
-CI runs the same checks. A hook failure the PR does not reproduce is a check CI has deferred to the
+**Claude never pushes with `--no-verify`**; the owner may, in an emergency (owner decision
+2026-10-03), and the failure still has to be fixed because CI runs the same checks. The hook's
+failure message says so beside its skip hint, pinned by `scripts/pre-push.test.mjs`. A hook failure the PR does not reproduce is a check CI has deferred to the
 unfiltered `main` run, not a wrong hook.
 
 ## Coverage thresholds: one bar for every package

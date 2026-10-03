@@ -191,6 +191,19 @@ describe("pre-push fast checks", () => {
       { signed: false },
     );
   });
+  it("offers the --no-verify skip to the owner only, never to an agent", () => {
+    fixture(
+      "packages/source/src/index.ts",
+      ({ invoke }) => {
+        const result = invoke();
+        expect(result.status).not.toBe(0);
+        const skipLines = result.stdout.split("\n").filter((line) => line.includes("--no-verify"));
+        expect(skipLines).toHaveLength(1);
+        expect(skipLines[0]).toContain("owner only");
+      },
+      { fail: "lint" },
+    );
+  });
   it.each(["--frozen-lockfile", "format:check", "lint", "root-tests", "typecheck"])(
     "blocks a failed %s check",
     (fail) => {
