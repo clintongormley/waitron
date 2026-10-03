@@ -97,6 +97,19 @@ declare module "@waitron/shared" {
     };
 
     /**
+     * `./drain.ts`: AEAT's reply line for this record has a missing or unrecognised status, so
+     * whether AEAT stored it is unknown. A warning: the record waits for a later send. `estado` is
+     * the line's raw status text; `csv` is the envío's, kept because AEAT never returns it again.
+     */
+    "fiscal.estado_desconocido": {
+      registroId: string;
+      estado: string | null;
+      codigo: number | null;
+      mensaje: string | null;
+      csv: string | null;
+    };
+
+    /**
      * `./drain.ts`'s `handleDuplicate` (error 3000): AEAT's own copy of this identity is `Anulada`,
      * so the invoice number is burned and this record can never become a confirmed accept. Halts
      * the record and its chain's successors. No `codigo`/`mensaje` params: they would only ever

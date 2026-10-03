@@ -900,6 +900,122 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
 });
 
 /**
+ * A line whose own status is missing or unrecognised (`status_unknown`): the reply says nothing about
+ * whether AEAT stored the record. The fake is made to drop the status from every line it returns.
+ */
+describe("drain — a reply line with no recognisable status", () => {
+  const NOW = new Date("2026-07-21T00:01:00Z");
+  let aeat: ReturnType<typeof createFakeAeat>;
+  let consultas = 0;
+
+  function withoutLineStatus(client: VerifactuClient): VerifactuClient {
+    return {
+      submit: async (cabecera, registros) => {
+        const respuesta = await client.submit(cabecera, registros);
+        return {
+          ...respuesta,
+          RespuestaLinea: respuesta.RespuestaLinea.map((linea) => ({
+            ...linea,
+            EstadoRegistro: undefined,
+          })),
+        };
+      },
+      consultar: async (...args) => {
+        consultas += 1;
+        return client.consultar(...args);
+      },
+    };
+  }
+
+  beforeEach(() => {
+    aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z"), tiempoEsperaInicial: 5 });
+    consultas = 0;
+  });
+
+  it("puts the record back to wait for a later send, flagged, with a warning incident carrying the reply's CSV", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    // The second record is rejected, so the stripped reply hides a refusal as well as an accept.
+    aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
+    const result = await drain(drainDeps(staticResolver(withoutLineStatus(aeat.client()))), NOW);
+
+    const rows = decodeFlags(
+      await withTransaction(suite.db, (tx) =>
+        tx.execute<{
+          estado: string;
+          incidencia: number;
+          proximo_intento_en: string;
+          csv: string | null;
+        }>(sql`
+        select e.estado, e.incidencia, e.proximo_intento_en, e.csv from envios e
+        join registros_facturacion r on r.id = e.registro_id
+        where r.node_id = ${seeded.nodeId} order by r.secuencia
+      `),
+      ),
+    );
+    const retryAt = new Date(NOW.getTime() + backoffMs(1)).toISOString();
+    expect(rows.rows).toEqual([
+      { estado: "pendiente", incidencia: true, proximo_intento_en: retryAt, csv: null },
+      { estado: "pendiente", incidencia: true, proximo_intento_en: retryAt, csv: null },
+    ]);
+    expect(consultas).toBe(0);
+    expect(result.recordsAccepted).toBe(0);
+    expect(result.recordsHalted).toBe(0);
+    expect(result.nextDueAt?.toISOString()).toBe(retryAt);
+
+    const acks = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ registro_id: string }>(
+        sql`select registro_id from acks where ${ownChain(seeded)}`,
+      ),
+    );
+    expect(acks.rows).toEqual([]);
+
+    const inc = parseParams(
+      await withTransaction(suite.db, (tx) =>
+        tx.execute<{ code: string; severity: string; params: string }>(
+          sql`select code, severity, params from incidents order by params`,
+        ),
+      ),
+    );
+    expect(inc.rows).toHaveLength(2);
+    for (const incident of inc.rows) {
+      expect(incident.code).toBe("fiscal.estado_desconocido");
+      expect(incident.severity).toBe("warning");
+    }
+    const byId = new Map(inc.rows.map((i) => [i.params.registroId, i.params]));
+    const [first, second] = seeded.registroIds;
+    // A partly accepted envío carries a CSV; AEAT never returns it again, so the incident keeps it.
+    expect(byId.get(first!)).toEqual({
+      registroId: first,
+      estado: null,
+      codigo: null,
+      mensaje: null,
+      csv: expect.any(String),
+    });
+    expect(byId.get(second!)).toMatchObject({
+      registroId: second,
+      codigo: 1100,
+      mensaje: "Campo obligatorio ausente",
+    });
+  });
+
+  it("files the record on the next send once AEAT's answer is readable again", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    await drain(drainDeps(staticResolver(withoutLineStatus(aeat.client()))), NOW);
+
+    // The first send stored the record at AEAT, so the resend meets its duplicate check (3000,
+    // `Correcta`), which reads as an accept.
+    const later = new Date(NOW.getTime() + backoffMs(1));
+    const result = await drain(drainDeps(staticResolver(aeat.client())), later);
+
+    const rows = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ estado: string }>(sql`select estado from envios where ${ownChain(seeded)}`),
+    );
+    expect(rows.rows.map((r) => r.estado)).toEqual(["aceptado"]);
+    expect(result.recordsAccepted).toBe(1);
+  });
+});
+
+/**
  * A halted record stays counted AND flagged, and the flag rides its `acks` row. The bulk
  * chain-halt paths bypass `setEstado`'s `writeAck`, so they must write their own `halted` acks.
  */

@@ -591,10 +591,50 @@ async function applyOutcome(
       result.recordsHalted += 1 + haltedIds.length;
       return;
     }
+    case "status_unknown":
+      await awaitReadableAnswer(tx, row, linea, csv, now, result);
+      return;
     // duplicate_annulled / duplicate_unknown — error 3000; see `handleDuplicate`.
     default:
       await handleDuplicate(tx, client, row, efectivo, csv, now, result, halted);
   }
+}
+
+/**
+ * A line whose own status `@waitron/verifactu` could not read: the reply does not say whether AEAT
+ * stored the record, so it is neither accepted nor rejected here, and never looked up as a
+ * duplicate, whose fingerprint comparison could halt a healthy chain. The row goes back to
+ * `pendiente` on `backoffBatch`'s schedule; a resend AEAT already holds comes back as error 3000
+ * with its stored state. The incident keeps the envío's CSV, which AEAT never returns again.
+ */
+async function awaitReadableAnswer(
+  tx: Transaction,
+  row: DueRow,
+  linea: RespuestaLinea,
+  csv: string | null,
+  now: Date,
+  result: DrainResult,
+): Promise<void> {
+  const next = new Date(now.getTime() + backoffMs(row.intentos));
+  await tx.execute(sql`
+    update envios set estado = 'pendiente', incidencia = true, proximo_intento_en = ${next.toISOString()}
+    where registro_id = ${row.id}
+  `);
+  bumpNextDue(result, next);
+  await raiseIncident(
+    tx,
+    row,
+    "warning",
+    new AppError("fiscal.estado_desconocido", {
+      registroId: row.id,
+      estado: linea.EstadoRegistro ?? null,
+      codigo: linea.CodigoErrorRegistro ?? null,
+      mensaje: linea.DescripcionErrorRegistro ?? null,
+      csv,
+    }),
+    now,
+    result,
+  );
 }
 
 /**
