@@ -73,6 +73,8 @@ const devices: DeviceRow[] = [
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     enrolledAt: "2026-08-20T09:00:00.000Z",
     deviceProfileId: "dp1",
+    receiptPrinterId: "pr1",
+    paymentSlipPrinterId: null,
   },
   {
     id: "d2",
@@ -85,6 +87,8 @@ const devices: DeviceRow[] = [
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
     deviceProfileId: null,
+    receiptPrinterId: null,
+    paymentSlipPrinterId: null,
   },
 ];
 
@@ -96,6 +100,8 @@ const deviceProfiles: DeviceProfile[] = [
     capabilities: [],
     formFactor: "till",
     inactivityTimeoutSeconds: null,
+    receiptPrinterIds: [],
+    paymentSlipPrinterIds: [],
   },
   {
     id: "dp2",
@@ -104,6 +110,8 @@ const deviceProfiles: DeviceProfile[] = [
     capabilities: [],
     formFactor: "phone-portrait",
     inactivityTimeoutSeconds: null,
+    receiptPrinterIds: [],
+    paymentSlipPrinterIds: [],
   },
   {
     id: "dp3",
@@ -112,6 +120,8 @@ const deviceProfiles: DeviceProfile[] = [
     capabilities: [],
     formFactor: "kds",
     inactivityTimeoutSeconds: null,
+    receiptPrinterIds: [],
+    paymentSlipPrinterIds: [],
   },
 ];
 
@@ -180,10 +190,6 @@ function stubApi(pairingOpen = false): DashboardApi {
     ]),
     getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r1" }),
     setDeviceReader: vi.fn().mockResolvedValue(undefined),
-    patchDeviceHardware: vi.fn().mockResolvedValue({
-      id: "d1",
-      receiptPrinterId: null,
-    }),
   } as unknown as DashboardApi;
 }
 
@@ -224,13 +230,14 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     },
   );
 
-  it("renders the list, per-row hardware editors and generate button accessibly", async () => {
+  it("renders the list, each row's printers and its hardware editor accessibly", async () => {
     const { el, host } = await mountWidget<DevicesScreen>(
       "dashboard-devices-screen",
       { api: stubApi() },
       theme,
     );
     await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=device-receipt-printer-d1]")).toBeTruthy();
     await expectNoA11yViolations(host);
   });
 

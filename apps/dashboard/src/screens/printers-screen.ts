@@ -36,6 +36,7 @@ import { SETTING_WIDTHS, textGrid } from "@waitron/printing/src/layout.js";
 import type {
   BluetoothCommandStatus,
   DashboardApi,
+  DeviceProfile,
   DiscoveredPrinter,
   JoinRequestRow,
   PairingModeState,
@@ -48,7 +49,6 @@ import type {
   Printer,
   PrinterPatch,
   PrinterAddressProbe,
-  Till,
 } from "../api/client.js";
 
 interface PrinterDraft {
@@ -520,7 +520,7 @@ export class PrintersScreen extends LitElement {
   /** The last print the edit or calibration dialog sent. */
   @state() private calibrationJobId: string | null = null;
 
-  @state() private tills: Till[] = [];
+  @state() private deviceProfiles: DeviceProfile[] = [];
 
   @state() private armedRevokeId: string | null = null;
 
@@ -671,8 +671,8 @@ export class PrintersScreen extends LitElement {
         this.#queries.watch("listRecentJobs", [], (jobs) => {
           this.jobs = jobs;
         }),
-        this.#queries.watch("listTills", [], (tills) => {
-          this.tills = tills;
+        this.#queries.watch("listDeviceProfiles", [], (deviceProfiles) => {
+          this.deviceProfiles = deviceProfiles;
         }),
         this.#queries.watch("pairingMode", [], (pairing) => {
           this.pairing = pairing;
@@ -2050,9 +2050,12 @@ export class PrintersScreen extends LitElement {
         <dt>${label}</dt>
         <dd data-test=${test}>${value}</dd>
       </div>`;
-    const registers = this.tills
-      .filter((till) => till.receiptPrinterId === p.id)
-      .map((till) => till.label);
+    const offeredOn = this.deviceProfiles
+      .filter(
+        (profile) =>
+          profile.receiptPrinterIds.includes(p.id) || profile.paymentSlipPrinterIds.includes(p.id),
+      )
+      .map((profile) => profile.name);
     return html`<section data-test="printer-status">
       ${back}
       <div class="status-heading">
@@ -2096,7 +2099,7 @@ export class PrintersScreen extends LitElement {
               ${field(t("printers.paper_width"), t(p.paperWidth === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80"))}
               ${field(t("printers.resolution"), t(p.resolution === "180dpi" ? "printers.resolution_180" : "printers.resolution_203"))}
               ${field(t("printers.drawer_attached"), t(p.hasCashDrawer ? "printers.yes" : "printers.no"), "printer-drawer")}
-              ${field(t("printers.cash_register"), registers.join(", ") || t("printers.no"), "printer-registers")}
+              ${field(t("printers.profiles"), offeredOn.join(", ") || t("printers.no"), "printer-profiles")}
             </dl></wt-card
           >
         </section>

@@ -94,6 +94,8 @@ const devices: DeviceRow[] = [
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     enrolledAt: "2026-08-20T09:00:00.000Z",
     deviceProfileId: "dp1",
+    receiptPrinterId: "pr1",
+    paymentSlipPrinterId: null,
   },
   {
     id: "d2",
@@ -106,6 +108,8 @@ const devices: DeviceRow[] = [
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
     deviceProfileId: null,
+    receiptPrinterId: null,
+    paymentSlipPrinterId: null,
   },
 ];
 
@@ -117,6 +121,8 @@ const deviceProfiles: DeviceProfile[] = [
     capabilities: [],
     formFactor: "till",
     inactivityTimeoutSeconds: null,
+    receiptPrinterIds: [],
+    paymentSlipPrinterIds: [],
   },
   {
     id: "dp2",
@@ -125,6 +131,8 @@ const deviceProfiles: DeviceProfile[] = [
     capabilities: [],
     formFactor: "phone-portrait",
     inactivityTimeoutSeconds: null,
+    receiptPrinterIds: [],
+    paymentSlipPrinterIds: [],
   },
   {
     id: "dp3",
@@ -133,6 +141,8 @@ const deviceProfiles: DeviceProfile[] = [
     capabilities: [],
     formFactor: "kds",
     inactivityTimeoutSeconds: null,
+    receiptPrinterIds: [],
+    paymentSlipPrinterIds: [],
   },
 ];
 
@@ -217,20 +227,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     // No device carries a default reader unless a test says otherwise.
     getDeviceReader: vi.fn().mockResolvedValue({ readerId: null }),
     setDeviceReader: vi.fn().mockResolvedValue(undefined),
-    // Reflect back the patched fields (the way the server returns the updated device) so the editor's
-    // controls can show what took.
-    patchDeviceHardware: vi.fn().mockImplementation(
-      (
-        id: string,
-        patch: {
-          receiptPrinterId?: string | null;
-        },
-      ) =>
-        Promise.resolve({
-          id,
-          receiptPrinterId: patch.receiptPrinterId ?? null,
-        }),
-    ),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -413,8 +409,8 @@ describe("devices-screen", () => {
 
     expect(api.listDevices).toHaveBeenCalledTimes(1);
     expect(api.listStations).toHaveBeenCalledTimes(1);
-    // Profiles/printers feed the row labelling and the hardware editor; stations and tills are also
-    // the accept dialog's binding pickers, so they are one load, not two.
+    // Profiles and printers name what each row shows; stations and tills are also the accept
+    // dialog's binding pickers, so they are one load, not two.
     expect(api.listDeviceProfiles).toHaveBeenCalledTimes(1);
     expect(api.listPrinters).toHaveBeenCalledTimes(1);
     expect(api.listTills).toHaveBeenCalledTimes(1);
@@ -1007,50 +1003,56 @@ describe("devices-screen", () => {
     expect(select.value).toBe("dp1");
   });
 
-  // ── Per-device hardware editor ─────────────────────────────────────────────────────────────────
+  // ── Per-device printers ────────────────────────────────────────────────────────────────────────
 
-  it("saves a row's edited hardware and reflects the update", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    pickSelect(el, "hw-printer-d1", "pr1");
-    await el.updateComplete;
-    q(el, "[data-test=hw-save-d1]")!.click();
-    await flush(el);
-
-    expect(api.patchDeviceHardware).toHaveBeenCalledWith("d1", {
-      receiptPrinterId: "pr1",
-    });
-    expect((q(el, "[data-test=hw-printer-d1]") as Dropdown).value).toBe("pr1");
-  });
-
-  it("saves cleared hardware (nulls) when the editor is left at its defaults", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    q(el, "[data-test=hw-save-d1]")!.click();
-    await flush(el);
-
-    expect(api.patchDeviceHardware).toHaveBeenCalledWith("d1", {
-      receiptPrinterId: null,
-    });
-  });
-
-  it("shows an error banner when a hardware save is rejected", async () => {
+  it("shows each active device's current receipt and payment slip printers", async () => {
     const api = stubApi({
-      patchDeviceHardware: vi.fn().mockRejectedValue({ code: "device.binding_invalid" }),
+      listDevices: vi
+        .fn()
+        .mockResolvedValue([
+          devices[0],
+          { ...devices[0], id: "d3", receiptPrinterId: "pr2", paymentSlipPrinterId: "pr1" },
+          devices[1],
+        ]),
+      listPrinters: vi
+        .fn()
+        .mockResolvedValue([
+          ...printers,
+          { ...printers[0], id: "pr2", name: "Terraza", active: false },
+        ]),
     });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
 
-    q(el, "[data-test=hw-save-d1]")!.click();
-    await flush(el);
+    expect(text(el, "[data-test=device-receipt-printer-d1]")).toBe("Cocina");
+    expect(text(el, "[data-test=device-slip-printer-d1]")).toBe(t("devices.no_printer"));
+    // A device may stay on a printer that has since been switched off.
+    expect(text(el, "[data-test=device-receipt-printer-d3]")).toBe(
+      `Terraza (${t("printers.status_inactive")})`,
+    );
+    expect(text(el, "[data-test=device-slip-printer-d3]")).toBe("Cocina");
+    expect(q(el, "[data-test=device-receipt-printer-d2]")).toBeNull();
+  });
 
-    expect((el as unknown as { errorKey: string | null }).errorKey).toBe("device.binding_invalid");
-    const banner = q(el, "[role=alert]")?.textContent;
-    expect(banner).toContain(codeMessage("device.binding_invalid", "es-ES"));
+  it("labels each printer it shows", async () => {
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    const label = (test: string) =>
+      q(el, `[data-test=${test}]`)!.closest("div")!.querySelector("dt")!.textContent!.trim();
+    expect(label("device-receipt-printer-d1")).toBe(t("devices.receipt_printer_now"));
+    expect(label("device-slip-printer-d1")).toBe(t("devices.slip_printer_now"));
+  });
+
+  it("offers no printer picker and no hardware save: a device picks its printers itself", async () => {
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    expect(q(el, "[data-test=hardware-d1]")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector("[data-test^=hw-printer-]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test^=hw-save-]")).toBeNull();
   });
 
   // ── Per-device default reader ──────────────────────────────────────────────────────────────────
@@ -1181,27 +1183,13 @@ describe("devices-screen fields", () => {
   const box = (el: DevicesScreen, testId: string) =>
     q(el, `wt-combobox[data-test=${testId}]`) as Combobox;
 
-  it("picks a device's receipt printer and card reader from labelled dropdowns showing the stored ones", async () => {
+  it("picks a device's card reader from a labelled dropdown showing the stored one", async () => {
     const api = stubApi({ getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r2" }) });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
       api,
       panels: PANELS,
     });
     await flush(el);
-
-    const printer = box(el, "hw-printer-d1");
-    expect(printer.name).toBe("receiptPrinterId");
-    expect(printer.label).toBe(t("devices.receipt_printer"));
-    expect(printer.placeholder).toBe(t("devices.receipt_printer_none"));
-    expect(printer.options).toEqual([
-      { value: "", label: t("devices.receipt_printer_none") },
-      { value: "pr1", label: "Cocina" },
-    ]);
-    expect(printer.value).toBe("");
-    await chooseOption(printer, "pr1");
-    q(el, "[data-test=hw-save-d1]")!.click();
-    await flush(el);
-    expect(api.patchDeviceHardware).toHaveBeenCalledWith("d1", { receiptPrinterId: "pr1" });
 
     const reader = box(el, "hw-reader-d1");
     expect(reader.name).toBe("defaultReaderId");

@@ -7,12 +7,12 @@ import "./printers-screen.js";
 import type { PrintersScreen } from "./printers-screen.js";
 import type {
   DashboardApi,
+  DeviceProfile,
   DiscoveredPrinter,
   JoinRequestRow,
   PrintAgentRow,
   PrintJobRow,
   Printer,
-  Till,
 } from "../api/client.js";
 
 const agents: PrintAgentRow[] = [
@@ -105,9 +105,37 @@ const jobs: PrintJobRow[] = [
   },
 ];
 
-const tills: Till[] = [
-  { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1", opensDrawer: true },
-  { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: null, opensDrawer: true },
+const deviceProfiles: DeviceProfile[] = [
+  {
+    id: "dp1",
+    name: "Mostrador",
+    canvasId: null,
+    capabilities: [],
+    formFactor: "till",
+    inactivityTimeoutSeconds: null,
+    receiptPrinterIds: ["p1"],
+    paymentSlipPrinterIds: [],
+  },
+  {
+    id: "dp2",
+    name: "Camareros",
+    canvasId: null,
+    capabilities: [],
+    formFactor: "phone-portrait",
+    inactivityTimeoutSeconds: null,
+    receiptPrinterIds: ["p2"],
+    paymentSlipPrinterIds: ["p2", "p1"],
+  },
+  {
+    id: "dp3",
+    name: "Cocina",
+    canvasId: null,
+    capabilities: [],
+    formFactor: "kds",
+    inactivityTimeoutSeconds: null,
+    receiptPrinterIds: [],
+    paymentSlipPrinterIds: [],
+  },
 ];
 
 // An unregistered USB device, a disabled registration offered for adding again, and an office printer.
@@ -182,7 +210,7 @@ function stubApi(pairingOpen = false, overrides: Partial<DashboardApi> = {}): Da
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
     renewPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 180_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
-    listTills: vi.fn().mockResolvedValue(tills),
+    listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
     ...overrides,
   } as unknown as DashboardApi;
 }

@@ -44,14 +44,6 @@ function bindingOf(formFactor: FormFactor): "station" | "register" | "none" {
   }
 }
 
-interface HardwareEdit {
-  receiptPrinterId: string;
-}
-
-const DEFAULT_HARDWARE: HardwareEdit = {
-  receiptPrinterId: "",
-};
-
 @customElement("dashboard-devices-screen")
 export class DevicesScreen extends LitElement {
   static override styles = [
@@ -116,6 +108,20 @@ export class DevicesScreen extends LitElement {
       .hardware wt-combobox {
         flex: 0 1 calc(var(--wt-space-6) * 7);
         min-width: 0;
+      }
+      .printers {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-3);
+        margin: 0;
+      }
+      .printers dt {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      .printers dd {
+        margin: 0;
+        color: var(--wt-color-text);
       }
       .pickers wt-combobox {
         flex: 1 1 calc(var(--wt-space-6) * 6);
@@ -185,8 +191,6 @@ export class DevicesScreen extends LitElement {
   @state() private watchers: Watcher[] = [];
   @state() private deviceProfiles: DeviceProfile[] = [];
   @state() private printers: Printer[] = [];
-  // A row with no entry opens at DEFAULT_HARDWARE: the device list carries no hardware.
-  @state() private hardwareEdits: Record<string, HardwareEdit> = {};
   @state() private readers: ReaderRow[] = [];
   @state() private deviceReaders: Record<string, string | null> = {};
   @state() private tills: Till[] = [];
@@ -448,35 +452,6 @@ export class DevicesScreen extends LitElement {
     }
   }
 
-  #hardwareFor(id: string): HardwareEdit {
-    return this.hardwareEdits[id] ?? DEFAULT_HARDWARE;
-  }
-
-  #setHardware(id: string, patch: Partial<HardwareEdit>): void {
-    this.hardwareEdits = {
-      ...this.hardwareEdits,
-      [id]: { ...this.#hardwareFor(id), ...patch },
-    };
-  }
-
-  async #saveHardware(id: string): Promise<void> {
-    this.#showError(null);
-    const hw = this.#hardwareFor(id);
-    try {
-      const updated = await this.api.patchDeviceHardware(id, {
-        receiptPrinterId: hw.receiptPrinterId === "" ? null : hw.receiptPrinterId,
-      });
-      this.hardwareEdits = {
-        ...this.hardwareEdits,
-        [id]: {
-          receiptPrinterId: updated.receiptPrinterId ?? "",
-        },
-      };
-    } catch (error) {
-      this.#showError(codeOf(error));
-    }
-  }
-
   #panelFor(providerId: string): CardProviderPanel | undefined {
     return this.panels.find((p) => p.providerId === providerId);
   }
@@ -576,28 +551,31 @@ export class DevicesScreen extends LitElement {
     return formatIsoMinute(iso);
   }
 
-  /** The printer list is deliberately not filtered to a location; the server's binding check is the
-   * authority. */
+  /** A device may stay on a printer switched off since it chose it, so that one is shown too. */
+  #printerName(printerId: string | null): string {
+    const printer = this.printers.find((p) => p.id === printerId);
+    if (printer === undefined) return t("devices.no_printer");
+    return printer.active ? printer.name : `${printer.name} (${t("printers.status_inactive")})`;
+  }
+
+  /** Read-only: a device picks its own printers from its profile's lists. */
   #renderHardware(device: DeviceRow): TemplateResult {
-    const activePrinters = this.printers.filter((p) => p.active);
     const activeReaders = this.readers.filter((r) => r.active);
     return html`<div class="hardware" data-test="hardware-${device.id}">
-      <wt-combobox
-        data-test="hw-printer-${device.id}"
-        name="receiptPrinterId"
-        label=${t("devices.receipt_printer")}
-        search="auto"
-        placeholder=${t("devices.receipt_printer_none")}
-        searchPlaceholder=${t("categories.combobox_search")}
-        noResultsLabel=${t("categories.combobox_no_results")}
-        .options=${[
-          { value: "", label: t("devices.receipt_printer_none") },
-          ...activePrinters.map((p) => ({ value: p.id, label: p.name })),
-        ]}
-        .value=${this.#hardwareFor(device.id).receiptPrinterId}
-        @wt-change=${(e: CustomEvent<{ value: string }>) =>
-          this.#setHardware(device.id, { receiptPrinterId: e.detail.value })}
-      ></wt-combobox>
+      <dl class="printers">
+        <div>
+          <dt>${t("devices.receipt_printer_now")}</dt>
+          <dd data-test="device-receipt-printer-${device.id}">
+            ${this.#printerName(device.receiptPrinterId)}
+          </dd>
+        </div>
+        <div>
+          <dt>${t("devices.slip_printer_now")}</dt>
+          <dd data-test="device-slip-printer-${device.id}">
+            ${this.#printerName(device.paymentSlipPrinterId)}
+          </dd>
+        </div>
+      </dl>
       <wt-combobox
         data-test="hw-reader-${device.id}"
         name="defaultReaderId"
@@ -614,13 +592,6 @@ export class DevicesScreen extends LitElement {
         @wt-change=${(e: CustomEvent<{ value: string }>) =>
           void this.#onReaderChange(device.id, e.detail.value)}
       ></wt-combobox>
-      <wt-button
-        variant="secondary"
-        size="sm"
-        data-test="hw-save-${device.id}"
-        @click=${() => void this.#saveHardware(device.id)}
-        >${t("devices.save_hardware")}</wt-button
-      >
     </div>`;
   }
 

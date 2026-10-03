@@ -366,6 +366,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             stationId: devices.stationId,
             watcherId: devices.watcherId,
             deviceProfileId: devices.deviceProfileId,
+            receiptPrinterId: devices.receiptPrinterId,
+            paymentSlipPrinterId: devices.paymentSlipPrinterId,
             label: devices.label,
             active: devices.active,
             lastSeenAt: devices.lastSeenAt,

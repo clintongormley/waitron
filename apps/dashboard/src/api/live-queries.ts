@@ -227,8 +227,8 @@ export const QUERY_DEPENDENCIES = {
   getOptionList: ["option_lists", "option_labels"],
   listExtraLists: ["extra_lists", "extra_list_items", "product_modifiers"],
   getExtraList: ["extra_lists", "extra_list_items"],
-  listDeviceProfiles: ["device_profiles", "devices", "canvases"],
-  getDeviceProfile: ["device_profiles", "canvases"],
+  listDeviceProfiles: ["device_profiles", "device_profile_printers", "devices", "canvases"],
+  getDeviceProfile: ["device_profiles", "device_profile_printers", "canvases"],
   listDevices: [
     "devices",
     "watchers",

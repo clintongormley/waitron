@@ -3,11 +3,11 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
-import type { Canvas, DeviceProfile, DashboardApi } from "../api/client.js";
+import type { Canvas, DeviceProfile, DashboardApi, Printer } from "../api/client.js";
 
 /**
- * Scanned in LIST and EDITOR mode. The `api` stub must resolve `listDeviceProfiles`, `listCanvases`
- * and `getDeviceProfile`, or a stray rejection pollutes the run.
+ * Scanned in LIST and EDITOR mode. The `api` stub must resolve `listDeviceProfiles`, `listCanvases`,
+ * `listPrinters` and `getDeviceProfile`, or a stray rejection pollutes the run.
  */
 const canvases: Canvas[] = [{ id: "c1", name: "Counter till", definition: {} }];
 
@@ -19,11 +19,42 @@ const profiles: DeviceProfile[] = [
     capabilities: ["integrated-card-payment"],
     formFactor: "till",
     inactivityTimeoutSeconds: null,
+    receiptPrinterIds: ["pr2", "pr1"],
+    paymentSlipPrinterIds: ["pr-old"],
   },
 ];
 
-function stubApi(): DashboardApi {
+function printer(id: string, name: string, active = true): Printer {
   return {
+    id,
+    name,
+    transport: "network_tcp",
+    host: "10.0.0.9",
+    port: 9100,
+    localKey: null,
+    pollId: null,
+    watcherId: null,
+    paperWidth: "80mm",
+    resolution: "180dpi",
+    hasCashDrawer: false,
+    pendingJobs: 0,
+    lastPrintAt: null,
+    lastPrintAgentId: null,
+    active,
+  };
+}
+
+/** Two on the receipt list, one off it, and a switched-off one the slip list still holds. */
+const venuePrinters = [
+  printer("pr1", "Barra"),
+  printer("pr2", "Cocina"),
+  printer("pr3", "Terraza"),
+  printer("pr-old", "Vieja", false),
+];
+
+function stubApi(printers: Printer[] = venuePrinters): DashboardApi {
+  return {
+    listPrinters: vi.fn().mockResolvedValue(printers),
     listDeviceProfiles: vi.fn().mockResolvedValue(profiles),
     getDeviceProfile: vi.fn().mockResolvedValue(profiles[0]),
     createDeviceProfile: vi.fn().mockResolvedValue({ ...profiles[0], id: "p9" }),
@@ -90,6 +121,22 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
     });
     // The home page layout pickers are on screen, one holding a removed choice.
     expect(el.shadowRoot!.querySelector("[data-test=home-reset-m-bar]")).not.toBeNull();
+    // Both printer lists, with order buttons and a switched-off printer still listed.
+    expect(el.shadowRoot!.querySelector("[data-test=receipt-printers-up-pr1]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=payment-slip-printers-pr-old]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the line asking for a printer first accessibly", async () => {
+    const { el, host } = await mountWidget<DeviceProfilesScreen>(
+      "dashboard-device-profiles-screen",
+      { api: stubApi([]) },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=no-printers]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

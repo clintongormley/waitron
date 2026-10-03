@@ -517,6 +517,8 @@ export interface DeviceRow {
   lastSeenAt: string | null;
   enrolledAt: string;
   deviceProfileId: string | null;
+  receiptPrinterId: string | null;
+  paymentSlipPrinterId: string | null;
 }
 
 export interface Canvas {
@@ -534,7 +536,15 @@ export interface DeviceProfile {
   capabilities: string[];
   formFactor: FormFactor;
   inactivityTimeoutSeconds: number | null;
+  receiptPrinterIds: string[];
+  paymentSlipPrinterIds: string[];
 }
+
+/** In list order: a device joining the profile starts on the first printer in each that it can use. */
+export type ProfilePrinterLists = Pick<
+  DeviceProfile,
+  "receiptPrinterIds" | "paymentSlipPrinterIds"
+>;
 
 /** Carries no verification number, deliberately: the list must never show the answer beside the
  * question. `label` is the name the joiner asked for, so it is untrusted text. */
@@ -2450,6 +2460,7 @@ export class DashboardApi {
     capabilities: string[],
     formFactor: FormFactor,
     inactivityTimeoutSeconds: number | null,
+    printerLists: ProfilePrinterLists,
   ): Promise<DeviceProfile> {
     return this.#request<DeviceProfile>("/management-api/device-profiles", "POST", {
       name,
@@ -2457,6 +2468,8 @@ export class DashboardApi {
       capabilities,
       formFactor,
       inactivityTimeoutSeconds,
+      receiptPrinterIds: printerLists.receiptPrinterIds,
+      paymentSlipPrinterIds: printerLists.paymentSlipPrinterIds,
     });
   }
 
@@ -2467,6 +2480,7 @@ export class DashboardApi {
     capabilities: string[],
     formFactor: FormFactor,
     inactivityTimeoutSeconds: number | null,
+    printerLists: ProfilePrinterLists,
   ): Promise<DeviceProfile> {
     return this.#request<DeviceProfile>(`/management-api/device-profiles/${id}`, "PUT", {
       name,
@@ -2474,6 +2488,8 @@ export class DashboardApi {
       capabilities,
       formFactor,
       inactivityTimeoutSeconds,
+      receiptPrinterIds: printerLists.receiptPrinterIds,
+      paymentSlipPrinterIds: printerLists.paymentSlipPrinterIds,
     });
   }
 
@@ -2506,18 +2522,6 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/devices/${id}/assign-device-profile`, "POST", {
       deviceProfileId,
     });
-  }
-
-  patchDeviceHardware(
-    id: string,
-    patch: {
-      receiptPrinterId?: string | null;
-    },
-  ): Promise<{
-    id: string;
-    receiptPrinterId: string | null;
-  }> {
-    return this.#request(`/management-api/devices/${id}/hardware`, "PATCH", patch);
   }
 
   setDeviceMadeHere(id: string, stationIds: string[]): Promise<void> {

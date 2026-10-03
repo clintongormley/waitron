@@ -22,7 +22,31 @@ import {
   type FormFactor,
 } from "./canvas-editor/card-contracts.js";
 import { toggleMembership } from "../array-utils.js";
-import type { Canvas, DeviceMenuHomeLayouts, DeviceProfile, DashboardApi } from "../api/client.js";
+import type {
+  Canvas,
+  DeviceMenuHomeLayouts,
+  DeviceProfile,
+  DashboardApi,
+  Printer,
+  ProfilePrinterLists,
+} from "../api/client.js";
+
+type PrinterListKey = keyof ProfilePrinterLists;
+
+const PRINTER_LISTS = [
+  {
+    key: "receiptPrinterIds",
+    test: "receipt-printers",
+    heading: "device_profiles.receipt_printers",
+  },
+  {
+    key: "paymentSlipPrinterIds",
+    test: "payment-slip-printers",
+    heading: "device_profiles.payment_slip_printers",
+  },
+] as const satisfies readonly { key: PrinterListKey; test: string; heading: StringKey }[];
+
+const NO_PRINTER_LISTS: ProfilePrinterLists = { receiptPrinterIds: [], paymentSlipPrinterIds: [] };
 
 /** A menu gets a picker when there is a choice to make, or a saved choice to undo. */
 function hasChoice(menu: DeviceMenuHomeLayouts): boolean {
@@ -100,6 +124,15 @@ export class DeviceProfilesScreen extends LitElement {
         gap: var(--wt-space-2);
         align-items: flex-start;
       }
+      .printer-choice,
+      .order {
+        display: flex;
+        gap: var(--wt-space-2);
+        align-items: center;
+      }
+      .printer-choice {
+        flex-wrap: wrap;
+      }
       .form-actions {
         display: flex;
         gap: var(--wt-space-2);
@@ -151,6 +184,8 @@ export class DeviceProfilesScreen extends LitElement {
 
   @state() private canvases: Canvas[] = [];
 
+  @state() private printers: Printer[] = [];
+
   @state() private errorKey: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
@@ -162,6 +197,7 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private draftFormFactor: FormFactor = FORM_FACTORS[0];
   // In whole MINUTES (`null` = never); the wire value is SECONDS.
   @state() private draftInactivityMinutes: number | null = null;
+  @state() private draftPrinterLists: ProfilePrinterLists = NO_PRINTER_LISTS;
 
   @state() private saving = false;
 
@@ -200,6 +236,9 @@ export class DeviceProfilesScreen extends LitElement {
         this.#queries.watch("listCanvases", [], (value) => {
           this.canvases = value;
         }),
+        this.#queries.watch("listPrinters", [], (value) => {
+          this.printers = value;
+        }),
       ]);
     } catch (error) {
       this.#showReadError(error);
@@ -216,7 +255,7 @@ export class DeviceProfilesScreen extends LitElement {
     if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
   }
 
-  /** Reloads only the PROFILES: no profile write changes the canvas set. */
+  /** Reloads only the PROFILES: no profile write changes the canvas or printer set. */
   async #mutate(action: () => Promise<unknown>): Promise<void> {
     this.#showError(null);
     let written = false;
@@ -296,7 +335,7 @@ export class DeviceProfilesScreen extends LitElement {
 
   // ── New / Edit ─────────────────────────────────────────────────────────────────────────────────
 
-  #openCreate(): void {
+  #clearDraft(): void {
     this.#releaseHome();
     this.editingId = null;
     this.draftName = "";
@@ -304,6 +343,11 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftCapabilities = [];
     this.draftFormFactor = FORM_FACTORS[0];
     this.draftInactivityMinutes = null;
+    this.draftPrinterLists = NO_PRINTER_LISTS;
+  }
+
+  #openCreate(): void {
+    this.#clearDraft();
     this.#showError(null);
     this.mode = "editor";
   }
@@ -323,6 +367,10 @@ export class DeviceProfilesScreen extends LitElement {
       this.draftFormFactor = profile.formFactor;
       this.draftInactivityMinutes =
         profile.inactivityTimeoutSeconds == null ? null : profile.inactivityTimeoutSeconds / 60;
+      this.draftPrinterLists = {
+        receiptPrinterIds: profile.receiptPrinterIds,
+        paymentSlipPrinterIds: profile.paymentSlipPrinterIds,
+      };
       this.mode = "editor";
       this.#releaseHome();
       void this.#watchHome(id);
@@ -364,15 +412,30 @@ export class DeviceProfilesScreen extends LitElement {
     ) as CapabilityFlag[];
   }
 
+  /** Appended when switched on: the order decides which printer a joining device starts on. */
+  #onPrinterToggle(
+    event: CustomEvent<{ checked: boolean }>,
+    key: PrinterListKey,
+    printerId: string,
+  ): void {
+    event.stopPropagation();
+    const others = this.draftPrinterLists[key].filter((id) => id !== printerId);
+    this.draftPrinterLists = {
+      ...this.draftPrinterLists,
+      [key]: event.detail.checked ? [...others, printerId] : others,
+    };
+  }
+
+  #movePrinter(key: PrinterListKey, printerId: string, by: -1 | 1): void {
+    const list = [...this.draftPrinterLists[key]];
+    const from = list.indexOf(printerId);
+    [list[from], list[from + by]] = [list[from + by]!, list[from]!];
+    this.draftPrinterLists = { ...this.draftPrinterLists, [key]: list };
+  }
+
   #cancel(): void {
-    this.#releaseHome();
+    this.#clearDraft();
     this.mode = "list";
-    this.editingId = null;
-    this.draftName = "";
-    this.draftCanvasId = null;
-    this.draftCapabilities = [];
-    this.draftFormFactor = FORM_FACTORS[0];
-    this.draftInactivityMinutes = null;
     this.#showError(null);
   }
 
@@ -394,6 +457,7 @@ export class DeviceProfilesScreen extends LitElement {
       formFactor === "kds" || this.draftInactivityMinutes == null
         ? null
         : this.draftInactivityMinutes * 60;
+    const printerLists = this.draftPrinterLists;
     this.saving = true;
     try {
       await this.#mutate(async () => {
@@ -405,6 +469,7 @@ export class DeviceProfilesScreen extends LitElement {
             capabilities,
             formFactor,
             inactivityTimeoutSeconds,
+            printerLists,
           );
         else
           await this.api.createDeviceProfile(
@@ -413,15 +478,10 @@ export class DeviceProfilesScreen extends LitElement {
             capabilities,
             formFactor,
             inactivityTimeoutSeconds,
+            printerLists,
           );
-        this.#releaseHome();
+        this.#clearDraft();
         this.mode = "list";
-        this.editingId = null;
-        this.draftName = "";
-        this.draftCanvasId = null;
-        this.draftCapabilities = [];
-        this.draftFormFactor = FORM_FACTORS[0];
-        this.draftInactivityMinutes = null;
       });
     } finally {
       this.saving = false;
@@ -439,6 +499,10 @@ export class DeviceProfilesScreen extends LitElement {
         profile.capabilities,
         profile.formFactor,
         profile.inactivityTimeoutSeconds,
+        {
+          receiptPrinterIds: profile.receiptPrinterIds,
+          paymentSlipPrinterIds: profile.paymentSlipPrinterIds,
+        },
       ),
     );
   }
@@ -644,6 +708,82 @@ export class DeviceProfilesScreen extends LitElement {
       </p>`;
   }
 
+  /** The list's own printers first, in its order, switched-off ones included so a save keeps them;
+   * then every other printer that is switched on. */
+  #printerChoices(key: PrinterListKey): { printer: Printer; listed: boolean }[] {
+    const listed = this.draftPrinterLists[key];
+    return [
+      ...listed.flatMap((id) => {
+        const printer = this.printers.find((p) => p.id === id);
+        return printer === undefined ? [] : [{ printer, listed: true }];
+      }),
+      ...this.printers
+        .filter((printer) => printer.active && !listed.includes(printer.id))
+        .map((printer) => ({ printer, listed: false })),
+    ];
+  }
+
+  #renderPrinterList(list: (typeof PRINTER_LISTS)[number]): TemplateResult {
+    const ids = this.draftPrinterLists[list.key];
+    return html`<div
+      class="field"
+      role="group"
+      aria-labelledby="${list.test}-heading"
+      data-test=${list.test}
+    >
+      <span class="panel-subtitle" id="${list.test}-heading">${t(list.heading)}</span>
+      <div class="toggles">
+        ${this.#printerChoices(list.key).map(({ printer, listed }) => {
+          const position = ids.indexOf(printer.id);
+          const name = printer.active
+            ? printer.name
+            : `${printer.name} (${t("printers.status_inactive")})`;
+          return html`<div class="printer-choice">
+            <wt-switch
+              data-test="${list.test}-${printer.id}"
+              data-printer-id=${printer.id}
+              label=${name}
+              .checked=${listed}
+              @wt-change=${(e: CustomEvent<{ checked: boolean }>) =>
+                this.#onPrinterToggle(e, list.key, printer.id)}
+            ></wt-switch>
+            ${
+              listed
+                ? html`<span class="order"
+                    ><wt-button
+                      variant="ghost"
+                      size="sm"
+                      data-test="${list.test}-up-${printer.id}"
+                      aria-label="${t("device_profiles.move_up")} ${printer.name}"
+                      ?disabled=${position === 0}
+                      @click=${() => this.#movePrinter(list.key, printer.id, -1)}
+                      >${t("device_profiles.move_up")}</wt-button
+                    >
+                    <wt-button
+                      variant="ghost"
+                      size="sm"
+                      data-test="${list.test}-down-${printer.id}"
+                      aria-label="${t("device_profiles.move_down")} ${printer.name}"
+                      ?disabled=${position === ids.length - 1}
+                      @click=${() => this.#movePrinter(list.key, printer.id, 1)}
+                      >${t("device_profiles.move_down")}</wt-button
+                    ></span
+                  >`
+                : nothing
+            }
+          </div>`;
+        })}
+      </div>
+    </div>`;
+  }
+
+  #renderPrinterLists(): TemplateResult {
+    const offered = PRINTER_LISTS.some((list) => this.#printerChoices(list.key).length > 0);
+    if (!offered)
+      return html`<p class="field" data-test="no-printers">${t("device_profiles.no_printers")}</p>`;
+    return html`${PRINTER_LISTS.map((list) => this.#renderPrinterList(list))}`;
+  }
+
   #renderEditor(): TemplateResult {
     return html`
       <div class="editor" data-test="editor-form" data-editing-id=${this.editingId ?? nothing}>
@@ -710,6 +850,7 @@ export class DeviceProfilesScreen extends LitElement {
             )}
           </div>
         </div>
+        ${this.#renderPrinterLists()}
         <div class="form-actions">
           <wt-button variant="secondary" data-test="profile-cancel" @click=${() => this.#cancel()}
             >${t("device_profiles.cancel")}</wt-button

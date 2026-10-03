@@ -2100,7 +2100,10 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(stored, true, 201));
     const api = new DashboardApi("", fetchImpl);
     expect(
-      await api.createDeviceProfile("Counter", "c1", ["open-cash-drawer"], "till", 300),
+      await api.createDeviceProfile("Counter", "c1", ["open-cash-drawer"], "till", 300, {
+        receiptPrinterIds: ["pr2", "pr1"],
+        paymentSlipPrinterIds: ["pr3"],
+      }),
     ).toEqual(stored);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-profiles", {
       method: "POST",
@@ -2112,6 +2115,8 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
         capabilities: ["open-cash-drawer"],
         formFactor: "till",
         inactivityTimeoutSeconds: 300,
+        receiptPrinterIds: ["pr2", "pr1"],
+        paymentSlipPrinterIds: ["pr3"],
       }),
     });
   });
@@ -2128,7 +2133,10 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(stored));
     const api = new DashboardApi("", fetchImpl);
     expect(
-      await api.updateDeviceProfile("p1", "Kitchen", null, ["act-as-kds"], "kds", null),
+      await api.updateDeviceProfile("p1", "Kitchen", null, ["act-as-kds"], "kds", null, {
+        receiptPrinterIds: [],
+        paymentSlipPrinterIds: ["pr1"],
+      }),
     ).toEqual(stored);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-profiles/p1", {
       method: "PUT",
@@ -2140,6 +2148,8 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
         capabilities: ["act-as-kds"],
         formFactor: "kds",
         inactivityTimeoutSeconds: null,
+        receiptPrinterIds: [],
+        paymentSlipPrinterIds: ["pr1"],
       }),
     });
   });
@@ -2154,35 +2164,6 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ deviceProfileId: "dp1" }),
     });
-  });
-
-  it("patchDeviceHardware PATCHes the hardware body and returns the updated device (200)", async () => {
-    const updated = {
-      id: "d1",
-      receiptPrinterId: "pr1",
-    };
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(updated));
-    const api = new DashboardApi("", fetchImpl);
-    const body = {
-      receiptPrinterId: "pr1",
-    };
-    expect(await api.patchDeviceHardware("d1", body)).toEqual(updated);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/hardware", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  });
-
-  it("patchDeviceHardware rejects with { code } on a non-2xx (binding invalid)", async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "device.binding_invalid" } }, false, 400));
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.patchDeviceHardware("d1", { receiptPrinterId: "nope" })).rejects.toMatchObject(
-      { code: "device.binding_invalid" },
-    );
   });
 
   it("reassignDeviceProfile sends { deviceProfileId: null } to clear the assignment", async () => {

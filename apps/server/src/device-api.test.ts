@@ -1351,6 +1351,19 @@ describe("a device's current printers", () => {
     expect(await off.json()).toEqual({ receiptPrinterId: null, paymentSlipPrinterId: t.bar });
   });
 
+  it("lists each device with its current receipt and slip printers", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await listedTill(venue, app);
+    const res = await send(app, "GET", "/management-api/devices", { cookie: venue.managerCookie });
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as { id: string }[];
+    expect(rows.find((r) => r.id === t.deviceId)).toMatchObject({
+      receiptPrinterId: t.counter,
+      paymentSlipPrinterId: t.portable,
+    });
+  });
+
   it("refuses a printer not on the list, naming the field, and stores neither choice", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
