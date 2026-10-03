@@ -39,6 +39,12 @@ export interface ExtraChild {
   priceQuantity?: string;
   unitName?: Record<string, string>;
   unitPrecision?: number;
+  unitContext?: {
+    id: string;
+    name: Record<string, string>;
+    precision: number;
+    hardwareUnit: "kg" | "g" | "mg" | null;
+  };
 }
 
 /**
@@ -103,6 +109,15 @@ export function buildLineExtras(
                 priceQuantity: item.portion,
                 unitName: item.unit?.abbreviation,
                 unitPrecision: item.unit?.precision,
+                unitContext:
+                  item.unit?.name !== undefined && item.unit.hardwareUnit !== undefined
+                    ? {
+                        id: item.unit.id,
+                        name: item.unit.name,
+                        precision: item.unit.precision,
+                        hardwareUnit: item.unit.hardwareUnit,
+                      }
+                    : undefined,
               }),
         };
       });

@@ -467,7 +467,16 @@ export interface VenueServiceContribution {
     tx: Transaction,
     cfg: { locationId: LocationId },
     workingOrderId: string,
-    lines: readonly { workingOrderLineId: string; menuItemId: string }[],
+    lines: readonly {
+      workingOrderLineId: string;
+      menuItemId: string;
+      unit?: {
+        id: string;
+        name: Record<string, string>;
+        precision: number;
+        hardwareUnit: "kg" | "g" | "mg" | null;
+      };
+    }[],
     offers: ZoneOffers,
   ): Promise<void>;
   copyOrderContext(

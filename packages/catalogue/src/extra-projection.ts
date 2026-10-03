@@ -16,7 +16,13 @@ import type { ProductModifierRef } from "./product-modifiers.js";
  */
 export type ResolvedExtraListItem = Omit<ExtraListItem, "price"> & {
   price: string;
-  unit?: { id: string; abbreviation: Record<string, string>; precision: number };
+  unit?: {
+    id: string;
+    name?: Readonly<Record<string, string>>;
+    abbreviation: Record<string, string>;
+    precision: number;
+    hardwareUnit?: "kg" | "g" | "mg" | null;
+  };
 };
 
 /** A list with every item priced — what the product projection hands back. */
@@ -38,8 +44,10 @@ async function borrowedProductFacts(
       id: products.id,
       unitPrice: effectiveProductColumns.unitPrice,
       unitId: units.id,
+      unitName: units.name,
       unitAbbreviation: units.abbreviation,
       unitPrecision: units.precision,
+      unitHardwareUnit: units.hardwareUnit,
     })
     .from(products)
     .leftJoin(parentProducts, parentJoin)
@@ -55,13 +63,17 @@ async function borrowedProductFacts(
           product.unitId === null
             ? {
                 id: EACH_UNIT.id,
+                name: EACH_UNIT.name,
                 abbreviation: EACH_UNIT.abbreviation,
                 precision: EACH_UNIT.precision,
+                hardwareUnit: EACH_UNIT.hardwareUnit,
               }
             : {
                 id: product.unitId,
+                name: product.unitName!,
                 abbreviation: product.unitAbbreviation!,
                 precision: product.unitPrecision!,
+                hardwareUnit: product.unitHardwareUnit as "kg" | "g" | "mg" | null,
               },
       },
     ]),

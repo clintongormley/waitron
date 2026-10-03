@@ -134,7 +134,13 @@ describe("what a product's own extras lists offer", () => {
         productId: weightedId,
         portion: "0.050",
         price: "0.01",
-        unit: { id: unitId, abbreviation: { en: "kg" }, precision: 3 },
+        unit: {
+          id: unitId,
+          name: { en: "Kilogram" },
+          abbreviation: { en: "kg" },
+          precision: 3,
+          hardwareUnit: null,
+        },
       }),
       expect.objectContaining({
         productId: ids.bacon,

@@ -865,7 +865,16 @@ export async function recordWorkingLineContexts(
   tx: Transaction,
   cfg: VenueScope,
   workingOrderId: string,
-  lines: readonly { workingOrderLineId: string; menuItemId: string }[],
+  lines: readonly {
+    workingOrderLineId: string;
+    menuItemId: string;
+    unit?: {
+      id: string;
+      name: Record<string, string>;
+      precision: number;
+      hardwareUnit: "kg" | "g" | "mg" | null;
+    };
+  }[],
   offers: ZoneOffers,
 ): Promise<void> {
   if (lines.length === 0) return;
@@ -903,10 +912,10 @@ export async function recordWorkingLineContexts(
         departmentId: context.departmentId,
         departmentName: department.name,
         categoryName: offer.category ?? "Uncategorised",
-        unitId: offer.unit.id,
-        unitName: offer.unit.name,
-        unitPrecision: offer.unit.precision,
-        hardwareUnit: offer.unit.hardwareUnit,
+        unitId: line.unit?.id ?? offer.unit.id,
+        unitName: line.unit?.name ?? offer.unit.name,
+        unitPrecision: line.unit?.precision ?? offer.unit.precision,
+        hardwareUnit: line.unit === undefined ? offer.unit.hardwareUnit : line.unit.hardwareUnit,
         vatClass: offer.vatClass,
         allergens: offer.allergens,
         diet: offer.diet,

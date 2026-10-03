@@ -417,7 +417,11 @@ export async function priceOrderLines(
   lineRows: WorkingOrderLineInsert[];
   gross: GrossLines;
   identities: OrderLineIdentity[];
-  lineContexts: { workingOrderLineId: string; menuItemId: string }[];
+  lineContexts: {
+    workingOrderLineId: string;
+    menuItemId: string;
+    unit?: ExtraChild["unitContext"];
+  }[];
   /** The zone's offers the lines were priced from, for `recordLineContexts`. */
   offers: ZoneOffers;
 }> {
@@ -523,7 +527,13 @@ export async function priceOrderLines(
         note: string | null;
         makeAt: string | null;
       }
-    | { kind: "child"; productId: string; menuItemId: string; extraListId: string };
+    | {
+        kind: "child";
+        productId: string;
+        menuItemId: string;
+        extraListId: string;
+        unit?: ExtraChild["unitContext"];
+      };
   const items: BasketItemWithOptions[] = [];
   const lineMeta: LineMeta[] = [];
   for (const line of lines) {
@@ -613,6 +623,7 @@ export async function priceOrderLines(
         productId: child.productId,
         menuItemId: line.menuItemId,
         extraListId: child.listId,
+        unit: child.unitContext,
       });
     }
   }
@@ -710,6 +721,7 @@ export async function priceOrderLines(
   const lineContexts = lineMeta.map((meta, index) => ({
     workingOrderLineId: ids[index]!,
     menuItemId: meta.menuItemId,
+    ...(meta.kind === "child" && meta.unit !== undefined ? { unit: meta.unit } : {}),
   }));
   return { lineRows, gross, identities, lineContexts, offers };
 }
@@ -2244,7 +2256,11 @@ export interface PricedTabRound {
   tabId: string;
   /** One row per line and per extras child, in the order the lines were sent. */
   rows: WorkingOrderLineInsert[];
-  lineContexts: { workingOrderLineId: string; menuItemId: string }[];
+  lineContexts: {
+    workingOrderLineId: string;
+    menuItemId: string;
+    unit?: ExtraChild["unitContext"];
+  }[];
   offers: ZoneOffers;
 }
 
