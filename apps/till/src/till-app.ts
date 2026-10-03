@@ -3505,11 +3505,13 @@ export class TillApp extends LitElement {
   /** Reads the device again first, so a profile list changed since boot is offered; a failed read
    * opens on the device as boot read it. */
   async #onOpenPrinters(): Promise<void> {
+    const session = this.#operatorSession;
     try {
       this.#heldIdentity = await this.api.getDeviceIdentity();
     } catch {
       // Opens on the identity held.
     }
+    if (session !== this.#operatorSession) return;
     const identity = this.#heldIdentity;
     if (identity !== undefined) {
       this.devicePrinters = {

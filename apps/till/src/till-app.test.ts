@@ -12397,6 +12397,27 @@ describe("the device's printers, switched from the header", () => {
     expect(printersDialog(el)).toBeNull();
   });
 
+  it("does not open the dialog over the lock screen when the operator logs out while the device is read", async () => {
+    let answer!: (value: unknown) => void;
+    const getDeviceIdentity = vi
+      .fn()
+      .mockResolvedValueOnce(identity)
+      .mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const { el } = await mountApp({ getDeviceIdentity });
+    await toCounter(el);
+    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
+    await flush(el);
+    expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    answer(identity);
+    await flush(el);
+
+    expect(lock(el)).not.toBeNull();
+    expect(printersDialog(el)).toBeNull();
+  });
+
   it("closes the dialog when it asks to close", async () => {
     const el = await openPrinters();
 

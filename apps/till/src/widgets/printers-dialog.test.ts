@@ -94,7 +94,42 @@ describe("till-printers-dialog", () => {
     });
 
     expect(combobox(el, "receiptPrinterId")!.value).toBe("");
-    expect(shown(el, "paymentSlip")!.textContent!.trim()).toBe(t("printers.none"));
+    expect(combobox(el, "paymentSlipPrinterId")!.value).toBe("");
+  });
+
+  it("lets a device on no printer pick the only one listed, reporting only that printer", async () => {
+    const el = await mountDialog({ receipt: { current: null, choices: [P1] } });
+    const seen = changes(el);
+
+    const picker = combobox(el, "receiptPrinterId")!;
+    expect(picker.options.map((option) => option.value)).toEqual(["P1"]);
+    expect(picker.value).toBe("");
+    await chooseOption(picker, "P1");
+
+    expect(seen).toEqual([{ receiptPrinterId: "P1" }]);
+  });
+
+  it("lets a device on a switched-off printer pick the only one listed, reporting only that printer", async () => {
+    const el = await mountDialog({ paymentSlip: { current: "S-off", choices: [S1] } });
+    const seen = changes(el);
+
+    const picker = combobox(el, "paymentSlipPrinterId")!;
+    expect(picker.value).toBe("");
+    expect(picker.placeholder).toBe(t("printers.none"));
+    await chooseOption(picker, "S1");
+
+    expect(seen).toEqual([{ paymentSlipPrinterId: "S1" }]);
+  });
+
+  it("goes back to the device's printer after a switch the app could not make", async () => {
+    const el = await mountDialog();
+    const picker = combobox(el, "receiptPrinterId")!;
+
+    await chooseOption(picker, "P2");
+    el.error = { code: "server.internal" };
+    await el.updateComplete;
+
+    expect(picker.value).toBe("P1");
   });
 
   it("shows a refusal naming the receipt printer under that field, and the generic sentence at the bottom", async () => {

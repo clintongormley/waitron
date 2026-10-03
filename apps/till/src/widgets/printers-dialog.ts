@@ -1,5 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { live } from "lit/directives/live.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -23,9 +24,9 @@ export interface PrintersChangeDetail {
 type Field = "receiptPrinterId" | "paymentSlipPrinterId";
 
 /**
- * Shows the device's current receipt and payment slip printers. A kind of printing whose profile
- * list offers more than one printer gets a list to switch with; the dialog only reports the switch,
- * and the app owns the request.
+ * Shows the device's current receipt and payment slip printers, with a list to switch with where
+ * the profile offers a printer the device could move to; the dialog only reports the switch, and the
+ * app owns the request.
  */
 @customElement("till-printers-dialog")
 export class TillPrintersDialog extends LitElement {
@@ -64,8 +65,12 @@ export class TillPrintersDialog extends LitElement {
     this.dispatchEvent(new CustomEvent<T>(type, { detail, bubbles: true, composed: true }));
   }
 
+  /** A list whenever there is a printer to move to: more than one, or one the device is not on. */
   #pickable(slot: PrinterSlot): boolean {
-    return slot.choices.length > 1;
+    return (
+      slot.choices.length > 1 ||
+      (slot.choices.length > 0 && !slot.choices.some((choice) => choice.id === slot.current))
+    );
   }
 
   /** The field a refusal is shown under, when this dialog shows it as a list. */
@@ -92,10 +97,11 @@ export class TillPrintersDialog extends LitElement {
           name=${field}
           search="auto"
           label=${label}
+          placeholder=${t("printers.none")}
           searchPlaceholder=${t("form.combobox_search")}
           noResultsLabel=${t("form.combobox_no_results")}
           .options=${slot.choices.map((choice) => ({ value: choice.id, label: choice.name }))}
-          .value=${current?.id ?? ""}
+          .value=${live(current?.id ?? "")}
           .error=${this.#refusedField() === field ? codeMessage(this.error!.code) : ""}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();

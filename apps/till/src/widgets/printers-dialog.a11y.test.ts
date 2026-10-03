@@ -19,6 +19,13 @@ const STATES: [string, Partial<TillPrintersDialog>][] = [
     },
   ],
   [
+    "one printer listed that the device is not on",
+    {
+      receipt: { current: "P1", choices: [P1] },
+      paymentSlip: { current: "S-off", choices: [S1] },
+    },
+  ],
+  [
     "no printers listed",
     { receipt: { current: null, choices: [] }, paymentSlip: { current: null, choices: [] } },
   ],
