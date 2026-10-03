@@ -64,4 +64,17 @@ describe("ticketLinesFrom", () => {
     ]);
     expect(lines.map((line) => Object.hasOwn(line, "listGross"))).toEqual([false, false, true]);
   });
+
+  it("shows the list total for a discounted extra priced by frozen portions", () => {
+    const child = {
+      ...filed("0.150", "0.02"),
+      descriptions: { "es-ES": "Jamón" },
+      unitName: { "es-ES": "kg" },
+      priceQuantity: "0.050",
+      parentLineNo: 1,
+    };
+    const [line] = ticketLinesFrom({ lines: [child] }, [{ listUnitGross: decimal("0.01") }]);
+
+    expect(line).toMatchObject({ quantity: "0.150", gross: "0.02", listGross: "0.03" });
+  });
 });

@@ -1,6 +1,14 @@
 import { joinCustomerPresentationText } from "@waitron/catalogue";
 import type { GrossLine } from "@waitron/catalogue";
-import { compareDecimal, grossOf, type Decimal } from "@waitron/shared";
+import {
+  compareDecimal,
+  decimal,
+  divideDecimal,
+  grossOf,
+  multiplyDecimal,
+  MONEY_SCALE,
+  type Decimal,
+} from "@waitron/shared";
 import type { TillSaleLine } from "./till-sale.js";
 import type { OrderLineIdentity } from "./working-order.js";
 
@@ -17,6 +25,7 @@ export type ReceiptSource = Pick<
   | "variantName"
   | "optionSnapshots"
   | "quantity"
+  | "priceQuantity"
   | "unitName"
   | "unitPrecision"
   | "lineGross"
@@ -56,11 +65,18 @@ export function ticketLinesFrom(
 
 /** The line's total at its list price, rounded as a line total is (`grossRows`), when it differs. */
 function listGrossOf(
-  line: Pick<GrossLine, "quantity" | "lineGross">,
+  line: Pick<GrossLine, "quantity" | "priceQuantity" | "lineGross">,
   listUnit: Decimal | null,
 ): { listGross?: string } {
   if (listUnit === null) return {};
-  const listGross = grossOf(listUnit, line.quantity);
+  const listGross =
+    line.priceQuantity === undefined
+      ? grossOf(listUnit, line.quantity)
+      : divideDecimal(
+          multiplyDecimal(listUnit, decimal(line.quantity)),
+          decimal(line.priceQuantity),
+          MONEY_SCALE,
+        );
   return compareDecimal(listGross, line.lineGross) === 0 ? {} : { listGross };
 }
 
