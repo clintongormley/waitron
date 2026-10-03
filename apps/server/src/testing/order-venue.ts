@@ -56,7 +56,7 @@ export async function provisionOrderVenue(db: Database): Promise<OrderVenue> {
       .values({ displayName: "Sofía", pinHash: hashPin("7777"), role: "supervisor" })
       .returning({ id: persons.id });
     const till = await loginWithPin(tx, {
-      tillId: venue.cfg.tillId,
+      deviceId: venue.deviceId,
       personId: person!.id,
       pin: "7777",
     });
@@ -157,7 +157,7 @@ async function invoiceOf(venue: OrderVenue, billId: string): Promise<string> {
 }
 
 function adminSession(venue: OrderVenue, tx: Transaction) {
-  return loginWithPin(tx, { tillId: venue.cfg.tillId, personId: venue.adminId, pin: "1234" });
+  return loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" });
 }
 
 /** A credit note of `base` at 21% totalling `total` against the bill's invoice, through `recordCorrection`. */

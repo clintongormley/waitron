@@ -33,6 +33,7 @@ import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { createOpenOrder } from "./working-order.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP surface of the transfer route: the session guard, the malformed-`:id`/`toBillId` screens
 // and the STATUS mapping for the transfer codes. The transfer's write behaviour is pinned in
@@ -143,9 +144,10 @@ function deps(db: Database): TillApiDeps {
 }
 
 async function openSession(db: Database): Promise<string> {
+  const deviceId = await seedSessionDevice(db, cfg);
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
-      tillId: cfg.tillId,
+      deviceId,
       personId: ana.id,
       pin: "5555",
     });

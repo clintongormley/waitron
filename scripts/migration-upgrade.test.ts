@@ -284,6 +284,10 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "catalogue/0021_sections_owned_restore": {
     refused: ["NOT NULL constraint failed: section_members.id"],
   },
+  // Adds `sessions.device_id` as required with no default; a held row has no device to name.
+  "identity/0005_session_device_add": {
+    refused: ["ALTER TABLE `sessions` ADD `device_id`", "Cannot add a NOT NULL column"],
+  },
 };
 
 /** What a step's failure lacks against its RESETS entry, or `undefined` when it matches. */

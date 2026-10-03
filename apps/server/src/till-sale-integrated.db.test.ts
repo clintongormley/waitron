@@ -80,6 +80,7 @@ import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 
 // The integrated (split-transaction) card-pay orchestration, end to end on one venue: P1 commits a
 // walk-up before `collect`, because the provider's payment row has a foreign key to
@@ -461,9 +462,10 @@ function rectificativeSeries(cfg: TillConfig): string {
 async function correctToZero(cfg: TillConfig, saleId: string): Promise<void> {
   const adminId = suite.db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!
     .id;
+  const deviceId = await seedSessionDevice(suite.db, cfg);
   await withTransaction(suite.db, async (tx) => {
     const session = await loginWithPin(tx, {
-      tillId: cfg.tillId,
+      deviceId,
       personId: adminId,
       pin: "1234",
     });

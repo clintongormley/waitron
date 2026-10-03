@@ -271,7 +271,7 @@ async function setupLunch(): Promise<Lunch> {
     profileId: profile!.id,
   });
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tillId: cfg.tillId, personId: seeded.personId, pin: "5555" }),
+    loginWithPin(tx, { deviceId: device.deviceId, personId: seeded.personId, pin: "5555" }),
   );
   const app = new Hono();
   mountTillApi(

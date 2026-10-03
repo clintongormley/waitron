@@ -3,7 +3,7 @@ import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { desc, eq } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, deviceOrigin } from "@waitron/shared";
 import { deviceProfiles, devices, ticketItems, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
@@ -28,7 +28,7 @@ import { advanceTicketItem, listStationQueue, type TicketState } from "./working
 import { isUuid, requireSession } from "./till-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import { listMadeHereStations, setMadeHereStations } from "./made-here.js";
 import { listWatcherQueue, markWatcherItems } from "./watcher-board.js";
@@ -211,12 +211,11 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     }),
   );
 
-  // ── Switch this device's current printers (DEVICE-GUARDED, open session) ──────────────────────
+  // ── Switch the session's device's current printers (SESSION-GUARDED) ─────────────────────────
   // Any signed-in staff member may switch; a named field is written, an absent one left alone.
   app.put("/api/device/printers", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      await requireSession({ db: deps.db }, c);
+      const { device } = await requireSession({ db: deps.db }, c);
       const body = await readJsonBody<{
         receiptPrinterId?: unknown;
         paymentSlipPrinterId?: unknown;
@@ -266,12 +265,13 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       if (device.watcherId === null) throw new AppError("device.unauthorized", {});
       const watcherId = device.watcherId;
+      const cfg: DeviceRequestConfig = { ...deps.cfg, origin: deviceOrigin(device.deviceId) };
       const body = parseWatcherDoneBody(await readJsonBody(c));
       const at = new Date();
       await withTransaction(deps.db, (tx) =>
         markWatcherItems(
           tx,
-          deps.cfg,
+          cfg,
           watcherId,
           body.ticketItemIds,
           body.done,
@@ -311,10 +311,11 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       if (device.stationId === null) throw new AppError("device.unauthorized", {});
       const stationId = device.stationId;
+      const cfg: DeviceRequestConfig = { ...deps.cfg, origin: deviceOrigin(device.deviceId) };
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("kitchen_notice.not_found", { noticeId: id });
       await withTransaction(deps.db, async (tx) => {
-        await VENUE_SERVICE.acknowledgeKitchenNotice(tx, deps.cfg, id, { stationId });
+        await VENUE_SERVICE.acknowledgeKitchenNotice(tx, cfg, id, { stationId });
       });
       return c.body(null, 204);
     }),
@@ -326,6 +327,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   app.post("/api/device/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const cfg: DeviceRequestConfig = { ...deps.cfg, origin: deviceOrigin(device.deviceId) };
       const id = c.req.param("id");
       // A malformed id names no item exactly as an absent one does — screened to the SAME
       // `ticket.invalid_transition` the verb raises for an unknown item. The screen is the only
@@ -347,7 +349,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         if (item !== undefined && item.stationId !== device.stationId) {
           throw new AppError("device.forbidden_station", { stationId: item.stationId });
         }
-        await advanceTicketItem(tx, deps.cfg, id, to);
+        await advanceTicketItem(tx, cfg, id, to);
       });
       return c.body(null, 204);
     }),

@@ -13,7 +13,7 @@ export interface Session {
   /** The bearer token the shift cookie carries. Only its hash is stored. */
   token: string;
   personId: string;
-  tillId: string;
+  deviceId: string;
   /** Convenience for client-side affordances only: every server gate re-derives the role from the
    * session and re-checks the permission (`authorize`), so a tampered client value grants nothing. */
   role: PersonRoleValue;
@@ -24,7 +24,7 @@ export interface Session {
 /** Throws `pin.invalid`, whatever the reason the person cannot sign in. */
 export async function loginWithPin(
   tx: Transaction,
-  input: { tillId: string; personId: string; pin: string; checked?: SecretCheck },
+  input: { deviceId: string; personId: string; pin: string; checked?: SecretCheck },
 ): Promise<Session> {
   const { role, locale } = await verifyPersonCredential(
     tx,
@@ -36,13 +36,17 @@ export async function loginWithPin(
   const token = mintSessionToken();
   const [row] = await tx
     .insert(sessions)
-    .values({ personId: input.personId, tillId: input.tillId, tokenHash: hashSessionToken(token) })
+    .values({
+      personId: input.personId,
+      deviceId: input.deviceId,
+      tokenHash: hashSessionToken(token),
+    })
     .returning({ id: sessions.id });
   return {
     id: row!.id,
     token,
     personId: input.personId,
-    tillId: input.tillId,
+    deviceId: input.deviceId,
     role,
     locale,
   };

@@ -26,7 +26,7 @@ import {
   openManagementSession,
   openSession,
   seedPerson,
-  seedTill,
+  seedSessionDevice,
   TOTP_KEY_RING,
 } from "../test/fixtures.js";
 
@@ -66,7 +66,7 @@ async function emailOf(id: string): Promise<string | null> {
 
 describe("createPerson", () => {
   it("creates an active person of the given role whose PIN opens a session (manager actor)", async () => {
-    const tillId = await seedTill(suite.db);
+    const deviceId = await seedSessionDevice(suite.db);
     const { token } = await openManagementSession(suite.db, "manager");
 
     const { id } = await run((tx) =>
@@ -84,12 +84,12 @@ describe("createPerson", () => {
     );
     expect(rows.rows).toEqual([{ role: "supervisor", status: "active", display_name: "Bea" }]);
 
-    const session = await run((tx) => loginWithPin(tx, { tillId, personId: id, pin: "5678" }));
+    const session = await run((tx) => loginWithPin(tx, { deviceId, personId: id, pin: "5678" }));
     expect(session).toEqual({
       id: expect.any(String),
       token: expect.any(String),
       personId: id,
-      tillId,
+      deviceId,
       role: "supervisor",
       locale: null,
     });
@@ -290,10 +290,10 @@ describe("asEmailTaken", () => {
 
 describe("setRole", () => {
   it("changes the role, seen by a later authorize on an already-open session", async () => {
-    const tillId = await seedTill(suite.db);
+    const deviceId = await seedSessionDevice(suite.db);
     const { token } = await openManagementSession(suite.db, "manager");
     const targetId = await seedPerson(suite.db, "staff");
-    const targetSessionId = await openSession(suite.db, tillId, targetId);
+    const targetSessionId = await openSession(suite.db, deviceId, targetId);
 
     const before = await codeOf(() =>
       run((tx) => authorize(tx, { sessionId: targetSessionId, permission: "person.manage" })),
@@ -331,7 +331,7 @@ describe("setRole", () => {
 
 describe("resetPin", () => {
   it("replaces the PIN: the new PIN logs in, the old one no longer does", async () => {
-    const tillId = await seedTill(suite.db);
+    const deviceId = await seedSessionDevice(suite.db);
     const { token } = await openManagementSession(suite.db, "manager");
     const targetId = await seedPerson(suite.db, "staff"); // PIN "1234"
 
@@ -340,19 +340,19 @@ describe("resetPin", () => {
     );
 
     const session = await run((tx) =>
-      loginWithPin(tx, { tillId, personId: targetId, pin: "8765" }),
+      loginWithPin(tx, { deviceId, personId: targetId, pin: "8765" }),
     );
     expect(session).toEqual({
       id: expect.any(String),
       token: expect.any(String),
       personId: targetId,
-      tillId,
+      deviceId,
       role: "staff",
       locale: null,
     });
 
     const oldPin = await codeOf(() =>
-      run((tx) => loginWithPin(tx, { tillId, personId: targetId, pin: "1234" })),
+      run((tx) => loginWithPin(tx, { deviceId, personId: targetId, pin: "1234" })),
     );
     expect(oldPin).toBe("pin.invalid");
   });
@@ -478,27 +478,27 @@ describe("suspendPerson / reactivatePerson", () => {
   });
 
   it("suspend blocks login; reactivate restores it", async () => {
-    const tillId = await seedTill(suite.db);
+    const deviceId = await seedSessionDevice(suite.db);
     const { token } = await openManagementSession(suite.db, "manager");
     const targetId = await seedPerson(suite.db, "staff"); // active, PIN "1234"
 
-    await run((tx) => loginWithPin(tx, { tillId, personId: targetId, pin: "1234" }));
+    await run((tx) => loginWithPin(tx, { deviceId, personId: targetId, pin: "1234" }));
 
     await run((tx) => suspendPerson(tx, { managementSessionId: token, personId: targetId }));
     const suspended = await codeOf(() =>
-      run((tx) => loginWithPin(tx, { tillId, personId: targetId, pin: "1234" })),
+      run((tx) => loginWithPin(tx, { deviceId, personId: targetId, pin: "1234" })),
     );
     expect(suspended).toBe("pin.invalid");
 
     await run((tx) => reactivatePerson(tx, { managementSessionId: token, personId: targetId }));
     const session = await run((tx) =>
-      loginWithPin(tx, { tillId, personId: targetId, pin: "1234" }),
+      loginWithPin(tx, { deviceId, personId: targetId, pin: "1234" }),
     );
     expect(session).toEqual({
       id: expect.any(String),
       token: expect.any(String),
       personId: targetId,
-      tillId,
+      deviceId,
       role: "staff",
       locale: null,
     });

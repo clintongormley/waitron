@@ -15,6 +15,7 @@ import {
   type Run,
   type TillApiDeps,
 } from "./till-api.js";
+import { requestCfg } from "./request-config.js";
 import { requireSession } from "./till-session.js";
 import { recordUnpaidDeparture, type UnpaidDepartureRequest } from "./unpaid-departure.js";
 import "./errors.js";
@@ -44,11 +45,13 @@ export function mountUnpaidDepartureApi(
 ): void {
   app.post("/api/parties/:id/unpaid-departure", (c) =>
     run(c, log, async () => {
-      const { personId, sessionId, tillId } = await requireSession(deps, c);
+      const session = await requireSession(deps, c);
+      const { personId, sessionId } = session;
+      const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
       const request = parseDeparture(asObject(await readRawJsonBody<unknown>(c)));
-      const saleTillId = await requireSaleTillId(deps, c);
-      const attempts = overridePinAttempts(pinThrottle, tillId);
+      const saleTillId = await requireSaleTillId(deps, c, session.device);
+      const attempts = overridePinAttempts(pinThrottle, session.deviceId);
       const toCheck = await overrideToCheck(
         deps.db,
         { sessionId, permission: "sale.void" },
@@ -57,19 +60,11 @@ export function mountUnpaidDepartureApi(
       const result = await withPinCheckAhead(deps.db, toCheck, attempts, (checked) => {
         const checkedRequest = { ...request, override: withCheck(request.override, checked) };
         return withTransaction(deps.db, (tx) =>
-          recordUnpaidDeparture(
-            tx,
-            { ...deps, log },
-            deps.cfg,
-            saleTillId,
-            partyId,
-            checkedRequest,
-            {
-              personId,
-              sessionId,
-              attempts,
-            },
-          ),
+          recordUnpaidDeparture(tx, { ...deps, log }, cfg, saleTillId, partyId, checkedRequest, {
+            personId,
+            sessionId,
+            attempts,
+          }),
         );
       });
       return c.json(result);

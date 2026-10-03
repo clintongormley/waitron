@@ -30,6 +30,7 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP shape of the reprint route: the `requireSession` guard, the `requireUuidId` screen, and
 // that `reprintOrderTickets` re-enqueues through the SAME outbox path the fire uses. The verb's logic
@@ -139,9 +140,10 @@ function printCfg(): PrintConfig {
 }
 
 async function openSession(db: Database): Promise<string> {
+  const deviceId = await seedSessionDevice(db, cfg);
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
-      tillId: cfg.tillId,
+      deviceId,
       personId: ana.id,
       pin: "5555",
     });

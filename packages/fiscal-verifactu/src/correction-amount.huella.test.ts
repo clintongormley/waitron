@@ -9,7 +9,7 @@ import { hashPin, loginWithPin } from "@waitron/identity";
 import { centsToDecimal, seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedSessionDevice, seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
@@ -43,8 +43,9 @@ beforeEach(async () => {
     sql`insert into persons (id, created_at, display_name, pin_hash, role)
         values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'supervisor') returning id`,
   );
+  const deviceId = await seedSessionDevice(suite.db, tillId);
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tillId, personId: rows[0]!.id, pin: "1234" }),
+    loginWithPin(tx, { deviceId, personId: rows[0]!.id, pin: "1234" }),
   );
   rectifySessionId = session.id;
   backend = new VerifactuBackend({

@@ -12,7 +12,7 @@ import { DEFAULT_SKIP_RETRY_MS, drain, type DrainDeps } from "./drain.js";
 import { reconcile, type ReconcileDeps } from "./reconcile.js";
 import { toAeatDate } from "./registro-row.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedSessionDevice, seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 // The drain fixtures stamp `fecha_expedicion_factura` = 2026-07-20, inside this one period.
@@ -118,8 +118,9 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
     sql`insert into persons (id, created_at, display_name, pin_hash, role)
         values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
   );
+  const deviceId = await seedSessionDevice(suite.db, tillId);
   const voidSession = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tillId, personId: mgr[0]!.id, pin: "1234" }),
+    loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
   );
   const aeat = createFakeAeat({ serverNow: SERVER_NOW });
   const resolveClient = staticResolver(aeat.client());

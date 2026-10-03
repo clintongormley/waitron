@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { AppError, tillId } from "@waitron/shared";
+import { AppError, isUuid, tillId } from "@waitron/shared";
 import type { TillId } from "@waitron/shared";
 import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -12,7 +12,6 @@ import { verifySecretAsync } from "@waitron/identity";
 // Side-effect only: keeps `device.unauthorized` (errors.ts) reachable from the file that throws it.
 import "./errors.js";
 import type { TillConfig } from "./till-config.js";
-import { isUuid } from "./till-session.js";
 
 /** The trusted-device cookie: a long-lived DEVICE identity, unlike the session cookies. */
 export const DEVICE_COOKIE = "waitron_device";
@@ -97,8 +96,8 @@ export interface DeviceBinding {
 }
 
 // The join always matches: `device_profile_id` is NOT NULL with a RESTRICT foreign key.
-const deviceProfileJoin = eq(deviceProfiles.id, devices.deviceProfileId);
-const deviceBindingColumns = {
+export const deviceProfileJoin = eq(deviceProfiles.id, devices.deviceProfileId);
+export const deviceBindingColumns = {
   formFactor: deviceProfiles.formFactor,
   label: devices.label,
   locationId: devices.locationId,
@@ -143,7 +142,7 @@ function rememberVerified(deviceId: string, token: string, tokenHash: string): v
  * Carries NO authentication: the caller has already fetched an `active` row and, on the cookie
  * path, verified the token. A `tokenHash` on the passed row is never copied through.
  */
-function toDeviceBinding(
+export function toDeviceBinding(
   deviceId: string,
   // `capabilities` arrives as `unknown` (device-profiles.ts leaves the column untyped), so it is
   // cast here.
@@ -303,20 +302,18 @@ export async function requireSaleTillId(
 }
 
 /**
- * The configuration a device's request runs under: the device's own till, and a
- * cash drawer only for a till form factor. Refuses as {@link requireSaleTillId} does. `device` as
- * there.
+ * The configuration `device`'s request runs under: the device's own till, and a cash drawer only
+ * for a till form factor. Refuses as {@link requireSaleTillId} does.
  */
-export async function deviceTillCfg(
-  deps: { db: Database; devMode?: boolean; cfg: TillConfig },
+export async function deviceTillCfg<C extends TillConfig>(
+  deps: { db: Database; devMode?: boolean; cfg: C },
   c: Context,
-  device?: DeviceBinding | null,
-): Promise<TillConfig> {
-  const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
+  device: DeviceBinding,
+): Promise<C> {
   return {
     ...deps.cfg,
-    tillId: await requireSaleTillId(deps, c, resolved),
-    allowCashDrawer: resolved !== null && kindOfFormFactor(resolved.formFactor) === "till",
+    tillId: await requireSaleTillId(deps, c, device),
+    allowCashDrawer: kindOfFormFactor(device.formFactor) === "till",
   };
 }
 

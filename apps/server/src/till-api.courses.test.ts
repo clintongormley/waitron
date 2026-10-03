@@ -32,6 +32,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP shape of the coursing, fire, station-queue and expo routes: the session guard, the id
 // screens and the STATUS mapping. The verbs' logic is pinned in `working-order.test.ts`.
@@ -166,9 +167,10 @@ function deps(db: Database): TillApiDeps {
 }
 
 async function openSession(db: Database): Promise<string> {
+  const deviceId = await seedSessionDevice(db, cfg);
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
-      tillId: cfg.tillId,
+      deviceId,
       personId: ana.id,
       pin: "5555",
     });

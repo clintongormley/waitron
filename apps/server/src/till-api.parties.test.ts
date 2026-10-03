@@ -41,6 +41,7 @@ import { createTable } from "./tables.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP surface of seating and finishing a table: the session guard, the body and id screens and
 // the status each refusal answers. The verbs themselves are pinned in `parties.test.ts`.
@@ -116,8 +117,9 @@ function app(db: Database): Hono {
 }
 
 async function cookie(): Promise<string> {
+  const deviceId = await seedSessionDevice(suite.db, cfg);
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tillId: cfg.tillId, personId: ana.id, pin: "5555" }),
+    loginWithPin(tx, { deviceId, personId: ana.id, pin: "5555" }),
   );
   return `${SESSION_COOKIE}=${session.token}`;
 }

@@ -16,7 +16,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
 import { createPrinter } from "@waitron/printing";
@@ -34,6 +34,8 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
+import { seedSessionDevice } from "./testing/session-device.js";
+import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 
 // A receipt, and a copy that names no language, is printed in its location's saved language (the
@@ -66,7 +68,7 @@ const MADRID = { postalCode: "28013", city: "Madrid", province: "Madrid" };
 interface Venue {
   app: Hono;
   cfg: TillConfig;
-  /** The logged-in operator's session cookie. */
+  /** The operator's session on a device allowed every capability, with no device cookie. */
   session: string;
   /** The session plus an enrolled till device, as a sale is sent. */
   till: string;
@@ -196,8 +198,18 @@ async function venueWith(
     headers: { "content-type": "application/json", cookie: deviceCookie },
     body: JSON.stringify({ personId: staffId, pin: "5555" }),
   });
-  const session = login.headers.get("set-cookie")!.split(";")[0]!;
-  return { app, cfg, session, till: `${session}; ${deviceCookie}`, menuItemId };
+  const tillSession = login.headers.get("set-cookie")!.split(";")[0]!;
+  const sessionDeviceId = await seedSessionDevice(db, cfg);
+  const session = await withTransaction(db, (tx) =>
+    loginWithPin(tx, { deviceId: sessionDeviceId, personId: staffId, pin: "5555" }),
+  );
+  return {
+    app,
+    cfg,
+    session: `${SESSION_COOKIE}=${session.token}`,
+    till: `${tillSession}; ${deviceCookie}`,
+    menuItemId,
+  };
 }
 
 async function sell(

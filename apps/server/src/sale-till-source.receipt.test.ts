@@ -271,14 +271,21 @@ function apiDeps(cfg: TillConfig): TillApiDeps {
   };
 }
 
-/** Log in through the HTTP surface and return the session cookie the route sets. */
-async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
-  // The login is DEVICE-GATED: this throwaway device binds to the venue's own register; each sale
-  // below carries its OWN device cookie bound to the till that case exercises.
-  const deviceCookie = await enrolTillCookie(cfg, cfg.tillId);
+/** Log in through the HTTP surface on the device `device` names (a cookie, or the dev-override
+ *  header) and return the session cookie the route sets. */
+async function login(
+  app: Hono,
+  operatorId: string,
+  device: { cookie: string } | { devHeader: string },
+): Promise<string> {
   const res = await app.request("/api/session", {
     method: "POST",
-    headers: { "content-type": "application/json", cookie: deviceCookie },
+    headers: {
+      "content-type": "application/json",
+      ...("cookie" in device
+        ? { cookie: device.cookie }
+        : { [DEV_DEVICE_HEADER]: device.devHeader }),
+    },
     body: JSON.stringify({ personId: operatorId, pin: "5555" }),
   });
   expect(res.status).toBe(200);
@@ -372,15 +379,23 @@ describe("H2 receipt: sale-time till_id resolves from the device, the chain does
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const sessionCookie = await login(app, cfg, operatorId);
-
-    // Sale 1 via a device bound to till X (the venue's own till).
+    // Sale 1 via a device bound to till X (the venue's own till), signed in on it.
     const deviceX = await enrolTillCookie(cfg, tillX);
-    await ringSale(app, sessionCookie, deviceX, product.menuItemId);
+    await ringSale(
+      app,
+      await login(app, operatorId, { cookie: deviceX }),
+      deviceX,
+      product.menuItemId,
+    );
 
     // Sale 2 via a device bound to till Y — same tenant, same node, same operator, same basket.
     const deviceY = await enrolTillCookie(cfg, tillY);
-    await ringSale(app, sessionCookie, deviceY, product.menuItemId);
+    await ringSale(
+      app,
+      await login(app, operatorId, { cookie: deviceY }),
+      deviceY,
+      product.menuItemId,
+    );
 
     const registros = await registrosFor(cfg);
     expect(registros).toHaveLength(2);
@@ -412,10 +427,11 @@ describe("H2 receipt: sale-time till_id resolves from the device, the chain does
 
 describe("SP-C: a sale posted with the dev-override header files under THAT device's till (devMode)", () => {
   it("resolves sale-time till_id from the x-waitron-dev-device header, not the env/cfg till", async () => {
-    // Under `devMode`, a `POST /api/sales` carrying the `x-waitron-dev-device: <id>` header (no
-    // `waitron_device` cookie) must resolve `sales.till_id` from THAT device's binding. The device
-    // is bound to till Y, not the venue's own till X, so a pass shows the override drove the till;
-    // were it ignored the route would answer `device.unauthorized` (401).
+    // Under `devMode`, a session signed in with the `x-waitron-dev-device: <id>` header (no
+    // `waitron_device` cookie) is that device's, and its `POST /api/sales` resolves `sales.till_id`
+    // from THAT device's binding. The device is bound to till Y, not the venue's own till X, so a
+    // pass shows the override drove the till; were it ignored the sign-in would answer
+    // `device.unauthorized` (401).
     const { cfg, locationId, product, operatorId } = await setupVenue();
     const tillX = cfg.tillId;
     const tillY = await insertTill(locationId, "Caja override");
@@ -425,9 +441,9 @@ describe("SP-C: a sale posted with the dev-override header files under THAT devi
     // header live.
     const app = new Hono();
     mountTillApi(app, { ...apiDeps(cfg), devMode: true }, noopLog);
-    const sessionCookie = await login(app, cfg, operatorId);
-
     const deviceY = await enrolTillDeviceId(cfg, tillY);
+    // Signed in through the same header, as a dev tab running that device does.
+    const sessionCookie = await login(app, operatorId, { devHeader: deviceY });
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: {

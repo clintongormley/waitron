@@ -257,6 +257,8 @@ export interface AdjustmentVenue {
   app: Hono;
   /** A till device and the session of each person, by role. */
   cookie: { staff: string; supervisor: string; manager: string };
+  /** The till device each `cookie` session is on. */
+  deviceId: string;
 }
 
 export const PINS = { staff: "5555", supervisor: "6666", manager: "7777" } as const;
@@ -419,7 +421,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
   const device = await enrolDeviceForTest(db, cfg, { name: "Barra", profileId: seeded.profileId });
   const cookieOf = async (personId: string, pin: string) => {
     const session = await withTransaction(db, (tx) =>
-      loginWithPin(tx, { tillId: cfg.tillId, personId, pin }),
+      loginWithPin(tx, { deviceId: device.deviceId, personId, pin }),
     );
     return `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
   };
@@ -443,6 +445,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     supervisorId,
     managerId,
     app,
+    deviceId: device.deviceId,
     cookie: {
       staff: await cookieOf(staffId, PINS.staff),
       supervisor: await cookieOf(supervisorId, PINS.supervisor),

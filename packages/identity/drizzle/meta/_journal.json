@@ -36,6 +36,20 @@
       "when": 1790784739695,
       "tag": "0004_passkey_provider_last_used",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791045186739,
+      "tag": "0005_session_device_add",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791045187583,
+      "tag": "0006_session_device_drop_till",
+      "breakpoints": true
     }
   ]
 }

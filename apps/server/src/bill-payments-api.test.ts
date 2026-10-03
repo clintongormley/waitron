@@ -54,6 +54,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { TillConfig } from "./till-config.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
+import { revokedDeviceSessionCookie } from "./testing/session-device.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { cancelBody } from "./testing/cancel-line.js";
@@ -87,7 +88,9 @@ interface Venue {
   productIds: Map<string, string>;
   app: Hono;
   cookie: string;
-  /** The operator's session with no device. */
+  /** The till device `cookie` names, which its session is on. */
+  deviceId: string;
+  /** `cookie`'s session, with no device cookie beside it. */
   sessionCookie: string;
   /** The operator's session on a handheld, which never opens a cash drawer. */
   handheldCookie: string;
@@ -250,10 +253,14 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       printerId: printer.id,
     };
   });
-  const session = await withTransaction(db, (tx) =>
-    loginWithPin(tx, { tillId: cfg.tillId, personId: seeded.personId, pin: "5555" }),
-  );
   const device = await enrolDeviceForTest(db, cfg, { name: "Barra", profileId: seeded.profileId });
+  const sessionOn = async (deviceId: string) =>
+    (
+      await withTransaction(db, (tx) =>
+        loginWithPin(tx, { deviceId, personId: seeded.personId, pin: "5555" }),
+      )
+    ).token;
+  const session = { token: await sessionOn(device.deviceId) };
   const [deviceRow] = db.all<{ till_id: string }>(
     sql`select till_id from devices where id = ${device.deviceId}`,
   );
@@ -292,8 +299,9 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     app,
     cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
     sessionCookie: `${SESSION_COOKIE}=${session.token}`,
-    handheldCookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`,
-    noCashCookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${noCash.deviceId}.${noCash.token}`,
+    deviceId: device.deviceId,
+    handheldCookie: `${SESSION_COOKIE}=${await sessionOn(handheld.deviceId)}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`,
+    noCashCookie: `${SESSION_COOKIE}=${await sessionOn(noCash.deviceId)}; ${DEVICE_COOKIE}=${noCash.deviceId}.${noCash.token}`,
     deviceTillId: deviceRow!.till_id,
     printerId: seeded.printerId,
     staffId: seeded.personId,
@@ -1608,7 +1616,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     expect(await lineTotals(billId)).toEqual(["35.00", "9.00"]);
   });
 
-  it("voids a line of a bill with no payments for a request with no device", async () => {
+  it("voids a line of a bill with no payments for a session sent with no device cookie", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
 
     const voided = await request(
@@ -1622,7 +1630,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     expect(await lineTotals(billId)).toEqual(["25.00"]);
   });
 
-  it("refuses a void that would issue the invoice for a request with no device, writing nothing", async () => {
+  it("refuses a void that would issue the invoice from a session whose device has been revoked, writing nothing", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
     expect((await contribute(billId, "25.00")).status).toBe(200);
 
@@ -1630,7 +1638,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
       "POST",
       `/api/working-orders/${billId}/adjustments`,
       await cancelBody(suite.db, billId, 2),
-      venue.sessionCookie,
+      await revokedDeviceSessionCookie(suite.db, venue.cfg, venue.staffId, "5555"),
     );
 
     expect(refused.status).toBe(401);
@@ -2361,7 +2369,7 @@ describe("a cash refund before the invoice (design §6)", () => {
       }),
     );
     const adminSession = await inTx((tx) =>
-      loginWithPin(tx, { tillId: venue.cfg.tillId, personId: venue.adminId, pin: "1234" }),
+      loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" }),
     );
     const deviceCookie = venue.cookie
       .split("; ")
@@ -2610,7 +2618,7 @@ describe("the limit on wrong refund PINs", () => {
   /** The admin, who holds `sale.refund`, signed in on the staff session's till and device. */
   async function adminCookie(): Promise<string> {
     const adminSession = await inTx((tx) =>
-      loginWithPin(tx, { tillId: venue.cfg.tillId, personId: venue.adminId, pin: "1234" }),
+      loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" }),
     );
     const deviceCookie = venue.cookie
       .split("; ")
@@ -3109,7 +3117,10 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
     });
     suite.db.run(sql`update tills set receipt_printer_id = ${otherTill.printerId}
       where id = (select till_id from devices where id = ${device.deviceId})`);
-    const cookie = `${venue.sessionCookie}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+    const session = await inTx((tx) =>
+      loginWithPin(tx, { deviceId: device.deviceId, personId: venue.staffId, pin: "5555" }),
+    );
+    const cookie = `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
     const billId = await bill120();
     const before = drawerJobCount();
 
@@ -3228,7 +3239,7 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
   /** The admin, who holds `sale.refund`, signed in on the staff session's till and device. */
   async function adminCookie(): Promise<string> {
     const adminSession = await inTx((tx) =>
-      loginWithPin(tx, { tillId: venue.cfg.tillId, personId: venue.adminId, pin: "1234" }),
+      loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" }),
     );
     const deviceCookie = venue.cookie
       .split("; ")

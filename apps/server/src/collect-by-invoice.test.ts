@@ -151,7 +151,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
           ),
         );
       const session = await loginWithPin(tx, {
-        tillId: venue.cfg.tillId,
+        deviceId: venue.deviceId,
         personId: venue.adminId,
         pin: "1234",
       });

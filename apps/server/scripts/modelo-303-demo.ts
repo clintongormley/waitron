@@ -56,6 +56,7 @@ import {
 } from "@waitron/shared";
 import type { Decimal, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { InputVatRateLine } from "@waitron/reporting";
+import { scriptSessionDevice } from "./script-device.js";
 
 /** identity holds the supervisor who authorises the rectificativa. */
 const SETS = ["core", "identity"];
@@ -505,7 +506,7 @@ async function main(): Promise<void> {
     // The rectificativa's `sale.rectify` gate needs a supervisor session.
     const authorizerSession = await withTransaction(db, async (tx) => {
       return loginWithPin(tx, {
-        tillId: venue.tillId,
+        deviceId: await scriptSessionDevice(tx, venue.tillId, "Modelo 303 demo"),
         personId: venue.authorizerId,
         pin: "1234",
       });

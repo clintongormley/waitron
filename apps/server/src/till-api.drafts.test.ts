@@ -34,7 +34,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     const session = await withTransaction(db, (tx) =>
-      loginWithPin(tx, { tillId: venue.cfg.tillId, personId: venue.adminId, pin: "1234" }),
+      loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" }),
     );
     adminCookie = `${SESSION_COOKIE}=${session.token}`;
   },

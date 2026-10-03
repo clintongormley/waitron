@@ -42,6 +42,7 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { cancelBody, giveAway } from "./testing/cancel-line.js";
+import { revokedDeviceSessionCookie, seedSessionDevice } from "./testing/session-device.js";
 import "./errors.js";
 import { watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
 
@@ -60,8 +61,8 @@ let prepayZone: string;
 let supervisorId: string;
 /** The supervisor's own session on the first till's device. */
 let supervisorCookie: string;
-/** The staff operator's session with no device. */
-let noDeviceCookie: string;
+/** The staff operator's session on a device allowed every capability, with no device cookie. */
+let staffSessionCookie: string;
 
 const SUPERVISOR_PIN = "7777";
 const REASON = "Se marcharon sin pagar";
@@ -93,7 +94,7 @@ useVenueDb({
         .returning({ id: persons.id });
       supervisorId = person!.id;
       return loginWithPin(tx, {
-        tillId: venue.cfg.tillId,
+        deviceId: venue.deviceId,
         personId: supervisorId,
         pin: SUPERVISOR_PIN,
       });
@@ -104,9 +105,13 @@ useVenueDb({
       select distinct k.id, t.receipt_printer_id from kitchen_stations k, tills t
       where t.receipt_printer_id is not null
     `);
-    const [staffSession, ...device] = venue.cookie.split("; ");
+    const [, ...device] = venue.cookie.split("; ");
     supervisorCookie = [`${SESSION_COOKIE}=${session.token}`, ...device].join("; ");
-    noDeviceCookie = staffSession!;
+    const staffDeviceId = await seedSessionDevice(db, venue.cfg);
+    const staff = await inTx(venue, (tx) =>
+      loginWithPin(tx, { deviceId: staffDeviceId, personId: venue.operatorId, pin: "5555" }),
+    );
+    staffSessionCookie = `${SESSION_COOKIE}=${staff.token}`;
   },
 });
 
@@ -195,7 +200,7 @@ async function credit(billId: string, base: string, total: string): Promise<void
         and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "rectificative")),
       );
     const session = await loginWithPin(tx, {
-      tillId: venue.cfg.tillId,
+      deviceId: venue.deviceId,
       personId: venue.adminId,
       pin: "1234",
     });
@@ -314,14 +319,19 @@ describe("recording that a table left without paying", () => {
     expect(counts()).toEqual(before);
   });
 
-  it("refuses a request from no device, which has no till to file on, and writes nothing", async () => {
+  it("refuses a request from a session whose device has been revoked, and writes nothing", async () => {
     const party = await seatedWith(venue, "Botella tinto");
-    const supervisorWithoutDevice = supervisorCookie.split("; ")[0]!;
+    const revoked = await revokedDeviceSessionCookie(
+      venue.db,
+      venue.cfg,
+      supervisorId,
+      SUPERVISOR_PIN,
+    );
 
     const answer = await depart(
       party.partyId,
       { expectedPartyRevision: party.revision, reason: REASON },
-      supervisorWithoutDevice,
+      revoked,
     );
 
     expect(answer).toMatchObject({ status: 401, json: { code: "device.unauthorized" } });
@@ -338,7 +348,7 @@ describe("recording that a table left without paying", () => {
 
     const reprinted = await send(
       venue.app,
-      noDeviceCookie,
+      staffSessionCookie,
       "POST",
       `/api/sales/${party.tabId}/reprint`,
     );
@@ -422,11 +432,18 @@ describe("who may record it", () => {
       sql`select till_id as tillId from devices where id = ${handheld.deviceId}`,
     );
     const party = await seatedWith(venue, "Botella tinto");
+    const onHandheld = await inTx(venue, (tx) =>
+      loginWithPin(tx, {
+        deviceId: handheld.deviceId,
+        personId: supervisorId,
+        pin: SUPERVISOR_PIN,
+      }),
+    );
 
     const answer = await depart(
       party.partyId,
       { expectedPartyRevision: party.revision, reason: REASON },
-      `${supervisorCookie.split("; ")[0]!}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`,
+      `${SESSION_COOKIE}=${onHandheld.token}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`,
     );
 
     expect(answer).toMatchObject({ status: 200, json: { state: "closed" } });

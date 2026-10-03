@@ -174,7 +174,8 @@ export class TillCardGrid extends LitElement {
 
   /**
    * Advisory: it only ever removes a card. The server checks the integrated-card, print and drawer
-   * capabilities on the operations themselves (`assertDeviceCapability`); no route checks `act-as-kds`
+   * capabilities on the operations themselves (`assertDeviceCapability`), and `take-cash` on a cash
+   * payment (`assertTakesCash`); no route checks `act-as-kds`
    * (apps/server/src/device-api.ts), so `kds-board`'s capability is checked here alone.
    */
   #capable(card: CardInstance): boolean {

@@ -1,4 +1,7 @@
+import { eq } from "drizzle-orm";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import {
+  locationId as brandLocationId,
   nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
@@ -114,4 +117,13 @@ export async function seedBareSale(
     })
     .returning({ id: sales.id });
   return brandSaleId(row!.id);
+}
+
+/** Pairs a device at `tillId`'s location and returns its id: the device a shift session is opened on. */
+export async function seedSessionDevice(db: Database, tillId: string): Promise<string> {
+  const [till] = await db
+    .select({ locationId: tills.locationId })
+    .from(tills)
+    .where(eq(tills.id, tillId));
+  return (await seedDevice(db, { locationId: brandLocationId(till!.locationId) })).deviceId;
 }

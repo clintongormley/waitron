@@ -1,6 +1,7 @@
-import { captureError, locations, tills, withTransaction } from "@waitron/db";
+import { captureError, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { isAppError } from "@waitron/shared";
+import { seedDevice } from "@waitron/db/testing/seed.js";
+import { isAppError, locationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { loginWithPin } from "../src/login.js";
 import { persons } from "../src/schema/persons.js";
@@ -12,23 +13,19 @@ import type { TotpKeyRing } from "../src/mfa.js";
 
 export const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
-/** Through the table definitions rather than raw SQL: `locations.id`, `tills.id` and
- * `tills.created_at` are `$defaultFn` generators, which only the insert BUILDER runs, and
- * `labelList` serialises `invoice_locales` from the plain array passed here. */
-export async function seedTill(db: Database): Promise<string> {
+/** Pairs a device at a new location and returns its id: the device a shift session is opened on. */
+export async function seedSessionDevice(db: Database): Promise<string> {
   const [location] = await db
     .insert(locations)
     .values({ name: "Main", invoiceLocales: ["en"], operationDescription: "Sale on premises" })
     .returning({ id: locations.id });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId: location!.id, name: "Till 1" })
-    .returning({ id: tills.id });
-  return till!.id;
+  const { deviceId } = await seedDevice(db, { locationId: locationId(location!.id) });
+  return deviceId;
 }
 
-/** A person whose PIN is "1234". Through the `persons` table definition for the same reason as
- * {@link seedTill}: `persons.id` and `persons.created_at` are `$defaultFn` generators. */
+/** A person whose PIN is "1234". Through the `persons` table definition rather than raw SQL:
+ * `persons.id` and `persons.created_at` are `$defaultFn` generators, which only the insert BUILDER
+ * runs. */
 export async function seedPerson(
   db: Database,
   role: "staff" | "supervisor" | "manager" | "admin" = "staff",
@@ -43,9 +40,13 @@ export async function seedPerson(
 }
 
 /** Opens a shift session through `loginWithPin`, as the till would. */
-export async function openSession(db: Database, tillId: string, personId: string): Promise<string> {
+export async function openSession(
+  db: Database,
+  deviceId: string,
+  personId: string,
+): Promise<string> {
   const session = await withTransaction(db, (tx) =>
-    loginWithPin(tx, { tillId, personId, pin: "1234" }),
+    loginWithPin(tx, { deviceId, personId, pin: "1234" }),
   );
   return session.id;
 }

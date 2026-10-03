@@ -19,6 +19,7 @@ import {
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 import "./errors.js";
 
 /**
@@ -148,8 +149,13 @@ async function setupGbVenue(): Promise<GbVenue> {
     sql`select id from persons where role = 'admin'`,
   );
   const adminPersonId = adminRows[0]!.id;
+  const sessionDeviceId = await seedSessionDevice(suite.db, venue);
   const { id: adminSessionId } = await asApp((tx) =>
-    loginWithPin(tx, { tillId: venue.tillId, personId: adminPersonId, pin: "1234" }),
+    loginWithPin(tx, {
+      deviceId: sessionDeviceId,
+      personId: adminPersonId,
+      pin: "1234",
+    }),
   );
 
   return {

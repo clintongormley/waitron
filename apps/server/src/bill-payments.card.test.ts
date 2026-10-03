@@ -19,6 +19,7 @@ import {
   partyRevisionOf,
 } from "./testing/bill-venue.js";
 import { addTabRound } from "./working-order.js";
+import { revokedDeviceSessionCookie } from "./testing/session-device.js";
 import "./errors.js";
 import { cancelBody } from "./testing/cancel-line.js";
 
@@ -354,10 +355,10 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
     expect(await paymentRows(venue, billId)).toEqual([]);
   });
 
-  it("refuses a card on a device-less request before any charge", async () => {
+  it("refuses a card from a session whose device has been revoked before any charge", async () => {
     const billId = await tabWithDishes("Paella");
     const calls = venue.card.collectCalls.length;
-    const cookie = venue.cookie.split("; ")[0]!;
+    const cookie = await revokedDeviceSessionCookie(venue.db, venue.cfg, venue.operatorId, "5555");
 
     const paid = await cardContribution(billId, "10.00", { cookie });
 

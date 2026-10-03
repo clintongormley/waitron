@@ -181,14 +181,14 @@ async function seedNamedPrinters(cfg: TillConfig, names: string[]): Promise<stri
   return rows.map((row) => row.id);
 }
 
-/** An open till session for a new staff member, as the cookie pair the till sends. */
-async function openTillSession(cfg: TillConfig): Promise<string> {
+/** An open till session on `deviceId` for a new staff member, as the cookie the till sends. */
+async function openTillSession(deviceId: string): Promise<string> {
   const [person] = await suite.db
     .insert(persons)
     .values({ displayName: "Server", pinHash: hashPin("4321"), role: "staff" })
     .returning({ id: persons.id });
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tillId: cfg.tillId, personId: person!.id, pin: "4321" }),
+    loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }),
   );
   return `${SESSION_COOKIE}=${session.token}`;
 }
@@ -1325,7 +1325,7 @@ describe("a device's current printers", () => {
       }),
     );
     const { deviceId, jar } = await knockAndAccept(app, venue, { name: "Caja", profileId });
-    const session = await openTillSession(venue.cfg);
+    const session = await openTillSession(deviceId);
     return { bar: bar!, counter: counter!, portable: portable!, deviceId, jar, session };
   }
 
@@ -1401,7 +1401,7 @@ describe("a device's current printers", () => {
     });
   });
 
-  it("needs both the device and an open session", async () => {
+  it("switches the session's device, and needs an open session on an active device", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const t = await listedTill(venue, app);
@@ -1411,13 +1411,24 @@ describe("a device's current printers", () => {
     });
     expect(noSession.status).toBe(401);
     expect(await noSession.json()).toMatchObject({ error: { code: "session.required" } });
-    const noDevice = await send(app, "PUT", "/api/device/printers", {
+    expect((await deviceBindings(t.deviceId)).paymentSlipPrinterId).toBe(t.portable);
+
+    // No device cookie: the session names the device.
+    const sessionOnly = await send(app, "PUT", "/api/device/printers", {
       cookie: t.session,
       body: { paymentSlipPrinterId: t.bar },
     });
-    expect(noDevice.status).toBe(401);
-    expect(await noDevice.json()).toMatchObject({ error: { code: "device.unauthorized" } });
-    expect((await deviceBindings(t.deviceId)).paymentSlipPrinterId).toBe(t.portable);
+    expect(sessionOnly.status).toBe(200);
+    expect((await deviceBindings(t.deviceId)).paymentSlipPrinterId).toBe(t.bar);
+
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, t.deviceId));
+    const revoked = await send(app, "PUT", "/api/device/printers", {
+      cookie: t.session,
+      body: { paymentSlipPrinterId: t.portable },
+    });
+    expect(revoked.status).toBe(401);
+    expect(await revoked.json()).toMatchObject({ error: { code: "device.unauthorized" } });
+    expect((await deviceBindings(t.deviceId)).paymentSlipPrinterId).toBe(t.bar);
   });
 
   it("GET /api/device/me reports the current printers and the active usable choices in list order", async () => {

@@ -195,6 +195,7 @@ const EXPECTED_FOREIGN_KEYS = [
   ["section_members", ["product_id"], "products"],
   ["section_members", ["section_id"], "sections"],
   ["sections", ["owner_menu_id"], "catalogues"],
+  ["sessions", ["device_id"], "devices"],
   ["shift_swaps", ["decided_by_person_id"], "persons"],
   ["shift_swaps", ["from_shift_id"], "shifts"],
   ["shift_swaps", ["requested_by_person_id"], "persons"],

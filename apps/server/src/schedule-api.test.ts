@@ -15,13 +15,14 @@ import {
 import type { Logger } from "./logger.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 import "./errors.js";
 
 // The schedule routes: mechanics, the request-shape 400s, the not-logged-in 401, and the property
 // that the requester is the SESSION's personId, never the body's.
 
 const noopLog: Logger = () => {};
-let tillId: string;
+let deviceId: string;
 let locationId: string;
 let me: string;
 let colleague: string;
@@ -42,7 +43,7 @@ const suite = useVenueDb({
       .insert(tills)
       .values({ locationId, name: "Till 1" })
       .returning({ id: tills.id });
-    tillId = till!.id;
+    deviceId = await seedSessionDevice(db, { locationId, tillId: till!.id });
     const [meRow] = await db
       .insert(persons)
       .values({ displayName: "Me", pinHash: hashPin("1111"), role: "staff" })
@@ -65,7 +66,7 @@ function mountApp(): Hono {
 /** Open a real shift session for `personId` through `loginWithPin` and return its cookie header. */
 async function cookieFor(personId: string, pin: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
-    return loginWithPin(tx, { tillId, personId, pin });
+    return loginWithPin(tx, { deviceId, personId, pin });
   });
   return `${SESSION_COOKIE}=${session.token}`;
 }

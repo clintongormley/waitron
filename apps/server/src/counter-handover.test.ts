@@ -243,7 +243,7 @@ async function creditWholeInvoice(billId: string): Promise<void> {
         and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "rectificative")),
       );
     const session = await loginWithPin(tx, {
-      tillId: venue.cfg.tillId,
+      deviceId: venue.deviceId,
       personId: venue.adminId,
       pin: "1234",
     });

@@ -46,6 +46,7 @@ import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
+import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { DRAWER_KICK } from "./receipt-print.js";
 import {
@@ -334,9 +335,13 @@ async function saleCount(cfg: TillConfig): Promise<number> {
 }
 
 /** Log in as `operatorId` (PIN "5555") over HTTP. The login is device-gated, so it carries an
- *  enrolled `till` device cookie exactly as a sale does. */
+ *  enrolled `till` device cookie, on a profile allowed every capability. */
 async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
-  const deviceCookie = await enrolTillCookie(cfg);
+  return loginOnDevice(app, await enrolTillCookie(cfg, [...CAPABILITY_FLAGS]), operatorId);
+}
+
+/** Log in as `operatorId` (PIN "5555") on `deviceCookie`'s device; answers the Set-Cookie. */
+async function loginOnDevice(app: Hono, deviceCookie: string, operatorId: string): Promise<string> {
   const res = await app.request("/api/session", {
     method: "POST",
     headers: { "content-type": "application/json", cookie: deviceCookie },
@@ -348,14 +353,17 @@ async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<st
 
 /** `POST /api/sales` resolves its till from the enrolled device. */
 let tillDeviceCounter = 0;
-async function enrolTillCookie(cfg: TillConfig): Promise<string> {
+async function enrolTillCookie(
+  cfg: TillConfig,
+  capabilities: string[] = ["take-cash"],
+): Promise<string> {
   // A login plus a sale both enrol a till device in the SAME database, so the profile name AND the
   // device name must be unique per call — both carry a unique index.
   tillDeviceCounter += 1;
   const n = tillDeviceCounter;
   const [profile] = await suite.db
     .insert(deviceProfiles)
-    .values({ name: `Counter till profile ${n}`, formFactor: "till", capabilities: ["take-cash"] })
+    .values({ name: `Counter till profile ${n}`, formFactor: "till", capabilities })
     .returning({ id: deviceProfiles.id });
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: `Counter till ${n}`,
@@ -640,13 +648,16 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
     expect(res.status).toBe(401);
   });
 
-  it("refuses an operator session presented without a device with device.unauthorized, writing nothing", async () => {
+  it("refuses an operator session whose device has been revoked with device.unauthorized, writing nothing", async () => {
     const { cfg, operatorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
     await setDrawerPolicy(cfg, "open");
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const sessionOnly = (await login(app, cfg, operatorId)).split(";")[0]!;
+    const deviceCookie = await enrolConfiguredTillCookie(cfg);
+    const sessionOnly = (await loginOnDevice(app, deviceCookie, operatorId)).split(";")[0]!;
+    const deviceId = /waitron_device=([^.]+)\./.exec(deviceCookie)![1]!;
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
 
     const res = await app.request("/api/drawer/open", {
       method: "POST",
@@ -691,13 +702,15 @@ describe("POST /api/drawer/open from a till device opens its own till's drawer w
     await setDrawerPolicy(venue.cfg, "open");
     const app = new Hono();
     mountTillApi(app, apiDeps(venue.cfg), noopLog);
-    const session = (await login(app, venue.cfg, venue.operatorId)).split(";")[0]!;
-    const press = (deviceCookie: string) =>
-      app.request("/api/drawer/open", {
+    // The operator signed in on the pressing device.
+    const press = async (deviceCookie: string) => {
+      const session = (await loginOnDevice(app, deviceCookie, venue.operatorId)).split(";")[0]!;
+      return app.request("/api/drawer/open", {
         method: "POST",
         headers: { cookie: `${session}; ${deviceCookie}` },
       });
-    return { ...venue, app, session, press };
+    };
+    return { ...venue, app, press };
   }
 
   it("opens the drawer of the pressing till's own receipt printer, and the row names that till's register", async () => {
@@ -792,8 +805,8 @@ describe("POST /api/drawer/open from a till device opens its own till's drawer w
     const { cfg, operatorId } = await setupVenue();
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const session = (await login(app, cfg, operatorId)).split(";")[0]!;
     const off = await enrolDrawerTill(cfg);
+    const session = (await loginOnDevice(app, off.cookie, operatorId)).split(";")[0]!;
     const printerId = await makePrinter(cfg);
     await configureReceipt({ ...cfg, tillId: brandTillId(off.tillId) }, { printerId });
     await switchOff(off.tillId);

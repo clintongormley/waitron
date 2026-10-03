@@ -51,6 +51,7 @@ import { addTabRound } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP surface of the split, un-join and merge routes: the session guard, the malformed-`:id`/`tableId`
 // screens, the result shapes and the STATUS mapping for `table.not_joined`. The successful merge case also
@@ -163,9 +164,10 @@ function deps(db: Database): TillApiDeps {
 }
 
 async function openSession(db: Database): Promise<string> {
+  const deviceId = await seedSessionDevice(db, cfg);
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
-      tillId: cfg.tillId,
+      deviceId,
       personId: ana.id,
       pin: "5555",
     });
@@ -480,11 +482,11 @@ describe("a split-off check after the till that made it has forgotten it", () =>
         .returning({ id: deviceProfiles.id });
       return { tabId: tab.tabId, personId: person!.id, profileId: profile!.id };
     });
-    const session = await withTransaction(db, (tx) =>
-      loginWithPin(tx, { tillId: venueCfg.tillId, personId, pin: "5555" }),
-    );
     // The sale route takes its till from the device that sends it.
     const device = await enrolDeviceForTest(db, venueCfg, { name: "Barra", profileId });
+    const session = await withTransaction(db, (tx) =>
+      loginWithPin(tx, { deviceId: device.deviceId, personId, pin: "5555" }),
+    );
     const clock = systemClock();
     const app = new Hono();
     mountTillApi(

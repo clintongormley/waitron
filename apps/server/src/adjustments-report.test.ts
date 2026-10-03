@@ -70,7 +70,7 @@ async function member(name: string): Promise<Member> {
       .values({ displayName: name, pinHash: hashPin("2468"), role: "staff" })
       .returning({ id: persons.id });
     const session = await loginWithPin(tx, {
-      tillId: venue.cfg.tillId,
+      deviceId: venue.deviceId,
       personId: row!.id,
       pin: "2468",
     });
@@ -273,7 +273,7 @@ describe("a kitchen cancellation is not a voided invoice (spec §7)", () => {
     expect(salesOf(report, lucia)).toBe("37.00");
 
     const manager = await inTx(venue, (tx) =>
-      loginWithPin(tx, { tillId: venue.cfg.tillId, personId: venue.managerId, pin: PINS.manager }),
+      loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.managerId, pin: PINS.manager }),
     );
     await inTx(venue, (tx) =>
       recordVoid(tx, venue.backend, brandSaleId(invoice.id), "rung in error", {

@@ -82,6 +82,8 @@ export interface BillVenue {
   appTipsOff: Hono;
   /** The first till's session and device. */
   cookie: string;
+  /** The first till's device: `cookie`'s. */
+  deviceId: string;
   /** The second till's session and device. */
   cookie2: string;
   /** A till whose profile does not declare `integrated-card-payment`. */
@@ -211,9 +213,6 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
       readerIds: readers.map((reader) => reader.id),
     };
   });
-  const session = await withTransaction(db, (tx) =>
-    loginWithPin(tx, { tillId: cfg.tillId, personId: seeded.personId, pin: "5555" }),
-  );
   const devices = [];
   for (const [index, name] of ["Barra", "Terraza"].entries()) {
     const device = await enrolDeviceForTest(db, cfg, { name, profileId: seeded.profileId });
@@ -256,8 +255,13 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     );
     return app;
   };
-  const cookieFor = (device: { deviceId: string; token: string }) =>
-    `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+  // The operator's shift on `device`, as signing in there opens it.
+  const cookieFor = async (device: { deviceId: string; token: string }) => {
+    const session = await withTransaction(db, (tx) =>
+      loginWithPin(tx, { deviceId: device.deviceId, personId: seeded.personId, pin: "5555" }),
+    );
+    return `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+  };
   return {
     db,
     backend,
@@ -268,9 +272,10 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     app: mount(true),
     appAt: (at) => mount(true, at),
     appTipsOff: mount(false),
-    cookie: cookieFor(devices[0]!),
-    cookie2: cookieFor(devices[1]!),
-    cookieNoCard: cookieFor(cashOnlyDevice),
+    cookie: await cookieFor(devices[0]!),
+    deviceId: devices[0]!.deviceId,
+    cookie2: await cookieFor(devices[1]!),
+    cookieNoCard: await cookieFor(cashOnlyDevice),
     deviceTillId: devices[0]!.tillId,
     device2TillId: devices[1]!.tillId,
     operatorId: seeded.personId,

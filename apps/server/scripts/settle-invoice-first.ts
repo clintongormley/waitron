@@ -33,6 +33,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
+import { scriptSessionDevice } from "./script-device.js";
 
 const LOCALE = "es-ES";
 
@@ -154,7 +155,7 @@ export async function settleInvoiceFirst(
         })
         .returning({ id: persons.id });
       return loginWithPin(tx, {
-        tillId: till,
+        deviceId: await scriptSessionDevice(tx, till, "Settle invoice first"),
         personId: person!.id,
         pin: "1234",
       });

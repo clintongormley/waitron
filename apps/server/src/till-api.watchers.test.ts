@@ -23,6 +23,7 @@ import { mountTillApi } from "./till-api.js";
 import { mountDeviceApi } from "./device-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { DEVICE_COOKIE } from "./device-session.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { inTx, orderForParty, seat, setupPartyVenue } from "./testing/party-venue.js";
@@ -35,9 +36,10 @@ const log = () => {};
 
 async function fixture() {
   const v = await setupPartyVenue(suite.db);
+  const sessionDeviceId = await seedSessionDevice(suite.db, v.cfg);
   const [person] = await inTx(v, (tx) => tx.select({ id: persons.id }).from(persons).limit(1));
   const session = await inTx(v, (tx) =>
-    loginWithPin(tx, { tillId: v.cfg.tillId, personId: person!.id, pin: "1234" }),
+    loginWithPin(tx, { deviceId: sessionDeviceId, personId: person!.id, pin: "1234" }),
   );
   const [profile] = await inTx(v, (tx) =>
     tx

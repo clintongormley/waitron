@@ -22,7 +22,7 @@ import {
   refusalOf,
   seedManager,
   seedPerson,
-  seedTill,
+  seedSessionDevice,
   TOTP_KEY_RING,
 } from "../test/fixtures.js";
 
@@ -309,22 +309,24 @@ describe("verifyThrottledCredential with a check", () => {
 
 describe("loginWithPin and authorize with a check", () => {
   it("opens a session on a matching check, deriving no key inside the transaction", async () => {
-    const tillId = await seedTill(suite.db);
+    const deviceId = await seedSessionDevice(suite.db);
     const personId = await seedPerson(suite.db);
     const checked = await checkPin(suite.db, personId, "1234");
     pinSpy.mockClear();
 
-    const session = await run((tx) => loginWithPin(tx, { tillId, personId, pin: "1234", checked }));
+    const session = await run((tx) =>
+      loginWithPin(tx, { deviceId, personId, pin: "1234", checked }),
+    );
 
     expect(session.personId).toBe(personId);
     expect(pinSpy).not.toHaveBeenCalled();
   });
 
   it("authorizes an override on its matching check, with or without a wrong-PIN limit", async () => {
-    const tillId = await seedTill(suite.db);
+    const deviceId = await seedSessionDevice(suite.db);
     const staffId = await seedPerson(suite.db, "staff");
     const supervisorId = await seedPerson(suite.db, "supervisor");
-    const sessionId = await openSession(suite.db, tillId, staffId);
+    const sessionId = await openSession(suite.db, deviceId, staffId);
     const checked = await checkPin(suite.db, supervisorId, "1234");
     const override = { personId: supervisorId, pin: "1234", checked };
     const attempts = { throttle: createPinThrottle({ now: () => 1_000_000 }), slot: "s" };

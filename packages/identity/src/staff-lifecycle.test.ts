@@ -23,7 +23,7 @@ import {
   openManagementSession,
   openSession,
   seedPerson,
-  seedTill,
+  seedSessionDevice,
   TOTP_KEY_RING,
 } from "../test/fixtures.js";
 
@@ -164,10 +164,10 @@ describe("invited person lifecycle", () => {
         email: "pending-login@example.com",
       }),
     );
-    const tillId = await seedTill(suite.db);
+    const deviceId = await seedSessionDevice(suite.db);
     expect(
       await codeOf(() =>
-        run((tx) => loginWithPin(tx, { tillId, personId: created.id, pin: "1234" })),
+        run((tx) => loginWithPin(tx, { deviceId, personId: created.id, pin: "1234" })),
       ),
     ).toBe("pin.invalid");
     expect(
@@ -287,9 +287,9 @@ describe("invited person lifecycle", () => {
   it("ends dashboard and till sessions when an administrator marks a person inactive", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
     const target = await openManagementSession(suite.db, "staff");
-    const tillId = await seedTill(suite.db);
+    const deviceId = await seedSessionDevice(suite.db);
     const tillSession = await run((tx) =>
-      loginWithPin(tx, { tillId, personId: target.personId, pin: "1234" }),
+      loginWithPin(tx, { deviceId, personId: target.personId, pin: "1234" }),
     );
 
     await run((tx) =>
@@ -417,8 +417,8 @@ async function seedStaffWithSession(
 ): Promise<{ personId: string; tillSessionId: string }> {
   const personId = await seedPerson(suite.db, "staff");
   await suite.db.execute(sql`update persons set email = ${email} where id = ${personId}`);
-  const tillId = await seedTill(suite.db);
-  const tillSessionId = await openSession(suite.db, tillId, personId);
+  const deviceId = await seedSessionDevice(suite.db);
+  const tillSessionId = await openSession(suite.db, deviceId, personId);
   return { personId, tillSessionId };
 }
 

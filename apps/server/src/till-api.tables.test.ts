@@ -32,6 +32,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { cancelBody } from "./testing/cancel-line.js";
 import { createTable } from "./tables.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP wiring of the table/tab routes: session guard, isUuid screens and STATUS mapping. The verbs
 // are pinned in `tabs.filing.test.ts`, `move-merge.filing.test.ts` and packages/db's schema suites.
@@ -157,9 +158,10 @@ function deps(db: Database): TillApiDeps {
 }
 
 async function openSession(db: Database): Promise<string> {
+  const deviceId = await seedSessionDevice(db, cfg);
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
-      tillId: cfg.tillId,
+      deviceId,
       personId: ana.id,
       pin: "5555",
     });

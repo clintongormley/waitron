@@ -150,7 +150,7 @@ async function seedVenue(db: Database): Promise<Venue> {
     .returning({ id: deviceProfiles.id });
   const device = await enrolDeviceForTest(db, cfg, { name: "Card till", profileId: profile!.id });
   const session = await withTransaction(db, (tx) =>
-    loginWithPin(tx, { tillId: cfg.tillId, personId: person!.id, pin: "5555" }),
+    loginWithPin(tx, { deviceId: device.deviceId, personId: person!.id, pin: "5555" }),
   );
   return {
     cfg,

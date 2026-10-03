@@ -42,6 +42,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
+import { scriptSessionDevice } from "./script-device.js";
 
 /** identity holds the supervisor who authorises the rectificativa. */
 const SETS = ["core", "identity"];
@@ -212,7 +213,7 @@ async function main(): Promise<void> {
 
     const authorizerSession = await withTransaction(db, async (tx) => {
       return loginWithPin(tx, {
-        tillId: venue.tillId,
+        deviceId: await scriptSessionDevice(tx, venue.tillId, "Daily close demo"),
         personId: venue.authorizerId,
         pin: "1234",
       });

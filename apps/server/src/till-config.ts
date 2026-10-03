@@ -3,7 +3,15 @@
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError, locationId, nodeId, seriesId, tillId } from "@waitron/shared";
-import type { Decimal, LocationId, NodeId, SeriesId, TillId } from "@waitron/shared";
+import type {
+  Decimal,
+  DeviceOrigin,
+  LocationId,
+  NodeId,
+  Origin,
+  SeriesId,
+  TillId,
+} from "@waitron/shared";
 import { locations, nodes, orderFlow, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { isUnset } from "./env-value.js";
@@ -56,6 +64,16 @@ export interface TillConfig {
    * enters, grows or pays an order holds it to this (`refuseOverSimplifiedLimit`, `@waitron/core`).
    */
   simplifiedInvoiceLimit: Decimal | null;
+}
+
+/** A configuration that says where the records it writes came from. */
+export interface OriginConfig extends TillConfig {
+  origin: Origin;
+}
+
+/** A till-app request's configuration: its records come from the session's device. */
+export interface DeviceRequestConfig extends TillConfig {
+  origin: DeviceOrigin;
 }
 
 /** What the environment alone says about the till: boot adds the rest from the database and the

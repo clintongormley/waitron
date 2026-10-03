@@ -13,7 +13,7 @@ import type { RegistroRow } from "./registro-row.js";
 import { cadenas } from "./schema/cadenas.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedSessionDevice, seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 let backend: VerifactuBackend;
@@ -48,8 +48,9 @@ beforeEach(async () => {
     sql`insert into persons (id, created_at, display_name, pin_hash, role)
         values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
   );
+  const deviceId = await seedSessionDevice(suite.db, tillId);
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tillId, personId: rows[0]!.id, pin: "1234" }),
+    loginWithPin(tx, { deviceId, personId: rows[0]!.id, pin: "1234" }),
   );
   voidSessionId = session.id;
   backend = new VerifactuBackend({

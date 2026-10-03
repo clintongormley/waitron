@@ -23,7 +23,7 @@ import {
   seedSecondChain,
   type SeededDrain,
 } from "../test/drain-fixtures.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedSessionDevice, seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 // The full manifest: `recordVoid` authorizes through identity's persons and sessions.
@@ -114,8 +114,9 @@ describe("drain — happy path, an anulación row", () => {
       sql`insert into persons (id, created_at, display_name, pin_hash, role)
           values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
     );
+    const deviceId = await seedSessionDevice(suite.db, tillId);
     const voidSession = await withTransaction(suite.db, (tx) =>
-      loginWithPin(tx, { tillId, personId: mgr[0]!.id, pin: "1234" }),
+      loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
     );
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const backend = new VerifactuBackend({
@@ -1121,8 +1122,9 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
       sql`insert into persons (id, created_at, display_name, pin_hash, role)
           values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
     );
+    const deviceId = await seedSessionDevice(suite.db, venue.tillId);
     const session = await withTransaction(suite.db, (tx) =>
-      loginWithPin(tx, { tillId: venue.tillId, personId: mgr[0]!.id, pin: "1234" }),
+      loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
     );
     voidSessionId = session.id;
     aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z"), tiempoEsperaInicial: 5 });

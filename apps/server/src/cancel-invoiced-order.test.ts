@@ -185,7 +185,7 @@ useVenueDb({
         .returning({ id: persons.id });
       supervisorId = person!.id;
       return loginWithPin(tx, {
-        tillId: venue.cfg.tillId,
+        deviceId: venue.deviceId,
         personId: supervisorId,
         pin: SUPERVISOR_PIN,
       });

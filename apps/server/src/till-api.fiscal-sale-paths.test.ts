@@ -31,7 +31,13 @@ import {
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, permissionsForRole, persons } from "@waitron/identity";
+import {
+  hashPassword,
+  hashPin,
+  loginWithPin,
+  permissionsForRole,
+  persons,
+} from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
@@ -60,6 +66,7 @@ import type { TillSaleResult } from "./till-sale.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { DRAWER_KICK } from "./receipt-print.js";
 import { DEVICE_COOKIE } from "./device-session.js";
+import { SESSION_COOKIE } from "./till-session.js";
 import { createStation } from "./kitchen.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
@@ -376,10 +383,15 @@ async function enrolTillCookie(
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
-/** Log the operator (PIN "5555") in and return the Set-Cookie session cookie. The login is
- *  device-gated, so it enrols a throwaway `till` device to present. */
-async function loginSession(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
-  const deviceCookie = await enrolTillCookie(cfg);
+/** Log the operator (PIN "5555") in on `deviceCookie`'s device and return the Set-Cookie session
+ *  cookie. The login is device-gated, so without one it enrols a throwaway `till` device. */
+async function loginSession(
+  app: Hono,
+  cfg: TillConfig,
+  operatorId: string,
+  deviceCookie?: string,
+): Promise<string> {
+  deviceCookie ??= await enrolTillCookie(cfg);
   const login = await app.request("/api/session", {
     method: "POST",
     headers: { "content-type": "application/json", cookie: deviceCookie },
@@ -462,10 +474,10 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
 
-    // 1. Log in through the HTTP surface and capture the session cookie the route sets.
-    const cookie = await loginSession(app, cfg, operatorId);
-    expect(cookie).toMatch(/waitron_till_session=/);
     const deviceCookie = await enrolTillCookie(cfg);
+    // 1. Log in through the HTTP surface and capture the session cookie the route sets.
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+    expect(cookie).toMatch(/waitron_till_session=/);
 
     // 2. Ring a sale with that cookie: 2 × 1.50 = 3.00 total, 5.00 tendered → 2.00 change.
     const saleRes = await app.request("/api/sales", {
@@ -517,10 +529,10 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
 
-    // 1. Log in through the HTTP surface and capture the session cookie.
-    const cookie = await loginSession(app, cfg, operatorId);
-    expect(cookie).toMatch(/waitron_till_session=/);
     const deviceCookie = await enrolTillCookie(cfg);
+    // 1. Log in through the HTTP surface and capture the session cookie.
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+    expect(cookie).toMatch(/waitron_till_session=/);
 
     // 2. The operator sees the default zone's menu offers. The sale lines are built from those offers,
     // exactly as the real till does (it never invents menu-item ids).
@@ -654,15 +666,17 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
 // A sale's `till_id` resolves from the authenticated enrolled device (`requireSaleTillId`); these two
 // negatives pin its fail-closed preconditions.
 describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () => {
-  it("refuses POST /api/sales with NO device cookie — 401 device.unauthorized, filing nothing", async () => {
+  it("refuses POST /api/sales from a session whose device has been revoked — 401 device.unauthorized, filing nothing", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
 
-    // A valid operator session, but the SALE carries no `waitron_device` cookie (the login itself is
-    // device-gated, so `loginSession` presents one).
-    const cookie = await loginSession(app, cfg, operatorId);
+    const deviceCookie = await enrolTillCookie(cfg);
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+    await suite.db.execute(
+      sql`update devices set active = 0 where id = ${deviceIdOf(deviceCookie)}`,
+    );
 
     const res = await app.request("/api/sales", {
       method: "POST",
@@ -699,8 +713,11 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
       stationId: station.id,
     });
     const deviceCookie = `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
-
-    const cookie = await loginSession(app, cfg, operatorId);
+    // Opened directly: the sign-in route refuses a till-less device itself.
+    const session = await withTransaction(suite.db, (tx) =>
+      loginWithPin(tx, { deviceId: dev.deviceId, personId: operatorId, pin: "5555" }),
+    );
+    const cookie = `${SESSION_COOKIE}=${session.token}`;
 
     const res = await app.request("/api/sales", {
       method: "POST",
@@ -728,8 +745,8 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     mountTillApi(app, apiDeps(cfg), noopLog);
 
     // 1. Log in and capture the session cookie.
-    const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg);
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
 
     // 2. Park an order (client-minted id, its own idempotency key) with 2 × 1.50.
     const workingOrderId = randomUUID();
@@ -826,8 +843,8 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
       const each = available.find((p) => p.pricingUnit === "each")!;
       const app = new Hono();
       mountTillApi(app, apiDeps(cfg), noopLog);
-      const cookie = await loginSession(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg);
+      const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
       const kitchenItems = async (id: string) =>
         (
           await suite.db.execute<{ items: number; fired: number }>(
@@ -892,8 +909,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
     const app = new Hono();
     mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
-    const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
     const reader = await seedReader();
     await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
@@ -921,8 +938,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
-    const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
     const dflt = await seedReader({ name: "Default" });
     const other = await seedReader({ name: "Other" });
@@ -955,8 +972,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     // One pool, one FakeStripe: the pay path calls `pool.get("stripe")` for BOTH sales and must get
     // the SAME cached provider, so the only thing distinguishing the two collects is `readerRef`.
     mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, client)), noopLog);
-    const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
     const readerA = await seedReader({ name: "Reader A" });
     const readerB = await seedReader({ name: "Reader B" });
@@ -990,8 +1007,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const pool = fakePool(cfg, new FakeStripe());
     const app = new Hono();
     mountTillApi(app, apiDepsWithPool(cfg, pool), noopLog);
-    const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
     const reader = await seedReader();
     await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
@@ -1021,8 +1038,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
-    const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     // No `device_card_readers` row and no `readerId` in the body → nothing resolves.
 
     const payRes = await app.request("/api/pay", {
@@ -1044,8 +1061,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
-    const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     const reader = await seedReader(); // active reader, but provider not connected
     await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
@@ -1071,8 +1088,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     client.declineNext();
     const app = new Hono();
     mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, client)), noopLog);
-    const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
     const reader = await seedReader();
     await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
@@ -1124,8 +1141,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const each = available.find((p) => p.pricingUnit === "each")!;
       const logged: string[] = [];
       const app = mount(cfg, (_level, event) => void logged.push(event));
-      const cookie = await loginSession(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+      const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
       await prepare(deviceCookie);
       const workingOrderId = randomUUID();
       const drop = refuseRelease(workingOrderId);
@@ -1208,8 +1225,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       },
       noopLog,
     );
-    const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
 
     const workingOrderId = randomUUID();
     const payRes = await app.request("/api/pay", {
@@ -1232,8 +1249,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const { cfg, operatorId } = await setupVenue();
     const app = new Hono();
     mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
-    const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
     const reader = await seedReader();
     await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
@@ -1334,8 +1351,8 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     mountTillApi(app, apiDeps(modeCfg), noopLog);
 
     // 1. Log in.
-    const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg);
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
 
     // 2. Park then PLACE: 2 × 1.50 = 3.00. Mode T files NO fiscal doc at placing.
     const workingOrderId = randomUUID();
@@ -1513,9 +1530,9 @@ describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route", ()
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
 
-    const cookie = await loginSession(app, cfg, operatorId);
-
     const deviceCookie = await enrolTillCookie(cfg);
+
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
 
     // A genuine Mode-P walk-up: `POST /api/sales` settles it immediately (open → settled) — no
     // `place` step at all, since Mode P never places.
@@ -1596,8 +1613,8 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg);
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
 
     // Walk-up settle and preparation fire happen in one transaction.
     const workingOrderId = randomUUID();
@@ -1705,10 +1722,16 @@ describe("handheld sales and device capability gates", () => {
     return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
   }
 
-  /** Log in and return just the `name=value` session cookie pair, to combine with a device cookie in
-   * one `Cookie` header. The login is device-gated, so it presents a throwaway `till` device. */
-  async function loginOperator(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
-    const loginDeviceCookie = await enrolTillCookie(cfg);
+  /** Log in on `deviceCookie`'s device and return just the `name=value` session cookie pair, to
+   * combine with that device cookie in one `Cookie` header. Without one it presents a throwaway
+   * `till` device. */
+  async function loginOperator(
+    app: Hono,
+    cfg: TillConfig,
+    operatorId: string,
+    deviceCookie?: string,
+  ): Promise<string> {
+    const loginDeviceCookie = deviceCookie ?? (await enrolTillCookie(cfg));
     const login = await app.request("/api/session", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: loginDeviceCookie },
@@ -1719,7 +1742,7 @@ describe("handheld sales and device capability gates", () => {
   }
 
   it.each(["receipt", "reprint", "payment-slip"])(
-    "requires print-receipt for handheld %s requests and admits a device-less caller",
+    "requires print-receipt of the session's device for handheld %s requests, with or without its device cookie",
     async (action) => {
       const { cfg, available, operatorId } = await setupVenue();
       const each = available.find((p) => p.pricingUnit === "each")!;
@@ -1727,11 +1750,15 @@ describe("handheld sales and device capability gates", () => {
       mountTillApi(app, apiDeps(cfg), noopLog);
       const blockedDevice = await enrolHandheldCookie(cfg);
       const allowedDevice = await enrolHandheldCookie(cfg, ["print-receipt"]);
-      const sessionPair = await loginOperator(app, cfg, operatorId);
+      const blockedSession = await loginOperator(app, cfg, operatorId, blockedDevice);
+      const allowedSession = await loginOperator(app, cfg, operatorId, allowedDevice);
       const workingOrderId = randomUUID();
       const sale = await app.request("/api/sales", {
         method: "POST",
-        headers: { "content-type": "application/json", cookie: `${sessionPair}; ${blockedDevice}` },
+        headers: {
+          "content-type": "application/json",
+          cookie: `${blockedSession}; ${blockedDevice}`,
+        },
         body: JSON.stringify({
           workingOrderId,
           lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
@@ -1742,11 +1769,11 @@ describe("handheld sales and device capability gates", () => {
       const route = `/api/sales/${workingOrderId}/${action}`;
       const refused = await app.request(route, {
         method: "POST",
-        headers: { cookie: `${sessionPair}; ${blockedDevice}` },
+        headers: { cookie: `${blockedSession}; ${blockedDevice}` },
       });
       expect(refused.status).toBe(403);
       expect(await refused.json()).toMatchObject({ error: { code: "device.forbidden_action" } });
-      for (const cookie of [`${sessionPair}; ${allowedDevice}`, sessionPair]) {
+      for (const cookie of [`${allowedSession}; ${allowedDevice}`, allowedSession]) {
         const accepted = await app.request(route, { method: "POST", headers: { cookie } });
         expect(accepted.status).toBe(200);
       }
@@ -1758,7 +1785,7 @@ describe("handheld sales and device capability gates", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const deviceCookie = await enrolHandheldCookie(cfg, ["open-cash-drawer"]);
-    const sessionPair = await loginOperator(app, cfg, operatorId);
+    const sessionPair = await loginOperator(app, cfg, operatorId, deviceCookie);
     const res = await app.request("/api/drawer/open", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
@@ -1777,7 +1804,7 @@ describe("handheld sales and device capability gates", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
 
     const deviceCookie = await enrolHandheldCookie(cfg);
-    const sessionPair = await loginOperator(app, cfg, operatorId);
+    const sessionPair = await loginOperator(app, cfg, operatorId, deviceCookie);
     await withTransaction(suite.db, async (tx) => {
       const printer = await createPrinter(tx, cfg, {
         name: "Counter",
@@ -1832,7 +1859,7 @@ describe("handheld sales and device capability gates", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
 
     const deviceCookie = await enrolHandheldCookie(cfg);
-    const sessionPair = await loginOperator(app, cfg, operatorId);
+    const sessionPair = await loginOperator(app, cfg, operatorId, deviceCookie);
 
     // The `card` tender on `POST /api/sales` is charged on a separate bank terminal the POS never
     // talks to, so it files the same chained record as cash plus one captured `payments` row.
@@ -1884,7 +1911,7 @@ describe("handheld sales and device capability gates", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
 
     const deviceCookie = await enrolTillCookie(cfg);
-    const sessionPair = await loginOperator(app, cfg, operatorId);
+    const sessionPair = await loginOperator(app, cfg, operatorId, deviceCookie);
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
@@ -1912,7 +1939,7 @@ describe("handheld sales and device capability gates", () => {
       mountTillApi(app, apiDeps(cfg), noopLog);
 
       const deviceCookie = await enrolHandheldCookie(cfg);
-      const sessionPair = await loginOperator(app, cfg, operatorId);
+      const sessionPair = await loginOperator(app, cfg, operatorId, deviceCookie);
 
       const res = await app.request(path, {
         method: "POST",
@@ -1943,7 +1970,7 @@ describe("handheld sales and device capability gates", () => {
       registerId: cfg.tillId,
     });
     const deviceCookie = `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
-    const sessionPair = await loginOperator(app, cfg, operatorId);
+    const sessionPair = await loginOperator(app, cfg, operatorId, deviceCookie);
 
     const res = await app.request("/api/pay", {
       method: "POST",
@@ -2035,7 +2062,9 @@ describe("handheld sales and device capability gates", () => {
     ] as const) {
       const placed = await app.request(`/api/working-orders/${id}/place`, {
         method: "POST",
-        headers: { cookie: `${sessionPair}; ${deviceCookie}` },
+        headers: {
+          cookie: `${await loginOperator(app, cfg, operatorId, deviceCookie)}; ${deviceCookie}`,
+        },
       });
       expect(placed.status).toBe(200);
       expect(await placed.json()).toMatchObject({
@@ -2081,7 +2110,7 @@ describe("handheld sales and device capability gates", () => {
       [byHandheld, handheldCookie],
       [byTill, tillDeviceCookie],
     ] as const) {
-      const both = `${sessionPair}; ${deviceCookie}`;
+      const both = `${await loginOperator(app, cfg, operatorId, deviceCookie)}; ${deviceCookie}`;
       const placed = await app.request(`/api/working-orders/${id}/place`, {
         method: "POST",
         headers: { cookie: both },
@@ -2131,7 +2160,7 @@ describe("handheld sales and device capability gates", () => {
       const app = new Hono();
       mountTillApi(app, apiDeps(cfg), noopLog);
       const deviceCookie = await enrolTillCookie(cfg, await seedProfileFF("till"));
-      const both = `${await loginOperator(app, cfg, operatorId)}; ${deviceCookie}`;
+      const both = `${await loginOperator(app, cfg, operatorId, deviceCookie)}; ${deviceCookie}`;
 
       const before = await saleCount();
       const refused = await postSale(app, both, each.menuItemId, "cash");
@@ -2150,7 +2179,7 @@ describe("handheld sales and device capability gates", () => {
       const app = new Hono();
       mountTillApi(app, apiDeps(cfg), noopLog);
       const deviceCookie = await enrolHandheldCookie(cfg, ["take-cash"]);
-      const both = `${await loginOperator(app, cfg, operatorId)}; ${deviceCookie}`;
+      const both = `${await loginOperator(app, cfg, operatorId, deviceCookie)}; ${deviceCookie}`;
 
       const before = await saleCount();
       const res = await postSale(app, both, each.menuItemId, "cash");
@@ -2168,7 +2197,7 @@ describe("handheld sales and device capability gates", () => {
       const app = new Hono();
       mountTillApi(app, apiDeps(modeCfg), noopLog);
       const deviceCookie = await enrolHandheldCookie(cfg, []);
-      const sessionPair = await loginOperator(app, cfg, operatorId);
+      const sessionPair = await loginOperator(app, cfg, operatorId, deviceCookie);
       const both = `${sessionPair}; ${deviceCookie}`;
       const id = await parkOrder(app, sessionPair, each.menuItemId);
       const placed = await app.request(`/api/working-orders/${id}/place`, {
@@ -2200,7 +2229,7 @@ describe("handheld sales and device capability gates", () => {
     const sessionPair = await loginOperator(app, cfg, operatorId);
 
     for (const deviceCookie of [handheldCookie, tillDeviceCookie]) {
-      const both = `${sessionPair}; ${deviceCookie}`;
+      const both = `${await loginOperator(app, cfg, operatorId, deviceCookie)}; ${deviceCookie}`;
       const id = await parkOrder(app, sessionPair, each.menuItemId);
       const placed = await app.request(`/api/working-orders/${id}/place`, {
         method: "POST",
@@ -2306,9 +2335,9 @@ it("files an extras pick and an options answer through cash checkout and reprint
   const options = [{ listId: optionListId, labelId }];
   const app = new Hono();
   mountTillApi(app, apiDeps(cfg), noopLog);
-  const cookie = await loginSession(app, cfg, operatorId);
   const profileId = await seedProfileFF("till", ["print-receipt", "take-cash"]);
   const deviceCookie = await enrolTillCookie(cfg, profileId);
+  const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
   const headers = { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` };
   const printerId = await withTransaction(suite.db, async (tx) => {
     const printer = await createPrinter(tx, cfg, {
@@ -2500,8 +2529,8 @@ describe("card readers the till cannot drive, and readers named by id", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
-    const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
     const readerId = randomUUID();
 
@@ -2529,8 +2558,8 @@ describe("card readers the till cannot drive, and readers named by id", () => {
       providers: undefined,
     };
     mountTillApi(app, withoutSeats, noopLog);
-    const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     // No `connectStripe()`: with the seat list present this reader answers reader.provider_disconnected.
     const reader = await seedReader();
     await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
@@ -2591,8 +2620,8 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
-    const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg);
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
 
     const workingOrderId = randomUUID();
     const stations = (await (
@@ -2646,8 +2675,8 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
-    const cookie = await loginSession(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg);
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     const workingOrderId = randomUUID();
     // With the default station off, the sale leaves the dish unsent; turning it back on before
     // the prep call lets that call send the same stored dish.
@@ -2760,7 +2789,10 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = (await loginSession(app, cfg, operatorId)).split(";")[0]!;
-    return { cfg, each, app, cookie, operatorId };
+    // The operator signed in on `deviceCookie`'s device, with that cookie beside the session.
+    const on = async (deviceCookie: string) =>
+      `${(await loginSession(app, cfg, operatorId, deviceCookie)).split(";")[0]!}; ${deviceCookie}`;
+    return { cfg, each, app, cookie, on, operatorId };
   }
 
   async function cardSale(
@@ -2780,13 +2812,13 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
   }
 
   it("a card sale at the till with the drawer opens it once, audited as a card slip naming the sale, and a replay opens nothing more", async () => {
-    const { cfg, each, app, cookie, operatorId } = await venueWithTill();
+    const { cfg, each, app, on, operatorId } = await venueWithTill();
     const deviceCookie = await enrolTillCookie(cfg);
     const tillId = await tillOf(deviceCookie);
     const printerId = await receiptPrinterFor(cfg, tillId, true);
     const workingOrderId = randomUUID();
 
-    const first = await cardSale(app, `${cookie}; ${deviceCookie}`, {
+    const first = await cardSale(app, await on(deviceCookie), {
       workingOrderId,
       menuItemId: each.menuItemId,
     });
@@ -2802,7 +2834,7 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
     expect(decodeTicket(new Uint8Array(printed.documents[0]!))).toContain("VERI*FACTU");
     expect(opensDrawer(new Uint8Array(printed.documents[0]!))).toBe(false);
 
-    const replay = await cardSale(app, `${cookie}; ${deviceCookie}`, {
+    const replay = await cardSale(app, await on(deviceCookie), {
       workingOrderId,
       menuItemId: each.menuItemId,
     });
@@ -2812,7 +2844,7 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
   });
 
   it("a card sale on a handheld opens no drawer, although the till it rings on has one", async () => {
-    const { cfg, each, app, cookie } = await venueWithTill();
+    const { cfg, each, app, on } = await venueWithTill();
     await receiptPrinterFor(cfg, cfg.tillId, true);
     const profileId = await seedProfileFF("phone-portrait");
     const handheld = await enrolDeviceForTest(suite.db, cfg, {
@@ -2823,7 +2855,7 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
 
     const res = await cardSale(
       app,
-      `${cookie}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`,
+      await on(`${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`),
       {
         workingOrderId: randomUUID(),
         menuItemId: each.menuItemId,
@@ -2845,7 +2877,6 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
         .values({ displayName: "Responsable", pinHash: hashPin("5555"), role: "supervisor" })
         .returning({ id: persons.id });
       expect(permissionsForRole("supervisor")).toContain("cash.drawer");
-      const session = (await loginSession(app, cfg, supervisor!.id)).split(";")[0]!;
       const profileId = await seedProfileFF("phone-portrait", [
         "open-cash-drawer",
         "print-receipt",
@@ -2856,7 +2887,9 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
         profileId,
         registerId: cfg.tillId,
       });
-      const cookie = `${session}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`;
+      const handheldCookie = `${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`;
+      const session = (await loginSession(app, cfg, supervisor!.id, handheldCookie)).split(";")[0]!;
+      const cookie = `${session}; ${handheldCookie}`;
 
       const res = await app.request("/api/sales", {
         method: "POST",
@@ -2881,12 +2914,12 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
   );
 
   it("a card sale at a till whose receipt printer has no drawer opens nothing, while the other till's printer has one", async () => {
-    const { cfg, each, app, cookie } = await venueWithTill();
+    const { cfg, each, app, on } = await venueWithTill();
     await receiptPrinterFor(cfg, cfg.tillId, true);
     const deviceCookie = await enrolTillCookie(cfg);
     await receiptPrinterFor(cfg, await tillOf(deviceCookie), false);
 
-    const res = await cardSale(app, `${cookie}; ${deviceCookie}`, {
+    const res = await cardSale(app, await on(deviceCookie), {
       workingOrderId: randomUUID(),
       menuItemId: each.menuItemId,
     });
@@ -2901,11 +2934,11 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
   it.each(["ticket_then_pay", "invoice_first"] as const)(
     "collecting a placed %s order by hand-keyed card opens the till's drawer once for the slip, and a replay opens nothing more",
     async (orderFlow) => {
-      const { cfg, each, app, cookie, operatorId } = await venueWithTill(orderFlow);
+      const { cfg, each, app, cookie, on, operatorId } = await venueWithTill(orderFlow);
       const deviceCookie = await enrolTillCookie(cfg);
       const tillId = await tillOf(deviceCookie);
       const printerId = await receiptPrinterFor(cfg, tillId, true);
-      const both = `${cookie}; ${deviceCookie}`;
+      const both = await on(deviceCookie);
 
       const workingOrderId = randomUUID();
       const park = await app.request("/api/working-orders", {
@@ -2963,7 +2996,7 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
   ] as const)(
     "a handheld collecting a placed %s order by %s opens no drawer, although the till it rings on has one",
     async (orderFlow, method) => {
-      const { cfg, each, app, cookie } = await venueWithTill(orderFlow);
+      const { cfg, each, app, cookie, on } = await venueWithTill(orderFlow);
       await receiptPrinterFor(cfg, cfg.tillId, true);
       const profileId = await seedProfileFF("phone-portrait", ["take-cash"]);
       const handheld = await enrolDeviceForTest(suite.db, cfg, {
@@ -2971,7 +3004,7 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
         profileId,
         registerId: cfg.tillId,
       });
-      const both = `${cookie}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`;
+      const both = await on(`${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`);
 
       const workingOrderId = randomUUID();
       const park = await app.request("/api/working-orders", {
@@ -3003,14 +3036,14 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
   );
 
   it("a cash sale at the till with the drawer still opens it as a cash sale", async () => {
-    const { cfg, each, app, cookie } = await venueWithTill();
+    const { cfg, each, app, on } = await venueWithTill();
     const deviceCookie = await enrolTillCookie(cfg);
     await receiptPrinterFor(cfg, await tillOf(deviceCookie), true);
     const workingOrderId = randomUUID();
 
     const res = await app.request("/api/sales", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      headers: { "content-type": "application/json", cookie: await on(deviceCookie) },
       body: JSON.stringify({
         workingOrderId,
         lines: [{ menuItemId: each.menuItemId, quantity: "2" }],

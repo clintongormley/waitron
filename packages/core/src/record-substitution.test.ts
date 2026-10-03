@@ -25,7 +25,12 @@ import type { RecordSubstitutionInput } from "./record-substitution.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
-import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
+import {
+  seedBareSale,
+  seedRectificativeSeries,
+  seedSessionDevice,
+  seedTenant,
+} from "../test/fixtures.js";
 
 let tillId: TillId;
 let nodeId: NodeId;
@@ -46,8 +51,9 @@ beforeEach(async () => {
     .insert(persons)
     .values({ displayName: "P", pinHash: hashPin("1234"), role: "manager" })
     .returning({ id: persons.id });
+  const deviceId = await seedSessionDevice(suite.db, tillId);
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tillId, personId: person!.id, pin: "1234" }),
+    loginWithPin(tx, { deviceId, personId: person!.id, pin: "1234" }),
   );
   voidSessionId = session.id;
 });
