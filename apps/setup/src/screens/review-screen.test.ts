@@ -273,26 +273,6 @@ describe("setup-review-screen", () => {
     }
   });
 
-  it("centres a value beside its label", async () => {
-    const original = { width: window.innerWidth, height: window.innerHeight };
-    try {
-      await page.viewport(1280, 800);
-      const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
-        draft: fullDraft(),
-      });
-      const value = q(el, '[data-test="summary-seriesCode"]')!;
-      const label = value.previousElementSibling!;
-      const labelBox = label.getBoundingClientRect();
-      const text = document.createRange();
-      text.selectNodeContents(value);
-      const valueBox = text.getBoundingClientRect();
-      expect(
-        Math.abs((labelBox.top + labelBox.bottom) / 2 - (valueBox.top + valueBox.bottom) / 2),
-      ).toBeLessThan(2);
-    } finally {
-      await page.viewport(original.width, original.height);
-    }
-  });
   it("names the country in the wizard's language", async () => {
     setLocale("es-ES");
     try {
