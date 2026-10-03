@@ -397,6 +397,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
         { code: "en-GB", label: "English" },
       ],
       venueDefault: "es-ES",
+      loginDefault: "es-ES",
     }),
     putLocale: vi.fn().mockResolvedValue(undefined),
     listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [cafe] }),
@@ -8876,6 +8877,129 @@ describe("till-app", () => {
       await flush(el);
       return counter(el)!;
     }
+
+    it("shows a browser-matched language before login when the venue language differs", async () => {
+      const { el } = await mountApp({
+        getLocales: vi.fn().mockResolvedValue({
+          locales: [
+            { code: "es-ES", label: "Español" },
+            { code: "en-GB", label: "English" },
+          ],
+          venueDefault: "es-ES",
+          loginDefault: "en-GB",
+        }),
+      });
+      await flush(el);
+      expect(currentLocale()).toBe("en-GB");
+      expect(
+        lock(el)!.shadowRoot!.querySelector("wt-language-chooser")!.getAttribute("active"),
+      ).toBe("en-GB");
+    });
+
+    it("shows the browser language on the unenrolled device setup screen", async () => {
+      const { el } = await mountApp({
+        getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+        getLocales: vi.fn().mockResolvedValue({
+          locales: [],
+          venueDefault: "es-ES",
+          loginDefault: "en-GB",
+        }),
+      });
+      await flush(el);
+      const enrol = enrolScreen(el)!;
+      expect(enrol).not.toBeNull();
+      expect(currentLocale()).toBe("en-GB");
+      expect(enrol.shadowRoot!.querySelector("wt-language-chooser")!.getAttribute("active")).toBe(
+        "en-GB",
+      );
+    });
+
+    it("keeps a person's pre-login pick when the browser language reply arrives later", async () => {
+      let answerLocales!: (value: {
+        locales: Array<{ code: string; label: string }>;
+        venueDefault: string;
+        loginDefault: string;
+      }) => void;
+      const getLocales = vi.fn(
+        () =>
+          new Promise<Awaited<ReturnType<TillApi["getLocales"]>>>((r) => {
+            answerLocales = r;
+          }),
+      );
+      const { el } = await mountApp({ getLocales });
+      await flush(el);
+      emit(lock(el)!, "wt-locale-selected", { code: "en-GB" });
+      await flush(el);
+      answerLocales({ locales: [], venueDefault: "es-ES", loginDefault: "es-ES" });
+      await flush(el);
+      expect(currentLocale()).toBe("en-GB");
+    });
+
+    it("keeps a signed-in operator's saved language when the browser reply arrives during login", async () => {
+      let answerLocales!: (value: Awaited<ReturnType<TillApi["getLocales"]>>) => void;
+      let answerOffers!: (value: ZoneOfferCatalogue) => void;
+      const { el } = await mountApp({
+        getLocales: vi.fn(
+          () =>
+            new Promise<Awaited<ReturnType<TillApi["getLocales"]>>>((r) => {
+              answerLocales = r;
+            }),
+        ),
+        listDefaultZoneOffers: vi.fn(
+          () =>
+            new Promise<ZoneOfferCatalogue>((r) => {
+              answerOffers = r;
+            }),
+        ),
+      });
+      await flush(el);
+      emit(lock(el)!, "logged-in", {
+        personId: "p1",
+        displayName: "Ana",
+        permissions: [],
+        locale: "en-GB",
+      });
+      await el.updateComplete;
+      answerLocales({ locales: [], venueDefault: "es-ES", loginDefault: "es-ES" });
+      await flush(el);
+      expect(currentLocale()).toBe("en-GB");
+      answerOffers(fixtureOffers({ menus: [defaultMenu], products: [cafe] }));
+      await flush(el);
+    });
+
+    it("returns to the browser match after an operator logs out", async () => {
+      const { el } = await mountApp({
+        getLocales: vi.fn().mockResolvedValue({
+          locales: [],
+          venueDefault: "es-ES",
+          loginDefault: "en-GB",
+        }),
+      });
+      const c = await toCounterAs(el, "es-ES");
+      expect(currentLocale()).toBe("es-ES");
+      emit(c, "logout");
+      await flush(el);
+      expect(currentLocale()).toBe("en-GB");
+    });
+
+    it("applies a late browser match after logout when it was unavailable during login", async () => {
+      let answerLocales!: (value: Awaited<ReturnType<TillApi["getLocales"]>>) => void;
+      const { el } = await mountApp({
+        getLocales: vi.fn(
+          () =>
+            new Promise<Awaited<ReturnType<TillApi["getLocales"]>>>((r) => {
+              answerLocales = r;
+            }),
+        ),
+      });
+      const c = await toCounterAs(el, "es-ES");
+      emit(c, "logout");
+      await flush(el);
+      expect(currentLocale()).toBe("es-ES");
+      answerLocales({ locales: [], venueDefault: "es-ES", loginDefault: "en-GB" });
+      await flush(el);
+      expect(currentLocale()).toBe("en-GB");
+    });
 
     it("after boot the UI is the venue default (getTill.locale), before any login", async () => {
       // The venue default differs from the es-ES starting point so the switch is observable. #boot

@@ -2429,14 +2429,14 @@ nudge sit in cards; the review, provisioning and done screens share one mode pil
 (`apps/setup/src/mode-pill.ts`); and the screen's styles hold no `rem` or `em` sizes, hex colours
 or fallback values.
 
-**The till ignores the browser's languages before anyone signs in (A245, owner 2026-10-03) — OPEN,
-queued as lane A's W35.** Finishing setup in English and clicking Till opens the device setup screen
-("Configurar este dispositivo") in Spanish. Before a login the till applies the venue's language
-(`setLocale(till.locale)` in `#boot`, `apps/till/src/till-app.ts`; the field starts as `es-ES`),
-where the dashboard matches the browser's `Accept-Language` against the installed languages
-(`loginDefault`, `resolveLoginLocale` in `apps/server/src/me-api.ts`). The owner: "it should be
-following my preferred browser languages". In the owner's screenshot the enrol screen also showed
-no language chooser, although `till-enrol-screen.ts` renders one; not investigated.
+**The till follows the browser's languages before anyone signs in (A245, owner 2026-10-03) — DONE
+in W35.** The public till locales response now uses the dashboard's `resolveLoginLocale` match of
+`Accept-Language`, with the venue's language as fallback. The till applies that match on the enrol
+and lock screens and after logout; a person's choice or saved language wins over a late response.
+The receipt language still comes from the location. In the Demo stack's fresh browser, the direct
+enrol screen's language chooser was visible at 1280 and 390 pixels in both themes, and the same was
+true inside Demo's device setup dialog. Screenshots: `~/waitron-campaign/w35-shots/`. The owner's
+earlier missing chooser was not reproduced; no separate chooser change was made.
 
 **A Demo bar on every page, so a new user can find their way (A246, owner 2026-10-03) — OPEN,
 queued as lane A's W36.** Clicking Till first after setup lands on the device setup screen with no

@@ -1261,11 +1261,28 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     mountTillApi(app, deps(suite.db), collect([]));
 
     // No cookie — the till app fetches the language catalogue before any session exists.
-    const res = await app.request("/api/locales");
+    const res = await app.request("/api/locales", {
+      headers: { "Accept-Language": "en-GB,en;q=0.9" },
+    });
     expect(res.status).toBe(200);
     // The static catalogue verbatim (es-ES + en-GB) plus the geography-derived default for this ES
     // venue (`deps.venueLocale`, es-ES).
-    expect(await res.json()).toEqual({ locales: SUPPORTED_LOCALES, venueDefault: "es-ES" });
+    expect(await res.json()).toEqual({
+      locales: SUPPORTED_LOCALES,
+      venueDefault: "es-ES",
+      loginDefault: "en-GB",
+    });
+    expect(res.headers.get("Vary")).toBe("Accept-Language");
+  });
+
+  it("GET /api/locales falls back to the venue language when the browser has no installed match", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const res = await app.request("/api/locales", {
+      headers: { "Accept-Language": "fr-FR,ja;q=0.8" },
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).loginDefault).toBe("es-ES");
   });
 
   it("GET /api/till echoes cfg.tipsEnabled, proving it reads config rather than a hardcoded value", async () => {

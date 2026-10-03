@@ -178,6 +178,7 @@ import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 import { mountBillLookupApi } from "./bill-lookup-api.js";
 import { resolveInstalledReceiptLanguageRules } from "@waitron/country-packs";
 import { geographyOf } from "./venue-locale.js";
+import { resolveLoginLocale } from "./login-locale.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
@@ -1117,7 +1118,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   // Unauthenticated: the till fetches it before login.
   app.get("/api/locales", (c) =>
-    run(c, log, async () => c.json({ locales: SUPPORTED_LOCALES, venueDefault: deps.venueLocale })),
+    run(c, log, async () => {
+      c.header("Vary", "Accept-Language");
+      return c.json({
+        locales: SUPPORTED_LOCALES,
+        venueDefault: deps.venueLocale,
+        loginDefault: resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
+      });
+    }),
   );
 
   app.get("/api/products", (c) =>
