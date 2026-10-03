@@ -87,6 +87,7 @@ RUN set -eux; \
 # the non-root process (same rule as the app image's /var/lib/waitron paths).
 RUN install -d -o node -g node /var/lib/waitron-print-agent
 COPY --from=build --chown=node:node /src/apps/print-agent/dist/print-agent.js /app/print-agent.js
+COPY --from=build --chown=node:node /src/apps/print-agent/dist/print-agent.js.NOTICES.txt /app/third-party/npm/print-agent/print-agent.js.NOTICES.txt
 COPY --from=build --chown=node:node /src/apps/print-agent/dist/rfcomm-send.py /app/rfcomm-send.py
 ENV NODE_ENV=production \
   WAITRON_STATE_DIR=/var/lib/waitron-print-agent \
@@ -184,6 +185,17 @@ COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/ /app/web/setup/
 COPY --from=build --chown=waitron:waitron /src/apps/server/scripts/demo-seed/media/ /app/demo-media/
 COPY --from=build --chown=waitron:waitron /sharp-runtime/node_modules/ /app/node_modules/
 COPY --from=build --chown=waitron:waitron /src/deploy/third-party/ /app/third-party/
+COPY --from=build --chown=waitron:waitron \
+  /src/apps/server/dist/server.js.NOTICES.txt \
+  /src/apps/server/dist/node-entry.js.NOTICES.txt \
+  /src/apps/server/dist/bin-restore.js.NOTICES.txt \
+  /src/apps/server/dist/bin-rejoin.js.NOTICES.txt \
+  /src/apps/server/dist/bin-break-glass.js.NOTICES.txt \
+  /src/apps/server/dist/bin-recovery.js.NOTICES.txt \
+  /app/third-party/npm/server/
+COPY --from=build --chown=waitron:waitron /src/apps/till/dist/THIRD-PARTY-NOTICES.txt /app/third-party/npm/till/THIRD-PARTY-NOTICES.txt
+COPY --from=build --chown=waitron:waitron /src/apps/dashboard/dist/THIRD-PARTY-NOTICES.txt /app/third-party/npm/dashboard/THIRD-PARTY-NOTICES.txt
+COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/THIRD-PARTY-NOTICES.txt /app/third-party/npm/setup/THIRD-PARTY-NOTICES.txt
 COPY --from=build --chown=waitron:waitron /third-party/libvips/ /app/third-party/libvips/
 
 # Fixed in the image, never operator-set: the server's own defaults for these sit beside the bundle,

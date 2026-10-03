@@ -160,8 +160,9 @@ for Litestream they compare `NOTICES.txt`'s `Litestream version:` line with the 
 module list with the binary; for Iosevka they check that `deploy/third-party/iosevka/LICENSE.md`
 carries the copyright line `packages/printing/src/glyphs.ts`'s header names and that the
 provenance file names the header's font sha256, never that the table was drawn from that font
-(added 2026-10-01, C107). The npm packages bundled into the server, the web apps and the print-agent have no notice
-file; the print-agent image (`deploy/Dockerfile`'s `print-agent` stage) ships the Debian copyright
+(added 2026-10-01, C107). Bundled npm packages now have generated notice files in both images
+(`scripts/npm-bundle-notices.mjs`; the image-smoke job checks that they are present). The print-agent
+image (`deploy/Dockerfile`'s `print-agent` stage) also ships the Debian copyright
 files of python3-minimal and the packages its install added under `/app/third-party/python3-minimal/`,
 and none for bluez (`docs/backlog.md`).
 

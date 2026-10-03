@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 
 import { defineConfig, type PluginOption } from "vite";
 import { devServerProxy } from "../../scripts/dev-server-proxy.js";
+import { viteNpmNotices } from "../../scripts/npm-bundle-notices.mjs";
 
 import { buildManifest } from "./src/manifest.js";
 
@@ -24,7 +25,7 @@ function webManifest(): PluginOption {
 }
 
 export default defineConfig({
-  plugins: [webManifest()],
+  plugins: [webManifest(), viteNpmNotices()],
   // Favicons and app icons are served from the ONE brand directory in packages/ui, so a redrawn
   // mark cannot go stale. A relative path, not `import.meta.resolve`: `@waitron/ui` has no
   // `exports` map. This line is read as text by `scripts/brand-icons.test.ts`.
