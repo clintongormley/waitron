@@ -57,6 +57,7 @@ export * from "./options.js";
 export * from "./extra-contract.js";
 export * from "./extras.js";
 export * from "./extra-projection.js";
+export * from "./extra-usage.js";
 export * from "./product-modifiers.js";
 export * from "./offered-modifiers.js";
 

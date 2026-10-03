@@ -1,7 +1,8 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { buildMenuDocuments } from "./menu-document.js";
 import { extraListItems, extraLists } from "./schema/extras.js";
+import { productUnits } from "./schema/units.js";
 
 export interface ExtraOfferUsage {
   productId: string;
@@ -63,4 +64,16 @@ export async function extraOfferUsage(
     });
   }
   return [...byProduct.values()];
+}
+
+export async function extraOfferUsageForUnitChange(
+  tx: Transaction,
+  productId: string,
+): Promise<ExtraOfferUsage[]> {
+  const inherited = await tx
+    .select({ id: products.id })
+    .from(products)
+    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .where(and(eq(products.parentId, productId), isNull(productUnits.productId)));
+  return extraOfferUsage(tx, [productId, ...inherited.map((row) => row.id)]);
 }

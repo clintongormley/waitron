@@ -71,6 +71,7 @@ import {
   updateExtraList,
   deleteExtraList,
   extraListDependants,
+  extraOfferUsageForUnitChange,
   listProducts,
   removeCatalogueFromLocation,
   setLocationDefaultCatalogue,
@@ -1191,6 +1192,19 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const productId = requireUuidParam(c.req.param("id"), "ProductId");
       return c.json(await gated(sessionId, (tx) => readProductEditor(tx, productId)));
+    }),
+  );
+
+  app.get("/management-api/products/:id/extra-usage", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const productId = requireUuidParam(c.req.param("id"), "ProductId");
+      return c.json(
+        await gated(sessionId, async (tx) => {
+          await readProductEditor(tx, productId);
+          return extraOfferUsageForUnitChange(tx, productId);
+        }),
+      );
     }),
   );
 
