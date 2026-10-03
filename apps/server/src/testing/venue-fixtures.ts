@@ -10,6 +10,7 @@ import { hashPassword, hashPin, persons, startManagementSession } from "@waitron
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
+  jobOrigin,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
@@ -17,7 +18,7 @@ import {
 } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "../modules.js";
-import type { TillConfig } from "../till-config.js";
+import type { OriginConfig } from "../till-config.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // Shared venue provisioning, extracted so the suites that need it stand up one fixture rather than
@@ -26,7 +27,8 @@ import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed
 const LOCALE = "es-ES";
 
 export interface Venue {
-  cfg: TillConfig;
+  /** Orders a test opens directly come from the dashboard, so no device is seeded for them. */
+  cfg: OriginConfig;
   /** The location's provisioned default kitchen station — where `placeOrder` fires items, and the
    *  station the KDS device below binds to. */
   defaultStationId: string;
@@ -39,8 +41,9 @@ export interface Venue {
   staffCookie: string;
 }
 
-function tillConfigFromVenue(venue: VenueResult): TillConfig {
+function tillConfigFromVenue(venue: VenueResult): OriginConfig {
   return {
+    origin: jobOrigin("dashboard"),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),

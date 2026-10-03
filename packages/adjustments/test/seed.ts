@@ -1,24 +1,20 @@
-import { locations, tills, workingOrders, type Database } from "@waitron/db";
+import { locations, workingOrders, type Database } from "@waitron/db";
 import { decimal } from "@waitron/shared";
 import { createAdjustmentReason } from "../src/operations.js";
 import type { AdjustmentReason } from "../src/policy.js";
 
 let orderNumber = 0;
 
-/** An open working order on a fresh location and till; returns its id. */
+/** An open working order on a fresh location, opened from the dashboard; returns its id. */
 export async function seedWorkingOrder(db: Database): Promise<string> {
   const [location] = await db
     .insert(locations)
     .values({ name: "Dining room", invoiceLocales: ["es"], operationDescription: "Hospitality" })
     .returning({ id: locations.id });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId: location!.id, name: "Till 1" })
-    .returning({ id: tills.id });
   orderNumber += 1;
   const [order] = await db
     .insert(workingOrders)
-    .values({ tillId: till!.id, orderNumber })
+    .values({ source: "dashboard", deviceId: null, locationId: location!.id, orderNumber })
     .returning({ id: workingOrders.id });
   return order!.id;
 }

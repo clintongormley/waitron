@@ -31,8 +31,7 @@ async function ordersBlockingReceiptLanguage(tx: Transaction, locationId: string
   const { rows } = await tx.execute<{ count: number }>(sql`
     select cast(count(*) as int) as count
     from working_orders wo
-    join tills t on t.id = wo.till_id
-    where t.location_id = ${locationId}
+    where wo.location_id = ${locationId}
       and wo.status = 'open'
       and exists (select 1 from working_order_lines l where l.working_order_id = wo.id)`);
   return rows[0]!.count;

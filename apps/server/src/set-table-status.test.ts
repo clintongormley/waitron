@@ -11,8 +11,9 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig, TillConfig } from "./till-config.js";
 import { createTable, setTableStatus } from "./tables.js";
 import { listTablesWithState } from "./working-order.js";
 import "./errors.js";
@@ -31,7 +32,7 @@ beforeAll(() => {
 });
 
 interface Seeded {
-  cfg: TillConfig;
+  cfg: OriginConfig;
   tableId: string;
   activeStatusId: string;
   inactiveStatusId: string;
@@ -55,7 +56,8 @@ async function setupVenue(): Promise<Seeded> {
     .values({ locationId, name: "Caja 1" })
     .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
-  const cfg: TillConfig = {
+  const cfg: OriginConfig = {
+    origin: jobOrigin("dashboard"),
     tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),

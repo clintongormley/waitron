@@ -184,6 +184,34 @@ describe("POST /api/tables/:id/seat", () => {
     expect(tab!.partyId).toBe(seated.partyId);
   });
 
+  it("opens the tab as the device that seated it, at the venue's location", async () => {
+    const deviceId = await seedSessionDevice(suite.db, cfg);
+    const session = await withTransaction(suite.db, (tx) =>
+      loginWithPin(tx, { deviceId, personId: ana.id, pin: "5555" }),
+    );
+    const res = await app(suite.db).request(`/api/tables/${await table()}/seat`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `${SESSION_COOKIE}=${session.token}`,
+      },
+      body: JSON.stringify({ guestCount: 2 }),
+    });
+    expect(res.status).toBe(200);
+    const { tabId } = (await res.json()) as { tabId: string };
+    const [tab] = await withTransaction(suite.db, (tx) =>
+      tx
+        .select({
+          source: workingOrders.source,
+          deviceId: workingOrders.deviceId,
+          locationId: workingOrders.locationId,
+        })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, tabId)),
+    );
+    expect(tab).toEqual({ source: "device", deviceId, locationId: cfg.locationId });
+  });
+
   it("seats without a guest count, absent or null", async () => {
     expect((await partyRow((await seat(null)).partyId)).guestCount).toBeNull();
     const res = await post(`/api/tables/${await table()}/seat`, {});

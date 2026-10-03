@@ -786,7 +786,9 @@ describe("parkOrder", () => {
       label: "John",
       orderNumber: 1,
       nodeId: cfg.nodeId,
-      tillId: cfg.tillId,
+      source: "device",
+      deviceId: cfg.origin.deviceId,
+      locationId: cfg.locationId,
       settledAt: null,
     });
 
@@ -1258,8 +1260,8 @@ async function seedForeignNodeOrder(cfg: DeviceRequestConfig): Promise<string> {
   const id = randomUUID();
   const otherNode = await seedNode(db, cfg.locationId);
   await db.execute(sql`
-    insert into working_orders (id, till_id, node_id, order_number, status, opened_at)
-    values (${id}, ${cfg.tillId}, ${otherNode}, 1, 'open', ${nowIso()})`);
+    insert into working_orders (id, source, device_id, location_id, node_id, order_number, status, opened_at)
+    values (${id}, 'device', ${cfg.origin.deviceId}, ${cfg.locationId}, ${otherNode}, 1, 'open', ${nowIso()})`);
   return id;
 }
 
@@ -2240,7 +2242,7 @@ describe("updateHeldOrder", () => {
     ];
     await updateProducts(cfg, id, { lines: newLines, label: "Mesa 7" });
 
-    // order_number / node_id / till_id are untouched; only the label changed and the
+    // order_number / node_id / origin are untouched; only the label changed and the
     // status stays open (the update ran over the enforce_transition trigger, not around it).
     const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
     expect(wo).toMatchObject({
@@ -2248,7 +2250,9 @@ describe("updateHeldOrder", () => {
       label: "Mesa 7",
       orderNumber: 1,
       nodeId: cfg.nodeId,
-      tillId: cfg.tillId,
+      source: "device",
+      deviceId: cfg.origin.deviceId,
+      locationId: cfg.locationId,
       settledAt: null,
     });
 

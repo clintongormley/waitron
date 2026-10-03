@@ -25,6 +25,7 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { TillConfig } from "./till-config.js";
 import { listExpoQueue, listStationQueue, listTablesWithState } from "./working-order.js";
+import { dashboardOrderAt } from "./testing/session-device.js";
 
 /** The three kitchen/floor read models, run against a real migrated venue database. */
 
@@ -64,9 +65,14 @@ beforeAll(async () => {
     .insert(parties)
     .values({ openedBy: randomUUID() })
     .returning({ id: parties.id });
-  await db
-    .insert(workingOrders)
-    .values({ id: orderId, tillId, nodeId, orderNumber: 1, status: "open", partyId: party!.id });
+  await db.insert(workingOrders).values({
+    id: orderId,
+    ...dashboardOrderAt(locationId),
+    nodeId,
+    orderNumber: 1,
+    status: "open",
+    partyId: party!.id,
+  });
   const lineId = randomUUID();
   await db.insert(workingOrderLines).values({
     id: lineId,
@@ -201,7 +207,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
     const orderId = randomUUID();
     await db.insert(workingOrders).values({
       id: orderId,
-      tillId: cfg.tillId,
+      ...dashboardOrderAt(cfg.locationId),
       nodeId: cfg.nodeId,
       orderNumber: 2,
       status: "open",

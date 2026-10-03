@@ -31,6 +31,7 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -44,7 +45,7 @@ import { attachPrinterToStation } from "./station-printers.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { addTabRound } from "./working-order.js";
@@ -59,7 +60,7 @@ import { seedSessionDevice } from "./testing/session-device.js";
 // tickets stay on the check. One case finds a split-off check in Held orders and pays it through the
 // sale route. The split and un-join verbs themselves are tested in
 // `split-bill.test.ts` and `split-bill.fiscal.test.ts`.
-let cfg: TillConfig;
+let cfg: OriginConfig;
 let ana: { id: string };
 // One product so a tab can open with a real line to split/carry across an un-join — `openTab` prices it
 // and the `check_locales` trigger demands its `es-ES` description key match the location's `es-ES` locale.
@@ -118,8 +119,9 @@ function collect(
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
+function makeCfg(tillId: string, locationId: string, nodeId: string): OriginConfig {
   return {
+    origin: jobOrigin("dashboard"),
     tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -195,8 +197,8 @@ async function setupTabApp(
   mountTillApi(app, d, collect([]));
   const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
   const { tabA, tableA } = await withTransaction(suite.db, async (tx) => {
-    const a = await createTable(tx, d.cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
-    const tabAResult = await openPartyTab(tx, d.cfg, {
+    const a = await createTable(tx, cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
+    const tabAResult = await openPartyTab(tx, cfg, {
       tableId: a.id,
       lines: [{ menuItemId: cafeMenuItemId, quantity: aQty }],
     });
@@ -206,7 +208,7 @@ async function setupTabApp(
 }
 
 /** The suite shares one database, and an earlier case may already have seeded the default station. */
-async function kitchenStation(config: TillConfig): Promise<string> {
+async function kitchenStation(config: OriginConfig): Promise<string> {
   const [existing] = await suite.db
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
@@ -225,15 +227,15 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
     printerId: string;
     ticket: { id: string; quantity: number | null };
   }> {
-    const { app, d, tabA, cookie } = await setupTabApp("1");
-    const stationId = await kitchenStation(d.cfg);
+    const { app, tabA, cookie } = await setupTabApp("1");
+    const stationId = await kitchenStation(cfg);
     const offers = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, d.cfg, { zone: "tables" }),
+      offerProducts(tx, cfg, { zone: "tables" }),
     );
     const printerId = await withTransaction(suite.db, async (tx) => {
       const { id } = await createPrinter(
         tx,
-        { locationId: d.cfg.locationId },
+        { locationId: cfg.locationId },
         {
           name: `P-${randomUUID().slice(0, 8)}`,
           transport: "cloud_poll",
@@ -244,7 +246,7 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
       return id;
     });
     await withTransaction(suite.db, (tx) =>
-      addTabRound(tx, d.cfg, tabA, [{ menuItemId: offers.offerFor(cafeId), quantity: "2" }]),
+      addTabRound(tx, cfg, tabA, [{ menuItemId: offers.offerFor(cafeId), quantity: "2" }]),
     );
     const [ticket] = await ticketsOn(tabA);
     expect(ticket).toMatchObject({ lineNo: 2, quantity: 2000 });
@@ -370,7 +372,7 @@ describe("POST /api/bills/:id/merge of a seated party's check back into its tab"
         body: JSON.stringify(body),
       });
     const table = await withTransaction(suite.db, (tx) =>
-      createTable(tx, d.cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId }),
+      createTable(tx, cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId }),
     );
     const seated = await post(`/api/tables/${table.id}/seat`, { guestCount: 2 });
     expect(seated.status).toBe(200);
@@ -379,9 +381,9 @@ describe("POST /api/bills/:id/merge of a seated party's check back into its tab"
       partyId: string;
       revision: number;
     };
-    await kitchenStation(d.cfg);
+    await kitchenStation(cfg);
     const offers = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, d.cfg, { zone: "tables" }),
+      offerProducts(tx, cfg, { zone: "tables" }),
     );
     const round = await post(`/api/parties/${partyId}/groups`, {
       submissionId: randomUUID(),

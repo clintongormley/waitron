@@ -18,7 +18,7 @@ import {
   requireBillOfParty,
   setMainBill,
 } from "./parties.js";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig, TillConfig } from "./till-config.js";
 import {
   assertDistinctTransferLines,
   assertServiceModesMatch,
@@ -130,7 +130,7 @@ async function requireUntouchedPair(
  */
 export async function splitBill(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   billId: string,
   transfers: Transfers,
   command: BillCommand,

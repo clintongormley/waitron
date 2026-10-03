@@ -17,6 +17,8 @@ import { locations, tenants, tills } from "./tenants.js";
 
 const LOCATION = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL = "bbbbbbbb-1111-4000-8000-000000000001";
+/** An order opened from the dashboard at `LOCATION`, needing no device. */
+const DASHBOARD = { source: "dashboard", deviceId: null, locationId: LOCATION } as const;
 const OPERATOR = "bbbbbbbb-2222-4000-8000-000000000001";
 
 describe("parties, party_tables and service_commands", () => {
@@ -189,7 +191,7 @@ describe("parties, party_tables and service_commands", () => {
     const [order] = await inTx((tx) =>
       tx
         .insert(workingOrders)
-        .values({ tillId: TILL, nodeId, orderNumber: orderSeq, partyId: id })
+        .values({ ...DASHBOARD, nodeId, orderNumber: orderSeq, partyId: id })
         .returning({ partyId: workingOrders.partyId }),
     );
     expect(order!.partyId).toBe(id);

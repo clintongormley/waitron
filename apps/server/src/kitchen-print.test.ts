@@ -30,7 +30,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, deactivatePrinter, updatePrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import { thousandthsToDecimal } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig } from "./till-config.js";
 import { createCourse, createStation, setProductCourse, updateStation } from "./kitchen.js";
 import { addTabRound, createOpenOrder, fireCourse, fireLines } from "./working-order.js";
 import {
@@ -98,11 +98,11 @@ afterEach(() => {
 });
 
 /** The location scope the printing verbs run under. */
-function printCfg(cfg: TillConfig): PrintConfig {
+function printCfg(cfg: OriginConfig): PrintConfig {
   return { locationId: cfg.locationId };
 }
 
-function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
     return fn(tx);
@@ -389,7 +389,7 @@ describe("show the rest of the order", () => {
 /** Create a sellable product, optionally routed to a station and/or a course. */
 async function makeProduct(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   catalogueId: string,
   name: string,
   route: { stationId?: string; courseId?: string } = {},
@@ -408,7 +408,7 @@ async function makeProduct(
 }
 
 /** Create a live station printer. */
-async function makePrinter(tx: Transaction, cfg: TillConfig, name: string): Promise<string> {
+async function makePrinter(tx: Transaction, cfg: OriginConfig, name: string): Promise<string> {
   const { id } = await createPrinter(tx, printCfg(cfg), {
     name,
     transport: "cloud_poll",
@@ -419,7 +419,7 @@ async function makePrinter(tx: Transaction, cfg: TillConfig, name: string): Prom
 
 async function makeWatcherPrinter(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   name: string,
   stationIds: string[],
   watcherId?: string,
@@ -448,7 +448,7 @@ async function makeWatcherPrinter(
  */
 async function fireContextlessDish(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   dishId: string,
   pickIds: string[],
 ): Promise<string> {
@@ -636,7 +636,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     const { cfg, catalogueId } = await setupVenue();
     // A till whose UI locale is NOT among the venue's invoice locales — name resolution must fall back to
     // the venue-language description rather than a blank line.
-    const foreignCfg: TillConfig = { ...cfg, locale: "de-DE" };
+    const foreignCfg: OriginConfig = { ...cfg, locale: "de-DE" };
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer");
@@ -1014,7 +1014,7 @@ describe("a dish sold by the piece prints no unit", () => {
    * Pulpo in the kg seed, Almendras in grams, and Pan in a stored unit spelled exactly like Each but
    * not seeded as it.
    */
-  async function sellInEveryUnit(tx: Transaction, cfg: TillConfig, catalogueId: string) {
+  async function sellInEveryUnit(tx: Transaction, cfg: OriginConfig, catalogueId: string) {
     const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
     const printerId = await makePrinter(tx, cfg, "Cocina printer");
     await attachPrinterToStation(tx, { stationId: cocina.id, printerId });

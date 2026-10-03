@@ -75,7 +75,14 @@ describe("an order's delivery table", () => {
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(workingOrders)
-        .values({ tillId: TILL_A, nodeId: nodeA, orderNumber: orderSeq, status: "open" })
+        .values({
+          source: "dashboard",
+          deviceId: null,
+          locationId: LOCATION_A,
+          nodeId: nodeA,
+          orderNumber: orderSeq,
+          status: "open",
+        })
         .returning({ id: workingOrders.id });
       return row!.id;
     });

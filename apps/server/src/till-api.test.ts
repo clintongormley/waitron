@@ -2191,7 +2191,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     }
   });
 
-  it("POST parks an order on the configured till and returns { id, orderNumber }", async () => {
+  it("POST parks an order as the session's device and returns { id, orderNumber }", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
@@ -2209,11 +2209,19 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     expect(Number.isInteger(body.orderNumber)).toBe(true);
     expect(body.orderNumber).toBeGreaterThanOrEqual(1);
 
-    // The order really persisted OPEN on the seeded till.
-    const rows = await suite.db.execute<{ status: string; till_id: string }>(
-      sql`select status, till_id from working_orders where id = ${id}`,
-    );
-    expect(rows.rows[0]).toMatchObject({ status: "open", till_id: cfg.tillId });
+    // The order really persisted OPEN, opened by the session's device at the venue's location.
+    const rows = await suite.db.execute<{
+      status: string;
+      source: string;
+      device_id: string;
+      location_id: string;
+    }>(sql`select status, source, device_id, location_id from working_orders where id = ${id}`);
+    expect(rows.rows[0]).toEqual({
+      status: "open",
+      source: "device",
+      device_id: sessionDeviceId,
+      location_id: cfg.locationId,
+    });
   });
 
   it("POST prices an allowed menu offer and rejects an offer outside the selected zone", async () => {

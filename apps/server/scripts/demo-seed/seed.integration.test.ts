@@ -19,8 +19,9 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
-import type { TillConfig } from "../../src/till-config.js";
+import type { OriginConfig } from "../../src/till-config.js";
 import { getHeldOrder, parkOrder } from "../../src/working-order.js";
 import { MEDIA_FILENAME } from "@waitron/media";
 import { readImageBytes } from "@waitron/media";
@@ -51,8 +52,9 @@ interface Venue {
   locationId: string;
 }
 
-function tillConfigFor(venue: Venue): TillConfig {
+function tillConfigFor(venue: Venue): OriginConfig {
   return {
+    origin: jobOrigin("dashboard"),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesId),

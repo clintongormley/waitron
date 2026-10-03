@@ -26,8 +26,9 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig } from "./till-config.js";
 import {
   clearPlacement,
   createTable,
@@ -66,7 +67,7 @@ beforeAll(() => {
   db = suite.db;
 });
 
-async function setupVenue(opts: { timeZone?: string } = {}): Promise<TillConfig> {
+async function setupVenue(opts: { timeZone?: string } = {}): Promise<OriginConfig> {
   await seedTenant(db);
   const timeZone = opts.timeZone ?? DEFAULT_TIME_ZONE;
   // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are
@@ -87,6 +88,7 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<TillConfig>
     .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
+    origin: jobOrigin("dashboard"),
     tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -99,7 +101,7 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<TillConfig>
   };
 }
 
-function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
+function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
     return fn(tx);
@@ -220,7 +222,7 @@ describe("table CRUD", () => {
   it("createTable rethrows a NON-unique DB error raw, not as table.label_taken", async () => {
     const cfg = await setupVenue();
     // A location id that names no row: the location foreign key refuses, not the label unique.
-    const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
+    const badCfg: OriginConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
     const err = await asApp(cfg, (tx) => createTable(tx, badCfg, { label: "5" })).catch(
       (e: unknown) => e,
     );
@@ -335,7 +337,7 @@ describe("zone CRUD", () => {
   it("createZone rethrows a NON-unique DB error raw, not as zone.name_taken", async () => {
     const cfg = await setupVenue();
     // A location id that names no row: the location foreign key refuses, not the name unique.
-    const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
+    const badCfg: OriginConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
     const err = await asApp(cfg, (tx) => createZone(tx, badCfg, { name: "Big" })).catch(
       (e: unknown) => e,
     );
@@ -475,7 +477,7 @@ describe("table placement", () => {
 // Products offered in the table's zone, and a kitchen station they route to, for the
 // tab → fire → bump → serve path.
 async function setupTabVenue(): Promise<{
-  cfg: TillConfig;
+  cfg: OriginConfig;
   cafeId: string;
   aguaId: string;
   tableId: string;
@@ -500,7 +502,8 @@ async function setupTabVenue(): Promise<{
     .values({ locationId, name: "Caja 1" })
     .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
-  const cfg: TillConfig = {
+  const cfg: OriginConfig = {
+    origin: jobOrigin("dashboard"),
     tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),

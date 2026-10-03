@@ -252,9 +252,10 @@ const EXPECTED_FOREIGN_KEYS = [
   ["working_order_lines", ["product_id"], "products"],
   ["working_order_lines", ["working_order_id"], "working_orders"],
   ["working_orders", ["delivery_table_id"], "dining_tables"],
+  ["working_orders", ["device_id"], "devices"],
+  ["working_orders", ["location_id"], "locations"],
   ["working_orders", ["node_id"], "nodes"],
   ["working_orders", ["party_id"], "parties"],
-  ["working_orders", ["till_id"], "tills"],
   ["zone_menus", ["menu_id"], "catalogues"],
   ["zone_menus", ["zone_id"], "zone_service_policies"],
   ["zone_service_policies", ["default_menu_id"], "catalogues"],
@@ -577,6 +578,8 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "working_order_lines_unit_precision_ck",
   "working_order_lines_vat_class_ck",
   "working_orders_settled_at_ck",
+  "working_orders_source_ck",
+  "working_orders_source_device_ck",
   "zone_service_policies_mode_ck",
 ];
 

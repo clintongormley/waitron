@@ -27,11 +27,12 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
 import { addTabRound, parkOrder } from "./working-order.js";
 import { createStation } from "./kitchen.js";
 import { createTable } from "./tables.js";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig } from "./till-config.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { claimFolderFor, routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -43,7 +44,7 @@ const suite = useVenueDb({
 });
 
 interface Venue {
-  cfg: TillConfig;
+  cfg: OriginConfig;
   catalogueId: string;
   cafe: string;
   tostada: string;
@@ -67,7 +68,8 @@ async function seedVenue(db: Database): Promise<Venue> {
     .insert(tills)
     .values({ locationId, name: "Caja 1" })
     .returning({ id: tills.id });
-  const cfg: TillConfig = {
+  const cfg: OriginConfig = {
+    origin: jobOrigin("dashboard"),
     tillId: brandTillId(till!.id),
     nodeId: brandNodeId(await seedNode(db, locationId)),
     seriesId: brandSeriesId(randomUUID()),

@@ -9,7 +9,7 @@ import {
   deleteCategory,
   readCategory,
 } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, locations, tills, withTransaction, workingOrders } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction, workingOrders } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -63,10 +63,6 @@ it("deleting a category removes its claim and exception with the category", asyn
 it("an open order keeps its copied category label after the category is deleted", async () => {
   const { locationId } = await venue();
   await withTransaction(suite.db, async (tx) => {
-    const [till] = await tx
-      .insert(tills)
-      .values({ locationId, name: "Till" })
-      .returning({ id: tills.id });
     const catalogue = await createCatalogue(tx, { name: "Menu" });
     const category = await createCategory(tx, { name: "Bakery" });
     const unit = await createUnit(
@@ -84,7 +80,13 @@ it("an open order keeps its copied category label after the category is deleted"
     });
     const [order] = await tx
       .insert(workingOrders)
-      .values({ tillId: till!.id, orderNumber: 1, label: "Historical" })
+      .values({
+        source: "dashboard",
+        deviceId: null,
+        locationId,
+        orderNumber: 1,
+        label: "Historical",
+      })
       .returning({ id: workingOrders.id });
     // Raw SQL so the stored counts are written literally; `id` is named because only the insert
     // builder generates one.

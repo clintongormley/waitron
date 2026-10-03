@@ -43,6 +43,7 @@ import {
   thousandthsToDecimal,
   tillId as brandTillId,
   deviceOrigin,
+  jobOrigin,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -52,7 +53,7 @@ import { createTable } from "./tables.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig } from "./till-config.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { revokedDeviceSessionCookie } from "./testing/session-device.js";
@@ -83,7 +84,7 @@ let backend: FiscalBackend;
 let clock: TrustedClock;
 
 interface Venue {
-  cfg: TillConfig;
+  cfg: OriginConfig;
   offers: ZoneOffers;
   /** Product id by the staff name. */
   productIds: Map<string, string>;
@@ -186,7 +187,8 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     ),
     { db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
+  const cfg: OriginConfig = {
+    origin: jobOrigin("dashboard"),
     tillId: brandTillId(provisioned.tillId),
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),

@@ -30,8 +30,9 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig, TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { createOpenOrder } from "./working-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -110,7 +111,8 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
       .values({ locationId, name: "Caja 1" })
       .returning({ id: tills.id });
     const nodeId = await seedNode(suite.db, brandLocationId(locationId));
-    const cfg: TillConfig = {
+    const cfg: OriginConfig = {
+      origin: jobOrigin("dashboard"),
       tillId: brandTillId(till!.id),
       nodeId: brandNodeId(nodeId),
       seriesId: brandSeriesId(randomUUID()),

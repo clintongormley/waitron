@@ -2814,7 +2814,9 @@ describe("startServer, against a migrated venue directory", () => {
     const orderId = randomUUID();
     await sharedDb.insert(workingOrders).values({
       id: orderId,
-      tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
+      source: "dashboard",
+      deviceId: null,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
       orderNumber: 990_001,
       paymentAttemptAt: new Date(Date.now() - 1_000).toISOString(),
     });
@@ -2852,7 +2854,9 @@ describe("startServer, against a migrated venue directory", () => {
     const orderId = randomUUID();
     await sharedDb.insert(workingOrders).values({
       id: orderId,
-      tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
+      source: "dashboard",
+      deviceId: null,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
       orderNumber: 990_002,
     });
     const { deviceId } = await seedDevice(sharedDb, { tillId: TILL_ENV.WAITRON_TILL_TILL_ID });

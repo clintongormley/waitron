@@ -41,8 +41,8 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
+import { dashboardOrderAt, deviceRequestCfg } from "./testing/session-device.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -194,7 +194,7 @@ async function setupVenue(): Promise<Seeded> {
   };
 }
 
-function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
+function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
     return fn(tx);
@@ -204,7 +204,7 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T> | T): Pro
 /** `minPicks: 0` leaves the list optional, so the dish still orders on its own. */
 async function attachExtras(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   dishId: string,
   extraProductId: string,
 ): Promise<string> {
@@ -230,7 +230,7 @@ async function attachExtras(
 /** A placed counter delivery to `tableId`, fired to the kitchen and not yet collected. Created open
  *  first, because the line insert needs an open parent (`require_open_parent`). */
 async function seedFiredDelivery(
-  cfg: TillConfig,
+  cfg: OriginConfig,
   cafeOffer: string,
   tableId: string,
 ): Promise<string> {
@@ -313,11 +313,15 @@ describe("openTab", () => {
 });
 
 /** An open walk-up order of no party and no delivery table. */
-async function bareOpenOrder(cfg: TillConfig, id: string): Promise<void> {
+async function bareOpenOrder(cfg: OriginConfig, id: string): Promise<void> {
   // Through the table definition: `working_orders.opened_at` is a `$defaultFn` generator.
-  await db
-    .insert(workingOrders)
-    .values({ id, tillId: cfg.tillId, nodeId: cfg.nodeId, orderNumber: 999, status: "open" });
+  await db.insert(workingOrders).values({
+    id,
+    ...dashboardOrderAt(cfg.locationId),
+    nodeId: cfg.nodeId,
+    orderNumber: 999,
+    status: "open",
+  });
 }
 
 describe("addTabRound (append-only, no re-price)", () => {
@@ -1080,7 +1084,7 @@ function line(menuItemId: string, opts?: { courseId?: string | null }): RoundLin
 }
 async function addTabRoundWith(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   tabId: string,
   lines: RoundLine[],
 ): Promise<{ productId: string | null; courseId: string | null }[]> {
@@ -1177,7 +1181,7 @@ it("returns a tab line's stored staff names and options answers", async () => {
 });
 
 /** Route `productId` to no station: a bottled drink handed over at the bar. */
-async function routeToNoPreparation(cfg: TillConfig, productId: string): Promise<void> {
+async function routeToNoPreparation(cfg: OriginConfig, productId: string): Promise<void> {
   await withTransaction(db, (tx) =>
     createException(tx, cfg, {
       zoneId: null,
@@ -1461,7 +1465,7 @@ async function ticketOfLine(
 }
 
 /** A station's notices, as the fields a cook reads. */
-async function noticesAt(cfg: TillConfig, stationId: string) {
+async function noticesAt(cfg: OriginConfig, stationId: string) {
   return (await asApp(cfg, (tx) => listStationNotices(tx, cfg, stationId))).map((notice) => ({
     kind: notice.kind,
     lineName: notice.lineName,

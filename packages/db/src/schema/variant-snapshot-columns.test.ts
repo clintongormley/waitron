@@ -14,6 +14,8 @@ import { locations, tenants, tills } from "./tenants.js";
 
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL = "aaaaaaaa-1111-4000-8000-000000000001";
+/** An order opened from the dashboard at `LOCATION`, needing no device. */
+const DASHBOARD = { source: "dashboard", deviceId: null, locationId: LOCATION } as const;
 const AT = "2026-07-20T19:20:30+00:00";
 
 // Bilingual on purpose: a single-locale venue cannot tell "exactly these locales" from
@@ -58,7 +60,7 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
     productId = prod!.id;
     const [order] = await db
       .insert(workingOrders)
-      .values({ tillId: TILL, orderNumber: 1, status: "open", openedAt: AT })
+      .values({ ...DASHBOARD, orderNumber: 1, status: "open", openedAt: AT })
       .returning({ id: workingOrders.id });
     orderId = order!.id;
   });

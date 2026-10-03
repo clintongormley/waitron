@@ -19,6 +19,8 @@ import { unpaidDepartures } from "./unpaid-departures.js";
 
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL = "aaaaaaaa-1111-4000-8000-000000000001";
+/** An order opened from the dashboard at `LOCATION`, needing no device. */
+const DASHBOARD = { source: "dashboard", deviceId: null, locationId: LOCATION } as const;
 const STAFF = "cccccccc-0000-4000-8000-000000000001";
 const SUPERVISOR = "cccccccc-0000-4000-8000-000000000002";
 const MISSING = "cccccccc-3333-4000-8000-0000000000ff";
@@ -69,7 +71,7 @@ describe("unpaid_departures", () => {
       const [bill] = await tx
         .insert(workingOrders)
         .values({
-          tillId: TILL,
+          ...DASHBOARD,
           nodeId,
           orderNumber,
           status: "placed",

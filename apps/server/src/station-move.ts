@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import { ticketItems, tills, workingOrderLines, workingOrders } from "@waitron/db";
+import { ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { raiseReleasedAtClosedStation } from "./closed-station-alert.js";
@@ -189,8 +189,7 @@ export async function moveDishesToStation(
       const [order] = await tx
         .select({ status: workingOrders.status, collectedAt: workingOrders.collectedAt })
         .from(workingOrders)
-        .innerJoin(tills, eq(tills.id, workingOrders.tillId))
-        .where(and(eq(workingOrders.id, orderId), eq(tills.locationId, cfg.locationId)));
+        .where(and(eq(workingOrders.id, orderId), eq(workingOrders.locationId, cfg.locationId)));
       if (order === undefined)
         throw new AppError("working_order.not_found", { workingOrderId: orderId });
       if (order.status === "abandoned")

@@ -504,10 +504,8 @@ async function asTenant<T>(
 }
 
 /**
- * A SECOND register on the SAME node — a `cfg` that shares `cfg`'s node, series and location and
- * differs only in `till_id`. Proving cross-till retrieval needs a genuine second till row because both
- * `working_orders.till_id` and `sales.till_id` FK onto `tills` — a fabricated uuid would fail
- * those.
+ * A SECOND register on the SAME node — a `cfg` that shares `cfg`'s node, series and location, on a
+ * device of its own.
  */
 async function addTill(cfg: DeviceRequestConfig, name: string): Promise<DeviceRequestConfig> {
   const id = randomUUID();
@@ -557,17 +555,17 @@ async function draftAggregate(id: string): Promise<{ itemCount: number; total: s
 }
 
 /**
- * The till the SALE was filed under vs the till the working order was PARKED under — the
+ * The device the SALE was filed under vs the device the working order was PARKED on — the
  * cross-till witness (parked on A, sold on B).
  */
-async function saleDeviceAndOrderTill(
+async function saleDeviceAndOrderDevice(
   workingOrderId: string,
-): Promise<{ saleDeviceId: string | null; orderTillId: string }> {
+): Promise<{ saleDeviceId: string | null; orderDeviceId: string | null }> {
   const sale = await suite.db.execute<{ device_id: string | null }>(sql`
     select device_id from sales where working_order_id = ${workingOrderId}`);
-  const order = await suite.db.execute<{ till_id: string }>(sql`
-    select till_id from working_orders where id = ${workingOrderId}`);
-  return { saleDeviceId: sale.rows[0]!.device_id, orderTillId: order.rows[0]!.till_id };
+  const order = await suite.db.execute<{ device_id: string | null }>(sql`
+    select device_id from working_orders where id = ${workingOrderId}`);
+  return { saleDeviceId: sale.rows[0]!.device_id, orderDeviceId: order.rows[0]!.device_id };
 }
 
 beforeAll(() => {
@@ -1169,8 +1167,8 @@ describe("cross-till end-to-end", () => {
     expect(await saleCount(orderId)).toBe(1);
     expect(await registroCount(orderId)).toBe(1);
     expect(tillB.origin.deviceId).not.toBe(tillA.origin.deviceId);
-    expect(await saleDeviceAndOrderTill(orderId)).toEqual({
-      orderTillId: tillA.tillId,
+    expect(await saleDeviceAndOrderDevice(orderId)).toEqual({
+      orderDeviceId: tillA.origin.deviceId,
       saleDeviceId: tillB.origin.deviceId,
     });
 

@@ -10,7 +10,6 @@ import {
   nodes,
   products,
   ticketItems,
-  tills,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -29,7 +28,6 @@ import "./errors.js";
 // Its fixture is separate from the overview suite's current-day sales.
 const noopLog: Logger = () => {};
 
-let tillId: string;
 let nodeId: string;
 let locationId: string;
 let managerCookie: string;
@@ -60,7 +58,14 @@ async function seedFiredOrder(
     .returning({ id: products.id });
   const [order] = await db
     .insert(workingOrders)
-    .values({ tillId, nodeId, orderNumber: opts.orderNumber, status: "open" })
+    .values({
+      source: "dashboard",
+      deviceId: null,
+      locationId,
+      nodeId,
+      orderNumber: opts.orderNumber,
+      status: "open",
+    })
     .returning({ id: workingOrders.id });
   const orderId = order!.id;
   // A quantity is a count of whole thousandths, so this line is one unit: a bare 1 would be accepted
@@ -118,11 +123,6 @@ const suite = useVenueDb({
       })
       .returning({ id: locations.id });
     locationId = loc!.id;
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId, name: "Caja 1" })
-      .returning({ id: tills.id });
-    tillId = till!.id;
     const [node] = await db
       .insert(nodes)
       .values({ locationId, name: "Nodo 1" })

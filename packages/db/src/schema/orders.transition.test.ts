@@ -5,7 +5,7 @@ import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { OPEN_PARENT_REFUSAL, TRANSITION_REFUSAL } from "../trigger-refusals.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
-import { seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { catalogues, products } from "./catalogue.js";
@@ -17,6 +17,7 @@ import { locations, tenants, tills } from "./tenants.js";
 // (`packages/db/src/trigger-refusals.ts`).
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
+const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 // Matches LOCATION_A's invoice_locales (es, ca), so check_locales lets the draft line reach
@@ -24,6 +25,8 @@ const AT = "2026-07-20T19:20:30+00:00";
 const DESCRIPTIONS_A = { es: "Café solo", ca: "Cafè sol" };
 
 let nodeA = "";
+let deviceA = "";
+let deviceB = "";
 let productA = "";
 let nextOrderNumber = 1;
 
@@ -39,12 +42,18 @@ describe("working_orders state machine (enforce_transition)", () => {
 
   // The Drizzle builder rather than raw SQL: `id` is a `$defaultFn` column applied CLIENT-side,
   // so a raw insert is refused NOT NULL before any trigger under test fires.
-  async function open(): Promise<string> {
+  async function open(
+    origin: { source: "device" | "dashboard"; deviceId: string | null } = {
+      source: "device",
+      deviceId: deviceA,
+    },
+  ): Promise<string> {
     const orderNumber = nextOrderNumber++;
     const [row] = await suite.db
       .insert(workingOrders)
       .values({
-        tillId: TILL_A1,
+        ...origin,
+        locationId: LOCATION_A,
         nodeId: nodeA,
         orderNumber,
         status: "open",
@@ -93,9 +102,17 @@ describe("working_orders state machine (enforce_transition)", () => {
         invoiceLocales: ["es", "ca"],
         operationDescription: "Hostelería",
       },
+      {
+        id: LOCATION_B,
+        name: "Fixture Location B",
+        invoiceLocales: ["es", "ca"],
+        operationDescription: "Hostelería",
+      },
     ]);
     await db.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
     nodeA = await seedNode(db, brandLocationId(LOCATION_A));
+    ({ deviceId: deviceA } = await seedDevice(db, { tillId: TILL_A1 }));
+    ({ deviceId: deviceB } = await seedDevice(db, { tillId: TILL_A1 }));
     const [catalogue] = await db
       .insert(catalogues)
       .values({ name: "Deli" })
@@ -266,6 +283,27 @@ describe("working_orders state machine (enforce_transition)", () => {
       ),
     );
     expect(engineErrorMessage(e2)).toBe(TRANSITION_REFUSAL);
+  });
+
+  // Each case changes one column alone: a dashboard order's source can move to another job source
+  // with its device still empty, which the source and device check allows.
+  it.each([
+    ["the device that opened it", "device", () => ({ deviceId: deviceB })],
+    ["its source", "dashboard", () => ({ source: "kitchen_timer" as const })],
+    ["its location", "device", () => ({ locationId: LOCATION_B })],
+  ] as const)("rejects changing %s on a placed order", async (_what, opener, change) => {
+    const id = await open(
+      opener === "device"
+        ? { source: "device", deviceId: deviceA }
+        : { source: "dashboard", deviceId: null },
+    );
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
+    );
+    const error = await captureError(() =>
+      inTx((tx) => tx.update(workingOrders).set(change()).where(eq(workingOrders.id, id))),
+    );
+    expect(engineErrorMessage(error)).toBe(TRANSITION_REFUSAL);
   });
 
   it("permits the handover stamp on a placed order alone, and keeps it when the order settles", async () => {

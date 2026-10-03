@@ -103,7 +103,7 @@ export interface SubmittedGroups {
  */
 export async function submitGroups(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   partyId: string,
   input: SubmitGroupsInput,
 ): Promise<SubmittedGroups> {
@@ -136,7 +136,7 @@ export type PlaceGroupsInput = Pick<
  */
 export async function placeGroups(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   partyId: string,
   input: PlaceGroupsInput,
 ): Promise<SubmittedGroups> {
@@ -232,7 +232,7 @@ export async function placeGroups(
 /** The bill a submission goes on: the open bill of the party it names, or else the main bill. */
 async function resolveOrderBill(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   partyId: string,
   input: Pick<PlaceGroupsInput, "billId" | "revisionMoved">,
 ): Promise<string> {

@@ -1,8 +1,9 @@
 // A stand-in for boot's `core.seatTable` (apps/server/src/parties.ts), which a module cannot import.
 // It reproduces the table read, the `table.not_found`/`table.inactive`/`tab.already_open` guards on
 // a table a party holds, and these writes of seating: a party, the `working_orders` insert whose id
-// is the tab id, the party's membership of the table, and clearing the table's manual status. It
-// records no main bill for the party. The order number is a counter; the verbs ignore it.
+// is the tab id, opened from the dashboard as boot binds it, the party's membership of the table,
+// and clearing the table's manual status. It records no main bill for the party. The order number
+// is a counter; the verbs ignore it.
 //
 // `table.inactive`/`tab.already_open` are apps/server's codes, declared here so the package's
 // production errors.ts does not claim them.
@@ -22,7 +23,7 @@ declare module "@waitron/shared" {
 
 /** The `TillConfig` fields the real `seatTable` stamps on a `working_orders` row. */
 export interface FakeCoreConfig {
-  tillId: string;
+  locationId: string;
   nodeId: string;
 }
 
@@ -50,7 +51,9 @@ export function fakeCore(cfg: FakeCoreConfig): CoreServices {
       nextOrderNumber += 1;
       await tx.insert(workingOrders).values({
         id: tabId,
-        tillId: cfg.tillId,
+        source: "dashboard",
+        deviceId: null,
+        locationId: cfg.locationId,
         nodeId: cfg.nodeId,
         orderNumber: nextOrderNumber,
         partyId: party!.id,

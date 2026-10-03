@@ -28,12 +28,13 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig } from "./till-config.js";
 import { addTabRound, createOpenOrder, parkOrder } from "./working-order.js";
 import { createTable } from "./tables.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -53,7 +54,7 @@ const suite = useVenueDb({
 });
 
 interface Venue {
-  cfg: TillConfig;
+  cfg: OriginConfig;
   cookie: string;
   water: string;
   // Its only variant is Inactive, so it sells as itself.
@@ -81,7 +82,8 @@ async function seedVenue(db: Database): Promise<Venue> {
     .insert(persons)
     .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
     .returning({ id: persons.id });
-  const cfg: TillConfig = {
+  const cfg: OriginConfig = {
+    origin: jobOrigin("dashboard"),
     tillId: brandTillId(till!.id),
     nodeId: brandNodeId(await seedNode(db, locationId)),
     seriesId: brandSeriesId(randomUUID()),

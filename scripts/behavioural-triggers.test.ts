@@ -212,15 +212,15 @@ function billRefund(id, paymentId) {
   );
 }
 
-/** A working order row. Callers name only what a case turns on. */
+/** A working order row, opened on `dev-active`. Callers name only what a case turns on. */
 function workingOrder(id, status, extra = {}) {
-  const tillId = extra.tillId ?? "till";
+  const locationId = extra.locationId ?? "loc";
   const settledAt = status === "settled" ? `'${STAMP}'` : "null";
   const collectedAt = extra.collectedAt ? `'${extra.collectedAt}'` : "null";
   const partyId = extra.partyId ? `'${extra.partyId}'` : "null";
   return (
-    `insert into working_orders (id, till_id, order_number, status, opened_at, settled_at, collected_at, party_id) ` +
-    `values ('${id}', '${tillId}', 1, '${status}', '${STAMP}', ${settledAt}, ${collectedAt}, ${partyId})`
+    `insert into working_orders (id, source, device_id, location_id, order_number, status, opened_at, settled_at, collected_at, party_id) ` +
+    `values ('${id}', 'device', 'dev-active', '${locationId}', 1, '${status}', '${STAMP}', ${settledAt}, ${collectedAt}, ${partyId})`
   );
 }
 
@@ -319,8 +319,8 @@ function seed(connection) {
     workingOrder("wo-lines-delete", "open"),
     workingOrder("wo-orphaned-parent", "open"),
     workingOrder("wo-tab", "open", { partyId: "party-bill-settles" }),
-    // A till that does not exist, so the join to a location resolves to nothing.
-    workingOrder("wo-orphan", "open", { tillId: "ghost-till" }),
+    // A location that does not exist, so the order resolves to no location.
+    workingOrder("wo-orphan", "open", { locationId: "ghost-location" }),
 
     // Lines written while their parent is still open, for the update and delete cases.
     line("line-open", "wo-open", '{"es":"Plato","ca":"Plat"}'),
@@ -430,16 +430,15 @@ function seed(connection) {
 
     // Lines for the served exception, written while their orders are open; the orders leave open
     // below. `loc-relocale` is a venue of its own so its invoice locales can change without moving
-    // what any other case reads.
+    // what any other case reads; its orders are opened on a device of `loc`, so a trigger reading
+    // the device's location instead of the order's would see the other venue's list.
     `insert into locations (id, name, invoice_locales, operation_description) ` +
       `values ('loc-relocale', 'Venue 2', '["es","ca"]', 'Restaurante')`,
-    `insert into tills (id, location_id, name, created_at) ` +
-      `values ('till-relocale', 'loc-relocale', 'Till 3', '${STAMP}')`,
     workingOrder("wo-served-placed", "open"),
     workingOrder("wo-served-settled", "open"),
     workingOrder("wo-served-orphan", "open"),
     workingOrder("wo-served-open", "open"),
-    workingOrder("wo-served-relocale", "open", { tillId: "till-relocale" }),
+    workingOrder("wo-served-relocale", "open", { locationId: "loc-relocale" }),
     line("line-served-placed", "wo-served-placed", '{"es":"Plato","ca":"Plat"}'),
     line("line-served-settled", "wo-served-settled", '{"es":"Plato","ca":"Plat"}'),
     line("line-served-frozen", "wo-served-settled", '{"es":"Plato","ca":"Plat"}'),
@@ -493,12 +492,10 @@ function seed(connection) {
     // reach only the descriptions trigger, so its refusal is the one that comes back.
     `insert into locations (id, name, invoice_locales, operation_description) ` +
       `values ('loc-relocale-text', 'Venue 3', '["es","ca"]', 'Restaurante')`,
-    `insert into tills (id, location_id, name, created_at) ` +
-      `values ('till-relocale-text', 'loc-relocale-text', 'Till 4', '${STAMP}')`,
-    workingOrder("wo-text-a", "open", { tillId: "till-relocale-text" }),
-    workingOrder("wo-text-b", "open", { tillId: "till-relocale-text" }),
-    workingOrder("wo-text-paid", "open", { tillId: "till-relocale-text" }),
-    workingOrder("wo-text-placed", "open", { tillId: "till-relocale-text" }),
+    workingOrder("wo-text-a", "open", { locationId: "loc-relocale-text" }),
+    workingOrder("wo-text-b", "open", { locationId: "loc-relocale-text" }),
+    workingOrder("wo-text-paid", "open", { locationId: "loc-relocale-text" }),
+    workingOrder("wo-text-placed", "open", { locationId: "loc-relocale-text" }),
     line("line-text-paid-served", "wo-text-paid", OLD_TEXT, OLD_VARIANT),
     line("line-text-paid-sent", "wo-text-paid", OLD_TEXT, OLD_VARIANT),
     line("line-text-placed", "wo-text-placed", OLD_TEXT, OLD_VARIANT),

@@ -63,11 +63,11 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
     .insert(nodes)
     .values({ locationId, name: "Node 1" })
     .returning({ id: nodes.id });
+  const { deviceId } = await seedDevice(db, { tillId: till!.id });
   const [wo] = await db
     .insert(workingOrders)
-    .values({ tillId: till!.id, orderNumber: 1 })
+    .values({ source: "device", deviceId, locationId, orderNumber: 1 })
     .returning({ id: workingOrders.id });
-  const { deviceId } = await seedDevice(db, { tillId: till!.id });
   return { tillId: till!.id, deviceId, nodeId: node!.id, workingOrderId: wo!.id };
 }
 

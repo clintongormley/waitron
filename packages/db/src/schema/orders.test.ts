@@ -14,8 +14,10 @@ import { TRANSITION_REFUSAL } from "../trigger-refusals.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
+import { deviceProfiles } from "./device-profiles.js";
+import { devices } from "./devices.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode } from "../testing/seed.js";
 import { catalogues, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
@@ -48,6 +50,8 @@ afterEach(async () => {
     await tx.execute(sql`delete from products`);
     await tx.execute(sql`delete from catalogues`);
     await tx.execute(sql`delete from nodes`);
+    await tx.execute(sql`delete from ${devices}`);
+    await tx.execute(sql`delete from ${deviceProfiles}`);
     await tx.execute(sql`delete from tills`);
     await tx.execute(sql`delete from locations`);
     await tx.execute(sql`delete from tenants`);
@@ -58,6 +62,8 @@ afterEach(async () => {
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
+/** An order opened from the dashboard at location A: no device to seed. */
+const DASHBOARD_ORDER = { source: "dashboard", deviceId: null, locationId: LOCATION_A } as const;
 
 let productA = "";
 let orderNumberSeq = 0;
@@ -99,10 +105,10 @@ async function seed(db: Database): Promise<void> {
   productA = prodA.id;
 }
 
-async function openOrder(db: Database, tillId = TILL_A1): Promise<string> {
+async function openOrder(db: Database): Promise<string> {
   const [row] = await db
     .insert(workingOrders)
-    .values({ tillId, orderNumber: ++orderNumberSeq, status: "open", openedAt: AT })
+    .values({ ...DASHBOARD_ORDER, orderNumber: ++orderNumberSeq, status: "open", openedAt: AT })
     .returning({ id: workingOrders.id });
   return row.id;
 }
@@ -146,8 +152,8 @@ describe("working_orders", () => {
       db.execute(
         // `id` and `order_number` are named so the statement reaches the status CHECK rather than
         // a NOT NULL refusal: `id` is a `$defaultFn` generator a raw insert never runs.
-        sql`insert into working_orders (id, till_id, order_number, status, opened_at)
-             values (${randomUUID()}, ${TILL_A1}, ${++orderNumberSeq}, 'paid', ${AT})`,
+        sql`insert into working_orders (id, source, location_id, order_number, status, opened_at)
+             values (${randomUUID()}, 'dashboard', ${LOCATION_A}, ${++orderNumberSeq}, 'paid', ${AT})`,
       ),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
@@ -157,8 +163,8 @@ describe("working_orders", () => {
     // assertion above just as well; `placed` is a listed status and no other case in this file
     // writes one, so it is the value that separates "this list is enforced" from "nothing gets in".
     await db.execute(
-      sql`insert into working_orders (id, till_id, order_number, status, opened_at)
-           values (${randomUUID()}, ${TILL_A1}, ${++orderNumberSeq}, 'placed', ${AT})`,
+      sql`insert into working_orders (id, source, location_id, order_number, status, opened_at)
+           values (${randomUUID()}, 'dashboard', ${LOCATION_A}, ${++orderNumberSeq}, 'placed', ${AT})`,
     );
     const placed = await rows<{ status: string }>(
       db,
@@ -279,7 +285,7 @@ describe("working_orders", () => {
       .set({ status: "settled", settledAt: AT })
       .where(eq(workingOrders.id, id));
     const error = await captureError(() =>
-      db.update(workingOrders).set({ tillId: TILL_A1 }).where(eq(workingOrders.id, id)),
+      db.update(workingOrders).set({ locationId: LOCATION_A }).where(eq(workingOrders.id, id)),
     );
     expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
@@ -288,7 +294,7 @@ describe("working_orders", () => {
     const id = await openOrder(db);
     await db.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
     const error = await captureError(() =>
-      db.update(workingOrders).set({ tillId: TILL_A1 }).where(eq(workingOrders.id, id)),
+      db.update(workingOrders).set({ locationId: LOCATION_A }).where(eq(workingOrders.id, id)),
     );
     expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
@@ -306,7 +312,7 @@ describe("working_orders", () => {
     const [withNode] = await db
       .insert(workingOrders)
       .values({
-        tillId: TILL_A1,
+        ...DASHBOARD_ORDER,
         orderNumber: ++orderNumberSeq,
         status: "open",
         openedAt: AT,
@@ -353,7 +359,7 @@ describe("working_orders", () => {
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {
     const error = await captureError(() =>
       db.insert(workingOrders).values({
-        tillId: TILL_A1,
+        ...DASHBOARD_ORDER,
         orderNumber: ++orderNumberSeq,
         status: "open",
         openedAt: AT,
@@ -362,6 +368,121 @@ describe("working_orders", () => {
     );
     // SQLite names neither the constraint nor the column, so the CLASS is all there is to assert.
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it("has no till column", async () => {
+    const columns = await rows<{ name: string }>(
+      db,
+      sql`select name from pragma_table_info('working_orders')`,
+    );
+    expect(columns.map((c) => c.name)).not.toContain("till_id");
+  });
+
+  it("records who opened an order and where: a device names itself, the dashboard names none", async () => {
+    const { deviceId } = await seedDevice(db, { tillId: TILL_A1 });
+    const [fromDevice] = await db
+      .insert(workingOrders)
+      .values({
+        source: "device",
+        deviceId,
+        locationId: LOCATION_A,
+        orderNumber: ++orderNumberSeq,
+        openedAt: AT,
+      })
+      .returning({ id: workingOrders.id });
+    const fromDashboard = await openOrder(db);
+    const stored = await db
+      .select({
+        id: workingOrders.id,
+        source: workingOrders.source,
+        deviceId: workingOrders.deviceId,
+        locationId: workingOrders.locationId,
+      })
+      .from(workingOrders);
+    expect(stored).toEqual(
+      expect.arrayContaining([
+        { id: fromDevice!.id, source: "device", deviceId, locationId: LOCATION_A },
+        { id: fromDashboard, source: "dashboard", deviceId: null, locationId: LOCATION_A },
+      ]),
+    );
+  });
+
+  it("refuses an order from a job that names a device", async () => {
+    const { deviceId } = await seedDevice(db, { tillId: TILL_A1 });
+    const error = await captureError(() =>
+      db.insert(workingOrders).values({
+        source: "kitchen_timer",
+        deviceId,
+        locationId: LOCATION_A,
+        orderNumber: ++orderNumberSeq,
+        openedAt: AT,
+      }),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe(
+      "CHECK constraint failed: working_orders_source_device_ck",
+    );
+  });
+
+  it("refuses a device order that names no device", async () => {
+    const error = await captureError(() =>
+      db.insert(workingOrders).values({
+        ...DASHBOARD_ORDER,
+        source: "device",
+        orderNumber: ++orderNumberSeq,
+        openedAt: AT,
+      }),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe(
+      "CHECK constraint failed: working_orders_source_device_ck",
+    );
+  });
+
+  it("refuses a source that is not on the list", async () => {
+    const error = await captureError(() =>
+      db.execute(
+        sql`insert into working_orders (id, source, location_id, order_number, status, opened_at)
+             values (${randomUUID()}, 'till', ${LOCATION_A}, ${++orderNumberSeq}, 'open', ${AT})`,
+      ),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("CHECK constraint failed: working_orders_source_ck");
+  });
+
+  it("refuses an order with no location", async () => {
+    const error = await captureError(() =>
+      db.execute(
+        sql`insert into working_orders (id, source, order_number, status, opened_at)
+             values (${randomUUID()}, 'dashboard', ${++orderNumberSeq}, 'open', ${AT})`,
+      ),
+    );
+    expect(engineErrorMessage(error)).toBe(
+      "NOT NULL constraint failed: working_orders.location_id",
+    );
+  });
+
+  it("rejects a device or a location that does not exist with a foreign-key violation", async () => {
+    const ghost = "99999999-9999-4999-8999-999999999999";
+    const noDevice = await captureError(() =>
+      db.insert(workingOrders).values({
+        source: "device",
+        deviceId: ghost,
+        locationId: LOCATION_A,
+        orderNumber: ++orderNumberSeq,
+        openedAt: AT,
+      }),
+    );
+    expect(isRefusal(noDevice, FOREIGN_KEY_VIOLATION)).toBe(true);
+    const noLocation = await captureError(() =>
+      db.insert(workingOrders).values({
+        ...DASHBOARD_ORDER,
+        locationId: ghost,
+        orderNumber: ++orderNumberSeq,
+        openedAt: AT,
+      }),
+    );
+    expect(isRefusal(noLocation, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });
 

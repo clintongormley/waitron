@@ -568,6 +568,34 @@
       "when": 1791061208380,
       "tag": "0080_money_records_recreate_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "6",
+      "when": 1791067895824,
+      "tag": "0081_working_orders_drop_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "6",
+      "when": 1791067905218,
+      "tag": "0082_working_orders_add_origin",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "6",
+      "when": 1791067912547,
+      "tag": "0083_working_orders_drop_till",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "6",
+      "when": 1791067924668,
+      "tag": "0084_working_orders_recreate_triggers",
+      "breakpoints": true
     }
   ]
 }

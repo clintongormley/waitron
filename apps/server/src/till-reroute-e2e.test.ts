@@ -279,7 +279,15 @@ beforeAll(async () => {
   // The inherited tab: an open working order in B's database tagged with the DEAD node's id (A's).
   await b
     .insert(workingOrders)
-    .values({ id: TAB_ID, tillId: TILL, nodeId: NODE_A, orderNumber: 1, status: "open" })
+    .values({
+      id: TAB_ID,
+      source: "dashboard",
+      deviceId: null,
+      locationId: LOCATION,
+      nodeId: NODE_A,
+      orderNumber: 1,
+      status: "open",
+    })
     .onConflictDoNothing({ target: workingOrders.id });
 }, 180_000);
 

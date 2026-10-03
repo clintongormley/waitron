@@ -17,6 +17,7 @@ import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { readRestOfOrder, restOfOrderQuery } from "./rest-of-order.js";
+import { dashboardOrderAt } from "./testing/session-device.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -52,8 +53,8 @@ describe("rest of the order read", () => {
     const orderId = randomUUID();
     const otherOrderId = randomUUID();
     await db.insert(workingOrders).values([
-      { id: orderId, tillId, nodeId, orderNumber: 1, status: "open" },
-      { id: otherOrderId, tillId, nodeId, orderNumber: 2, status: "open" },
+      { id: orderId, ...dashboardOrderAt(locationId), nodeId, orderNumber: 1, status: "open" },
+      { id: otherOrderId, ...dashboardOrderAt(locationId), nodeId, orderNumber: 2, status: "open" },
     ]);
     const cases = [
       {

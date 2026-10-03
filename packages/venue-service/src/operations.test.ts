@@ -419,7 +419,6 @@ describe("venue service routing", () => {
     const location = await seedLocation("Venue");
     const locationId = brandLocationId(location);
     const zone = await seedZone(locationId, "Deli counter");
-    const till = await seedTill(locationId, "Deli till");
     const nodeId = await seedNode(db, locationId);
 
     await scoped(async (tx) => {
@@ -470,7 +469,7 @@ describe("venue service routing", () => {
         where zone_id = ${zone}`);
 
       await tx.execute(sql`
-        insert into working_orders (id, till_id, node_id, order_number, opened_at) values ('00000000-0000-4000-8000-000000000001', ${brandTillId(till)}, ${nodeId}, 1, ${new Date().toISOString()})`);
+        insert into working_orders (id, source, location_id, node_id, order_number, opened_at) values ('00000000-0000-4000-8000-000000000001', 'dashboard', ${locationId}, ${nodeId}, 1, ${new Date().toISOString()})`);
       await recordOrderServiceContext(
         tx,
         { locationId },
@@ -585,7 +584,7 @@ describe("venue service routing", () => {
       const copiedOrderId = "00000000-0000-4000-8000-000000000003";
       const copiedLineId = "00000000-0000-4000-8000-000000000004";
       await tx.execute(sql`
-        insert into working_orders (id, till_id, node_id, order_number, opened_at) values (${copiedOrderId}, ${brandTillId(till)}, ${nodeId}, 2, ${new Date().toISOString()})`);
+        insert into working_orders (id, source, location_id, node_id, order_number, opened_at) values (${copiedOrderId}, 'dashboard', ${locationId}, ${nodeId}, 2, ${new Date().toISOString()})`);
       await tx.insert(workingOrderLines).values({
         id: copiedLineId,
         workingOrderId: copiedOrderId,
@@ -627,7 +626,6 @@ describe("venue service routing", () => {
     const location = await seedLocation("Venue");
     const locationId = brandLocationId(location);
     const zone = await seedZone(locationId, "Deli counter");
-    const till = await seedTill(locationId, "Deli till");
     const nodeId = await seedNode(db, locationId);
 
     await scoped(async (tx) => {
@@ -664,8 +662,8 @@ describe("venue service routing", () => {
       const orderId = "00000000-0000-4000-8000-000000000101";
       const workingLineId = "00000000-0000-4000-8000-000000000102";
       await tx.execute(sql`
-        insert into working_orders (id, till_id, node_id, order_number, opened_at)
-        values (${orderId}, ${brandTillId(till)}, ${nodeId}, 1, ${new Date().toISOString()})`);
+        insert into working_orders (id, source, location_id, node_id, order_number, opened_at)
+        values (${orderId}, 'dashboard', ${locationId}, ${nodeId}, 1, ${new Date().toISOString()})`);
       await recordOrderServiceContext(tx, { locationId }, orderId, zone);
       await tx.insert(workingOrderLines).values({
         id: workingLineId,
@@ -1013,8 +1011,8 @@ type SellingVenue = Awaited<ReturnType<typeof seedSellingVenue>>;
 async function openOrder(tx: Transaction, venue: SellingVenue, orderNumber: number) {
   const id = randomUUID();
   await tx.execute(sql`
-    insert into working_orders (id, till_id, node_id, order_number, opened_at)
-    values (${id}, ${venue.till}, ${venue.nodeId}, ${orderNumber}, ${new Date().toISOString()})`);
+    insert into working_orders (id, source, location_id, node_id, order_number, opened_at)
+    values (${id}, 'dashboard', ${venue.cfg.locationId}, ${venue.nodeId}, ${orderNumber}, ${new Date().toISOString()})`);
   return id;
 }
 

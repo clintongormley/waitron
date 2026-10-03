@@ -40,7 +40,7 @@ function insertSaleSql(opts: {
 // `id` is supplied for the reason {@link insertSaleSql} records.
 async function openOrder(admin: Database, orderNumber: number): Promise<string> {
   const result = await admin.execute<{ id: string }>(
-    sql`insert into working_orders (id, till_id, order_number, status, opened_at) values (${randomUUID()}, ${TILL_A1}, ${orderNumber}, 'open', ${AT}) returning id`,
+    sql`insert into working_orders (id, source, device_id, location_id, order_number, status, opened_at) values (${randomUUID()}, 'device', ${deviceA}, ${LOCATION_A}, ${orderNumber}, 'open', ${AT}) returning id`,
   );
   return result.rows[0]!.id;
 }

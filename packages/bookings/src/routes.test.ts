@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { diningTables, locations, tills, withTransaction, type Database } from "@waitron/db";
+import { diningTables, locations, withTransaction, type Database } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -50,10 +50,6 @@ async function setupVenue(): Promise<Venue> {
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
 
   const { managerSid, staffSid } = await withTransaction(db, async (tx: Transaction) => {
@@ -83,7 +79,7 @@ async function setupVenue(): Promise<Venue> {
   };
   return {
     cfg,
-    ctx: { db, cfg, core: fakeCore({ tillId: till!.id, nodeId }) },
+    ctx: { db, cfg, core: fakeCore({ locationId, nodeId }) },
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
   };

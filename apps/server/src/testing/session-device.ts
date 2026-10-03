@@ -3,7 +3,7 @@ import { devices, withTransaction, workingOrders, type Database } from "@waitron
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { loginWithPin } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
-import { deviceOrigin } from "@waitron/shared";
+import { deviceOrigin, locationId as brandLocationId } from "@waitron/shared";
 import type { DeviceOrigin } from "@waitron/shared";
 import type { TillConfig } from "../till-config.js";
 import { SESSION_COOKIE } from "../till-session.js";
@@ -41,14 +41,23 @@ export async function deviceRequestCfg<C extends TillConfig>(
   return { ...cfg, origin: deviceOrigin(await seedSessionDevice(db, cfg)) };
 }
 
-/** The origin of a device seeded on `workingOrderId`'s till, for a payment a fixture writes by hand. */
+/** The origin of a device seeded at `workingOrderId`'s location, for a payment a fixture writes by hand. */
 export async function orderDeviceOrigin(
   db: Database,
   workingOrderId: string,
 ): Promise<DeviceOrigin> {
   const [order] = await db
-    .select({ tillId: workingOrders.tillId })
+    .select({ locationId: workingOrders.locationId })
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
-  return deviceOrigin(await seedSessionDevice(db, { tillId: order!.tillId }));
+  const { deviceId } = await seedDevice(db, {
+    locationId: brandLocationId(order!.locationId),
+    capabilities: [...CAPABILITY_FLAGS],
+  });
+  return deviceOrigin(deviceId);
+}
+
+/** The origin and place of an order a fixture writes straight to the table: the dashboard, at `locationId`. */
+export function dashboardOrderAt(locationId: string) {
+  return { source: "dashboard", deviceId: null, locationId } as const;
 }

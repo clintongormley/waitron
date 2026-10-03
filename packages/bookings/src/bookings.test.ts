@@ -480,15 +480,10 @@ describe("seatBooking", () => {
   }> {
     await seedTenant(db);
     const locationId = await insertLocation("Barra");
-    // `id` and `created_at` supplied for the reason `insertLocation` gives.
-    const till = await db.execute<{ id: string }>(sql`
-      insert into tills (id, created_at, location_id, name)
-      values (${newId()}, ${nowIso()}, ${locationId}, 'Caja 1')
-      returning id`);
     const nodeId = await seedNode(db, brandLocationId(locationId));
     return {
       cfg: { locationId: brandLocationId(locationId) },
-      core: fakeCore({ tillId: till.rows[0]!.id, nodeId }),
+      core: fakeCore({ locationId, nodeId }),
       createdBy: randomUUID(),
       seatedBy: randomUUID(),
     };

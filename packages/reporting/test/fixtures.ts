@@ -454,7 +454,7 @@ export async function seedFiredLine(
 
 /** What {@link seedFiredOrder} needs to seed one KITCHEN order with a single fired line. */
 export interface FiredOrderSeed {
-  tillId: TillId;
+  deviceId: DeviceId;
   nodeId: NodeId;
   locationId: string;
   stationId: string;
@@ -466,13 +466,15 @@ export interface FiredOrderSeed {
  */
 export async function seedOpenOrder(
   db: Database,
-  seed: { tillId: TillId; nodeId: NodeId },
+  seed: { deviceId: DeviceId; locationId: string; nodeId: NodeId },
   orderNumber: number,
 ): Promise<{ orderId: string }> {
   const [order] = await db
     .insert(workingOrders)
     .values({
-      tillId: seed.tillId,
+      source: "device",
+      deviceId: seed.deviceId,
+      locationId: seed.locationId,
       nodeId: seed.nodeId,
       orderNumber,
       status: "open",

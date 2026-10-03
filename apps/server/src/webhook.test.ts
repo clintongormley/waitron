@@ -69,11 +69,11 @@ async function seedInitiated(
     .insert(tills)
     .values({ locationId: loc!.id, name: "Till 1" })
     .returning({ id: tills.id });
+  const { deviceId } = await seedDevice(db, { tillId: till!.id });
   const [wo] = await db
     .insert(workingOrders)
-    .values({ tillId: till!.id, orderNumber: 1 })
+    .values({ source: "device", deviceId, locationId: loc!.id, orderNumber: 1 })
     .returning({ id: workingOrders.id });
-  const { deviceId } = await seedDevice(db, { tillId: till!.id });
   await withTransaction(db, (tx) =>
     insertInitiated(tx, {
       origin: deviceOrigin(deviceId),

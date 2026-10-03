@@ -22,8 +22,9 @@ import {
   thousandthsToDecimal,
   tillId as brandTillId,
   type ExtraSelection,
+  jobOrigin,
 } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { createOpenOrder, parkOrder, moveOrderLines } from "./working-order.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -48,7 +49,7 @@ beforeAll(() => {
 });
 
 interface Seeded {
-  cfg: TillConfig;
+  cfg: OriginConfig;
   /** "Café" — each, 1.50 gross, general(21%). */
   cafeId: string;
   /** "Agua" — each, 2.00 gross, general(21%). */
@@ -82,7 +83,8 @@ async function setupVenue(): Promise<Seeded> {
   const tillId = randomUUID();
   await db.insert(tills).values({ id: tillId, locationId, name: "Caja 1" });
   const nodeId = await seedNode(db, brandLocationId(locationId));
-  const cfg: TillConfig = {
+  const cfg: OriginConfig = {
+    origin: jobOrigin("dashboard"),
     tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -147,7 +149,7 @@ async function setupVenue(): Promise<Seeded> {
 }
 
 /** Run `fn` on a fresh transaction, like production. */
-function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
     return fn(tx);
@@ -190,7 +192,7 @@ async function linesOf(tabId: string): Promise<
 
 /** Open a tab on `tableId` with an initial round, returning its tab id. */
 async function openTabWith(
-  cfg: TillConfig,
+  cfg: OriginConfig,
   tableId: string,
   lines: { menuItemId: string; quantity: string }[],
 ): Promise<string> {
@@ -200,7 +202,7 @@ async function openTabWith(
 
 /** A second bill of `tabId`'s party with `lines`, in its service context unless `zoneless`. */
 async function openBeside(
-  cfg: TillConfig,
+  cfg: OriginConfig,
   tabId: string,
   lines: { menuItemId: string; quantity: string }[],
   zoneless = false,
@@ -220,7 +222,7 @@ async function openBeside(
 /** A transfer between two bills, sent with the source bill's party's revision as it stands. */
 async function transfer(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   fromBillId: string,
   toBillId: string,
   transfers: { lineNo: number; quantity?: string }[],
@@ -597,7 +599,7 @@ describe("transfer — extras children (FIX 2 cascade / FIX 4 split)", () => {
    *  line names. `minPicks: 0` leaves the list optional, so the dish still orders on its own. */
   async function addExtra(
     tx: Transaction,
-    cfg: TillConfig,
+    cfg: OriginConfig,
     dishId: string,
     extraProductId: string,
   ): Promise<string> {
@@ -623,7 +625,7 @@ describe("transfer — extras children (FIX 2 cascade / FIX 4 split)", () => {
   /** An OPEN bill of `partyId` with extras lines: `openTab` does not thread `extras`, so the bill is
    *  built directly here. No fire. */
   async function openExtrasTab(
-    cfg: TillConfig,
+    cfg: OriginConfig,
     zoneId: string,
     partyId: string,
     lines: { menuItemId: string; quantity: string; extras?: ExtraSelection[] }[],
@@ -636,7 +638,7 @@ describe("transfer — extras children (FIX 2 cascade / FIX 4 split)", () => {
   }
 
   /** A party seated at `tableId`, whose bills the extras cases open. */
-  async function partyAt(cfg: TillConfig, tableId: string): Promise<string> {
+  async function partyAt(cfg: OriginConfig, tableId: string): Promise<string> {
     return (await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }))).partyId;
   }
 

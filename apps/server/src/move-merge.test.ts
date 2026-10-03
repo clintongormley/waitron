@@ -26,8 +26,9 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { addTabRound, moveOrderLines } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
@@ -63,7 +64,7 @@ beforeAll(() => {
 });
 
 interface Seeded {
-  cfg: TillConfig;
+  cfg: OriginConfig;
   cafeId: string;
   aguaId: string;
   /** "Bacon" — sold only as another dish's extra here, so a child line's product id can never be
@@ -103,7 +104,8 @@ async function setupVenue(): Promise<Seeded> {
   const tillId = randomUUID();
   await db.insert(tills).values({ id: tillId, locationId, name: "Caja 1" });
   const nodeId = await seedNode(db, brandLocationId(locationId));
-  const cfg: TillConfig = {
+  const cfg: OriginConfig = {
+    origin: jobOrigin("dashboard"),
     tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -152,12 +154,12 @@ async function setupVenue(): Promise<Seeded> {
 }
 
 /** Each venue's offers in its tables zone, keyed by the venue's config so call sites pass only `cfg`. */
-const offersByCfg = new WeakMap<TillConfig, ZoneOffers>();
-function offersOf(cfg: TillConfig): ZoneOffers {
+const offersByCfg = new WeakMap<OriginConfig, ZoneOffers>();
+function offersOf(cfg: OriginConfig): ZoneOffers {
   return offersByCfg.get(cfg)!;
 }
 
-function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
     return fn(tx);
@@ -165,14 +167,14 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
 }
 
 /** Create one active dining table in the venue's tables zone; returns its id. */
-async function seedTable(cfg: TillConfig, label: string): Promise<string> {
+async function seedTable(cfg: OriginConfig, label: string): Promise<string> {
   const zoneId = offersOf(cfg).zoneId;
   return asApp(cfg, (tx) => createTable(tx, cfg, { label, zoneId }).then((r) => r.id));
 }
 
 /** Open a tab on a table with the given lines; returns the tab (working_order) id. */
 async function openTabOn(
-  cfg: TillConfig,
+  cfg: OriginConfig,
   tableId: string,
   lines: { productId: string; quantity: string }[],
 ): Promise<string> {

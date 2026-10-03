@@ -334,7 +334,9 @@ describe("configuration transfer database path", () => {
         values ('cash_only', 5000, ${policyStamp}, ${policyStamp})`);
       await tx.insert(workingOrders).values({
         id: "aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa",
-        tillId: source.tillId,
+        source: "dashboard",
+        deviceId: null,
+        locationId: source.locationId,
         nodeId: source.nodeId,
         orderNumber: 1,
         label: "Practice tab",

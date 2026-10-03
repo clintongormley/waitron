@@ -9,7 +9,7 @@ import {
   deviceOrigin,
   jobOrigin,
 } from "@waitron/shared";
-import type { DeviceId, NodeId, SeriesId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { DeviceId, LocationId, NodeId, SeriesId, WorkingOrderId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type {
   FiscalBackend,
@@ -41,7 +41,7 @@ import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
 import { seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
-let tillId: TillId;
+let locationId: LocationId;
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -53,7 +53,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ tillId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ locationId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -903,7 +903,7 @@ describe("recordSale — working order linkage", () => {
   async function seedOpenWorkingOrder(): Promise<WorkingOrderId> {
     const [row] = await suite.db
       .insert(workingOrders)
-      .values({ tillId, orderNumber: 1 })
+      .values({ source: "device", deviceId, locationId, orderNumber: 1 })
       .returning({ id: workingOrders.id });
     return brandWorkingOrderId(row!.id);
   }

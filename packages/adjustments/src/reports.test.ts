@@ -4,7 +4,6 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   locations,
-  tills,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -56,31 +55,29 @@ async function person(name: string, status?: "suspended"): Promise<string> {
   return row!.id;
 }
 
-let tillId: string;
+let locationId: string;
 let orderNumber = 0;
 
-/** A bill opened at `openedAt` on this test's till, which is made on first use. */
+/** A bill opened from the dashboard at `openedAt`, at this test's location, made on first use. */
 async function bill(
   opts: { openedAt?: string } = {},
 ): Promise<{ id: string; orderNumber: number }> {
-  const [till] = await db.select({ id: tills.id }).from(tills);
-  if (till === undefined) {
-    const [location] = await db
+  const [location] = await db.select({ id: locations.id }).from(locations);
+  if (location === undefined) {
+    [{ id: locationId }] = (await db
       .insert(locations)
       .values({ name: "Sala", invoiceLocales: ["es"], operationDescription: "Restaurante" })
-      .returning({ id: locations.id });
-    [{ id: tillId }] = (await db
-      .insert(tills)
-      .values({ locationId: location!.id, name: "Till 1" })
-      .returning({ id: tills.id })) as [{ id: string }];
+      .returning({ id: locations.id })) as [{ id: string }];
   } else {
-    tillId = till.id;
+    locationId = location.id;
   }
   orderNumber += 1;
   const [order] = await db
     .insert(workingOrders)
     .values({
-      tillId,
+      source: "dashboard",
+      deviceId: null,
+      locationId,
       orderNumber,
       openedAt: opts.openedAt ?? EVENING,
     })

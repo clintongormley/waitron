@@ -32,7 +32,7 @@ import {
   thousandthsToDecimal,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { createTable } from "./tables.js";
 import {
@@ -155,12 +155,12 @@ async function setupVenue(): Promise<Seeded> {
 }
 
 /** Each venue's offers in its tables zone, keyed by the venue's config so call sites pass only `cfg`. */
-const offersByCfg = new WeakMap<TillConfig, ZoneOffers>();
+const offersByCfg = new WeakMap<OriginConfig, ZoneOffers>();
 
 /** `openTab`, selling each line through the venue's offer for its product. */
 function openTabWith(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   req: { tableId: string; lines?: { productId: string; quantity: string }[] },
 ) {
   return openPartyTab(tx, cfg, {
@@ -169,7 +169,7 @@ function openTabWith(
   });
 }
 
-function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
     return fn(tx);
@@ -233,7 +233,9 @@ describe("splitBill", () => {
           status: workingOrders.status,
           label: workingOrders.label,
           nodeId: workingOrders.nodeId,
-          tillId: workingOrders.tillId,
+          source: workingOrders.source,
+          deviceId: workingOrders.deviceId,
+          locationId: workingOrders.locationId,
         })
         .from(workingOrders)
         .where(eq(workingOrders.id, checkId));
@@ -259,9 +261,13 @@ describe("splitBill", () => {
 
     expect(state.check?.status).toBe("open");
     expect(state.check?.label).toBe("T1");
-    // Inherits the origin's node/till (createOpenOrder stamps them from cfg).
+    // Opened on the splitting device's node and location (createOpenOrder stamps them from cfg).
     expect(state.check?.nodeId).toBe(cfg.nodeId);
-    expect(state.check?.tillId).toBe(cfg.tillId);
+    expect(state.check).toMatchObject({
+      source: "device",
+      deviceId: cfg.origin.deviceId,
+      locationId: cfg.locationId,
+    });
     // WHOLE lines are moved first, THEN partial splits — not the transfers-array order.
     // Read straight off the column, so each quantity is a count of whole THOUSANDTHS: 300 is the
     // 0.300 kg of jamón and 1000 is one agua.
@@ -419,7 +425,7 @@ it("retains the frozen options answers and the frozen names when a dish quantity
 });
 
 /** A default kitchen station, with each product's route re-pointed at it, so a round fires there. */
-async function withKitchen(cfg: TillConfig): Promise<string> {
+async function withKitchen(cfg: OriginConfig): Promise<string> {
   const stationId = await seedKitchenStation(db, { locationId: cfg.locationId });
   const offers = await asApp(cfg, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
   offersByCfg.set(cfg, offers);
@@ -466,7 +472,7 @@ async function revisionOf(orderId: string): Promise<number> {
 }
 
 /** A cloud-poll printer attached to the station, so a fire or a correction there prints. */
-async function printerAt(cfg: TillConfig, stationId: string): Promise<string> {
+async function printerAt(cfg: OriginConfig, stationId: string): Promise<string> {
   return asApp(cfg, async (tx) => {
     const { id } = await createPrinter(
       tx,
@@ -510,7 +516,7 @@ async function noticesOn(...orderIds: string[]) {
 }
 
 /** Each order at the station, with the quantities its items ask for. */
-async function queueAt(cfg: TillConfig, stationId: string) {
+async function queueAt(cfg: OriginConfig, stationId: string) {
   const groups = await asApp(cfg, (tx) => listStationQueue(tx, stationId));
   return Object.fromEntries(
     groups.map((group) => [group.orderId, group.items.map((item) => item.quantity)]),
@@ -934,7 +940,7 @@ describe("splitting held kitchen work onto a check", () => {
 });
 
 /** A station's notices, every field a cook reads, oldest first. */
-async function kitchenNoticesAt(cfg: TillConfig, stationId: string) {
+async function kitchenNoticesAt(cfg: OriginConfig, stationId: string) {
   return (await asApp(cfg, (tx) => listStationNotices(tx, cfg, stationId))).map((notice) => ({
     stationId: notice.stationId,
     workingOrderId: notice.workingOrderId,

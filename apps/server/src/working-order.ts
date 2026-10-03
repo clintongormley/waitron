@@ -1027,7 +1027,7 @@ export interface ParkOrderResult {
  */
 export async function createOpenOrder(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   id: string,
   lines: ({
     menuItemId: string;
@@ -1085,7 +1085,9 @@ export async function createOpenOrder(
 
   await tx.insert(workingOrders).values({
     id,
-    tillId: cfg.tillId,
+    source: cfg.origin.source,
+    deviceId: cfg.origin.deviceId,
+    locationId: cfg.locationId,
     nodeId: cfg.nodeId,
     orderNumber,
     label,
@@ -1109,7 +1111,7 @@ export async function createOpenOrder(
 
 export async function parkOrder(
   deps: WorkingOrderDeps,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   req: ParkOrderRequest,
 ): Promise<ParkOrderResult> {
   if (req.lines.length === 0) {
@@ -1152,7 +1154,7 @@ export async function parkOrder(
  */
 export async function openTab(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   req: {
     tableId: string;
     lines?: { menuItemId: string; quantity: string }[];

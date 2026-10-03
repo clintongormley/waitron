@@ -7,7 +7,6 @@ import {
   kitchenStations,
   locations,
   ticketItems,
-  tills,
   watcherItemMarks,
   workingOrderLines,
   workingOrders,
@@ -251,10 +250,6 @@ describe("watcher routes", () => {
         operationDescription: "Restaurante",
       })
       .returning({ id: locations.id });
-    const [foreignTill] = await suite.db
-      .insert(tills)
-      .values({ locationId: foreignLocation!.id, name: "Other till" })
-      .returning({ id: tills.id });
     const foreignNode = await seedNode(suite.db, brandLocationId(foreignLocation!.id));
     const [foreignStation] = await suite.db
       .insert(kitchenStations)
@@ -262,7 +257,14 @@ describe("watcher routes", () => {
       .returning({ id: kitchenStations.id });
     const [foreignOrder] = await suite.db
       .insert(workingOrders)
-      .values({ tillId: foreignTill!.id, nodeId: foreignNode, orderNumber: 1, status: "open" })
+      .values({
+        source: "dashboard",
+        deviceId: null,
+        locationId: foreignLocation!.id,
+        nodeId: foreignNode,
+        orderNumber: 1,
+        status: "open",
+      })
       .returning({ id: workingOrders.id });
     const [foreignLine] = await suite.db
       .insert(workingOrderLines)

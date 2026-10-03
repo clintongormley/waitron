@@ -102,7 +102,15 @@ describe("watchers schema", () => {
       .returning({ id: products.id });
     const [order] = await suite.db
       .insert(workingOrders)
-      .values({ tillId: "till", nodeId, orderNumber: 1, status: "open", openedAt: AT })
+      .values({
+        source: "dashboard",
+        deviceId: null,
+        locationId: LOCATION,
+        nodeId,
+        orderNumber: 1,
+        status: "open",
+        openedAt: AT,
+      })
       .returning({ id: workingOrders.id });
     const [line] = await suite.db
       .insert(workingOrderLines)

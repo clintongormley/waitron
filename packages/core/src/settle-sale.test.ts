@@ -195,7 +195,9 @@ describe("settleSale — a bill paid in parts", () => {
     const [order] = await suite.db
       .insert(workingOrders)
       .values({
-        tillId: seed.tillId,
+        source: "device",
+        deviceId: seed.deviceId,
+        locationId: seed.locationId,
         nodeId: seed.nodeId,
         orderNumber: 1,
         status: "open",

@@ -19,13 +19,14 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -38,7 +39,7 @@ import { seedSessionDevice } from "./testing/session-device.js";
 // The HTTP surface of the transfer route: the session guard, the malformed-`:id`/`toBillId` screens
 // and the STATUS mapping for the transfer codes. The transfer's write behaviour is pinned in
 // `transfer-lines.test.ts` and `transfer-lines.filing.test.ts`.
-let cfg: TillConfig;
+let cfg: OriginConfig;
 let ana: { id: string };
 // One product, offered in a table zone, so a tab can open with a real line to transfer — `openTab`
 // prices it and the `check_locales` trigger demands its `es-ES` description key match the
@@ -98,8 +99,9 @@ function collect(
 }
 
 /** `seriesId` is unused by the transfer route (no fiscal write on the tab path). */
-function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
+function makeCfg(tillId: string, locationId: string, nodeId: string): OriginConfig {
   return {
+    origin: jobOrigin("dashboard"),
     tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -166,14 +168,14 @@ async function setupTabsApp(
   mountTillApi(app, d, collect([]));
   const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
   const { tabA, tabB } = await withTransaction(suite.db, async (tx) => {
-    const a = await createTable(tx, d.cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
-    const tabAResult = await openPartyTab(tx, d.cfg, {
+    const a = await createTable(tx, cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
+    const tabAResult = await openPartyTab(tx, cfg, {
       tableId: a.id,
       lines: [{ menuItemId: cafeOffer, quantity: aQty }],
     });
     const tabB = randomUUID();
-    await createOpenOrder(tx, d.cfg, tabB, [], null, { partyId: tabAResult.partyId });
-    await VENUE_SERVICE.copyOrderContext(tx, d.cfg, tabAResult.tabId, tabB);
+    await createOpenOrder(tx, cfg, tabB, [], null, { partyId: tabAResult.partyId });
+    await VENUE_SERVICE.copyOrderContext(tx, cfg, tabAResult.tabId, tabB);
     return { tabA: tabAResult.tabId, tabB };
   });
   return { app, d, tabA, tabB, cookie };

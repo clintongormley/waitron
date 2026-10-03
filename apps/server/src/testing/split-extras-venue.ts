@@ -19,7 +19,7 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { DeviceRequestConfig, TillConfig } from "../till-config.js";
+import type { DeviceRequestConfig, OriginConfig, TillConfig } from "../till-config.js";
 import { deviceRequestCfg } from "./session-device.js";
 import { createStation } from "../kitchen.js";
 import { createPrinter } from "@waitron/printing";
@@ -237,7 +237,7 @@ export type ProductLine = {
  *  the active claim or default station each product would have taken. */
 export async function createOfferedOrder(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   id: string,
   lines: ProductLine[],
 ): ReturnType<typeof createOpenOrder> {
@@ -251,7 +251,7 @@ export async function createOfferedOrder(
  *  line, children included, to `fireLines`, so the parent-only filter under test is `fireLines`' own. */
 export async function fireNewOrder(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   lines: ProductLine[],
 ): Promise<string> {
   const id = randomUUID();

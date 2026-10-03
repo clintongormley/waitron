@@ -18,6 +18,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/catalogue";
 import { dishKitchenItems, dishKitchenItemsQuery, onDishesOrTheirExtras } from "./dish-kitchen.js";
+import { dashboardOrderAt } from "./testing/session-device.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -49,7 +50,9 @@ async function seed() {
     .returning({ id: kitchenStations.id, name: kitchenStations.name });
   const station = (name: string) => stations.find((s) => s.name === name)!.id;
   const orderId = randomUUID();
-  await db.insert(workingOrders).values({ id: orderId, tillId, nodeId, orderNumber: 1 });
+  await db
+    .insert(workingOrders)
+    .values({ id: orderId, ...dashboardOrderAt(locationId), nodeId, orderNumber: 1 });
   const ids = {
     burger: randomUUID(),
     chips: randomUUID(),

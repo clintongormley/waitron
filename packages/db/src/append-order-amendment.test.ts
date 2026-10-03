@@ -79,12 +79,14 @@ describe("order_amendments append helper", () => {
   /** Seeds one fresh open working order and returns its id. A fresh chain per test so sequence
    * numbers are predictable and one test's rows never interleave with another's. Through the
    * Drizzle builder, since `id` is a `$defaultFn` column applied CLIENT-side. */
-  async function openOrder(till: string, node: string): Promise<string> {
+  async function openOrder(node: string): Promise<string> {
     orderNumberSeq += 1;
     const [row] = await suite.db
       .insert(workingOrders)
       .values({
-        tillId: till,
+        source: "dashboard",
+        deviceId: null,
+        locationId: LOCATION_A,
         nodeId: node,
         orderNumber: orderNumberSeq,
         status: "open",
@@ -140,7 +142,7 @@ describe("order_amendments append helper", () => {
   }
 
   it("appends a hashed per-order sequence, genesis first then linked", async () => {
-    const order = await openOrder(TILL_A1, nodeA);
+    const order = await openOrder(nodeA);
     const first = await inTx((tx) => appendOrderAmendment(tx, genesisA(order)));
     expect(first.sequenceNo).toBe(1);
     const second = await inTx((tx) =>
@@ -174,7 +176,7 @@ describe("order_amendments append helper", () => {
   });
 
   it("is append-only: the trigger refuses an UPDATE and a DELETE", async () => {
-    const order = await openOrder(TILL_A1, nodeA);
+    const order = await openOrder(nodeA);
     await inTx((tx) => appendOrderAmendment(tx, genesisA(order)));
     const eU = await captureError(() =>
       suite.db
@@ -192,7 +194,7 @@ describe("order_amendments append helper", () => {
   });
 
   it("the stored hash commits the reason, actor and capturing node — a tamper of any breaks verification", async () => {
-    const order = await openOrder(TILL_A1, nodeA);
+    const order = await openOrder(nodeA);
     await inTx((tx) => appendOrderAmendment(tx, genesisA(order)));
     await inTx((tx) =>
       appendOrderAmendment(tx, {
@@ -235,7 +237,7 @@ describe("order_amendments append helper", () => {
     // The subject: N callers append to ONE fresh order at once and all N commit with contiguous
     // positions 1..N and one unbroken hash chain. See this file's header for what arranges that.
     const WRITERS = 10;
-    const order = await openOrder(TILL_A1, nodeA);
+    const order = await openOrder(nodeA);
     // A distinct instant per writer, so a lost race would also show as a wrong hash, not only a
     // duplicate position.
     const results = await Promise.all(

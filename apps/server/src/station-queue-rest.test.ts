@@ -16,6 +16,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { listStationQueue } from "./working-order.js";
+import { dashboardOrderAt } from "./testing/session-device.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -42,9 +43,13 @@ describe("station queue rest of the order", () => {
       .values({ locationId, name: "Cocina", isDefault: true })
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
-    await db
-      .insert(workingOrders)
-      .values({ id: orderId, tillId, nodeId, orderNumber: 1, status: "open" });
+    await db.insert(workingOrders).values({
+      id: orderId,
+      ...dashboardOrderAt(locationId),
+      nodeId,
+      orderNumber: 1,
+      status: "open",
+    });
     const ownLineId = randomUUID();
     await db.insert(workingOrderLines).values({
       id: ownLineId,
@@ -161,7 +166,7 @@ describe("station queue rest of the order", () => {
     const ownOnlyOrderId = randomUUID();
     await db.insert(workingOrders).values({
       id: ownOnlyOrderId,
-      tillId,
+      ...dashboardOrderAt(locationId),
       nodeId,
       orderNumber: 2,
       status: "open",

@@ -149,7 +149,7 @@ import {
 } from "./configuration-transfer.js";
 import { createFiscalReadinessStore } from "./fiscal-readiness.js";
 import { fiscalReadinessInput, submitFiscalReadiness } from "./fiscal-readiness-runner.js";
-import { seatTable } from "./parties.js";
+import { moduleCoreServices } from "./parties.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountUnitsApi } from "./units-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
@@ -1558,7 +1558,7 @@ async function bootServer(
       contentDefaultLanguage: venueLocale,
     },
     maxUploadBytes: MAX_UPLOAD_BYTES,
-    core: { seatTable: (tx, req) => seatTable(tx, till, req) },
+    core: moduleCoreServices(till),
   };
   for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);
   // `dataNodeId`, not this node's own id: see its declaration above.

@@ -312,6 +312,14 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "payments/0004_payment_origin_required": {
     refused: ["NOT NULL constraint failed: __new_payments.source"],
   },
+  // Adds `working_orders.source` as required with no default; a held row has no source to name.
+  "core/0082_working_orders_add_origin": {
+    refused: ["ALTER TABLE `working_orders` ADD `source`", "Cannot add a NOT NULL column"],
+  },
+  // Rebuilds `working_orders` with the source list's check; a carried row's source is not on it.
+  "core/0083_working_orders_drop_till": {
+    refused: ["CHECK constraint failed: working_orders_source_ck"],
+  },
 };
 
 /** What a step's failure lacks against its RESETS entry, or `undefined` when it matches. */
