@@ -2266,7 +2266,8 @@ describe("till-app", () => {
       });
     });
 
-    // A handheld's canvas has no counter tab, so nothing on it fills the basket.
+    // Till only: the phone layout the handheld cases above use has no counter tab or sale cards, so
+    // nothing on it fills the basket.
     it("leaves a logged-out till's basket in place after new-sale, for the next sign-in", async () => {
       const { el } = await mountApp();
       const c = await toCounter(el);
