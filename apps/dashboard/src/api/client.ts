@@ -1427,6 +1427,10 @@ export interface OrderDetailDto {
   }[];
 }
 
+/** Above three Stripe attempts that go silent for 80 s once connected (`defaultMakeStripe`, in
+ * payments-stripe's card-provider.ts); a slow sender or a connection slow to open can take longer. */
+const CARD_PROVIDER_READ_LIMIT_MS = 250_000;
+
 export class DashboardApi {
   readonly liveData = new LiveData();
   #background?: DashboardApi;
@@ -3128,13 +3132,20 @@ export class DashboardApi {
   }
 
   readerStatus(id: string): Promise<ReaderStatusView> {
-    return this.#request<ReaderStatusView>(`/management-api/payments/readers/${id}/status`, "GET");
+    return this.#request<ReaderStatusView>(
+      `/management-api/payments/readers/${id}/status`,
+      "GET",
+      undefined,
+      { timeLimitMs: CARD_PROVIDER_READ_LIMIT_MS },
+    );
   }
 
   availableReaders(providerId: string): Promise<AvailableReader[]> {
     return this.#request<AvailableReader[]>(
       `/management-api/payments/providers/${encodeURIComponent(providerId)}/available-readers`,
       "GET",
+      undefined,
+      { timeLimitMs: CARD_PROVIDER_READ_LIMIT_MS },
     );
   }
 

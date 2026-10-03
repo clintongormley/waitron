@@ -51,6 +51,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This browser could not connect to Waitron. Check your connection and try again.",
     es: "Este navegador no pudo conectar con Waitron. Comprueba tu conexión e inténtalo de nuevo.",
   },
+  "connection.timed_out": {
+    en: "Waitron is taking too long to answer. Try again in a moment.",
+    es: "Waitron está tardando demasiado en responder. Inténtalo de nuevo en un momento.",
+  },
   "category.not_found": {
     en: "This category no longer exists. Refresh the list.",
     es: "Esta categoría ya no existe. Actualiza la lista.",

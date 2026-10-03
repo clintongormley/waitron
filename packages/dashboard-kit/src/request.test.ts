@@ -278,7 +278,7 @@ describe("the time limit on a read", () => {
     return record;
   }
 
-  it("gives up on a GET the server never answers after 30 seconds, as a lost connection", async () => {
+  it("gives up on a GET the server never answers after 30 seconds, as a read that took too long", async () => {
     const fetchImpl = hangingFetch();
     const onError = vi.fn();
     const out = track(createRequest({ fetchImpl, onError })("/management-api/staff", "GET"));
@@ -288,9 +288,9 @@ describe("the time limit on a read", () => {
     expect(fetchImpl.mock.calls[0]![1].signal?.aborted).toBe(false);
 
     await vi.advanceTimersByTimeAsync(1);
-    expect(out.settled).toEqual({ error: { code: "connection.failed" } });
+    expect(out.settled).toEqual({ error: { code: "connection.timed_out" } });
     expect(fetchImpl.mock.calls[0]![1].signal?.aborted).toBe(true);
-    expect(onError.mock.calls).toEqual([["connection.failed"]]);
+    expect(onError.mock.calls).toEqual([["connection.timed_out"]]);
   });
 
   it("does not cut off a GET answered just inside the limit", async () => {
@@ -313,18 +313,18 @@ describe("the time limit on a read", () => {
     const out = track(createRequest({ fetchImpl, onError })("/management-api/staff", "GET"));
 
     await vi.advanceTimersByTimeAsync(30_000);
-    expect(out.settled).toEqual({ error: { code: "connection.failed" } });
-    expect(onError.mock.calls).toEqual([["connection.failed"]]);
+    expect(out.settled).toEqual({ error: { code: "connection.timed_out" } });
+    expect(onError.mock.calls).toEqual([["connection.timed_out"]]);
   });
 
-  it("reports a refusal whose body stops part-way as a lost connection, not a server fault", async () => {
+  it("reports a refusal whose body stops part-way as a read that took too long, not a server fault", async () => {
     const fetchImpl = vi.fn<FetchLike>(async (_url, init) => stalledBody(500, init.signal));
     const onError = vi.fn();
     const out = track(createRequest({ fetchImpl, onError })("/management-api/staff", "GET"));
 
     await vi.advanceTimersByTimeAsync(30_000);
-    expect(out.settled).toEqual({ error: { code: "connection.failed" } });
-    expect(onError.mock.calls).toEqual([["connection.failed"]]);
+    expect(out.settled).toEqual({ error: { code: "connection.timed_out" } });
+    expect(onError.mock.calls).toEqual([["connection.timed_out"]]);
   });
 
   it("passes on a body that fails for another reason within the limit unchanged", async () => {
@@ -346,7 +346,68 @@ describe("the time limit on a read", () => {
     const out = track(createRequest({ fetchImpl })("/management-api/staff", "GET"));
 
     await vi.advanceTimersByTimeAsync(30_000);
+    expect(out.settled).toEqual({ error: { code: "connection.timed_out" } });
+  });
+
+  it("waits as long as a read's own limit asks before giving up", async () => {
+    const fetchImpl = vi.fn<FetchLike>(
+      () => new Promise((resolve) => setTimeout(() => resolve(jsonResponse({ ok: 1 })), 60_000)),
+    );
+    const onError = vi.fn();
+    const out = track(
+      createRequest({ fetchImpl, onError })(
+        "/management-api/payments/readers/r-1/status",
+        "GET",
+        undefined,
+        {
+          timeLimitMs: 90_000,
+        },
+      ),
+    );
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(out.settled).toEqual({ value: { ok: 1 } });
+    expect(fetchImpl.mock.calls[0]![1].signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(out.settled).toEqual({ value: { ok: 1 } });
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("gives up on a read with its own limit when that limit runs out", async () => {
+    const fetchImpl = hangingFetch();
+    const onError = vi.fn();
+    const out = track(
+      createRequest({ fetchImpl, onError })(
+        "/management-api/payments/readers/r-1/status",
+        "GET",
+        undefined,
+        {
+          timeLimitMs: 90_000,
+        },
+      ),
+    );
+
+    await vi.advanceTimersByTimeAsync(89_999);
+    expect(out.settled).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(out.settled).toEqual({ error: { code: "connection.timed_out" } });
+    expect(fetchImpl.mock.calls[0]![1].signal?.aborted).toBe(true);
+    expect(onError.mock.calls).toEqual([["connection.timed_out"]]);
+  });
+
+  it("still reports a fetch that fails on its own as a lost connection", async () => {
+    const onError = vi.fn();
+    const out = track(
+      createRequest({
+        fetchImpl: vi.fn<FetchLike>().mockRejectedValue(new TypeError("Failed to fetch")),
+        onError,
+      })("/management-api/staff", "GET"),
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
     expect(out.settled).toEqual({ error: { code: "connection.failed" } });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(onError.mock.calls).toEqual([["connection.failed"]]);
   });
 
   it("puts no limit on a write", async () => {
