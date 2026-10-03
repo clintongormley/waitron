@@ -8,7 +8,7 @@ import { deviceProfiles, printJobs, products, workingOrders } from "@waitron/db"
 import { createPrinter } from "@waitron/printing";
 import { createException, deleteException, writePrintHeldWork } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
-import { createWatcher, setPrinterWatcher } from "./watchers.js";
+import { createWatcher, removeWatcher, setPrinterWatcher } from "./watchers.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
   adjustments,
@@ -163,7 +163,7 @@ describe("watcher corrections through order actions", () => {
     }
   });
   it("routes beer VOID only to its watcher, and steak VOID to the Grill-only watcher", async () => {
-    const { routeId, printerIds } = await inTx(venue, async (tx) => {
+    const { routeId, printerIds, watcherIds } = await inTx(venue, async (tx) => {
       const bar = await createStation(tx, venue.cfg, { name: `Bar ${randomUUID()}` });
       const [beer] = await tx
         .select({ id: products.id })
@@ -176,6 +176,7 @@ describe("watcher corrections through order actions", () => {
         target: { kind: "station", stationId: bar.id },
       });
       const ids: string[] = [];
+      const watcherIds: string[] = [];
       for (const [label, stationIds] of [
         ["Both", [venue.stationId, bar.id]],
         ["Grill only", [venue.stationId]],
@@ -199,8 +200,9 @@ describe("watcher corrections through order actions", () => {
         );
         await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
         ids.push(printer.id);
+        watcherIds.push(watcher.id);
       }
-      return { routeId, printerIds: ids };
+      return { routeId, printerIds: ids, watcherIds };
     });
     try {
       const { billId } = await billWith(venue, [{ name: "Steak" }, { name: "Cana" }]);
@@ -246,7 +248,15 @@ describe("watcher corrections through order actions", () => {
         expect(printedLines(slips[0]!.payload).join(" ")).toContain("VOID");
       }
     } finally {
-      await inTx(venue, (tx) => deleteException(tx, venue.cfg, routeId));
+      await inTx(venue, async (tx) => {
+        for (const printerId of printerIds) {
+          await setPrinterWatcher(tx, venue.cfg, printerId, null);
+        }
+        for (const watcherId of watcherIds) {
+          await removeWatcher(tx, venue.cfg, watcherId);
+        }
+        await deleteException(tx, venue.cfg, routeId);
+      });
     }
   });
 });
