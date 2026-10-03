@@ -198,6 +198,17 @@ async function snapshot(tabId: string, itemId: string) {
   };
 }
 
+/** A station's notices as listed at `at`: the list leaves out any from before the clock's business day. */
+async function noticesAt(stationId: string, at: Date) {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(at);
+  try {
+    return await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, stationId));
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
 describe("stillMovable", () => {
   const line = { servedAt: null, servedQuantity: 0 };
 
@@ -319,7 +330,7 @@ describe("release", () => {
     const paper = decodeTicket((await jobs(grillPrinter))[oldGrillJobs]!.payload);
     expect(paper).toContain("From Bar");
     expect(paper).not.toMatch(/^\s*(?:\*+\s*)?FIRE\b/m);
-    const notices = await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar));
+    const notices = await noticesAt(bar, at);
     expect(notices.at(-1)).toMatchObject({ kind: "rerouted", reroutedTo: "Grill" });
     const alerts = await inTx(venue, (tx) =>
       tx.select().from(incidents).where(eq(incidents.code, "route.released_at_closed_station")),
@@ -616,10 +627,10 @@ describe("release", () => {
       await setStationToday(tx, venue.cfg, bar, "closed", at);
     });
     const barJobs = (await jobs(barPrinter)).length;
-    const barNotices = (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar))).length;
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(at);
     try {
+      const barNotices = (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar))).length;
       await inTx(venue, (tx) => sendLines(tx, venue.cfg, tabId, [line!.lineNo]));
       const [after] = await inTx(venue, (tx) =>
         tx.select().from(ticketItems).where(eq(ticketItems.id, item.id)),
