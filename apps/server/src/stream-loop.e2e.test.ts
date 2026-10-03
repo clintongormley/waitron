@@ -581,7 +581,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       };
       const baseline: number[] = [];
       for (let i = 0; i < TIMED_SALES; i += 1) baseline.push((await timedSale(i)).ms);
-      s3.pause();
+      await s3.pause();
       let lastSaleId = "";
       try {
         // Long enough for Litestream to be part-way through calls the server will not answer.

@@ -58,8 +58,12 @@ function listing(server: S3TestServer): Promise<"answered" | "refused" | "unansw
 describe("startS3TestServer", () => {
   let scratch: string;
   const started: S3TestServer[] = [];
-  const start = async (bin: string) => {
-    const server = await startS3TestServer({ bin, root: await mkdtemp(join(scratch, "s3-")) });
+  const start = async (bin: string, readState?: () => Promise<string | undefined>) => {
+    const server = await startS3TestServer({
+      bin,
+      root: await mkdtemp(join(scratch, "s3-")),
+      readState,
+    });
     started.push(server);
     return server;
   };
@@ -90,12 +94,37 @@ describe("startS3TestServer", () => {
 
     expect(second.endpoint).not.toBe(first.endpoint);
     expect(await listing(second)).toBe("answered");
-    second.pause();
+    const paused = second.pause();
+    expect(paused).toBeInstanceOf(Promise);
+    await paused;
     const pending = listing(second);
     expect(await listing(first)).toBe("answered");
     expect(await pending).toBe("unanswered");
     second.resume();
     expect(await listing(second)).toBe("answered");
+  });
+
+  it("does not resolve a pause while the process state still reports running", async (ctx) => {
+    const pendingStates: Array<(state: string) => void> = [];
+    const readState = () =>
+      new Promise<string>((resolve) => {
+        pendingStates.push(resolve);
+      });
+    const server = await start(versitygwBin(ctx), readState);
+
+    const paused = server.pause();
+    let resolved = false;
+    void paused.then(() => {
+      resolved = true;
+    });
+    await vi.waitFor(() => expect(pendingStates).toHaveLength(1));
+    expect(resolved).toBe(false);
+    pendingStates.shift()!("R");
+    await vi.waitFor(() => expect(pendingStates).toHaveLength(1));
+    expect(resolved).toBe(false);
+    pendingStates.shift()!("T");
+    await paused;
+    expect(resolved).toBe(true);
   });
 
   it("gives up, naming the port and the server's words, when every port it draws is taken", async (ctx) => {

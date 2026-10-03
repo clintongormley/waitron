@@ -4971,14 +4971,13 @@ characters. Left open:
 ### B9. CI and test infra
 
 - **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254
-  attempt 1, job 111163230954, 2026-10-03; passed on re-run; not fixed).** In
+  attempt 1, job 111163230954, 2026-10-03; passed on re-run).** In
   `apps/server/src/stream-pause.e2e.test.ts` step 6, the call to the bucket made just after
   `s3.pause()` answered before the bound, so the assertion at line 540 read
-  `expected 'answered' to be 'unanswered'`. A possible cause, not tested: `pause()` in
-  `apps/server/src/testing/s3-test-server.ts` sends `SIGSTOP` and returns without waiting for the
-  process to be stopped, so a call can be answered in between. The PR did not change either file.
-  Next action: reproduce it (repeat the job, or the step in a loop), then have `pause()` wait until
-  the process reports itself stopped (on Linux, state `T` in `/proc/<pid>/stat`) before returning.
+  `expected 'answered' to be 'unanswered'`. W30 makes `pause()` await the stopped state before its
+  caller starts that control. The original one-off race has not been reproduced locally; the
+  changed real-binary stream pause and loop suites passed together on 2026-10-03. If the control
+  fails again, retain that run's log and inspect the child state before naming another cause.
 - **The stream pause test's last restore failed once in CI, about 31 s after the stream resumed
   (PR #1055, run 37042034082, job 110955048468, 2026-10-02; not fixed).** In
   `apps/server/src/stream-pause.e2e.test.ts` step 10, the probe that restores the generation to
@@ -4987,11 +4986,12 @@ characters. Left open:
   at once. The six green runs of the same job read that day went from the resume to the end of the
   test in about 2.5 s. Since 31 s is just past the probe's 30 s `RESTORE_MS` ceiling, the likeliest
   reading is a `litestream restore` against versitygw that never finished and was stopped there.
-  That is inferred: the error's `exitCode` is not in the log, and the run was not repeated before
+  That is inferred: the error's `exitCode` was not in the log, and the run was not repeated before
   this was written down. The PR's own change is not on that path; the test's sales go through
-  `POST /api/sales`, which does not reach `readPartyBills`. Next action: have the probe log the
-  restore's exit code and Litestream's output when it fails, then find out whether the restore
-  hangs or exits refused.
+  `POST /api/sales`, which does not reach `readPartyBills`. W30 adds failure diagnostics with the
+  child exit code when available, whether the restore was abandoned, and whatever Litestream
+  output was captured; output may be empty on abandonment. The cause of the one-off failure remains
+  open. Next action: inspect those details from any new failing run before choosing a repair.
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full (in a Linux
   container the test peaked at about 14 MiB and failed with 8 MiB free), and on CI's Linux runner
