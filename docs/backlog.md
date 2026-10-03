@@ -1201,7 +1201,9 @@ read failed. Roster and Planned vs actual show the error, not their "no location
 locations read fails before it has ever answered. Since lane A's W18a, every dashboard `GET` made
 through `createRequest`, except a file download, gives up after 30 seconds (the owner's value,
 2026-10-03): `createRequest` (`packages/dashboard-kit/src/request.ts`) aborts it and it fails as
-`connection.failed`, so a read the server never finishes stops loading. A read the live data store
+`connection.failed`, so a read the server never finishes stops loading (since lane A's W18c,
+2026-10-03, such a read fails as `connection.timed_out`, "Waitron is taking too long to answer…",
+and a fetch that fails on its own still as `connection.failed`; see A255). A read the live data store
 keeps (`packages/dashboard-kit/src/live-data.ts`) is then read again like any other failed one: at
 once if something asked for it while it waited (the live connection, the query's timed refresh, or
 a save on the same screen), otherwise the next time one of those asks. A one-off read, such as
@@ -1228,13 +1230,48 @@ Left as it was (#1142's run-it review, which found the same on `main`): on Devic
 failed one-off reload's message can stay after fresh data arrives.
 
 **A dashboard read that waits on an outside service can be cut off at 30 seconds and reported as a
-broken connection (A255, from lane A's W18a, #1135, 2026-10-03) — OPEN, queued as lane A's W18c.**
-Since #1135 every dashboard `GET` gives up after 30 seconds with `connection.failed`. Some server
-routes behind those reads call an outside service whose own limit may be longer (the card readers'
-list and status, the Cloud services checks, the bucket and backup status reads — not yet listed
-with their limits), so a slow answer can be cut off and the person told to check a connection
-that works. Next step: list each such route with its provider's limit (`file:line`), give those
-reads a limit above it at the call site, and report a timed-out read with its own message.
+broken connection (A255, from lane A's W18a, #1135, 2026-10-03) — DONE (lane A's W18c).** Two
+dashboard reads wait on a card provider, and each now passes its own limit to `createRequest`
+(`packages/dashboard-kit/src/request.ts`, the `timeLimitMs` option). A reader's status
+(`GET /management-api/payments/readers/:id/status`) and the provider's available readers
+(`GET /management-api/payments/providers/:id/available-readers`) wait up to 250 seconds
+(`apps/dashboard/src/api/client.ts`), above Stripe's worst case of three 80-second attempts
+(stripe 22.6.2, `esm/stripe.esm.node.js` lines 98 and 178). The SumUp pairing dialog's status
+read waits up to 50 seconds (`packages/payments-sumup/src/dashboard/client.ts`), above SumUp's two
+20-second calls (`packages/payments-sumup/src/sumup-client.ts`, line 85). Every other read keeps
+30 seconds. A read that runs out of time now fails as `connection.timed_out` ("Waitron is taking
+too long to answer. Try again in a moment."), and a fetch that fails on its own still as
+`connection.failed`; a timed-out read the live data store keeps is read again as before. The other
+reads this entry named do not wait on an outside service, read in the code and not run: the Cloud
+status and backup status reads and the bucket settings read look only at local files and the
+database, and the Cloud network calls belong to actions, which have no limit. One read that would
+wait on a card provider, the alerts list, today fails before it reaches one (A258).
+
+**A low card-reader battery is never alerted: the alerts list asks the card provider inside a
+transaction, and the provider's key read is refused (A258, found while checking lane A's W18c,
+2026-10-03) — OPEN, unqueued.** The alerts list read (`GET /management-api/alerts`,
+`apps/server/src/alerts-api.ts`, lines 37 to 57) runs every alert source inside one
+`withTransaction`, each source in a nested one (`apps/server/src/alerts.ts`, line 105). The
+card-reader battery source (`batteryAlertSource`, `apps/server/src/alert-sources.ts`, line 381,
+given the real card providers in `apps/server/src/boot.ts`) asks each provider for a reader's
+status, and the provider reads its secret key in ANOTHER `withTransaction`
+(`packages/payments-sumup/src/card-provider.ts`, lines 55 to 57;
+`packages/payments-stripe/src/card-provider.ts`, lines 93 to 95). The write queue refuses that
+second one: "write lock: a body asked for the lock it is already holding"
+(`packages/store/src/write-queue.ts`, lines 33 to 35). Measured on `main` at 2bcb4c617 with a
+throwaway experiment, not committed: with SumUp the alerts list shows `alert.source_unavailable` for
+the `card_reader` area (logged with `errorCode: unknown`) and makes no network call, so a SumUp
+reader's low battery is never alerted; with Stripe the refusal is caught (`card-provider.ts`,
+lines 223 to 224) and the reader reads as unreachable without Stripe being asked, which changes
+nothing visible because Stripe reports no battery. Control: the same status call outside a
+transaction reached the stubbed provider for both, and SumUp reported `batteryPercent: 5`. Not
+tested: the battery source's five-minute cache. History (`git log -S`): the battery source came in
+4c9bf11cf (#371, 2026-09-15), the providers' key read in its own transaction in 91caf00d9 (#378),
+and the refusal of a nested lock request in aabdde6a8 (#489, the switch to SQLite). If it is fixed
+by moving the provider call out of the transaction, take care that the alerts read does not
+instead hold the write lock for the provider's whole wait, which for Stripe can be about four
+minutes; and the alerts list would then be a dashboard read waiting on an outside service, which
+needs a limit above that wait (A255).
 
 **Empty-state text shows beside a failed read on Payments and Cloud services (A252, seen 2026-10-03
 while checking lane A's W18) — OPEN.** While its read is failing, Payments still says "No card
