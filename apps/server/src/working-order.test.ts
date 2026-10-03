@@ -53,6 +53,7 @@ import {
   advanceTicketItem,
   bumpCourseReady,
   createOpenOrder,
+  splitLinesWithinOrder,
   fireCourse,
   fireLines,
   getHeldOrder,
@@ -5706,6 +5707,73 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
 });
 
 describe("a cancel's extras cascade (FIX 2)", () => {
+  it("splits a 50 g child with its dish without changing either frozen price", async () => {
+    const { cfg, cafeId, catalogueId, kgUnitId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      const extra = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Jamón",
+        unitId: kgUnitId,
+        unitPrice: "0.27",
+        vatClass: "general",
+      });
+      const list = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Jamón list",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 3,
+          active: true,
+          items: [
+            {
+              productId: extra.id,
+              portion: "0.050",
+              maxQuantity: 3,
+              preselected: false,
+              price: null,
+            },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
+      const tableId = await makeTable(tx, cfg);
+      const tabId = await openExtrasTab(tx, cfg, tableId, [
+        {
+          productId: cafeId,
+          quantity: "2",
+          extras: [{ listId: list.id, picks: [{ productId: extra.id, quantity: 3 }] }],
+        },
+      ]);
+
+      await splitLinesWithinOrder(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }], {
+        splitExtras: true,
+      });
+      const rows = await tx
+        .select({
+          parentLineId: workingOrderLines.parentLineId,
+          quantity: workingOrderLines.quantity,
+          priceQuantity: workingOrderLines.priceQuantity,
+          lineTotal: workingOrderLines.lineTotal,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(workingOrderLines.lineNo);
+      expect(rows).toHaveLength(4);
+      expect(
+        rows.map(({ quantity, priceQuantity, lineTotal }) => [quantity, priceQuantity, lineTotal]),
+      ).toEqual([
+        [1000, 1000, 150],
+        [150, 50, 3],
+        [1000, 1000, 150],
+        [150, 50, 3],
+      ]);
+    });
+  });
+
   it("keeps one frozen 50 g extra portion when one of two dishes is cancelled", async () => {
     const { cfg, cafeId, catalogueId, kgUnitId } = await setupVenue();
     await withTransaction(db, async (tx) => {

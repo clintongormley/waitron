@@ -3351,6 +3351,7 @@ export async function carveOffLines(
       optionSnapshots: workingOrderLines.optionSnapshots,
       quantity: workingOrderLines.quantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
+      priceQuantity: workingOrderLines.priceQuantity,
       vatClass: workingOrderLines.vatClass,
       category: workingOrderLines.category,
       unitName: workingOrderLines.unitName,
@@ -3383,6 +3384,7 @@ export async function carveOffLines(
     ...l,
     quantity: thousandthsToDecimal(l.quantity),
     unitPriceGross: centsToDecimal(l.unitPriceGross),
+    priceQuantity: thousandthsToDecimal(l.priceQuantity),
   }));
   const byLineNo = new Map(sourceLines.map((l) => [l.lineNo, l]));
   const lineNoById = new Map(sourceLines.map((l) => [l.id, l.lineNo]));
@@ -3457,11 +3459,11 @@ export async function carveOffLines(
       const remaining = subtractDecimal(decimal(line.quantity), moved);
       const children = childLineNos.map((childLineNo) => {
         const row = byLineNo.get(childLineNo)!;
-        const perDish = perDishOptionQuantity(row.quantity, line.quantity);
+        const perDish = perDishExtraPicks(row.quantity, line.quantity, row.priceQuantity);
         return {
           row,
-          remaining: extraQuantityFor(perDish, remaining),
-          moved: extraQuantityFor(perDish, moved),
+          remaining: extraQuantityFor(perDish, remaining, row.priceQuantity),
+          moved: extraQuantityFor(perDish, moved, row.priceQuantity),
         };
       });
       // An extra that is not a whole count a dish would split into parts that do not add up to it,
@@ -3516,7 +3518,9 @@ export async function carveOffLines(
         .update(workingOrderLines)
         .set({
           quantity: decimalToThousandths(remaining),
-          lineTotal: decimalToCents(grossLineTotal(row.unitPriceGross, remaining)),
+          lineTotal: decimalToCents(
+            grossLineTotal(row.unitPriceGross, remaining, row.priceQuantity),
+          ),
         })
         .where(eq(workingOrderLines.id, row.id));
       await clampServed(tx, [row.id]);
@@ -3537,8 +3541,9 @@ export async function carveOffLines(
         optionSnapshots: row.optionSnapshots ?? [],
         quantity: movedThousandths,
         unitPriceGross: decimalToCents(row.unitPriceGross),
+        priceQuantity: decimalToThousandths(row.priceQuantity),
         vatClass: row.vatClass,
-        lineTotal: decimalToCents(grossLineTotal(row.unitPriceGross, moved)),
+        lineTotal: decimalToCents(grossLineTotal(row.unitPriceGross, moved, row.priceQuantity)),
         category: row.category,
         unitName: row.unitName,
         unitPrecision: row.unitPrecision,
