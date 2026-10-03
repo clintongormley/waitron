@@ -1388,6 +1388,31 @@ exist. The options list editor gives its Default heading the same two rules
 options probably shows the same fault; that has not been opened to check. A198's Chromium checks did
 not cover an empty table; the fix adds that case for both editors.
 
+**The number field with − and + is still too wide (A263, owner 2026-10-03) — OPEN, queued: mockups
+first.** The owner, on a screenshot of the extras list editor after A202: _"i'm not sure about the
+number fields with the +- buttons, they're very wide"_. Each button is `--wt-tap-min` (44px) wide,
+so 88px of every box is buttons; the box is at least `--wt-stepper-field-width` (152px), or
+`--wt-stepper-field-width-wide` (184px) when its blank value shows words such as "No limit", and a
+longer label such as "Minimum choices" widens it further
+(`packages/ui-core/src/tokens/structure.css`, `packages/ui/src/components/wt-number-stepper.ts`).
+**Next step (owner's choice, 2026-10-03):** a brainstorm that draws narrower versions side by side,
+at 1280px and phone width, for the owner to pick from, as A202 did. A202's constraint still stands:
+stacked up/down arrows were turned down because each came to 28px tall, below `--wt-tap-min`.
+Options raised but not chosen: narrower buttons on the dashboard only, an ordinary number box on
+the dashboard with the steppers kept for touch screens, and shorter labels.
+
+**The extras list editor's columns move as products are added (A264, owner 2026-10-03) — OPEN,
+queued.** The owner, on two screenshots of the editor before and after adding a second product:
+_"the layout jumps as you add different extras options"_. Adding "Croquetas" beside "Bravas" moved
+the Maximum quantity, Preselected and Price columns right by about 19 CSS pixels (measured from
+the screenshots), because the table sizes its Product column to its longest name
+(`apps/dashboard/src/widgets/extra-list-form.ts`; only the grip, Preselected and remove columns
+have widths, from A198). **Wanted:** columns that stay put as rows are added, removed or renamed,
+with a long product name wrapping or cut rather than pushing the others along, at phone and
+desktop width. The options list editor (`option-list-form.ts`) gives its Name column the spare
+width (A198), so whether its columns move too has not been checked. Do it with A262, which changes
+the same column rules.
+
 **The option form opens with its names section expanded (A199, owner 2026-10-02) — DONE by A170
 (#1040):** the option window no longer folds its names at all, so they show on open on Add and Edit;
 "can still be collapsed" no longer applies, because nothing folds. The
