@@ -234,12 +234,12 @@ when its ticket printed there), and checking a held dish whose station closed or
 release against the current rules. A station chosen by hand stays while switched on, even if closed,
 without an alert. Otherwise, with no replacement, the dish stays at its old station and raises an
 alert. A dish made at the till is never moved or re-routed
-([plan](superpowers/plans/2026-10-01-moving-dishes-slice-3c3.md)). What is left:
-- **3d**, watchers ([plan](superpowers/plans/2026-10-01-watchers-slice-3d.md)): the pass and runners
+([plan](superpowers/plans/2026-10-01-moving-dishes-slice-3c3.md)). Status and remaining work:
+- **3d watchers — LANDED (#1088, 2026-10-03)** ([plan](superpowers/plans/2026-10-01-watchers-slice-3d.md)): the pass and runners
   follow stations and service zones on screen and paper. Each watcher has its own Done, while Away
   stays shared. Watcher printers replace whole-order printing; an existing printer set to
   "one ticket per order" keeps printing its attached stations' tickets until you attach it to a
-  watcher (owner, 2026-10-01). PF8 is in progress in lane D.
+  watcher (owner, 2026-10-01).
 - **Show how many dishes are being made on the table plan — OPEN (3d, W16).** The plan has no such
   count; adding one needs another value from `listTablesWithState`.
 - **Refresh the floor without a staff action — OPEN (3d, W16).** `till-floor-screen.ts` reads on
@@ -5421,8 +5421,9 @@ recommendation are in lane B's question of 2026-10-03; the measurement branch
 
 - **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23; narrowed by A92 and by C127's second pull request (#1039), which renamed the `pg` handles to `suite`, dropped five `.sqlite.` infixes and retitled the `bytea` test).**
   Still open: `apps/server/src/working-order-reads.sqlite.test.ts` keeps its `.sqlite.` infix
-  because the approved slice 3d plan (`docs/superpowers/plans/2026-10-01-watchers-slice-3d.md`,
-  now PF8 in lane D) runs it by that name; rename it once PF8 has landed. The `pg` handle
+  because the approved slice 3d plan (`docs/superpowers/plans/2026-10-01-watchers-slice-3d.md`)
+  ran it by that name. PF8 landed as #1088; rename the file and its references in the next T2
+  sweep. The `pg` handle
   stays in `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and `inmutabilidad.test.ts`,
   the fiscal gates no runner edits.
   `generatePassword` has a caller in `apps/server/src/break-glass.ts` and remains exported.
