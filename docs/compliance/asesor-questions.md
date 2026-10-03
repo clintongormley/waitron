@@ -13,21 +13,24 @@ On **2026-10-03** (W41s, the design for a fiscal chain AEAT disagrees with): **Q
 in a new section, *Recovering from conflicts*. They replace the ten questions the design listed in its
 §10. Later the same day **Q5(f)** was added, on how new series are named. The standalone copy (the
 English and Spanish Word files) was updated the same day: its new section 6 carries Q33 to Q40 as 6.1
-to 6.8, and Q5(f) is its section 4.3's questions (e) and (f).
+to 6.8, and Q5(f) is its section 4.3's questions (e) and (f). The same pass brought the three
+older gaps noted below up to date: section 1.8 (Q28) now describes the owner's 2026-10-01 decision,
+section 1.9 (Q29) the 2026-09-30 receipt, and a new section 3.5 carries Q32; section 3.3 (Q31) no
+longer says the tills cannot issue a corrective invoice.
 
 On **2026-10-01** (lane B item B17): the owner decided **Q28** without the asesor — the full
 simplified invoice is issued when the table leaves, and a later payment is recorded against it —
-and leaving without paying is now built on that decision. Q28 stays open for the asesor to confirm. The standalone copy's section 1.8 (Q28) has not been updated for this.
+and leaving without paying is now built on that decision. Q28 stays open for the asesor to confirm. *(The standalone copy's section 1.8 was updated for this on 2026-10-03.)*
 
 On **2026-10-02** (lane C item C126, built in lane B): **Q32 added** — the owner decided, without
 the asesor, that cancelling an order whose ticket was already issued credits it in full with an R5
-corrective invoice; Q32 asks whether that, or an annulment, is right. The standalone copy has no
-section for Q32 and has not been updated for this.
+corrective invoice; Q32 asks whether that, or an annulment, is right. *(The standalone copy gained
+section 3.5 for Q32 on 2026-10-03.)*
 
 Later on **2026-09-30** (C90, owner decision that day): Q29's notes and parts (a), (c) and (e) now
 describe the new receipt. It prints each dish at its full price with each comp or discount on a line
 of its own beneath it, and a discount on the whole bill on a line of its own; the filed record is
-unchanged. The standalone copy's section 1.9 (Q29) has not been updated for this.
+unchanged. *(The standalone copy's section 1.9 was updated for this on 2026-10-03.)*
 
 Last revised **2026-09-30**, checked against the backlog, the owner's decisions and `main` at
 `34fb2b487`:
