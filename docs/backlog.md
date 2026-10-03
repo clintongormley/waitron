@@ -1586,6 +1586,12 @@ get 50->100->150 etc"_. The list item now stores a portion and the offer freezes
 price per portion. The saved child line records its physical amount and price basis; receipt and
 kitchen labels use the saved amount. The menu's published offer stays in use until republishing.
 
+**An extra sold by the piece prints as `x3` on receipts, kitchen tickets and the till (W53,
+owner 2026-10-03) — DONE.** The presentation reads the saved unit identity: Each shows its pick
+count per dish, while weight and volume retain the total physical amount and saved abbreviation.
+This amends the display decision in the [A203 design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md);
+the filed sale amount and fiscal record are unchanged.
+
 **Decided (owner, 2026-10-02):**
 
 - an extras list item for a product whose unit is weighed (`hardwareUnit` set) or fractional

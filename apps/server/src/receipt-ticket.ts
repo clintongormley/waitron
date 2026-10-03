@@ -82,7 +82,6 @@ export interface FormatReceiptInput {
 }
 
 /** The per-dish option-quantity badge (`×2`). */
-const QTY_BADGE = "×";
 
 /**
  * A filed line's goods name (art. 7.1.e): the names' locale, then any description; "" only for an
@@ -216,12 +215,12 @@ export function formatReceipt({
       text(`  ${answer}`, 2);
     }
     for (const option of options) {
-      // No quantity prefix: a count option uses a per-dish badge, while a weighed extra shows its filed amount.
+      // A measured extra shows its filed amount; an Each extra shows the count per dish.
       const name = lineName(option.descriptions, namesLocale);
       let caption: string;
-      if (option.unitName == null) {
+      if (option.unitName == null || option.soldInEach === true) {
         const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
-        caption = perDish > 1 ? `  ${name} ${QTY_BADGE}${perDish}` : `  ${name}`;
+        caption = perDish > 1 ? `  ${name} x${perDish}` : `  ${name}`;
       } else {
         caption = `  ${name} ${option.quantity} ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`;
       }

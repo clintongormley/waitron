@@ -650,6 +650,65 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     expect(text).toMatch(/2 ud\s+Agua mineral/u);
   });
 
+  it("prints a filed Each extra as a pick count in Spanish, regardless of its abbreviation", () => {
+    const result: TillSaleResult = {
+      ...FILED_SALE,
+      lines: [
+        { descriptions: { "es-ES": "Tostada" }, quantity: "1", gross: "2.00", parentLineNo: null },
+        {
+          descriptions: { "es-ES": "Queso" },
+          quantity: "3",
+          gross: "1.50",
+          parentLineNo: 1,
+          unitName: { es: "pzas" },
+          unitPrecision: 0,
+          soldInEach: true,
+        },
+      ],
+      total: "3.50",
+    };
+    const text = decodeTicket(
+      formatReceipt({
+        result,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    );
+    expect(text).toContain("Queso x3");
+    expect(text).not.toContain("3 pzas");
+  });
+
+  it("keeps an integral volume amount and its unit when the stored identity is not Each", () => {
+    const result: TillSaleResult = {
+      ...FILED_SALE,
+      lines: [
+        { descriptions: { "en-GB": "Tea" }, quantity: "1", gross: "2.00", parentLineNo: null },
+        {
+          descriptions: { "en-GB": "Milk" },
+          quantity: "150",
+          gross: "1.50",
+          parentLineNo: 1,
+          unitName: { en: "ml" },
+          unitPrecision: 0,
+        },
+      ],
+      total: "3.50",
+    };
+    const text = decodeTicket(
+      formatReceipt({
+        result,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "en-GB",
+        printer: PRINTER_80,
+      }),
+    );
+    expect(text).toContain("Milk 150 ml");
+    expect(text).not.toContain("Milk x150");
+  });
+
   it("groups modifier lines under their dish — dish at its price, options indented at their delta, and the lines reconcile with the filed desglose", () => {
     // The dish is a PARENT line and each option a CHILD line pointing at it, each a filed sale
     // line. Σ(line.gross) === total and Σ(base + tax) === total: the receipt groups the filed lines
@@ -710,7 +769,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
 
   it("badges an option's PER-DISH count when it exceeds one, leaving a plain option unbadged", () => {
     // A child line's filed `quantity` is the COMBINED count (dish quantity × per-option quantity).
-    // The "×N" badge appears only when the PER-DISH count is above 1.
+    // The "xN" badge appears only when the PER-DISH count is above 1.
     const withPerOptionQty: TillSaleResult = {
       locale: "es-ES",
       orderLabel: null,
@@ -727,8 +786,8 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
           gross: "33.00",
           parentLineNo: null,
         },
-        // An option taken ×2 per dish → filed at the COMBINED quantity 6 (3 dishes × 2). Per-dish = 2 →
-        // badged "×2". Its gross is the FILED delta, unchanged by the badge.
+        // An option taken x2 per dish → filed at the COMBINED quantity 6 (3 dishes × 2). Per-dish = 2 →
+        // badged "x2". Its gross is the FILED delta, unchanged by the badge.
         { descriptions: { "es-ES": "Extra queso" }, quantity: "6", gross: "1.50", parentLineNo: 1 },
         // A plain option taken once per dish → filed at quantity 3 (== dish quantity). Per-dish = 1
         // → NO badge.
@@ -748,13 +807,13 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       }),
     );
 
-    // The ×2 option: an indented line carrying the "×2" badge after the name, its filed gross unchanged.
-    expect(s).toMatch(/\n {2,}Extra queso ×2[^\n]*1,50/u);
+    // The x2 option: an indented line carrying the "x2" badge after the name, its filed gross unchanged.
+    expect(s).toMatch(/\n {2,}Extra queso x2[^\n]*1,50/u);
     // The plain option: NO badge — name, padding, then the gross.
     expect(s).toMatch(/\n {2,}Sin cebolla {2,}0,00/u);
-    expect(s).not.toContain("Sin cebolla ×");
+    expect(s).not.toContain("Sin cebolla x");
 
-    // Without the badge the ×2 line would read like the control.
+    // Without the badge the x2 line would read like the control.
     expect(s).not.toMatch(/\n {2,}Extra queso {2,}1,50/u);
   });
 

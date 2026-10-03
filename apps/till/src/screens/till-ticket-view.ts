@@ -43,7 +43,6 @@ function lineName(descriptions: Record<string, string>, locale: string): string 
 }
 
 /** The SAME `×` (U+00D7) the printed receipt (`apps/server/src/receipt-ticket.ts`) and the basket use. */
-const QTY_BADGE = "×";
 
 interface LineGroup {
   dish: TillSaleLine;
@@ -506,9 +505,9 @@ export class TillTicketView extends LitElement {
                 // The per-dish count is recovered from the filed COMBINED child quantity.
                 (option) => {
                   let amount: string;
-                  if (option.unitName == null) {
+                  if (option.unitName == null || option.soldInEach === true) {
                     const perDish = perDishOptionQuantity(option.quantity, group.dish.quantity);
-                    amount = perDish > 1 ? ` ${QTY_BADGE}${perDish}` : "";
+                    amount = perDish > 1 ? ` x${perDish}` : "";
                   } else {
                     amount = ` ${option.quantity} ${resolveSnapshotText(option.unitName, language, language)}`;
                   }

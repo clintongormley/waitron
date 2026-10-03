@@ -164,7 +164,7 @@ describe("till-ticket-view", () => {
     expect(norm(rows[2]!.textContent!)).toContain("0,00 €");
   });
 
-  it("shows a ×N badge for an option taken more than once per dish, and none for a plain option (per-option quantity)", async () => {
+  it("shows an xN badge for an option taken more than once per dish, and none for a plain option (per-option quantity)", async () => {
     // FILED lines carry the COMBINED count on the child (dishQty × optionQty).
     const { el } = await mount({
       lines: [
@@ -185,9 +185,9 @@ describe("till-ticket-view", () => {
     });
     const rows = el.shadowRoot!.querySelectorAll(".line");
     expect(rows[1]!.textContent).toContain("Extra chupito");
-    expect(rows[1]!.textContent).toContain("×2"); // 4 / 2 = 2 → badge
+    expect(rows[1]!.textContent).toContain("x2"); // 4 / 2 = 2 → badge
     expect(rows[2]!.textContent).toContain("Sin cebolla");
-    expect(rows[2]!.textContent).not.toContain("×"); // 2 / 2 = 1 → no badge
+    expect(rows[2]!.textContent).not.toContain("x"); // 2 / 2 = 1 → no badge
   });
 
   it("shows a weighted extra's filed physical amount and frozen unit without a pick-count badge", async () => {
@@ -214,6 +214,51 @@ describe("till-ticket-view", () => {
     expect(rows[1]!.textContent).toContain("Jamón");
     expect(rows[1]!.textContent).toContain("0.150 kg");
     expect(rows[1]!.textContent).not.toContain("×");
+  });
+
+  it("shows a filed Each extra as x3 instead of its translated unit abbreviation", async () => {
+    const { el } = await mount({
+      lines: [
+        { descriptions: { "es-ES": "Tostada" }, quantity: "1", gross: "2.00", parentLineNo: null },
+        {
+          descriptions: { "es-ES": "Queso" },
+          quantity: "3",
+          gross: "1.50",
+          parentLineNo: 1,
+          unitName: { es: "pzas" },
+          unitPrecision: 0,
+          soldInEach: true,
+        },
+      ],
+      total: "3.50",
+    });
+    const row = el.shadowRoot!.querySelectorAll(".line")[1]!;
+    expect(row.textContent).toContain("Queso x3");
+    expect(row.textContent).not.toContain("3 pzas");
+  });
+
+  it("keeps an integral volume amount and unit when the filed identity is not Each", async () => {
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      result: {
+        ...result,
+        lines: [
+          { descriptions: { "en-GB": "Tea" }, quantity: "1", gross: "2.00", parentLineNo: null },
+          {
+            descriptions: { "en-GB": "Milk" },
+            quantity: "150",
+            gross: "1.50",
+            parentLineNo: 1,
+            unitName: { en: "ml" },
+            unitPrecision: 0,
+          },
+        ],
+      },
+      issuer,
+      invoiceLocale: "en-GB",
+    });
+    const row = el.shadowRoot!.querySelectorAll(".line")[1]!;
+    expect(row.textContent).toContain("Milk 150 ml");
+    expect(row.textContent).not.toContain("Milk x150");
   });
 
   it("shows the taxable base per rate, plus the (allowed extra) cuota per rate (art. 7.1.f)", async () => {
