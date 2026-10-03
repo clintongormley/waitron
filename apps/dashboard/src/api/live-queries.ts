@@ -21,6 +21,8 @@ const MENU_PUBLICATION_READS = [
   "units",
 ] as const;
 
+const CURRENT_CLASSIFICATION_READS = ["products", "categories", "category_details"] as const;
+
 /** Dependencies describe the read model, independently of which operation changes it. */
 export const QUERY_DEPENDENCIES = {
   getContentLanguages: ["content_languages"],
@@ -137,16 +139,14 @@ export const QUERY_DEPENDENCIES = {
     "printers",
   ],
   getOrderPrinters: ["printers"],
+  // The current mode's list; `dependenciesOf` narrows it at time of sale.
   getCategorySales: [
     "sales",
     "sale_lines",
     "sale_voids",
     "sale_substitutions",
     "locations",
-    "products",
-    "categories",
-    "category_details",
-    "content_languages",
+    ...CURRENT_CLASSIFICATION_READS,
   ],
   getReportPrinters: ["printers"],
   listStaff: ["persons", "webauthn_credentials"],
@@ -270,6 +270,20 @@ export type DashboardQueryName = keyof typeof QUERY_DEPENDENCIES;
 type Arguments<N extends DashboardQueryName> = Parameters<DashboardApi[N]>;
 type Result<N extends DashboardQueryName> = Awaited<ReturnType<DashboardApi[N]>>;
 
+function dependenciesOf<N extends DashboardQueryName>(
+  name: N,
+  args: Arguments<N>,
+): readonly string[] {
+  // At time of sale names each line's category from the snapshot the line recorded
+  // (`computeCategorySales`, packages/reporting/src/category-sales.ts), so no catalogue edit moves
+  // it. A subset of the declared list, so `scripts/live-subscriptions.test.ts` still covers it.
+  if (name === "getCategorySales" && (args as readonly unknown[])[2] === "at_time_of_sale") {
+    const current: readonly string[] = CURRENT_CLASSIFICATION_READS;
+    return QUERY_DEPENDENCIES.getCategorySales.filter((type) => !current.includes(type));
+  }
+  return QUERY_DEPENDENCIES[name];
+}
+
 export function dashboardQuery<N extends DashboardQueryName>(
   api: DashboardApi,
   name: N,
@@ -278,7 +292,7 @@ export function dashboardQuery<N extends DashboardQueryName>(
   let initial = true;
   return {
     key: JSON.stringify([name, args]),
-    dependencies: QUERY_DEPENDENCIES[name].map((type) => ({ type })),
+    dependencies: dependenciesOf(name, args).map((type) => ({ type })),
     read: () => {
       const client = initial ? api : (api.background ?? api);
       initial = false;

@@ -121,8 +121,7 @@ it.each([
   ],
   // `computeCategorySales` (packages/reporting/src/category-sales.ts) reads the period's lines under
   // the same inclusion clauses as the other reports, on the venue clock from `locations`; current
-  // mode adds today's classification (`currentClassifications`, packages/catalogue) named in the
-  // saved default content language.
+  // mode adds today's classification (`currentClassifications`, packages/catalogue).
   [
     "getCategorySales",
     ["2026-09-01", "2026-09-11", "current", false],
@@ -135,8 +134,14 @@ it.each([
       "products",
       "categories",
       "category_details",
-      "content_languages",
     ],
+  ],
+  // At time of sale names each line's category from the snapshot the line recorded, so no
+  // catalogue table moves the answer.
+  [
+    "getCategorySales",
+    ["2026-09-01", "2026-09-11", "at_time_of_sale", false],
+    ["sales", "sale_lines", "sale_voids", "sale_substitutions", "locations"],
   ],
   ["getReportPrinters", [], ["printers"]],
   // The server works the rules out once at boot, so no table change moves them.
@@ -158,7 +163,7 @@ it.each([
     ],
   ],
 ] as const)(
-  "subscribes %s to exactly the tables its read selects from",
+  "subscribes %s %j to exactly the tables its read selects from",
   async (name, args, types) => {
     const query = dashboardQuery(new DashboardApi("", vi.fn()), name, [...args]);
     expect(query.dependencies).toEqual(types.map((type) => ({ type })));
@@ -202,3 +207,28 @@ it.each(["getMenuPrices", "getMenuStatus", "getMenuStatuses", "getMenuPreview"] 
     }
   },
 );
+
+it("leaves the category report at time of sale alone when the catalogue is edited", async () => {
+  const fetchImpl = vi.fn(async () => new Response("{}"));
+  const api = new DashboardApi("", fetchImpl);
+  const query = dashboardQuery(api, "getCategorySales", [
+    "2026-09-01",
+    "2026-09-11",
+    "at_time_of_sale",
+    false,
+  ]);
+  const observed = api.liveData.observe(query, () => {});
+  try {
+    await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
+    for (const type of ["products", "categories", "category_details"]) {
+      api.liveData.invalidate([{ type, id: "edited" }]);
+      await new Promise((settle) => setTimeout(settle, 0));
+      expect(observed.snapshot.loading).toBe(false);
+    }
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    api.liveData.invalidate([{ type: "sales", id: "sold" }]);
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+  } finally {
+    observed.unsubscribe();
+  }
+});

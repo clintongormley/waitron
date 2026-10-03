@@ -485,6 +485,10 @@ describe("dashboard-sales-screen — category report", () => {
       { liveData },
     );
     const el = await mount(api);
+    pickMode(el, "current");
+    await vi.waitFor(() =>
+      expect(api.getCategorySales).toHaveBeenLastCalledWith(today(), today(), "current", false),
+    );
     await vi.waitFor(() => expect(q(el, "categories-error")).not.toBeNull());
     vi.mocked(api.getCategorySales).mockResolvedValue(currentReport);
     liveData.invalidate([{ type: "categories", id: "fixed" }]);
@@ -497,6 +501,10 @@ describe("dashboard-sales-screen — category report", () => {
     const liveData = new LiveData();
     const api = Object.assign(stubApi(), { liveData });
     const el = await mount(api);
+    pickMode(el, "current");
+    await vi.waitFor(() =>
+      expect(api.getCategorySales).toHaveBeenLastCalledWith(today(), today(), "current", false),
+    );
     await vi.waitFor(() => expect(rows(el)).toHaveLength(11));
     vi.mocked(api.getCategorySales).mockRejectedValue({ code: "sale_classification.invalid" });
     liveData.invalidate([{ type: "categories", id: "edited" }]);
@@ -520,6 +528,21 @@ describe("dashboard-sales-screen — category report", () => {
     vi.mocked(api.getCategorySales).mockResolvedValue(currentReport);
     liveData.invalidate([{ type: "sale_lines", id: "new-line" }]);
     await vi.waitFor(() => expect(rows(el)).toHaveLength(2));
+  });
+
+  it("keeps the report at time of sale when the catalogue is edited, and refreshes today's", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const el = await mount(api);
+    await vi.waitFor(() => expect(rows(el)).toHaveLength(11));
+    liveData.invalidate([{ type: "categories", id: "edited" }]);
+    liveData.invalidate([{ type: "products", id: "edited" }]);
+    await flush(el);
+    expect(api.getCategorySales).toHaveBeenCalledTimes(1);
+    pickMode(el, "current");
+    await vi.waitFor(() => expect(api.getCategorySales).toHaveBeenCalledTimes(2));
+    liveData.invalidate([{ type: "categories", id: "edited" }]);
+    await vi.waitFor(() => expect(api.getCategorySales).toHaveBeenCalledTimes(3));
   });
 });
 

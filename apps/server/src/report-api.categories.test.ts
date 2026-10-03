@@ -19,7 +19,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   CATALOGUE_MIGRATIONS,
-  contentLanguages,
   createCatalogue,
   createCategory,
   createProduct,
@@ -47,9 +46,8 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
 // The category report, its printer list and its print, end to end over sales seeded with the
-// columns a filed line carries. Recorded names differ from today's, and today's Spanish names
-// (the saved default content language) differ from the English ones, so a route that reads the
-// wrong mode or the wrong language fails.
+// columns a filed line carries. Recorded names differ from today's, so a route that reads the
+// wrong mode fails.
 const noopLog: Logger = () => {};
 
 const DAY1 = "2026-06-10"; // classified lines, one of them an extra
@@ -199,9 +197,6 @@ const suite = useVenueDb({
     inactivePrinter = await printer({ name: "Antigua", active: false });
     elsewherePrinter = await printer({ name: "Terraza", location: other!.id });
 
-    await db
-      .insert(contentLanguages)
-      .values({ id: 1, defaultLanguage: "es", languages: ["es", "en"] });
     await withTransaction(db, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Bar" });
       const drinks = await createCategory(tx, { name: "Bebidas" });
@@ -388,7 +383,7 @@ describe("GET /management-api/reports/categories", () => {
     });
   });
 
-  it("reports today's tree in current mode, named in the venue's default content language", async () => {
+  it("reports today's tree in current mode", async () => {
     const res = await report(`from=${DAY1}&to=${DAY1}&mode=current`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as CategoryReport;
