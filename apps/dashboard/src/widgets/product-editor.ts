@@ -474,13 +474,12 @@ export class ProductEditor extends LitElement {
       "name",
       "kitchen-name",
       "tax",
-      "unit",
       "unit-price",
       "product-course",
       ...this.locales.flatMap((locale) => [`customer-name-${locale}`, `description-${locale}`]),
     ];
     if (this.api) keys.push("image");
-    if (this.inherited === null) keys.push("primary", "ordering", "modifier");
+    if (this.inherited === null) keys.push("primary", "unit", "ordering", "modifier");
     return new Set(keys);
   }
   private dismiss(...keys: string[]): void {
@@ -582,7 +581,7 @@ export class ProductEditor extends LitElement {
   }
   /** Empty for a product with no unit; callers choose the no-unit wording from the empty string. */
   private get unitShortLabel(): string {
-    const unitId = this.draft.unitId ?? this.inherited?.unitId ?? null;
+    const unitId = this.inherited ? this.inherited.unitId : this.draft.unitId;
     if (!unitId) return "";
     const unit = this.units.find((unit) => unit.id === unitId);
     if (!unit) return t("editor.missing_choice");
@@ -593,7 +592,7 @@ export class ProductEditor extends LitElement {
    * button that gives no sign anything is wrong. Having no unit is NOT such a case: it means Each,
    * which the button names like any other unit. */
   private get unitOpen(): boolean {
-    return this.unitPickerOpen || this.error("unit") !== "";
+    return this.inherited === null && (this.unitPickerOpen || this.error("unit") !== "");
   }
   private fields(): FieldContext {
     return { busy: this.busy, locales: this.locales, error: (key) => this.error(key) };
@@ -664,8 +663,9 @@ export class ProductEditor extends LitElement {
     delete value.inherited;
     if (this.inherited !== null) {
       if (!(value.unitPrice ?? "").trim()) value.unitPrice = null;
-      // A variant is always in its product's category; the server refuses one of its own.
+      // A variant always has its product's category and unit; the server refuses its own.
       value.primaryCategoryId = null;
+      value.unitId = null;
     }
     if (restore) value.active = true;
     value.name = value.name.trim();
@@ -1110,35 +1110,26 @@ export class ProductEditor extends LitElement {
     ></wt-combobox>`;
   }
 
-  /** The unit dropdown behind the price field's button. On a variant its empty choice is the
-   * parent's unit, so the synthetic "Each" — which means NO unit on a product of its own — is not
-   * offered: it would read as one thing and save as another. */
+  /** The unit dropdown behind the price field's button, on a product's own page only. */
   private renderUnit() {
-    const parent = this.inherited;
-    const parentUnit = this.units.find((unit) => unit.id === parent?.unitId);
-    const blank = !parent?.unitId
-      ? t("editor.unit_each")
-      : parentUnit
-        ? this.unitLabel(parentUnit)
-        : t("editor.missing_choice");
-    const none = parent ? "" : EACH_CHOICE;
+    const each = t("editor.unit_each");
     return html`<wt-combobox
         name="unit"
         label=${t("product.unit")}
         search="auto"
         searchPlaceholder=${t("categories.combobox_search")}
         noResultsLabel=${t("categories.combobox_no_results")}
-        placeholder=${blank}
+        placeholder=${each}
         .options=${[
-          { value: none, label: blank },
+          { value: EACH_CHOICE, label: each },
           ...this.units.map((unit) => ({ value: unit.id, label: this.unitLabel(unit) })),
         ]}
-        .value=${this.draft.unitId ?? none}
+        .value=${this.draft.unitId ?? EACH_CHOICE}
         error=${this.error("unit")}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
           const value = event.detail.value;
-          this.change("unitId", value === none ? null : value);
+          this.change("unitId", value === EACH_CHOICE ? null : value);
           this.unitPickerOpen = false;
         }}
       ></wt-combobox>
@@ -1190,6 +1181,7 @@ export class ProductEditor extends LitElement {
               : t("editor.base_price")
         }
         unit=${unitLabel ? t("editor.per_unit").replace("{unit}", unitLabel) : t("editor.unit_each")}
+        ?fixed-unit=${parent !== null}
         locale=${currentLocale()}
         placeholder=${parent?.unitPrice ?? ""}
         ?required=${parent === null}

@@ -229,10 +229,16 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       }
     }
     if (state === "variant-page") {
-      // Without this the scan could pass on a variant's page that drew no category path.
+      // Without these the scan could pass on a variant's page that drew no category path, or a
+      // unit button where its product's unit is fixed text.
       expect(el.shadowRoot!.querySelector("[data-test=category-path]")!.textContent).toContain(
         "Drinks",
       );
+      const price = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-price-input"]>(
+        "wt-price-input[name=unit-price]",
+      )!;
+      await price.updateComplete;
+      expect(price.shadowRoot!.querySelector("span.unit")).not.toBeNull();
     }
     if (state === "inactive") {
       // Without this the scan could pass on an editor that never drew the notice and Restore.
