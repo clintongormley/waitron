@@ -2289,6 +2289,10 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/courses/${id}`, "DELETE");
   }
 
+  moveCourse(id: string, to: number): Promise<Course[]> {
+    return this.#request<Course[]>(`/management-api/courses/${id}/position`, "PUT", { to });
+  }
+
   getFireControl(): Promise<{ mode: FireControl }> {
     return this.#request<{ mode: FireControl }>("/management-api/fire-control", "GET");
   }

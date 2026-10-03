@@ -27,6 +27,7 @@ import {
   deactivateStation,
   listCourses,
   listStations,
+  moveCourse,
   setDefaultStation,
   setProductCourse,
   updateCourse,
@@ -337,6 +338,101 @@ describe("kitchen-course config", () => {
     );
     expect(createErr).toBeInstanceOf(Error);
     expect(createErr).not.toBeInstanceOf(AppError);
+  });
+});
+
+describe("moveCourse", () => {
+  /** Four courses created out of name order, so their firing order is A, B, C, D. */
+  async function fourCourses(cfg: TillConfig): Promise<string[]> {
+    const ids: string[] = [];
+    for (const [name, displayOrder] of [
+      ["A", 0],
+      ["B", 5],
+      ["C", 5],
+      ["D", 20],
+    ] as const) {
+      ids.push((await asApp(cfg, (tx) => createCourse(tx, cfg, { name, displayOrder }))).id);
+    }
+    return ids;
+  }
+
+  async function storedOrders(ids: string[]): Promise<number[]> {
+    const orders: number[] = [];
+    for (const id of ids) {
+      const { rows } = await db.execute<{ display_order: number }>(
+        sql`select display_order from kitchen_courses where id = ${id}`,
+      );
+      orders.push(Number(rows[0]!.display_order));
+    }
+    return orders;
+  }
+
+  it("moves a course down, renumbers every active course 0..n-1 and returns the list", async () => {
+    const cfg = await setupVenue();
+    const [a, b, c, d] = await fourCourses(cfg);
+    const moved = await asApp(cfg, (tx) => moveCourse(tx, cfg, a!, 2));
+    expect(moved).toEqual([
+      { id: b, name: "B", displayOrder: 0, active: true },
+      { id: c, name: "C", displayOrder: 1, active: true },
+      { id: a, name: "A", displayOrder: 2, active: true },
+      { id: d, name: "D", displayOrder: 3, active: true },
+    ]);
+    expect(await storedOrders([b!, c!, a!, d!])).toEqual([0, 1, 2, 3]);
+    expect(await asApp(cfg, (tx) => listCourses(tx, cfg))).toEqual(moved);
+  });
+
+  it("moves a course up", async () => {
+    const cfg = await setupVenue();
+    const [a, b, c, d] = await fourCourses(cfg);
+    const moved = await asApp(cfg, (tx) => moveCourse(tx, cfg, d!, 1));
+    expect(moved.map((x) => x.id)).toEqual([a, d, b, c]);
+    expect(moved.map((x) => x.displayOrder)).toEqual([0, 1, 2, 3]);
+    expect(await storedOrders([a!, d!, b!, c!])).toEqual([0, 1, 2, 3]);
+  });
+
+  it("treats a position past the end as last", async () => {
+    const cfg = await setupVenue();
+    const [a, b, c, d] = await fourCourses(cfg);
+    const moved = await asApp(cfg, (tx) => moveCourse(tx, cfg, b!, 99));
+    expect(moved.map((x) => x.id)).toEqual([a, c, d, b]);
+    expect(await storedOrders([a!, c!, d!, b!])).toEqual([0, 1, 2, 3]);
+  });
+
+  it("counts only active courses and leaves an inactive one's stored order alone", async () => {
+    const cfg = await setupVenue();
+    const [a, b, c, d] = await fourCourses(cfg);
+    await asApp(cfg, (tx) => deactivateCourse(tx, cfg, b!));
+    const moved = await asApp(cfg, (tx) => moveCourse(tx, cfg, a!, 1));
+    expect(moved.map((x) => x.id)).toEqual([c, a, d]);
+    expect(moved.map((x) => x.displayOrder)).toEqual([0, 1, 2]);
+    expect(await storedOrders([b!])).toEqual([5]);
+  });
+
+  it("refuses an inactive course with course.not_found and changes nothing", async () => {
+    const cfg = await setupVenue();
+    const [a, b, c, d] = await fourCourses(cfg);
+    await asApp(cfg, (tx) => deactivateCourse(tx, cfg, b!));
+    await expect(asApp(cfg, (tx) => moveCourse(tx, cfg, b!, 0))).rejects.toMatchObject({
+      code: "course.not_found",
+      params: { courseId: b },
+    });
+    expect(await storedOrders([a!, b!, c!, d!])).toEqual([0, 5, 5, 20]);
+  });
+
+  it("refuses an unknown id, or another venue's course, with course.not_found", async () => {
+    const cfg = await setupVenue();
+    await fourCourses(cfg);
+    const missing = randomUUID();
+    await expect(asApp(cfg, (tx) => moveCourse(tx, cfg, missing, 0))).rejects.toMatchObject({
+      code: "course.not_found",
+      params: { courseId: missing },
+    });
+    const other = await setupVenue();
+    const [elsewhere] = await fourCourses(other);
+    await expect(asApp(cfg, (tx) => moveCourse(tx, cfg, elsewhere!, 0))).rejects.toMatchObject({
+      code: "course.not_found",
+      params: { courseId: elsewhere },
+    });
   });
 });
 

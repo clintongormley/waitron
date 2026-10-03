@@ -327,6 +327,36 @@ export async function listCourses(tx: Transaction, cfg: TillConfig): Promise<Cou
 }
 
 /**
+ * Move an active course to index `to` of {@link listCourses}' order (past the end means last), and
+ * renumber every active course's `displayOrder` to its index. An absent, inactive or other venue's
+ * id throws `course.not_found`.
+ */
+export async function moveCourse(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+  to: number,
+): Promise<Course[]> {
+  const courses = await listCourses(tx, cfg);
+  const from = courses.findIndex((course) => course.id === id);
+  if (from === -1) {
+    throw new AppError("course.not_found", { courseId: id });
+  }
+  const [moving] = courses.splice(from, 1);
+  courses.splice(Math.min(to, courses.length), 0, moving!);
+  for (const [index, course] of courses.entries()) {
+    if (course.displayOrder !== index) {
+      await tx
+        .update(kitchenCourses)
+        .set({ displayOrder: index })
+        .where(eq(kitchenCourses.id, course.id));
+      course.displayOrder = index;
+    }
+  }
+  return courses;
+}
+
+/**
  * Edit any subset of a course's `name`/`displayOrder`/`active`. An absent id throws
  * `course.not_found`; a name collision throws `course.name_taken`.
  */
