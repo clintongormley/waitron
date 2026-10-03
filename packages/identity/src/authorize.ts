@@ -10,10 +10,13 @@ import {
   verifyThrottledCredential,
   type PinAttempts,
 } from "./credential.js";
+import type { SecretCheck } from "./secret-check.js";
 
 export interface Override {
   personId: string;
   pin: string;
+  /** From `checkPin` on this person and PIN, taken before the transaction opened. */
+  checked?: SecretCheck;
 }
 export interface AuthzInput {
   sessionId: string;
@@ -56,10 +59,10 @@ export async function authorize(
   if (args.override === undefined) {
     throw new AppError("authorization.not_permitted", { permission: args.permission });
   }
-  const { personId, pin } = args.override;
+  const { personId, pin, checked } = args.override;
   const cred = await (attempts === undefined
-    ? verifyPersonCredential(tx, personId, pin)
-    : verifyThrottledCredential(tx, personId, pin, attempts));
+    ? verifyPersonCredential(tx, personId, pin, checked)
+    : verifyThrottledCredential(tx, personId, pin, attempts, checked));
   if (!roleHasPermission(cred.role, args.permission)) {
     throw new AppError("authorization.not_permitted", { permission: args.permission });
   }

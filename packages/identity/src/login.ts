@@ -5,6 +5,7 @@ import { sessions } from "./schema/sessions.js";
 import { verifyPersonCredential } from "./credential.js";
 import type { PersonRoleValue } from "./permissions.js";
 import { hashSessionToken, mintSessionToken } from "./session-token.js";
+import type { SecretCheck } from "./secret-check.js";
 
 export interface Session {
   /** The row's identity — what `authorize` takes. Never the cookie. */
@@ -23,9 +24,14 @@ export interface Session {
 /** Throws `pin.invalid`, whatever the reason the person cannot sign in. */
 export async function loginWithPin(
   tx: Transaction,
-  input: { tillId: string; personId: string; pin: string },
+  input: { tillId: string; personId: string; pin: string; checked?: SecretCheck },
 ): Promise<Session> {
-  const { role, locale } = await verifyPersonCredential(tx, input.personId, input.pin);
+  const { role, locale } = await verifyPersonCredential(
+    tx,
+    input.personId,
+    input.pin,
+    input.checked,
+  );
 
   const token = mintSessionToken();
   const [row] = await tx

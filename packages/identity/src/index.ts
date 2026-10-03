@@ -1,7 +1,8 @@
 export { IDENTITY_MIGRATIONS } from "./migrations.js";
 export { authorize } from "./authorize.js";
-export { verifyPersonCredential, verifyThrottledCredential } from "./credential.js";
+export { checkPin, verifyPersonCredential, verifyThrottledCredential } from "./credential.js";
 export type { PinAttempts } from "./credential.js";
+export type { SecretCheck } from "./secret-check.js";
 // Exported for the writers OUTSIDE this package that create a person, which must fold the same way.
 export { foldForUniqueness } from "./fold.js";
 export type { Authorization, AuthzInput, Override } from "./authorize.js";
@@ -17,7 +18,12 @@ export type { ManagementSession } from "./management-session.js";
 export { hashSessionToken, mintSessionToken } from "./session-token.js";
 export { encryptTotpSecret } from "./mfa.js";
 export type { TotpKeyEntry, TotpKeyRing } from "./mfa.js";
-export { loginManager, loginManagerById, authorizeManager } from "./manager-login.js";
+export {
+  checkManagerPassword,
+  loginManager,
+  loginManagerById,
+  authorizeManager,
+} from "./manager-login.js";
 export {
   CHALLENGE_TTL_MS,
   beginPasskeyAuthentication,
@@ -48,6 +54,7 @@ export {
   disableOwnTotp,
   unlinkOwnGoogle,
   verifyOwnCredentials,
+  checkOwnPassword,
   removeOwnPasskey,
 } from "./profile.js";
 export { sessions } from "./schema/sessions.js";

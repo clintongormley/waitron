@@ -1,15 +1,33 @@
 import "./errors.js";
 import { eq } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { AppError, isAppError } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
 import { hashPin, verifyPin } from "./verify-pin.js";
 import type { PersonRoleValue } from "./permissions.js";
 import type { PinThrottle } from "./pin-throttle.js";
+import { DUMMY, issueCheck, trustedVerdict, type SecretCheck } from "./secret-check.js";
 
 // Checked against when there is no real PIN hash to check, so every refusal costs one PIN check:
 // a faster refusal would tell an unknown or suspended account from a wrong PIN.
 const DUMMY_PIN_HASH = hashPin("timing-equalization-dummy");
+
+/**
+ * Opens no transaction, so a caller holding none leaves the write lock free while the key is
+ * derived. Pass the result to {@link verifyPersonCredential} inside the transaction.
+ */
+export async function checkPin(db: Database, personId: string, pin: string): Promise<SecretCheck> {
+  const [person] = await db
+    .select({ status: persons.status, pinHash: persons.pinHash })
+    .from(persons)
+    .where(eq(persons.id, personId));
+  if (person?.status !== "active" || person.pinHash === null) {
+    await verifyPin(pin, DUMMY_PIN_HASH);
+    return issueCheck({ personId, secret: pin, derivedAgainst: DUMMY, matches: false });
+  }
+  const matches = await verifyPin(pin, person.pinHash);
+  return issueCheck({ personId, secret: pin, derivedAgainst: person.pinHash, matches });
+}
 
 /**
  * Every refusal is `pin.invalid` with no params, whatever the cause, so the answer never says
@@ -20,6 +38,7 @@ export async function verifyPersonCredential(
   tx: Transaction,
   personId: string,
   pin: string,
+  checked?: SecretCheck,
 ): Promise<{ role: PersonRoleValue; locale: string | null }> {
   const [person] = await tx
     .select({
@@ -31,7 +50,9 @@ export async function verifyPersonCredential(
     .from(persons)
     .where(eq(persons.id, personId));
   if (person?.status !== "active" || person.pinHash === null) {
-    await verifyPin(pin, DUMMY_PIN_HASH);
+    if (trustedVerdict(checked, personId, pin, DUMMY) === undefined) {
+      await verifyPin(pin, DUMMY_PIN_HASH);
+    }
     const reason =
       person === undefined
         ? "unknown_person"
@@ -40,7 +61,10 @@ export async function verifyPersonCredential(
           : person.status;
     throw new AppError("pin.invalid", {}, { reason });
   }
-  if (!(await verifyPin(pin, person.pinHash))) {
+  const matches =
+    trustedVerdict(checked, personId, pin, person.pinHash) ??
+    (await verifyPin(pin, person.pinHash));
+  if (!matches) {
     throw new AppError("pin.invalid", {}, { reason: "wrong_pin" });
   }
   return { role: person.role as PersonRoleValue, locale: person.locale };
@@ -61,12 +85,13 @@ export async function verifyThrottledCredential(
   personId: string,
   pin: string,
   attempts: PinAttempts,
+  checked?: SecretCheck,
 ): Promise<{ role: PersonRoleValue; locale: string | null }> {
   const { throttle, slot } = attempts;
   throttle.check(slot, personId);
   let cred;
   try {
-    cred = await verifyPersonCredential(tx, personId, pin);
+    cred = await verifyPersonCredential(tx, personId, pin, checked);
   } catch (error) {
     if (isAppError(error) && error.code === "pin.invalid") throttle.recordFailure(slot, personId);
     throw error;

@@ -1,6 +1,6 @@
 import "./errors.js";
 import { nowIso } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { and, eq, gt, isNull, ne } from "drizzle-orm";
 import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
@@ -34,6 +34,7 @@ import {
   replaceRecoveryCodes,
   type TotpKeyRing,
 } from "./mfa.js";
+import { DUMMY, issueCheck, trustedVerdict, type SecretCheck } from "./secret-check.js";
 
 interface Owner {
   /** The dashboard cookie's value — the session's token, which this package hashes. */
@@ -43,6 +44,34 @@ interface Credentials {
   currentPassword?: string;
   totp?: string;
   keyRing: TotpKeyRing;
+  /** From {@link checkOwnPassword}, taken before the transaction opened. */
+  checked?: SecretCheck;
+}
+
+/**
+ * Checks the signed-in person's current password. Opens no transaction, so a caller holding none
+ * leaves the write lock free while the key is derived, and writes nothing, not even the session's
+ * last-seen time. Pass the result to the change inside the transaction; the authenticator code is
+ * still checked there.
+ */
+export async function checkOwnPassword(
+  db: Database,
+  input: Owner & { currentPassword?: string },
+): Promise<SecretCheck> {
+  const { personId } = await resolveManagementSession(db, input.managementSessionId, {
+    touch: false,
+  });
+  const [person] = await db
+    .select({ passwordHash: persons.passwordHash })
+    .from(persons)
+    .where(eq(persons.id, personId));
+  const secret = input.currentPassword ?? "";
+  const passwordHash = person?.passwordHash ?? null;
+  if (passwordHash === null) {
+    return issueCheck({ personId, secret, derivedAgainst: DUMMY, matches: false });
+  }
+  const matches = await verifyPassword(secret, passwordHash);
+  return issueCheck({ personId, secret, derivedAgainst: passwordHash, matches });
 }
 
 async function ownSession(tx: Transaction, input: Owner) {
@@ -60,12 +89,12 @@ async function verifyCurrent(
   person: typeof persons.$inferSelect,
   credentials: Credentials,
 ): Promise<void> {
-  if (
-    person.passwordHash === null ||
-    !(await verifyPassword(credentials.currentPassword ?? "", person.passwordHash))
-  ) {
-    throw new AppError("password.invalid", {});
-  }
+  if (person.passwordHash === null) throw new AppError("password.invalid", {});
+  const secret = credentials.currentPassword ?? "";
+  const matches =
+    trustedVerdict(credentials.checked, person.id, secret, person.passwordHash) ??
+    (await verifyPassword(secret, person.passwordHash));
+  if (!matches) throw new AppError("password.invalid", {});
   if (
     person.totpSecret !== null &&
     (credentials.totp === undefined ||
