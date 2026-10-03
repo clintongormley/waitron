@@ -2446,6 +2446,12 @@ put in the column headings because a phone scrolls columns out of sight and a hi
 filters. The units table's always-on checkboxes become a Select mode, as the product list already
 has.
 
+**Filters panel initial focus — OPEN, owner decision needed after W39.** Opening the panel focuses
+Clear all (`packages/ui/src/components/wt-data-table.ts`), so a second Enter can clear the filters.
+Move focus to the first section heading if the owner approves changing the existing focus assertion
+in `packages/ui/src/components/wt-data-table.test.ts`; the W39 queue's inherited rule prohibits
+editing that assertion without approval.
+
 **The table's Columns button becomes a Customise dialog (A249, owner 2026-10-03) — OPEN, queued as
 lane E's W40.** Today `wt-data-table`'s Columns button opens a list of checkboxes for the columns a
 screen marked `choosable`, with no order and no reset. Agreed with the owner, after Home Assistant's

@@ -621,7 +621,8 @@ and the stored view is rewritten without it — rather than hiding every row beh
 reads "all". A chosen option whose column is not rendered, has no `filter`, or has
 an empty option list (a screen still loading the data it builds them from) waits instead: it hides
 no rows, stays in storage when the view is saved for another change, and is checked when the column
-next has a non-empty list. So one `viewKey` can serve two layouts that show different columns. A
+next has a non-empty list. Clear all removes those waiting choices too; a column's Clear removes
+its own waiting choice. So one `viewKey` can serve two layouts that show different columns. A
 stored "all" does not wait: it is kept only while its column is rendered with a `filter` that names
 an `initial`, and otherwise cleared and the stored view rewritten without it, so a layout that
 leaves the column out forgets that "all" was chosen.
