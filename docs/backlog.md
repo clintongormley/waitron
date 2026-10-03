@@ -3874,6 +3874,14 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   whether this page is still wanted, and what would open it, is the owner's call. If wanted, it
   needs a spec: brainstorm what each section's page says.
 
+- **The report screens get their own sidebar section, Reporting (A251, owner 2026-10-03) — OPEN,
+  queued as lane A's W41.** Today Sales & takings, the VAT return, Orders and the adjustments
+  module's Adjustment report sit in the sidebar's first group, which has no heading, under Overview
+  (`NAV_GROUPS` in `apps/dashboard/src/dashboard-app.ts`; the module places its screen in group
+  `reports`). They move into a collapsible section headed Reporting ("Informes"), like Products and
+  menus or Service; Overview stays on top with no heading. A staff session's short list (My schedule,
+  Orders) is left as it is.
+
 - **A generated display name is the first given name and first surname (C38, #827, owner decision
   2026-09-28).** Left as they were, from #827's review: unlike the two staff forms, the profile
   screen keeps a taken-name message beside the display name when a first- or last-name change
