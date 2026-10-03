@@ -2351,6 +2351,18 @@ dashboard, the device page and the pretend demo printer (A241, not built yet), s
 knows where they are. And the device setup screen should say that a manager approves the device in
 the dashboard under Settings → Devices, ideally with a link straight there.
 
+**Table filters move into a Filters panel, and vanish on an empty table (A248, owner 2026-10-03) —
+OPEN, queued as lane A's W39.** `wt-data-table` (`packages/ui/src/components/wt-data-table.ts`)
+draws every column filter as a dropdown above the table even when the table has no rows at all — the
+empty Printers screen showed an "Active" filter over "No printers yet". Agreed with the owner, after
+comparing Home Assistant's entity table: on a table with no rows, no filters, search or Columns
+button; otherwise one Filters button with a count of active filters, opening a panel (beside the
+table when wide, full screen on a phone) with one collapsible section per filter, each with its count
+and a clear button, plus clear-all; a funnel mark in a filtered column's heading. Filters were not
+put in the column headings because a phone scrolls columns out of sight and a hidden column still
+filters. The units table's always-on checkboxes become a Select mode, as the product list already
+has.
+
 The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
