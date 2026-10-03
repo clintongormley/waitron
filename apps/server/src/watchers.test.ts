@@ -178,6 +178,19 @@ describe("watcher configuration", () => {
       stationIds: [second.id],
       zoneIds: [v.counter.zoneId],
     });
+    await inTx(v, (tx) =>
+      updateWatcher(tx, v.cfg, id, {
+        ...input,
+        name: "Pass edited",
+        stationIds: [second.id],
+        zoneIds: [v.counter.zoneId],
+        displayOrder: undefined,
+      }),
+    );
+    expect(await inTx(v, (tx) => readWatcher(tx, v.cfg, id))).toMatchObject({
+      name: "Pass edited",
+      displayOrder: 2,
+    });
     const printerId = await inTx(v, async (tx) => {
       const [printer] = await tx
         .insert(printers)

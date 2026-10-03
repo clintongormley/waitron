@@ -6354,7 +6354,6 @@ export async function listExpoQueue(
   const loc = locationId ?? cfg.locationId;
   return readPassBoard(
     tx,
-    cfg,
     loc,
     sql`exists (
       select 1 from ${ticketItems} tix
@@ -6367,12 +6366,9 @@ export async function listExpoQueue(
 /** Build every section of the selected pass orders before a watcher narrows their items. */
 export async function readPassBoard(
   tx: Transaction,
-  cfg: TillConfig,
   locationId: string,
   scope: SQL,
 ): Promise<ExpoOrder[]> {
-  const loc = locationId;
-  void cfg;
   const rows = await tx
     .select({
       itemId: ticketItems.id,
@@ -6443,7 +6439,7 @@ export async function readPassBoard(
   );
   const tableLabels = await orderTableLabels(
     tx,
-    loc,
+    locationId,
     [...new Map(rows.map((row) => [row.orderId, row])).values()].map((row) => ({
       id: row.orderId,
       partyId: row.partyId,

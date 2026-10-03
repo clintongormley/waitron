@@ -534,18 +534,18 @@ describe("printing rules", () => {
       api,
     });
     await flush(el);
-    const select = q(el, "select[name=watcherId]") as HTMLSelectElement;
+    const select = q(el, "wt-combobox[name=watcherId]") as HTMLElement & {
+      value: string;
+      options: { value: string; label: string }[];
+    };
     expect(q(el, "[name=ticketScope]")).toBeNull();
-    expect([...select.options].map((option) => [option.value, option.textContent?.trim()])).toEqual(
-      [
-        ["", t("printers.watcher_no")],
-        ["w1", "Pass"],
-        ["w2", "Terrace"],
-      ],
-    );
+    expect(select.options.map((option) => [option.value, option.label])).toEqual([
+      ["", t("printers.watcher_no")],
+      ["w1", "Pass"],
+      ["w2", "Terrace"],
+    ]);
     expect(select.value).toBe("w1");
-    select.value = "w2";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "w2" } }));
     await flush(el);
     expect(api.setPrinterWatcher).toHaveBeenCalledWith("p1", "w2");
     expect(q(el, "[data-test=station-toggle-p1-s1]")!.hasAttribute("disabled")).toBe(true);
@@ -557,7 +557,7 @@ describe("printing rules", () => {
     });
     host.style.width = "320px";
     await flush(el);
-    const select = q(el, "select[name=watcherId]")!;
+    const select = q(el, "wt-combobox[name=watcherId]")!;
     expect(select.getBoundingClientRect().right).toBeLessThanOrEqual(
       el.getBoundingClientRect().right,
     );
@@ -577,9 +577,8 @@ describe("printing rules", () => {
       api,
     });
     await flush(el);
-    const select = q(el, "select[name=watcherId]") as HTMLSelectElement;
-    select.value = "w1";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    const select = q(el, "wt-combobox[name=watcherId]") as HTMLElement & { value: string };
+    select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "w1" } }));
     await flush(el);
     expect(select.value).toBe("");
     expect(select.closest("wt-card")!.textContent).toContain(t("printers.watcher_conflict"));
@@ -603,9 +602,8 @@ describe("printing rules", () => {
     });
     await flush(el);
     const card = q(el, "[data-test=printer-watcher-p1]")!.closest("wt-card")!;
-    const select = q(el, "[data-test=printer-watcher-p1]") as HTMLSelectElement;
-    select.value = "w1";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    const select = q(el, "[data-test=printer-watcher-p1]")!;
+    select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "w1" } }));
     await flush(el);
     expect(card.textContent).toContain(t("printers.watcher_conflict"));
 
@@ -703,7 +701,7 @@ describe.each(["light", "dark"] as const)("printing rules accessibility (%s)", (
   );
 });
 
-it("uses a named watcher select and named shared switches for station routing", async () => {
+it("uses a named shared watcher picker and switches for station routing", async () => {
   const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
     api: stubApi(),
   });
@@ -713,7 +711,7 @@ it("uses a named watcher select and named shared switches for station routing", 
     expect(control.tagName).toBe("WT-SWITCH");
     expect(control.shadowRoot!.querySelector("input")!.name).toBe(name);
   }
-  expect((q(el, "select[name=watcherId]") as HTMLSelectElement).name).toBe("watcherId");
+  expect(q(el, "wt-combobox[name=watcherId]")?.getAttribute("name")).toBe("watcherId");
 });
 
 it("refreshes displayed printers when their data changes elsewhere", async () => {

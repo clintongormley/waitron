@@ -249,6 +249,10 @@ alert. A dish made at the till is never moved or re-routed
   column. Dropping it rebuilds `printers`, so leave it until the venue reset that permits the rebuild.
 - **Clear a failed watcher copy without printing or resending — OPEN (3d, P9).** A Reprint does not
   clear its failed job because watcher copies have no station or bill link.
+- **Avoid repeat watcher configuration reads during a table move — OPEN (3d).**
+  `readSentWork`, `enqueueMovedSlips`, and `printCorrectionSlips` each read watcher printers in the
+  move flow. Measure the query count on a moved order with a watcher printer, then pass one read
+  through the transaction if it repeats unchanged configuration.
 - **Show one watcher in a canvas card — OPEN (3d, P15).** The ordinary embedded pass card still
   shows All stations; a watcher-bound device opens its own board.
 - **Alert when a watcher's screens go dark — OPEN (3d, P17).** The existing dark-screen alert is

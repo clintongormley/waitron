@@ -91,7 +91,6 @@ export async function listWatcherQueue(
   const ids = new Set(kept.map((item) => item.id));
   const orders = await readPassBoard(
     tx,
-    cfg,
     cfg.locationId,
     inArray(workingOrders.id, [...new Set(kept.map((item) => item.orderId))]),
   );

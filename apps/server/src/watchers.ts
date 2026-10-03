@@ -147,7 +147,7 @@ export async function updateWatcher(
         everyStation: input.everyStation,
         everyZone: input.everyZone,
         runsPass: input.runsPass,
-        displayOrder: input.displayOrder ?? 0,
+        ...(input.displayOrder === undefined ? {} : { displayOrder: input.displayOrder }),
       })
       .where(eq(watchers.id, watcherId));
   } catch (error) {

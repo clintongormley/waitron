@@ -63,17 +63,6 @@ export class PrintingRulesScreen extends LitElement {
         flex: 0 1 calc(var(--wt-space-6) * 7);
         min-width: 0;
       }
-      .row label {
-        display: grid;
-        gap: var(--wt-space-1);
-        min-width: 0;
-        max-width: 100%;
-      }
-      .row select {
-        box-sizing: border-box;
-        min-width: 0;
-        max-width: 100%;
-      }
       .empty {
         color: var(--wt-color-text-muted);
       }
@@ -192,34 +181,29 @@ export class PrintingRulesScreen extends LitElement {
       <wt-card>
         <div class="row">
           <span class="details">${printer.name}</span>
-          <label
-            >${t("printers.watcher_copies")}
-            <select
-              name="watcherId"
-              data-test="printer-watcher-${printer.id}"
-              .disabled=${this.saving}
-              @change=${(event: Event) => {
-                const id = (event.target as HTMLSelectElement).value;
-                void this.#mutate(
-                  () => this.api.setPrinterWatcher(printer.id, id || null),
-                  printer.id,
-                );
-              }}
-            >
-              <option value="" .selected=${live(printer.watcherId === null)}>
-                ${t("printers.watcher_no")}
-              </option>
-              ${this.watchers
+          <wt-combobox
+            name="watcherId"
+            label=${t("printers.watcher_copies")}
+            search="auto"
+            searchPlaceholder=${t("categories.combobox_search")}
+            noResultsLabel=${t("categories.combobox_no_results")}
+            .options=${[
+              { value: "", label: t("printers.watcher_no") },
+              ...this.watchers
                 .filter((watcher) => watcher.active)
-                .map(
-                  (watcher) => html`
-                    <option value=${watcher.id} .selected=${live(printer.watcherId === watcher.id)}>
-                      ${watcher.name}
-                    </option>
-                  `,
-                )}
-            </select>
-          </label>
+                .map((watcher) => ({ value: watcher.id, label: watcher.name })),
+            ]}
+            .value=${live(printer.watcherId ?? "")}
+            .disabled=${this.saving}
+            data-test="printer-watcher-${printer.id}"
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              void this.#mutate(
+                () => this.api.setPrinterWatcher(printer.id, event.detail.value || null),
+                printer.id,
+              );
+            }}
+          ></wt-combobox>
         </div>
         <div class="stations" role="group" aria-label=${t("printers.stations_title")}>
           <strong>${t("printers.stations_title")}</strong>
