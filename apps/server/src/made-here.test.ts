@@ -13,6 +13,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { deviceOrigin } from "@waitron/shared";
 import { createPrinter } from "@waitron/printing";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -158,7 +159,13 @@ describe("device made-here stations", () => {
         .select()
         .from(printJobs)
         .where(eq(printJobs.printerId, barPrinter));
-      await fireCourse(tx, venue.cfg, orderId, second.id, randomUUID());
+      await fireCourse(
+        tx,
+        { ...venue.cfg, origin: deviceOrigin(deviceId) },
+        orderId,
+        second.id,
+        randomUUID(),
+      );
       await reprintOrderTickets(tx, venue.cfg, orderId);
       expect(
         await tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinter)),
@@ -486,7 +493,13 @@ describe("device made-here stations", () => {
       expect(
         await tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinter)),
       ).toHaveLength(0);
-      await fireCourse(tx, venue.cfg, orderId, second.id, randomUUID());
+      await fireCourse(
+        tx,
+        { ...venue.cfg, origin: deviceOrigin(deviceId) },
+        orderId,
+        second.id,
+        randomUUID(),
+      );
       const [released] = await tx
         .select()
         .from(ticketItems)

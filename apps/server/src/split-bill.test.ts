@@ -32,7 +32,8 @@ import {
   thousandthsToDecimal,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 import { createTable } from "./tables.js";
 import {
   addTabRound,
@@ -74,7 +75,7 @@ beforeAll(() => {
 });
 
 interface Seeded {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   /** "Agua" — each, 1.50 gross, general(21%). */
   aguaId: string;
   /** "Jamón" — WEIGHT, 24.90/kg gross, reduced(10%). */
@@ -101,7 +102,7 @@ async function setupVenue(): Promise<Seeded> {
   const tillId = randomUUID();
   await db.insert(tills).values({ id: tillId, locationId, name: "Caja 1" });
   const nodeId = await seedNode(db, brandLocationId(locationId));
-  const cfg: TillConfig = {
+  const cfg = await deviceRequestCfg(db, {
     tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -111,7 +112,7 @@ async function setupVenue(): Promise<Seeded> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  } satisfies TillConfig);
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });

@@ -11,7 +11,7 @@ import type { Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
 import { AppError, saleId as brandSaleId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig } from "./till-config.js";
 import "./errors.js";
 
 /** The dishes of a paid order that no prep station could take. */
@@ -22,13 +22,14 @@ export interface DishesNotSent {
 
 /**
  * Record one alert for a paid sale whose dishes were not sent to the kitchen, naming each dish once
- * by its staff name. Keyed by the sale, since the incidents table keeps one open incident per till,
- * code and sale. Called after the order is settled, so it reads the label the sale froze. An alert
- * the database refuses is logged under its code instead.
+ * by its staff name and naming the device that took the payment. Keyed by the sale, since the
+ * incidents table keeps one open incident per source, device, code and sale. Called after the order
+ * is settled, so it reads the label the sale froze. An alert the database refuses is logged under
+ * its code instead.
  */
 export async function raiseDishesNotSent(
   tx: Transaction,
-  cfg: Pick<TillConfig, "tillId">,
+  cfg: Pick<OriginConfig, "origin">,
   saleId: string,
   workingOrderId: string,
   notSent: DishesNotSent,
@@ -55,7 +56,7 @@ const ALERT_REFUSALS = [...TRIGGER_ABORT, ...UNIQUE_VIOLATION, ...NOT_NULL_VIOLA
 
 async function recordDishesNotSent(
   tx: Transaction,
-  cfg: Pick<TillConfig, "tillId">,
+  cfg: Pick<OriginConfig, "origin">,
   saleId: string,
   workingOrderId: string,
   notSent: DishesNotSent,
@@ -72,7 +73,7 @@ async function recordDishesNotSent(
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
   await recordIncidentOnce(tx, {
-    tillId: cfg.tillId,
+    origin: cfg.origin,
     saleId: brandSaleId(saleId),
     error: new AppError("route.dish_not_sent", {
       // `products.name` is not null but may be blank.

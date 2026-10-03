@@ -1,5 +1,5 @@
 import { AppError, deviceOrigin } from "@waitron/shared";
-import type { DeviceId, DeviceOrigin } from "@waitron/shared";
+import type { DeviceId, DeviceOrigin, Origin } from "@waitron/shared";
 import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
 
 /** The configuration a till-app request runs under: the venue's, as its session's device. */
@@ -17,4 +17,17 @@ export function storedDeviceOrigin(row: {
 }): DeviceOrigin {
   if (row.source === "device" && row.deviceId !== null) return deviceOrigin(row.deviceId);
   throw new AppError("origin.invalid", { source: row.source ?? "", deviceId: row.deviceId });
+}
+
+/**
+ * Who an alert about a stored payment row names: the caller's own origin, or `"stored"`, the device
+ * the row was started on, for a manager acting on the row from the dashboard (spec §5).
+ */
+export type AlertOrigin = Origin | "stored";
+
+export function alertOrigin(
+  raisedBy: AlertOrigin,
+  row: { source: string | null; deviceId: string | null },
+): Origin {
+  return raisedBy === "stored" ? storedDeviceOrigin(row) : raisedBy;
 }

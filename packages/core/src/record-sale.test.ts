@@ -669,7 +669,11 @@ describe("recordSale — settlement modes", () => {
       );
     });
     await withTransaction(suite.db, async (tx) => {
-      await settleSale(tx, { saleId: b.saleId, tenders: tendersInput });
+      await settleSale(tx, {
+        saleId: b.saleId,
+        tenders: tendersInput,
+        origin: deviceOrigin(other.deviceId),
+      });
     });
 
     // Tenders, modulo id/sale_id, sorted for a position-independent compare.

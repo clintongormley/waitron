@@ -9,6 +9,7 @@ import {
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
   deviceOrigin,
+  jobOrigin,
 } from "@waitron/shared";
 import { openIncidents, recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
@@ -114,7 +115,9 @@ describe("on-device offline accept -> recordSale -> associate -> forward decline
     );
     expect(sale.rows).toHaveLength(1); // NOT voided or removed
 
-    const incidents = await suite.db.transaction((tx) => openIncidents(tx, brandTillId(s.tillId)));
+    const incidents = await suite.db.transaction((tx) =>
+      openIncidents(tx, jobOrigin("payment_check")),
+    );
     expect(incidents).toHaveLength(1);
     expect(incidents[0].code).toBe("payment.offline_forward_declined");
     expect(incidents[0].saleId).toBe(saleId);

@@ -288,6 +288,17 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "identity/0005_session_device_add": {
     refused: ["ALTER TABLE `sessions` ADD `device_id`", "Cannot add a NOT NULL column"],
   },
+  // Adds `incidents.source` as required with no default; a held row has no source to name.
+  "core/0075_incident_origin_add": {
+    refused: ["ALTER TABLE `incidents` ADD `source`", "Cannot add a NOT NULL column"],
+  },
+  // Rebuilds `incidents` with the source list's check; a carried row's source is not on the list.
+  "core/0076_incident_origin_drop_till": {
+    refused: ["CHECK constraint failed: incidents_source_ck"],
+  }, // Restores the open-alert index after the rebuild; the rows carried while it was absent collide.
+  "core/0077_incident_origin_dedup": {
+    refused: ["UNIQUE constraint failed: index 'incidents_open_dedup'"],
+  },
 };
 
 /** What a step's failure lacks against its RESETS entry, or `undefined` when it matches. */

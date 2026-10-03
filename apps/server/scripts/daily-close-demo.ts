@@ -210,6 +210,7 @@ async function main(): Promise<void> {
     await withTransaction(db, async (tx) => {
       await settleSale(tx, {
         saleId: saleB.saleId,
+        origin: jobOrigin("demo_seed"),
         tenders: [{ method: "card", amount: "55.00", tipAmount: "0.00", settledAt: SETTLED_LATER }],
       });
     });

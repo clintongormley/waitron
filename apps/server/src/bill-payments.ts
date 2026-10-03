@@ -696,7 +696,7 @@ async function issueWhenFullyPaid(
     operatorId,
     settlement: { kind: "deferred" },
   });
-  await settleSale(tx, { saleId, tenders: tendersOfBill });
+  await settleSale(tx, { saleId, tenders: tendersOfBill, origin: cfg.origin });
 
   const provided = await findPaymentsByBillPayments(
     tx,

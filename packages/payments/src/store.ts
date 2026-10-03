@@ -657,7 +657,6 @@ export interface ReconcilableRow {
   // auto-reverse gate (`!== "abandoned"`) treat `placed` as neither; whether that is right for a
   // placed order is not settled.
   workingOrderStatus: "open" | "placed" | "settled" | "abandoned";
-  tillId: string;
   reconcileRemediatedAt: string | null;
 }
 
@@ -687,7 +686,6 @@ export async function listReconcilable(
         auditedAt: sql<string>`coalesce(${payments.settledAt}, ${payments.createdAt})`,
         workingOrderId: payments.workingOrderId,
         workingOrderStatus: workingOrders.status,
-        tillId: workingOrders.tillId,
         reconcileRemediatedAt: payments.reconcileRemediatedAt,
       })
       .from(payments)
@@ -766,24 +764,6 @@ export async function markReconcileRemediated(
     .where(and(keyWhere(params), isNull(payments.reconcileRemediatedAt)))
     .returning({ id: payments.id });
   return row !== undefined;
-}
-
-/** Keyed by working-order id; an id that does not exist is absent from the map. */
-export async function tillsForWorkingOrders(
-  tx: Transaction,
-  workingOrderIds: string[],
-): Promise<Map<string, string>> {
-  if (workingOrderIds.length === 0) return new Map();
-  const tills = new Map<string, string>();
-  for (let i = 0; i < workingOrderIds.length; i += CHUNK_SIZE) {
-    const chunk = workingOrderIds.slice(i, i + CHUNK_SIZE);
-    const rows = await tx
-      .select({ id: workingOrders.id, tillId: workingOrders.tillId })
-      .from(workingOrders)
-      .where(inArray(workingOrders.id, chunk));
-    for (const row of rows) tills.set(row.id, row.tillId);
-  }
-  return tills;
 }
 
 /**

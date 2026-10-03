@@ -38,9 +38,10 @@ declare module "@waitron/shared" {
      * refusal. The row is resolved `failed` so the sweep terminates; the incident is what makes a
      * human look. */
     "payment.pending_outcome_unactionable": { paymentRef: string; status: string };
-    /** The reconcile incidents are AGGREGATED, one per (till, code) carrying every payment: the
-     * open-incident dedup index keys on `(till, code, sale_id)` and these incidents carry no
-     * `sale_id`, so one incident per payment would collapse into one. */
+    /** The reconcile incidents are AGGREGATED, one per code carrying every payment: the
+     * open-incident dedup index keys on `(source, device, code, sale_id)` and these incidents all
+     * name the payment check and carry no `sale_id`, so one incident per payment would collapse
+     * into one. */
     "payment.reconcile_unsettled": {
       payments: { paymentRef: string; amount: string; settledAt: string }[];
       count: number;

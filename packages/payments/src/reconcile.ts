@@ -1,22 +1,11 @@
-import {
-  AppError,
-  compareDecimal,
-  decimal,
-  isAppError,
-  tillId as brandTillId,
-} from "@waitron/shared";
-import type { Decimal, SaleId, TillId } from "@waitron/shared";
+import { AppError, compareDecimal, decimal, isAppError, jobOrigin } from "@waitron/shared";
+import type { Decimal, Origin, SaleId } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { PaymentState } from "./provider.js";
 import type { OrphanRemediation } from "./errors.js";
 import type { ReconcilableRow } from "./store.js";
-import {
-  existingReferences,
-  listReconcilable,
-  markReconcileRemediated,
-  tillsForWorkingOrders,
-} from "./store.js";
+import { existingReferences, listReconcilable, markReconcileRemediated } from "./store.js";
 
 /** Half-open `[from, to)`. */
 export interface ReconcilePeriod {
@@ -56,14 +45,14 @@ export interface SettlementReportSource {
 export type ReversalFn = (paymentRef: string) => Promise<void>;
 
 /**
- * Raise an incident, deduplicated per open `(till, code, sale)`, reporting whether it
+ * Raise an incident, deduplicated per open `(source, device, code, sale)`, reporting whether it
  * actually inserted. Typed structurally rather than imported so this package keeps `@waitron/core`
  * a DEV dependency; `recordIncidentOnce` is assignable to it verbatim.
  */
 export type IncidentSink = (
   tx: Transaction,
   input: {
-    tillId: TillId;
+    origin: Origin;
     saleId?: SaleId;
     error: AppError;
     severity: "warning" | "error";
@@ -98,7 +87,8 @@ export interface PaymentReconcileResult {
    * Orphans this sweep claimed and then could not reverse, with each reason. No later sweep
    * retries a claimed orphan's reversal (its marker is permanent), and the
    * `payment.reconcile_remediation_failed` incident can be swallowed by an earlier still-open one on
-   * the same `(till, code, sale_id)` key — so a failure not recorded here can be lost for good.
+   * the same `(source, device, code, sale_id)` key — so a failure not recorded here can be lost for
+   * good.
    */
   remediationFailures: { paymentRef: string; reason: string }[];
 }
@@ -213,8 +203,8 @@ const SEVERITY = {
 } as const;
 
 /**
- * Audit one period's payments against the processor's settlement report, raise incidents per till
- * and class, and reverse the orphans that pass every gate.
+ * Audit one period's payments against the processor's settlement report, raise one incident per
+ * class, and reverse the orphans that pass every gate.
  *
  * T1 reads, the report fetch runs outside every transaction, T2 writes incidents and markers, and
  * the reversals run outside every transaction (each is a network call). The report is fetched even
@@ -336,9 +326,13 @@ export async function reconcilePayments(
   return result;
 }
 
-/** One aggregate incident per (till, class), returning how many were really inserted. Aggregate
- * because the open-incident dedup keys on `(till, code, sale_id)` and these rows often share a null
- * sale_id, so per-payment incidents would collapse into one. */
+/** The payment check's alerts: they name no device, so one open alert of a code stands for every
+ * payment it covers. */
+const PAYMENT_CHECK = jobOrigin("payment_check");
+
+/** One aggregate incident per class, returning how many were really inserted. Aggregate because
+ * the open-incident dedup keys on `(source, device, code, sale_id)` and these rows share the payment
+ * check's source and a null sale_id, so per-payment incidents would collapse into one. */
 async function raiseRowIncidents(
   tx: Transaction,
   deps: ReconcileDeps,
@@ -346,11 +340,10 @@ async function raiseRowIncidents(
   remediation: Map<string, OrphanRemediation>,
   now: Date,
 ): Promise<number> {
-  const groups = new Map<string, ClassifiedRow[]>();
+  const groups = new Map<MismatchClass, ClassifiedRow[]>();
   for (const entry of classified.rows) {
-    const key = `${entry.row.tillId}|${entry.klass}`;
-    const group = groups.get(key);
-    if (group === undefined) groups.set(key, [entry]);
+    const group = groups.get(entry.klass);
+    if (group === undefined) groups.set(entry.klass, [entry]);
     else group.push(entry);
   }
 
@@ -358,7 +351,7 @@ async function raiseRowIncidents(
   for (const group of groups.values()) {
     const first = group[0]!;
     const inserted = await deps.incidents(tx, {
-      tillId: brandTillId(first.row.tillId),
+      origin: PAYMENT_CHECK,
       error: incidentFor(first.klass, group, remediation),
       severity: SEVERITY[first.klass],
       detectedAt: now,
@@ -421,50 +414,33 @@ function incidentFor(
   });
 }
 
-/** A settlement with no hint, or whose hinted working order does not exist, has no till: it is
- * reported in the result and raises no incident. */
+/** One aggregate incident for the settlements the processor attributed to us with a hint. One
+ * with no hint is reported in the result and raises no incident: nothing says it is ours. */
 async function raiseMissingLocal(
   tx: Transaction,
   deps: ReconcileDeps,
   missing: SettlementRecord[],
   now: Date,
 ): Promise<number> {
-  const hintedIds = new Set<string>();
-  for (const record of missing) {
-    if (record.hint !== undefined) hintedIds.add(record.hint.workingOrderId);
-  }
-  const tills = await tillsForWorkingOrders(tx, [...hintedIds]);
-
-  const byTill = new Map<string, { record: SettlementRecord; paymentRef: string }[]>();
-  for (const record of missing) {
-    if (record.hint === undefined) continue;
-    const tillId = tills.get(record.hint.workingOrderId);
-    if (tillId === undefined) continue;
-    const group = byTill.get(tillId);
-    const item = { record, paymentRef: record.hint.paymentRef };
-    if (group === undefined) byTill.set(tillId, [item]);
-    else group.push(item);
-  }
-
-  let raised = 0;
-  for (const [tillId, group] of byTill) {
-    const inserted = await deps.incidents(tx, {
-      tillId: brandTillId(tillId),
-      error: new AppError(CODE.missingLocal, {
-        count: group.length,
-        settlements: group.map(({ record, paymentRef }) => ({
-          references: record.references,
-          amount: record.amount,
-          settledAt: record.settledAt.toISOString(),
-          paymentRef,
-        })),
-      }),
-      severity: "error",
-      detectedAt: now,
-    });
-    if (inserted) raised += 1;
-  }
-  return raised;
+  const hinted = missing.flatMap((record) =>
+    record.hint === undefined ? [] : [{ record, paymentRef: record.hint.paymentRef }],
+  );
+  if (hinted.length === 0) return 0;
+  const inserted = await deps.incidents(tx, {
+    origin: PAYMENT_CHECK,
+    error: new AppError(CODE.missingLocal, {
+      count: hinted.length,
+      settlements: hinted.map(({ record, paymentRef }) => ({
+        references: record.references,
+        amount: record.amount,
+        settledAt: record.settledAt.toISOString(),
+        paymentRef,
+      })),
+    }),
+    severity: "error",
+    detectedAt: now,
+  });
+  return inserted ? 1 : 0;
 }
 
 function mismatchOf(entry: ClassifiedRow): PaymentMismatch {
@@ -505,37 +481,26 @@ interface RemediationFailure {
   reason: string;
 }
 
-/** One aggregate incident per till, in its own transaction: the reversals ran after T2 committed. */
+/** One aggregate incident, in its own transaction: the reversals ran after T2 committed. */
 async function raiseRemediationFailures(
   deps: ReconcileDeps,
   failures: RemediationFailure[],
   now: Date,
 ): Promise<number> {
-  const byTill = new Map<string, RemediationFailure[]>();
-  for (const failure of failures) {
-    const group = byTill.get(failure.row.tillId);
-    if (group === undefined) byTill.set(failure.row.tillId, [failure]);
-    else group.push(failure);
-  }
-
-  let raised = 0;
-  await withTransaction(deps.db, async (tx) => {
-    for (const [tillId, group] of byTill) {
-      const inserted = await deps.incidents(tx, {
-        tillId: brandTillId(tillId),
-        error: new AppError(CODE.remediationFailed, {
-          count: group.length,
-          payments: group.map(({ row, reason }) => ({
-            paymentRef: row.paymentRef,
-            amount: row.amount,
-            reason,
-          })),
-        }),
-        severity: "error",
-        detectedAt: now,
-      });
-      if (inserted) raised += 1;
-    }
-  });
-  return raised;
+  const inserted = await withTransaction(deps.db, (tx) =>
+    deps.incidents(tx, {
+      origin: PAYMENT_CHECK,
+      error: new AppError(CODE.remediationFailed, {
+        count: failures.length,
+        payments: failures.map(({ row, reason }) => ({
+          paymentRef: row.paymentRef,
+          amount: row.amount,
+          reason,
+        })),
+      }),
+      severity: "error",
+      detectedAt: now,
+    }),
+  );
+  return inserted ? 1 : 0;
 }

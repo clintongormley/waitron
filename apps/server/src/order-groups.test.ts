@@ -43,7 +43,8 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { createWatcher, setPrinterWatcher } from "./watchers.js";
@@ -135,7 +136,7 @@ const COURSE_OF: Record<Dish, keyof typeof COURSES> = {
 };
 
 interface Venue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   productId: Record<Dish, string>;
   printerId: string;
   /** The one kitchen station every routed dish goes to. */
@@ -160,7 +161,7 @@ async function setupVenue(): Promise<Venue> {
     .values({ locationId, name: "Caja 1" })
     .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
-  const cfg: TillConfig = {
+  const cfg = await deviceRequestCfg(db, {
     tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -170,7 +171,7 @@ async function setupVenue(): Promise<Venue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  } satisfies TillConfig);
   return inTx(async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Carta" });
     const category = await createCategory(tx, { name: "Platos" });

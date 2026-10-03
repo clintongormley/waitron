@@ -195,6 +195,7 @@ export async function settleInvoiceFirst(
     await withTransaction(db, (tx) =>
       settleSale(tx, {
         saleId: sale.saleId,
+        origin: jobOrigin("demo_seed"),
         tenders: [
           { method: "cash", amount: net, tipAmount: "0.00", settledAt: clock.now().instant },
         ],

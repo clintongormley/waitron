@@ -243,7 +243,7 @@ export async function recordCorrection(
   if (verification.issues.length > 0) {
     pending.push({
       error: new AppError("chain.verification_failed", {
-        tillId: input.tillId,
+        deviceId: input.origin.deviceId,
         issues: verification.issues.map((issue) => ({
           issueCode: issue.code,
           recordId: issue.recordId ?? null,
@@ -299,7 +299,7 @@ export async function recordCorrection(
   // On this same transaction, attached to the corrective sale.
   for (const incident of pending) {
     await recordIncident(tx, {
-      tillId: input.tillId,
+      origin: input.origin,
       saleId,
       detectedAt: now.instant,
       ...incident,

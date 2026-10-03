@@ -57,9 +57,10 @@ export interface RecordSaleTender {
 }
 
 export interface RecordSaleInput {
-  /** Where the sale rings; also the key incidents are recorded under. */
+  /** Where the sale rings. */
   tillId: TillId;
-  /** Where the sale came from, written to `sales.source` and `sales.device_id`. */
+  /** Where the sale came from, written to `sales.source` and `sales.device_id`; its incidents name
+   * it too. */
   origin: SaleOrigin;
   /** The node that chains the sale. The named series must belong to it. */
   nodeId: NodeId;
@@ -201,7 +202,7 @@ export async function recordSale(
   if (verification.issues.length > 0) {
     pending.push({
       error: new AppError("chain.verification_failed", {
-        tillId: input.tillId,
+        deviceId: input.origin.deviceId,
         issues: verification.issues.map((issue) => ({
           issueCode: issue.code,
           recordId: issue.recordId ?? null,
@@ -296,7 +297,7 @@ export async function recordSale(
   // On this same transaction, so an incident never commits for a sale that rolls back.
   for (const incident of pending) {
     await recordIncident(tx, {
-      tillId: input.tillId,
+      origin: input.origin,
       saleId,
       detectedAt: now.instant,
       ...incident,
@@ -311,6 +312,7 @@ export async function recordSale(
     await settleSale(tx, {
       saleId,
       tenders: input.settlement.tenders,
+      origin: input.origin,
     });
   }
 

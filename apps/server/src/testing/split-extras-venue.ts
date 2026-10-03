@@ -19,7 +19,8 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { TillConfig } from "../till-config.js";
+import type { DeviceRequestConfig, TillConfig } from "../till-config.js";
+import { deviceRequestCfg } from "./session-device.js";
 import { createStation } from "../kitchen.js";
 import { createPrinter } from "@waitron/printing";
 import { attachPrinterToStation } from "../station-printers.js";
@@ -39,7 +40,7 @@ export function useSplitExtrasDb(database: Database): void {
 }
 
 export interface Venue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   catalogueId: string;
 }
 
@@ -68,7 +69,7 @@ export async function setupVenue(): Promise<Venue> {
     await assignCatalogueToLocation(tx, locationId, cat.id);
     return cat.id;
   });
-  const cfg: TillConfig = {
+  const cfg = await deviceRequestCfg(db, {
     tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -78,7 +79,7 @@ export async function setupVenue(): Promise<Venue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  } satisfies TillConfig);
   return { cfg, catalogueId };
 }
 

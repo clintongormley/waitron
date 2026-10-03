@@ -69,6 +69,9 @@ function eventAlert(incident: TenantIncident, claim: AlertEventClaim): Alert {
     severity: incident.severity,
     since: incident.detectedAt.toISOString(),
     area: claim.area,
+    source: incident.source,
+    deviceId: incident.deviceId,
+    deviceName: incident.deviceName,
   };
 }
 

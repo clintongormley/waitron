@@ -29,7 +29,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import type { Decimal, SaleId } from "@waitron/shared";
+import type { Decimal, Origin, SaleId } from "@waitron/shared";
 import { readReceiptLanguage } from "@waitron/catalogue";
 import type { GrossLines } from "@waitron/catalogue";
 import {
@@ -1512,7 +1512,7 @@ export async function fireDishesAtPayment(
  */
 async function finalizeSettle(
   deps: IntegratedPayDeps,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   req: IntegratedPayRequest,
   outstanding: { saleId: SaleId; amountDue: Decimal },
   tip: Decimal,
@@ -1530,6 +1530,7 @@ async function finalizeSettle(
     return await withTransaction(deps.db, async (tx) => {
       await settleSale(tx, {
         saleId: outstanding.saleId,
+        origin: cfg.origin,
         tenders: [
           {
             method: "card",
@@ -1579,7 +1580,7 @@ async function finalizeSettle(
  */
 async function finalizeSettleRecovery(
   deps: IntegratedPayDeps,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   req: IntegratedPayRequest,
   captured: CapturedPaymentForOrder,
   outstanding: { saleId: SaleId; amountDue: Decimal },
@@ -1622,6 +1623,7 @@ async function finalizeSettleRecovery(
 
     await settleSale(tx, {
       saleId: outstanding.saleId,
+      origin: cfg.origin,
       tenders: [{ method: "card", amount: capturedAmount, tipAmount: tip, settledAt }],
     });
 
@@ -1718,6 +1720,7 @@ export async function collectOrder(
 
       await settleSale(tx, {
         saleId: outstanding.saleId,
+        origin: cfg.origin,
         tenders: [
           {
             method: req.tender.method,
@@ -1769,11 +1772,11 @@ export async function collectOrder(
 async function settleOwingNothing(
   tx: Transaction,
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   workingOrderId: string,
   saleId: SaleId,
 ): Promise<TillSaleResult> {
-  await settleIssuedOwingNothing(tx, deps, workingOrderId, saleId);
+  await settleIssuedOwingNothing(tx, deps, cfg.origin, workingOrderId, saleId);
   return readSettledTicket(deps.backend, tx, cfg, workingOrderId);
 }
 
@@ -1781,11 +1784,12 @@ async function settleOwingNothing(
 export async function settleIssuedOwingNothing(
   tx: Transaction,
   deps: Pick<TillSaleDeps, "clock" | "log">,
+  origin: Origin,
   workingOrderId: string,
   saleId: SaleId,
 ): Promise<void> {
   const settledAt = deps.clock.now().instant.toISOString();
-  await settleSale(tx, { saleId, tenders: [] });
+  await settleSale(tx, { saleId, tenders: [], origin });
   await tx
     .update(workingOrders)
     .set({ status: "settled", settledAt })

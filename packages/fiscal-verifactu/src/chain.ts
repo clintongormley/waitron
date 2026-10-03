@@ -2,7 +2,7 @@
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import { recordIncident } from "@waitron/core";
-import { AppError } from "@waitron/shared";
+import { AppError, readOrigin } from "@waitron/shared";
 import type { NodeId, SaleId, SaleOrigin, SaleSource, TillId } from "@waitron/shared";
 import { isUniqueViolation, type Transaction } from "@waitron/db";
 import type {
@@ -261,7 +261,8 @@ async function raiseWarning(
   error: AppError,
 ): Promise<void> {
   await recordIncident(tx, {
-    tillId: registro.tillId,
+    // An anulación copied from an alta with no stored source is refused `origin.invalid`.
+    origin: readOrigin(registro.origin.source ?? "", registro.origin.deviceId),
     saleId: registro.saleId,
     error,
     severity: "warning",

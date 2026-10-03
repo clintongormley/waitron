@@ -2,6 +2,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
+import { jobOrigin } from "@waitron/shared";
 import { computeHuella } from "@waitron/verifactu";
 import { newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -70,7 +71,14 @@ async function sell() {
 
 async function voidSale(saleId: SaleId, reason = "staff error") {
   return withTransaction(suite.db, async (tx) => {
-    return recordVoid(tx, backend, saleId, reason, { sessionId: voidSessionId });
+    return recordVoid(
+      tx,
+      backend,
+      saleId,
+      reason,
+      { sessionId: voidSessionId },
+      jobOrigin("readiness_test"),
+    );
   });
 }
 

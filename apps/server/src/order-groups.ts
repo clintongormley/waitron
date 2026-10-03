@@ -18,7 +18,7 @@ import { enqueueHoldCorrections, enqueueKitchenTickets } from "./kitchen-print.j
 import type { FiredItem, HoldCorrection, TicketState } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { trimQuantityForDisplay } from "./receipt-lines.js";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig, TillConfig } from "./till-config.js";
 import {
   checkAndBumpParty,
   partyFamily,
@@ -251,7 +251,7 @@ async function resolveOrderBill(
  */
 export async function fireGroup(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   partyId: string,
   groupId: string,
   args: PartyCommandArgs,
@@ -361,7 +361,7 @@ function groupLinesOf(tx: Transaction, groupId: string) {
  */
 export async function fireHeldGroupsOfCourse(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   orderId: string,
   courseId: string,
   operatorId: string,
@@ -436,7 +436,7 @@ export async function moveGroupsToParty(
  */
 async function releaseGroup(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   partyId: string,
   groupId: string,
   operatorId: string,

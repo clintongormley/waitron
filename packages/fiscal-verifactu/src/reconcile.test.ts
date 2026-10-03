@@ -4,6 +4,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { recordSale, recordVoid } from "@waitron/core";
+import { jobOrigin } from "@waitron/shared";
 import { newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
@@ -54,6 +55,16 @@ async function incidentsFor(): Promise<
   );
   // A raw read hands back a `json` column's stored text.
   return rows.map((row) => ({ ...row, params: JSON.parse(row.params) as Record<string, unknown> }));
+}
+
+/** Every incident's source and device: a checking pass names itself, never the record's device. */
+async function incidentOrigins(): Promise<{ source: string; device_id: string | null }[]> {
+  const { rows } = await withTransaction(suite.db, (tx) =>
+    tx.execute<{ source: string; device_id: string | null }>(
+      sql`select source, device_id from incidents`,
+    ),
+  );
+  return rows;
 }
 
 async function estadosFor(): Promise<Map<string, string>> {
@@ -145,7 +156,14 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
 
   const alta = await altaIdentityFor(sale.saleId);
   await withTransaction(suite.db, async (tx) => {
-    await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
+    await recordVoid(
+      tx,
+      backend,
+      sale.saleId,
+      "staff error",
+      { sessionId: voidSession.id },
+      jobOrigin("readiness_test"),
+    );
   });
   expect(await hasAnulacion(alta.id)).toBe(true);
   const { rows: anul } = await suite.db.execute<{ id: string }>(
@@ -383,6 +401,7 @@ describe("reconcile — the three audit cases", () => {
     expect(inc).toHaveLength(1);
     expect(inc[0]?.code).toBe("fiscal.reconcile_drift_errores");
     expect(inc[0]?.severity).toBe("warning");
+    expect(await incidentOrigins()).toEqual([{ source: "fiscal_filing", device_id: null }]);
 
     const estados = await estadosFor();
     expect(estados.get(seeded.registroIds[0]!)).toBe("aceptado_con_errores");
@@ -511,6 +530,7 @@ describe("reconcile — the three audit cases", () => {
     const incidents = await incidentsFor();
     expect(incidents).toHaveLength(1);
     expect(incidents[0]?.code).toBe("fiscal.reconcile_drift_anulada");
+    expect(await incidentOrigins()).toEqual([{ source: "fiscal_filing", device_id: null }]);
   });
 
   it("drift-AceptadoConErrores CONVERGES: a second sweep does not re-raise the incident", async () => {

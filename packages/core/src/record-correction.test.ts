@@ -366,7 +366,14 @@ describe("recordCorrection — the sale being corrected", () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     await withTransaction(suite.db, async (tx) => {
-      await recordVoid(tx, backend, saleId, "Wrong table", { sessionId: managerSessionId });
+      await recordVoid(
+        tx,
+        backend,
+        saleId,
+        "Wrong table",
+        { sessionId: managerSessionId },
+        deviceOrigin(deviceId),
+      );
     });
     await expect(correct(backend, saleId)).rejects.toMatchObject({
       code: "sale.voided",

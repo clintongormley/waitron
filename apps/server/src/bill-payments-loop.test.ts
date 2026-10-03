@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -163,24 +163,56 @@ async function refusingSalesOf<T>(billId: string, fn: () => Promise<T>): Promise
   }
 }
 
-async function incidentsOf(code: string, tillId: string) {
-  return inTx(venue, (tx) =>
-    tx
-      .select({ params: incidents.params })
-      .from(incidents)
-      .where(and(eq(incidents.code, code), eq(incidents.tillId, tillId))),
-  );
-}
-
-async function mismatchIncidents(tillId: string) {
+/** The loop's alerts name the payment check, never the device that took the payment. */
+async function incidentsOf(code: string) {
   return inTx(venue, (tx) =>
     tx
       .select({ params: incidents.params })
       .from(incidents)
       .where(
-        and(eq(incidents.code, "payment.bill_capture_mismatch"), eq(incidents.tillId, tillId)),
+        and(
+          eq(incidents.code, code),
+          eq(incidents.source, "payment_check"),
+          isNull(incidents.deviceId),
+        ),
       ),
   );
+}
+
+async function openMismatchIncidents() {
+  return inTx(venue, (tx) =>
+    tx
+      .select({ params: incidents.params })
+      .from(incidents)
+      .where(
+        and(
+          eq(incidents.code, "payment.bill_capture_mismatch"),
+          eq(incidents.source, "payment_check"),
+          isNull(incidents.deviceId),
+          isNull(incidents.acknowledgedAt),
+        ),
+      ),
+  );
+}
+
+/** A pending card payment whose provider row captured 30.00 against the 35.00 it was for. */
+async function mismatchedPending(
+  billId: string,
+  device?: { deviceId: string; tillId: string },
+): Promise<string> {
+  const id = await strandedPending(billId, 3000, 500, device);
+  await inTx(venue, (tx) =>
+    insertCapturedPayment(tx, {
+      origin: venue.cfg.origin,
+      workingOrderId: brandWorkingOrderId(billId),
+      provider: "fake",
+      paymentRef: `mismatch-${randomUUID()}`,
+      amount: decimal("30.00"),
+      settledAt: new Date(),
+      billPaymentId: id,
+    }),
+  );
+  return id;
 }
 
 describe("recovery after a crash (design §8 test 13)", () => {
@@ -239,18 +271,7 @@ describe("recovery after a crash (design §8 test 13)", () => {
 
   it("files nothing for a capture of another amount, keeps it pending, and raises one alert", async () => {
     const billId = await tabWith(venue, "Paella");
-    const id = await strandedPending(billId, 3000, 500);
-    await inTx(venue, (tx) =>
-      insertCapturedPayment(tx, {
-        origin: venue.cfg.origin,
-        workingOrderId: brandWorkingOrderId(billId),
-        provider: "fake",
-        paymentRef: `mismatch-${randomUUID()}`,
-        amount: decimal("30.00"),
-        settledAt: new Date(),
-        billPaymentId: id,
-      }),
-    );
+    const id = await mismatchedPending(billId);
 
     const first = await settle();
     const second = await settle();
@@ -259,7 +280,7 @@ describe("recovery after a crash (design §8 test 13)", () => {
     expect(second).toMatchObject({ received: 0, mismatched: 1 });
     expect(await stateOf(id)).toBe("pending");
     expect(registroCount(venue, billId)).toBe(0);
-    const raised = await mismatchIncidents(venue.device2TillId);
+    const raised = await openMismatchIncidents();
     expect(raised).toHaveLength(1);
     expect(raised[0]!.params).toMatchObject({
       billPaymentId: id,
@@ -267,6 +288,29 @@ describe("recovery after a crash (design §8 test 13)", () => {
       captured: "30.00",
       expected: "35.00",
     });
+  });
+
+  it("keeps one open alert for two captures of another amount on two bills (no sale behind either)", async () => {
+    await inTx(venue, (tx) =>
+      tx
+        .update(incidents)
+        .set({ acknowledgedAt: new Date().toISOString(), acknowledgedBy: venue.operatorId })
+        .where(eq(incidents.code, "payment.bill_capture_mismatch")),
+    );
+    const first = await mismatchedPending(await tabWith(venue, "Paella"));
+    const second = await mismatchedPending(await tabWith(venue, "Paella"), {
+      deviceId: venue.deviceId,
+      tillId: venue.deviceTillId,
+    });
+
+    const pass = await settle();
+
+    // The pass meets an earlier test's mismatch first, so that one holds the open alert.
+    expect(pass.mismatched).toBeGreaterThanOrEqual(2);
+    expect([await stateOf(first), await stateOf(second)]).toEqual(["pending", "pending"]);
+    const open = await openMismatchIncidents();
+    expect(open).toHaveLength(1);
+    expect([first, second]).not.toContain(open[0]!.params.billPaymentId);
   });
 });
 
@@ -343,7 +387,7 @@ describe("the loop's own edges", () => {
     expect(second!.errors).toHaveLength(1);
     expect(await stateOf(id)).toBe("pending");
     expect(registroCount(venue, billId)).toBe(0);
-    const raised = await incidentsOf("payment.bill_settle_failed", venue.device2TillId);
+    const raised = await incidentsOf("payment.bill_settle_failed");
     expect(raised).toEqual([
       {
         params: {
@@ -361,7 +405,7 @@ describe("the loop's own edges", () => {
   it("raises no such alert for a payment no card was charged for", async () => {
     const billId = await tabWith(venue, "Paella");
     const id = await strandedPending(billId, 1000);
-    const before = await incidentsOf("payment.bill_settle_failed", venue.device2TillId);
+    const before = await incidentsOf("payment.bill_settle_failed");
     venue.db.run(
       sql.raw(
         `create trigger refuse_one_bill_payment before update on bill_payments ` +
@@ -374,7 +418,7 @@ describe("the loop's own edges", () => {
       venue.db.run(sql`drop trigger refuse_one_bill_payment`);
     }
 
-    expect(await incidentsOf("payment.bill_settle_failed", venue.device2TillId)).toEqual(before);
+    expect(await incidentsOf("payment.bill_settle_failed")).toEqual(before);
     await settle();
   });
 

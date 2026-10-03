@@ -5,9 +5,9 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   compareDecimal,
   decimal,
-  tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
   deviceOrigin,
+  jobOrigin,
 } from "@waitron/shared";
 import {
   PAYMENTS_MIGRATIONS,
@@ -207,7 +207,9 @@ describe("StripeOnDeviceProvider.forward", () => {
     );
     expect(rowA?.state).toBe("settled");
     expect(rowB?.state).toBe("declined");
-    const incidents = await suite.db.transaction((tx) => openIncidents(tx, brandTillId(s.tillId)));
+    const incidents = await suite.db.transaction((tx) =>
+      openIncidents(tx, jobOrigin("payment_check")),
+    );
     expect(incidents).toHaveLength(1);
     expect(incidents[0].code).toBe("payment.offline_forward_declined");
 
@@ -296,12 +298,14 @@ describe("StripeOnDeviceProvider.forward", () => {
     client.nextCollect("offline");
     const b = await provider.collect(collectParams(s, true));
 
-    // Neither payment has a sale, so both declines key the same open incident (till, code).
+    // Neither payment has a sale, so both declines key the same open incident (source, code).
     client.queueResult({ settled: [], declined: [a.paymentRef, b.paymentRef] });
     const result = await provider.forward(AT);
 
     expect(result).toMatchObject({ forwarded: 0, declined: 2, incidentsRaised: 1 });
-    const incidents = await suite.db.transaction((tx) => openIncidents(tx, brandTillId(s.tillId)));
+    const incidents = await suite.db.transaction((tx) =>
+      openIncidents(tx, jobOrigin("payment_check")),
+    );
     expect(incidents).toHaveLength(1);
   });
 });

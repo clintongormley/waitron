@@ -1200,6 +1200,10 @@ export interface AlertView {
   screen?: string;
   handledAt?: string;
   handledBy?: string | null;
+  /** An event's source: `device`, or the job that raised it. Ongoing alerts carry none. */
+  source?: string;
+  deviceId?: string | null;
+  deviceName?: string | null;
 }
 
 export interface AlertsResponse {

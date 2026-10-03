@@ -1,10 +1,8 @@
-import { eq } from "drizzle-orm";
 import { AppError, decimal } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
-import { saleId as brandSaleId, tillId as brandTillId } from "@waitron/shared";
+import { jobOrigin, saleId as brandSaleId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
-import { workingOrders } from "@waitron/db";
 import type {
   AbandonedAttemptAudit,
   AbandonedAttemptOutcome,
@@ -297,12 +295,8 @@ export class FakePaymentProvider implements PaymentProvider {
         if (this.declineForwardRefs.has(p.paymentRef)) {
           await declineForwarded(tx, key);
           declined += 1;
-          const [wo] = await tx
-            .select({ tillId: workingOrders.tillId })
-            .from(workingOrders)
-            .where(eq(workingOrders.id, p.workingOrderId));
           const raised = await recordIncidentOnce(tx, {
-            tillId: brandTillId(wo.tillId),
+            origin: jobOrigin("payment_check"),
             ...(p.saleId === null ? {} : { saleId: brandSaleId(p.saleId) }),
             error: new AppError("payment.offline_forward_declined", {
               paymentRef: p.paymentRef,

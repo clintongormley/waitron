@@ -10,7 +10,6 @@ import {
   nodes,
   refusalOn,
   tills,
-  workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, deviceOrigin } from "@waitron/shared";
@@ -49,11 +48,9 @@ import {
   settleForwarded,
   settleInitiated,
   stampAttemptingRef,
-  tillsForWorkingOrders,
 } from "./store.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
 import type { Seeded } from "../test/seed.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
@@ -943,7 +940,6 @@ describe("listReconcilable", () => {
       saleId: null,
       workingOrderId: seeded.workingOrderId,
       workingOrderStatus: "open",
-      tillId: seeded.tillId,
       reconcileRemediatedAt: null,
     });
     expect(rows[0].auditedAt).toBe(rows[0].settledAt);
@@ -1156,73 +1152,6 @@ describe("markReconcileRemediated", () => {
         }),
       ),
     ).toBe(false);
-  });
-});
-
-async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
-  const [till] = (
-    await suite.db.execute<{ location_id: string }>(
-      sql`select location_id from tills where id = ${seeded.tillId}`,
-    )
-  ).rows;
-  const [till2] = await suite.db
-    .insert(tills)
-    .values({ locationId: till.location_id, name: "Till 2" })
-    .returning({ id: tills.id });
-  const tillId = till2!.id;
-  const [node2] = await suite.db
-    .insert(nodes)
-    .values({ locationId: till.location_id, name: "Node 2" })
-    .returning({ id: nodes.id });
-  const [wo2] = await suite.db
-    .insert(workingOrders)
-    .values({ tillId, orderNumber: 1 })
-    .returning({ id: workingOrders.id });
-  const { deviceId } = await seedDevice(suite.db, { tillId });
-  return {
-    tillId,
-    deviceId,
-    nodeId: node2!.id,
-    workingOrderId: wo2!.id,
-  };
-}
-
-describe("tillsForWorkingOrders", () => {
-  it("resolves several working orders across two tills in one pass, skipping one that does not exist", async () => {
-    const seeded = await seedTenant();
-    const second = await seedSecondTill(seeded);
-    const tills = await suite.db.transaction((tx) =>
-      tillsForWorkingOrders(tx, [
-        seeded.workingOrderId,
-        second.workingOrderId,
-        "00000000-0000-0000-0000-000000000000",
-      ]),
-    );
-    expect(tills).toEqual(
-      new Map([
-        [seeded.workingOrderId, seeded.tillId],
-        [second.workingOrderId, second.tillId],
-      ]),
-    );
-  });
-
-  it("is empty for an empty input list", async () => {
-    expect(await suite.db.transaction((tx) => tillsForWorkingOrders(tx, []))).toEqual(new Map());
-  });
-
-  it("chunks the IN list — a match past the first chunk boundary is still found", async () => {
-    const seeded = await seedTenant();
-    // 1000 non-matching ids fill the first chunk exactly (CHUNK_SIZE); the real working order id
-    // lands in the second chunk, so this only passes if every chunk is actually queried.
-    const ids = [
-      ...Array.from(
-        { length: 1000 },
-        (_, i) => `00000000-0000-0000-0000-${String(i).padStart(12, "0")}`,
-      ),
-      seeded.workingOrderId,
-    ];
-    const tills = await suite.db.transaction((tx) => tillsForWorkingOrders(tx, ids));
-    expect(tills).toEqual(new Map([[seeded.workingOrderId, seeded.tillId]]));
   });
 });
 

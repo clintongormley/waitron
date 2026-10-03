@@ -69,7 +69,7 @@ export async function creditWholeInvoice(
     authz,
     clock: deps.clock,
   });
-  await settleSale(tx, { saleId: invoice.id, tenders: [] });
+  await settleSale(tx, { saleId: invoice.id, tenders: [], origin: cfg.origin });
 }
 
 function reversedLines(rows: (typeof saleLines.$inferSelect)[]): RecordSaleLine[] {

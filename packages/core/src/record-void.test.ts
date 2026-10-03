@@ -150,7 +150,7 @@ async function voidSale(
   authz: AuthzInput = { sessionId: managerSessionId },
 ) {
   return withTransaction(suite.db, async (tx) => {
-    return recordVoid(tx, backend, saleId, reason, authz);
+    return recordVoid(tx, backend, saleId, reason, authz, deviceOrigin(deviceId));
   });
 }
 
@@ -407,9 +407,14 @@ describe("recordVoid — error propagation", () => {
     };
 
     const error = await captureError(() =>
-      recordVoid(fakeTx, backend, "00000000-0000-4000-8000-000000000000" as SaleId, "reason", {
-        sessionId: "operator-session",
-      }),
+      recordVoid(
+        fakeTx,
+        backend,
+        "00000000-0000-4000-8000-000000000000" as SaleId,
+        "reason",
+        { sessionId: "operator-session" },
+        deviceOrigin(deviceId),
+      ),
     );
     expect(error).not.toBeInstanceOf(AppError);
     expect(driverErrorCode(error)).toBe("53100");
@@ -460,7 +465,7 @@ describe("recordVoid — no fiscal condition blocks a void", () => {
 
     await voidSale(backend, saleId);
 
-    const rows = await suite.db.select().from(incidents).where(eq(incidents.tillId, tillId));
+    const rows = await suite.db.select().from(incidents).where(eq(incidents.deviceId, deviceId));
     expect(rows).toHaveLength(1);
     expect(rows[0]?.code).toBe("chain.verification_failed");
     expect(rows[0]?.severity).toBe("error");

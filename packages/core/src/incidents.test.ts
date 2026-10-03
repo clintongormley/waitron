@@ -1,10 +1,10 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { AppError, deviceOrigin } from "@waitron/shared";
-import type { DeviceId, NodeId, SeriesId, TillId } from "@waitron/shared";
+import { AppError, deviceOrigin, jobOrigin } from "@waitron/shared";
+import type { DeviceId, NodeId, Origin, SeriesId, TillId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { CORE_MIGRATIONS, incidents, nowIso, sales, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, devices, incidents, nowIso, sales, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -131,14 +131,23 @@ async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> 
   });
 }
 
-/** Scoped to one till: several cases seed a second till and read only that one's rows. */
-async function incidentsForTill(till: TillId) {
-  return suite.db.select().from(incidents).where(eq(incidents.tillId, till));
+/** Scoped to one device: several cases seed a second device and read only that one's rows. */
+async function incidentsForDevice(device: DeviceId) {
+  return suite.db.select().from(incidents).where(eq(incidents.deviceId, device));
 }
 
-async function seedTillForIncidents(): Promise<{ tillId: TillId }> {
+async function seedDeviceForIncidents(): Promise<{ deviceId: DeviceId }> {
   const seeded = await seedTenant(suite.db);
-  return { tillId: seeded.tillId };
+  return { deviceId: seeded.deviceId };
+}
+
+/** A raw insert, so the database's own checks are what refuse it. */
+async function insertRaw(source: string, device: string | null): Promise<void> {
+  await suite.db.execute(sql`
+    insert into incidents (id, source, device_id, code, params, severity, detected_at)
+    values (${crypto.randomUUID()}, ${source}, ${device}, 'chain.verification_failed', '{}',
+            'error', ${BASE.toISOString()})
+  `);
 }
 
 describe("incidents — chain verification failure", () => {
@@ -146,7 +155,7 @@ describe("incidents — chain verification failure", () => {
     const backend = failingChain();
     const { saleId } = await sell(backend);
 
-    const rows = await incidentsForTill(tillId);
+    const rows = await incidentsForDevice(deviceId);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.code).toBe("chain.verification_failed");
     expect(rows[0]?.severity).toBe("error");
@@ -160,9 +169,9 @@ describe("incidents — chain verification failure", () => {
   it("carries the module's structured issue detail, not a rendered message", async () => {
     // One stable code, with the module's own issues nested under `params.issues`.
     await sell(failingChain());
-    const [row] = await incidentsForTill(tillId);
+    const [row] = await incidentsForDevice(deviceId);
     expect(row?.params).toEqual({
-      tillId,
+      deviceId,
       issues: [
         {
           issueCode: "predecessor-hash-mismatch",
@@ -175,7 +184,7 @@ describe("incidents — chain verification failure", () => {
 
   it("aggregates multiple issues from one failed check into a SINGLE incident", async () => {
     // Two issues for one sale. `incidents_open_dedup` allows one open incident per
-    // (till, code, sale), so one row per issue would lose the second; both must be carried in the
+    // (source, device, code, sale), so one row per issue would lose the second; both must be carried in the
     // one incident's `params.issues`.
     const backend = new FakeFiscalBackend(suite.db);
     backend.breakIntegrity(nodeId, {
@@ -190,14 +199,14 @@ describe("incidents — chain verification failure", () => {
     });
     const { saleId } = await sell(backend);
 
-    const rows = await incidentsForTill(tillId);
+    const rows = await incidentsForDevice(deviceId);
     // EXACTLY one row — not two — even though two issues were reported for the one sale.
     expect(rows).toHaveLength(1);
     expect(rows[0]?.code).toBe("chain.verification_failed");
     expect(rows[0]?.saleId).toBe(saleId);
     // Both issues, in order.
     expect(rows[0]?.params).toEqual({
-      tillId,
+      deviceId,
       issues: [
         {
           issueCode: "predecessor-hash-mismatch",
@@ -224,7 +233,7 @@ describe("incidents — chain verification failure", () => {
       }),
     ).rejects.toThrow("simulated crash");
 
-    expect(await incidentsForTill(tillId)).toHaveLength(0);
+    expect(await incidentsForDevice(deviceId)).toHaveLength(0);
     expect(await suite.db.select().from(sales).where(eq(sales.tillId, tillId))).toHaveLength(0);
   });
 });
@@ -234,7 +243,7 @@ describe("incidents — clock degradation", () => {
     // At error severity it would share a channel with chain failures and train staff to ignore
     // both.
     await sell(new FakeFiscalBackend(suite.db), { clock: degradedClock });
-    const [row] = await incidentsForTill(tillId);
+    const [row] = await incidentsForDevice(deviceId);
     expect(row?.code).toBe("clock.degraded");
     expect(row?.severity).toBe("warning");
     expect(await suite.db.select().from(sales).where(eq(sales.tillId, tillId))).toHaveLength(1);
@@ -242,14 +251,57 @@ describe("incidents — clock degradation", () => {
 
   it("records both incidents when the chain fails and the clock is degraded", async () => {
     await sell(failingChain(), { clock: degradedClock });
-    const rows = await incidentsForTill(tillId);
+    const rows = await incidentsForDevice(deviceId);
     expect(rows.map((r) => r.code).sort()).toEqual(["chain.verification_failed", "clock.degraded"]);
   });
 
   it("records nothing when verification passes and the clock is confident", async () => {
     // Without this, an implementation that always records an incident passes every test above.
     await sell(new FakeFiscalBackend(suite.db));
-    expect(await incidentsForTill(tillId)).toHaveLength(0);
+    expect(await incidentsForDevice(deviceId)).toHaveLength(0);
+  });
+});
+
+describe("recordIncident — origin", () => {
+  it("stores a device alert as ('device', D)", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      await recordIncident(tx, {
+        origin: deviceOrigin(deviceId),
+        error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+        severity: "warning",
+        detectedAt: BASE,
+      });
+    });
+    const [row] = await incidentsForDevice(deviceId);
+    expect(row).toMatchObject({ source: "device", deviceId });
+  });
+
+  it("stores a job alert as ('fiscal_filing', null)", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      await recordIncident(tx, {
+        origin: jobOrigin("fiscal_filing"),
+        error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+        severity: "warning",
+        detectedAt: BASE,
+      });
+    });
+    const rows = await suite.db
+      .select({ source: incidents.source, deviceId: incidents.deviceId })
+      .from(incidents)
+      .where(eq(incidents.source, "fiscal_filing"));
+    expect(rows).toEqual([{ source: "fiscal_filing", deviceId: null }]);
+  });
+
+  it("refuses a job source that names a device", async () => {
+    await expect(insertRaw("dashboard", deviceId)).rejects.toThrow(/incidents_source_device_ck/);
+  });
+
+  it("refuses a source that is not on the list", async () => {
+    await expect(insertRaw("system", null)).rejects.toThrow(/incidents_source_ck/);
+  });
+
+  it("refuses a device source that names no device", async () => {
+    await expect(insertRaw("device", null)).rejects.toThrow(/incidents_source_device_ck/);
   });
 });
 
@@ -257,19 +309,19 @@ describe("recordIncident — no sale attached", () => {
   it("records an incident with a null sale_id when the caller supplies no saleId", async () => {
     await withTransaction(suite.db, async (tx) => {
       await recordIncident(tx, {
-        tillId,
+        origin: deviceOrigin(deviceId),
         error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
         severity: "warning",
         detectedAt: BASE,
       });
     });
-    const [row] = await incidentsForTill(tillId);
+    const [row] = await incidentsForDevice(deviceId);
     expect(row?.saleId).toBeNull();
   });
 });
 
 describe("openIncidents", () => {
-  it("returns unacknowledged incidents for a till, newest first", async () => {
+  it("returns unacknowledged incidents for a device, newest first", async () => {
     // Two DISTINCT instants, not one fixed `BASE` shared by both sells: with an identical
     // `detected_at` on both rows, "newest first" is unverifiable rather than merely untested.
     const later: TrustedClock = fixedClock(() => ({
@@ -282,7 +334,7 @@ describe("openIncidents", () => {
     await sell(failingChain());
     await sell(failingChain(), { clock: later });
     const rows = await withTransaction(suite.db, async (tx) => {
-      return openIncidents(tx, tillId);
+      return openIncidents(tx, deviceOrigin(deviceId));
     });
     expect(rows).toHaveLength(2);
     expect(rows[0]!.detectedAt.getTime()).toBeGreaterThan(rows[1]!.detectedAt.getTime());
@@ -295,18 +347,36 @@ describe("openIncidents", () => {
       await tx.update(incidents).set({ acknowledgedAt: new Date().toISOString() });
     });
     const rows = await withTransaction(suite.db, async (tx) => {
-      return openIncidents(tx, tillId);
+      return openIncidents(tx, deviceOrigin(deviceId));
     });
     expect(rows).toHaveLength(0);
   });
 
-  it("scopes incidents to one till", async () => {
+  it("scopes incidents to one device", async () => {
     const other = await seedTenant(suite.db);
     await sell(failingChain());
     const rows = await withTransaction(suite.db, async (tx) => {
-      return openIncidents(tx, other.tillId);
+      return openIncidents(tx, deviceOrigin(other.deviceId));
     });
     expect(rows).toHaveLength(0);
+  });
+
+  it("reads a job source's incidents, which name no device", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      await recordIncident(tx, {
+        origin: jobOrigin("payment_check"),
+        error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+        severity: "warning",
+        detectedAt: BASE,
+      });
+    });
+    await sell(failingChain());
+    const rows = await withTransaction(suite.db, async (tx) => {
+      return openIncidents(tx, jobOrigin("payment_check"));
+    });
+    expect(rows.map((r) => [r.source, r.deviceId, r.code])).toEqual([
+      ["payment_check", null, "clock.degraded"],
+    ]);
   });
 });
 
@@ -317,7 +387,7 @@ describe("recordIncidentOnce", () => {
 
   function chainFailed(): RecordIncidentInput["error"] {
     return new AppError("chain.verification_failed", {
-      tillId,
+      deviceId,
       issues: [
         {
           issueCode: "predecessor-hash-mismatch",
@@ -331,22 +401,24 @@ describe("recordIncidentOnce", () => {
   it("inserts the first time and returns true", async () => {
     await withTransaction(suite.db, async (tx) => {
       const inserted = await recordIncidentOnce(tx, {
-        tillId,
+        origin: deviceOrigin(deviceId),
         saleId: undefined,
         error: chainFailed(),
         severity: "error",
         detectedAt: BASE,
       });
       expect(inserted).toBe(true);
-      expect(await openIncidents(tx, tillId)).toHaveLength(1);
+      expect(await openIncidents(tx, deviceOrigin(deviceId))).toHaveLength(1);
     });
   });
 
-  it("de-dups a second raise for the same open (till, code, sale) and returns false", async () => {
+  it("de-dups a second raise for the same open (origin, code, sale) and returns false", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await sell(backend);
     await withTransaction(suite.db, async (tx) => {
       const input: RecordIncidentInput = {
-        tillId,
-        saleId: undefined,
+        origin: deviceOrigin(deviceId),
+        saleId,
         error: chainFailed(),
         severity: "error",
         detectedAt: BASE,
@@ -358,14 +430,56 @@ describe("recordIncidentOnce", () => {
         detectedAt: new Date(BASE.getTime() + 3_600_000),
       });
       expect(second).toBe(false);
-      expect(await openIncidents(tx, tillId)).toHaveLength(1);
+      expect(await openIncidents(tx, deviceOrigin(deviceId))).toHaveLength(1);
     });
+  });
+
+  it("does not de-dup the same code and sale raised on two different devices", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await sell(backend);
+    const other = await seedTenant(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      const base = { saleId, error: chainFailed(), severity: "error" as const, detectedAt: BASE };
+      expect(await recordIncidentOnce(tx, { ...base, origin: deviceOrigin(deviceId) })).toBe(true);
+      expect(await recordIncidentOnce(tx, { ...base, origin: deviceOrigin(other.deviceId) })).toBe(
+        true,
+      );
+    });
+    const rows = await suite.db.select().from(incidents).where(eq(incidents.saleId, saleId));
+    expect(rows.map((r) => r.deviceId).sort()).toEqual([deviceId, other.deviceId].sort());
+  });
+
+  it("de-dups two raises of the same code by one job source with no sale", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const input: RecordIncidentInput = {
+        origin: jobOrigin("payment_check"),
+        error: chainFailed(),
+        severity: "error",
+        detectedAt: BASE,
+      };
+      expect(await recordIncidentOnce(tx, input)).toBe(true);
+      expect(await recordIncidentOnce(tx, input)).toBe(false);
+      expect(await openIncidents(tx, jobOrigin("payment_check"))).toHaveLength(1);
+    });
+  });
+
+  it("does not de-dup the same code with no sale raised by two different job sources", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const base = { error: chainFailed(), severity: "error" as const, detectedAt: BASE };
+      expect(await recordIncidentOnce(tx, { ...base, origin: jobOrigin("payment_check") })).toBe(
+        true,
+      );
+      expect(await recordIncidentOnce(tx, { ...base, origin: jobOrigin("fiscal_filing") })).toBe(
+        true,
+      );
+    });
+    expect(await suite.db.select().from(incidents)).toHaveLength(2);
   });
 
   it("raises a fresh one after the prior incident is acknowledged", async () => {
     await withTransaction(suite.db, async (tx) => {
       const input: RecordIncidentInput = {
-        tillId,
+        origin: deviceOrigin(deviceId),
         saleId: undefined,
         error: chainFailed(),
         severity: "error",
@@ -374,7 +488,7 @@ describe("recordIncidentOnce", () => {
       await recordIncidentOnce(tx, input);
       // The caller stamps `acknowledged_at`; only "not null" matters here.
       await tx.execute(
-        sql`update incidents set acknowledged_at = ${nowIso()} where till_id = ${tillId}`,
+        sql`update incidents set acknowledged_at = ${nowIso()} where device_id = ${deviceId}`,
       );
       const again = await recordIncidentOnce(tx, {
         ...input,
@@ -382,14 +496,14 @@ describe("recordIncidentOnce", () => {
       });
       expect(again).toBe(true);
       // The acknowledged row stays acknowledged; only the fresh raise is open.
-      expect(await openIncidents(tx, tillId)).toHaveLength(1);
+      expect(await openIncidents(tx, deviceOrigin(deviceId))).toHaveLength(1);
     });
   });
 
-  it("does not de-dup a different code for the same till", async () => {
+  it("does not de-dup a different code for the same device", async () => {
     await withTransaction(suite.db, async (tx) => {
       const base = {
-        tillId,
+        origin: deviceOrigin(deviceId),
         saleId: undefined,
         severity: "error" as const,
         detectedAt: BASE,
@@ -401,12 +515,12 @@ describe("recordIncidentOnce", () => {
         error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
       });
       expect(otherCode).toBe(true);
-      expect(await openIncidents(tx, tillId)).toHaveLength(2);
+      expect(await openIncidents(tx, deviceOrigin(deviceId))).toHaveLength(2);
     });
   });
 
   it("does not de-dup the same code for a different sale", async () => {
-    // Two real sales (`incidents.sale_id` is a foreign key): the key is per sale, not per till.
+    // Two real sales (`incidents.sale_id` is a foreign key): the key is per sale, not per device.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: saleA } = await sell(backend);
     const { saleId: saleB } = await sell(backend);
@@ -414,7 +528,7 @@ describe("recordIncidentOnce", () => {
     await withTransaction(suite.db, async (tx) => {
       const error = new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 });
       const forSaleA = await recordIncidentOnce(tx, {
-        tillId,
+        origin: deviceOrigin(deviceId),
         saleId: saleA,
         error,
         severity: "warning",
@@ -422,25 +536,25 @@ describe("recordIncidentOnce", () => {
       });
       expect(forSaleA).toBe(true);
       const forSaleB = await recordIncidentOnce(tx, {
-        tillId,
+        origin: deviceOrigin(deviceId),
         saleId: saleB,
         error,
         severity: "warning",
         detectedAt: BASE,
       });
       expect(forSaleB).toBe(true);
-      expect(await openIncidents(tx, tillId)).toHaveLength(2);
+      expect(await openIncidents(tx, deviceOrigin(deviceId))).toHaveLength(2);
     });
   });
 });
 
 describe("incidents open-dedup invariant (partial unique index)", () => {
   it("recordIncident (unconditional) de-dups a second OPEN same-key raise to one row", async () => {
-    const { tillId } = await seedTillForIncidents(); // reuse the suite's existing seeding
+    const { deviceId } = await seedDeviceForIncidents(); // reuse the suite's existing seeding
     const input: RecordIncidentInput = {
-      tillId,
+      origin: deviceOrigin(deviceId),
       error: new AppError("chain.verification_failed", {
-        tillId,
+        deviceId,
         issues: [
           {
             issueCode: "predecessor-hash-mismatch",
@@ -458,16 +572,16 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
     await withTransaction(suite.db, async (tx) => {
       await recordIncident(tx, input);
     });
-    const rows = await incidentsForTill(tillId);
+    const rows = await incidentsForDevice(deviceId);
     expect(rows).toHaveLength(1);
   });
 
   it("de-dups two orphan (sale_id NULL) raises: the second records nothing and one row remains", async () => {
-    const { tillId } = await seedTillForIncidents();
+    const { deviceId } = await seedDeviceForIncidents();
     const raise = () =>
       withTransaction(suite.db, async (tx) => {
         return recordIncidentOnce(tx, {
-          tillId,
+          origin: deviceOrigin(deviceId),
           // no saleId — orphan
           error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
           severity: "error",
@@ -478,14 +592,14 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
     const second = await raise();
     expect(first).toBe(true);
     expect(second).toBe(false);
-    const rows = await incidentsForTill(tillId);
+    const rows = await incidentsForDevice(deviceId);
     expect(rows.filter((r) => r.saleId === null)).toHaveLength(1);
   });
 
   it("frees the key after acknowledgement (a recurring condition resurfaces)", async () => {
-    const { tillId } = await seedTillForIncidents();
+    const { deviceId } = await seedDeviceForIncidents();
     const input: RecordIncidentInput = {
-      tillId,
+      origin: deviceOrigin(deviceId),
       error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
       severity: "error",
       detectedAt: new Date("2026-07-24T10:00:00Z"),
@@ -496,25 +610,25 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
       });
     expect(await raise()).toBe(true);
     await suite.db.execute(
-      sql`update incidents set acknowledged_at = ${nowIso()} where till_id = ${tillId}`,
+      sql`update incidents set acknowledged_at = ${nowIso()} where device_id = ${deviceId}`,
     );
     expect(await raise()).toBe(true);
   });
 });
 
 describe("tenant incident reads", () => {
-  function chainFailed(forTill: TillId): RecordIncidentInput["error"] {
+  function chainFailed(forDevice: DeviceId): RecordIncidentInput["error"] {
     return new AppError("chain.verification_failed", {
-      tillId: forTill,
+      deviceId: forDevice,
       issues: [{ issueCode: "predecessor-hash-mismatch", recordId: null, issueParams: {} }],
     });
   }
 
-  async function raise(forTill: TillId, detectedAt: Date): Promise<void> {
+  async function raise(origin: Origin, detectedAt: Date): Promise<void> {
     await withTransaction(suite.db, async (tx) => {
       await recordIncident(tx, {
-        tillId: forTill,
-        error: chainFailed(forTill),
+        origin,
+        error: chainFailed(deviceId),
         severity: "error",
         detectedAt,
       });
@@ -527,17 +641,33 @@ describe("tenant incident reads", () => {
     });
   }
 
-  it("lists this tenant's open incidents across tills, newest first", async () => {
-    const secondTill = await seedTenant(suite.db);
-    await raise(tillId, BASE);
-    await raise(secondTill.tillId, new Date(BASE.getTime() + 60_000));
+  it("lists this tenant's open incidents across devices, newest first", async () => {
+    const second = await seedTenant(suite.db);
+    await raise(deviceOrigin(deviceId), BASE);
+    await raise(deviceOrigin(second.deviceId), new Date(BASE.getTime() + 60_000));
     const rows = await asApp((tx) => listOpenIncidents(tx));
-    expect(rows.map((r) => r.tillId)).toEqual([secondTill.tillId, tillId]);
+    expect(rows.map((r) => r.deviceId)).toEqual([second.deviceId, deviceId]);
     expect(rows[0]).toMatchObject({ acknowledgedAt: null, acknowledgedBy: null });
   });
 
+  it("names a device alert's device and leaves a job alert's name empty", async () => {
+    const [device] = await suite.db
+      .select({ label: devices.label })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    await raise(deviceOrigin(deviceId), BASE);
+    await raise(jobOrigin("fiscal_filing"), new Date(BASE.getTime() + 60_000));
+    const rows = await asApp((tx) => listOpenIncidents(tx));
+    expect(rows.map((r) => [r.source, r.deviceId, r.deviceName])).toEqual([
+      ["fiscal_filing", null, null],
+      ["device", deviceId, device!.label],
+    ]);
+    const found = await asApp((tx) => findIncident(tx, rows[1]!.id));
+    expect(found?.deviceName).toBe(device!.label);
+  });
+
   it("finds an incident by id, and reads an unknown id as null", async () => {
-    await raise(tillId, BASE);
+    await raise(deviceOrigin(deviceId), BASE);
     const [mine] = await asApp((tx) => listOpenIncidents(tx));
     expect((await asApp((tx) => findIncident(tx, mine!.id)))?.id).toBe(mine!.id);
     expect(
@@ -546,7 +676,7 @@ describe("tenant incident reads", () => {
   });
 
   it("marks an incident handled once; a second mark keeps the first time and person", async () => {
-    await raise(tillId, BASE);
+    await raise(deviceOrigin(deviceId), BASE);
     const [open] = await asApp((tx) => listOpenIncidents(tx));
     const first = new Date(BASE.getTime() + 1_000);
     const firstPerson = "00000000-0000-4000-8000-000000000001";
@@ -567,27 +697,27 @@ describe("tenant incident reads", () => {
   });
 
   it("lists handled incidents inside the window, newest handled first", async () => {
-    const secondTill = await seedTenant(suite.db);
-    const thirdTill = await seedTenant(suite.db);
-    await raise(tillId, BASE);
-    await raise(secondTill.tillId, BASE);
-    await raise(thirdTill.tillId, BASE);
+    const second = await seedTenant(suite.db);
+    const third = await seedTenant(suite.db);
+    await raise(deviceOrigin(deviceId), BASE);
+    await raise(deviceOrigin(second.deviceId), BASE);
+    await raise(deviceOrigin(third.deviceId), BASE);
     const open = await asApp((tx) => listOpenIncidents(tx));
-    const byTill = new Map(open.map((r) => [r.tillId, r.id]));
+    const byDevice = new Map(open.map((r) => [r.deviceId, r.id]));
     const person = "00000000-0000-4000-8000-000000000001";
-    const mark = (till: TillId, at: Date) =>
+    const mark = (device: DeviceId, at: Date) =>
       asApp((tx) =>
         markIncidentHandled(tx, {
-          id: byTill.get(till)!,
+          id: byDevice.get(device)!,
           personId: person,
           handledAt: at,
         }),
       );
-    await mark(tillId, new Date("2026-03-10T10:00:00Z"));
-    await mark(secondTill.tillId, new Date("2026-03-12T10:00:00Z"));
-    await mark(thirdTill.tillId, new Date("2026-02-01T10:00:00Z"));
+    await mark(deviceId, new Date("2026-03-10T10:00:00Z"));
+    await mark(second.deviceId, new Date("2026-03-12T10:00:00Z"));
+    await mark(third.deviceId, new Date("2026-02-01T10:00:00Z"));
     const rows = await asApp((tx) => listHandledIncidents(tx, new Date("2026-03-01T00:00:00Z")));
-    expect(rows.map((r) => r.tillId)).toEqual([secondTill.tillId, tillId]);
+    expect(rows.map((r) => r.deviceId)).toEqual([second.deviceId, deviceId]);
   });
 
   // Each call mints fresh ids, inserted in ascending order: a read with no second sort key tends to
@@ -598,7 +728,8 @@ describe("tenant incident reads", () => {
     for (const [index, id] of ids.entries()) {
       await suite.db.insert(incidents).values({
         id,
-        tillId,
+        source: "device",
+        deviceId,
         code: `test.tied_${index}`,
         params: {},
         severity: "error",
@@ -609,7 +740,6 @@ describe("tenant incident reads", () => {
     }
     return ids;
   }
-
   it("orders open incidents detected at the same instant by id, highest first", async () => {
     const ids = await insertTied(null);
     const rows = await asApp((tx) => listOpenIncidents(tx));
@@ -624,27 +754,27 @@ describe("tenant incident reads", () => {
 
   it("includes an incident handled exactly at the cut-off and excludes one a millisecond before", async () => {
     const cutOff = new Date("2026-03-10T10:00:00.000Z");
-    await raise(tillId, BASE);
-    const secondTill = await seedTenant(suite.db);
-    await raise(secondTill.tillId, BASE);
+    await raise(deviceOrigin(deviceId), BASE);
+    const second = await seedTenant(suite.db);
+    await raise(deviceOrigin(second.deviceId), BASE);
     const open = await asApp((tx) => listOpenIncidents(tx));
-    const byTill = new Map(open.map((r) => [r.tillId, r.id]));
+    const byDevice = new Map(open.map((r) => [r.deviceId, r.id]));
     const person = "00000000-0000-4000-8000-000000000001";
     await asApp((tx) =>
       markIncidentHandled(tx, {
-        id: byTill.get(tillId)!,
+        id: byDevice.get(deviceId)!,
         personId: person,
         handledAt: cutOff,
       }),
     );
     await asApp((tx) =>
       markIncidentHandled(tx, {
-        id: byTill.get(secondTill.tillId)!,
+        id: byDevice.get(second.deviceId)!,
         personId: person,
         handledAt: new Date(cutOff.getTime() - 1),
       }),
     );
     const rows = await asApp((tx) => listHandledIncidents(tx, cutOff));
-    expect(rows.map((r) => r.tillId)).toEqual([tillId]);
+    expect(rows.map((r) => r.deviceId)).toEqual([deviceId]);
   });
 });

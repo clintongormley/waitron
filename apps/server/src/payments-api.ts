@@ -853,7 +853,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const fromRow = async () => {
         const settled = await gated(sessionId, async (tx) => {
           await requireStuckBillPayment(tx, id);
-          return settleFromProviderRow(tx, fiscal, id, deps.clock.now().instant);
+          return settleFromProviderRow(tx, fiscal, id, deps.clock.now().instant, "stored");
         });
         switch (settled.settled) {
           case "received":
@@ -1003,7 +1003,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "BillRefundId");
       await gated(sessionId, () => Promise.resolve());
-      const resumed = await resumeCardRefund(refundDeps, id, "manager");
+      const resumed = await resumeCardRefund(refundDeps, id, "manager", "stored");
       if (!resumed.claimed) throw new AppError("bill.refund_not_stuck", { refundId: id });
       if (resumed.refund.state !== "pending") return c.json({ outcome: resumed.refund.state });
       const { lookup } = resumed;

@@ -20,7 +20,13 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
-import { AppError, saleId as brandSaleId, stringToCents } from "@waitron/shared";
+import {
+  AppError,
+  deviceOrigin,
+  jobOrigin,
+  saleId as brandSaleId,
+  stringToCents,
+} from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { seedTenant } from "../test/fixtures.js";
 import { settleSale } from "./settle-sale.js";
@@ -66,9 +72,12 @@ async function seedSale(
 /**
  * Runs `settleSale` inside one transaction, the shape a request takes.
  */
-function settle(db: Database, input: SettleSaleInput): Promise<void> {
+function settle(
+  db: Database,
+  input: Omit<SettleSaleInput, "origin"> & { origin?: SettleSaleInput["origin"] },
+): Promise<void> {
   return withTransaction(db, async (tx) => {
-    await settleSale(tx, input);
+    await settleSale(tx, { origin: jobOrigin("readiness_test"), ...input });
   });
 }
 
@@ -272,6 +281,21 @@ describe("settleSale — guards", () => {
     expect(settled).toHaveLength(0);
   });
 
+  it("names the settling device in a refusal", async () => {
+    const seed = await seedTenant(suite.db);
+    const saleId = await seedSale(suite.db, seed, { total: "65.00" });
+    await expect(
+      settle(suite.db, {
+        saleId,
+        origin: deviceOrigin(seed.deviceId),
+        tenders: [{ method: "cash", amount: "60.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+      }),
+    ).rejects.toMatchObject({
+      code: "sale.tender_shortfall",
+      params: { deviceId: seed.deviceId, saleId },
+    });
+  });
+
   it("throws sale.tender_shortfall when sum(amount) != total + sum(tip)", async () => {
     const seed = await seedTenant(suite.db);
     const saleId = await seedSale(suite.db, seed, { total: "65.00" });
@@ -323,6 +347,7 @@ describe("settleSale — guards", () => {
     const input: SettleSaleInput = {
       saleId,
       tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+      origin: deviceOrigin(seed.deviceId),
     };
 
     await settle(suite.db, input);
@@ -351,6 +376,7 @@ describe("settleSale — two settlements started together", () => {
     const input: SettleSaleInput = {
       saleId,
       tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+      origin: deviceOrigin(seed.deviceId),
     };
 
     // Started together and NOT awaited in turn.
@@ -401,6 +427,7 @@ describe("settleSale — error propagation", () => {
 
     const error = await captureError(() =>
       settleSale(fakeTx, {
+        origin: jobOrigin("readiness_test"),
         saleId: brandSaleId("11111111-1111-4111-8111-111111111111"),
         tenders: [],
       }),
@@ -439,6 +466,7 @@ describe("settleSale — error propagation", () => {
 
     const error = await captureError(() =>
       settleSale(fakeTx, {
+        origin: jobOrigin("readiness_test"),
         saleId: brandSaleId("11111111-1111-4111-8111-111111111111"),
         tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
       }),
@@ -474,6 +502,7 @@ describe("settleSale — error propagation", () => {
 
     const error = await captureError(() =>
       settleSale(fakeTx, {
+        origin: jobOrigin("readiness_test"),
         saleId: brandSaleId("11111111-1111-4111-8111-111111111111"),
         tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
       }),

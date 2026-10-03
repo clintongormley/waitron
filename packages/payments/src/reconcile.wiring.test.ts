@@ -4,9 +4,9 @@ import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   decimal,
-  tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
   deviceOrigin,
+  jobOrigin,
 } from "@waitron/shared";
 import { openIncidents } from "@waitron/core";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
@@ -58,9 +58,9 @@ describe("the orphan backstop, end to end", () => {
     expect(result.remediated).toBe(1);
     expect(reconciler.reversed).toEqual([captured.paymentRef]);
 
-    // 5. And the till sees exactly one incident, through the UI's own query.
+    // 5. And the payment check raised exactly one incident.
     const incidents = await suite.db.transaction((tx) =>
-      openIncidents(tx, brandTillId(seeded.tillId)),
+      openIncidents(tx, jobOrigin("payment_check")),
     );
     expect(incidents.map((i) => i.code)).toEqual(["payment.reconcile_orphan"]);
     expect(incidents[0].params.count).toBe(1);

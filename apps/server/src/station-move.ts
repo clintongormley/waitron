@@ -9,7 +9,7 @@ import type { TicketState, CorrectionItem, FiredItem } from "./kitchen-print.js"
 import { VENUE_SERVICE } from "./modules.js";
 import { printedHeldGroups } from "./order-groups.js";
 import { runServiceCommand } from "./parties.js";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig, TillConfig } from "./till-config.js";
 import { bumpRevision, readOrderRevision } from "./working-order.js";
 import type { RoutingOnce } from "./working-order.js";
 import "./errors.js";
@@ -21,7 +21,7 @@ export type Rerouted = ReadonlyMap<string, { stationId: string; stationName: str
  * stays unchanged. */
 export async function rerouteHeldAtRelease(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   orderId: string,
   scope: SQL,
   routing: RoutingOnce,

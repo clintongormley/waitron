@@ -53,7 +53,7 @@ import { parseWatcherDoneBody } from "./watcher-done-body.js";
 import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig, TillConfig } from "./till-config.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { moveDishesToStation } from "./station-move.js";
 import { madeHereAnswer, madeHereSinkFor } from "./made-here.js";
@@ -859,7 +859,7 @@ function mountCourseVerb(
   suffix: string,
   verb: (
     tx: Transaction,
-    cfg: TillConfig,
+    cfg: OriginConfig,
     orderId: string,
     courseId: string,
     operatorId: string,

@@ -463,8 +463,7 @@ The ones worth grepping for:
   reset failed before any work was looked for, and the cause is the database, not the credential.
   There is at most one of these per pass: one database files for one taxpayer. This line is the
   ONLY place this fact exists outside `/health`'s `skipped` count — a skipped drain has no ledger
-  row (`drain` has no table of its own) and no incident (`incidents.till_id` is `NOT NULL`, and a
-  drain has no till). `errorCode` is typically `server.credential_unusable` (a `fiscal.aeat`
+  row (`drain` has no table of its own) and raises no incident. `errorCode` is typically `server.credential_unusable` (a `fiscal.aeat`
   credential exists but a declared field — most often `certKind`, absent from a row sealed before
   that field joined the purpose registry — is missing or unusable) or a credential-store code from
   `getCredential` (`credentials.missing` — no row for that purpose at all,

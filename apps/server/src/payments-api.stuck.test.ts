@@ -1237,6 +1237,20 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     });
     expect((await billPaymentOf(id)).state).toBe("pending");
     expect(saleIdsFor(orderId)).toEqual([]);
+    // A manager acting from the dashboard: the alert names the device that started the payment.
+    const { rows } = await suite.db.execute<{
+      source: string;
+      device_id: string | null;
+      started_on: string | null;
+    }>(sql`
+      select i.source, i.device_id, p.device_id as started_on
+      from incidents i join bill_payments p on p.id = ${id}
+      where i.code = 'payment.bill_capture_mismatch'
+        and json_extract(i.params, '$.billPaymentId') = ${id}
+    `);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.started_on).not.toBeNull();
+    expect(rows[0]).toMatchObject({ source: "device", device_id: rows[0]!.started_on });
   });
 
   it("refuses outcome_unconfirmed, naming Stripe's status, when Stripe captured another amount", async () => {

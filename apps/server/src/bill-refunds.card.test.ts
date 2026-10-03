@@ -16,7 +16,7 @@ import { loadKeyRing } from "@waitron/credentials";
 import type { PaymentProvider, RefundAnswer, RefundLookup } from "@waitron/payments";
 import { SumUpCloudProvider } from "@waitron/payments-sumup";
 import type { SumUpClient, SumUpTransaction } from "@waitron/payments-sumup";
-import { AppError, decimal } from "@waitron/shared";
+import { AppError, decimal, jobOrigin } from "@waitron/shared";
 import type { RefundScript } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
@@ -804,6 +804,7 @@ describe("the provider refunds another refund of the payment already accounts fo
         },
         second!.id,
         "loop",
+        jobOrigin("payment_check"),
       );
 
       expect(
@@ -849,6 +850,7 @@ describe("the provider refunds another refund of the payment already accounts fo
         },
         pending!.id,
         "loop",
+        jobOrigin("payment_check"),
       ),
     );
 
@@ -918,6 +920,7 @@ describe("the provider's refunds read before the first send", () => {
         },
         row!.id,
         "loop",
+        jobOrigin("payment_check"),
       );
       // SumUp stamps the refund our send made 30 s before our own clock's `sent_at`.
       events.push(refunded("ours", Date.now() - Date.parse(row!.sentAt!) + 30_000));
@@ -929,6 +932,7 @@ describe("the provider's refunds read before the first send", () => {
         },
         row!.id,
         "loop",
+        jobOrigin("payment_check"),
       );
 
       expect(row).toMatchObject({ state: "pending", refsBeforeSend: ["made-a-minute-before"] });
@@ -1223,7 +1227,12 @@ describe("one resolver at a time", () => {
     expect(await providerRefundsOf(card.id)).toEqual([]);
     const raised = await inTx(venue, (tx) =>
       tx
-        .select({ code: incidents.code, params: incidents.params })
+        .select({
+          code: incidents.code,
+          params: incidents.params,
+          source: incidents.source,
+          deviceId: incidents.deviceId,
+        })
         .from(incidents)
         .where(eq(incidents.code, "payment.refund_outcome_conflict")),
     );
@@ -1234,6 +1243,9 @@ describe("one resolver at a time", () => {
         workingOrderId: billId,
       }),
     );
+    // Raised inside the till's own refund request: the alert names the device that asked.
+    const mine = raised.find((r) => (r.params as { refundId?: string }).refundId === row!.id);
+    expect(mine).toMatchObject({ source: "device", deviceId: venue.deviceId });
   });
 });
 
@@ -1426,6 +1438,13 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
     venue.card.scriptNextRefund({ made: false, answer: LOST });
     await refund(billId, card.id, { applied: "5.00", cookie: venue.cookie2 });
     const refundId = (await onlyRefundOf(card.id)).id;
+    // The payment check's open alert of this code stands for every pending refund, so an earlier
+    // case's alert, or its still-pending refund, would absorb this one's.
+    venue.db.run(sql`delete from incidents where code = 'payment.refund_unresolved'`);
+    venue.db.run(
+      sql`update bill_payment_refunds set state = 'failed', failed_at = ${new Date().toISOString()}
+          where state = 'pending' and id <> ${refundId}`,
+    );
     const alerts = () =>
       inTx(venue, (tx) =>
         tx
@@ -1434,7 +1453,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
           .where(
             and(
               eq(incidents.code, "payment.refund_unresolved"),
-              eq(incidents.tillId, venue.device2TillId),
+              eq(incidents.source, "payment_check"),
             ),
           ),
       );
@@ -1619,6 +1638,7 @@ describe("a refund the provider here cannot answer for", () => {
       },
       refundId,
       "manager",
+      "stored",
     );
 
   /** The test provider with only the parts named, so a missing method is missing. */
@@ -1724,6 +1744,7 @@ describe("a refund the provider here cannot answer for", () => {
       { db: venue.db, clock: systemClock(), refundProviderFor: partial({}) },
       stranded!.id,
       "retry",
+      venue.cfg.origin,
     );
 
     expect(resumed).toMatchObject({

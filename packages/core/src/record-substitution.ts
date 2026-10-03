@@ -167,7 +167,7 @@ export async function recordSubstitution(
   if (verification.issues.length > 0) {
     pending.push({
       error: new AppError("chain.verification_failed", {
-        tillId: input.tillId,
+        deviceId: input.origin.deviceId,
         issues: verification.issues.map((issue) => ({
           issueCode: issue.code,
           recordId: issue.recordId ?? null,
@@ -225,7 +225,7 @@ export async function recordSubstitution(
   // On this same transaction, attached to the F3.
   for (const incident of pending) {
     await recordIncident(tx, {
-      tillId: input.tillId,
+      origin: input.origin,
       saleId,
       detectedAt: now.instant,
       ...incident,

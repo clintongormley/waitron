@@ -9,7 +9,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
 import { AppError } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig } from "./till-config.js";
 import "./errors.js";
 
 export interface Stranded {
@@ -19,11 +19,11 @@ export interface Stranded {
   lineIds: readonly string[];
 }
 
-/** Record one release that leaves work at a closed station. An open alert on this till absorbs
- * later releases. */
+/** Record one release that leaves work at a closed station, naming the device that released it. An
+ * open alert from the same device absorbs later releases. */
 export async function raiseReleasedAtClosedStation(
   tx: Transaction,
-  cfg: Pick<TillConfig, "tillId">,
+  cfg: Pick<OriginConfig, "origin">,
   orderId: string,
   at: Date,
   stranded: readonly Stranded[],
@@ -41,7 +41,7 @@ export async function raiseReleasedAtClosedStation(
       .from(workingOrders)
       .where(eq(workingOrders.id, orderId));
     await recordIncidentOnce(tx, {
-      tillId: cfg.tillId,
+      origin: cfg.origin,
       error: new AppError("route.released_at_closed_station", {
         station: [
           ...new Map(stranded.map((entry) => [entry.stationId, entry.stationName])).values(),

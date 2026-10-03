@@ -2,10 +2,10 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { locations, printJobs, printers, tills, withTransaction, type Database } from "@waitron/db";
+import { locations, printJobs, printers, withTransaction, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { listOpenIncidents, recordIncident } from "@waitron/core";
 import {
@@ -25,7 +25,14 @@ import {
   type CardProviderRuntimeDeps,
   type ReaderStatus,
 } from "@waitron/payments";
-import { AppError, tillId as brandTillId, type TillId } from "@waitron/shared";
+import {
+  AppError,
+  deviceOrigin,
+  jobOrigin,
+  locationId as brandLocationId,
+  type DeviceId,
+  type Origin,
+} from "@waitron/shared";
 import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";
 import { mountAlertsApi } from "./alerts-api.js";
 import {
@@ -69,7 +76,7 @@ const NOW = new Date("2026-09-14T12:00:00.000Z");
 const noopLog: Logger = () => {};
 
 interface Venue {
-  tillId: TillId;
+  deviceId: DeviceId;
   manager: string;
   supervisor: string;
   admin: string;
@@ -85,10 +92,10 @@ async function seedVenue(): Promise<Venue> {
       operationDescription: "Venta en establecimiento",
     })
     .returning({ id: locations.id });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId: location!.id, name: "Caja 1" })
-    .returning({ id: tills.id });
+  const { deviceId } = await seedDevice(db, {
+    locationId: brandLocationId(location!.id),
+    label: "Caja 1",
+  });
   const cookie = (role: PersonRoleValue, name: string) =>
     withTransaction(db, async (tx) => {
       const [p] = await tx
@@ -99,7 +106,7 @@ async function seedVenue(): Promise<Venue> {
       return `${MANAGEMENT_COOKIE}=${session.token}`;
     });
   return {
-    tillId: brandTillId(till!.id),
+    deviceId,
     manager: await cookie("manager", "Marta"),
     supervisor: await cookie("supervisor", "Sergio"),
     admin: await cookie("admin", "Ana"),
@@ -110,10 +117,11 @@ async function raise(
   v: Venue,
   code: string,
   severity: "warning" | "error" = "error",
+  origin: Origin = deviceOrigin(v.deviceId),
 ): Promise<string> {
   return withTransaction(db, async (tx) => {
     await recordIncident(tx, {
-      tillId: v.tillId,
+      origin,
       error: new AppError(code as never, {} as never),
       severity,
       detectedAt: NOW,
@@ -169,6 +177,27 @@ describe("alert routes", () => {
       "chain.verification_failed",
       "payment.offline_forward_declined",
     ]);
+  });
+
+  it("names a device alert's device and a job alert's source", async () => {
+    const v = await seedVenue();
+    await raise(v, "payment.offline_forward_declined");
+    await raise(v, "fiscal.registro_rechazado", "error", jobOrigin("fiscal_filing"));
+    const app = appFor();
+    const body = (await (await get(app, "/management-api/alerts", v.manager)).json()) as {
+      alerts: { code: string; source?: string; deviceId?: string | null; deviceName?: string }[];
+    };
+    const byCode = new Map(body.alerts.map((a) => [a.code, a]));
+    expect(byCode.get("payment.offline_forward_declined")).toMatchObject({
+      source: "device",
+      deviceId: v.deviceId,
+      deviceName: "Caja 1",
+    });
+    expect(byCode.get("fiscal.registro_rechazado")).toMatchObject({
+      source: "fiscal_filing",
+      deviceId: null,
+      deviceName: null,
+    });
   });
 
   it("answers not visible and empty to a session holding no alert permission", async () => {

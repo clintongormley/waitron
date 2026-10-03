@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
+import { jobOrigin } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { newId, nowIso, withTransaction } from "@waitron/db";
@@ -131,7 +132,14 @@ describe("drain — happy path, an anulación row", () => {
       return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
     });
     await withTransaction(suite.db, async (tx) => {
-      await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
+      await recordVoid(
+        tx,
+        backend,
+        sale.saleId,
+        "staff error",
+        { sessionId: voidSession.id },
+        jobOrigin("readiness_test"),
+      );
     });
 
     // Both envíos default to the wall-clock insert time, so a minute past it has them due.
@@ -587,6 +595,14 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     ).toBe(true);
     const rejected = inc.rows.find((i) => i.code === "fiscal.registro_rechazado");
     expect(rejected?.params).toMatchObject({ codigo: 1100, mensaje: "Campo obligatorio ausente" });
+
+    // The record was sold on a device; the alert names the filing pass that raised it.
+    const origins = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ source: string; device_id: string | null }>(sql`
+        select source, device_id from incidents where code = 'fiscal.registro_rechazado'
+      `),
+    );
+    expect(origins.rows).toEqual([{ source: "fiscal_filing", device_id: null }]);
   });
 
   it("marks aceptado_con_errores and raises a warning incident, but the record still counts as accepted", async () => {
@@ -1143,7 +1159,14 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
 
   const voidSale = (saleId: Awaited<ReturnType<typeof sell>>["saleId"]) =>
     withTransaction(suite.db, (tx) =>
-      recordVoid(tx, backend, saleId, "staff error", { sessionId: voidSessionId }),
+      recordVoid(
+        tx,
+        backend,
+        saleId,
+        "staff error",
+        { sessionId: voidSessionId },
+        jobOrigin("readiness_test"),
+      ),
     );
 
   /** The chain's rows in order: tipo, estado and incidencia per secuencia. */

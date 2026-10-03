@@ -129,7 +129,7 @@ export async function recordUnpaidDeparture(
   }
   for (const id of owingIds) {
     if (decimalToCents(due.get(id)!) === 0) {
-      await settleIssuedOwingNothing(tx, deps, id, saleOf.get(id)!);
+      await settleIssuedOwingNothing(tx, deps, cfg.origin, id, saleOf.get(id)!);
     }
   }
 

@@ -1,15 +1,16 @@
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
 import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
-import { incidents, newId } from "@waitron/db";
+import { devices, incidents, newId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { AppError } from "@waitron/shared";
-import type { SaleId, TillId } from "@waitron/shared";
+import { readOrigin } from "@waitron/shared";
+import type { AppError, DeviceId, Origin, SaleId, Source } from "@waitron/shared";
 
 export type IncidentSeverity = "warning" | "error";
 
 export interface RecordIncidentInput {
-  tillId: TillId;
+  /** The device the problem arose on, or the job that found it. */
+  origin: Origin;
   saleId?: SaleId;
   /** `code` and `params` are taken from it, never re-derived. */
   error: AppError;
@@ -19,7 +20,8 @@ export interface RecordIncidentInput {
 
 export interface Incident {
   id: string;
-  tillId: TillId;
+  source: Source;
+  deviceId: DeviceId | null;
   saleId: SaleId | null;
   code: string;
   params: Record<string, unknown>;
@@ -29,15 +31,16 @@ export interface Incident {
 
 /**
  * Records an incident on the caller's transaction, deduplicated to at most one OPEN incident per
- * `(till_id, code, sale_id)` by the `incidents_open_dedup` index. Never a fresh connection: an
- * incident that committed while its sale rolled back would report a failure for a sale that never
- * existed. Only `.code` and `.params` are written; an `AppError` would not survive the round trip.
+ * `(source, device_id, code, sale_id)` by the `incidents_open_dedup` index. Never a fresh
+ * connection: an incident that committed while its sale rolled back would report a failure for a
+ * sale that never existed. Only `.code` and `.params` are written; an `AppError` would not survive the round trip.
  */
 export async function recordIncident(tx: Transaction, input: RecordIncidentInput): Promise<void> {
   await tx
     .insert(incidents)
     .values({
-      tillId: input.tillId,
+      source: input.origin.source,
+      deviceId: input.origin.deviceId,
       saleId: input.saleId ?? null,
       code: input.error.code,
       params: input.error.params,
@@ -49,8 +52,9 @@ export async function recordIncident(tx: Transaction, input: RecordIncidentInput
 
 /**
  * Like `recordIncident`, but reports whether it inserted (`true`) or found an OPEN incident with
- * the same `(till_id, code, sale_id)` (`false`), so a caller that re-detects a still-open condition
- * on every sweep counts only real raises. Once that incident is handled the key is free again.
+ * the same `(source, device_id, code, sale_id)` (`false`), so a caller that re-detects a
+ * still-open condition on every sweep counts only real raises. Once that incident is handled the
+ * key is free again.
  */
 export async function recordIncidentOnce(
   tx: Transaction,
@@ -58,7 +62,8 @@ export async function recordIncidentOnce(
 ): Promise<boolean> {
   const saleId = input.saleId ?? null;
   // Raw SQL rather than the builder above, for the conflict target alone: `incidents_open_dedup`
-  // indexes an EXPRESSION over `sale_id` (`packages/db/src/schema/incidents.ts` says why), and
+  // indexes EXPRESSIONS over `device_id` and `sale_id` (`packages/db/src/schema/incidents.ts` says
+  // why), and
   // drizzle's `onConflictDoNothing({ target })` takes columns only. The target has to repeat the
   // index's expression and its partial `where`, or SQLite refuses the statement rather than
   // matching a different index. An UNTARGETED clause is not an option here: this function reads an
@@ -68,11 +73,12 @@ export async function recordIncidentOnce(
   // `id` and `params` are supplied by hand because a raw insert runs neither the `$defaultFn`
   // generator nor the column's JSON encoder — `newId` is the same generator the column declares.
   const { rows } = await tx.execute<{ id: string }>(sql`
-    insert into incidents (id, till_id, sale_id, code, params, severity, detected_at)
-    values (${newId()}, ${input.tillId}, ${saleId}, ${input.error.code},
-            ${JSON.stringify(input.error.params)}, ${input.severity},
+    insert into incidents (id, source, device_id, sale_id, code, params, severity, detected_at)
+    values (${newId()}, ${input.origin.source}, ${input.origin.deviceId}, ${saleId},
+            ${input.error.code}, ${JSON.stringify(input.error.params)}, ${input.severity},
             ${input.detectedAt.toISOString()})
-    on conflict (till_id, code, case when sale_id is null then '' else sale_id end)
+    on conflict (source, case when device_id is null then '' else device_id end, code,
+                 case when sale_id is null then '' else sale_id end)
       where acknowledged_at is null
     do nothing
     returning id
@@ -80,12 +86,13 @@ export async function recordIncidentOnce(
   return rows.length > 0;
 }
 
-/** Unacknowledged incidents for one till, newest first. Only tests call it. */
-export async function openIncidents(tx: Transaction, tillId: TillId): Promise<Incident[]> {
+/** Unacknowledged incidents for one source and device, newest first. Only tests call it. */
+export async function openIncidents(tx: Transaction, origin: Origin): Promise<Incident[]> {
   const rows = await tx
     .select({
       id: incidents.id,
-      tillId: incidents.tillId,
+      source: incidents.source,
+      deviceId: incidents.deviceId,
       saleId: incidents.saleId,
       code: incidents.code,
       params: incidents.params,
@@ -93,12 +100,20 @@ export async function openIncidents(tx: Transaction, tillId: TillId): Promise<In
       detectedAt: incidents.detectedAt,
     })
     .from(incidents)
-    .where(and(eq(incidents.tillId, tillId), isNull(incidents.acknowledgedAt)))
+    .where(
+      and(
+        eq(incidents.source, origin.source),
+        origin.deviceId === null
+          ? isNull(incidents.deviceId)
+          : eq(incidents.deviceId, origin.deviceId),
+        isNull(incidents.acknowledgedAt),
+      ),
+    )
     .orderBy(desc(incidents.detectedAt));
 
   return rows.map((row) => ({
     id: row.id,
-    tillId: row.tillId as TillId,
+    ...readOrigin(row.source, row.deviceId),
     saleId: row.saleId as SaleId | null,
     code: row.code,
     params: row.params,
@@ -109,13 +124,17 @@ export async function openIncidents(tx: Transaction, tillId: TillId): Promise<In
 
 /** An incident as the dashboard alerts read it: who handled it and when, if anyone has. */
 export interface TenantIncident extends Incident {
+  /** The device's name, kept while the device is switched off; null for a job source. */
+  deviceName: string | null;
   acknowledgedAt: Date | null;
   acknowledgedBy: string | null;
 }
 
 const tenantIncidentColumns = {
   id: incidents.id,
-  tillId: incidents.tillId,
+  source: incidents.source,
+  deviceId: incidents.deviceId,
+  deviceName: devices.label,
   saleId: incidents.saleId,
   code: incidents.code,
   params: incidents.params,
@@ -127,7 +146,9 @@ const tenantIncidentColumns = {
 
 type TenantIncidentRow = {
   id: string;
-  tillId: string;
+  source: string;
+  deviceId: string | null;
+  deviceName: string | null;
   saleId: string | null;
   code: string;
   params: Record<string, unknown>;
@@ -140,7 +161,8 @@ type TenantIncidentRow = {
 function toTenantIncident(row: TenantIncidentRow): TenantIncident {
   return {
     id: row.id,
-    tillId: row.tillId as TillId,
+    ...readOrigin(row.source, row.deviceId),
+    deviceName: row.deviceName,
     saleId: row.saleId as SaleId | null,
     code: row.code,
     params: row.params,
@@ -156,6 +178,7 @@ export async function listOpenIncidents(tx: Transaction): Promise<TenantIncident
   const rows = await tx
     .select(tenantIncidentColumns)
     .from(incidents)
+    .leftJoin(devices, eq(devices.id, incidents.deviceId))
     .where(isNull(incidents.acknowledgedAt))
     .orderBy(desc(incidents.detectedAt), desc(incidents.id));
   return rows.map(toTenantIncident);
@@ -169,6 +192,7 @@ export async function listHandledIncidents(
   const rows = await tx
     .select(tenantIncidentColumns)
     .from(incidents)
+    .leftJoin(devices, eq(devices.id, incidents.deviceId))
     .where(gte(incidents.acknowledgedAt, handledSince.toISOString()))
     .orderBy(desc(incidents.acknowledgedAt), desc(incidents.id));
   return rows.map(toTenantIncident);
@@ -176,7 +200,11 @@ export async function listHandledIncidents(
 
 /** One incident by id, or `null` when no incident has that id. */
 export async function findIncident(tx: Transaction, id: string): Promise<TenantIncident | null> {
-  const [row] = await tx.select(tenantIncidentColumns).from(incidents).where(eq(incidents.id, id));
+  const [row] = await tx
+    .select(tenantIncidentColumns)
+    .from(incidents)
+    .leftJoin(devices, eq(devices.id, incidents.deviceId))
+    .where(eq(incidents.id, id));
   return row === undefined ? null : toTenantIncident(row);
 }
 

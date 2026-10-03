@@ -41,7 +41,8 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -88,7 +89,7 @@ beforeAll(() => {
 });
 
 interface Seeded {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   cafeId: string;
   aguaId: string;
   cafeMenuItemId: string;
@@ -122,7 +123,7 @@ async function setupVenue(): Promise<Seeded> {
     .values({ locationId, name: "Caja 1" })
     .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
-  const cfg: TillConfig = {
+  const cfg = await deviceRequestCfg(db, {
     tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -132,7 +133,7 @@ async function setupVenue(): Promise<Seeded> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  } satisfies TillConfig);
   const { cafeId, aguaId, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId, offers } =
     await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
@@ -2380,7 +2381,12 @@ async function tabWithHeldCafe() {
  * On a party's bill, what an edit adds for the kitchen goes in a held group of its own, which is
  * released by firing that group rather than by Send.
  */
-async function fireGroupOfLine(cfg: TillConfig, partyId: string, tabId: string, lineNo: number) {
+async function fireGroupOfLine(
+  cfg: DeviceRequestConfig,
+  partyId: string,
+  tabId: string,
+  lineNo: number,
+) {
   const [line] = await db
     .select({ groupId: workingOrderLines.groupId })
     .from(workingOrderLines)

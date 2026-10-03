@@ -254,7 +254,8 @@ async function alertsFor(saleId: string) {
     tx
       .select({
         code: incidents.code,
-        tillId: incidents.tillId,
+        source: incidents.source,
+        deviceId: incidents.deviceId,
         params: incidents.params,
         severity: incidents.severity,
       })
@@ -330,11 +331,15 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     expect(await statusOf(id)).toBe("settled");
     expect(await kitchenItems(id)).toEqual([]);
     const saleId = await saleOf(id);
-    const [saleTill] = await inTx(v, (tx) =>
-      tx.select({ tillId: sales.tillId }).from(sales).where(eq(sales.id, saleId)),
+    const [sale] = await inTx(v, (tx) =>
+      tx.select({ deviceId: sales.deviceId }).from(sales).where(eq(sales.id, saleId)),
     );
     const expected = dishNotSent(id, made.name, await orderNumberOf(id), "Mesa 3");
-    expect(await alertsFor(saleId)).toEqual([{ ...expected, tillId: saleTill!.tillId }]);
+    // The alert names the device the sale was taken on.
+    expect(sale!.deviceId).not.toBeNull();
+    expect(await alertsFor(saleId)).toEqual([
+      { ...expected, source: "device", deviceId: sale!.deviceId },
+    ]);
 
     const replay = await payCash(till, id);
     expect(replay.status).toBe(200);
@@ -455,7 +460,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     ]);
   });
 
-  it("raises a separate alert for each sale on one till", async () => {
+  it("raises a separate alert for each sale on one device", async () => {
     const made = await strandedDish("Gazpacho");
     const till = await enrolTill();
     const first = randomUUID();

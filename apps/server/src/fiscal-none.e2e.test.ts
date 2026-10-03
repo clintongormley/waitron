@@ -250,9 +250,14 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
 
     // 3. Void the first sale — authorized by the admin session, no fiscal chain work.
     await asApp((tx) =>
-      recordVoid(tx, backend, sale.saleId, "rung in error", {
-        sessionId: venue.adminSessionId,
-      }),
+      recordVoid(
+        tx,
+        backend,
+        sale.saleId,
+        "rung in error",
+        { sessionId: venue.adminSessionId },
+        deviceOrigin(venue.deviceId),
+      ),
     );
 
     // 4. A rectificativa correcting the second sale, drawn from the rectificative series.

@@ -363,6 +363,7 @@ describe("readTenderBlock", () => {
       try {
         await settleSale(tx, {
           saleId,
+          origin: cfg.origin,
           tenders: [
             { method: "cash", amount: "0.40", tipAmount: "0.00", cashTendered: "1.00", settledAt },
             { method: "card", amount: "0.60", tipAmount: "0.00", settledAt },

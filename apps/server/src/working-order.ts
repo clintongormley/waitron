@@ -181,7 +181,7 @@ import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
 import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
-import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { enqueueOriginalReceipt } from "./receipt-print.js";
@@ -1812,7 +1812,7 @@ export async function isOpenOrder(tx: Transaction, orderId: string): Promise<boo
  */
 export async function fireCourse(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   orderId: string,
   courseId: string,
   operatorId: string,
@@ -1840,7 +1840,7 @@ export async function fireCourse(
  */
 export async function fireOrderLines(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   orderId: string,
   lineIds: readonly string[],
   mark?: "FIRE",
@@ -1859,7 +1859,7 @@ export async function fireOrderLines(
 
 async function releaseHeld(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   orderId: string,
   ticketScope: SQL,
   noRouteScope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] },
@@ -1963,7 +1963,7 @@ async function finishRelease(
  */
 export async function sendLines(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   tabId: string,
   lineNos: number[],
 ): Promise<void> {

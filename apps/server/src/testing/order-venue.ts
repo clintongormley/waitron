@@ -205,9 +205,14 @@ export async function voidInvoice(venue: OrderVenue, billId: string): Promise<vo
   const saleId = await invoiceOf(venue, billId);
   await inTx(venue, async (tx) => {
     const session = await adminSession(venue, tx);
-    await recordVoid(tx, venue.backend, brandSaleId(saleId), "Error de cobro", {
-      sessionId: session.id,
-    });
+    await recordVoid(
+      tx,
+      venue.backend,
+      brandSaleId(saleId),
+      "Error de cobro",
+      { sessionId: session.id },
+      venue.cfg.origin,
+    );
   });
 }
 

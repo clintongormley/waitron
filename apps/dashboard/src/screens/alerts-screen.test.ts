@@ -86,6 +86,37 @@ describe("dashboard-alerts-screen", () => {
     expect(location.pathname).toBe("/manage/alerts/view/open");
   });
 
+  it("names the device an alert came from, or its source when no device raised it", async () => {
+    const onDevice: AlertView = {
+      ...open,
+      source: "device",
+      deviceId: "d1",
+      deviceName: "Caja 1",
+    };
+    const fromFiling: AlertView = {
+      ...open,
+      key: "incident:i3",
+      code: "fiscal.registro_rechazado",
+      params: {},
+      area: "fiscal",
+      source: "fiscal_filing",
+      deviceId: null,
+      deviceName: null,
+    };
+    const api = stubApi({
+      listAlerts: vi.fn().mockResolvedValue({
+        visible: true,
+        alerts: [onDevice, fromFiling],
+      } satisfies AlertsResponse),
+    });
+    const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
+    await flush(el);
+    const [deviceRow, jobRow] = rows(el, "open-alerts-table");
+    expect(deviceRow!.textContent).toContain("Caja 1");
+    expect(jobRow!.textContent).toContain("Veri*Factu filing");
+    expect(jobRow!.textContent).not.toContain("fiscal_filing");
+  });
+
   for (const [test, viewKey, choices, hidden, hiddenLabel] of [
     [
       "open-alerts-table",

@@ -24,7 +24,6 @@ import {
   recordResolution,
   recordVoid,
   stampAttemptingRef,
-  tillsForWorkingOrders,
 } from "./index.js";
 import type {
   AbandonedAttemptOutcome,
@@ -166,7 +165,6 @@ describe("the reconcile surface", () => {
     expect(typeof listReconcilable).toBe("function");
     expect(typeof existingReferences).toBe("function");
     expect(typeof markReconcileRemediated).toBe("function");
-    expect(typeof tillsForWorkingOrders).toBe("function");
   });
 
   it("types a PaymentReconciler an adapter can implement against the root barrel", () => {
