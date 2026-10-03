@@ -1032,7 +1032,7 @@ a passkey is picked failed the picked-passkey refusal case, which showed Google'
 of the passkey refusal.
 
 **The "Continue with Google" button follows Google's branding rules (A228, 2026-10-03) — DONE
-(branch `fix/google-sign-in-branding`).** Google's sign-in branding guidelines
+(#1078).** Google's sign-in branding guidelines
 (<https://developers.google.com/identity/branding-guidelines>) require a custom Google button to
 carry the standard gradient "G" (the download bundle's), and give its light and dark fill, line and
 text colours and its font, Google Sans Medium. The flat four-colour "G" was the kind the guidelines call
