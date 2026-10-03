@@ -261,6 +261,33 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  test("an open Filters panel with a chosen filter", async () => {
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Users"></wt-data-table>',
+      theme,
+    )) as WtDataTable<Row>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name },
+      {
+        key: "status",
+        label: "Status",
+        cell: (row) => row.status,
+        filter: {
+          label: "Filter by status",
+          allLabel: "Any status",
+          value: (row) => row.status,
+          options: [{ value: "Active", label: "Active" }],
+          initial: "Active",
+        },
+      },
+    ];
+    el.rows = [{ id: "1", name: "Ada", status: "Active" }];
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
   test("toolbar with an active filter and a search that matches nothing", async () => {
     const el = (await mountThemed(
       '<wt-data-table aria-label="Users"></wt-data-table>',
@@ -324,6 +351,7 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     el.rows = [{ id: "1", name: "Ada", status: "Active" }];
     el.rowKey = (row) => row.id;
     await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
     const filter = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
     await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
     await filter.updateComplete;

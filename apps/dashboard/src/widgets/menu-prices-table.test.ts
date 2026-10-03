@@ -439,6 +439,7 @@ it("a category filter long enough to search shows its search box and empty list 
   const filter = table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
     'wt-combobox[data-filter="category"]',
   )!;
+  table(el).shadowRoot.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
   await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
   await filter.updateComplete;
   const search = filter.shadowRoot!.querySelector<HTMLInputElement>(".search")!;

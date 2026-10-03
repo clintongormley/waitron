@@ -956,6 +956,11 @@ export class AdjustmentReasonsScreen extends LitElement {
               aria-label=${t("adjustments.title")}
               viewKey="waitron.adjustments.reasons.table"
               columnsLabel=${t("adjustments.columns")}
+              filtersLabel=${t("adjustments.filters")}
+              filteredColumnLabel=${t("adjustments.filtered_column")}
+              filterClearLabel=${t("adjustments.filter_clear")}
+              filtersClearAllLabel=${t("adjustments.filters_clear_all")}
+              filtersCloseLabel=${t("adjustments.filters_close")}
               .rows=${this.reasons}
               .columns=${this.#columns()}
               .rowKey=${(reason: AdjustmentReason) => reason.id}

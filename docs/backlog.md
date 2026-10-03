@@ -2435,8 +2435,8 @@ knows where they are. And the device setup screen should say that a manager appr
 the dashboard under Settings → Devices, ideally with a link straight there.
 
 **Table filters move into a Filters panel, and vanish on an empty table (A248, owner 2026-10-03) —
-OPEN, queued as lane A's W39.** `wt-data-table` (`packages/ui/src/components/wt-data-table.ts`)
-draws every column filter as a dropdown above the table even when the table has no rows at all — the
+DONE in W39.** `wt-data-table` (`packages/ui/src/components/wt-data-table.ts`)
+drew every column filter as a dropdown above the table even when the table had no rows at all — the
 empty Printers screen showed an "Active" filter over "No printers yet". Agreed with the owner, after
 comparing Home Assistant's entity table: on a table with no rows, no filters, search or Columns
 button; otherwise one Filters button with a count of active filters, opening a panel (beside the
@@ -2446,8 +2446,14 @@ put in the column headings because a phone scrolls columns out of sight and a hi
 filters. The units table's always-on checkboxes become a Select mode, as the product list already
 has.
 
+**Filters panel initial focus — OPEN, owner decision needed after W39.** Opening the panel focuses
+Clear all (`packages/ui/src/components/wt-data-table.ts`), so a second Enter can clear the filters.
+Move focus to the first section heading if the owner approves changing the existing focus assertion
+in `packages/ui/src/components/wt-data-table.test.ts`; the W39 queue's inherited rule prohibits
+editing that assertion without approval.
+
 **The table's Columns button becomes a Customise dialog (A249, owner 2026-10-03) — OPEN, queued as
-lane A's W40.** Today `wt-data-table`'s Columns button opens a list of checkboxes for the columns a
+lane E's W40.** Today `wt-data-table`'s Columns button opens a list of checkboxes for the columns a
 screen marked `choosable`, with no order and no reset. Agreed with the owner, after Home Assistant's
 column customiser: an icon button opening a dialog that lists every column with a show/hide eye
 (columns that cannot be hidden listed but greyed), drag handles to reorder with a keyboard

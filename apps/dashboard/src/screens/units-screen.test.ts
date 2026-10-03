@@ -88,6 +88,12 @@ async function openInUseModal(el: UnitsScreen): Promise<HTMLElement & { open: bo
   )!;
 }
 
+async function enableProductSelection(el: UnitsScreen, dialog: HTMLElement): Promise<void> {
+  dialog.querySelector<HTMLElement>("[data-test=select-products]")!.click();
+  await el.updateComplete;
+  await dialog.querySelector("wt-data-table")!.updateComplete;
+}
+
 async function flush(el: UnitsScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -131,6 +137,41 @@ function precisionCellText(el: UnitsScreen, id: string): string {
 }
 
 describe("units-screen", () => {
+  it("offers selection only after Select is pressed in the in-use products table", async () => {
+    const el = await mount(inUseApi());
+    const dialog = await openInUseModal(el);
+    const table = dialog.querySelector("wt-data-table")!;
+    expect(table.selectable).toBe(false);
+    expect(table.shadowRoot!.querySelector("[data-test=select-p1]")).toBeNull();
+    dialog.querySelector<HTMLElement>("[data-test=select-products]")!.click();
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(table.selectable).toBe(true);
+    expect(table.shadowRoot!.querySelector("[data-test=select-p1]")).not.toBeNull();
+  });
+
+  it("shows the selected product count and Cancel while selecting", async () => {
+    setLocale("en-GB");
+    const el = await mount(inUseApi());
+    const dialog = await openInUseModal(el);
+    await enableProductSelection(el, dialog);
+    expect(dialog.querySelector("[data-test=selected-count]")!.textContent).toBe("0 selected");
+    dialog
+      .querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!
+      .click();
+    await el.updateComplete;
+    expect(dialog.querySelector("[data-test=selected-count]")!.textContent).toBe("1 selected");
+    const cancel = dialog.querySelector<HTMLElement>("[data-test=select-products]")!;
+    expect(cancel.textContent?.trim()).toBe("Cancel selection");
+    cancel.click();
+    await el.updateComplete;
+    expect(dialog.querySelector("[data-test=selected-count]")).toBeNull();
+    expect(dialog.querySelector("wt-data-table")!.selectable).toBe(false);
+    await enableProductSelection(el, dialog);
+    expect(dialog.querySelector("[data-test=selected-count]")!.textContent).toBe("0 selected");
+  });
+
   it("lists localized units and searches them by name and abbreviation", async () => {
     setLocale("es-ES");
     const el = await mount();
@@ -262,6 +303,15 @@ describe("units-screen", () => {
     await el.updateComplete;
     await table.updateComplete;
     expect(listedKeys(el)).toEqual(["u2"]);
+  });
+
+  it("names the Filters panel and its clear controls in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mount();
+    const root = el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
+    expect(root.querySelector(".filters-trigger")!.textContent).toContain("Filtros");
+    expect(root.querySelector(".filters-clear-all")!.textContent).toContain("Borrar todo");
+    expect(root.querySelector(".filter-clear")!.textContent).toContain("Borrar");
   });
 
   it("sorts by name ascending on first visit", async () => {
@@ -469,6 +519,7 @@ describe("units-screen", () => {
     expect(rowText("p1")).toContain("Activo");
     expect(rowText("p1")).not.toContain("Inactivo");
     expect(rowText("p2")).toContain("Inactivo");
+    await enableProductSelection(el, dialog);
     // Each row's checkbox is the only place a screen reader hears which product it is ticking.
     expect(
       productTable.shadowRoot!.querySelector('[data-test="select-p1"]')!.getAttribute("aria-label"),
@@ -560,6 +611,7 @@ describe("units-screen", () => {
     const reassignProductsUnit = vi.fn().mockResolvedValue([]);
     const el = await mount(stubApi({ deleteUnit, reassignProductsUnit }));
     const dialog = await openInUseModal(el);
+    await enableProductSelection(el, dialog);
     dialog
       .querySelector("wt-data-table")!
       .shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!
@@ -606,6 +658,7 @@ describe("units-screen", () => {
     );
     const dialog = await openInUseModal(el);
     const productTable = dialog.querySelector("wt-data-table")!;
+    await enableProductSelection(el, dialog);
     productTable.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!.click();
     await el.updateComplete;
     await chooseOption(dialog.querySelector("[data-test=reassign-unit]")!, "u2");
@@ -628,6 +681,7 @@ describe("units-screen", () => {
       }),
     );
     const dialog = await openInUseModal(el);
+    await enableProductSelection(el, dialog);
     dialog
       .querySelector("wt-data-table")!
       .shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!
@@ -750,6 +804,7 @@ describe("units-screen", () => {
     expect(target.placeholder).toBe(t("units.change_unit_placeholder"));
     expect(target.value).toBe("");
     expect(target.options[0]!.value).toBe("");
+    await enableProductSelection(el, dialog);
     dialog
       .querySelector("wt-data-table")!
       .shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!
@@ -772,6 +827,7 @@ describe("units-screen", () => {
     table.shadowRoot!.querySelector<HTMLButtonElement>(".row-activate")!.click();
     await flush(el);
     const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-test=in-use-dialog]")!;
+    await enableProductSelection(el, dialog);
     dialog
       .querySelector("wt-data-table")!
       .shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!
@@ -1029,6 +1085,7 @@ describe("units-screen", () => {
     change.click();
     await el.updateComplete;
     expect(reassignProductsUnit).not.toHaveBeenCalled();
+    await enableProductSelection(el, dialog);
     dialog
       .querySelector("wt-data-table")!
       .shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!

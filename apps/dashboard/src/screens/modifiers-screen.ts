@@ -595,6 +595,11 @@ export class ModifiersScreen extends LitElement {
       searchLabel=${t(`${kind}.search`)}
       viewKey=${`waitron.modifiers.${kind}.table`}
       columnsLabel=${t("table.columns")}
+      filtersLabel=${t("table.filters")}
+      filteredColumnLabel=${t("table.filtered_column")}
+      filterClearLabel=${t("table.filter_clear")}
+      filtersClearAllLabel=${t("table.filters_clear_all")}
+      filtersCloseLabel=${t("table.filters_close")}
       sortKey="name"
       sortDirection="ascending"
       .rows=${this.#lists(kind)}

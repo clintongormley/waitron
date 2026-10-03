@@ -1782,6 +1782,11 @@ export class PrintersScreen extends LitElement {
         data-test="agents-table"
         viewKey="printers:agents"
         columnsLabel=${t("table.columns")}
+        filtersLabel=${t("table.filters")}
+        filteredColumnLabel=${t("table.filtered_column")}
+        filterClearLabel=${t("table.filter_clear")}
+        filtersClearAllLabel=${t("table.filters_clear_all")}
+        filtersCloseLabel=${t("table.filters_close")}
         aria-label=${t("printers.agents_title")}
         .rows=${this.agents}
         .columns=${columns}
@@ -2183,6 +2188,11 @@ export class PrintersScreen extends LitElement {
         data-test="printers-table"
         viewKey="printers:table"
         columnsLabel=${t("table.columns")}
+        filtersLabel=${t("table.filters")}
+        filteredColumnLabel=${t("table.filtered_column")}
+        filterClearLabel=${t("table.filter_clear")}
+        filtersClearAllLabel=${t("table.filters_clear_all")}
+        filtersCloseLabel=${t("table.filters_close")}
         aria-label=${t("printers.list_title")}
         .rows=${this.printers}
         .columns=${columns}
@@ -2325,6 +2335,11 @@ export class PrintersScreen extends LitElement {
         data-test="jobs-table"
         viewKey="printers:jobs"
         columnsLabel=${t("table.columns")}
+        filtersLabel=${t("table.filters")}
+        filteredColumnLabel=${t("table.filtered_column")}
+        filterClearLabel=${t("table.filter_clear")}
+        filtersClearAllLabel=${t("table.filters_clear_all")}
+        filtersCloseLabel=${t("table.filters_close")}
         aria-label=${t("printers.jobs_title")}
         .rows=${this.jobs}
         .columns=${columns}

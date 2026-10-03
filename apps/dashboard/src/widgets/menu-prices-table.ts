@@ -1041,6 +1041,11 @@ export class MenuPricesTable extends LitElement {
         searchable
         searchLabel=${t("menu_prices.search")}
         columnsLabel=${t("menu_prices.columns")}
+        filtersLabel=${t("table.filters")}
+        filteredColumnLabel=${t("table.filtered_column")}
+        filterClearLabel=${t("table.filter_clear")}
+        filtersClearAllLabel=${t("table.filters_clear_all")}
+        filtersCloseLabel=${t("table.filters_close")}
         .rows=${this.#lines}
         .columns=${this.#columns}
         .rowKey=${({ item, variant }: Line) =>
