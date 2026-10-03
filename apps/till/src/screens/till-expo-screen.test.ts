@@ -215,6 +215,16 @@ async function mount(props: {
 const orderCard = (el: TillExpoScreen, orderNumber: number) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-order="${orderNumber}"]`);
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
 afterEach(cleanupWidgets);
 
 describe("till-expo-screen", () => {
@@ -227,6 +237,244 @@ describe("till-expo-screen", () => {
     expect(api.getExpoQueue).toHaveBeenCalled();
     expect(api.listWatchers).not.toHaveBeenCalled();
     expect(el.shadowRoot!.textContent).not.toContain("What should this screen show?");
+  });
+
+  it("refreshes the embedded All stations card every fifteen seconds", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
+    try {
+      const api = stubApi([threeCourseOrder]);
+      const el = await mount({ api, embedded: true });
+      expect(api.getExpoQueue).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(api.getExpoQueue).toHaveBeenCalledTimes(2);
+      expect(api.listWatchers).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.textContent).toContain("Pan");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not paint a former watcher's pending read on the selected watcher", async () => {
+    const pending = deferred<Awaited<ReturnType<TillApi["getWatcherQueue"]>>>();
+    const runnerPending = deferred<Awaited<ReturnType<TillApi["getWatcherQueue"]>>>();
+    const runnerOrder = {
+      ...firedNotReadyOrder,
+      courses: firedNotReadyOrder.courses.map((course) => ({ ...course, allReady: false })),
+      groups: [],
+    };
+    const api = stubApi([], {
+      listWatchers: vi.fn().mockResolvedValue([
+        { id: "pass", name: "Pass", runsPass: true },
+        { id: "runner", name: "Runner", runsPass: false },
+      ]),
+      getWatcherQueue: vi.fn((id: string) =>
+        id === "pass" ? pending.promise : runnerPending.promise,
+      ),
+    });
+    const el = await mount({ api });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-watcher="pass"]')!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-change]")!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-watcher="runner"]')!.click();
+    await flush(el);
+    pending.resolve({
+      watcher: { id: "pass", name: "Pass", runsPass: true, active: true },
+      orders: [
+        {
+          ...threeCourseOrder,
+          courses: threeCourseOrder.courses.map((course) => ({ ...course, allReady: false })),
+          groups: [],
+        },
+      ],
+    });
+    await flush(el);
+    expect(orderCard(el, 5)).toBeNull();
+    runnerPending.resolve({
+      watcher: { id: "runner", name: "Runner", runsPass: false, active: true },
+      orders: [runnerOrder],
+    });
+    await flush(el);
+    expect(orderCard(el, 6)).not.toBeNull();
+  });
+
+  it("finishes a pending Done on its original watcher without showing Undo on the new board", async () => {
+    const pending = deferred<void>();
+    const api = stubApi([threeCourseOrder], {
+      listWatchers: vi.fn().mockResolvedValue([
+        { id: "pass", name: "Pass", runsPass: false },
+        { id: "runner", name: "Runner", runsPass: false },
+      ]),
+      markWatcherDone: vi.fn().mockImplementation(() => pending.promise),
+      getWatcherQueue: vi.fn((id: string) =>
+        Promise.resolve({
+          watcher: { id, name: id, runsPass: false, active: true },
+          orders: id === "pass" ? [threeCourseOrder] : [firedNotReadyOrder],
+        }),
+      ),
+    });
+    const el = await mount({ api });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-watcher="pass"]')!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-change]")!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-watcher="runner"]')!.click();
+    await flush(el);
+    pending.resolve();
+    await flush(el);
+    expect(api.markWatcherDone).toHaveBeenCalledWith("pass", ["ti-0"], true);
+    expect(orderCard(el, 6)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-undo]")).toBeNull();
+  });
+
+  it("finishes a pending Undo on its original watcher after switching boards", async () => {
+    const pending = deferred<void>();
+    const mark = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockImplementation(() => pending.promise);
+    const api = stubApi([threeCourseOrder], {
+      listWatchers: vi.fn().mockResolvedValue([
+        { id: "pass", name: "Pass", runsPass: false },
+        { id: "runner", name: "Runner", runsPass: false },
+      ]),
+      markWatcherDone: mark,
+      getWatcherQueue: vi.fn((id: string) =>
+        Promise.resolve({
+          watcher: { id, name: id, runsPass: false, active: true },
+          orders: id === "pass" ? [threeCourseOrder] : [firedNotReadyOrder],
+        }),
+      ),
+    });
+    const el = await mount({ api });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-watcher="pass"]')!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-undo]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-change]")!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-watcher="runner"]')!.click();
+    await flush(el);
+    const reads = vi.mocked(api.getWatcherQueue).mock.calls.length;
+    pending.resolve();
+    await flush(el);
+    expect(mark).toHaveBeenLastCalledWith("pass", ["ti-0"], false);
+    expect(orderCard(el, 6)).not.toBeNull();
+    expect(api.getWatcherQueue).toHaveBeenCalledTimes(reads);
+  });
+
+  it("does not show a former watcher's reprint error on the selected board", async () => {
+    const pending = deferred<void>();
+    const api = stubApi([threeCourseOrder], {
+      listWatchers: vi.fn().mockResolvedValue([
+        { id: "pass", name: "Pass", runsPass: false },
+        { id: "runner", name: "Runner", runsPass: false },
+      ]),
+      reprintOrder: vi.fn().mockImplementation(() => pending.promise),
+      getWatcherQueue: vi.fn((id: string) =>
+        Promise.resolve({
+          watcher: { id, name: id, runsPass: false, active: true },
+          orders: id === "pass" ? [threeCourseOrder] : [firedNotReadyOrder],
+        }),
+      ),
+    });
+    const el = await mount({ api });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-watcher="pass"]')!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-reprint="wo-1"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-change]")!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-watcher="runner"]')!.click();
+    await flush(el);
+    pending.reject({ code: "server.internal" });
+    await flush(el);
+    expect(orderCard(el, 6)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("marks Away items Done for their original watcher after switching boards", async () => {
+    const pending = deferred<void>();
+    const passOrder = {
+      ...threeCourseOrder,
+      courses: [{ ...threeCourseOrder.courses[1]!, allReady: true }],
+      groups: [],
+    };
+    const api = stubApi([passOrder], {
+      listWatchers: vi.fn().mockResolvedValue([
+        { id: "pass", name: "Pass", runsPass: true },
+        { id: "runner", name: "Runner", runsPass: false },
+      ]),
+      markCourseAway: vi.fn().mockImplementation(() => pending.promise),
+      getWatcherQueue: vi.fn((id: string) =>
+        Promise.resolve({
+          watcher: { id, name: id, runsPass: id === "pass", active: true },
+          orders: id === "pass" ? [passOrder] : [firedNotReadyOrder],
+        }),
+      ),
+    });
+    const el = await mount({ api });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-watcher="pass"]')!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-away="co-1"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-change]")!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-watcher="runner"]')!.click();
+    await flush(el);
+    const reads = vi.mocked(api.getWatcherQueue).mock.calls.length;
+    pending.resolve();
+    await flush(el);
+    expect(api.markWatcherDone).toHaveBeenCalledWith("pass", ["ti-1"], true);
+    expect(orderCard(el, 6)).not.toBeNull();
+    expect(api.getWatcherQueue).toHaveBeenCalledTimes(reads);
+  });
+
+  it("marks group Away items Done for their original watcher after switching boards", async () => {
+    const pending = deferred<{ revision: number }>();
+    const passOrder = {
+      ...threeCourseOrder,
+      party: { id: "party-1", revision: 3 },
+      courses: [],
+      groups: [
+        {
+          groupId: "g-3",
+          position: 3,
+          state: "fired" as const,
+          fired: true,
+          away: false,
+          allReady: true,
+          items: [threeCourseOrder.courses[1]!.items[0]!],
+        },
+      ],
+    };
+    const api = stubApi([passOrder], {
+      listWatchers: vi.fn().mockResolvedValue([
+        { id: "pass", name: "Pass", runsPass: true },
+        { id: "runner", name: "Runner", runsPass: false },
+      ]),
+      markGroupAway: vi.fn().mockImplementation(() => pending.promise),
+      getWatcherQueue: vi.fn((id: string) =>
+        Promise.resolve({
+          watcher: { id, name: id, runsPass: id === "pass", active: true },
+          orders: id === "pass" ? [passOrder] : [firedNotReadyOrder],
+        }),
+      ),
+    });
+    const el = await mount({ api });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-watcher="pass"]')!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-group-away="g-3"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-change]")!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-watcher="runner"]')!.click();
+    await flush(el);
+    const reads = vi.mocked(api.getWatcherQueue).mock.calls.length;
+    pending.resolve({ revision: 4 });
+    await flush(el);
+    expect(api.markWatcherDone).toHaveBeenCalledWith("pass", ["ti-1"], true);
+    expect(orderCard(el, 6)).not.toBeNull();
+    expect(api.getWatcherQueue).toHaveBeenCalledTimes(reads);
   });
 
   it("offers watchers and marks a dish Done with Undo on its board", async () => {

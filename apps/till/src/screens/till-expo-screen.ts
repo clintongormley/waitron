@@ -455,6 +455,7 @@ export class TillExpoScreen extends LitElement {
   readonly #refreshReads = new Set<AbortController>();
   #request = 0;
   #appliedRequest = 0;
+  #selectionEpoch = 0;
   readonly #url = new UrlStateController(
     this,
     () => {
@@ -506,15 +507,23 @@ export class TillExpoScreen extends LitElement {
     else if (requested === "all" || this.watchers.some((watcher) => watcher.id === requested))
       this.#select(requested!, true);
     else {
+      this.#selectionEpoch++;
       this.selected = null;
+      this.orders = [];
       this.choosing = true;
     }
   }
 
   #select(id: string, restored = false): void {
     if (id !== this.selected) {
+      this.#selectionEpoch++;
       this.orders = [];
       this.doneNotice = undefined;
+      this.doneErrorCode = undefined;
+      this.reprintErrorCode = undefined;
+      this.tableChanged = null;
+      this.#tableChangedNext = null;
+      this.stale = false;
       clearTimeout(this.#undoTimer);
     }
     this.selected = id;
@@ -526,7 +535,7 @@ export class TillExpoScreen extends LitElement {
   }
 
   async #refresh(): Promise<void> {
-    if (this.choosing || this.selected === null) return;
+    if (this.choosing || this.#boardId() === null) return;
     const read = new AbortController();
     const limit = setTimeout(() => read.abort(), READ_LIMIT_MS);
     this.#refreshReads.add(read);
@@ -539,13 +548,16 @@ export class TillExpoScreen extends LitElement {
   }
 
   async #reload(signal?: AbortSignal): Promise<void> {
+    const boardId = this.#boardId();
+    if (boardId === null) return;
+    const epoch = this.#selectionEpoch;
     const request = ++this.#request;
     try {
       const result =
-        this.selected === null || this.selected === "all"
+        boardId === "all"
           ? await this.api.getExpoQueue({ signal })
-          : await this.api.getWatcherQueue(this.selected, { signal });
-      if (request < this.#appliedRequest || !this.isConnected) return;
+          : await this.api.getWatcherQueue(boardId, { signal });
+      if (request < this.#appliedRequest || !this.#isCurrent(boardId, epoch)) return;
       this.#appliedRequest = request;
       if (Array.isArray(result)) this.orders = result;
       else {
@@ -558,18 +570,37 @@ export class TillExpoScreen extends LitElement {
       this.tableChanged = this.#tableChangedNext;
       this.#tableChangedNext = null;
     } catch (error) {
-      if (request > this.#appliedRequest) {
+      if (request > this.#appliedRequest && this.#isCurrent(boardId, epoch)) {
         if ((error as { code?: string }).code === "watcher.not_found") this.watcherRemoved = true;
         this.stale = true;
       }
     }
   }
 
-  async #done(ids: string[], dish: string): Promise<void> {
-    if (this.selected === null || this.selected === "all") return;
-    this.doneErrorCode = undefined;
+  #boardId(): string | null {
+    return this.embedded ? "all" : this.selected;
+  }
+
+  #isCurrent(boardId: string, epoch: number): boolean {
+    return (
+      this.isConnected &&
+      !this.choosing &&
+      this.#boardId() === boardId &&
+      this.#selectionEpoch === epoch
+    );
+  }
+
+  async #done(
+    ids: string[],
+    dish: string,
+    watcherId = this.selected,
+    epoch = this.#selectionEpoch,
+  ): Promise<void> {
+    if (watcherId === null || watcherId === "all") return;
+    if (this.#isCurrent(watcherId, epoch)) this.doneErrorCode = undefined;
     try {
-      await this.api.markWatcherDone(this.selected, ids, true);
+      await this.api.markWatcherDone(watcherId, ids, true);
+      if (!this.#isCurrent(watcherId, epoch)) return;
       this.doneNotice = { ids, dish };
       clearTimeout(this.#undoTimer);
       this.#undoTimer = setTimeout(() => {
@@ -577,32 +608,38 @@ export class TillExpoScreen extends LitElement {
       }, 10_000);
       await this.#reload();
     } catch (error) {
-      this.doneErrorCode = (error as { code?: string }).code ?? "server.internal";
+      if (this.#isCurrent(watcherId, epoch))
+        this.doneErrorCode = (error as { code?: string }).code ?? "server.internal";
     }
   }
 
   async #undo(): Promise<void> {
     const notice = this.doneNotice;
     if (!notice || this.selected === null || this.selected === "all") return;
+    const watcherId = this.selected;
+    const epoch = this.#selectionEpoch;
     this.doneNotice = undefined;
     clearTimeout(this.#undoTimer);
     try {
-      await this.api.markWatcherDone(this.selected, notice.ids, false);
-      await this.#reload();
+      await this.api.markWatcherDone(watcherId, notice.ids, false);
+      if (this.#isCurrent(watcherId, epoch)) await this.#reload();
     } catch (error) {
-      this.doneErrorCode = (error as { code?: string }).code ?? "server.internal";
+      if (this.#isCurrent(watcherId, epoch))
+        this.doneErrorCode = (error as { code?: string }).code ?? "server.internal";
     }
   }
 
   /** A rejected call (a race, an already-dispatched course) is SWALLOWED; the reload converges the board
    * on server truth. */
   async #act(call: () => Promise<void>): Promise<void> {
+    const boardId = this.#boardId();
+    const epoch = this.#selectionEpoch;
     try {
       await call();
     } catch {
       // Non-fatal — the reload reconciles the board to server truth.
     }
-    await this.#reload();
+    if (boardId !== null && this.#isCurrent(boardId, epoch)) await this.#reload();
   }
 
   /** Refused `party.out_of_date`, the board is read again and the expediter decides; nothing is
@@ -612,23 +649,32 @@ export class TillExpoScreen extends LitElement {
     party: QueueParty,
     call: (command: GroupCommand) => Promise<{ revision: number }>,
   ): Promise<void> {
+    const boardId = this.#boardId();
+    const epoch = this.#selectionEpoch;
     this.tableChanged = null;
     this.#tableChangedNext = null;
     try {
       await call({ submissionId: crypto.randomUUID(), expectedPartyRevision: party.revision });
     } catch (error) {
-      if ((error as { code?: string }).code === "party.out_of_date")
+      if (
+        boardId !== null &&
+        this.#isCurrent(boardId, epoch) &&
+        (error as { code?: string }).code === "party.out_of_date"
+      )
         this.#tableChangedNext = order.tableLabel ?? `#${order.orderNumber}`;
     }
-    await this.#reload();
+    if (boardId !== null && this.#isCurrent(boardId, epoch)) await this.#reload();
   }
 
   async #reprint(orderId: string): Promise<void> {
+    const boardId = this.#boardId();
+    const epoch = this.#selectionEpoch;
     this.reprintErrorCode = undefined;
     try {
       await this.api.reprintOrder(orderId);
     } catch (error) {
-      this.reprintErrorCode = (error as { code?: string }).code ?? "server.internal";
+      if (boardId !== null && this.#isCurrent(boardId, epoch))
+        this.reprintErrorCode = (error as { code?: string }).code ?? "server.internal";
     }
   }
 
@@ -822,16 +868,21 @@ export class TillExpoScreen extends LitElement {
         class="lever away"
         data-group-away=${groupId}
         aria-label=${`${t("expo.away")} ${name}`}
-        @click=${() =>
+        @click=${() => {
+          const watcherId = this.#isWatcher() ? this.selected : null;
+          const epoch = this.#selectionEpoch;
           void this.#groupAct(order, party, async (command) => {
             const result = await this.api.markGroupAway(party.id, groupId, command);
-            if (this.#isWatcher())
+            if (watcherId !== null)
               await this.#done(
                 group.items.map((item) => item.id),
                 name,
+                watcherId,
+                epoch,
               );
             return result;
-          })}
+          });
+        }}
       >
         ${t("expo.away")}
       </button>`;
@@ -981,15 +1032,20 @@ export class TillExpoScreen extends LitElement {
         class="lever away"
         data-away=${courseId}
         aria-label=${`${t("expo.away")} ${name}`}
-        @click=${() =>
+        @click=${() => {
+          const watcherId = this.#isWatcher() ? this.selected : null;
+          const epoch = this.#selectionEpoch;
           void this.#act(async () => {
             await this.api.markCourseAway(order.orderId, courseId);
-            if (this.#isWatcher())
+            if (watcherId !== null)
               await this.#done(
                 course.items.map((item) => item.id),
                 name,
+                watcherId,
+                epoch,
               );
-          })}
+          });
+        }}
       >
         ${t("expo.away")}
       </button>`;
