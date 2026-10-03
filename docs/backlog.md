@@ -4686,18 +4686,35 @@ approved.
 
 ### B7. Provisioning and build debt
 
-**`@waitron/verifactu` 0.2.0 (A230, owner 2026-10-03) — BLOCKED on an owner decision.** 0.2.0 hashes,
-builds and serialises exactly what 0.1.0 did for the same input (both suites' captured inputs fed to
-both published packages, 2026-10-03), but its validator refuses every sale Waitron builds today: no
-`ClaveRegimen` on a VAT line (`packages/fiscal-verifactu/src/backend.ts`), which AEAT's rules make
-mandatory, so today's filings likely lack a required field (not tried against AEAT). It also refuses
-test tax IDs with a wrong check letter, including the golden fingerprint test's pinned one, so that
-test cannot pass unedited. 0.1.0's lookup state names were wrong (`Correcta` for AEAT's `Correcto`),
-so `reconcile.ts` would not recognise a real AEAT status. On 0.2.0, 156 of 420 fiscal-verifactu and
-699 of 7,775 apps/server tests fail. The options, the extra refusals that can reach a till (€3,010
-simplified-invoice limit, a customer tax ID's check letter, a VAT of 0.00 on a tiny base) and the
-recommendation are in lane B's question of 2026-10-03; the measurement branch
-`feat/service-verifactu-0-2-0` is local only.
+**`@waitron/verifactu` 0.2.1 (A230, owner 2026-10-03) — DONE on this branch.** Waitron moved from
+0.1.0 to `^0.2.1` (0.2.1 is A230a: the library now accepts a zero VAT amount when the base times the
+rate rounds to 0.00). The fingerprint, built record and XML are unchanged for the same input (both
+published packages fed the same records; controls showed a difference is reported). Done with it:
+`ClaveRegimen: "01"` on every VAT line; the lookup states `Correcto`/`AceptadoConErrores`/`Anulado`
+(0.1.0's names would not have matched a real AEAT answer); a missing `TiempoEsperaEnvio`; a reply
+line with no readable status gets its own branch (`fiscal.estado_desconocido`); `validate` is given
+the record's own generation time as `now`; validation warnings are split by code (totals →
+`fiscal.record_totals_disagree`, the rest filed and flagged `fiscal.record_flagged`); a voided sale's
+lookup is read through its cancellation; test tax IDs carry a correct check letter and the golden
+test's pinned one was corrected with its fingerprint re-pinned (owner-approved). Caught at entry: a
+sale over €3,010.00 (`sale.total_exceeds_simplified_limit`, limit from the fiscal seat), a customer's
+tax ID or legal name in `recordSubstitution` (`counterparty.invalid`), a venue legal name over 120
+characters. Left open:
+  - **A resent cancellation AEAT already holds is stopped** with `fiscal.duplicado_anulado`
+    (`drain.ts`'s duplicate handling, unchanged by A230; shown against the library's fake, not real
+    AEAT). It can follow a restart reset or a lost reply. Likely it should count as accepted, or be
+    decided by comparing fingerprints. Owner's call.
+  - **`HUELLA_MISMATCH` is filed and flagged, not refused.** Waitron builds the fingerprint itself,
+    so it cannot occur today; refusing it may be preferred since a wrong fingerprint is permanent.
+  - **No sale over €3,010 can be made at all**: Waitron issues only simplified invoices and no screen
+    accepts a customer's tax ID, so a full invoice is not offered. Spain's legal ceiling for a
+    simplified invoice in hospitality is believed to be €3,000 (RD 1619/2012 art. 4, not checked
+    against the source); the branch refuses over €3,010 as the owner asked.
+  - **A voided sale whose lookup AEAT answers under the sale's own reference** is not handled; not
+    shown to happen either way.
+  - **An unusable `TiempoEsperaEnvio` is not recorded** anywhere (the raw value is dropped).
+  - **A dev venue built before A230 keeps the tax ID `50000000K`**, whose sales 0.2.1 refuses;
+    `wa-wt reset demo <name>` rebuilds it with `50000000R`.
 
 - **Resetting a box without a terminal** (owner, 2026-10-02). An operator who set the box up in
   Demo and now wants to Prepare has to wipe Demo away first, and the only wipe is
