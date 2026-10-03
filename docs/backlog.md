@@ -1165,7 +1165,7 @@ measured only before the review's fixes: a 90 s outage recovers and an unsaved f
 Not covered — below, A224.
 
 **Dashboard reads have no time limit, and a save's lost-connection message can vanish when reads
-recover (A224, from A206's review, 2026-10-02) — PARTLY DONE (lane A's W18, #1125; W18a).** Done: Payments'
+recover (A224, from A206's review, 2026-10-02) — PARTLY DONE (lane A's W18, #1125; W18a, #1135).** Done: Payments'
 providers and readers, Cloud services' status and Profile's language list now load through the
 shared queries, so a screen opened while the server is down fills in once it is back. Payments asks
 for each reader's status again only when the set of active readers changes, after a change the
@@ -1188,6 +1188,15 @@ message when the reads recover: most screens store the message as a code, Profil
 dialog store its text. Units compares the error itself and keeps it, the placement step keeps a
 save's failures in a list of their own, and Payments and Cloud services now keep it too. The owner
 chose (2026-10-03) that each screen tracks where its message came from.
+
+**A dashboard read that waits on an outside service can be cut off at 30 seconds and reported as a
+broken connection (A255, from lane A's W18a, #1135, 2026-10-03) — OPEN, queued as lane A's W18c.**
+Since #1135 every dashboard `GET` gives up after 30 seconds with `connection.failed`. Some server
+routes behind those reads call an outside service whose own limit may be longer (the card readers'
+list and status, the Cloud services checks, the bucket and backup status reads — not yet listed
+with their limits), so a slow answer can be cut off and the person told to check a connection
+that works. Next step: list each such route with its provider's limit (`file:line`), give those
+reads a limit above it at the call site, and report a timed-out read with its own message.
 
 **Empty-state text shows beside a failed read on Payments and Cloud services (A252, seen 2026-10-03
 while checking lane A's W18) — OPEN.** While its read is failing, Payments still says "No card
