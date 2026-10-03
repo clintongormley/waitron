@@ -1165,7 +1165,7 @@ measured only before the review's fixes: a 90 s outage recovers and an unsaved f
 Not covered — below, A224.
 
 **Dashboard reads have no time limit, and a save's lost-connection message can vanish when reads
-recover (A224, from A206's review, 2026-10-02) — PARTLY DONE (lane A's W18, #1125).** Done: Payments'
+recover (A224, from A206's review, 2026-10-02) — PARTLY DONE (lane A's W18, #1125; W18a).** Done: Payments'
 providers and readers, Cloud services' status and Profile's language list now load through the
 shared queries, so a screen opened while the server is down fills in once it is back. Payments asks
 for each reader's status again only when the set of active readers changes, after a change the
@@ -1174,15 +1174,20 @@ and Cloud services, a failed action's message stays when the reads recover, and 
 ignores a status read that started before a successful action's answer was shown and answered after
 it. Sales keeps watching the business-day read until it has answered, so it loads when only that
 read failed. Roster and Planned vs actual show the error, not their "no locations" prompt, when the
-locations read fails before it has ever answered. **Still open:** no read has a time limit, so a
-request that never answers keeps its read loading for ever, and the live connection does not re-read
-a read still marked loading (`packages/dashboard-kit/src/live-data.ts`, `#schedule`). And where a
-save's failure is shown in the same field as a read's, a save that failed with `connection.failed`
-during the outage loses its message when the reads recover: most screens store the message as a
-code, Profile and the reprint dialog store its text. Units compares the error itself and keeps it,
-the placement step keeps a save's failures in a list of their own, and Payments and Cloud services
-now keep it too. Both need a choice (asked of the owner 2026-10-03): the limit's value, and whether
-each screen tracks where its message came from.
+locations read fails before it has ever answered. Since lane A's W18a, every dashboard `GET` made
+through `createRequest`, except a file download, gives up after 30 seconds (the owner's value,
+2026-10-03): `createRequest` (`packages/dashboard-kit/src/request.ts`) aborts it and it fails as
+`connection.failed`, so a read the server never finishes stops loading. A read the live data store
+keeps (`packages/dashboard-kit/src/live-data.ts`) is then read again like any other failed one: at
+once if something asked for it while it waited (the live connection, the query's timed refresh, or
+a save on the same screen), otherwise the next time one of those asks. A one-off read, such as
+opening the product editor, shows the error and is read again only when the person tries again.
+Writes have no limit. **Still open (W18b):** where a save's failure is shown in
+the same field as a read's, a save that failed with `connection.failed` during the outage loses its
+message when the reads recover: most screens store the message as a code, Profile and the reprint
+dialog store its text. Units compares the error itself and keeps it, the placement step keeps a
+save's failures in a list of their own, and Payments and Cloud services now keep it too. The owner
+chose (2026-10-03) that each screen tracks where its message came from.
 
 **Empty-state text shows beside a failed read on Payments and Cloud services (A252, seen 2026-10-03
 while checking lane A's W18) — OPEN.** While its read is failing, Payments still says "No card

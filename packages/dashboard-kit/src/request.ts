@@ -15,6 +15,9 @@ export interface RequestOptions {
   as?: "blob";
 }
 
+/** How long a read may take, response and body together, before it fails as `connection.failed`. */
+const READ_TIME_LIMIT_MS = 30_000;
+
 /** The one request primitive every dashboard API method funnels through — path-first: `(path, method, body?)`. */
 export type DashboardRequest = <T>(
   path: string,
@@ -32,8 +35,11 @@ export type DashboardRequest = <T>(
  * back to `server.internal` when the body is missing, non-JSON or names no code — so callers branch
  * on a stable domain code, never an HTTP status, while `status` (the answered response's HTTP status)
  * rides along for the rare caller that needs it. Without `as: "blob"`, a 2xx with an EMPTY body
- * resolves to `undefined`, keyed off the empty body, not the status. This primitive does NOT redirect
- * on 401 — it only decodes and throws the code.
+ * resolves to `undefined`, keyed off the empty body, not the status. A GET other than a blob download
+ * is aborted after `READ_TIME_LIMIT_MS` and fails as `connection.failed`, as an unreachable server
+ * does; it is aborted rather than only abandoned, so it does not keep holding one of the browser's
+ * connections to the box. This primitive does NOT redirect on 401 — it only decodes and throws the
+ * code.
  */
 export function createRequest(
   opts: {
@@ -69,35 +75,65 @@ export function createRequest(
       headers.set("x-waitron-live", "1");
       init.headers = headers;
     }
-    let res: Response;
-    try {
-      res = await fetchImpl(baseUrl + path, init);
-    } catch {
+    const lost = (): { code: string } => {
       opts.onError?.("connection.failed");
-      throw { code: "connection.failed" };
+      return { code: "connection.failed" };
+    };
+    const limit = method === "GET" && options?.as !== "blob" ? new AbortController() : undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Raced against every wait below, so a fetch or body that ignores the signal still settles.
+    const timedOut =
+      limit === undefined
+        ? undefined
+        : new Promise<never>((_resolve, reject) => {
+            timer = setTimeout(() => {
+              limit.abort();
+              reject(new Error("read time limit"));
+            }, READ_TIME_LIMIT_MS);
+          });
+    timedOut?.catch(() => undefined);
+    const within = <V>(wait: Promise<V>): Promise<V> =>
+      timedOut === undefined ? wait : Promise.race([wait, timedOut]);
+    if (limit !== undefined) init.signal = limit.signal;
+    try {
+      let res: Response;
+      try {
+        res = await within(fetchImpl(baseUrl + path, init));
+      } catch {
+        throw lost();
+      }
+      if (!res.ok) {
+        // The body is untrusted: a route that is gone answers Hono's own `404 Not Found` as
+        // `text/plain`, on which `res.json()` throws; and the literal `null` is valid JSON, so a bare
+        // try/catch is not enough — the parsed value is checked for being an object before `.error` is
+        // read off it, and `code` is used only when it is a string. Any of these falls back to
+        // `server.internal` rather than surfacing a parse error as a fake network outage.
+        const parsed: unknown = await within(res.json()).catch(() => undefined);
+        if (limit?.signal.aborted === true) throw lost();
+        const envelope = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : undefined;
+        const rawCode = envelope?.code;
+        const code = typeof rawCode === "string" ? rawCode : "server.internal";
+        opts.onError?.(code);
+        // Carry the envelope's `params` through so a caller that needs a code's structured detail can
+        // read it. Attached ONLY when present, so a code-only rejection stays a bare `{ code, status }`.
+        const rawParams = envelope?.params;
+        const params = isRecord(rawParams) ? rawParams : undefined;
+        throw params === undefined
+          ? { code, status: res.status }
+          : { code, params, status: res.status };
+      }
+      let read: Blob | string;
+      try {
+        read = await within<Blob | string>(options?.as === "blob" ? res.blob() : res.text());
+      } catch (error) {
+        if (limit?.signal.aborted === true) throw lost();
+        throw error;
+      }
+      if (!passive) opts.onSuccess?.(path);
+      if (typeof read !== "string") return read as T;
+      return (read === "" ? undefined : JSON.parse(read)) as T;
+    } finally {
+      clearTimeout(timer);
     }
-    if (!res.ok) {
-      // The body is untrusted: a route that is gone answers Hono's own `404 Not Found` as
-      // `text/plain`, on which `res.json()` throws; and the literal `null` is valid JSON, so a bare
-      // try/catch is not enough — the parsed value is checked for being an object before `.error` is
-      // read off it, and `code` is used only when it is a string. Any of these falls back to
-      // `server.internal` rather than surfacing a parse error as a fake network outage.
-      const parsed: unknown = await res.json().catch(() => undefined);
-      const envelope = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : undefined;
-      const rawCode = envelope?.code;
-      const code = typeof rawCode === "string" ? rawCode : "server.internal";
-      opts.onError?.(code);
-      // Carry the envelope's `params` through so a caller that needs a code's structured detail can
-      // read it. Attached ONLY when present, so a code-only rejection stays a bare `{ code, status }`.
-      const rawParams = envelope?.params;
-      const params = isRecord(rawParams) ? rawParams : undefined;
-      throw params === undefined
-        ? { code, status: res.status }
-        : { code, params, status: res.status };
-    }
-    const read: Blob | string = await (options?.as === "blob" ? res.blob() : res.text());
-    if (!passive) opts.onSuccess?.(path);
-    if (typeof read !== "string") return read as T;
-    return (read === "" ? undefined : JSON.parse(read)) as T;
   };
 }

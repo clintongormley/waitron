@@ -37,6 +37,7 @@ describe("BookingApi — bookings", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/bookings?date=2026-08-20", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -168,6 +169,7 @@ describe("BookingApi — listTables", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/tables", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 });
@@ -203,10 +205,12 @@ describe("BookingApi — background", () => {
     expect(fetchImpl).toHaveBeenNthCalledWith(3, "/management-api/bookings?date=2026-08-20", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
     expect(fetchImpl).toHaveBeenNthCalledWith(4, "/management-api/tables", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
     // The copy carries the same live-data source.
     expect(background.liveData).toBe(liveData);

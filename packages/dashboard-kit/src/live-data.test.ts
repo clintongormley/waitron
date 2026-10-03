@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LiveData } from "./live-data.js";
+import { createRequest, type FetchLike } from "./request.js";
 
 afterEach(() => vi.useRealTimers());
 
@@ -129,6 +130,50 @@ describe("observed resources", () => {
     data.invalidate([{ type: "print-job" }]);
     await vi.waitFor(() => expect(observed.snapshot.value).toBe(2));
     expect(observed.snapshot.error).toBeUndefined();
+    observed.unsubscribe();
+  });
+
+  it("fails a read the server never answers after 30 seconds and reads it again on reconnect", async () => {
+    vi.useFakeTimers();
+    const answers: Array<(response: Response) => void> = [];
+    const fetchImpl = vi.fn<FetchLike>(
+      (_url, init) =>
+        new Promise<Response>((resolve, reject) => {
+          answers.push(resolve);
+          init.signal?.addEventListener("abort", () =>
+            reject(new DOMException("The operation was aborted.", "AbortError")),
+          );
+        }),
+    );
+    const request = createRequest({ fetchImpl });
+    const data = new LiveData();
+    const observed = data.observe(
+      {
+        key: "staff",
+        dependencies: [{ type: "staff" }],
+        read: () => request<number[]>("/management-api/staff", "GET"),
+      },
+      () => {},
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    // The live connection reopens while the first read is still waiting for an answer.
+    data.refresh();
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(observed.snapshot.loading).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(observed.snapshot.error).toEqual({ code: "connection.failed" });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    answers[1]!(new Response("[1,2]", { status: 200 }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(observed.snapshot).toEqual({
+      value: [1, 2],
+      error: undefined,
+      loading: false,
+      status: "ready",
+    });
     observed.unsubscribe();
   });
 
