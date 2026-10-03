@@ -522,8 +522,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `checkPin`, `checkManagerPassword` and `checkOwnPassword`, whose result the check inside the
   transaction reuses only while the person, the secret and the stored hash it was derived against
   are the same — weaker than it looks: those inner checks still
-  take a `tx` and derive inside it when handed no result, so a new route that forgets the early check
-  holds the lock again and nothing notices ([conventions-data.md](docs/developers/conventions-data.md)).
+  take a `tx` and derive inside it when handed no result, so a new route that forgets the early check,
+  or forgets to take turns (`inTurn`, `apps/server/src/attempt-turns.ts`), derives under the lock or
+  once per attempt in a burst, and nothing notices ([conventions-data.md](docs/developers/conventions-data.md)).
   **Splitting one logical change across transactions is a commented decision, never a default.**
   **Queries on one transaction are awaited in turn, never `Promise.all`** — this engine is
   synchronous, so two statements issued together run one after the other in an order nothing

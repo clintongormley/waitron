@@ -208,8 +208,8 @@ Track C.
   (A181 #990, A183 #997); form fields in the filled style, drawn by the shared field components
   (A178: #1010, #1012, #1015, #1016, #1017, #1019). The Extras and Options editor fixes, A64–A67
   (#714, #716, #717, #718).
-- Secret checks derive the key off the event loop (A126 #900, A125 #912, A146 #941, W1
-  #1113); a product save reads the language setting once (A149, #943); `wt-tabs` sends
+- Secret checks derive the key off the event loop (A126 #900, A125 #912, A146 #941); the PIN,
+  manager-login and profile checks derive their key before the write lock is taken (W1); a product save reads the language setting once (A149, #943); `wt-tabs` sends
   `wt-tab-change` (A150, #937); undeclared token reads and the Cloud services typography and dates (C69 #865, C75 #867, C76 #879,
   C85 #896).
 
@@ -476,8 +476,8 @@ as "no longer on this menu". A shortcut whose target a newly read version lacks 
 with no notice. **Next action:** the owner confirms this meets §9, or asks for a notice when a
 shortcut disappears.
 
-**Secret checks and the write lock: the PIN, manager-login and profile checks moved — DONE (W1,
-#1113); two blocking derivations and one stale-answer window remain OPEN.** Every check against a stored
+**Secret checks and the write lock: the PIN, manager-login and profile checks moved — DONE (W1);
+two blocking derivations and one stale-answer window remain OPEN.** Every check against a stored
 hash from `packages/identity/src/secret-hash.ts` derives the key with `verifySecretAsync` on Node's
 thread pool. The print agent's token and the two join-status readers derive it with no transaction
 open (A125, #912), and so does the device token (`tryReadDevice`, `apps/server/src/device-session.ts`).
