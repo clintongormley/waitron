@@ -297,7 +297,7 @@ describe("formatKitchenTicket", () => {
     });
   });
 
-  describe("order scope", () => {
+  describe("watcher copy", () => {
     it("prints a pass header, table/order/time, and groups items under each station sub-header in order", () => {
       const bytes = formatKitchenTicket(
         {

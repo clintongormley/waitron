@@ -265,6 +265,8 @@ the default moved to Prep Stations. The list below records the design's starting
   - A kitchen screen device is bound to one station (`devices.station_id`).
   - A printer can print one ticket per station, or one per whole order (`printTicketScope`,
     `packages/db/src/schema/printers.ts`).
+  _2026-10-01 (slice 3d): a kitchen screen binds a station or a watcher; the whole-order setting
+  is gone. [Plan](../plans/2026-10-01-watchers-slice-3d.md)._
 - **Routing rules** are edited on a different screen: Venue operations › Preparation routing
   (`packages/venue-service/src/dashboard/venue-operations-screen.ts:730`, table
   `preparation_routes`). A rule matches a zone (or all zones) together with a product or a category,
@@ -424,6 +426,10 @@ A watcher shows each item's progress (queued, being made, done), and it can mark
 for example "plated and sent out". When the venue's fire-control setting is "expo", the fire
 action appears on the expediter's watcher screen.
 
+_2026-10-01 (slice 3d): a watcher is its own thing, not a station. Its station and service-zone
+filters must both match. It marks its own Done; Away remains one shared mark. Fire is a switch on
+the watcher. [Plan](../plans/2026-10-01-watchers-slice-3d.md)._
+
 ### 5.10 What a ticket shows
 
 - **A dish and its split-off extras always mention each other,** on screen and on paper. For
@@ -438,6 +444,9 @@ action appears on the expediter's watcher screen.
   - on **paper**, it is a plain list. Many kitchens work from print alone.
 
 _2026-10-01 (slice 3c-1): a station's own tickets, first send, FIRE, HOLD and reprint, and its kitchen screen's card view list it. The whole-order PASE ticket and correction slips do not, and neither does the column view. It lists items now with other stations, held ones as on hold; served, sent-away, made-here and no-preparation lines and dishes not yet sent are left out._
+
+_2026-10-01 (slice 3d): the whole-order PASE printer becomes a watcher's printer. Its copies and
+correction slips are headed by the watcher. [Plan](../plans/2026-10-01-watchers-slice-3d.md)._
 
 ### 5.11 "Made here, no ticket"
 
@@ -469,6 +478,9 @@ Preparation routing. It holds:
   - what the station watches, if it is a watcher;
   - "Show the rest of the order";
   - the folders it claims.
+
+  _2026-10-01 (slice 3d): watchers are a separate group on Prep Stations. A station card says which
+  watchers follow it. [Plan](../plans/2026-10-01-watchers-slice-3d.md)._
 
   Claims are added by picking from the unassigned list.
 - **The unassigned list** (§5.5).
@@ -560,9 +572,15 @@ These were not discussed. Each is the default this document takes.
 
 - **Whether the till's table plan also shows each table's progress,** beside the area watchers
   (§5.9).
+  _2026-10-01 (slice 3d): left as it is; a "being made" count and a refresh are in the backlog._
 - **What the whole-order printer becomes.** A printer that prints one ticket per whole order
   (`printTicketScope = 'order'`) may be a watcher of a delivery area, or of every station. The
   routing plan decides and states why.
+  _2026-10-01 (slice 3d, owner): it becomes a watcher's printer. You set up a named watcher on
+  Prep Stations, choosing stations and service zones that must both match. Its printers produce
+  one copy per send, headed by its name, and every correction slip for a dish on that paper. The
+  "one ticket per order" setting is gone; its column stays unread until the next reset.
+  [Plan](../plans/2026-10-01-watchers-slice-3d.md)._
 - **Bundles.** Waitron may gain bundled products, made of a list of other products: a set menu, for
   example. Bundles are not designed here. The direction for routing: each product in a bundle is
   an ordinary product in its own folder, so it routes by its own folder like any other. The bundle
