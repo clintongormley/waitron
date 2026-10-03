@@ -639,7 +639,7 @@ describe("product-list", () => {
     expect(rowKeys(root)).toEqual(["dish"]);
   });
 
-  it("leaves a variant row's ordering cell muted", async () => {
+  it("leaves a variant row's ordering cell empty", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({ id: "dish", ordering: "public" }),
@@ -652,7 +652,7 @@ describe("product-list", () => {
     await table.updateComplete;
     const cell = cellUnder(root, "bun:small", t("product.ordering"));
     expect(cell.querySelector("[data-test=ordering-badge]")).toBeNull();
-    expect(cell.textContent!.trim()).toBe("—");
+    expect(cell.textContent!.trim()).toBe("");
   });
 
   it("expands a parent product to its variant rows", async () => {
@@ -1257,7 +1257,7 @@ it("drags a product outside the selection alone and never offers a variant as a 
   root.querySelector<HTMLElement>(".tree-toggle")!.click();
   const variant = (await tableRoot(el)).querySelector('tr[data-row-key="bun:small"]')!;
   expect(variant).not.toBeNull();
-  const variantName = variant.querySelector("strong")!;
+  const variantName = variant.querySelector('[part~="variant-name"]')!;
   variantName.dispatchEvent(
     new PointerEvent("pointerdown", { bubbles: true, composed: true, pointerId: 2 }),
   );
@@ -1453,7 +1453,9 @@ describe("the product list at phone width", () => {
     const keys = rowKeys(root);
     expect(keys).toHaveLength(3);
     for (const key of keys) {
-      const name = cellUnder(root, key, t("product.name")).querySelector("strong")!;
+      const name = cellUnder(root, key, t("product.name")).querySelector(
+        'strong, [part~="variant-name"]',
+      )!;
       const price = cellUnder(root, key, t("product.price")).querySelector('[data-test="price"]')!;
       expect(Math.abs(bottom(name) - bottom(price)), key).toBeLessThanOrEqual(1);
     }
@@ -1968,5 +1970,172 @@ describe("the product list as a tree", () => {
     await el.updateComplete;
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect((await popup()).matches(":popover-open")).toBe(false);
+  });
+});
+
+describe("a product's variants in the list", () => {
+  const cecina = () =>
+    product({
+      id: "cecina",
+      name: "Cured beef cecina",
+      primaryCategoryId: "deli",
+      image: "abc123.webp",
+      variants: [
+        { ...bunVariant, id: "thin", name: "Thin cut", unitPrice: "38.00" },
+        { ...bunVariant, id: "thick", name: "Thick cut", unitPrice: "40.00" },
+        { ...bunVariant, id: "gone", name: "Old cut", active: false },
+      ],
+    });
+  const loin = () =>
+    product({
+      id: "loin",
+      name: "Cured pork loin",
+      primaryCategoryId: "deli",
+      variants: [{ ...bunVariant, id: "more", name: "More pork" }],
+    });
+
+  async function mountDeli(props: Partial<ProductList> = {}) {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        cecina(),
+        loin(),
+        product({ id: "chorizo", name: "Iberian chorizo", primaryCategoryId: "deli" }),
+      ],
+      categories: [{ id: "deli", name: "Deli", parentId: null }],
+      madeAt: {
+        thin: {
+          stationId: "deli",
+          stationName: "Deli counter",
+          noPreparation: false,
+          noReplacement: false,
+          variesByZone: false,
+        },
+      },
+      ...props,
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    await openRow(el, "folder:deli");
+    return { el, table, root };
+  }
+
+  async function openVariants(
+    root: ShadowRoot,
+    table: HTMLElement & { updateComplete: Promise<unknown> },
+    key: string,
+  ) {
+    root.querySelector<HTMLElement>(`tr[data-row-key="${key}"] .tree-toggle`)!.click();
+    await table.updateComplete;
+  }
+
+  const nameCell = (root: ShadowRoot, key: string) => cellUnder(root, key, t("product.name"));
+
+  it("draws a small, muted arrow on a product with variants, against its grip", async () => {
+    const { root } = await mountDeli();
+    const arrow = root.querySelector<HTMLElement>('tr[data-row-key="cecina"] .tree-toggle')!;
+    const name = nameCell(root, "cecina").querySelector("strong")!;
+    const style = getComputedStyle(arrow);
+    expect(parseFloat(style.fontSize)).toBeLessThan(parseFloat(getComputedStyle(name).fontSize));
+    expect(style.color).toBe(
+      getComputedStyle(nameCell(root, "cecina").querySelector('[data-test="variant-count"]')!)
+        .color,
+    );
+    const grip = nameCell(root, "cecina").querySelector<HTMLElement>(".drag-grip")!;
+    const glyph = document.createRange();
+    glyph.selectNodeContents(arrow);
+    // The arrow is drawn at the end of its box, against the grip, not in the middle of it.
+    expect(grip.getBoundingClientRect().left - glyph.getBoundingClientRect().right).toBeLessThan(
+      grip.getBoundingClientRect().width / 2,
+    );
+  });
+
+  it.each([
+    ["en", "2 variants", "1 variant"],
+    ["es", "2 variantes", "1 variante"],
+  ])(
+    "says how many variants a product has under its name, leaving removed ones out (%s)",
+    async (locale, two, one) => {
+      setLocale(locale);
+      const { root } = await mountDeli();
+      const count = (key: string) =>
+        nameCell(root, key).querySelector<HTMLElement>('[data-test="variant-count"]');
+      expect(count("cecina")!.textContent!.trim()).toBe(two);
+      expect(count("loin")!.textContent!.trim()).toBe(one);
+      expect(count("chorizo")).toBeNull();
+      const name = nameCell(root, "cecina").querySelector("strong")!.getBoundingClientRect();
+      const box = count("cecina")!.getBoundingClientRect();
+      expect(box.top).toBeGreaterThanOrEqual(name.bottom - 1);
+      expect(Math.abs(box.left - name.left)).toBeLessThanOrEqual(0.5);
+      expect(getComputedStyle(count("cecina")!).color).not.toBe(
+        getComputedStyle(nameCell(root, "cecina").querySelector("strong")!).color,
+      );
+    },
+  );
+
+  it.each([1280, 390])(
+    "lines each opened variant's name up under its product's, in normal weight, on a band (%i px)",
+    async (width) => {
+      const before = { width: window.innerWidth, height: window.innerHeight };
+      try {
+        await page.viewport(width, 844);
+        const { table, root } = await mountDeli();
+        await openVariants(root, table, "cecina");
+        expect(rowKeys(root)).toEqual([
+          "folder:deli",
+          "cecina",
+          "cecina:thick",
+          "cecina:thin",
+          "loin",
+          "chorizo",
+        ]);
+        const productName = nameCell(root, "cecina").querySelector("strong")!;
+        for (const key of ["cecina:thin", "cecina:thick"]) {
+          const name = nameCell(root, key).querySelector<HTMLElement>('[part~="variant-name"]')!;
+          // The text itself, not the box, which starts at its padding.
+          const text = document.createRange();
+          text.selectNodeContents(name);
+          expect(
+            Math.abs(text.getBoundingClientRect().left - productName.getBoundingClientRect().left),
+            key,
+          ).toBeLessThanOrEqual(0.5);
+          expect(Number(getComputedStyle(name).fontWeight)).toBeLessThan(
+            Number(getComputedStyle(productName).fontWeight),
+          );
+          const row = root.querySelector(`tr[data-row-key="${key}"]`)!;
+          expect(row.matches(".joined")).toBe(true);
+        }
+        expect(root.querySelector('tr[data-row-key="cecina"]')!.matches(".joined")).toBe(false);
+        const scroll = root.querySelector<HTMLElement>(".scroll")!;
+        expect(scroll.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
+      } finally {
+        await page.viewport(before.width, before.height);
+      }
+    },
+  );
+
+  it("shows only a variant's price, status and menu, leaving its other cells empty", async () => {
+    setLocale("en");
+    const { table, root } = await mountDeli();
+    await openVariants(root, table, "cecina");
+    for (const header of [
+      t("editor.main_category"),
+      t("product.made_at"),
+      t("editor.modifiers"),
+      t("product.ordering"),
+      t("product.allergens"),
+    ]) {
+      const cell = cellUnder(root, "cecina:thin", header);
+      expect(cell.textContent!.trim(), header).toBe("");
+      expect(cell.querySelector("*"), header).toBeNull();
+    }
+    expect(
+      cellUnder(root, "cecina:thin", t("product.price")).querySelector('[data-test="price"]')!
+        .textContent,
+    ).toContain("38.00");
+    expect(
+      cellUnder(root, "cecina:thin", t("product.status")).querySelector("[data-test=active-badge]"),
+    ).not.toBeNull();
+    expect(root.querySelector('[data-test="actions-thin"]')).not.toBeNull();
+    expect(cellUnder(root, "cecina", t("product.made_at")).textContent!.trim()).not.toBe("");
   });
 });

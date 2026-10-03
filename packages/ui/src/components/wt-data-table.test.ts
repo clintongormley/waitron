@@ -1137,6 +1137,82 @@ test("a phone-width tree indents each level half as far, and no deeper than four
   expect(["a", "b", "e", "f"].map(indent)).toEqual(["0px", "16px", "64px", "80px"]);
 });
 
+test("a row that joins its parent is indented as its parent is, at either width, and is still a level down", async () => {
+  const ids = ["a", "b", "c", "d", "e", "f"];
+  const deep: TreeRow[] = ids.map((id, index) => ({
+    id,
+    parent: index === 0 ? null : ids[index - 1]!,
+    name: id.toUpperCase(),
+  }));
+  const el = await treeTable({ rows: deep, rowJoinsParent: (row) => row.id === "f" });
+  host.style.setProperty("--wt-space-2", "8px");
+  host.style.setProperty("--wt-space-4", "16px");
+  const indent = (key: string) =>
+    getComputedStyle(
+      el.shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="${key}"] .tree-cell`)!,
+    ).paddingInlineStart;
+  el.style.width = "360px";
+  await frames();
+  expect(["d", "e", "f"].map(indent)).toEqual(["24px", "32px", "32px"]);
+  el.style.width = "600px";
+  await frames();
+  expect(["d", "e", "f"].map(indent)).toEqual(["48px", "64px", "64px"]);
+  const level = (key: string) =>
+    el.shadowRoot!.querySelector(`tr[data-row-key="${key}"]`)!.getAttribute("aria-level");
+  expect([level("e"), level("f")]).toEqual(["5", "6"]);
+});
+
+test("a row that joins its parent sits on the band colour, pinned cell too, and still shows hover", async () => {
+  type Joined = TreeRow & { joins?: boolean };
+  const el = (await mount(
+    '<wt-data-table aria-label="Products"></wt-data-table>',
+  )) as WtDataTable<Joined>;
+  Object.assign(el, {
+    rows: [
+      { id: "bun", parent: null, name: "Bun" },
+      { id: "small", parent: "bun", name: "Small", joins: true },
+    ] satisfies Joined[],
+    columns: [
+      { key: "name", label: "Name", cell: (row: Joined) => row.name },
+      { key: "actions", label: "Actions", pinned: "end", cell: () => "⋮" },
+    ] satisfies DataTableColumn<Joined>[],
+    rowKey: (row: Joined) => row.id,
+    rowParent: (row: Joined) => row.parent,
+    rowJoinsParent: (row: Joined) => row.joins === true,
+    rowClick: () => {},
+  });
+  await el.updateComplete;
+  host.style.setProperty("--wt-color-bg", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-color-surface", "rgb(7, 8, 9)");
+  host.style.setProperty("--wt-color-surface-raised", "rgb(30, 40, 50)");
+  const cells = (key: string) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>(`tr[data-row-key="${key}"] td`),
+  ];
+  for (const cell of cells("small"))
+    expect(getComputedStyle(cell).backgroundColor).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(cells("bun")[0]!).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  expect(getComputedStyle(cells("bun")[1]!).backgroundColor).toBe("rgb(7, 8, 9)");
+  await userEvent.hover(cells("small")[0]!);
+  onTestFinished(() => commands.parkPointer());
+  for (const cell of cells("small"))
+    expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
+  el.rowClick = undefined;
+  await el.updateComplete;
+  await commands.parkPointer();
+  await userEvent.hover(cells("small")[0]!);
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="small"]')!.matches(".clickable")).toBe(
+    false,
+  );
+  for (const cell of cells("small"))
+    expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
+});
+
+test("a branch's toggle button is exposed as a part, so a screen can size and colour it", async () => {
+  const el = await treeTable();
+  const toggle = el.shadowRoot!.querySelector('tr[data-row-key="food"] button.tree-toggle')!;
+  expect(toggle.part.contains("tree-toggle")).toBe(true);
+});
+
 // The width compared is the scroll box's inside its border, which is what clientWidth reports here.
 test("the phone indent starts at a 440px box, not at 441px, and a flat table never takes it", async () => {
   const el = await treeTable();

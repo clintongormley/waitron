@@ -49,7 +49,10 @@ interface ProductRow {
   variant: Product["variants"][number] | null;
 }
 
-function countOf(key: "folders.count" | "folders.product_count", count: number): string {
+function countOf(
+  key: "folders.count" | "folders.product_count" | "product.variant_count",
+  count: number,
+): string {
   return t(count === 1 ? `${key}_one` : key).replace("{count}", String(count));
 }
 
@@ -184,7 +187,6 @@ export class ProductList extends LitElement {
         color: var(--wt-color-danger);
         font-weight: var(--wt-font-weight-bold);
       }
-      wt-data-table::part(variant-muted),
       wt-data-table::part(context) {
         color: var(--wt-color-text-muted);
       }
@@ -194,9 +196,26 @@ export class ProductList extends LitElement {
         border: 0;
         border-block-start: 1px solid var(--wt-color-border);
       }
-      wt-data-table::part(count) {
+      wt-data-table::part(count),
+      wt-data-table::part(variant-count) {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+      /* A column flex box takes its first item's baseline, so the row still lines up by the name. */
+      wt-data-table::part(name-stack) {
+        display: inline-flex;
+        flex-direction: column;
+      }
+      /* Drawn at the end of its tap target, against the grip. */
+      wt-data-table::part(tree-toggle) {
+        padding-inline-end: var(--wt-space-1);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        text-align: end;
+      }
+      /* The table draws a variant at its product's indent; this is the product's grip and photo. */
+      wt-data-table::part(variant-name) {
+        padding-inline-start: calc(2 * var(--wt-tap-min) + var(--wt-space-3));
       }
       wt-data-table::part(price-unit) {
         color: var(--wt-color-text-muted);
@@ -707,6 +726,16 @@ export class ProductList extends LitElement {
     return product.modifiers.map((ref) => modifierListName(ref, this.#listNames)).join(", ");
   }
 
+  /** Removed variants are kept but not counted: the default Status filter hides them. */
+  #variantCount(product: Product) {
+    const count = product.variants.filter(({ active }) => active).length;
+    return count === 0
+      ? nothing
+      : html`<span part="variant-count" data-test="variant-count"
+          >${countOf("product.variant_count", count)}</span
+        >`;
+  }
+
   #unavailableBadge() {
     return html`<span part="badge" data-test="unavailable-badge"
       >${t("product.unavailable_badge")}</span
@@ -754,7 +783,7 @@ export class ProductList extends LitElement {
           [product.name, ...product.variants.map(({ name }) => name)].join(" "),
         cell: ({ product, variant }, { ancestorOnly }) =>
           variant
-            ? html`<strong>${variant.name}</strong>`
+            ? html`<span part="variant-name">${variant.name}</span>`
             : html`<span part=${ancestorOnly ? "product-cell context" : "product-cell"}>
                 <button
                   class="drag-grip"
@@ -762,9 +791,8 @@ export class ProductList extends LitElement {
                   type="button"
                   aria-label=${`${t("folders.drag")}: ${product.name}`}
                 >
-                  <wt-icon name="grip"></wt-icon>
-                </button>
-                ${
+                  <wt-icon name="grip"></wt-icon></button
+                >${
                   product.image === null
                     ? html`<span
                         part="thumb-placeholder"
@@ -778,14 +806,19 @@ export class ProductList extends LitElement {
                           alt=""
                           draggable="false"
                       /></span>`
-                }<strong>${product.name}</strong>
+                }<span part="name-stack"
+                  ><strong>${product.name}</strong>${this.#variantCount(product)}</span
+                >
               </span>`,
       },
       {
         key: "reporting-category",
         choosable: "shown",
         label: t("editor.main_category"),
-        cell: (row) => this.#category(this.#values(row).primaryCategoryId),
+        cell: (row) =>
+          row.variant && row.variant.effective.primaryCategoryId === row.product.primaryCategoryId
+            ? nothing
+            : this.#category(this.#values(row).primaryCategoryId),
         searchValue: (row) => this.#category(this.#values(row).primaryCategoryId),
       },
       {
@@ -793,7 +826,8 @@ export class ProductList extends LitElement {
         choosable: "shown",
         label: t("product.made_at"),
         cell: (row) => {
-          const id = row.variant?.id ?? row.product.id;
+          if (row.variant) return nothing;
+          const id = row.product.id;
           const maker = this.madeAt[id];
           const name = maker?.noPreparation
             ? t("product.no_preparation")
@@ -837,8 +871,7 @@ export class ProductList extends LitElement {
         key: "modifiers",
         choosable: "shown",
         label: t("editor.modifiers"),
-        cell: ({ product, variant }) =>
-          variant ? html`<span part="variant-muted">—</span>` : this.#modifierNames(product),
+        cell: ({ product, variant }) => (variant ? nothing : this.#modifierNames(product)),
         searchValue: ({ product, variant }) => (variant ? "" : this.#modifierNames(product)),
       },
       {
@@ -848,7 +881,7 @@ export class ProductList extends LitElement {
         // A variant is a way of buying its product, so the filter reads the PRODUCT's answer on
         // every row and a variant is shown or hidden together with its product.
         cell: ({ product, variant }) => {
-          if (variant) return html`<span part="variant-muted">—</span>`;
+          if (variant) return nothing;
           return html`<span
             part="badge"
             data-test="ordering-badge"
@@ -902,7 +935,7 @@ export class ProductList extends LitElement {
         choosable: "shown",
         label: t("product.allergens"),
         cell: ({ product, variant }) => {
-          if (variant) return html`<span part="variant-muted">—</span>`;
+          if (variant) return nothing;
           const state = allergenState(product.allergens);
           return html`<span part="badge" data-test="allergen-state" data-state=${state}
             >${allergenStateName(state)}</span
@@ -1180,6 +1213,7 @@ export class ProductList extends LitElement {
               : ""}
         .rowGroup=${(row: ListRow) => (row.kind === "product" ? 1 : 0)}
         .rowCollapsible=${(row: ListRow) => row.kind !== "root"}
+        .rowJoinsParent=${(row: ListRow) => row.kind === "product" && row.variant !== null}
         .expandAllIncludes=${(row: ListRow) => row.kind === "folder"}
         .rowActivation=${(row: ListRow) =>
           row.kind === "folder" && !this.#renaming(row.folder.id)

@@ -186,6 +186,37 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  test("tree mode with an opened branch whose children join it on the band", async () => {
+    type TreeRow = { id: string; parent: string | null; name: string };
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Products"></wt-data-table>',
+      theme,
+    )) as WtDataTable<TreeRow>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name, sortValue: (row) => row.name },
+      {
+        key: "actions",
+        label: "Actions",
+        pinned: "end",
+        cell: (row) => html`<button aria-label=${`Edit ${row.name}`}>Edit</button>`,
+      },
+    ] satisfies DataTableColumn<TreeRow>[];
+    el.rows = [
+      { id: "bun", parent: null, name: "Bun" },
+      { id: "small", parent: "bun", name: "Small" },
+      { id: "large", parent: "bun", name: "Large" },
+    ];
+    el.rowKey = (row) => row.id;
+    el.rowParent = (row) => row.parent;
+    el.rowJoinsParent = (row) => row.parent !== null;
+    el.rowClick = (row) => void row.id;
+    el.rowClickLabel = (row) => `Open ${row.name}`;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('tr[data-row-key="small"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('tr[data-row-key="small"]')!.matches(".joined")).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
   test("toolbar with a search box and a filter dropdown", async () => {
     const el = (await mountThemed(
       '<wt-data-table aria-label="Users"></wt-data-table>',

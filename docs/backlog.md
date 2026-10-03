@@ -1315,7 +1315,10 @@ idea. maybe we shouldn't allow editing that"_): a variant's page shows its produ
 text, with no Change. That retires the variant's own category everywhere — the server's
 resolution of a variant's reported category (`variant.effective`, which the Products list and
 reporting read) becomes "always the product's", and variants holding a category of their own are
-cleared (allowed before go-live, §3). Trace every consumer of a variant's `categoryId` first.
+cleared (allowed before go-live, §3). Trace every consumer of a variant's `categoryId` first,
+among them the Products list's main-category cell on a variant (A221, `apps/dashboard/src/widgets/product-list.ts`), which
+compares the variant's effective main category with its product's and should then always stay
+empty.
 
 **Standalone ordering becomes one dropdown (A210) — DONE (#1070).** The owner: _"Standalone ordering can
 be reduced to a single dropdown"_. Before this, `renderOrdering` drew three radio buttons, Public, Staff
@@ -1523,19 +1526,21 @@ blank language other than the default shows the variant's own default-language d
 hint, where there is one, as a product's does; the parent's description is a hint only while the
 variant describes itself in no language.
 
-**Variants in the Products list look like part of their product (A221, owner 2026-10-02) — OPEN,
-designed.** The owner, on a screenshot of an opened "Cured pork loin" with its variant "More
-pork": _"it is there, but it doesn't look very good"_. `product-list.ts` gives each variant a row
-nested under its product, folded shut at first (`initiallyCollapsed`); today the toggle is a heavy
-black triangle far to the left, the variant's name starts left of its product's in the same bold,
-and its row repeats "Made at" and fills the rest with "—". **Decided (owner, choosing B of two
-mockups):** a small arrow next to the photo; a product with variants says "2 variants" in muted
-text under its name; the opened variants sit on a faint tinted band under their product, each
-name lined up under the product's name in normal weight; a variant's row shows only its price,
-status and row menu — no Made at, no dashes. A208 rebuilds this table: build this with it or
-after it, not against today's version. **Also check:** in the same screenshot "Cured beef cecina"
-had no arrow, though the owner's editor had shown a variant "Some difference" on it — either it
-was not saved yet or the list misses it; reproduce before assuming either.
+**Variants in the Products list look like part of their product (A221, owner 2026-10-02) — DONE.**
+The owner, on a screenshot of an opened "Cured pork loin" with its variant "More pork": _"it is
+there, but it doesn't look very good"_ — a heavy black triangle far to the left, the variant's name
+starting left of its product's in the same bold, and its row repeating "Made at" and filling the
+rest with "—". **Built (mockup B):** a small, muted arrow; "2 variants" in muted text under a
+product's name; opened variants on a `--wt-color-bg` band, lined up under the product's name, showing
+price, status, row menu and a main category only where it differs from the product's. `wt-data-table`
+gained `rowJoinsParent` and a `tree-toggle` part.
+**Also check:** tried in the list widget on a test variant, not the owner's data: the arrow showed
+under a search, an ordering filter, for an Unavailable variant and for one with its own main
+category; it was missing only for a variant saved Inactive and for a product with no variant.
+`listProducts` lists Inactive and other-category variants
+(`packages/catalogue/src/variant-fallback.test.ts`, run). Read, not run: Cancel closes the product
+editor with no prompt, so a variant added and not saved is lost silently — the likeliest cause; ask
+the owner if it recurs.
 
 **A variant always has its product's unit (A222, owner 2026-10-02) — OPEN.** The owner:
 _"currently variants can have different units from their parents. i think that's a bad idea"_.
@@ -1652,7 +1657,7 @@ plans to retire the editor.
 - **Review suggestions on the product editor not taken (Task 6):** split the editor's types into a
   product shape and a variant shape, derive `InheritedValues` from the product type, and write a
   parent's variant republishes in one statement. Nothing waits on them.
-- **The product list.** It shows "—" for a variant's allergens (`ListedVariant`,
+- **The product list.** It leaves a variant's allergen cell empty (`ListedVariant`,
   `packages/catalogue/src/product-types.ts`) — decide whether it should read a variant's effective
   allergens; a variant's name may sit a few pixels low in its row at 390px, not yet looked at;
   `listedVariantsOfProducts` (`packages/catalogue/src/operations.ts`) repeats the grouping

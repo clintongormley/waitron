@@ -340,6 +340,16 @@ export class WtDataTable<Row = unknown> extends LitElement {
         line-height: 1;
       }
 
+      /* The clickable and pinned hover rules above are more specific than this resting band, so they
+       * still win over it. */
+      tr.joined td {
+        background: var(--wt-color-bg);
+      }
+
+      tbody tr.joined:hover td {
+        background: var(--wt-color-surface-raised);
+      }
+
       .tree-cell {
         display: inline-flex;
         align-items: baseline;
@@ -363,6 +373,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** In tree mode, a branch this returns false for is always open: it draws no toggle, is never seeded
    * closed, and `setExpanded` cannot close it. */
   @property({ attribute: false }) rowCollapsible: (row: Row) => boolean = () => true;
+  /** In tree mode, a row this returns true for is drawn as part of its parent's row: at its parent's
+   * indent rather than a level deeper, on the `--wt-color-bg` band, so a run of them reads as one
+   * group under that row. Its `aria-level` still puts it a level down. */
+  @property({ attribute: false }) rowJoinsParent: (row: Row) => boolean = () => false;
   /** When set, each row becomes activatable: a stretched, focusable button covers the row and calls
    * this on click. Per-row controls (the selection checkbox, the Edit/Delete menu) sit above the
    * activator, so they are never swallowed. In a tree, `rowActivation` can give a row a toggle instead. */
@@ -1374,6 +1388,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 : expanded
                   ? this.collapseLabel
                   : this.expandLabel;
+              const joined = depth > 0 && this.rowJoinsParent(row);
               const activate = toggles
                 ? () => this.#toggle(key)
                 : clicks
@@ -1382,7 +1397,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
               return html`<tr
                 data-row-key=${key}
                 role="row"
-                class=${classMap({ clickable: activate !== undefined })}
+                class=${classMap({ clickable: activate !== undefined, joined })}
                 aria-level=${depth + 1}
                 aria-expanded=${hasChildren ? String(expanded) : nothing}
               >
@@ -1422,7 +1437,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
                                         @click=${() => this.rowClick!(row)}
                                       ></button>`
                                     : nothing
-                              }<span class="tree-cell" style=${`--tree-depth: ${depth}`}>
+                              }<span
+                                class="tree-cell"
+                                style=${`--tree-depth: ${joined ? depth - 1 : depth}`}
+                              >
                                 ${
                                   !branch
                                     ? html`<span class="tree-spacer"></span>`
@@ -1432,6 +1450,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                                         >`
                                       : html`<button
                                           class="tree-toggle"
+                                          part="tree-toggle"
                                           aria-label=${toggleLabel}
                                           @click=${(event: Event) => {
                                             event.stopPropagation();
