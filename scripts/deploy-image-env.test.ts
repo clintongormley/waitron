@@ -1,4 +1,5 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../apps/server/src/config.js";
@@ -592,7 +593,7 @@ describe("the box image carries Litestream's licence and a notice naming the pin
     expect(section).toContain("`licenses/Apache-2.0.txt`");
   });
 
-  it("names no version in the notice but libvips's, Litestream's and the font's", () => {
+  it("names no version in the notice but libvips's, Litestream's and Iosevka's", () => {
     const { packageVersion, libvips } = libvipsRelease();
     expect(new Set(NOTICES.match(/\b\d+\.\d+\.\d+\b/g))).toEqual(
       new Set([libvips, packageVersion, pinned, fontRelease()]),
@@ -685,9 +686,10 @@ describe("the box image carries the licence of the font printed text is drawn in
 
 /**
  * The dashboard bundles Google Sans Medium for its Sign in with Google button, under the SIL Open
- * Font License 1.1. Reads TEXT: it proves the notice and the licence file exist and name the font's
- * copyright line, and that the font file is in the dashboard's source — not that the built image
- * serves it, nor that the licence is the one Google publishes beside the font.
+ * Font License 1.1. Reads TEXT and hashes the source file: it proves the notice and the licence file
+ * name the font's copyright line, that the font file in the dashboard's source matches the SHA-256
+ * the notice records, and that image-smoke looks for the licence — not that a build emits the font,
+ * that the built image serves it, nor that the licence is the one Google publishes beside the font.
  */
 describe("the box image carries the licence of the font the Google button is drawn in", () => {
   const COPYRIGHT =
@@ -699,24 +701,31 @@ describe("the box image carries the licence of the font the Google button is dra
     expect(licence).toContain(COPYRIGHT);
   });
 
-  it("describes it in the notice, naming the licence file and the copyright line", () => {
+  it("describes it in the notice, and image-smoke looks for it in the built image", () => {
     const section = noticeSection("Google Sans");
     expect(section).toContain("`google-sans/OFL.txt`");
     expect(section.replace(/\s+/g, " ")).toContain(COPYRIGHT);
     expect(section).toMatch(/SIL Open Font License,\s+Version 1\.1/);
+    expect(IMAGE_SMOKE).toContain("test -s /app/third-party/google-sans/OFL.txt");
   });
 
-  it("bundles the font file it describes into the dashboard", () => {
-    expect(
-      statSync(`${ROOT}apps/dashboard/src/assets/google-sans-medium-latin.woff2`).size,
-    ).toBeGreaterThan(0);
+  it("the font file it describes is in the dashboard's source and matches the notice's SHA-256", () => {
+    const font = readFileSync(`${ROOT}apps/dashboard/src/assets/google-sans-medium-latin.woff2`);
+    expect(font.length).toBeGreaterThan(0);
+    expect(noticeSection("Google Sans")).toContain(createHash("sha256").update(font).digest("hex"));
   });
 });
 
-it("names Google's \"G\" on the dashboard's Google button as Google's trademark in the notice", () => {
-  expect(noticeSection('Google "G" mark').replace(/\s+/g, " ")).toContain(
-    'Google and the Google "G" logo are trademarks of Google LLC.',
-  );
+/**
+ * The dashboard's Google button draws Google's "G", a Google trademark, so the notice credits it.
+ * Reads only the notice's TEXT — never the SVG, nor what the built image carries.
+ */
+describe("the notice credits Google's \"G\" as Google's trademark", () => {
+  it("names Google's \"G\" on the dashboard's Google button as Google's trademark in the notice", () => {
+    expect(noticeSection('Google "G" mark').replace(/\s+/g, " ")).toContain(
+      'Google and the Google "G" logo are trademarks of Google LLC.',
+    );
+  });
 });
 
 /**

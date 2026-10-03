@@ -251,4 +251,21 @@ describe.each(["light", "dark"] as const)("Google button tokens (%s)", (theme) =
     await commands.emulateColorScheme(theme);
     expect(tokens(mount())).toEqual(GOOGLE_BUTTON[theme]);
   });
+
+  test("the button's text and line meet WCAG on its fill and on the surfaces around it", () => {
+    const el = mount(theme);
+    const line = token(el, "--wt-color-google-button-line");
+    // Small text (1.4.3).
+    expect(
+      ratio(token(el, "--wt-color-google-button-text"), token(el, "--wt-color-google-button-fill")),
+    ).toBeGreaterThanOrEqual(4.5);
+    // Non-text (1.4.11): the sign-in card is drawn on --wt-color-surface-raised.
+    for (const surface of [
+      "--wt-color-google-button-fill",
+      "--wt-color-surface-raised",
+      "--wt-color-surface",
+      "--wt-color-bg",
+    ])
+      expect(ratio(line, token(el, surface)), surface).toBeGreaterThanOrEqual(3);
+  });
 });

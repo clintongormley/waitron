@@ -35,10 +35,13 @@ import {
 } from "../login-preference.js";
 import waitronLockup from "../../../../packages/ui/brand/waitron-lockup.svg?raw";
 
+// Attribution: Google and the Google "G" logo are trademarks of Google LLC. Google Sans is Copyright
+// 2025 The Google Sans Project Authors, licensed under the SIL Open Font License, Version 1.1. The
+// image carries both notices in /app/third-party/README.md, the licence in google-sans/OFL.txt.
 const GOOGLE_G_URL = new URL("../assets/google-g.svg", import.meta.url).href;
 const GOOGLE_SANS_URL = new URL("../assets/google-sans-medium-latin.woff2", import.meta.url).href;
 
-// On the document because the browser does not apply a @font-face rule inside a shadow root.
+// On the document: Chromium does not apply a @font-face rule declared inside a shadow root.
 document.fonts.add(
   new FontFace("Google Sans", `url(${GOOGLE_SANS_URL}) format("woff2")`, {
     weight: "500",
@@ -163,6 +166,8 @@ export class LoginScreen extends LitElement {
         color: var(--wt-color-google-button-text);
         font-family: var(--wt-font-family-google);
         font-weight: var(--wt-font-weight-medium);
+        font-size: var(--wt-font-size-md);
+        line-height: var(--wt-google-button-line-height);
       }
       wt-button.google img {
         width: var(--wt-google-mark-size);

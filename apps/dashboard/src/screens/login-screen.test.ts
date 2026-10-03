@@ -959,7 +959,7 @@ describe("login-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-test=submit]")).toBeNull();
   });
 
-  it("makes each step's own way in its one primary button and offers the others as buttons", async () => {
+  it("makes each step's own way in its one primary button, Google's its Google button, and offers the others as buttons", async () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     expect(
       el.shadowRoot!.querySelector("wt-button[variant=primary]")?.getAttribute("data-test"),
@@ -983,6 +983,18 @@ describe("login-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-password]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("wt-input[name=password]")).not.toBeNull();
+    await openGoogle(el);
+    expect(el.shadowRoot!.querySelector("wt-button[variant=primary]")).toBeNull();
+    expect(
+      [...el.shadowRoot!.querySelectorAll("wt-button.own-way")].map((b) =>
+        b.getAttribute("data-test"),
+      ),
+    ).toEqual(["google-login"]);
+    expect(
+      [...el.shadowRoot!.querySelectorAll("wt-button[variant=secondary]:not(.own-way)")].map((b) =>
+        b.getAttribute("data-test"),
+      ),
+    ).toEqual(["use-password", "passkey-login"]);
   });
 
   it("groups account-setup credentials and lets each secret be revealed", async () => {
@@ -3119,10 +3131,10 @@ describe("login-screen: the sign-in card", () => {
     ["Google", openGoogle, "google-login"],
   ] as const)(
     "each other way in on the %s page has an icon hidden from assistive technology, and is named by its label",
-    async (_step, open, primary) => {
+    async (_step, open, ownWay) => {
       const el = await mountOn(open);
       const others = methodControls(el).filter(
-        (control) => control.matches("wt-button") && control.dataset.test !== primary,
+        (control) => control.matches("wt-button") && control.dataset.test !== ownWay,
       );
       expect(others.length).toBeGreaterThan(0);
       const iconSize = tokenValue(el, "width", "var(--wt-font-size-lg)");
@@ -3168,7 +3180,7 @@ describe("login-screen: the sign-in card", () => {
   );
 
   it.each(googlePagesByTheme)(
-    "the %s page draws Continue with Google in Google's %s colours and Google Sans Medium, with Google's G at 20px",
+    "the %s page draws Continue with Google in Google's %s colours and Google Sans Medium 14/20, with Google's G at 20px",
     async (_step, theme, open) => {
       const { el } = await mountWidget<LoginScreen>(
         "dashboard-login-screen",
@@ -3191,6 +3203,8 @@ describe("login-screen: the sign-in card", () => {
       expect(style.color).toBe(googleColours[theme].text);
       expect(style.fontFamily).toMatch(/^"Google Sans", /);
       expect(style.fontWeight).toBe("500");
+      expect(style.fontSize).toBe("14px");
+      expect(style.lineHeight).toBe("20px");
       expect(style.columnGap).toBe("10px");
       expect(parseFloat(style.height)).toBeGreaterThanOrEqual(44);
       const g = google.querySelector("img")!;
@@ -3213,7 +3227,32 @@ describe("login-screen: the sign-in card", () => {
     expect(await document.fonts.load('500 14px "Google Sans"')).not.toHaveLength(0);
   });
 
-  it("draws Google's gradient G, not the old flat one", async () => {
+  // Read from a screenshot: the G's foreignObject taints a canvas it is drawn into.
+  it("paints Google's G in red, yellow, green and blue, not blank or in one colour", async () => {
+    const el = await mountOn();
+    const g = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=google-login] img")!;
+    await g.decode();
+    const shot = new Image();
+    shot.src = `data:image/png;base64,${await page.screenshot({ element: g, save: false })}`;
+    await shot.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = shot.naturalWidth;
+    canvas.height = shot.naturalHeight;
+    const context = canvas.getContext("2d")!;
+    context.drawImage(shot, 0, 0);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const counts = { red: 0, yellow: 0, green: 0, blue: 0 };
+    for (let i = 0; i < pixels.length; i += 4) {
+      const [r, gr, b] = [pixels[i]!, pixels[i + 1]!, pixels[i + 2]!];
+      if (r > 200 && gr < 120 && b < 120) counts.red++;
+      else if (r > 200 && gr > 150 && b < 80) counts.yellow++;
+      else if (gr > 150 && r < 120 && b < 140) counts.green++;
+      else if (b > 200 && r < 100 && gr < 160) counts.blue++;
+    }
+    for (const count of Object.values(counts)) expect(count).toBeGreaterThanOrEqual(3);
+  });
+
+  it("draws Google's gradient G from the download bundle, not the old flat one", async () => {
     const el = await mountOn();
     const src = el.shadowRoot!.querySelector("[data-test=google-login] img")!.getAttribute("src")!;
     const svg = await (await fetch(src)).text();

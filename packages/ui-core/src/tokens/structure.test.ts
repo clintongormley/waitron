@@ -37,6 +37,7 @@ test("defines the structural contract", () => {
     "--wt-font-weight-medium",
     "--wt-google-mark-size",
     "--wt-google-mark-gap",
+    "--wt-google-button-line-height",
     "--wt-font-size-sm",
     "--wt-font-size-md",
     "--wt-font-size-lg",
@@ -78,7 +79,7 @@ test("the type scale is 12px small, 14px body, 18px large and 22px extra large",
   expect(size("--wt-font-size-xl")).toBe("22px");
 });
 
-test("the Google button sets Google Sans Medium, with a 20px mark 10px from its label", () => {
+test("the Google button sets Google Sans Medium on 20px lines, with a 20px mark 10px from its label", () => {
   const el = mount();
   const probe = document.createElement("span");
   probe.style.display = "block";
@@ -86,6 +87,7 @@ test("the Google button sets Google Sans Medium, with a 20px mark 10px from its 
   probe.style.fontWeight = "var(--wt-font-weight-medium)";
   probe.style.width = "var(--wt-google-mark-size)";
   probe.style.columnGap = "var(--wt-google-mark-gap)";
+  probe.style.lineHeight = "var(--wt-google-button-line-height)";
   el.appendChild(probe);
   const style = getComputedStyle(probe);
   expect(style.fontFamily).toMatch(/^"Google Sans", /);
@@ -93,6 +95,7 @@ test("the Google button sets Google Sans Medium, with a 20px mark 10px from its 
   expect(style.fontWeight).toBe("500");
   expect(style.width).toBe("20px");
   expect(style.columnGap).toBe("10px");
+  expect(style.lineHeight).toBe("20px");
 });
 
 test("dialog max width is 48rem, capped at 90% of the viewport", () => {
