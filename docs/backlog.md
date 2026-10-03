@@ -3822,7 +3822,14 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 - **A pretend printer in Demo mode (A241) — OPEN (owner, 2026-10-03).** Demo mode has no real
   printer, so receipts and kitchen tickets go nowhere visible. Add a pretend printer and a link in the
   dashboard header to see what it printed, like the development email viewer. Its link goes in the
-  Demo bar (A246), beside the email inbox.
+  Demo bar (A246), beside the email inbox. Queued as lane A's W37 (owner, 2026-10-03).
+
+- **A pretend connected card reader in Demo mode (A247) — OPEN, queued as lane A's W38 (owner,
+  2026-10-03).** Today the till's pay dialog carries its own Approve/Decline choice and the card
+  simulator (`SimulatorPaymentProvider`, `packages/payments/src/simulator.ts`) answers at once, so a
+  demo never shows what a connected reader does: the till sends the amount and waits while the
+  customer pays on the reader. Add a pretend reader with its own page, linked from the Demo bar
+  (A246), where the amount appears and the payment is approved or declined.
 
 - **The rest of the Printing rules screen (A242) — OPEN (owner, 2026-10-03).** A238 removes its
   per-till section; device printers move to the device profile's printer lists. What remains is
