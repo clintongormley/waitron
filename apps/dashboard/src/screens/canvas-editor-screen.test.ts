@@ -1577,3 +1577,38 @@ describe("canvas-editor-screen fields", () => {
     expect(definition.formFactor).toBe("tablet-landscape");
   });
 });
+
+it.each(["connection.failed", "server.internal"])(
+  "keeps a failed delete's message through a re-read failing with %s and the reads' recovery",
+  async (rereadCode) => {
+    const api = Object.assign(
+      stubApi({ deleteCanvas: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", { api });
+    await flush(el);
+    const alert = () => el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim();
+    vi.mocked(api.listCanvases).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(alert()).toBe(codeMessage("connection.failed")));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-c1]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+    await vi.waitFor(() => expect(api.deleteCanvas).toHaveBeenCalledOnce());
+    await flush(el);
+    vi.mocked(api.listCanvases).mockRejectedValue({ code: rereadCode });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.listCanvases).toHaveBeenCalledTimes(3));
+    await flush(el);
+    vi.mocked(api.listCanvases).mockResolvedValue([
+      ...canvases,
+      { ...canvases[0]!, id: "c2", name: "Bar till" },
+    ]);
+    api.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=canvas-row-c2]")).toBeTruthy(),
+    );
+    await flush(el);
+    expect(alert()).toBe(codeMessage("connection.failed"));
+  },
+);

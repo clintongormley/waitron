@@ -410,3 +410,37 @@ it("clears a failed load's message once the server answers again", async () => {
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull());
   expect(list(el)!.invoices).toEqual(invoices);
 });
+
+it.each(["connection.failed", "server.internal"])(
+  "keeps a failed delete's message through a re-read failing with %s and the reads' recovery",
+  async (rereadCode) => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        deletePurchaseInvoice: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      }),
+      { liveData },
+    );
+    const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
+    const alert = () => el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim();
+    await vi.waitFor(() => expect(list(el)?.invoices).toEqual(invoices));
+    vi.mocked(api.listPurchaseInvoices).mockRejectedValue({ code: "connection.failed" });
+    liveData.refresh();
+    await vi.waitFor(() => expect(alert()).toBe(codeMessage("connection.failed")));
+    emitFromChild(list(el)!, "delete-purchase", { id: "pi-1" });
+    await vi.waitFor(() => expect(api.deletePurchaseInvoice).toHaveBeenCalledOnce());
+    await flush(el);
+    vi.mocked(api.listPurchaseInvoices).mockRejectedValue({ code: rereadCode });
+    liveData.refresh();
+    await vi.waitFor(() => expect(api.listPurchaseInvoices).toHaveBeenCalledTimes(3));
+    await flush(el);
+    vi.mocked(api.listPurchaseInvoices).mockResolvedValue([
+      ...invoices,
+      { ...invoices[0]!, id: "pi-2" },
+    ]);
+    liveData.refresh();
+    await vi.waitFor(() => expect(list(el)?.invoices).toHaveLength(2));
+    await flush(el);
+    expect(alert()).toBe(codeMessage("connection.failed"));
+  },
+);

@@ -66,18 +66,19 @@ export class ApprovalsScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.errorKey = codeOf(error);
-    },
-    (error) => {
-      if (this.errorKey === codeOf(error)) this.errorKey = null;
-      if (!this.#queuesWatched) void this.#loadQueues().catch((failure) => this.#fail(failure));
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
+      if (!this.#queuesWatched)
+        void this.#loadQueues().catch((failure) => this.#showReadError(failure));
     },
   );
 
   @state() private swaps: PendingSwap[] = [];
   @state() private absences: PendingAbsence[] = [];
   @state() private errorKey: string | null = null;
+  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
   @state() private busy = false;
   #names = new Map<string, string>();
   #queuesWatched = false;
@@ -88,7 +89,7 @@ export class ApprovalsScreen extends LitElement {
   }
 
   async #load(): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     this.#queuesWatched = false;
     try {
       await this.#queries.watch("listStaff", [], (value) => {
@@ -97,7 +98,7 @@ export class ApprovalsScreen extends LitElement {
       });
       await this.#loadQueues();
     } catch (error) {
-      this.#fail(error);
+      this.#showReadError(error);
     }
   }
 
@@ -113,8 +114,19 @@ export class ApprovalsScreen extends LitElement {
     ]);
   }
 
-  #fail(error: unknown): void {
-    this.errorKey = codeOf(error);
+  #showError(code: string | null, fromRead = false): void {
+    this.errorKey = code;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
+  }
+
+  #fail(error: unknown, written: boolean): void {
+    if (written) this.#showReadError(error);
+    else this.#showError(codeOf(error));
   }
 
   #name(personId: string): string {
@@ -124,12 +136,14 @@ export class ApprovalsScreen extends LitElement {
   async #decideSwap(swapId: string, decision: "approved" | "rejected"): Promise<void> {
     if (this.busy) return;
     this.busy = true;
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await this.api.decideSwap(swapId, decision);
+      written = true;
       await this.#loadQueues();
     } catch (error) {
-      this.#fail(error);
+      this.#fail(error, written);
     } finally {
       this.busy = false;
     }
@@ -138,12 +152,14 @@ export class ApprovalsScreen extends LitElement {
   async #decideAbsence(absenceId: string, decision: "approved" | "rejected"): Promise<void> {
     if (this.busy) return;
     this.busy = true;
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await this.api.decideAbsence(absenceId, decision);
+      written = true;
       await this.#loadQueues();
     } catch (error) {
-      this.#fail(error);
+      this.#fail(error, written);
     } finally {
       this.busy = false;
     }

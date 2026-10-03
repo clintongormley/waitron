@@ -139,11 +139,9 @@ export class DeviceProfilesScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.errorKey = codeOf(error);
-    },
-    (error) => {
-      if (this.errorKey === codeOf(error)) this.errorKey = null;
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
     },
   );
 
@@ -154,6 +152,8 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private canvases: Canvas[] = [];
 
   @state() private errorKey: string | null = null;
+  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
 
   @state() private editingId: string | null = null;
   @state() private draftName = "";
@@ -191,7 +191,7 @@ export class DeviceProfilesScreen extends LitElement {
   }
 
   async #load(): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     try {
       await Promise.all([
         this.#queries.watch("listDeviceProfiles", [], (value) => {
@@ -202,18 +202,31 @@ export class DeviceProfilesScreen extends LitElement {
         }),
       ]);
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
+  }
+
+  #showError(code: string | null, fromRead = false): void {
+    this.errorKey = code;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
   }
 
   /** Reloads only the PROFILES: no profile write changes the canvas set. */
   async #mutate(action: () => Promise<unknown>): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await action();
+      written = true;
       this.profiles = await this.api.listDeviceProfiles();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(codeOf(error));
     }
   }
 
@@ -291,14 +304,14 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftCapabilities = [];
     this.draftFormFactor = FORM_FACTORS[0];
     this.draftInactivityMinutes = null;
-    this.errorKey = null;
+    this.#showError(null);
     this.mode = "editor";
   }
 
   /** Fetches the profile fresh via `getDeviceProfile(id)` rather than reusing the possibly-stale list
    * row. */
   async #openEditor(id: string): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     try {
       const profile = await this.api.getDeviceProfile(id);
       this.editingId = id;
@@ -314,7 +327,7 @@ export class DeviceProfilesScreen extends LitElement {
       this.#releaseHome();
       void this.#watchHome(id);
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
   }
 
@@ -360,7 +373,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftCapabilities = [];
     this.draftFormFactor = FORM_FACTORS[0];
     this.draftInactivityMinutes = null;
-    this.errorKey = null;
+    this.#showError(null);
   }
 
   /** The server accepts `""` as a name, so an empty name is refused here. */
@@ -368,7 +381,7 @@ export class DeviceProfilesScreen extends LitElement {
     if (this.saving) return;
     const name = this.draftName.trim();
     if (name === "") {
-      this.errorKey = "device_profiles.err_no_name";
+      this.#showError("device_profiles.err_no_name");
       return;
     }
     const id = this.editingId;
