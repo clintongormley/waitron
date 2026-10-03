@@ -49,7 +49,7 @@ export interface S3TestServer {
   log(): string;
   /** SIGTERM, then SIGKILL after a grace period; resolves once the process is gone either way. */
   stop(): Promise<void>;
-  /** Resolves once SIGSTOP has stopped the process. Throws once it has exited. */
+  /** Resolves once the process state reports stopped after SIGSTOP. Throws once it has exited. */
   pause(): Promise<void>;
   /** Lets a paused process run again (SIGCONT). Throws once it has exited. */
   resume(): void;
@@ -134,6 +134,7 @@ class PortTaken extends Error {}
 export async function startS3TestServer(opts: {
   bin: string;
   root: string;
+  readState?: () => Promise<string | undefined>;
 }): Promise<S3TestServer> {
   const data = join(opts.root, "data");
   const meta = join(opts.root, "meta");
@@ -143,7 +144,7 @@ export async function startS3TestServer(opts: {
   const taken: string[] = [];
   for (let attempt = 0; attempt < PORT_ATTEMPTS; attempt += 1) {
     try {
-      return await startOnPort(opts.bin, data, meta, await freePort(), deadline);
+      return await startOnPort(opts.bin, data, meta, await freePort(), deadline, opts.readState);
     } catch (error) {
       if (!(error instanceof PortTaken)) throw error;
       taken.push(error.message);
@@ -160,6 +161,7 @@ async function startOnPort(
   meta: string,
   port: number,
   deadline: number,
+  readState?: () => Promise<string | undefined>,
 ): Promise<S3TestServer> {
   const accessKeyId = `waitron${randomBytes(8).toString("hex")}`;
   const secretAccessKey = randomBytes(16).toString("hex");
@@ -208,19 +210,26 @@ async function startOnPort(
     }
     child.kill(name);
   };
-  const state = async (): Promise<string | undefined> => {
-    if (child.pid === undefined) return undefined;
-    try {
-      if (process.platform === "linux") {
-        const stat = await readFile(`/proc/${child.pid}/stat`, "utf8");
-        return stat.slice(stat.lastIndexOf(") ") + 2, stat.lastIndexOf(") ") + 3);
+  const state =
+    readState ??
+    (async (): Promise<string | undefined> => {
+      if (child.pid === undefined) return undefined;
+      try {
+        if (process.platform === "linux") {
+          const stat = await readFile(`/proc/${child.pid}/stat`, "utf8");
+          return stat.slice(stat.lastIndexOf(") ") + 2, stat.lastIndexOf(") ") + 3);
+        }
+        const { stdout } = await promisify(execFile)("ps", [
+          "-o",
+          "state=",
+          "-p",
+          String(child.pid),
+        ]);
+        return stdout.trim().charAt(0);
+      } catch {
+        return undefined;
       }
-      const { stdout } = await promisify(execFile)("ps", ["-o", "state=", "-p", String(child.pid)]);
-      return stdout.trim().charAt(0);
-    } catch {
-      return undefined;
-    }
-  };
+    });
 
   const server: S3TestServer = {
     endpoint: `http://127.0.0.1:${port}`,

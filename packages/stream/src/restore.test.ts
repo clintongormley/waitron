@@ -183,6 +183,19 @@ describe("restoreGeneration", () => {
     });
   });
 
+  it("keeps the restore refusal when failure diagnostics throw", async () => {
+    const { promise } = await run("fail", {
+      onFailure: () => {
+        throw new Error("diagnostic output is unavailable");
+      },
+    });
+
+    await expect(promise).rejects.toMatchObject({
+      code: "backup.stream_restore_failed",
+      params: { exitCode: 1, diskFull: false },
+    });
+  });
+
   it("says the disk filled when Litestream's error is the system's 'no space left on device'", async () => {
     const { promise } = await run("full");
     await expect(promise).rejects.toMatchObject({

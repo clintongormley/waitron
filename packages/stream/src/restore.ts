@@ -119,7 +119,11 @@ export async function restoreGeneration(args: RestoreGenerationArgs): Promise<vo
     clearTimeout(timer);
   }
   if (abandoned || exitCode !== 0) {
-    args.onFailure?.({ exitCode, output: child.output(), abandoned });
+    try {
+      args.onFailure?.({ exitCode, output: child.output(), abandoned });
+    } catch {
+      // Diagnostics must not replace the restore refusal.
+    }
     throw new AppError("backup.stream_restore_failed", {
       exitCode: abandoned ? null : exitCode,
       diskFull: exitCategory(exitCode, child.output()) === "disk_full",

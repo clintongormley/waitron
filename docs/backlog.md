@@ -4926,8 +4926,9 @@ characters. Left open:
   That is inferred: the error's `exitCode` was not in the log, and the run was not repeated before
   this was written down. The PR's own change is not on that path; the test's sales go through
   `POST /api/sales`, which does not reach `readPartyBills`. W30 adds failure diagnostics with the
-  actual child exit code, whether the restore hit its ceiling, and Litestream's captured output;
-  the cause of the one-off failure remains open. Next action: inspect those details from any new
+  child exit code when available, whether the restore was abandoned, and whatever Litestream
+  output was captured; output may be empty on abandonment. The cause of the one-off failure remains
+  open. Next action: inspect those details from any new
   failing run before choosing a repair.
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full (in a Linux
