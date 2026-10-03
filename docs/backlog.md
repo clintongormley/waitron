@@ -1393,8 +1393,8 @@ not cover an empty table; the fix adds that case for both editors.
 
 **The number field with − and + is still too wide (A263, owner 2026-10-03) — DONE. (The owner chose
 option C: 24px plain − and + either side of a centred number, and clearable Minimum and Maximum
-choices that show "None" while empty; a maximum of 0 is refused by the form and the request check,
-and the database CHECK is unchanged.)**
+choices that show the placeholder "None" while empty; a maximum of 0 is refused by the form and the
+request check, and the database CHECK is unchanged.)**
 The owner, on a screenshot of the extras list editor after A202: _"i'm not sure about the
 number fields with the +- buttons, they're very wide"_. Each button was `--wt-tap-min` (44px) wide,
 so 88px of every box was buttons; the box was at least `--wt-stepper-field-width` (152px), or
@@ -1433,9 +1433,9 @@ the backup screen, the extras list editor and the venue operations screen).
 - the stepper has a new `clearable` setting: − at its lowest number or below empties the box
   instead of being disabled there;
 - in the extras list editor, Minimum and Maximum choices sit under a "Number of choices" heading.
-  Both are clearable from 1, so − goes 3 → 2 → 1 → blank, and an empty box shows the hint "None"
-  ("Ninguna"). A blank minimum is saved as 0, and a saved 0 shows as the empty box; a typed 0 is
-  kept as typed. A blank maximum means no limit. A maximum of 0 is refused by the form
+  Both are clearable from 1, so − goes 3 → 2 → 1 → blank, and an empty box shows "None"
+  ("Ninguna") as its placeholder. A blank minimum is saved as 0, and a saved 0 shows as the empty
+  box; a typed 0 is kept as typed. A blank maximum means no limit. A maximum of 0 is refused by the form
   (`extras.max_picks_zero`) and by `parseExtraListInput`
   (`packages/catalogue/src/extra-contract.ts`, `extras.invalid` naming `maxPicks`); the database
   CHECK in `packages/catalogue/src/schema/extras.ts` is unchanged, because changing it rebuilds the

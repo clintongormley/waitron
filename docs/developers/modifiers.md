@@ -68,7 +68,8 @@ Configuration transfer copies rows without going through that parser, so a store
 still possible, and a reader of `defaultLabelId` has to accept one.
 
 An **extras list** bounds how many picks it takes — `minPicks` 0 makes it optional, 1 or more makes
-it required, `maxPicks` null leaves it uncapped — and each item bounds its own product with
+it required, `maxPicks` null leaves it uncapped and is otherwise at least 1 (the request check
+refuses 0; the database CHECK still allows it) — and each item bounds its own product with
 `maxQuantity` (at least 1, where 1 means "one or none"). An item names a product and adds only the
 terms of the offer: it duplicates none of the product's names, VAT class, allergens, dietary labels
 or photo, which all come from the product. Each item stores the amount one pick adds in the
