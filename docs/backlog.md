@@ -2290,7 +2290,9 @@ earlier request when the operator comes back to it, which is the rule's "starts 
 exception, so each of its fields needs a judgement rather than a straight swap. Other screens' "?"
 buttons were not reviewed against the rule. Separately, the role screen
 (`apps/setup/src/screens/role-screen.ts`), reached from Join or recover, still shows its choices as
-cards with buttons rather than `wt-choice-row` rows.
+cards with buttons rather than `wt-choice-row` rows. The certificate help page the setup wizard opens
+(`/setup/trust`, drawn by `apps/server/src/trust-page.ts`) still writes the browser's warning as
+“not secure” in quotes, where the wizard's first screen (#1107) now writes Not secure without them.
 
 The original walkthrough is retained under *Detail → Setup wizard*.
 
@@ -3754,7 +3756,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `params`. It came in with #296 (`fabdb224d`). Fix: move it onto the request helper's
   `as: "blob"` option, which the VAT return download uses.
 
-- **Does setup need to create a till at all? (A238) — OPEN (owner, 2026-10-03).** Every setup
+- **Remove the till that setup creates (A238) — OPEN, design not started (owner, 2026-10-03).** Every setup
   creates one till: Demo names it "Caja 1" itself, and Prepare and Live ask for a "Till name"
   (`packages/provisioning/src/venue-plan.ts`, `create-till`; `applyVenue` refuses a plan without
   one). The box saves that till's id as its default. Requests from a paired device use the
@@ -3791,6 +3793,15 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     - Remove it: medium to large. The order routes move to the device's till, which changes what
       the order history hash covers. `applyVenue` stops requiring a till, and many test fixtures
       change. No migration is needed.
+  - **Owner decision (2026-10-03): remove it, on its own branch, with the full review.** Their
+    principle: any device can do everything; opening the cash drawer is the one exception so far
+    (till form factor only), and even that is open to debate. Fixing the receipt and payment-slip
+    printer routes goes with it.
+  - Open question before the design is written: a handheld today must attach to an existing till
+    (`resolveDeviceBinding`, `apps/server/src/device.ts`). With no setup till, the first device
+    could be a handheld with nothing to attach to. Choose whether every device gets its own till,
+    handhelds keep sharing one, or a handheld may do either. Also ask whether handhelds share a till
+    on purpose today, for example to count cash per till.
 
 - **Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29).** A page saying
   what the section is for and what is in it, opened by the section's header. It was the answer to
