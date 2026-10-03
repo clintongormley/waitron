@@ -579,9 +579,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   the next step that can throw** (`apps/server/src/boot.ts`), or a failed start leaves it running on
   a store the unwind has just closed. The landing listener, started last, is the one step not on the
   list. Guard: `apps/server/src/boot.failed-start.test.ts`, weaker than its name — it covers only
-  the duties it names, so a new one that forgets is seen by nothing, and it does not observe the
-  ORDER (work stopping before the store closes) or that the waits finish before the store closes:
-  removing `await loop` or `liveEvents.close()` from the undos still passes. Receipt:
+  the duties it names, so a new one that forgets is seen by nothing. Dropping `.reverse()` or
+  removing `liveEvents.close()` now fails, but removing `await loop` still passes, so not every
+  stop is proven to finish before the store closes. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md).
 - **There is no tenant column. The taxpayer is the one row in `tenants` (id = 1, singleton check); a
   query that wants "this tenant's rows" reads the table.** (2026-09-14, #378.)

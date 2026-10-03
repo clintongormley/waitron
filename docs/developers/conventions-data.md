@@ -1209,6 +1209,11 @@ and throwing-undo cases close a listener that has not bound yet — its close re
 `ERR_SERVER_NOT_RUNNING`, which the unwind drops — so only the trading and tunnel cases close a
 bound one.
 
+On 2026-10-03, W3 added failed-start cases for a rejecting cloud worker and a throwing change-feed
+unsubscribe. Against the changed suite, removing `.reverse()` timed out in the trading and cloud
+cases, and removing `liveEvents.close()` failed its assertion. Removing `await loop` still passed
+all 15 cases. The 2026-09-26 deletion results above describe the suite as it stood then.
+
 ## A by-id read still needs its own `eq(table.tenantId, cfg.tenantId)` — one-tenant-per-database is NOT the query's isolation boundary
 
 > **Superseded 2026-09-14.** There is no tenant column to compare against any more: the taxpayer is

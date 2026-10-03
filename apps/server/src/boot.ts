@@ -2062,6 +2062,7 @@ async function bootServer(
         }),
       })
     : undefined;
+  // The unwind runs newest first: abort before awaiting either duty, even if one rejects.
   undoOnFailure.push(async () => cloudSnapshots);
   undoOnFailure.push(async () => cloudWorker);
   undoOnFailure.push(async () => cloudController.abort());
