@@ -301,6 +301,15 @@ Each fix names the test that holds it; each guard is proven by deletion when bui
   (CLAUDE.md §5), and in Veri\*Factu mode Orden art. 3 switches off the art. 7.f clock duty. Tests:
   "a clock a day ahead raises the alert and the sale goes through"; "the readiness test reports a
   name mismatch".
+  - **A change to what AEAT checks is tested before it is saved** (owner, 2026-10-03, with D2). The
+    readiness test (`apps/server/src/fiscal-readiness-runner.ts`) files one sale with AEAT's
+    pre-production service from its own throwaway database beside the venue's, never the venue
+    database. Setup already refuses to provision without an accepted test (`assertFiscalReady`,
+    `apps/server/src/setup-api.ts`), and its fingerprint covers the tax id, the business name, the
+    fiscal territory and the certificate. Today only setup sets those; a search found no later route
+    that changes them. Any screen or command that later changes one runs the same test and saves only
+    on an accepted answer. Whether the test catches a business name AEAT's register does not hold
+    depends on the pre-production service checking names, which §13's fifth probe settles.
 
 P1 and P2 are the urgent ones: P1 is the only high-likelihood cause, and without P2 every collision in
 C2–C6 is silent. P5 and P6 depend on the topology work and may land later.
@@ -316,6 +325,12 @@ Today a stop is classified only by which branch of `drain.ts` fired. After this 
 | **Ordinary refusal**    | `Incorrecto` with any code but 3000 — bad data on one record, or a cause about us (C9)                                                                                      | The record stays `rechazado`; the chain carries on (§7.5); an alert names the record and AEAT's reason            |
 | **Held**                | A cancellation, credit note or substitution naming an invoice whose record is `divergente` or `rechazado`                                                                   | The record becomes `retenido`, is never sent, and goes on the adviser list                                        |
 | **Our ordering bug**    | A cancellation refused 3002 because its sale had not been sent; a resent sale meeting our own cancellation                                                                  | Removed by P1 and P2                                                                                              |
+
+**The same sale recorded twice is not a divergence that starts a chain** (owner, 2026-10-03, with
+D1). When AEAT's stored record under our key has our issue date, total and tax total (all returned by
+the lookup, `RespuestaConsultaLR.xsd`), it is our own sale recorded a second time — for example a
+till's retry reaching a rolled-back copy. The record is marked `divergente` with that cause, listed
+for the adviser until asesor Q38 is answered, and is not counted by §7.1's step that starts a chain.
 
 `divergente` and `retenido` are terminal for their one record and never hold others. With D2 below, a
 refusal holds nothing either, so **nothing writes `detenido` any more**: the state, `haltSuccessors`,
@@ -616,10 +631,12 @@ until answered. What changed in the move:
 
 Each has the recommended default this design is written to.
 
-1. **D1 — Automatic or manual new chain.** Recommended: automatic, straight after the divergence is
-   saved (§7.1), with the loop guard and a manual start for administrators (§7.7).
-2. **D2 — An ordinary refusal no longer stops the chain** (§7.5). Recommended: yes, once §13's first
-   probe shows AEAT accepts a record linked to a refused one. This changes what is filed after a
+1. **D1 — Automatic or manual new chain. DECIDED (owner, 2026-10-03): automatic,** straight after
+   the divergence is saved (§7.1), with the loop guard and a manual start for administrators (§7.7).
+   A duplicate that is the same sale recorded twice starts no chain (§6).
+2. **D2 — An ordinary refusal no longer stops the chain** (§7.5). **DECIDED (owner, 2026-10-03):
+   yes, once §13's first probe shows AEAT accepts a record linked to a refused one;** if it does
+   not, D2 comes back to the owner. This changes what is filed after a
    refusal: later records go to AEAT instead of waiting forever.
 3. **D3 — The series is read per sale and `WAITRON_TILL_SERIES_ID` goes** (§7.2). Recommended: yes,
    rather than a restart.
@@ -648,7 +665,7 @@ experiments **[ran]**. The correction record of §7.5 is a new builder and is NO
 
 ## 13. Probes to run on AEAT's pre-production service first
 
-The design rests on three things not yet measured at AEAT. Both are cheap to settle with
+The design rests on five things not yet measured at AEAT. All are cheap to settle with
 the `waitron-io/verifactu` library's live workflow (`live-aeat.yml`), and the plan runs them before
 the tasks that depend on them (D2, D5, the recovery):
 
@@ -665,6 +682,14 @@ the tasks that depend on them (D2, D5, the recovery):
    system by its software code, a new chain in this design would meet 2007 on its first record, and
    §6's shared-installation rule would misfire — Task 7 is then re-cut with the owner. Run
    36350894099 changed both at once (§4 C3).
+4. **Does AEAT accept a credit note naming an invoice it refused?** (added 2026-10-03, asesor Q37.)
+   Send a record AEAT refuses, then an `R5` naming that invoice's key, beside a control `R5` naming
+   an invoice AEAT accepted. If AEAT requires the named invoice to exist, the first is refused and
+   the control is not; if not, both come back `Correcto`.
+5. **Does the pre-production service refuse a business name its register does not hold for the tax
+   id?** (added 2026-10-03, P7.) Send one record with the registered name and one with a different
+   name for the same tax id. If it checks, the second is refused or flagged and the first is not; if
+   both come back `Correcto`, the readiness test cannot catch a wrong name and P7 needs another way.
 
 ## 14. Corrections the research found in the compliance notes
 

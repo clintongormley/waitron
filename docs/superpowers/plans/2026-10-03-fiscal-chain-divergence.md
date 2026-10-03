@@ -67,7 +67,7 @@ the spec's.
 - **Coverage** 98/98/98/95 in every touched package, never by an exclude or ignore comment.
 - **Comments** only for an invariant or a non-obvious why.
 
-## Task 0 — Three probes at AEAT's pre-production service (spec §13)
+## Task 0 — Five probes at AEAT's pre-production service (spec §13)
 
 Repository: `waitron-io/verifactu` (the library), its `live-aeat.yml` workflow and
 `scripts/live-aeat.mjs`. No Waitron code changes.
@@ -82,6 +82,10 @@ Repository: `waitron-io/verifactu` (the library), its `live-aeat.yml` workflow a
 - [ ] Add a probe step for spec §13's third question: a first record under an installation number
   that has already filed (control: expect 2007), and a first record under a NEW installation number
   with the SAME `IdSistemaInformatico`. Run 36350894099 changed both at once.
+- [ ] Add probe steps for spec §13's fourth and fifth questions: an `R5` naming an invoice AEAT
+  refused, beside a control `R5` naming an accepted one; and one record with the business name AEAT's
+  register holds for the tax id beside one with a different name. Write down beforehand what each
+  answer means (spec §13).
 - [ ] Add the run ids and the answers to the spec as a dated pointer under §13. If (a) is refused or
   flagged, D2 and D5 (Tasks 6 and 7) are re-decided with the owner before either starts. If the new
   installation with the same software code gets 2007, Task 7 (its 2007 rule above all) is re-cut with

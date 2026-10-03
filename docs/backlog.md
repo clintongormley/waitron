@@ -2360,7 +2360,7 @@ sale (no restart), what the
 dashboard says, AEAT's procedures quoted from primary sources, and eight asesor questions
 (Q33–Q40 in `docs/compliance/asesor-questions.md`, rewritten with their background on 2026-10-03). The
 [plan](superpowers/plans/2026-10-03-fiscal-chain-divergence.md) has fourteen tasks (0–13), starting
-with three probes at AEAT's pre-production service. **Next action:** owner decides D1–D9 (spec §11)
+with five probes at AEAT's pre-production service. **Next action:** owner decides D1–D9 (spec §11)
 and sends the asesor questions (Q33–Q40); the build is queued only after approval. Tasks 1, 2, 3, 6,
 7, 9 and 10 end `needs-owner-review`.
 
