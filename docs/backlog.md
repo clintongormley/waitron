@@ -476,30 +476,31 @@ as "no longer on this menu". A shortcut whose target a newly read version lacks 
 with no notice. **Next action:** the owner confirms this meets §9, or asks for a notice when a
 shortcut disappears.
 
-**Some secret checks still hold the venue's write lock while scrypt runs.** Every check against a
-stored hash from `packages/identity/src/secret-hash.ts` derives the key with `verifySecretAsync` on
-Node's thread pool. The print agent's token and the two join-status readers derive it with no
-transaction open (A125, #912), and so does the device token (`tryReadDevice`,
-`apps/server/src/device-session.ts`, menus Task 9). The PIN, manager-login and profile
-checks still await the key while their caller's `withTransaction` (the write lock,
-`packages/db/src/tenancy.ts`) is open, so other writes wait while the key is derived. A search on
-2026-09-30 found every server route among them inside `withTransaction`: PIN login (`loginWithPin`
-in `mountTillApi`, `apps/server/src/till-api.ts`), the drawer override (`POST /api/drawer/open`,
-same file), the payments PIN re-check (`verifyManagerPin` under `gated`,
-`apps/server/src/payments-api.ts`), the refund's override and PIN confirmation
-(`refundBillPayment`'s first transaction, `apps/server/src/bill-refunds.ts`), manager login
-(`apps/server/src/management-api.ts`, and `loginManagerById` in `promote-api.ts` and
-`mirror-bundle-api.ts`), and profile changes (`updateProfile` in `apps/server/src/me-api.ts`, and
-`withCredentialChange` in `apps/server/src/management-api.ts`). **Next action:** move them out of
-`withTransaction`, as A125 did for the print agent. Still blocking the event loop: `hashSecret`
-derives with `scryptSync` (`secret-hash.ts`), so minting a token or setting a PIN or password stops
-the loop; and `deriveKey` (`apps/server/src/scrypt-kdf.ts`) runs `scryptSync` too, reached when the
-server encrypts or decrypts a configuration bundle, decrypts a restore archive or a sealed node
-state, or encrypts a recovery bundle. Left by #912's review: the two join-status readers answer from
-a hash read just before the key is derived, so a request denied or revoked in that window can get
-one stale `pending` or `approved` (both routes return only `{ status }` and issue no credential; the
-till and print-agent clients were not traced); and `verifySecretAsync` could be renamed
-`verifySecret` (optional).
+**Secret checks and the write lock: the PIN, manager-login and profile checks moved — DONE (W1, this
+PR); two blocking derivations and one stale-answer window remain OPEN.** Every check against a stored
+hash from `packages/identity/src/secret-hash.ts` derives the key with `verifySecretAsync` on Node's
+thread pool. The print agent's token and the two join-status readers derive it with no transaction
+open (A125, #912), and so does the device token (`tryReadDevice`, `apps/server/src/device-session.ts`).
+W1 moved the rest: PIN sign-in, the drawer override, the cancel of an invoiced order, the unpaid
+departure, the adjustment approver, the two payment attestations, the bill refund's override and
+confirmer, the four manager password sign-ins (email, membership, promote, mirror bundle) and the ten
+own-password profile and credential changes now derive the key before the transaction opens, and the
+check inside it reuses that result only while the row is unchanged
+(`docs/developers/conventions-data.md`). Nothing makes a NEW route do the same. **Still open:**
+`hashSecret` derives with `scryptSync` (`secret-hash.ts`), so minting a token or setting a PIN or
+password stops the event loop; and `deriveKey` (`apps/server/src/scrypt-kdf.ts`) runs `scryptSync`
+too, reached when the server encrypts or decrypts a configuration bundle, decrypts a restore archive
+or a sealed node state, or encrypts a recovery bundle. Left by #912's review: the two join-status
+readers answer from a hash read just before the key is derived, so a request denied or revoked in
+that window can get one stale `pending` or `approved` (both routes return only `{ status }` and issue
+no credential; the till and print-agent clients were not traced); and `verifySecretAsync` could be
+renamed `verifySecret` (optional).
+
+**A till sign-in whose PIN is not text answers 500, not `pin.invalid` — OPEN (found 2026-10-03 by W1).**
+`POST /api/session` (`mountTillApi`, `apps/server/src/till-api.ts`) with a PIN that is a number,
+`null`, missing or an object answers 500 `server.internal`; measured the same before and after W1.
+**Next action:** refuse a non-text PIN as `pin.invalid` before the throttle, as the payments
+attestation already refuses one (`apps/server/src/payments-api.ts`), with a failing case first.
 
 **The till's removed-layout warning outlives a sign-out.** When the home layout a device's profile
 chose is removed, the till warns until someone presses Dismiss. Signing out does not clear it
