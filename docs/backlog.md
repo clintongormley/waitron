@@ -2210,6 +2210,24 @@ it by itself later; its source code waits 7 days before counting such a job fail
 five questions. This settles A3's open "Printing A4 invoices on an office printer" design when
 built.
 
+### W41s. A fiscal chain that AEAT disagrees with — DESIGN FOR OWNER REVIEW (2026-10-03)
+
+The owner asked (2026-10-03, on W21's review) how a chain AEAT disagrees with can happen, how to
+prevent it, how to recover, and how to put things right with AEAT; today `drain.ts` stops such a
+chain for good and the alert says "Contact support". The
+[design](superpowers/specs/2026-10-03-fiscal-chain-divergence-design.md) ranks thirteen causes with
+their receipts. The top one is our own: a failed send backs off each record separately, so after a
+two-minute outage a void can be filed before its sale, and the chain stops for good (reproduced
+against the fake AEAT; dates from #15). Second, a duplicate answer AEAT reports as `Correcta` is
+taken as ours without comparing fingerprints, so an older database copy or a second venue under the
+same tax id collides silently. It proposes seven preventions, three kinds of stop, an automatic new
+chain in the divergence's own transaction with the series read per sale (no restart), what the
+dashboard says, AEAT's procedures quoted from primary sources, and nine asesor questions. The
+[plan](superpowers/plans/2026-10-03-fiscal-chain-divergence.md) has fourteen tasks (0–13), starting
+with two probes at AEAT's pre-production service. **Next action:** owner decides D1–D7 (spec §11)
+and sends the asesor questions (spec §10); the build is queued only after approval. Tasks 1, 2, 6, 7,
+10 and 11 end `needs-owner-review`.
+
 ### A2. The setup wizard
 
 The restore choice now includes guided Cloud recovery of a verified test-venue snapshot. The
