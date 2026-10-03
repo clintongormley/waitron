@@ -1586,14 +1586,17 @@ get 50->100->150 etc"_. The list item now stores a portion and the offer freezes
 price per portion. The saved child line records its physical amount and price basis; receipt and
 kitchen labels use the saved amount. The menu's published offer stays in use until republishing.
 
-**An extra sold by the piece prints as `x3` on receipts, kitchen tickets and the till (W53,
-owner 2026-10-03) — DONE.** The working line context saves whether its unit is Each when the line
-is added. Each shows its pick count per dish, while weight and volume retain the total physical amount and saved abbreviation.
+**An extra sold by the piece prints as `x3` on receipts, kitchen tickets and the till's filed-ticket
+view (W53, owner 2026-10-03) — DONE.** The working line context saves whether its unit is Each when
+the line is added. Each shows its pick count per dish, while weight and volume retain the total
+physical amount and saved abbreviation.
 This amends the display decision in the [A203 design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md);
 the filed sale amount and fiscal record are unchanged. The new context column defaults to false on
 existing rows, including open orders. Reset pre-production venues before using W53 with orders
 recorded before this migration; otherwise their live tickets and settled reprints can show the old
 unit wording.
+The live till basket still uses `×N` for modifier counts (`apps/till/src/widgets/basket.ts`);
+W53 changes the filed display surfaces.
 
 **Decided (owner, 2026-10-02):**
 
