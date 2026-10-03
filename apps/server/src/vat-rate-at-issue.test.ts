@@ -35,14 +35,14 @@ import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "./testing/nif.js";
 
-// A release that ships a reduced rate of 11% from 1 January 2027, the shipped table otherwise.
+// A release that ships a reduced rate of 4% from 1 January 2027, the shipped table otherwise.
 vi.mock("@waitron/catalogue/src/vat-rates.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("@waitron/catalogue/src/vat-rates.js")>();
   const table = {
     ...original.VAT_RATE_TABLE,
     reduced: [
       { from: null, rate: "10.00" },
-      { from: "2027-01-01", rate: "11.00" },
+      { from: "2027-01-01", rate: "4.00" },
     ],
   };
   return {
@@ -66,7 +66,7 @@ const MIDNIGHT = "2026-12-31T23:00:00.000Z";
 
 /** A 2.50 gross line split at each rate: base = gross × 100 ÷ (100 + rate), tax the difference. */
 const CANA_AT_10 = [{ rate: "10.00", base: "2.27", tax: "0.23" }];
-const CANA_AT_11 = [{ rate: "11.00", base: "2.25", tax: "0.25" }];
+const CANA_AT_4 = [{ rate: "4.00", base: "2.40", tax: "0.10" }];
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -340,7 +340,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     });
 
     expect(await filed(eve)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
-    expect(await filed(newYear)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_11 });
+    expect(await filed(newYear)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_4 });
   });
 
   it("a tab rung on the eve and paid on New Year's Day files the new rate for the dish, its extra and a round, at the same gross", async () => {
@@ -369,8 +369,8 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
 
     const sale = await filed(tabId);
     expect(sale.lines.map((line) => [line.productId, line.vatRate])).toEqual([
-      [v.products.burger, 1100],
-      [v.products.queso, 1100],
+      [v.products.burger, 400],
+      [v.products.queso, 400],
       [v.products.vino, 2100],
     ]);
     expect(sale.total).toBe(1438);
@@ -390,7 +390,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     expect(invoice).not.toBeNull();
     expect(await filed(tabId)).toMatchObject({
       total: 500,
-      vatBreakdown: [{ rate: "11.00", base: "4.50", tax: "0.50" }],
+      vatBreakdown: [{ rate: "4.00", base: "4.81", tax: "0.19" }],
     });
   });
 
@@ -408,8 +408,8 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
 
     expect(out.outcome).toBe("captured");
     const sale = await filed(id);
-    expect(sale).toMatchObject({ issuedAt: MIDNIGHT, total: 250, vatBreakdown: CANA_AT_11 });
-    expect(out.outcome === "captured" && out.ticket.vatBreakdown).toEqual(CANA_AT_11);
+    expect(sale).toMatchObject({ issuedAt: MIDNIGHT, total: 250, vatBreakdown: CANA_AT_4 });
+    expect(out.outcome === "captured" && out.ticket.vatBreakdown).toEqual(CANA_AT_4);
   });
 
   it("invoice-first files at placing: placed on the eve and collected on New Year's Day keeps the old rate; parked on the eve and placed on New Year's Day takes the new one", async () => {
@@ -428,7 +428,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     await placeOrder(deps(), v.cfg, after, OPERATOR, v.cfg.tillId);
 
     expect(await filed(before)).toMatchObject({ issuedAt: EVE, vatBreakdown: CANA_AT_10 });
-    expect(await filed(after)).toMatchObject({ issuedAt: NEW_YEAR, vatBreakdown: CANA_AT_11 });
+    expect(await filed(after)).toMatchObject({ issuedAt: NEW_YEAR, vatBreakdown: CANA_AT_4 });
   });
 
   it("ticket-then-pay: placed on the eve and collected on New Year's Day files the new rate", async () => {
@@ -444,7 +444,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
       tender: { method: "cash", amount: "2.50" },
     });
 
-    expect(await rates(id)).toEqual([1100]);
+    expect(await rates(id)).toEqual([400]);
   });
 });
 
@@ -473,7 +473,7 @@ describe("the day is the invoice's own, read once", () => {
       issuedAt: "2026-12-31T22:59:59.999Z",
       vatBreakdown: CANA_AT_10,
     });
-    expect(await filed(onTheDot)).toMatchObject({ issuedAt: MIDNIGHT, vatBreakdown: CANA_AT_11 });
+    expect(await filed(onTheDot)).toMatchObject({ issuedAt: MIDNIGHT, vatBreakdown: CANA_AT_4 });
   });
 
   it("prices and dates the invoice from one reading, even when the clock crosses midnight during the request", async () => {
@@ -516,7 +516,7 @@ describe("the day is the invoice's own, read once", () => {
       tender: { method: "cash", amount: "2.50" },
     });
 
-    expect(await filed(east)).toMatchObject({ offsetMinutes: 120, vatBreakdown: CANA_AT_11 });
+    expect(await filed(east)).toMatchObject({ offsetMinutes: 120, vatBreakdown: CANA_AT_4 });
     expect(await filed(utc)).toMatchObject({ offsetMinutes: 0, vatBreakdown: CANA_AT_10 });
   });
 });
@@ -542,6 +542,6 @@ describe("publishing a menu before a rate's legal date", () => {
     });
 
     expect(await rates(eve)).toEqual([1000]);
-    expect(await rates(newYear)).toEqual([1100]);
+    expect(await rates(newYear)).toEqual([400]);
   });
 });
