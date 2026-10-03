@@ -1336,18 +1336,18 @@ at the bottom. The Kitchen screen shows the same list, replacing its one-card-pe
 with its own Save buttons and typed-in order numbers — so the list is one widget both use.
 Closing the window selects a course just added, and the product's unsaved edits survive it.
 
-**Allergens and dietary preferences are edited in place (A213) — OPEN.** The owner: _"for
-nutritional info, we can show: Allergens: Nuts, Seeds / Dietary preferences: None specified. And
-when you click on one it converts into a multi-value combobox (ie no need for the Edit button)"_,
-and _"each one doesn't need a box around it, like we've removed them for descriptors etc"_.
-Today `dashboard-allergen-dietary-picker` (`allergen-dietary-picker.ts`) draws a bordered card
-for each with "None selected" and an Edit button. **Wanted:** two plain lines, "Allergens: Nuts,
-Seeds" and "Dietary preferences: None specified", with no card and no Edit button; clicking or
-pressing Enter on a line turns it into a `wt-combobox` with `multiple` set, and leaving it turns it
-back into the line. Each line is a button for a keyboard and a screen reader ("Allergens: Nuts,
-Seeds, edit"). The product picker offers no "may contain" today (only the ingredient form's
-`allergen-picker.ts` does), and the draft keeps each allergen's stored presence when the list
-changes; keep that. A variant's hints of its parent's values (`nutritionHints`) stay meaningful.
+**Allergens and dietary preferences are edited in place (A213) — DONE (#1079).** The owner:
+_"for nutritional info, we can show: Allergens: Nuts, Seeds / Dietary preferences: None specified.
+And when you click on one it converts into a multi-value combobox (ie no need for the Edit
+button)"_, and _"each one doesn't need a box around it, like we've removed them for descriptors
+etc"_. Built: `dashboard-allergen-dietary-picker` draws each field as one borderless line, its
+name in bold and then its values or "None specified" (`modifiers.none_specified`, which replaced
+`modifiers.none_selected`). The line is a button named "Allergens: Milk, Eggs, edit"
+(`modifiers.edit_named`); a click or Enter swaps it for a labelled multiple `wt-combobox` with
+focus in it, Escape swaps it back with focus on the line (the second Escape, when the first closed
+the open list) without closing the product's window, and focus leaving the combobox swaps it back.
+The product picker still offers no "may contain", a stored allergen keeps its presence when another
+is added, and a variant's hints of its parent's values are unchanged.
 
 **No box around Pricing (A214) — DONE (#1065).** The owner: _"Pricing also doesn't need the box around it"_.
 Built: `renderPrice` draws a borderless `fieldset class="group"` whose legend is the same upper-case

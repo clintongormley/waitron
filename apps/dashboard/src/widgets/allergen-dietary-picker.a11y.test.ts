@@ -28,7 +28,7 @@ describe.each(["light", "dark"] as const)("allergen-dietary-picker a11y (%s them
       { value: { allergens: ["milk"], dietary: ["vegan"] } },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>(`[data-test="edit-${field}"]`)!.click();
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${field}-line"]`)!.click();
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
