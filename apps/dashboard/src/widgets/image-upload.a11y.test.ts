@@ -1,12 +1,28 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./image-upload.js";
+// The app registers `media-image-picker` through the module registry, as dashboard-app.ts does.
+import "@waitron/dashboard-modules";
 import type { ImageUpload } from "./image-upload.js";
 import type { DashboardApi } from "../api/client.js";
 
 function stubApi(): DashboardApi {
   return {
     imageLibraryRequest: vi.fn().mockResolvedValue({ image: "abc.png" }),
+  } as unknown as DashboardApi;
+}
+
+function stubLibraryApi(): DashboardApi {
+  const image = {
+    id: "bread",
+    filename: "bread.png",
+    names: { es: "Pan", en: "Bread" },
+    createdAt: "2026-09-12T10:00:00Z",
+    updatedAt: "2026-09-12T10:00:00Z",
+    usageCount: 1,
+  };
+  return {
+    imageLibraryRequest: vi.fn().mockResolvedValue({ images: [image], total: 1 }),
   } as unknown as DashboardApi;
 }
 
@@ -66,12 +82,22 @@ describe.each(["light", "dark"] as const)("image-upload a11y (%s theme)", (theme
   it("renders accessibly as a thumbnail with its library open", async () => {
     const { el, host } = await mountWidget<ImageUpload>(
       "dashboard-image-upload",
-      { api: stubApi(), thumbnail: true, image: "abc.png" },
+      { api: stubLibraryApi(), thumbnail: true, image: "abc.png" },
       theme,
     );
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-image]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=remove-image]")).not.toBeNull();
+    // Without these the scan could pass on a window whose library never rendered.
+    expect(customElements.get("media-image-picker")).toBeDefined();
+    const picker = el.shadowRoot!.querySelector("media-image-picker")!;
+    await vi.waitFor(() =>
+      expect(
+        picker.shadowRoot
+          ?.querySelector("dashboard-image-library")
+          ?.shadowRoot?.querySelector("[data-image=bread]"),
+      ).toBeTruthy(),
+    );
     await expectNoA11yViolations(host);
   });
 });
