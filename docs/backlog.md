@@ -1406,7 +1406,7 @@ axe's `violations` list, so text set to exactly its background colour, which axe
 `incomplete`, passed every a11y test.
 
 **The accessibility checks fail when axe cannot confirm a colour contrast because of the colours
-themselves (A226, owner 2026-10-03) — DONE (branch `fix/a11y-incomplete-contrast`).** All five copies
+themselves (A226, owner 2026-10-03) — DONE (#1092).** All five copies
 of `expectNoA11yViolations` (`packages/ui/src/a11y-helpers.ts`, `packages/ui-core/src/a11y-helpers.ts`,
 and `src/widgets/test-helpers.ts` in `apps/dashboard`, `apps/setup` and `apps/till`) now also fail on a
 `color-contrast` result axe 4.13.0 left undecided with the reason `equalRatio`, `fgAlpha` or
