@@ -317,8 +317,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Demasiados intentos. Espera un minuto e inténtalo de nuevo.",
   },
   "email.test_inbox_unavailable": {
-    en: "The test inbox is unavailable because account email is not using local capture",
-    es: "La bandeja de pruebas no está disponible porque el correo de cuentas no usa la captura local",
+    en: "The email inbox is unavailable because account email is not using local capture",
+    es: "La bandeja de correo no está disponible porque el correo de cuentas no usa la captura local",
   },
   "management.request_invalid": {
     en: "Check the form and try again",

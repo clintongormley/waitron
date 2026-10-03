@@ -310,7 +310,6 @@ const NAV_SCREENS = [
   "diagnostics",
   "backup",
   "cloud",
-  "email",
 ] as const;
 
 const NAV_GROUP_KEYS = [
@@ -1677,6 +1676,7 @@ describe("dashboard-app", () => {
     );
     for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
     for (const s of NAV_SCREENS) expect(navItem(el, s)).toBeTruthy();
+    expect(navItem(el, "email"), "the banner's inbox link is the way to the inbox").toBeNull();
     expect(navItem(el, "sections")).toBeNull();
     expect(navItem(el, "recipe")).toBeNull();
     expect(navItem(el, "location-menus")).toBeNull();
@@ -2204,6 +2204,28 @@ describe("dashboard-app", () => {
         }),
       });
       await flush(el);
+      expect(el.shadowRoot!.querySelector(tag)).not.toBeNull();
+      expect(location.pathname).toBe(path);
+    },
+  );
+
+  it.each([
+    ["manager", "dashboard-email-screen", "/manage/email"],
+    ["admin", "dashboard-email-screen", "/manage/email"],
+    ["supervisor", "dashboard-overview-screen", "/manage/overview"],
+  ])(
+    "opens /manage/email, which has no sidebar entry, signed in as %s, only for a manager or an admin",
+    async (role, tag, path) => {
+      history.replaceState(null, "", "/manage/email");
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({ ...meResponse, role }),
+          listStaff: vi.fn().mockResolvedValue([]),
+          getEmailInbox: vi.fn(() => new Promise(() => undefined)),
+        }),
+      });
+      await flush(el);
+      expect(navItem(el, "email")).toBeNull();
       expect(el.shadowRoot!.querySelector(tag)).not.toBeNull();
       expect(location.pathname).toBe(path);
     },
@@ -3538,13 +3560,15 @@ describe("the banner's email inbox link", () => {
         });
 
   it.each([
-    ["signed in", true],
-    ["signed out", false],
+    ["signed in", "demo", true],
+    ["signed out", "demo", false],
+    ["signed in", "prepare", true],
+    ["signed out", "prepare", false],
   ] as const)(
-    "in a demo, %s, links to the inbox just before the language chooser",
-    async (_state, signedIn) => {
+    "%s, when the intent is %s, links to the inbox just before the language chooser",
+    async (_state, intent, signedIn) => {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-        api: withIntent(signedIn, "demo"),
+        api: withIntent(signedIn, intent),
       });
       await flush(el);
       expect(login(el) === null).toBe(signedIn);
@@ -3556,10 +3580,8 @@ describe("the banner's email inbox link", () => {
   );
 
   it.each([
-    ["signed in", "prepare", true],
     ["signed in", "live", true],
     ["signed in", undefined, true],
-    ["signed out", "prepare", false],
     ["signed out", "live", false],
     ["signed out", undefined, false],
   ] as const)("shows no inbox link %s when the intent is %s", async (_state, intent, signedIn) => {
@@ -3573,16 +3595,20 @@ describe("the banner's email inbox link", () => {
   });
 
   it.each([
-    ["staff", false],
-    ["supervisor", false],
-    ["manager", true],
-    ["admin", true],
+    ["demo", "staff", false],
+    ["demo", "supervisor", false],
+    ["demo", "manager", true],
+    ["demo", "admin", true],
+    ["prepare", "staff", false],
+    ["prepare", "supervisor", false],
+    ["prepare", "manager", true],
+    ["prepare", "admin", true],
   ] as const)(
-    "in a demo signed in as %s, shows the inbox link only to a session that may open the inbox",
-    async (role, shown) => {
+    "when the intent is %s, signed in as %s, shows the inbox link only to a session that may open the inbox",
+    async (intent, role, shown) => {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
-          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, onboardingIntent: "demo" }),
+          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, onboardingIntent: intent }),
           listStaff: vi.fn().mockResolvedValue([]),
         }),
       });
@@ -3779,13 +3805,18 @@ describe("alerts in the shell", () => {
     },
   );
 
-  it.each(["en-GB", "es-ES"] as const)(
-    "in a demo in %s at 1280px, puts the email inbox link on the lockup's row just before the language chooser",
-    async (locale) => {
+  it.each([
+    ["demo", "en-GB"],
+    ["demo", "es-ES"],
+    ["prepare", "en-GB"],
+    ["prepare", "es-ES"],
+  ] as const)(
+    "when the intent is %s, in %s at 1280px, puts the email inbox link on the lockup's row just before the language chooser",
+    async (intent, locale) => {
       const api = alertsApi({
         getMe: vi
           .fn()
-          .mockResolvedValue({ ...meResponse, sessionDefault: locale, onboardingIntent: "demo" }),
+          .mockResolvedValue({ ...meResponse, sessionDefault: locale, onboardingIntent: intent }),
         listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1")] }),
       });
       const { el, host } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -3819,20 +3850,19 @@ describe("alerts in the shell", () => {
     },
   );
 
-  it.each([
-    ["en-GB", 360],
-    ["en-GB", 390],
-    ["en-GB", 480],
-    ["es-ES", 360],
-    ["es-ES", 390],
-    ["es-ES", 480],
-  ] as const)(
-    "in a demo in %s, fits every banner item without overlap at %ipx, the email inbox link included",
-    async (locale, width) => {
+  it.each(
+    (["demo", "prepare"] as const).flatMap((intent) =>
+      (["en-GB", "es-ES"] as const).flatMap((locale) =>
+        ([360, 390, 480] as const).map((width) => [intent, locale, width] as const),
+      ),
+    ),
+  )(
+    "when the intent is %s, in %s, fits every banner item without overlap at %ipx, the email inbox link included",
+    async (intent, locale, width) => {
       const api = alertsApi({
         getMe: vi
           .fn()
-          .mockResolvedValue({ ...meResponse, sessionDefault: locale, onboardingIntent: "demo" }),
+          .mockResolvedValue({ ...meResponse, sessionDefault: locale, onboardingIntent: intent }),
         listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1", "error")] }),
       });
       const { el, host } = await mountWidget<DashboardApp>("dashboard-app", {
