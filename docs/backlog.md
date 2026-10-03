@@ -295,7 +295,7 @@ alert. A dish made at the till is never moved or re-routed
   pass read its frozen customer `descriptions` (`readQueueSubItems`,
   `apps/server/src/working-order.ts`). A split-off extra's cross-reference reads kitchen names on
   both surfaces. Decide which name the following extra should show, then make the surfaces agree.
-- **Done (lane C's W27) — the till navigation fits a 390 px screen** (PF6 Task 9's wide
+- **Done (lane C's W27, #1140) — the till navigation fits a 390 px screen** (PF6 Task 9's wide
   screenshot). The header bar wraps onto more rows at phone width; the entry under C130's review
   below has the measurements.
 - **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01). A kitchen working from paper
@@ -3238,7 +3238,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       countdown keeps running,
       since `wt-toast` (`packages/ui/src/components/wt-toast.ts`) pauses it only while the pointer
       or keyboard focus is on the pop-up. Decide whether an arriving alert should close the menu.
-    - **Done (lane C's W27) — the counter header fits at phone width.** The header, its tab row
+    - **Done (lane C's W27, #1140) — the counter header fits at phone width.** The header, its tab row
       and its button group wrap onto further rows (`apps/till/src/widgets/tab-shell.ts`). Measured
       in real Chromium at 390 px: with Find a bill, Kitchen, Pass, My schedule, Allergens, the
       language chooser, the operator and Log out all shown, every one sits on screen in English
