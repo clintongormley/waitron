@@ -29,6 +29,7 @@ import {
   streamSettingsPayload,
   type StreamHostDeps,
 } from "./stream-host.js";
+import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xd).toString("base64"),
@@ -190,6 +191,22 @@ describe("the live copy's wiring", () => {
       expect((await readStreamSettings(db, RING))?.bucket).toMatchObject({
         endpoint: "https://s3.example",
         prefix: "copies/",
+      });
+    });
+
+    it.each([
+      "venueId",
+      "endpoint",
+      "region",
+      "bucket",
+      "prefix",
+      "accessKeyId",
+      "secretAccessKey",
+    ])("refuses an older sealed bucket missing %s", async (field) => {
+      await omitStoredStreamField(db, RING, field);
+      await expect(readStreamSettings(db, RING)).rejects.toMatchObject({
+        code: "server.credential_unusable",
+        params: { purpose: "backup.stream", field },
       });
     });
 

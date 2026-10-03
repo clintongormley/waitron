@@ -38,6 +38,7 @@ import { mintNextMembershipDocument } from "./membership-mint.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { STREAM_PURPOSE, streamSettingsPayload, type StreamSettings } from "./stream-host.js";
+import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 import {
   REBUILD_MARKER,
   assertRestoredMembershipReadable,
@@ -592,6 +593,68 @@ describe("readBucketPointerTerm", () => {
 });
 
 describe("runFirstStart", () => {
+  it("keeps the restore marker until missing bucket settings are repaired", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING, {
+        purpose: STREAM_PURPOSE,
+        value: streamSettingsPayload({
+          venueId: LOCATION,
+          bucket: {
+            region: "eu-west-1",
+            bucket: "venue-copy",
+            prefix: "",
+            accessKeyId: "AKIA",
+            secretAccessKey: "secret-0123456789",
+          },
+        }),
+      }),
+    );
+    try {
+      await omitStoredStreamField(suite.db, RING, "endpoint");
+      const openStore = vi.fn(() => createMemoryObjectStore());
+      const log = vi.fn();
+      const firstStart = deps(stateDir, {
+        log,
+        pointerTerm: () => readBucketPointerTerm(suite.db, RING, { openStore }),
+      });
+      await expect(runFirstStart(firstStart)).resolves.toEqual({
+        mayStream: false,
+        failedSince: NOW.toISOString(),
+      });
+      expect(log).toHaveBeenCalledWith("error", "restore.first_start_failed", {
+        errorCode: "server.credential_unusable",
+      });
+      expect(openStore).not.toHaveBeenCalled();
+      await stat(join(stateDir, REBUILD_MARKER));
+      expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
+
+      await withTransaction(suite.db, (tx) =>
+        putCredential(tx, RING, {
+          purpose: STREAM_PURPOSE,
+          value: streamSettingsPayload({
+            venueId: LOCATION,
+            bucket: {
+              region: "eu-west-1",
+              bucket: "venue-copy",
+              prefix: "",
+              accessKeyId: "AKIA",
+              secretAccessKey: "secret-0123456789",
+            },
+          }),
+        }),
+      );
+      await expect(runFirstStart(firstStart)).resolves.toEqual({
+        mayStream: true,
+        failedSince: null,
+      });
+      expect(openStore).toHaveBeenCalledTimes(1);
+      await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: STREAM_PURPOSE }));
+    }
+  });
+
   it("opens for sales without streaming, logs restore.first_start_failed, and keeps the marker for the next start", async () => {
     const stateDir = await rebuiltStateDir("stream");
     const log = vi.fn();

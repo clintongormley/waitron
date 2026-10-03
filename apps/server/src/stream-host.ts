@@ -17,6 +17,7 @@ import {
   type StreamView,
 } from "@waitron/stream";
 import type { Logger } from "./logger.js";
+import { credentialField } from "./credentials.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import "./errors.js";
 
@@ -57,15 +58,21 @@ export async function readStreamSettings(
     tryGetCredential(tx, ring, { purpose: STREAM_PURPOSE }),
   );
   if (value === null) return null;
+  const field = (
+    name:
+      "venueId" | "endpoint" | "region" | "bucket" | "prefix" | "accessKeyId" | "secretAccessKey",
+  ) => credentialField(value, STREAM_PURPOSE, name);
+  const endpoint = field("endpoint");
+  const prefix = field("prefix");
   return {
-    venueId: value.venueId,
+    venueId: field("venueId"),
     bucket: {
-      endpoint: value.endpoint === ABSENT ? undefined : value.endpoint,
-      region: value.region,
-      bucket: value.bucket,
-      prefix: value.prefix === ABSENT ? "" : value.prefix,
-      accessKeyId: value.accessKeyId,
-      secretAccessKey: value.secretAccessKey,
+      endpoint: endpoint === ABSENT ? undefined : endpoint,
+      region: field("region"),
+      bucket: field("bucket"),
+      prefix: prefix === ABSENT ? "" : prefix,
+      accessKeyId: field("accessKeyId"),
+      secretAccessKey: field("secretAccessKey"),
     },
   };
 }
