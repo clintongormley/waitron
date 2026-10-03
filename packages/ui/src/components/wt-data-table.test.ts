@@ -1847,7 +1847,10 @@ test("a press outside the Filters panel closes it and updates its trigger", asyn
 });
 
 test("opening Filters moves focus inside; Escape closes it without reaching a surrounding dialog", async () => {
-  const el = await tableS({ columns: withStatus });
+  const status = withStatus[1]!;
+  const el = await tableS({
+    columns: [withStatus[0]!, { ...status, filter: { ...status.filter!, initial: "active" } }],
+  });
   const root = el.shadowRoot!;
   const trigger = root.querySelector<HTMLButtonElement>(".filters-trigger")!;
   const parent = document.createElement("div");
@@ -1858,7 +1861,9 @@ test("opening Filters moves focus inside; Escape closes it without reaching a su
   parent.append(el);
   host.append(parent);
   await userEvent.click(trigger);
-  expect(root.activeElement).toBe(root.querySelector(".filters-clear-all"));
+  expect(root.activeElement).toBe(root.querySelector(".filter-section summary"));
+  await userEvent.keyboard("{Enter}");
+  expect(rowKeysS(el)).toEqual(["1"]);
   await userEvent.keyboard("{Escape}");
   expect(root.querySelector(".filters-panel")!.matches(":popover-open")).toBe(false);
   expect(root.activeElement).toBe(trigger);

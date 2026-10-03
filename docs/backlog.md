@@ -2701,11 +2701,8 @@ put in the column headings because a phone scrolls columns out of sight and a hi
 filters. The units table's always-on checkboxes become a Select mode, as the product list already
 has.
 
-**Filters panel initial focus — OPEN, owner decision needed after W39.** Opening the panel focuses
-Clear all (`packages/ui/src/components/wt-data-table.ts`), so a second Enter can clear the filters.
-Move focus to the first section heading if the owner approves changing the existing focus assertion
-in `packages/ui/src/components/wt-data-table.test.ts`; the W39 queue's inherited rule prohibits
-editing that assertion without approval.
+**Filters panel initial focus — DONE (W39f, owner 2026-10-03).** Opening the panel focuses its first
+filter section, so a second Enter expands or collapses that section without clearing the filters.
 
 **The table's Columns button becomes a Customise dialog (A249, owner 2026-10-03) — DONE.**
 `wt-data-table` has an icon button opening a dialog that lists every column with a show/hide eye.
