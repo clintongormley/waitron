@@ -2114,6 +2114,177 @@ describe("till-app", () => {
     });
   });
 
+  describe("a navigation event that arrives on the lock screen", () => {
+    const handheld = () => ({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+    });
+    const devices = [
+      { device: "till", overrides: () => ({}), home: "counter", other: "floor" },
+      { device: "handheld", overrides: handheld, home: "floor", other: "order" },
+    ];
+
+    async function signIn(el: TillApp): Promise<void> {
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el);
+    }
+
+    async function lockedTill(overrides: Record<string, unknown>): Promise<TillApp> {
+      const { el } = await mountApp(overrides);
+      await flush(el);
+      await signIn(el);
+      emit(shell(el)!, "logout");
+      await flush(el);
+      return el;
+    }
+
+    const message = (el: TillApp) => el.shadowRoot!.querySelector("p.error")?.textContent ?? "";
+
+    describe.each(devices)("on a $device", ({ overrides, home, other }) => {
+      it.each([
+        { type: "show-station", detail: undefined },
+        { type: "show-expo", detail: undefined },
+        { type: "show-schedule", detail: undefined },
+        { type: "open-allergens", detail: undefined },
+        { type: "close-allergens", detail: undefined },
+        { type: "new-sale", detail: undefined },
+        { type: "back-to-counter", detail: undefined },
+        { type: "back-to-floor", detail: undefined },
+        { type: "floor-refresh", detail: undefined },
+        { type: "move-held-order-open", detail: undefined },
+        { type: "open-table", detail: { tableId: openTable.id, seated: true } },
+      ])("keeps the lock screen's message after $type", async ({ type, detail }) => {
+        const router = new ServerRouter({
+          origin: BOX,
+          fetchImpl: probeFetch(),
+          storage: memoryStorage(),
+        });
+        currentApi = stubApi(overrides());
+        const { el } = await mountWidget<TillApp>("till-app", { api: currentApi, router });
+        await flush(el);
+        await signIn(el);
+        router.dispatchEvent(
+          new CustomEvent("server-changed", { detail: { from: BOX, to: CLOUD } }),
+        );
+        await flush(el);
+        expect(lock(el)).not.toBeNull();
+        expect(message(el)).toContain(t("server.switched"));
+        emit(lock(el)!, type, detail);
+        await flush(el);
+        await flush(el);
+        expect(lock(el)).not.toBeNull();
+        expect(message(el)).toContain(t("server.switched"));
+      });
+
+      it.each([
+        "show-station",
+        "show-expo",
+        "show-schedule",
+        "show-floor",
+        "open-allergens",
+        "close-allergens",
+        "new-sale",
+        "back-to-counter",
+        "back-to-floor",
+      ])(
+        "leaves a logged-out till locked after %s, reading neither the stations nor the floor and leaving no destination to restore",
+        async (type) => {
+          const el = await lockedTill(overrides());
+          const stationReads = vi.mocked(currentApi.listStations).mock.calls.length;
+          const floorReads = vi.mocked(currentApi.getTablesState).mock.calls.length;
+          emit(lock(el)!, type);
+          await flush(el);
+          await flush(el);
+          expect(lock(el)).not.toBeNull();
+          expect(shell(el)).toBeNull();
+          expect(location.pathname).not.toContain("/view/");
+          expect(currentApi.listStations).toHaveBeenCalledTimes(stationReads);
+          expect(currentApi.getTablesState).toHaveBeenCalledTimes(floorReads);
+        },
+      );
+
+      it.each([
+        { name: "floor-refresh", type: "floor-refresh", detail: undefined },
+        { name: "move-held-order-open", type: "move-held-order-open", detail: undefined },
+        {
+          name: "open-table on a free table",
+          type: "open-table",
+          detail: { tableId: "tb-1", seated: false, guestCount: 2 },
+        },
+        {
+          name: "open-table on a seated table",
+          type: "open-table",
+          detail: { tableId: openTable.id, seated: true },
+        },
+      ])(
+        "leaves a logged-out till locked after $name, without reading the stations, the floor or the drafts, or seating a table",
+        async ({ type, detail }) => {
+          // The floor is read before logout, so the till still holds the seated table and its party
+          // when the event arrives; an open that ran would read that party's drafts.
+          const { el } = await mountApp({
+            ...overrides(),
+            getTablesState: vi.fn().mockResolvedValue([openTable]),
+          });
+          await flush(el);
+          await signIn(el);
+          selectTab(el, "floor");
+          await flush(el);
+          emit(shell(el)!, "logout");
+          await flush(el);
+          const stationReads = vi.mocked(currentApi.listStations).mock.calls.length;
+          const floorReads = vi.mocked(currentApi.getTablesState).mock.calls.length;
+          emit(lock(el)!, type, detail);
+          await flush(el);
+          await flush(el);
+          expect(lock(el)).not.toBeNull();
+          expect(shell(el)).toBeNull();
+          expect(location.pathname).not.toContain("/view/");
+          expect(currentApi.listStations).toHaveBeenCalledTimes(stationReads);
+          expect(currentApi.getTablesState).toHaveBeenCalledTimes(floorReads);
+          expect(currentApi.seatTable).not.toHaveBeenCalled();
+          expect(currentApi.listDrafts).not.toHaveBeenCalled();
+        },
+      );
+
+      it("ignores a tab-select sent while logout is still taking the shell down", async () => {
+        const { el } = await mountApp(overrides());
+        await flush(el);
+        await signIn(el);
+        const floorReads = vi.mocked(currentApi.getTablesState).mock.calls.length;
+        const outgoing = shell(el)!;
+        emit(outgoing, "logout");
+        emit(outgoing, "tab-select", { key: other });
+        await flush(el);
+        await flush(el);
+        expect(lock(el)).not.toBeNull();
+        expect(location.pathname).toBe(`/tabs/${home}`);
+        expect(currentApi.getTablesState).toHaveBeenCalledTimes(floorReads);
+        await signIn(el);
+        expect(shell(el)!.activeTabKey).toBe(home);
+      });
+    });
+
+    // Till only: the phone layout the handheld cases above use has no counter tab or sale cards, so
+    // nothing on it fills the basket.
+    it("leaves a logged-out till's basket in place after new-sale, for the next sign-in", async () => {
+      const { el } = await mountApp();
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "logout");
+      await flush(el);
+      expect(c.store.lines).toHaveLength(1);
+      emit(lock(el)!, "new-sale");
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(c.store.lines).toHaveLength(1);
+      await toCounter(el);
+      expect(counter(el)!.store.lines).toHaveLength(1);
+    });
+  });
+
   // ── Device front door ───────────────────────────────────────────────────────
   // One boot decision: dev + no adopted tab device → the chooser; not enrolled (401, not dev) → the join
   // screen; enrolled `kds` → the kiosk shell (the kds-boot test above); enrolled other → the login (lock)
@@ -4634,7 +4805,7 @@ describe("till-app", () => {
     });
   });
 
-  it("session activity: uses the real controller as a clean no-op when wake lock is unavailable", async () => {
+  it("session activity: with no injected controller, a logout still reaches the lock screen", async () => {
     // No injected sessionActivity → the app builds a real SessionActivity.
     const { el } = await mountApp();
     const c = await toCounter(el);
@@ -4740,7 +4911,7 @@ describe("till-app", () => {
   });
 
   describe("live floor (FP-1)", () => {
-    it("show-floor loads the zones + occupancy read-model and shows the floor (basket preserved)", async () => {
+    it("selecting the floor tab loads the zones + occupancy read-model and shows the floor (basket preserved)", async () => {
       const { el } = await mountApp({
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -4763,7 +4934,7 @@ describe("till-app", () => {
       expect(store.lines).toHaveLength(1);
     });
 
-    it("show-floor degrades to an empty floor when the occupancy load fails (never blocks)", async () => {
+    it("selecting the floor tab shows an empty floor when the occupancy load fails (never blocks)", async () => {
       const { el } = await mountApp({
         getTablesState: vi.fn().mockRejectedValue({ code: "server.internal" }),
         listZones: vi.fn().mockResolvedValue([floorZone]),

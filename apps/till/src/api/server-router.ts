@@ -28,7 +28,8 @@ function defaultStorage(): Pick<Storage, "getItem" | "setItem"> | undefined {
   }
 }
 
-interface Tracked extends ServerEntry {
+interface Tracked {
+  url: string;
   label: string;
   state: ServerState;
   term: number | null;
@@ -166,11 +167,9 @@ export class ServerRouter extends EventTarget {
       const body = (await res.json()) as {
         acceptingSales?: unknown;
         term?: unknown;
-        nodeId?: unknown;
       };
       s.state = body.acceptingSales === true ? "primary" : "standby";
       s.term = typeof body.term === "number" ? body.term : null;
-      if (typeof body.nodeId === "string") s.nodeId = body.nodeId;
     } catch {
       s.state = "unreachable";
       s.term = null;
@@ -194,13 +193,11 @@ export class ServerRouter extends EventTarget {
       if (prev !== undefined) {
         // A probe mutates this tracked object after its fetch resolves. Retain it when getTill refreshes
         // the same URL mid-probe so that successful result remains in the active list.
-        if (e.nodeId !== undefined) prev.nodeId = e.nodeId;
         next.push(prev);
       } else {
         next.push({
           url,
           label: parsed.hostname,
-          nodeId: e.nodeId,
           state: "unknown",
           term: null,
         });

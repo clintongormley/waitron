@@ -55,6 +55,6 @@ export async function isTrustBroken({
   try {
     return await Promise.race([probe, timeout]);
   } finally {
-    if (timer !== undefined) clearTimeout(timer);
+    clearTimeout(timer);
   }
 }

@@ -100,7 +100,6 @@ export class SessionActivity {
   }
 
   #shouldHoldWakeLock(): boolean {
-    if (!this.#active) return false;
     return this.#config.kind === "kds_station" || this.#config.loggedIn;
   }
 

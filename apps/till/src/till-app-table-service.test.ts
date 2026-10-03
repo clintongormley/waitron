@@ -2277,6 +2277,27 @@ describe("till-app table ordering: logout while a request is waiting for the ser
     expect(el.shadowRoot!.querySelector("till-tab-shell")).toBeNull();
     expect((el as unknown as { operatorName: string }).operatorName).toBe("");
   });
+
+  it("stays locked when a tab payment's answer arrives after logout, and the next sign-in opens on the first tab, not that ticket", async () => {
+    let settle!: (result: TillSaleResult) => void;
+    const recordSale = vi.fn(() => new Promise<TillSaleResult>((resolve) => (settle = resolve)));
+    const { el } = await mountApp({ recordSale });
+    const screen = await toTableOrder(el);
+    emit(screen, "pay-tab", { method: "cash", amount: "3.00" });
+    await flush(el);
+    emit(shell(el), "logout");
+    await flush(el);
+
+    settle(saleResult);
+    await flush(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-tab-shell")).toBeNull();
+
+    await logIn(el);
+    expect(shell(el).activeTabKey).toBe("counter");
+    expect(ticket(el)).toBeNull();
+  });
 });
 
 describe("till-app table ordering: a menu published while a table is open", () => {
