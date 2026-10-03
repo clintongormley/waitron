@@ -812,7 +812,9 @@ show the parent's value itself, and the variant table shows the product's price,
 italic; where the parent names nothing they show what will be used ("Uncategorised", the course's
 "— none —", "Each" for the unit, "None", or "Not yet reviewed" for allergens the parent has not had reviewed). The
 photo now shows without a "Same as" caption too (A172b — DONE, owner 2026-10-02); its alt text still
-names the main product's photo.
+names the main product's photo. (Since A200, 2026-10-03, the product editor draws that photo with
+empty alt text and its photo button carries those words as a description that is not shown; a
+variant's small window still uses them as the photo's alt text.)
 The owner: _"the kitchen name hint should be the name field, unless it has its own value. The main
 language name hint should be the name field, and the secondary languages should be the main
 language name"_. A field's hint is its placeholder (CLAUDE.md §3, Forms), so it shows only while
@@ -3666,7 +3668,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `apps/dashboard/src/widgets/section-details-form.ts` puts `aria-describedby="section-image-error"`
   on the `dashboard-image-upload` host, and an id outside a shadow root describes nothing inside it
   (`docs/developers/design-system.md` → Forms); the Choose image button inside it carries
-  `aria-invalid` and takes focus, so a screen reader hears "invalid" with no reason;
+  `aria-invalid` and takes focus, so a screen reader hears "invalid" with no reason. Since A200 the
+  product editor's photo button (`apps/dashboard/src/widgets/product-editor.ts`) has the same
+  defect: it carries `aria-invalid` and takes focus, while the reason is a `data-test="image-error"`
+  line in the editor's own shadow root that nothing points to;
   (6) the till's schedule screen (`apps/till/src/screens/till-schedule-screen.ts`) does not follow
   the rule yet: its cover request keeps its button disabled until a shift and a colleague are
   chosen, and its absence request until both dates are filled, before any press; neither shows a

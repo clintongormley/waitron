@@ -92,7 +92,7 @@ export class ImageUpload extends LitElement {
   @property() image: string | null = null;
   /** The photo a blank `image` falls back to — a variant's parent's — is not stored. */
   @property() inheritedImage: string | null = null;
-  /** Marks Choose image invalid, so `focusFirstInvalid` lands on it. */
+  /** Marks the control's button invalid, so `focusFirstInvalid` lands on it. */
   @property({ type: Boolean }) invalid = false;
   @property({ type: Boolean, reflect: true }) thumbnail = false;
   @state() private pickerOpen = false;
