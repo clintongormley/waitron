@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -82,6 +83,21 @@ describe("the shared node bundle command", () => {
       }),
     ).toThrow(failure);
     expect(entries).toEqual(["a.ts", "b.ts"]);
+  });
+
+  it("writes one notice from esbuild's input list and removes the temporary metadata", () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-bundle-meta-"));
+    try {
+      const outfile = join(dir, "out.js");
+      const lit = realpathSync(join(ROOT, "apps/till/node_modules/lit/index.js"));
+      bundle([{ entry: "entry.ts", outfile }], {
+        run: () => writeFileSync(`${outfile}.meta.json`, JSON.stringify({ inputs: { [lit]: {} } })),
+      });
+      expect(readFileSync(`${outfile}.NOTICES.txt`, "utf8")).toContain("lit 3.3.3");
+      expect(existsSync(`${outfile}.meta.json`)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("prints its usage and exits 1 when run with no pairs", () => {
