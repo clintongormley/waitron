@@ -32,9 +32,33 @@ export function formatViolations(violations: axe.Result[]): string {
     .join("\n\n");
 }
 
+// The reasons in axe's colour-contrast messages (`locales/_template.json`) counted as being about
+// the colours themselves. axe 4.13.0 never sets `fgAlpha`.
+const UNDECIDED_COLOUR_READINGS = new Set(["equalRatio", "fgAlpha", "colorParse"]);
+
+function undecidedColourReadings(incomplete: axe.Result[]): string[] {
+  return incomplete
+    .filter((result) => result.id === "color-contrast")
+    .flatMap((result) =>
+      result.nodes.flatMap((node) =>
+        node.any
+          .filter((check) =>
+            UNDECIDED_COLOUR_READINGS.has(
+              (check.data as { messageKey?: string } | null)?.messageKey ?? "",
+            ),
+          )
+          .map(
+            (check) =>
+              `${result.id} [undecided]: ${check.message}\n  targets: ${node.target.join(" ")}`,
+          ),
+      ),
+    );
+}
+
 /**
  * Runs the full default axe-core ruleset against `context` and fails the test (via a vitest
- * `expect`, with a readable message) if it finds any violations.
+ * `expect`, with a readable message) if it finds any violations, or a colour-contrast check it left
+ * undecided for a reason about the colours themselves (`equalRatio`, `fgAlpha`, `colorParse`).
  *
  * `context` is almost always the themed host `<div>` — the live `host` binding from
  * `test-helpers.ts` — rather than the mounted component itself, so axe also sees the theme root's
@@ -48,6 +72,8 @@ export function formatViolations(violations: axe.Result[]): string {
 export async function expectNoA11yViolations(context: Element): Promise<void> {
   const results = await axe.run(context);
   expect(results.violations, formatViolations(results.violations)).toEqual([]);
+  const colourReadings = undecidedColourReadings(results.incomplete);
+  expect(colourReadings, colourReadings.join("\n\n")).toEqual([]);
 }
 
 /**

@@ -1645,9 +1645,12 @@ describe.each(["light", "dark"] as const)("wt-button a11y (%s theme)", (theme) =
   contrast-checked against the browser's default white page background regardless of theme —
   meaningless for dark mode.
 - `expectNoA11yViolations(context)` — runs the full default axe ruleset against `context` (almost
-  always `host`) and fails with a readable message (rule id, impact, offending selectors) if axe
-  finds anything. **The ruleset is never narrowed** — every caller runs the same, full default set;
-  narrowing it to make a test pass is exactly the kind of box-ticking this exists to prevent.
+  always `host`) and fails with a readable message (rule id, impact, offending selectors) on any
+  violation, and on a `color-contrast` check axe left undecided for `equalRatio`, `fgAlpha` or
+  `colorParse` (shown as `color-contrast [undecided]` with axe's message and the selectors). Any
+  other undecided result passes. **The ruleset is never narrowed** — every caller runs the same,
+  full default set; narrowing it to make a test pass is exactly the kind of box-ticking this exists
+  to prevent.
 
 **Shadow DOM is the whole point here** — every interesting element in these components (the actual
 `<button>`, `<input>`, `<dialog>`, ...) lives inside a shadow root, and `axe.run()` does traverse
@@ -1666,7 +1669,13 @@ have caught the defect it's named after.
 
 **Colour contrast** is checked as part of the same default ruleset, per theme, via `mountThemed`'s
 `theme` argument — see the `describe.each(["light", "dark"])` pattern above, used throughout the
-`*.a11y.test.ts` files. As of this writing axe reports zero contrast violations for any `--wt-color-*`
+`*.a11y.test.ts` files. `expectNoA11yViolations` fails on a contrast violation, and on a contrast
+check axe left undecided for a reason about the colours themselves (`equalRatio`, `fgAlpha`,
+`colorParse` — text the same colour as its background is one; its helper tests show it failing;
+axe 4.13.0 never sets `fgAlpha`). A check axe left undecided for any other reason (among them an
+overlapping element, such as an empty `wt-input`, a background image or gradient, and content too
+short or not text) still passes, so contrast there is not checked. As of
+this writing axe reports zero contrast violations for any `--wt-color-*`
 pairing actually used by every primitive in the table above, in either theme, across every documented state (`wt-input`
 invalid, `wt-switch` checked/unchecked, `wt-dialog` open, `wt-button` icon-only and every variant,
 disabled and loading states; `wt-spinner` as a status region and decorative — all verified

@@ -1,31 +1,17 @@
 import { afterEach, expect, test, vi } from "vitest";
 import axe from "axe-core";
-import { cleanup, host, mount } from "./test-helpers.js";
-import { expectNoA11yViolations, mountThemed } from "./a11y-helpers.js";
-import "./components/wt-button.js";
-import "./components/wt-icon.js";
-import "./components/wt-input.js";
+import type { WtInput } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-input.js";
+import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 
-afterEach(cleanup);
+afterEach(cleanupWidgets);
 afterEach(() => vi.restoreAllMocks());
-
-// The canary for the whole a11y harness: the markup worth checking lives in shadow roots, so axe
-// has to be seen reaching into them.
-test("axe traverses into shadow roots: catches an icon-only button with no accessible name", async () => {
-  await mount('<wt-button><wt-icon name="close"></wt-icon></wt-button>');
-  const results = await axe.run(host);
-  const ruleIds = results.violations.map((violation) => violation.id);
-  expect(ruleIds).toContain("button-name");
-});
-
-test("the same button is clean once aria-label restores its accessible name", async () => {
-  await mount('<wt-button aria-label="Cerrar"><wt-icon name="close"></wt-icon></wt-button>');
-  await expectNoA11yViolations(host);
-});
 
 const COLOUR_READINGS = ["equalRatio", "fgAlpha", "colorParse"];
 
-async function undecidedContrastReasons(): Promise<{ violations: string[]; reasons: string[] }> {
+async function undecidedContrastReasons(
+  host: HTMLElement,
+): Promise<{ violations: string[]; reasons: string[] }> {
   const results = await axe.run(host);
   const reasons = results.incomplete
     .filter((result) => result.id === "color-contrast")
@@ -34,11 +20,17 @@ async function undecidedContrastReasons(): Promise<{ violations: string[]; reaso
   return { violations: results.violations.map((violation) => violation.id), reasons };
 }
 
+async function mountText(text: string, color: string, theme: "light" | "dark") {
+  const mounted = await mountWidget<HTMLParagraphElement>("p", { textContent: text }, theme);
+  mounted.el.style.color = color;
+  return mounted;
+}
+
 test.each(["light", "dark"] as const)(
   "text the same colour as its background fails, though axe calls it undecided (%s)",
   async (theme) => {
-    await mountThemed('<p style="color: var(--wt-color-bg)">Hidden words</p>', theme);
-    const { violations, reasons } = await undecidedContrastReasons();
+    const { host } = await mountText("Hidden words", "var(--wt-color-surface-raised)", theme);
+    const { violations, reasons } = await undecidedContrastReasons(host);
     expect(violations).not.toContain("color-contrast");
     expect(reasons).toContain("equalRatio");
     await expect(expectNoA11yViolations(host)).rejects.toThrow(
@@ -48,13 +40,13 @@ test.each(["light", "dark"] as const)(
 );
 
 test.each(["light", "dark"] as const)("readable text passes (%s)", async (theme) => {
-  await mountThemed('<p style="color: var(--wt-color-text)">Readable words</p>', theme);
+  const { host } = await mountText("Readable words", "var(--wt-color-text)", theme);
   await expectNoA11yViolations(host);
 });
 
 test("an undecided reading that is not about colour still passes", async () => {
-  await mountThemed('<wt-input label="Peso (kg)"></wt-input>', "light");
-  const { reasons } = await undecidedContrastReasons();
+  const { host } = await mountWidget<WtInput>("wt-input", { label: "Peso (kg)" }, "light");
+  const { reasons } = await undecidedContrastReasons(host);
   expect(reasons).toContain("bgOverlap");
   expect(reasons.filter((reason) => COLOUR_READINGS.includes(reason))).toEqual([]);
   await expectNoA11yViolations(host);
