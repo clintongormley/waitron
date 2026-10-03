@@ -2220,13 +2220,14 @@ their receipts. The top one is our own: a failed send backs off each record sepa
 two-minute outage a void can be filed before its sale, and the chain stops for good (reproduced
 against the fake AEAT; dates from #15). Second, a duplicate answer AEAT reports as `Correcta` is
 taken as ours without comparing fingerprints, so an older database copy or a second venue under the
-same tax id collides silently. It proposes seven preventions, three kinds of stop, an automatic new
+same tax id collides silently. A review seat also found that a cancellation sent for a colliding
+invoice would cancel the other copy's record at AEAT; the design never sends one. It proposes seven preventions, three kinds of stop, an automatic new
 chain in the divergence's own transaction with the series read per sale (no restart), what the
-dashboard says, AEAT's procedures quoted from primary sources, and nine asesor questions. The
+dashboard says, AEAT's procedures quoted from primary sources, and ten asesor questions. The
 [plan](superpowers/plans/2026-10-03-fiscal-chain-divergence.md) has fourteen tasks (0–13), starting
-with two probes at AEAT's pre-production service. **Next action:** owner decides D1–D7 (spec §11)
-and sends the asesor questions (spec §10); the build is queued only after approval. Tasks 1, 2, 6, 7,
-10 and 11 end `needs-owner-review`.
+with two probes at AEAT's pre-production service. **Next action:** owner decides D1–D9 (spec §11)
+and sends the asesor questions (spec §10); the build is queued only after approval. Tasks 1, 2, 3, 6,
+7 and 10 end `needs-owner-review`.
 
 ### A2. The setup wizard
 
