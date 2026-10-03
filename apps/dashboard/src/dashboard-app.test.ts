@@ -2209,6 +2209,58 @@ describe("dashboard-app", () => {
     },
   );
 
+  it("offers the VAT return under Sales to a session holding report.export, and opens its page", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["report.export"] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    const item = navItem(el, "vat-return");
+    expect(item!.textContent!.trim()).toBe(t("nav.vat_return"));
+    const panel = el.shadowRoot!.querySelector("#nav-group-panel-reports")!;
+    const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
+    expect(order.indexOf("nav-vat-return")).toBe(order.indexOf("nav-sales") + 1);
+
+    item!.click();
+    await flush(el);
+    const face = el.shadowRoot!.querySelector<HTMLElement & { api?: DashboardApi }>(
+      "dashboard-vat-return-screen",
+    );
+    expect(face!.api).toBe(api);
+    expect(location.pathname).toBe("/manage/vat-return");
+  });
+
+  it.each([
+    ["supervisor", ["report.view"]],
+    ["manager", ["booking.manage"]],
+  ])(
+    "does not offer the VAT return to a %s session without report.export",
+    async (role, permissions) => {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }) }),
+      });
+      await flush(el);
+      expect(navItem(el, "sales")).toBeTruthy();
+      expect(navItem(el, "vat-return")).toBeNull();
+    },
+  );
+
+  it.each([
+    ["manager", ["report.export"], "dashboard-vat-return-screen", "/manage/vat-return"],
+    ["supervisor", ["report.view"], "dashboard-overview-screen", "/manage/overview"],
+  ])(
+    "opens /manage/vat-return for a %s session only when it holds report.export",
+    async (role, permissions, tag, path) => {
+      history.replaceState(null, "", "/manage/vat-return");
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }) }),
+      });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector(tag)).not.toBeNull();
+      expect(location.pathname).toBe(path);
+    },
+  );
+
   it.each([
     ["manager", "dashboard-email-screen", "/manage/email"],
     ["admin", "dashboard-email-screen", "/manage/email"],

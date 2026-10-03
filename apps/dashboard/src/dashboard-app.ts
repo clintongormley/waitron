@@ -41,6 +41,7 @@ import type { ProfileScreen } from "./screens/profile-screen.js";
 import "./screens/my-schedule-screen.js";
 import "./screens/dashboard-overview-screen.js";
 import "./screens/dashboard-sales-screen.js";
+import "./screens/vat-return-screen.js";
 import "./screens/orders-screen.js";
 import "./screens/staff-screen.js";
 import "./screens/catalogue-screen.js";
@@ -90,6 +91,7 @@ const CORE_SCREENS = [
   "my-schedule",
   "overview",
   "sales",
+  "vat-return",
   "orders",
   "staff",
   "catalogue",
@@ -151,6 +153,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { screen: "overview", labelKey: "nav.overview" },
       { screen: "sales", labelKey: "nav.sales" },
+      { screen: "vat-return", labelKey: "nav.vat_return", requiresPermission: "report.export" },
       { screen: "orders", labelKey: "nav.orders" },
     ],
   },
@@ -1651,6 +1654,8 @@ export class DashboardApp extends LitElement {
         ></dashboard-my-schedule-screen>`;
       case "sales":
         return html`<dashboard-sales-screen .api=${this.api}></dashboard-sales-screen>`;
+      case "vat-return":
+        return html`<dashboard-vat-return-screen .api=${this.api}></dashboard-vat-return-screen>`;
       case "orders":
         return html`<dashboard-orders-screen .api=${this.api}></dashboard-orders-screen>`;
       case "staff":
