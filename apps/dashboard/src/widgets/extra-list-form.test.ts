@@ -988,7 +988,7 @@ it("focuses the kitchen field when a refusal naming it arrives, leaving the name
   expect(kitchen.shadowRoot!.activeElement).toBe(kitchen.shadowRoot!.querySelector("input"));
 });
 
-it("puts the minimum and maximum choices side by side as steppers, with their meaning in a hint", async () => {
+it("puts the minimum and maximum choices side by side as steppers, the minimum's meaning in its hint", async () => {
   const { el } = await mount({ value: addons });
   const row = el.shadowRoot!.querySelector('[data-test="picks-row"]')!;
   const min = field<HTMLElementTagNameMap["wt-number-stepper"]>(el, "min-picks");
@@ -997,9 +997,10 @@ it("puts the minimum and maximum choices side by side as steppers, with their me
   expect([min.tagName, max.tagName]).toEqual(["WT-NUMBER-STEPPER", "WT-NUMBER-STEPPER"]);
   expect([min.parentElement, max.parentElement]).toEqual([row, row]);
   expect([min.label, max.label]).toEqual([t("extras.min_picks"), t("extras.max_picks")]);
-  expect([min.hint, max.hint]).toEqual([t("extras.min_picks_hint"), t("extras.max_picks_hint")]);
-  expect(max.placeholder).toBe(t("extras.no_limit"));
-  expect(min.min).toBe(0);
+  expect([min.hint, max.hint]).toEqual([t("extras.min_picks_hint"), ""]);
+  expect(max.placeholder).toBe("");
+  expect([min.min, max.min]).toEqual([0, 1]);
+  expect([min.clearable, max.clearable]).toEqual([false, true]);
   expect(min.increaseLabel(min.label)).toBe(
     t("action.increase").replace("{label}", t("extras.min_picks")),
   );
@@ -1019,30 +1020,72 @@ it("saves the minimum one higher after its + button is pressed", async () => {
   expect(submitted[0]!.minPicks).toBe(1);
 });
 
-it("shows the whole No limit placeholder in the maximum's box, in English and Spanish", async () => {
-  for (const locale of ["en", "es"] as const) {
+it("sets the choices under a Number of choices heading, with a line saying a blank maximum is no limit, in English and Spanish", async () => {
+  for (const [locale, heading, line] of [
+    ["en", "Number of choices", "Leave Maximum choices blank for no limit."],
+    ["es", "Número de selecciones", "Deja Selecciones máximas vacío para no poner límite."],
+  ] as const) {
     setLocale(locale);
     try {
-      const { el } = await mount({ value: { ...addons, maxPicks: null } });
-      const input = field(el, "max-picks").shadowRoot!.querySelector("input")!;
-      expect(input.placeholder).toBe(t("extras.no_limit"));
-      const style = getComputedStyle(input);
-      const probe = document.createElement("span");
-      probe.style.font = style.font;
-      probe.style.position = "absolute";
-      probe.style.whiteSpace = "pre";
-      probe.textContent = input.placeholder;
-      document.body.append(probe);
-      const needed = probe.getBoundingClientRect().width;
-      probe.remove();
-      const room =
-        input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-      expect(needed, locale).toBeLessThanOrEqual(room);
+      const { el } = await mount({ value: addons });
+      const group = el.shadowRoot!.querySelector<HTMLFieldSetElement>(
+        'fieldset[data-test="picks"]',
+      )!;
+      const legend = group.querySelector("legend")!;
+      const note = group.querySelector<HTMLElement>('[data-test="picks-note"]')!;
+      expect(legend.textContent!.trim(), locale).toBe(heading);
+      expect(note.textContent!.trim(), locale).toBe(line);
+      expect(group.getAttribute("aria-describedby")).toBe(note.id);
+      expect(group.contains(el.shadowRoot!.querySelector('[data-test="picks-row"]'))).toBe(true);
+      expect(legend.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     } finally {
       setLocale("en");
       cleanupWidgets();
     }
   }
+});
+
+it("paints the choices heading and its line from tokens", async () => {
+  const { el, host } = await mount({ value: addons });
+  host.style.setProperty("--wt-color-text-muted", "rgb(41, 42, 43)");
+  host.style.setProperty("--wt-font-size-sm", "11px");
+  const group = el.shadowRoot!.querySelector('fieldset[data-test="picks"]')!;
+  for (const part of [
+    group.querySelector("legend")!,
+    group.querySelector('[data-test="picks-note"]')!,
+  ]) {
+    expect(getComputedStyle(part).color).toBe("rgb(41, 42, 43)");
+    expect(getComputedStyle(part).fontSize).toBe("11px");
+  }
+  expect(getComputedStyle(group).borderTopStyle).toBe("none");
+});
+
+it("clears a maximum of 1 with its − button, and saves the list with no limit", async () => {
+  const { el, host } = await mount({ value: { ...addons, maxPicks: 1 } });
+  const submitted = record(host);
+  const max = field<HTMLElementTagNameMap["wt-number-stepper"]>(el, "max-picks");
+
+  max.shadowRoot!.querySelector<HTMLButtonElement>('[data-step="-1"]')!.click();
+  await el.updateComplete;
+  await max.updateComplete;
+  expect(max.value).toBe("");
+  expect(max.shadowRoot!.querySelector("input")!.value).toBe("");
+  await click(el, "save");
+
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]!.maxPicks).toBeNull();
+});
+
+it("gives the maximum the standard stepper width, not a wider one of its own", async () => {
+  const { el } = await mount({ value: addons });
+  const root = getComputedStyle(el).getPropertyValue("--wt-stepper-field-width").trim();
+  for (const name of ["min-picks", "max-picks"]) {
+    expect(
+      getComputedStyle(field(el, name)).getPropertyValue("--wt-stepper-field-width").trim(),
+      name,
+    ).toBe(root);
+  }
+  expect(root).toBe("88px");
 });
 
 it("stacks the two choices steppers on a phone and sets them side by side on a wide screen", async () => {

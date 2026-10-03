@@ -66,14 +66,29 @@ export class ExtraListForm extends LitElement {
         display: grid;
         gap: var(--wt-space-3);
       }
+      .picks {
+        min-inline-size: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+      .picks > legend {
+        padding: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        text-transform: uppercase;
+      }
+      .picks-note {
+        margin: var(--wt-space-1) 0 var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
       .picks-row {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: var(--wt-space-3);
         align-items: start;
-      }
-      .picks-row wt-number-stepper {
-        --wt-stepper-field-width: var(--wt-stepper-field-width-wide);
       }
       /* The same narrow case, and the same width, as the variants table's (design-system.md): a
          container query cannot read a token. There the column heading alone names the switches. */
@@ -826,41 +841,46 @@ export class ExtraListForm extends LitElement {
             this.name,
           )}
           ${this.#namesSection(errors)}
-          <div class="picks-row" data-test="picks-row">
-            <wt-number-stepper
-              name="min-picks"
-              label=${t("extras.min_picks")}
-              hint=${t("extras.min_picks_hint")}
-              .min=${0}
-              .decreaseLabel=${decreaseLabel}
-              .increaseLabel=${increaseLabel}
-              .disabled=${this.busy}
-              .value=${this.minPicks}
-              .error=${errors["min-picks"] ?? ""}
-              .invalid=${!!errors["min-picks"]}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                event.stopPropagation();
-                this.#edit(() => (this.minPicks = event.detail.value), "min-picks");
-              }}
-            ></wt-number-stepper>
-            <wt-number-stepper
-              name="max-picks"
-              label=${t("extras.max_picks")}
-              hint=${t("extras.max_picks_hint")}
-              placeholder=${t("extras.no_limit")}
-              .min=${0}
-              .decreaseLabel=${decreaseLabel}
-              .increaseLabel=${increaseLabel}
-              .disabled=${this.busy}
-              .value=${this.maxPicks}
-              .error=${errors["max-picks"] ?? ""}
-              .invalid=${!!errors["max-picks"]}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                event.stopPropagation();
-                this.#edit(() => (this.maxPicks = event.detail.value), "max-picks");
-              }}
-            ></wt-number-stepper>
-          </div>
+          <fieldset class="picks" data-test="picks" aria-describedby="picks-note">
+            <legend>${t("extras.picks_heading")}</legend>
+            <p class="picks-note" id="picks-note" data-test="picks-note">
+              ${t("extras.picks_note")}
+            </p>
+            <div class="picks-row" data-test="picks-row">
+              <wt-number-stepper
+                name="min-picks"
+                label=${t("extras.min_picks")}
+                hint=${t("extras.min_picks_hint")}
+                .min=${0}
+                .decreaseLabel=${decreaseLabel}
+                .increaseLabel=${increaseLabel}
+                .disabled=${this.busy}
+                .value=${this.minPicks}
+                .error=${errors["min-picks"] ?? ""}
+                .invalid=${!!errors["min-picks"]}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  this.#edit(() => (this.minPicks = event.detail.value), "min-picks");
+                }}
+              ></wt-number-stepper>
+              <wt-number-stepper
+                name="max-picks"
+                label=${t("extras.max_picks")}
+                clearable
+                .min=${1}
+                .decreaseLabel=${decreaseLabel}
+                .increaseLabel=${increaseLabel}
+                .disabled=${this.busy}
+                .value=${this.maxPicks}
+                .error=${errors["max-picks"] ?? ""}
+                .invalid=${!!errors["max-picks"]}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  this.#edit(() => (this.maxPicks = event.detail.value), "max-picks");
+                }}
+              ></wt-number-stepper>
+            </div>
+          </fieldset>
           <wt-switch
             name="active"
             data-test="active"
