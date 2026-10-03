@@ -379,8 +379,15 @@ export class CatalogueScreen extends LitElement {
     if (this.busy || !this.#knows(productId)) return;
     this.busy = true;
     this.#showError(null);
+    let value: ProductEditorValue;
     try {
-      const value = await this.api.getProductEditor(productId);
+      value = await this.api.getProductEditor(productId);
+    } catch (error) {
+      this.#showReadError(error);
+      this.busy = false;
+      return;
+    }
+    try {
       await this.api.updateProductEditor(productId, { ...value, active: true });
     } catch (error) {
       this.#showError(codeOf(error));

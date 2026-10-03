@@ -399,6 +399,7 @@ export class DevicesScreen extends LitElement {
         try {
           await this.#reloadJoins();
         } catch (reloadError) {
+          // Replaces the refusal on purpose: the person must see the queue could not be refreshed.
           this.#showError(codeOf(reloadError), true);
         }
       }

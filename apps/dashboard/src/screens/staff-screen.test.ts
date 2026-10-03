@@ -1259,6 +1259,51 @@ describe("staff-screen — row actions, filters and edit races", () => {
       expect(editForm(el).person).toEqual(people[1]);
     });
   });
+
+  it("keeps a failed edit's message and field when an earlier row action completes after it", async () => {
+    let finish!: () => void;
+    const api = stubApi({
+      resetPin: vi.fn().mockReturnValue(
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+      ),
+      savePerson: vi
+        .fn()
+        .mockRejectedValue({ code: "person.email_taken", params: { field: "email" } }),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    rowAction(el, "p1", "reset-pin");
+    await flush(el);
+    confirmRow(el);
+    await vi.waitFor(() => expect(api.resetPin).toHaveBeenCalledTimes(1));
+    await openEdit(el, "p1");
+    editForm(el).dispatchEvent(
+      new CustomEvent("save-person", {
+        detail: {
+          displayName: "Ada",
+          firstNames: "Ada",
+          lastNames: "Lovelace",
+          telephone: null,
+          email: "bea@x.com",
+          role: "manager",
+          status: "active",
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await vi.waitFor(() => expect(editForm(el).error).toBe("person.email_taken"));
+
+    const reads = vi.mocked(api.listStaff).mock.calls.length;
+    finish();
+    await vi.waitFor(() => expect(api.listStaff).toHaveBeenCalledTimes(reads + 1));
+    await flush(el);
+    expect(editForm(el).open).toBe(true);
+    expect(editForm(el).error).toBe("person.email_taken");
+    expect(editForm(el).errorField).toBe("email");
+  });
 });
 
 describe("staff-screen filter fields", () => {

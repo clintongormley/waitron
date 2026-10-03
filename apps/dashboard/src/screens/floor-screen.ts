@@ -178,6 +178,7 @@ export class FloorScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#showError(null);
     void this.#load();
   }
 
@@ -195,7 +196,7 @@ export class FloorScreen extends LitElement {
   }
 
   async #load(): Promise<void> {
-    this.#showError(null);
+    if (this.#readErrorShown) this.#showError(null);
     try {
       await Promise.all([
         this.#queries.watch("listZones", [], (rows) => {
@@ -215,7 +216,7 @@ export class FloorScreen extends LitElement {
 
   /** For placement writes, which cannot change the zone list. */
   async #loadTables(): Promise<void> {
-    this.#showError(null);
+    if (this.#readErrorShown) this.#showError(null);
     try {
       await this.#queries.watch("listTables", [], (rows) => {
         this.tables = this.#tablesDrafts.merge(this.tables, this.#toEditableTables(rows));

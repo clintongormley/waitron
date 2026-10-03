@@ -434,4 +434,37 @@ describe("service-status keeps a save's message while the reads recover", () => 
     await flush(el);
     expect(q(el, "[role=alert]")?.textContent?.trim()).toBe(codeMessage("connection.failed"));
   });
+
+  it("keeps a failed deactivation when an earlier deactivation completes after it", async () => {
+    let finishFirst!: () => void;
+    const api = stubApi(
+      {
+        deactivateStatus: vi
+          .fn()
+          .mockReturnValueOnce(
+            new Promise<void>((resolve) => {
+              finishFirst = resolve;
+            }),
+          )
+          .mockRejectedValueOnce({ code: "status.not_found" }),
+      },
+      TWO_SEED,
+    );
+    const { el } = await mountWidget<ServiceStatusScreen>("dashboard-service-status-screen", {
+      api,
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=row-s2]")).not.toBeNull());
+
+    q(el, "[data-test=deactivate-s1]")!.click();
+    await vi.waitFor(() => expect(api.deactivateStatus).toHaveBeenCalledTimes(1));
+    q(el, "[data-test=deactivate-s2]")!.click();
+    await vi.waitFor(() => expect(errorKey(el)).toBe("status.not_found"));
+
+    const reads = vi.mocked(api.listStatuses).mock.calls.length;
+    finishFirst();
+    await vi.waitFor(() => expect(api.listStatuses).toHaveBeenCalledTimes(reads + 1));
+    await flush(el);
+    expect(errorKey(el)).toBe("status.not_found");
+    expect(q(el, "[role=alert]")?.textContent?.trim()).toBe(codeMessage("status.not_found"));
+  });
 });

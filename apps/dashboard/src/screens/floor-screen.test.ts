@@ -918,3 +918,30 @@ it("keeps a save's connection failure when the reads that failed beside it recov
   await flush(el);
   expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed"));
 });
+
+it("keeps a failed table deactivation when an earlier zone deactivation completes after it", async () => {
+  let finishZone!: () => void;
+  const api = stubApi({
+    deactivateZone: vi.fn().mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishZone = resolve;
+      }),
+    ),
+    deactivateTable: vi.fn().mockRejectedValue({ code: "table.not_found" }),
+  });
+  const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+  await vi.waitFor(() => expect(q(el, "[data-test=zone-row-z1]")).not.toBeNull());
+
+  q(el, "[data-test=zone-deactivate-z1]")!.click();
+  await vi.waitFor(() => expect(api.deactivateZone).toHaveBeenCalledTimes(1));
+  q(el, "[data-test=table-deactivate-t1]")!.click();
+  await vi.waitFor(() =>
+    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("table.not_found")),
+  );
+
+  const reads = vi.mocked(api.listZones).mock.calls.length;
+  finishZone();
+  await vi.waitFor(() => expect(api.listZones).toHaveBeenCalledTimes(reads + 1));
+  await flush(el);
+  expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("table.not_found"));
+});

@@ -92,11 +92,12 @@ export class ServiceStatusScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#showError(null);
     void this.#load();
   }
 
   async #load(): Promise<void> {
-    this.#showError(null);
+    if (this.#readErrorShown) this.#showError(null);
     try {
       await this.#queries.watch("listStatuses", [], (rows) => {
         this.statuses = this.#statusesDrafts.merge(

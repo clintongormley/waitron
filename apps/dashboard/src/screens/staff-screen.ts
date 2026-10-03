@@ -174,11 +174,12 @@ export class StaffScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#showError(null);
     void this.#load();
   }
 
   async #load(): Promise<void> {
-    this.#showError(null);
+    if (this.#readErrorShown) this.#showError(null);
     try {
       await this.#queries.watch("listStaff", [], (value) => {
         this.people = value;

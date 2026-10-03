@@ -363,6 +363,47 @@ describe("catalogue-screen", () => {
     expect(alert()?.textContent?.trim()).toBe(codeMessage("connection.failed"));
   });
 
+  async function restoreDuringOutage(api: DashboardApi & { liveData: LiveData }) {
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    const alert = () => el.shadowRoot!.querySelector("[role=alert]");
+    vi.mocked(api.listUnits).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(alert()).not.toBeNull());
+
+    emit(list(el), "restore-product", { productId: "p1" });
+    await vi.waitFor(() => expect(api.getProductEditor).toHaveBeenCalledTimes(1));
+    await flush(el);
+    expect(alert()?.textContent?.trim()).toBe(codeMessage("connection.failed"));
+
+    const reads = vi.mocked(api.listUnits).mock.calls.length;
+    vi.mocked(api.listUnits).mockResolvedValue(units);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.listUnits).toHaveBeenCalledTimes(reads + 1));
+    await flush(el);
+    return alert;
+  }
+
+  it("drops a restore's failed read when the reads that failed beside it recover", async () => {
+    const api = Object.assign(
+      stubApi({ getProductEditor: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      { liveData: new LiveData() },
+    );
+    const alert = await restoreDuringOutage(api);
+    expect(api.updateProductEditor).not.toHaveBeenCalled();
+    expect(alert()).toBeNull();
+  });
+
+  it("keeps a restore's failed write when the reads that failed beside it recover", async () => {
+    const api = Object.assign(
+      stubApi({ updateProductEditor: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      { liveData: new LiveData() },
+    );
+    const alert = await restoreDuringOutage(api);
+    expect(api.updateProductEditor).toHaveBeenCalledTimes(1);
+    expect(alert()?.textContent?.trim()).toBe(codeMessage("connection.failed"));
+  });
+
   it("loads the products once the server answers again after a failed first load", async () => {
     const api = Object.assign(
       stubApi({ listCatalogues: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),

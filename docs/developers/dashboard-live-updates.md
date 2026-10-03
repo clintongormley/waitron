@@ -27,16 +27,22 @@ a key request already in flight, so it never replaces a key the screen made. `Dr
 scalar row editors by replacing clean fields while retaining locally edited fields. Structured
 editors keep their draft until you save or reopen them.
 
-A read error a screen shows must go away once the read succeeds again, for example after the server
-restarts. Either clear it in the apply callback, or pass `QueryController` (or `DashboardQueries`)
-a fourth argument, `recovered(error)`. The controller calls it once every failed read it still
-watches has applied a value with no new failure reported while that value applied, passing the last
-error it gave the error callback; clear the message there only if the field still holds what that
-failed read set, so a newer message is kept. A screen whose most recent load stopped before it
-started its later reads (on opening, on being reattached, or in the reload after a save) runs the
-unfinished part again from `recovered`, and only while that load has not completed. That rerun
-starts the reads the load never reached and takes its remaining steps, such as opening the item the
-page's link names; it performs no mutation.
+A read error a screen shows must go away once the read succeeds again, for example after the
+server restarts. Either clear it in the apply callback (on a screen that shares one field between
+reads and actions, clear only a read's message there), or pass `QueryController` (or
+`DashboardQueries`) a fourth argument, `recovered(error)`. The controller calls it once every failed
+read it still watches has applied a value with no new failure reported while that value applied,
+passing the last error it gave the error callback. A screen that shows a read's and an action's
+failure in one field remembers whether the message came from a read (Payments' `#readErrorShown`,
+set only through `#showError(code, fromRead)`, `apps/dashboard/src/screens/payments-screen.ts`):
+`recovered` clears only a read's message, the reload that runs after a successful action clears only
+a read's message too, and a read's failure never replaces an action's message. A read an action
+takes before its write counts as a read's, and when an action writes and then re-reads, a failure
+after the write counts as a read's. A screen whose most recent load stopped before it started its
+later reads (on opening, on being reattached, or in the reload after a save) runs the unfinished
+part again from `recovered`, and only while that load has not completed. That rerun starts the
+reads the load never reached and takes its remaining steps, such as opening the item the page's
+link names; it performs no mutation.
 
 Use passive requests for automatic refreshes so leaving a dashboard open does not keep its session
 alive. `DashboardQueries` handles that distinction for core screens. A module using `request`

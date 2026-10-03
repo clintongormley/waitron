@@ -1186,13 +1186,18 @@ Writes have no limit. Since lane A's W18b, a save's or other action's failure is
 when the reads recover on the screens that show a read's and an action's failure in one place: each
 remembers whether its message came from a read (the owner's choice, 2026-10-03); the reads' recovery
 clears only a read's message, and a read failing again during the outage no longer replaces an
-action's. An action that saves and then re-reads counts a failure after the save as the re-read's.
+action's, except on Devices, where the queue reload after a wrong-number refusal still replaces that
+refusal; the replacing message is a read's, so the reads' recovery then clears it. An action that
+saves and then re-reads counts a failure after the save as the re-read's. The reload after a
+successful action no longer clears another action's failure on Floor, Service status, Canvases,
+Staff and Payments, and a read an action takes before its write, such as Products' restore, counts
+as a read's.
 Screens: Floor, Roster, Kitchen, Printing rules, Device profiles, Recipes, Purchases, Canvases,
 Approvals, Devices, Service status, Staff, Products, the courses list, Profile, the reprint dialog,
 Diagnostics, Units, Bookings and Prep stations; Payments and Cloud services already kept it, and the
 placement step keeps a save's failures in a list of their own. Prep stations used to clear any
-message on every successful read; an action's message there now stays until the next action or
-editor opens.
+message on every successful read; an action's message there now stays until the person acts or
+edits again.
 
 **A dashboard read that waits on an outside service can be cut off at 30 seconds and reported as a
 broken connection (A255, from lane A's W18a, #1135, 2026-10-03) — OPEN, queued as lane A's W18c.**

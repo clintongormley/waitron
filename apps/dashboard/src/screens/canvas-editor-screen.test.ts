@@ -1612,3 +1612,41 @@ it.each(["connection.failed", "server.internal"])(
     expect(alert()).toBe(codeMessage("connection.failed"));
   },
 );
+
+it("keeps a failed delete's message when an earlier delete completes after it", async () => {
+  let finishFirst!: () => void;
+  const api = stubApi({
+    listCanvases: vi
+      .fn()
+      .mockResolvedValue([...canvases, { ...canvases[0]!, id: "c2", name: "Bar till" }]),
+    deleteCanvas: vi
+      .fn()
+      .mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          finishFirst = resolve;
+        }),
+      )
+      .mockRejectedValueOnce({ code: "canvas.not_found" }),
+  });
+  const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", { api });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=canvas-row-c2]")).toBeTruthy(),
+  );
+  const alert = () => el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim();
+  const remove = async (id: string) => {
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-test=delete-${id}]`)!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+  };
+
+  await remove("c1");
+  await vi.waitFor(() => expect(api.deleteCanvas).toHaveBeenCalledTimes(1));
+  await remove("c2");
+  await vi.waitFor(() => expect(alert()).toBe(codeMessage("canvas.not_found")));
+
+  const reads = vi.mocked(api.listCanvases).mock.calls.length;
+  finishFirst();
+  await vi.waitFor(() => expect(api.listCanvases).toHaveBeenCalledTimes(reads + 1));
+  await flush(el);
+  expect(alert()).toBe(codeMessage("canvas.not_found"));
+});
