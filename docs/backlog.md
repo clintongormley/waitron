@@ -1180,7 +1180,10 @@ during the outage loses its message when the reads recover: most screens store t
 code, Profile and the reprint dialog store its text. Units compares the error itself and keeps it,
 the placement step keeps a save's failures in a list of their own, and Payments and Cloud services
 now keep it too. Both need a choice (asked 2026-10-03 in lane A's questions): the limit's value, and
-whether each screen tracks where its message came from.
+whether each screen tracks where its message came from. Seen while checking W18's screenshots,
+and the same on `main` before it: while its read is failing, Payments still says "No card readers
+yet." under an empty table, and Cloud services says "Checking Cloud connection…" under the failure
+message — the kind of empty-state text W18 removed from Roster and Planned vs actual.
 
 **The WAITRON wordmark is nearly invisible in the dashboard's banner in dark mode (A225, seen
 2026-10-02 while checking A206) — OPEN, not investigated.** The dark lettering of the lockup sits on
