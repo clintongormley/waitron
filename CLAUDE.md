@@ -1064,9 +1064,10 @@ before treating an implementation as a rule violation.
   `wa-wt onboarding <worktree-name>`**, never a bare `pnpm dev*` — compose names its project after the
   directory, so an unqualified `docker compose up` starts a SECOND `mailpit` fighting for the fixed
   1025 and 8025 ports.
-- **The dev venue is a directory of SQLite files on the host, shared by every checkout and seeded,
-  and moving between worktrees on the same target does not wipe it — so a branch's migrations can
-  fail on the rows already in it.** Migrations carry no data-preservation code (§3);
+- **The first dev stack's venue is a seeded directory of SQLite files on the host, shared by
+  worktrees that take the first port slot; a second stack running beside it has its own venue.
+  Moving between worktrees on the same target does not wipe that slot's venue — so a branch's
+  migrations can fail on the rows already in it.** Migrations carry no data-preservation code (§3);
   `wa-wt reset demo <name>` rebuilds it, and boot points at that conditionally
   (`migrations.dev_constraint_violation`, `WAITRON_ENV=dev` only). Detail, including what that line
   may NOT claim: [workflow-guide.md](docs/developers/workflow-guide.md). Cost: repeated dead boots

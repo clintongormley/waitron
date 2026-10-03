@@ -170,7 +170,8 @@ logging `mdns.responding`. The guard landed in #380.
 **The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or
 `wa-wt onboarding <worktree-name>`** (`~/workspace/tools`),
 never with a bare `pnpm dev*`. The first port slot uses
-`$HOME/workspace/.waitron-dev/box`. Its venue directory is derived from that state directory by
+`$HOME/workspace/.waitron-dev/box`, including its venue across worktrees that take that slot. The
+venue directory is derived from that state directory by
 `defaultDevVenueDir` (`apps/server/scripts/dev-setup.ts`). The gitignored `apps/server/.env`
 describes that venue (venue ids, credentials key), so `wa-wt` copies its newest copy into another
 worktree that takes the first slot. Starting a second worktree while the first runs gives it ports
