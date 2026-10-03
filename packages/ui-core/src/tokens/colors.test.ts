@@ -202,3 +202,24 @@ test("the OS light preference gives the field tokens the same values as an expli
   expect(fromPreference).toEqual(FIELD_TOKENS.map((name) => token(explicit, name)));
   expect(fromPreference).not.toEqual(FIELD_TOKENS.map(() => ""));
 });
+
+describe.each(["light", "dark"] as const)("primary text (%s)", (theme) => {
+  // --wt-color-primary itself is 4.32:1 on the light --wt-color-bg a hovered list row paints.
+  test("reads at 4.5:1 or more on the page background and on both surfaces", () => {
+    const el = mount(theme);
+    const text = token(el, "--wt-color-primary-text");
+    for (const surface of ["--wt-color-bg", "--wt-color-surface", "--wt-color-surface-raised"]) {
+      expect(ratio(text, token(el, surface)), `${theme}: on ${surface}`).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    }
+  });
+
+  test("the OS preference gives it the same value as the explicit theme", async () => {
+    await commands.emulateColorScheme(theme);
+    const byPreference = mount();
+    const fromPreference = token(byPreference, "--wt-color-primary-text");
+    byPreference.remove();
+    expect(fromPreference).toBe(token(mount(theme), "--wt-color-primary-text"));
+  });
+});
