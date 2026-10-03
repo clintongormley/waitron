@@ -3038,6 +3038,145 @@ function panel(el: AnyTable): HTMLElement {
   return el.shadowRoot!.querySelector<HTMLElement>(".columns-panel")!;
 }
 
+function chooserOpen(el: AnyTable): boolean {
+  return (panel(el) as HTMLElement & { open: boolean }).open;
+}
+
+test("customise lists every column and fixes the first and pinned columns in place", async () => {
+  const columns: DataTableColumn<Row>[] = [
+    choosable[0]!,
+    choosable[1]!,
+    { key: "actions", label: "Actions", cell: () => "Edit", pinned: "end" },
+  ];
+  const el = await table({ columns });
+  await userEvent.click(trigger(el));
+  const rows = [...panel(el).querySelectorAll<HTMLElement>("[data-column-row]")];
+  expect(rows.map((row) => row.dataset.columnRow)).toEqual(["name", "count", "actions"]);
+  expect(rows[0]!.querySelector("[data-reorder]")).toBeNull();
+  expect(rows[1]!.querySelector("[data-reorder]")).not.toBeNull();
+  expect(rows[2]!.querySelector("[data-reorder]")).toBeNull();
+  expect(chooserBox(el, "name").disabled).toBe(true);
+  expect(chooserBox(el, "actions").disabled).toBe(true);
+});
+
+test("the eye icon reflects column visibility and its toggle names the action", async () => {
+  const el = await table({ columns: choosable });
+  await userEvent.click(trigger(el));
+  const eye = () => chooserBox(el, "extra").closest("label")!.querySelector("wt-icon")!;
+  expect(eye().getAttribute("name")).toBe("eye-closed");
+  expect(chooserBox(el, "extra").getAttribute("aria-label")).toBe("Show Extra");
+  await choose(el, "extra");
+  expect(eye().getAttribute("name")).toBe("eye-open");
+  expect(chooserBox(el, "extra").getAttribute("aria-label")).toBe("Hide Extra");
+});
+
+test("Customise actions use the shared buttons", async () => {
+  const el = await table({ columns: choosable });
+  const actions = [...panel(el).querySelectorAll("[slot=footer]")];
+  expect(actions.map((action) => action.tagName)).toEqual(["WT-BUTTON", "WT-BUTTON"]);
+  expect(actions.map((action) => action.textContent!.trim())).toEqual(["Restore defaults", "Done"]);
+});
+
+test("keyboard reordering changes the table and keeps the row menu last", async () => {
+  const columns: DataTableColumn<Row>[] = [
+    choosable[0]!,
+    choosable[1]!,
+    { ...choosable[2]!, choosable: "shown" },
+    { key: "actions", label: "Actions", cell: () => "Edit", pinned: "end" },
+  ];
+  const el = await table({ columns });
+  await userEvent.click(trigger(el));
+  const handle = panel(el).querySelector<HTMLButtonElement>('[data-reorder="extra"]')!;
+  handle.focus();
+  await userEvent.keyboard("{ArrowUp}");
+  await el.updateComplete;
+  expect(headers(el)).toEqual(["Name", "Extra", "Count", "Actions"]);
+  expect(panel(el).querySelector('[data-reorder="extra"]')).toBe(el.shadowRoot!.activeElement);
+  expect(panel(el).querySelector('[role="status"]')?.textContent).toContain("2");
+  await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+  await el.updateComplete;
+  expect(headers(el)).toEqual(["Name", "Count", "Extra", "Actions"]);
+});
+
+test("the position announcement is available to assistive technology without adding a visible row", async () => {
+  const el = await table({ columns: choosable });
+  await userEvent.click(trigger(el));
+  const status = panel(el).querySelector<HTMLElement>('[role="status"]')!;
+  expect(status.getAttribute("aria-live")).toBe("polite");
+  expect(status.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+});
+
+test("Restore defaults resets the declared order and column visibility", async () => {
+  const columns = [choosable[0]!, choosable[1]!, { ...choosable[2]!, choosable: "shown" as const }];
+  const el = await table({ columns, viewKey: "test.restore-defaults" });
+  await userEvent.click(trigger(el));
+  panel(el).querySelector<HTMLButtonElement>('[data-reorder="extra"]')!.focus();
+  await userEvent.keyboard("{ArrowUp}");
+  await el.updateComplete;
+  await choose(el, "count");
+  expect(headers(el)).toEqual(["Name", "Extra"]);
+  panel(el).querySelector<HTMLButtonElement>("[data-restore-columns]")!.click();
+  await el.updateComplete;
+  expect(headers(el)).toEqual(["Name", "Count", "Extra"]);
+  expect(chooserBox(el, "count").checked).toBe(true);
+  expect(localStorage.getItem("test.restore-defaults:column-order")).toBeNull();
+});
+
+test("a stored order ignores removed columns and inserts new ones in their declared place", async () => {
+  localStorage.setItem("test.order:column-order", JSON.stringify(["extra", "removed", "count"]));
+  const columns = [
+    choosable[0]!,
+    choosable[1]!,
+    { key: "new", label: "New", cell: (row: Row) => row.name, choosable: "shown" as const },
+    { ...choosable[2]!, choosable: "shown" as const },
+  ];
+  const el = await table({ columns, viewKey: "test.order" });
+  expect(headers(el)).toEqual(["Name", "Extra", "Count", "New"]);
+});
+
+test("dragging a column handle moves it to the pointed movable row", async () => {
+  const columns = [choosable[0]!, choosable[1]!, { ...choosable[2]!, choosable: "shown" as const }];
+  const el = await table({ columns });
+  await userEvent.click(trigger(el));
+  const source = panel(el).querySelector<HTMLButtonElement>('[data-reorder="extra"]')!;
+  const destination = panel(el).querySelector<HTMLElement>('[data-column-row="count"]')!;
+  const start = source.getBoundingClientRect();
+  const end = destination.getBoundingClientRect();
+  source.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      pointerId: 1,
+      pointerType: "mouse",
+      button: 0,
+      bubbles: true,
+      composed: true,
+      clientX: start.x + start.width / 2,
+      clientY: start.y + start.height / 2,
+    }),
+  );
+  document.dispatchEvent(
+    new PointerEvent("pointermove", {
+      pointerId: 1,
+      pointerType: "mouse",
+      button: 0,
+      bubbles: true,
+      clientX: end.x + end.width / 2,
+      clientY: end.y + end.height / 2,
+    }),
+  );
+  document.dispatchEvent(
+    new PointerEvent("pointerup", {
+      pointerId: 1,
+      pointerType: "mouse",
+      button: 0,
+      bubbles: true,
+      clientX: end.x + end.width / 2,
+      clientY: end.y + end.height / 2,
+    }),
+  );
+  await el.updateComplete;
+  expect(headers(el)).toEqual(["Name", "Extra", "Count"]);
+});
+
 async function choose(el: AnyTable, key: string): Promise<void> {
   chooserBox(el, key).click();
   await el.updateComplete;
@@ -3049,17 +3188,27 @@ test("no column chooser is drawn when no column is choosable", async () => {
   expect(el.shadowRoot!.querySelector(".columns-panel")).toBeNull();
 });
 
-test("a choosable column starts shown or hidden as it asks, and an unchoosable one is always shown and not offered", async () => {
-  const el = await table({ columns: choosable });
-  expect(headers(el)).toEqual(["Name", "Count"]);
-  expect(rowText(el)).toEqual(["Bea2", "Ada10"]);
-  expect(chooserBoxes(el).map((box) => box.closest("label")!.textContent!.trim())).toEqual([
-    "Count",
-    "Extra",
+test("a choosable column starts shown or hidden as it asks, and an unchoosable one is listed but fixed", async () => {
+  const cols: DataTableColumn<Row>[] = [
+    ...choosable,
+    { key: "id", label: "ID", cell: (row) => row.id, choosable: "shown" },
+  ];
+  const el = await table({ columns: cols });
+  expect(headers(el)).toEqual(["Name", "Count", "ID"]);
+  expect(rowText(el)).toEqual(["Bea2b", "Ada10a"]);
+  expect(
+    chooserBoxes(el).map((box) =>
+      box.closest(".column-choice")!.querySelector(".column-name")!.textContent!.trim(),
+    ),
+  ).toEqual(["Name", "Count", "Extra", "ID"]);
+  expect(chooserBoxes(el).map((box) => box.checked)).toEqual([true, true, false, true]);
+  expect(chooserBoxes(el).map((box) => box.name)).toEqual([
+    "name-column",
+    "count-column",
+    "extra-column",
+    "id-column",
   ]);
-  expect(chooserBoxes(el).map((box) => box.checked)).toEqual([true, false]);
-  expect(chooserBoxes(el).map((box) => box.name)).toEqual(["count-column", "extra-column"]);
-  expect(chooserBoxes(el).map((box) => box.disabled)).toEqual([false, false]);
+  expect(chooserBoxes(el).map((box) => box.disabled)).toEqual([true, false, false, false]);
 });
 
 test("the chooser sits at the toolbar's trailing end, after the filters", async () => {
@@ -3070,7 +3219,7 @@ test("the chooser sits at the toolbar's trailing end, after the filters", async 
   const toolbar = el.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
   const filter = el.shadowRoot!.querySelector(".table-filter")!.getBoundingClientRect();
   const button = trigger(el).getBoundingClientRect();
-  expect(button.right).toBeCloseTo(toolbar.right, 0);
+  expect(button.right).toBeGreaterThanOrEqual(toolbar.right - 8);
   expect(filter.right).toBeLessThan(button.left - 100);
 });
 
@@ -3082,15 +3231,16 @@ test("the chooser draws in the toolbar even with no search box or filter", async
   expect(toolbar.querySelector(".table-filters")).toBeNull();
 });
 
-test("the chooser's button and group read 'Columns' unless the consumer names them", async () => {
+test("the chooser's icon button and dialog read their accessible names", async () => {
   const el = await table({ columns: choosable });
-  expect(trigger(el).textContent!.trim()).toBe("Columns");
-  expect(panel(el).getAttribute("role")).toBe("group");
-  expect(panel(el).getAttribute("aria-label")).toBe("Columns");
-  el.columnsLabel = "Columnas";
+  expect(trigger(el).getAttribute("aria-label")).toBe("Customise columns");
+  expect(trigger(el).querySelector("wt-icon")).not.toBeNull();
+  expect(panel(el).getAttribute("heading")).toBe("Customise");
+  el.customiseColumnsLabel = "Personalizar columnas";
+  el.customiseLabel = "Personalizar";
   await el.updateComplete;
-  expect(trigger(el).textContent!.trim()).toBe("Columnas");
-  expect(panel(el).getAttribute("aria-label")).toBe("Columnas");
+  expect(trigger(el).getAttribute("aria-label")).toBe("Personalizar columnas");
+  expect(panel(el).getAttribute("heading")).toBe("Personalizar");
 });
 
 test("ticking a hidden column shows its header and cells, and unticking hides them again", async () => {
@@ -3107,17 +3257,19 @@ test("ticking a hidden column shows its header and cells, and unticking hides th
 
 test("a selectable table keeps its selection column while columns are hidden", async () => {
   const el = await table({ columns: choosable, selectable: true, selected: [] });
+  await choose(el, "extra");
   await choose(el, "count");
-  expect(headers(el)).toEqual(["", "Name"]);
+  expect(headers(el)).toEqual(["", "Name", "Extra"]);
   expect(el.shadowRoot!.querySelector("thead th.select [data-test=select-all]")).not.toBeNull();
   const firstRow = el.shadowRoot!.querySelector('tbody tr[data-row-key="b"]')!;
   expect([...firstRow.querySelectorAll("td")].map((cell) => cell.textContent!.trim())).toEqual([
     "",
     "Bea",
+    "xb",
   ]);
 });
 
-test("hiding a clickable table's first column moves the row activator to the first shown cell", async () => {
+test("a clickable table keeps its first column and its row activator", async () => {
   const cols: DataTableColumn<Row>[] = [
     { ...choosable[1]! },
     { key: "name", label: "Name", cell: (row) => row.name },
@@ -3125,7 +3277,7 @@ test("hiding a clickable table's first column moves the row activator to the fir
   const el = await table({ columns: cols, rowClick: (row: Row) => row.id });
   await choose(el, "count");
   const cells = el.shadowRoot!.querySelectorAll('tbody tr[data-row-key="b"] td');
-  expect(cells.length).toBe(1);
+  expect(cells.length).toBe(2);
   expect(cells[0]!.querySelector(".row-activate")).not.toBeNull();
 });
 
@@ -3134,18 +3286,18 @@ const choosableTree: DataTableColumn<TreeRow>[] = [
   { key: "code", label: "Code", cell: (row) => row.id, choosable: "hidden" },
 ];
 
-test("a tree shows and hides chosen columns, and its first shown column carries the toggle", async () => {
+test("a tree keeps its first column and toggle while other columns are chosen", async () => {
   const el = await treeTable({ columns: choosableTree, selectable: true, selected: [] });
   expect(headers(el)).toEqual(["", "Name"]);
   await choose(el, "code");
   expect(headers(el)).toEqual(["", "Name", "Code"]);
   await choose(el, "name");
-  expect(headers(el)).toEqual(["", "Code"]);
+  expect(headers(el)).toEqual(["", "Name", "Code"]);
   const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>('tr[data-row-key="food"] td')];
-  expect(cells.length).toBe(2);
+  expect(cells.length).toBe(3);
   expect(cells[0]!.classList.contains("select")).toBe(true);
   expect(cells[1]!.querySelector("button.tree-toggle")).not.toBeNull();
-  expect(cells[1]!.textContent!.trim()).toContain("food");
+  expect(cells[1]!.textContent!.trim()).toContain("Food");
   expect(cells[1]!.getAttribute("role")).toBe("gridcell");
 });
 
@@ -3160,26 +3312,26 @@ test("a tree without selection hides a chosen column's header and cells", async 
   ).toEqual(["Eggs", "eggs"]);
 });
 
-test("the last shown column cannot be hidden: its box is disabled until another is shown", async () => {
+test("the fixed first column cannot be hidden while other choices remain available", async () => {
   const all: DataTableColumn<Row>[] = [
     { key: "name", label: "Name", cell: (row) => row.name, choosable: "shown" },
     { ...choosable[1]! },
     { ...choosable[2]! },
   ];
   const el = await table({ columns: all });
-  expect(chooserBoxes(el).map((box) => box.disabled)).toEqual([false, false, false]);
+  expect(chooserBoxes(el).map((box) => box.disabled)).toEqual([true, true, false]);
   await choose(el, "name");
-  expect(chooserBoxes(el).map((box) => box.disabled)).toEqual([false, true, false]);
+  expect(chooserBoxes(el).map((box) => box.disabled)).toEqual([true, true, false]);
   await choose(el, "extra");
-  expect(chooserBoxes(el).map((box) => box.disabled)).toEqual([false, false, false]);
+  expect(chooserBoxes(el).map((box) => box.disabled)).toEqual([true, false, false]);
 });
 
-test("an always-shown column counts, so the one choosable column beside it can still be hidden", async () => {
+test("the last visible movable column cannot be hidden beside the fixed first column", async () => {
   const el = await table({ columns: [choosable[0]!, choosable[1]!] });
-  expect(chooserBox(el, "count").disabled).toBe(false);
+  expect(chooserBox(el, "count").disabled).toBe(true);
   await choose(el, "count");
-  expect(headers(el)).toEqual(["Name"]);
-  expect(chooserBox(el, "count").disabled).toBe(false);
+  expect(headers(el)).toEqual(["Name", "Count"]);
+  expect(chooserBox(el, "count").disabled).toBe(true);
 });
 
 test("when every column starts hidden, the first one is shown and cannot be hidden", async () => {
@@ -3207,10 +3359,14 @@ test("a stored choice hiding every column still leaves the first one shown", asy
 });
 
 test("a hidden column's filter dropdown stays drawn and keeps filtering", async () => {
-  const cols: DataTableColumn<RowS>[] = [withStatus[0]!, { ...withStatus[1]!, choosable: "shown" }];
+  const cols: DataTableColumn<RowS>[] = [
+    withStatus[0]!,
+    { ...withStatus[1]!, choosable: "shown" },
+    { key: "id", label: "ID", cell: (row) => row.id, choosable: "shown" },
+  ];
   const el = await tableS({ columns: cols });
   await choose(el, "status");
-  expect(headers(el)).toEqual(["Name"]);
+  expect(headers(el)).toEqual(["Name", "ID"]);
   const select = statusSelect(el);
   await chooseOption(select, "off");
   await el.updateComplete;
@@ -3220,16 +3376,17 @@ test("a hidden column's filter dropdown stays drawn and keeps filtering", async 
 test("a hidden column stops sorting the rows, and showing it again restores its sort", async () => {
   const el = await table({ columns: choosable, sortKey: "count", sortDirection: "descending" });
   expect(rowText(el)).toEqual(["Ada10", "Bea2"]);
+  await choose(el, "extra");
   await choose(el, "count");
-  expect(rowText(el)).toEqual(["Bea", "Ada"]);
+  expect(rowText(el)).toEqual(["Beaxb", "Adaxa"]);
   expect(el.sortKey).toBe("count");
   expect(el.sortDirection).toBe("descending");
   expect(el.shadowRoot!.querySelector('th[aria-sort="none"] [data-sort="name"]')).not.toBeNull();
   await choose(el, "count");
-  expect(rowText(el)).toEqual(["Ada10", "Bea2"]);
+  expect(rowText(el)).toEqual(["Ada10xa", "Bea2xb"]);
 });
 
-test("a hidden column stops sorting a tree's siblings, and showing it again restores its sort", async () => {
+test("the fixed first column keeps sorting a tree's siblings", async () => {
   const cols: DataTableColumn<TreeRow>[] = [
     choosableTree[0]!,
     { key: "code", label: "Code", cell: (row) => row.id },
@@ -3240,7 +3397,7 @@ test("a hidden column stops sorting a tree's siblings, and showing it again rest
   await el.updateComplete;
   expect(treeKeys(el)).toEqual(["drinks", "food", "break", "eggs"]);
   await choose(el, "name");
-  expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
+  expect(treeKeys(el)).toEqual(["drinks", "food", "break", "eggs"]);
   await choose(el, "name");
   expect(treeKeys(el)).toEqual(["drinks", "food", "break", "eggs"]);
 });
@@ -3297,7 +3454,7 @@ test("restores the chosen columns from local storage under the view key", async 
   localStorage.setItem("test.restore:columns", JSON.stringify({ count: false, extra: true }));
   const el = await table({ columns: choosable, viewKey: "test.restore" });
   expect(headers(el)).toEqual(["Name", "Extra"]);
-  expect(chooserBoxes(el).map((box) => box.checked)).toEqual([false, true]);
+  expect(chooserBoxes(el).map((box) => box.checked)).toEqual([true, false, true]);
 });
 
 test("restores the chosen columns once columns arrive after the viewKey", async () => {
@@ -3400,15 +3557,17 @@ test("the column choice and the sort and filter memory are stored apart", async 
   expect(localStorage.getItem("test.apart")).toBeNull();
 });
 
-test("the chooser button opens and closes its panel and says whether it is open", async () => {
+test("the chooser button opens its dialog and Done closes it", async () => {
   const el = await table({ columns: choosable });
-  expect(panel(el).matches(":popover-open")).toBe(false);
+  expect(chooserOpen(el)).toBe(false);
   expect(trigger(el).getAttribute("aria-expanded")).toBe("false");
   await userEvent.click(trigger(el));
-  expect(panel(el).matches(":popover-open")).toBe(true);
+  expect(chooserOpen(el)).toBe(true);
   await vi.waitFor(() => expect(trigger(el).getAttribute("aria-expanded")).toBe("true"));
-  await userEvent.click(trigger(el));
-  expect(panel(el).matches(":popover-open")).toBe(false);
+  await userEvent.click(
+    panel(el).querySelector<HTMLElement>('wt-button[slot="footer"]:last-child')!,
+  );
+  expect(chooserOpen(el)).toBe(false);
   await vi.waitFor(() => expect(trigger(el).getAttribute("aria-expanded")).toBe("false"));
 });
 
@@ -3419,7 +3578,7 @@ test("Escape closes the chooser and returns focus to its button, and goes no fur
   const outer = vi.fn();
   host.addEventListener("keydown", outer);
   await userEvent.keyboard("{Escape}");
-  expect(panel(el).matches(":popover-open")).toBe(false);
+  expect(chooserOpen(el)).toBe(false);
   expect(el.shadowRoot!.activeElement).toBe(trigger(el));
   expect(outer).not.toHaveBeenCalled();
 });
@@ -3434,7 +3593,8 @@ test("an Escape that closes the chooser is marked handled, so a dialog around it
     cancelable: true,
   });
   panel(el).dispatchEvent(escape);
-  expect(panel(el).matches(":popover-open")).toBe(false);
+  await el.updateComplete;
+  expect(chooserOpen(el)).toBe(false);
   expect(escape.defaultPrevented).toBe(true);
 });
 
@@ -3445,7 +3605,7 @@ test("Escape on the chooser button closes the open panel and goes no further", a
   const outer = vi.fn();
   host.addEventListener("keydown", outer);
   await userEvent.keyboard("{Escape}");
-  expect(panel(el).matches(":popover-open")).toBe(false);
+  expect(chooserOpen(el)).toBe(false);
   expect(outer).not.toHaveBeenCalled();
 });
 
@@ -3458,68 +3618,33 @@ test("an Escape already handled, or pressed while closed, is left alone", async 
   const handled = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
   handled.preventDefault();
   panel(el).dispatchEvent(handled);
-  expect(panel(el).matches(":popover-open")).toBe(true);
+  expect(chooserOpen(el)).toBe(true);
   const other = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
   panel(el).dispatchEvent(other);
   expect(other.defaultPrevented).toBe(false);
-  expect(panel(el).matches(":popover-open")).toBe(true);
+  expect(chooserOpen(el)).toBe(true);
 });
 
-test("a press outside the chooser closes it, and a press inside it does not", async () => {
+test("an inside choice keeps the dialog open, and dismissing it closes it", async () => {
   const el = await table({ columns: choosable });
   await userEvent.click(trigger(el));
   await userEvent.click(chooserBox(el, "extra").closest("label")!);
-  expect(panel(el).matches(":popover-open")).toBe(true);
+  expect(chooserOpen(el)).toBe(true);
   expect(headers(el)).toEqual(["Name", "Count", "Extra"]);
-  await userEvent.click(el.shadowRoot!.querySelector("table")!);
-  expect(panel(el).matches(":popover-open")).toBe(false);
+  panel(el).shadowRoot!.querySelector("dialog")!.close();
+  await vi.waitFor(() => expect(chooserOpen(el)).toBe(false));
 });
 
-test("the chooser panel opens under its button, aligned to its end, over the table", async () => {
-  // Narrower than the screen on both sides, so the alignment is observed rather than a clamp.
+test("the Customise dialog overlays the table without moving it", async () => {
   const el = await table({ columns: choosable, searchable: true });
-  el.style.width = "300px";
-  el.style.marginInlineStart = "50px";
-  await el.updateComplete;
   const tableTop = el.shadowRoot!.querySelector("table")!.getBoundingClientRect().top;
-  const firstFrame = new Promise<DOMRect>((resolve) => {
-    trigger(el).addEventListener(
-      "click",
-      () => requestAnimationFrame(() => resolve(panel(el).getBoundingClientRect())),
-      { once: true },
-    );
-  });
   await userEvent.click(trigger(el));
-  const bounds = await firstFrame;
-  const anchor = trigger(el).getBoundingClientRect();
-  expect(bounds.top).toBeCloseTo(anchor.bottom, 0);
-  expect(bounds.right).toBeCloseTo(anchor.right, 0);
+  const dialog = panel(el).shadowRoot!.querySelector("dialog")!;
+  const bounds = dialog.getBoundingClientRect();
+  expect(dialog.open).toBe(true);
+  expect(bounds.left).toBeGreaterThanOrEqual(0);
+  expect(bounds.right).toBeLessThanOrEqual(innerWidth);
   expect(el.shadowRoot!.querySelector("table")!.getBoundingClientRect().top).toBe(tableTop);
-  expect(bounds.bottom).toBeGreaterThan(tableTop);
-});
-
-test("a chooser near the screen's leading edge holds its panel 8px inside it", async () => {
-  const cols: DataTableColumn<Row>[] = [
-    choosable[0]!,
-    { ...choosable[1]!, label: "A much longer column name than the button" },
-  ];
-  const el = await table({ columns: cols });
-  el.style.position = "fixed";
-  el.style.insetInlineStart = "0";
-  el.style.insetBlockStart = "0";
-  el.style.width = "120px";
-  await userEvent.click(trigger(el));
-  expect(panel(el).getBoundingClientRect().left).toBeCloseTo(8, 0);
-});
-
-test("a chooser near the screen's trailing edge holds its panel 8px inside it", async () => {
-  const el = await table({ columns: choosable });
-  el.style.position = "fixed";
-  el.style.insetInlineEnd = "0";
-  el.style.insetBlockStart = "0";
-  el.style.width = "300px";
-  await userEvent.click(trigger(el));
-  expect(panel(el).getBoundingClientRect().right).toBeCloseTo(innerWidth - 8, 0);
 });
 
 function manyChoosable(count: number): DataTableColumn<Row>[] {
@@ -3534,31 +3659,16 @@ function manyChoosable(count: number): DataTableColumn<Row>[] {
   ];
 }
 
-test("a chooser near the screen's bottom edge holds its panel 8px inside it", async () => {
-  const el = await table({ columns: manyChoosable(7) });
-  el.style.position = "fixed";
-  el.style.insetInlineStart = "0";
-  el.style.insetBlockEnd = "0";
-  el.style.width = "300px";
-  await userEvent.click(trigger(el));
-  const bounds = panel(el).getBoundingClientRect();
-  expect(bounds.bottom).toBeCloseTo(innerHeight - 8, 0);
-  expect(bounds.top).toBeLessThan(trigger(el).getBoundingClientRect().bottom);
-});
-
-test("a chooser panel taller than the screen stays 8px inside it and scrolls its choices", async () => {
+test("a long Customise list scrolls within the screen and reaches its last choice", async () => {
   const el = await table({ columns: manyChoosable(40) });
-  el.style.position = "fixed";
-  el.style.insetInlineStart = "0";
-  el.style.insetBlockStart = "0";
-  el.style.width = "300px";
   await userEvent.click(trigger(el));
-  const popup = panel(el);
+  const popup = panel(el).querySelector<HTMLElement>(".columns-list")!;
   const bounds = popup.getBoundingClientRect();
-  expect(bounds.top).toBeCloseTo(8, 0);
-  expect(bounds.bottom).toBeCloseTo(innerHeight - 8, 0);
+  expect(bounds.top).toBeGreaterThanOrEqual(0);
+  expect(bounds.bottom).toBeLessThanOrEqual(innerHeight);
   expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
   popup.scrollTop = popup.scrollHeight;
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   const last = chooserBox(el, "extra39");
   const lastBounds = last.getBoundingClientRect();
   expect(lastBounds.top).toBeGreaterThanOrEqual(bounds.top);
@@ -3570,6 +3680,7 @@ test("the chooser's button and panel paint from the theme tokens", async () => {
   host.style.setProperty("--wt-tap-min", "52px");
   host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
   host.style.setProperty("--wt-color-surface", "rgb(7, 8, 9)");
+  host.style.setProperty("--wt-color-surface-raised", "rgb(8, 9, 10)");
   host.style.setProperty("--wt-color-text", "rgb(10, 11, 12)");
   host.style.setProperty("--wt-color-primary", "rgb(13, 14, 15)");
   const button = trigger(el);
@@ -3579,13 +3690,13 @@ test("the chooser's button and panel paint from the theme tokens", async () => {
   expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
   expect(button.getBoundingClientRect().width).toBeGreaterThanOrEqual(52);
   await userEvent.click(button);
-  const popup = panel(el);
+  const popup = panel(el).shadowRoot!.querySelector("dialog")!;
   expect(getComputedStyle(popup).borderColor).toBe("rgb(1, 2, 3)");
-  expect(getComputedStyle(popup).backgroundColor).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(popup).backgroundColor).toBe("rgb(8, 9, 10)");
   expect(getComputedStyle(popup).color).toBe("rgb(10, 11, 12)");
-  const box = chooserBox(el, "count");
-  expect(getComputedStyle(box).accentColor).toBe("rgb(13, 14, 15)");
-  expect(box.closest("label")!.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
+  const box = chooserBox(el, "extra");
+  expect(getComputedStyle(box.nextElementSibling!).color).toBe("rgb(13, 14, 15)");
+  expect(box.closest(".column-choice")!.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
 });
 
 test("the chooser's button and boxes draw the focus ring when focused", async () => {
@@ -3593,13 +3704,16 @@ test("the chooser's button and boxes draw the focus ring when focused", async ()
   host.style.setProperty("--wt-focus-ring", "3px solid rgb(4, 5, 6)");
   trigger(el).focus();
   await userEvent.keyboard("{Enter}");
-  await userEvent.keyboard("{Tab}");
-  for (const control of [chooserBox(el, "count"), trigger(el)]) {
-    control.focus();
-    expect(control.matches(":focus-visible")).toBe(true);
-    expect(getComputedStyle(control).outlineColor).toBe("rgb(4, 5, 6)");
-    expect(getComputedStyle(control).outlineStyle).toBe("solid");
-  }
+  const control = chooserBox(el, "extra");
+  control.focus();
+  expect(control.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(control.nextElementSibling!).outlineColor).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(control.nextElementSibling!).outlineStyle).toBe("solid");
+  panel(el).querySelector<HTMLElement>('wt-button[slot="footer"]:last-child')!.click();
+  await el.updateComplete;
+  trigger(el).focus();
+  expect(trigger(el).matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(trigger(el)).outlineColor).toBe("rgb(4, 5, 6)");
 });
 
 test("a focused table search marks its existing border without an outer ring", async () => {

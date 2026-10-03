@@ -438,6 +438,14 @@ export class VenueOperationsScreen extends LitElement {
       data-test=${key}
       viewKey=${viewKey}
       columnsLabel=${t("venue.columns")}
+      customiseColumnsLabel=${t("venue.customise_columns")}
+      customiseLabel=${t("venue.customise")}
+      restoreColumnsLabel=${t("venue.restore_columns")}
+      doneLabel=${t("venue.done")}
+      moveColumnLabel=${t("venue.move_column")}
+      showColumnLabel=${t("venue.show_column")}
+      hideColumnLabel=${t("venue.hide_column")}
+      columnPositionLabel=${t("venue.column_position")}
       aria-label=${label}
       .rows=${rows}
       .columns=${columns}

@@ -3260,12 +3260,16 @@ describe("publishing", () => {
       expect(headerTexts()).toContain(t("menus.status"));
     });
     const root = table(el).shadowRoot;
-    expect(text(root.querySelector(".columns-trigger"))).toBe(t("table.columns"));
-    expect(text(root.querySelector(".columns-trigger"))).toBe("Columnas");
+    expect(root.querySelector(".columns-trigger")?.getAttribute("aria-label")).toBe(t("table.customise_columns"));
+    expect(root.querySelector(".columns-trigger")?.getAttribute("aria-label")).toBe("Personalizar columnas");
     const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
-    expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([["status", true]]);
-    boxes[0]!.checked = false;
-    boxes[0]!.dispatchEvent(new Event("change"));
+    expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([
+      ["name", true],
+      ["status", true],
+      ["actions", true],
+    ]);
+    boxes[1]!.checked = false;
+    boxes[1]!.dispatchEvent(new Event("change"));
     await table(el).updateComplete;
     expect(headerTexts()).not.toContain(t("menus.status"));
     expect(JSON.parse(localStorage.getItem("waitron.menus.table:columns")!)).toEqual({

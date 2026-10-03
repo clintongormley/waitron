@@ -535,18 +535,20 @@ describe("the column chooser", () => {
       const found = table(el, testId);
       await vi.waitFor(() => expect(found.shadowRoot.querySelector("tbody tr")).not.toBeNull());
       const root = found.shadowRoot;
-      expect(root.querySelector(".columns-trigger")!.textContent!.trim()).toBe(t("table.columns"));
+      expect(root.querySelector(".columns-trigger")!.getAttribute("aria-label")).toBe(t("table.customise_columns"));
       const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
       expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([
+        ["name", true],
         [detail, true],
         ["usedBy", true],
         ["status", true],
+        ["actions", true],
       ]);
       const headerTexts = () =>
         [...root.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
       expect(headerTexts()).toContain(t(detailLabel));
-      boxes[0]!.checked = false;
-      boxes[0]!.dispatchEvent(new Event("change"));
+      boxes[1]!.checked = false;
+      boxes[1]!.dispatchEvent(new Event("change"));
       await found.updateComplete;
       expect(headerTexts()).not.toContain(t(detailLabel));
       expect(JSON.parse(localStorage.getItem(`waitron.modifiers.${kind}.table:columns`)!)).toEqual({

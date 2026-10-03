@@ -2,11 +2,23 @@ import { LitElement, css, html, nothing } from "lit";
 import type { PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
+import { repeat } from "lit/directives/repeat.js";
 import { baseStyles } from "../base-styles.js";
+import { holdPageCursor, releasePageCursor } from "../reorder-table.js";
 import { registerIcons } from "./wt-icon.js";
 import "./wt-combobox.js";
+import "./wt-button.js";
+import "./wt-dialog.js";
 
-registerIcons({ "table-filter": "M1.5 3h13L9.5 8.5v3.5l-3 1.5v-5Z" });
+registerIcons({
+  "table-filter": "M1.5 3h13L9.5 8.5v3.5l-3 1.5v-5Z",
+  "table-customise":
+    "M1 2h11v1H2v3h9v1H2v3h6v1H1z M5 3h1v7H5z M12 9l.5 1 1-.2.6 1-.7.8.7.8-.6 1-1-.2-.5 1h-1l-.5-1-1 .2-.6-1 .7-.8-.7-.8.6-1 1 .2.5-1z M11.5 11a.5.5 0 1 0 1 0 .5.5 0 0 0-1 0",
+  "column-grip": "M5 2h2v2H5z M9 2h2v2H9z M5 7h2v2H5z M9 7h2v2H9z M5 12h2v2H5z M9 12h2v2H9z",
+  "eye-open": "M1 8c2-3 4-4 7-4s5 1 7 4c-2 3-4 4-7 4S3 11 1 8zm7-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
+  "eye-closed":
+    "M1 2l13 12 1-1L2 1z M2 8c.7-1 1.5-1.8 2.3-2.4l1.1 1.1A2.5 2.5 0 0 0 9.3 10l1.1 1.1c-.8.3-1.6.4-2.4.4-3 0-5-1-6-3.5z M8 4c3 0 5 1 7 4-.4.7-.9 1.3-1.5 1.8l-5.8-5.8z",
+});
 
 export interface DataTableColumn<Row> {
   key: string;
@@ -376,18 +388,20 @@ export class WtDataTable<Row = unknown> extends LitElement {
         cursor: pointer;
       }
 
-      .columns-panel {
-        position: fixed;
-        margin: 0;
-        /* #toggleChooser keeps this same gutter above and below the panel. */
-        max-height: calc(100dvh - 2 * var(--wt-space-2));
+      .columns-list {
+        display: flex;
+        flex-direction: column;
+        max-height: calc(100dvh - 2 * var(--wt-space-6));
         overflow-y: auto;
-        padding: var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        box-shadow: var(--wt-shadow-2);
+      }
+
+      .column-move-status {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
       }
 
       .column-choice {
@@ -399,16 +413,57 @@ export class WtDataTable<Row = unknown> extends LitElement {
         cursor: pointer;
       }
 
-      .column-choice input {
-        width: var(--wt-space-4);
-        height: var(--wt-space-4);
-        margin: 0;
-        accent-color: var(--wt-color-primary);
+      .column-choice[data-fixed] {
+        color: var(--wt-color-text-muted);
+      }
+
+      [data-reorder] {
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        border: 0;
+        background: transparent;
+        color: var(--wt-color-text);
+        cursor: var(--reorder-drag-cursor, grab);
+        touch-action: none;
+      }
+
+      [data-reorder]:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+
+      .column-name {
+        flex: 1;
+      }
+
+      .eye-toggle {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        cursor: pointer;
+      }
+
+      .eye-toggle input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+      }
+
+      .eye-toggle wt-icon {
+        color: var(--wt-color-primary);
+      }
+
+      .eye-toggle input:disabled + wt-icon {
+        color: var(--wt-color-text-muted);
       }
 
       .columns-trigger:focus-visible,
       .expand-all:focus-visible,
-      .column-choice input:focus-visible {
+      .eye-toggle input:focus-visible + wt-icon {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
@@ -530,6 +585,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property() filtersCloseLabel = "Close filters";
   /** The column chooser's button text and the accessible name of its list. */
   @property() columnsLabel = "Columns";
+  @property() customiseColumnsLabel = "Customise columns";
+  @property() customiseLabel = "Customise";
+  @property() restoreColumnsLabel = "Restore defaults";
+  @property() doneLabel = "Done";
+  @property() moveColumnLabel = "Move";
+  @property() showColumnLabel = "Show";
+  @property() hideColumnLabel = "Hide";
+  @property() columnPositionLabel = "{position} of {total}";
   /** When set, the tab's session storage remembers this table's sort and filter choices under this
    * key, and the browser's local storage remembers the chosen columns under `${viewKey}:columns`;
    * both are restored on the next visit. Search text is never persisted. */
@@ -561,9 +624,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @state() private collapsed = new Set<string>();
   /** Each column's shown state, chosen or restored; it applies only while its column is choosable. */
   @state() private columnChoices: Record<string, boolean> = {};
+  @state() private columnOrder: string[] = [];
+  @state() private columnMoveAnnouncement = "";
   @state() private chooserOpen = false;
   @query(".columns-trigger") private chooserTrigger!: HTMLButtonElement;
   @query(".columns-panel") private chooserPanel!: HTMLElement;
+  #columnDrag: { key: string; pointerId: number; startY: number; active: boolean } | null = null;
   private readonly seededBranches = new Set<string>();
   #restored = false;
   /** A CSS condition cannot read a token, so the width is compared here and the host carries the
@@ -612,6 +678,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.#endColumnDrag();
     window.removeEventListener("resize", this.#resizeFilters);
     this.#scrollObserver.disconnect();
     this.#observedScroll = null;
@@ -712,16 +779,152 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.columnChoices = Object.fromEntries(
       entries.filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean"),
     );
+    try {
+      const order: unknown = JSON.parse(localStorage.getItem(`${viewKey}:column-order`) ?? "null");
+      this.columnOrder = Array.isArray(order)
+        ? order.filter((key): key is string => typeof key === "string")
+        : [];
+    } catch {
+      this.columnOrder = [];
+    }
   }
 
-  /** The columns drawn, in column order; the first column stands in when every one is hidden. */
+  #orderedColumns(): DataTableColumn<Row>[] {
+    const [first, ...rest] = this.columns;
+    if (!first) return [];
+    const movable = rest.filter((column) => column.pinned !== "end");
+    const pinned = rest.filter((column) => column.pinned === "end");
+    const byKey = new Map(movable.map((column) => [column.key, column]));
+    const ordered = [...new Set(this.columnOrder)].filter((key) => byKey.has(key));
+    for (const column of movable) {
+      if (ordered.includes(column.key)) continue;
+      const before = movable
+        .slice(0, movable.indexOf(column))
+        .reverse()
+        .find((item) => ordered.includes(item.key));
+      if (before) ordered.splice(ordered.indexOf(before.key) + 1, 0, column.key);
+      else {
+        const after = movable
+          .slice(movable.indexOf(column) + 1)
+          .find((item) => ordered.includes(item.key));
+        if (after) ordered.splice(ordered.indexOf(after.key), 0, column.key);
+        else ordered.push(column.key);
+      }
+    }
+    return [first, ...ordered.map((key) => byKey.get(key)!), ...pinned];
+  }
+
+  /** The columns drawn, in the person's order; the first column stays shown. */
   #shownColumns(): DataTableColumn<Row>[] {
-    const shown = this.columns.filter(
-      (column) =>
+    const shown = this.#orderedColumns().filter(
+      (column, index) =>
+        index === 0 ||
+        column.pinned === "end" ||
         column.choosable === undefined ||
         (this.columnChoices[column.key] ?? column.choosable === "shown"),
     );
-    return shown.length > 0 ? shown : this.columns.slice(0, 1);
+    return shown;
+  }
+
+  #moveColumn(key: string, delta: number): void {
+    const movable = this.#orderedColumns().filter(
+      (column, index) => index > 0 && column.pinned !== "end",
+    );
+    const from = movable.findIndex((column) => column.key === key);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= movable.length) return;
+    const [moving] = movable.splice(from, 1);
+    movable.splice(to, 0, moving!);
+    this.columnOrder = movable.map((column) => column.key);
+    this.columnMoveAnnouncement = `${moving!.label}, ${this.columnPositionLabel.replace("{position}", String(to + 2)).replace("{total}", String(this.columns.length))}`;
+    if (this.viewKey) {
+      try {
+        localStorage.setItem(`${this.viewKey}:column-order`, JSON.stringify(this.columnOrder));
+      } catch {
+        // The table can be reordered without storage.
+      }
+    }
+    this.dispatchEvent(
+      new CustomEvent("wt-columns-change", {
+        detail: { shown: this.#shownColumns().map((column) => column.key) },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  #startColumnDrag(event: PointerEvent, key: string): void {
+    if (event.button !== 0 || this.#columnDrag) return;
+    this.#columnDrag = { key, pointerId: event.pointerId, startY: event.clientY, active: false };
+    document.addEventListener("pointermove", this.#moveColumnDrag);
+    document.addEventListener("pointerup", this.#dropColumnDrag);
+    document.addEventListener("pointercancel", this.#cancelColumnDrag);
+  }
+
+  readonly #moveColumnDrag = (event: PointerEvent): void => {
+    const drag = this.#columnDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (!drag.active && Math.abs(event.clientY - drag.startY) < 5) return;
+    event.preventDefault();
+    if (!drag.active) {
+      drag.active = true;
+      holdPageCursor();
+    }
+  };
+
+  readonly #dropColumnDrag = (event: PointerEvent): void => {
+    const drag = this.#columnDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (drag.active) {
+      const rows = [...this.chooserPanel.querySelectorAll<HTMLElement>("[data-column-row]")];
+      const target = rows.find((row) => {
+        const box = row.getBoundingClientRect();
+        return event.clientY >= box.top && event.clientY < box.bottom;
+      });
+      const destination = target?.dataset.columnRow;
+      if (destination && target?.querySelector("[data-reorder]")) {
+        const movable = this.#orderedColumns().filter(
+          (column, index) => index > 0 && column.pinned !== "end",
+        );
+        const from = movable.findIndex((column) => column.key === drag.key);
+        const to = movable.findIndex((column) => column.key === destination);
+        if (from >= 0 && to >= 0) this.#moveColumn(drag.key, to - from);
+      }
+    }
+    this.#endColumnDrag();
+  };
+
+  readonly #cancelColumnDrag = (event: PointerEvent): void => {
+    if (event.pointerId === this.#columnDrag?.pointerId) this.#endColumnDrag();
+  };
+
+  #endColumnDrag(): void {
+    if (this.#columnDrag?.active) releasePageCursor();
+    this.#columnDrag = null;
+    document.removeEventListener("pointermove", this.#moveColumnDrag);
+    document.removeEventListener("pointerup", this.#dropColumnDrag);
+    document.removeEventListener("pointercancel", this.#cancelColumnDrag);
+  }
+
+  #restoreColumnDefaults(): void {
+    this.columnChoices = {};
+    this.columnOrder = [];
+    this.columnMoveAnnouncement = "";
+    if (this.viewKey) {
+      try {
+        localStorage.removeItem(`${this.viewKey}:columns`);
+        localStorage.removeItem(`${this.viewKey}:column-order`);
+      } catch {
+        // Defaults still apply for this visit when storage is blocked.
+      }
+    }
+    this.dispatchEvent(
+      new CustomEvent("wt-columns-change", {
+        detail: { shown: this.#shownColumns().map((column) => column.key) },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   #chooseColumn(key: string, shown: boolean): void {
@@ -744,30 +947,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   #toggleChooser(event: MouseEvent): void {
     event.preventDefault();
-    if (this.chooserPanel.matches(":popover-open")) {
-      this.chooserPanel.hidePopover();
-      return;
-    }
-    this.chooserPanel.showPopover();
-    // Placed synchronously after opening, so its first paint is already in place.
-    const anchor = this.chooserTrigger.getBoundingClientRect();
-    const box = this.chooserPanel.getBoundingClientRect();
-    const left = Math.max(8, Math.min(anchor.right - box.width, innerWidth - box.width - 8));
-    this.chooserPanel.style.left = `${left}px`;
-    const top = Math.max(8, Math.min(anchor.bottom, innerHeight - box.height - 8));
-    this.chooserPanel.style.top = `${top}px`;
+    this.chooserOpen = !this.chooserOpen;
   }
 
   #chooserKeydown(event: KeyboardEvent): void {
-    if (
-      event.key !== "Escape" ||
-      event.defaultPrevented ||
-      !this.chooserPanel.matches(":popover-open")
-    )
-      return;
+    if (event.key !== "Escape" || event.defaultPrevented || !this.chooserOpen) return;
     event.preventDefault();
     event.stopPropagation();
-    this.chooserPanel.hidePopover();
+    this.chooserOpen = false;
     this.chooserTrigger.focus();
   }
 
@@ -1527,7 +1714,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         expandAll !== nothing || end || choosable.length > 0
           ? html`<div class="table-end">
               ${expandAll}<slot name="toolbar-end"></slot>${
-                choosable.length > 0 ? this.#renderChooser(choosable) : nothing
+                choosable.length > 0 ? this.#renderChooser() : nothing
               }
             </div>`
           : nothing
@@ -1535,46 +1722,95 @@ export class WtDataTable<Row = unknown> extends LitElement {
     </div>`;
   }
 
-  #renderChooser(choosable: readonly DataTableColumn<Row>[]) {
+  #renderChooser() {
     const shown = this.#shownColumns();
+    const visibleMovable = shown.filter(
+      (column) => column !== this.columns[0] && column.pinned !== "end",
+    );
     return html`<button
         type="button"
         class="columns-trigger"
         aria-expanded=${this.chooserOpen}
-        popovertarget="columns-panel"
+        aria-label=${this.customiseColumnsLabel}
         @click=${this.#toggleChooser}
         @keydown=${this.#chooserKeydown}
       >
-        ${this.columnsLabel}
+        <wt-icon name="table-customise"></wt-icon>
       </button>
-      <div
-        id="columns-panel"
+      <wt-dialog
         class="columns-panel"
-        popover
-        role="group"
-        aria-label=${this.columnsLabel}
-        @toggle=${(event: ToggleEvent) => {
-          this.chooserOpen = event.newState === "open";
-        }}
+        heading=${this.customiseLabel}
+        .open=${this.chooserOpen}
+        @wt-close=${() => (this.chooserOpen = false)}
         @keydown=${this.#chooserKeydown}
       >
-        ${choosable.map((column) => {
-          const isShown = shown.includes(column);
-          return html`<label class="column-choice">
-            <input
-              type="checkbox"
-              name=${`${column.key}-column`}
-              data-column=${column.key}
-              .checked=${isShown}
-              ?disabled=${isShown && shown.length === 1}
-              @change=${(event: Event) => {
-                event.stopPropagation();
-                this.#chooseColumn(column.key, (event.target as HTMLInputElement).checked);
-              }}
-            />${column.label}
-          </label>`;
-        })}
-      </div>`;
+        <div class="columns-list">
+          ${repeat(
+            this.#orderedColumns(),
+            (column) => column.key,
+            (column, index) => {
+              const isShown = shown.includes(column);
+              const fixed = index === 0 || column.pinned === "end";
+              return html`<div
+                class="column-choice"
+                data-column-row=${column.key}
+                ?data-fixed=${fixed}
+              >
+                ${
+                  fixed
+                    ? nothing
+                    : html`<button
+                        type="button"
+                        data-reorder=${column.key}
+                        aria-label=${`${this.moveColumnLabel} ${column.label}`}
+                        @keydown=${(event: KeyboardEvent) => {
+                          const delta =
+                            event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+                          if (!delta) return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          this.#moveColumn(column.key, delta);
+                        }}
+                        @pointerdown=${(event: PointerEvent) => this.#startColumnDrag(event, column.key)}
+                      >
+                        <wt-icon name="column-grip"></wt-icon>
+                      </button>`
+                }
+                <span class="column-name">${column.label}</span>
+                <label class="eye-toggle">
+                  <input
+                    type="checkbox"
+                    name=${`${column.key}-column`}
+                    data-column=${column.key}
+                    aria-label=${`${isShown ? this.hideColumnLabel : this.showColumnLabel} ${column.label}`}
+                    .checked=${isShown}
+                    ?disabled=${fixed ||
+                    column.choosable === undefined ||
+                    (isShown && !fixed && visibleMovable.length === 1)}
+                    @change=${(event: Event) => {
+                      event.stopPropagation();
+                      this.#chooseColumn(column.key, (event.target as HTMLInputElement).checked);
+                    }} /><wt-icon name=${isShown ? "eye-open" : "eye-closed"}></wt-icon
+                ></label>
+              </div>`;
+            },
+          )}
+        </div>
+        <div class="column-move-status" role="status" aria-live="polite">
+          ${this.columnMoveAnnouncement}
+        </div>
+        <wt-button
+          slot="footer"
+          variant="secondary"
+          data-restore-columns
+          @click=${this.#restoreColumnDefaults}
+        >
+          ${this.restoreColumnsLabel}
+        </wt-button>
+        <wt-button slot="footer" @click=${() => (this.chooserOpen = false)}>
+          ${this.doneLabel}
+        </wt-button>
+      </wt-dialog>`;
   }
 
   override render() {

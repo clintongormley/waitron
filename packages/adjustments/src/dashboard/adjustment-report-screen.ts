@@ -752,6 +752,14 @@ export class AdjustmentReportScreen extends LitElement {
         aria-label=${t("adjustment_report.people")}
         viewKey="waitron.adjustments.report.people"
         columnsLabel=${t("adjustments.columns")}
+        customiseColumnsLabel=${t("adjustments.customise_columns")}
+        customiseLabel=${t("adjustments.customise")}
+        restoreColumnsLabel=${t("adjustments.restore_columns")}
+        doneLabel=${t("adjustments.done")}
+        moveColumnLabel=${t("adjustments.move_column")}
+        showColumnLabel=${t("adjustments.show_column")}
+        hideColumnLabel=${t("adjustments.hide_column")}
+        columnPositionLabel=${t("adjustments.column_position")}
         .rows=${this.#personRows(report)}
         .columns=${this.#personColumns()}
         .rowKey=${(row: PersonRow) => row.key}
@@ -841,6 +849,14 @@ export class AdjustmentReportScreen extends LitElement {
         aria-label=${heading}
         viewKey="waitron.adjustments.report.entries"
         columnsLabel=${t("adjustments.columns")}
+        customiseColumnsLabel=${t("adjustments.customise_columns")}
+        customiseLabel=${t("adjustments.customise")}
+        restoreColumnsLabel=${t("adjustments.restore_columns")}
+        doneLabel=${t("adjustments.done")}
+        moveColumnLabel=${t("adjustments.move_column")}
+        showColumnLabel=${t("adjustments.show_column")}
+        hideColumnLabel=${t("adjustments.hide_column")}
+        columnPositionLabel=${t("adjustments.column_position")}
         .rows=${this.entries ?? []}
         .columns=${this.#entryColumns()}
         .rowKey=${(entry: AdjustmentEntry) => entry.id}

@@ -2664,13 +2664,11 @@ Move focus to the first section heading if the owner approves changing the exist
 in `packages/ui/src/components/wt-data-table.test.ts`; the W39 queue's inherited rule prohibits
 editing that assertion without approval.
 
-**The table's Columns button becomes a Customise dialog (A249, owner 2026-10-03) — OPEN, queued as
-lane E's W40.** Today `wt-data-table`'s Columns button opens a list of checkboxes for the columns a
-screen marked `choosable`, with no order and no reset. Agreed with the owner, after Home Assistant's
-column customiser: an icon button opening a dialog that lists every column with a show/hide eye
-(columns that cannot be hidden listed but greyed), drag handles to reorder with a keyboard
-equivalent, Restore defaults and Done. No "Sort by" control: clicking a column's heading already
-sorts (owner).
+**The table's Columns button becomes a Customise dialog (A249, owner 2026-10-03) — DONE.**
+`wt-data-table` has an icon button opening a dialog that lists every column with a show/hide eye.
+The fixed first and pinned end columns are listed but cannot move or hide. Drag and keyboard controls
+reorder the others; Restore defaults resets order and visibility. The table remembers choices when it
+has a `viewKey`. Clicking a column heading still sorts it.
 
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through

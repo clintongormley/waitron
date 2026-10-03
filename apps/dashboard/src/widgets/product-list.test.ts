@@ -247,13 +247,14 @@ describe("product-list", () => {
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
-    expect(root.querySelector(".columns-trigger")?.textContent?.trim()).toBe(t("table.columns"));
+    expect(root.querySelector(".columns-trigger")?.getAttribute("aria-label")).toBe(t("table.customise_columns"));
     expect(
       [...root.querySelectorAll<HTMLInputElement>("input[data-column]")].map((box) => [
         box.dataset.column,
         box.checked,
       ]),
     ).toEqual([
+      ["name", true],
       ["reporting-category", true],
       ["made-at", true],
       ["price", true],
@@ -261,6 +262,7 @@ describe("product-list", () => {
       ["ordering", true],
       ["active", true],
       ["allergens", true],
+      ["actions", true],
     ]);
     const headerLabels = () =>
       [...root.querySelectorAll("thead th")].map((th) =>

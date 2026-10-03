@@ -194,18 +194,20 @@ describe("payments-screen", () => {
     const { el } = await mount();
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = table.shadowRoot!;
-    expect(root.querySelector(".columns-trigger")?.textContent?.trim()).toBe(t("table.columns"));
-    expect(root.querySelector(".columns-trigger")?.textContent?.trim()).toBe("Columnas");
+    expect(root.querySelector(".columns-trigger")?.getAttribute("aria-label")).toBe(t("table.customise_columns"));
+    expect(root.querySelector(".columns-trigger")?.getAttribute("aria-label")).toBe("Personalizar columnas");
     expect(
       [...root.querySelectorAll<HTMLInputElement>("input[data-column]")].map((box) => [
         box.dataset.column,
         box.checked,
       ]),
     ).toEqual([
+      ["name", true],
       ["provider", true],
       ["status", true],
       ["battery", true],
       ["deviceCount", true],
+      ["actions", true],
     ]);
     const headerLabels = () =>
       [...root.querySelectorAll("thead th")].map((th) =>

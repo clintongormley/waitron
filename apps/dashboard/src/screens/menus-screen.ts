@@ -1709,6 +1709,14 @@ export class MenusScreen extends LitElement {
                   aria-label=${t("menus.title")}
                   viewKey="waitron.menus.table"
                   columnsLabel=${t("table.columns")}
+                  customiseColumnsLabel=${t("table.customise_columns")}
+                  customiseLabel=${t("table.customise")}
+                  restoreColumnsLabel=${t("table.restore_columns")}
+                  doneLabel=${t("table.done")}
+                  moveColumnLabel=${t("table.move_column")}
+                  showColumnLabel=${t("table.show_column")}
+                  hideColumnLabel=${t("table.hide_column")}
+                  columnPositionLabel=${t("table.column_position")}
                   sortKey="name"
                   sortDirection="ascending"
                   .rows=${this.#rows}
