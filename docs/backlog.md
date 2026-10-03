@@ -5880,7 +5880,7 @@ reading unless marked run:
   the dialog itself. `apps/dashboard/src/widgets/allergen-picker.ts` avoids the problem by mounting
   a fresh dialog for each open (`keyed`). Seen once under coverage load in a test (run); we believe
   a person cannot reopen it that fast; not tested.
-- DONE (lane A's W20): the product editor's variant form
+- DONE (lane A's W20, #1118): the product editor's variant form
   (`apps/dashboard/src/widgets/variant-form.ts`) no longer turns the dialog's late `wt-close` into a
   Cancel once the editor has closed it; it carries the `!this.open` check the Units, Options and
   Extras forms do (C68, #863; C74, #878).
