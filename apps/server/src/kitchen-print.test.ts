@@ -1298,6 +1298,31 @@ describe("dish extras on kitchen tickets", () => {
     }
   });
 
+  it("prints a split-off measured extra's saved amount on both station tickets", async () => {
+    const venue = await setupSplitExtrasVenue();
+    const { cfg, products, lists, printers } = venue;
+    const jobs = await asApp(cfg, async (tx) => {
+      const [kg] = await tx.select({ id: units.id }).from(units).where(eq(units.seedKey, "kg"));
+      await assignProductUnit(tx, products.chips, kg!.id);
+      await tx.execute(sql`update extra_list_items set portion = 50, max_quantity = 3
+        where list_id = ${lists.burger} and product_id = ${products.chips}`);
+      await fireNewOrder(tx, cfg, [
+        {
+          productId: products.burger,
+          quantity: "1",
+          extras: [{ listId: lists.burger, picks: [{ productId: products.chips, quantity: 3 }] }],
+        },
+      ]);
+      return printJobsFor(tx);
+    });
+
+    const paper = (printerId: string) =>
+      decodeTicket(jobs.find((job) => job.printerId === printerId)!.payload);
+    expect(paper(printers.grill)).toContain("CHIPS 0.150 kg de Fryer");
+    expect(paper(printers.fryer)).toContain("0.150 kg x CHIPS");
+    expect(paper(printers.fryer)).toContain("para BURG en Grill");
+  });
+
   it("keeps an unclaimed cheese as a modifier without a Fryer job", async () => {
     const { cfg, products, lists, printers } = await setupSplitExtrasVenue();
     const jobs = await asApp(cfg, async (tx) => {
