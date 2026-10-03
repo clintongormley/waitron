@@ -34,6 +34,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       zoneMenus: [],
       readiness: [],
       settings: { editSentLines: true },
+      clearingWorkflow: false,
     };
     const fetchImpl = vi.fn((path: string) =>
       Promise.resolve({

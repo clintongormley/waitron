@@ -22,6 +22,7 @@ const model: VenueServiceView = {
   kitchenTicketGrouping: "combined",
   printHeldWork: false,
   releaseReminderMinutes: 10,
+  clearingWorkflow: false,
 };
 
 beforeEach(() => setLocale("en"));

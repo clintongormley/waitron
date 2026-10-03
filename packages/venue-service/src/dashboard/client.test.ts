@@ -11,6 +11,53 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("VenueServiceApi", () => {
+  it("stores whether tables need clearing after Finish table", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    await api.saveClearingWorkflow(true);
+    expect(
+      fetchImpl.mock.calls.map(([path, init]) => [
+        path,
+        init.method,
+        JSON.parse(init.body as string),
+      ]),
+    ).toEqual([
+      [
+        "/management-api/venue-service/settings/clearing-workflow",
+        "PUT",
+        { clearingWorkflow: true },
+      ],
+    ]);
+  });
+
+  it("loads only the settings from the venue-service read", async () => {
+    const model = {
+      departments: [{ id: "d1" }],
+      zones: [],
+      deviceZones: [],
+      hours: [],
+      zoneMenus: [],
+      readiness: [],
+      settings: { editSentLines: false },
+      kitchenTicketGrouping: "separate",
+      printHeldWork: true,
+      releaseReminderMinutes: null,
+      clearingWorkflow: true,
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(model));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    expect(await api.loadSettings()).toEqual({
+      settings: { editSentLines: false },
+      kitchenTicketGrouping: "separate",
+      printHeldWork: true,
+      releaseReminderMinutes: null,
+      clearingWorkflow: true,
+    });
+    expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
+      ["/management-api/venue-service", "GET"],
+    ]);
+  });
+
   it("sends edits to the existing department", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));

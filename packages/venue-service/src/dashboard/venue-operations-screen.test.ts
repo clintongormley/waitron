@@ -73,6 +73,7 @@ const model: VenueServiceView = {
   kitchenTicketGrouping: "combined",
   printHeldWork: false,
   releaseReminderMinutes: 10,
+  clearingWorkflow: false,
 };
 
 async function mount(api: VenueServiceApi): Promise<VenueOperationsScreen> {

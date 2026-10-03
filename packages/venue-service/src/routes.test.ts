@@ -1187,6 +1187,80 @@ describe("the print-held-work setting", () => {
   });
 });
 
+describe("the clearing setting", () => {
+  const CLEARING = "/management-api/venue-service/settings/clearing-workflow";
+  async function stored(fx: Fixture): Promise<unknown> {
+    return (
+      (await (
+        await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+      ).json()) as { clearingWorkflow: unknown }
+    ).clearingWorkflow;
+  }
+
+  it("reads off until a manager turns it on, and back", async () => {
+    const fx = await fixture();
+    expect(await stored(fx)).toBe(false);
+    expect(
+      (await send(fx.app, "PUT", CLEARING, fx.managerCookie, { clearingWorkflow: true })).status,
+    ).toBe(204);
+    expect(await stored(fx)).toBe(true);
+    expect(
+      (await send(fx.app, "PUT", CLEARING, fx.managerCookie, { clearingWorkflow: false })).status,
+    ).toBe(204);
+    expect(await stored(fx)).toBe(false);
+  });
+
+  it("refuses anything but true or false, naming the field, and keeps the stored value", async () => {
+    const fx = await fixture();
+    expect(
+      (await send(fx.app, "PUT", CLEARING, fx.managerCookie, { clearingWorkflow: true })).status,
+    ).toBe(204);
+    for (const body of [
+      {},
+      { clearingWorkflow: "false" },
+      { clearingWorkflow: 0 },
+      { clearingWorkflow: null },
+      { clearingWorkflow: [false] },
+    ]) {
+      const rejected = await send(fx.app, "PUT", CLEARING, fx.managerCookie, body);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "clearingWorkflow" } },
+      });
+    }
+    expect(await stored(fx)).toBe(true);
+  });
+
+  it("lets only a signed-in manager change it", async () => {
+    const fx = await fixture();
+    const body = { clearingWorkflow: true };
+    expect((await send(fx.app, "PUT", CLEARING, undefined, body)).status).toBe(401);
+    const refused = await send(fx.app, "PUT", CLEARING, fx.staffCookie, body);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(await stored(fx)).toBe(false);
+  });
+
+  it("leaves the other settings as they were", async () => {
+    const fx = await fixture();
+    expect(
+      (await send(fx.app, "PUT", CLEARING, fx.managerCookie, { clearingWorkflow: true })).status,
+    ).toBe(204);
+    const body = (await (
+      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+    ).json()) as {
+      settings: unknown;
+      kitchenTicketGrouping: unknown;
+      printHeldWork: unknown;
+      releaseReminderMinutes: unknown;
+    };
+    expect(body.settings).toEqual({ editSentLines: true });
+    expect(body.kitchenTicketGrouping).toBe("combined");
+    expect(body.printHeldWork).toBe(false);
+    expect(body.releaseReminderMinutes).toBe(10);
+  });
+});
+
 describe("the release-reminder setting", () => {
   const RELEASE_REMINDER = "/management-api/venue-service/settings/release-reminder-minutes";
   async function stored(fx: Fixture): Promise<unknown> {

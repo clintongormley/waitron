@@ -191,6 +191,7 @@ describe.each(["light", "dark"] as const)(
           kitchenTicketGrouping: "combined",
           printHeldWork: false,
           releaseReminderMinutes: 10,
+          clearingWorkflow: false,
         }),
         saveReleaseReminderMinutes: refusal ? vi.fn().mockRejectedValue(refusal) : vi.fn(),
       } as unknown as VenueServiceApi;
