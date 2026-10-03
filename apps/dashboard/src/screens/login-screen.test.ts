@@ -3367,6 +3367,97 @@ describe("login-screen: Google on the first page", () => {
     expect(field(el, "email")).not.toBeNull();
   });
 
+  it("does not start passkey autofill while Google is starting, when Google was pressed before the autofill had", async () => {
+    const supported = deferred<boolean>();
+    conditionalMediationAvailable.mockReturnValue(supported.promise);
+    const begin = deferred<{ authorizationUrl: string }>();
+    const api = stubApi({ beginGoogleLogin: vi.fn().mockReturnValue(begin.promise) });
+    const navigate = vi.fn();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, navigate });
+    const loggedIn = vi.fn();
+    el.addEventListener("logged-in", loggedIn);
+    await el.updateComplete;
+    expect(conditionalMediationAvailable).toHaveBeenCalledTimes(1);
+    click(el, "google-login");
+    await el.updateComplete;
+    supported.resolve(true);
+    await flush(el);
+    await flush(el);
+    expect(api.passkeyAuthOptions).not.toHaveBeenCalled();
+    expect(navigator.credentials.get).not.toHaveBeenCalled();
+    begin.resolve({ authorizationUrl: "https://accounts.google.test/login" });
+    await flush(el);
+    expect(navigate).toHaveBeenCalledExactlyOnceWith("https://accounts.google.test/login");
+    expect(navigator.credentials.get).not.toHaveBeenCalled();
+    expect(loggedIn).not.toHaveBeenCalled();
+  });
+
+  it("keeps Google's refusal on screen when the autofill it restarts then fails", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    vi.mocked(navigator.credentials.get).mockImplementation(never);
+    const api = stubApi({
+      beginGoogleLogin: vi.fn().mockRejectedValue({ code: "google.invalid" }),
+      passkeyAuthOptions: vi
+        .fn()
+        .mockResolvedValueOnce({ challengeHandle: "h1", options: { challenge: "AQID" } })
+        .mockRejectedValueOnce({ code: "connection.failed" }),
+    });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalledTimes(1));
+    await flush(el);
+    click(el, "google-login");
+    await vi.waitFor(() => expect(api.passkeyAuthOptions).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(await bottomOf(el)).toBe(codeMessage("google.invalid"));
+  });
+
+  it.each([
+    ["passkey.verification_failed", () => codeMessage("passkey.verification_failed")],
+    ["passkey.not_registered", () => t("login.passkey_unknown")],
+  ])(
+    "shows the refusal (%s) of a passkey picked from the autofill Google's refusal restarts, not Google's",
+    async (code, message) => {
+      conditionalMediationAvailable.mockResolvedValue(true);
+      vi.mocked(navigator.credentials.get).mockImplementationOnce(never);
+      const api = stubApi({
+        beginGoogleLogin: vi.fn().mockRejectedValue({ code: "google.invalid" }),
+        passkeyAuthVerify: vi.fn().mockRejectedValue({ code }),
+      });
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+      await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalledTimes(1));
+      await flush(el);
+      click(el, "google-login");
+      await vi.waitFor(() => expect(api.passkeyAuthVerify).toHaveBeenCalledTimes(1));
+      await flush(el);
+      await flush(el);
+      expect(navigator.credentials.get).toHaveBeenCalledTimes(2);
+      expect(await bottomOf(el)).toBe(message());
+    },
+  );
+
+  it("offers the autofill once, from Google's refusal, when the browser's support answer was held back", async () => {
+    const supported = deferred<boolean>();
+    conditionalMediationAvailable.mockReturnValue(supported.promise);
+    vi.mocked(navigator.credentials.get).mockImplementation(never);
+    const api = stubApi({
+      beginGoogleLogin: vi.fn().mockRejectedValue({ code: "google.invalid" }),
+    });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await el.updateComplete;
+    expect(conditionalMediationAvailable).toHaveBeenCalledTimes(1);
+    click(el, "google-login");
+    await vi.waitFor(() => expect(conditionalMediationAvailable).toHaveBeenCalledTimes(2));
+    supported.resolve(true);
+    await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalled());
+    await flush(el);
+    await flush(el);
+    expect(api.passkeyAuthOptions).toHaveBeenCalledTimes(1);
+    expect(navigator.credentials.get).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ mediation: "conditional" }),
+    );
+    expect(await bottomOf(el)).toBe(codeMessage("google.invalid"));
+  });
+
   it("with Remember ticked, carries the consent to Google without an email", async () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
       api: stubApi(),

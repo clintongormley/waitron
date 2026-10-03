@@ -839,6 +839,9 @@ export class LoginScreen extends LitElement {
   }
 
   async #conditionalPasskeyLogin(): Promise<void> {
+    // Anything that cancels the passkey ceremony while this one is still starting (Google pressed
+    // meanwhile, a reset) stops it too.
+    const before = this.passkeyAttempt;
     try {
       if (!(await browserSupportsWebAuthnAutofill())) return;
     } catch {
@@ -846,6 +849,7 @@ export class LoginScreen extends LitElement {
     }
     await this.updateComplete;
     if (!this.isConnected || this.step !== "email" || this.token !== null) return;
+    if (before !== this.passkeyAttempt) return;
     const attempt = ++this.passkeyAttempt;
     try {
       // Nobody asked for this attempt, so a successful options answer whose body is not JSON
@@ -867,6 +871,7 @@ export class LoginScreen extends LitElement {
         verifyBrowserAutofillInput: false,
       }).catch(() => null);
       if (response === null || !this.isConnected || attempt !== this.passkeyAttempt) return;
+      this.errorKey = null;
       const out = await this.#verifyPasskey(challengeHandle, options, response, attempt);
       if (out === null) return;
       this.dispatchEvent(
@@ -878,7 +883,8 @@ export class LoginScreen extends LitElement {
       );
     } catch (error) {
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
-      this.errorKey = codeOf(error, "passkey.verification_failed");
+      // Before a passkey is picked nobody asked for this attempt, so an earlier message stays.
+      this.errorKey ??= codeOf(error, "passkey.verification_failed");
     }
   }
 

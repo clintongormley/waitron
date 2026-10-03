@@ -967,7 +967,43 @@ email (`POST /management-api/google/login` reads no body, `apps/server/src/manag
 and whether it shows depends only on the venue's settings, so the first page still shows everyone
 the same choices. The Google "G" (`apps/dashboard/src/assets/google-g.svg`) is the commonly
 reproduced four-colour mark; neither the drawing nor Google's branding terms were checked against
-Google's own sources. Sign in with Apple does not exist; the mockup only showed where it would go. **Left open by #1074 (owner to decide):** the new key and passkey icons draw lines at width 2 while the change-account icon beside them uses 1; the card copies the setup wizard's card styles rather than sharing `wt-card`, and nothing keeps the two in step; the Google "G" is not listed in `deploy/third-party/README.md`; and two races were reasoned about but not reproduced — pressing Continue with Google before the email page's passkey autofill has fully started could still let that autofill start while Google loads (a one-line fix: the autofill skips starting while the screen is busy), and after a failed Google start a failing restarted autofill's message replaces Google's.
+Google's own sources. Sign in with Apple does not exist; the mockup only showed where it would go. **Left open by #1074 (owner to decide):** the new key and passkey icons draw lines at width 2 while the change-account icon beside them uses 1; the card copies the setup wizard's card styles rather than sharing `wt-card`, and nothing keeps the two in step; the Google "G" is not listed in `deploy/third-party/README.md`. Two races it reasoned about but did not reproduce were reproduced and fixed by A229 (below).
+
+**Pressing Google stops a passkey autofill that is still starting, and an autofill failure before a
+passkey is picked keeps Google's message (A229, owner 2026-10-03) — DONE (#1080).** The two sign-in
+timing cases A191 left unreproduced were both real, and both are fixed in
+`apps/dashboard/src/screens/login-screen.ts`. What was run, in
+`apps/dashboard/src/screens/login-screen.test.ts` (describe "Google on the first page"), with the
+browser's `PublicKeyCredential.isConditionalMediationAvailable` and `navigator.credentials.get`
+stubbed and the WebAuthn library kept real:
+
+1. The browser's "can autofill offer passkeys?" answer is held back, Continue with Google is
+   pressed and its start is held back too, then the answer is released. Before the fix the email
+   page's autofill went on to ask the server for passkey options and armed the browser's autofill
+   prompt (`navigator.credentials.get` called once, with `mediation: "conditional"`) while Google
+   was still starting; with the stubbed browser handing back a passkey at once, the screen
+   announced a passkey sign-in before Google's start had answered. Google's cancel only stopped a
+   ceremony that had already begun. Now an autofill still starting when the ceremony is cancelled
+   does not start. If Google then fails, the autofill is offered again: a further case holds back
+   the browser's answer, presses Google and has it refused, then releases the answer, and the
+   autofill asks the server for passkey options once and arms the browser's autofill prompt once
+   (`mediation: "conditional"`), from the restart (the held-back original stops at the new check).
+2. Google's start is refused (`google.invalid`) and the autofill it restarts is then refused too
+   (`connection.failed`). Before the fix the page showed the autofill's message in place of
+   Google's. Now a failure of the autofill before the person picks a passkey (its passkey-options
+   request failing) leaves a message already shown in place, and shows its own when none is
+   shown. Once the person picks a passkey from the autofill list, that is their own action: the
+   old message is cleared and the result of their choice shows, so a refused picked passkey shows
+   its refusal (`passkey.verification_failed`, or `passkey.not_registered`) in place of Google's
+   message, the same as every other sign-in action.
+
+What deleting each fix did: deleting the check of whether anything cancelled the autofill meanwhile
+failed case 1, and failed the held-back-then-refused case, where the held-back original autofill
+also sent its own options request, so options were asked for twice (it never reached the browser's
+prompt); turning the keep-the-message rule back into a plain assignment failed case 2, which showed
+the connection message instead of Google's; and deleting the line that clears the old message when
+a passkey is picked failed the picked-passkey refusal case, which showed Google's message instead
+of the passkey refusal.
 
 **A focused table search box turns its own border blue, with no second ring (A192, owner
 2026-10-02) — OPEN.** The owner, on two screenshots of the Modifiers screen's "Search extras
