@@ -271,8 +271,8 @@ variant's column back to null, and deleting a category clears it from any varian
 (`vacateCategories`, `packages/catalogue/src/categories.ts`). No migration clears the categories
 variants held before this rule (A209), and the owner decided on 2026-10-03 that none will be
 written: there is no data-migration code before go-live (CLAUDE.md §3) and the dev venue is reset
-before then. So an older variant row may still store one until its next save or until that
-category is deleted.
+before then. So an older variant row may still store one until the next save of the variant's
+own page or until that category is deleted.
 
 Its unit is always its parent's too (A222), and with it the legacy `pricing_unit`: the unit read
 joins the parent's `product_units` row, never one the variant stores (`unitOwnerJoin`, same file),

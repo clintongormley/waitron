@@ -1437,8 +1437,8 @@ leaves a variant's category cell empty without comparing.
 - No migration clears the categories variants already store, and none will be written (owner
   decision, 2026-10-03: no data-migration code before go-live, CLAUDE.md §3, and the dev venue is
   reset before then). The effective category (`effectiveProductColumns.categoryId`) and the
-  editor's read ignore a stored one, and the variant's next save, or that category's deletion,
-  clears it.
+  editor's read ignore a stored one, and the next save of the variant's own page, or that
+  category's deletion, clears it.
 - Prep Stations marks a product exception that can never apply when an earlier category exception
   already catches the product and every one of its variants (`family.every(...)` in `routingModel`,
   `packages/venue-service/src/routing-store.ts`). A variant's category is now its product's, so the

@@ -537,9 +537,9 @@ describe("readProductEditor", () => {
 });
 
 describe("effectiveProductColumns, entry by entry", () => {
-  // Every entry read straight, for the parent and both variants: Wine 125 (every field blank)
-  // must read the parent's value and Wine 175 (every field set, each different from the parent's)
-  // its own. An entry with its two sides swapped fails one of the two.
+  // Every entry read straight, for the parent and both variants: Wine 125 has every field blank and
+  // Wine 175 every field set, each different from the parent's. An entry with its two sides swapped
+  // fails one of the two.
   it("reads the parent's value for a blank field and the variant's own for a set one, except the category and pricing unit, always the parent's", async () => {
     const raw = await run((tx) =>
       tx
