@@ -2371,6 +2371,17 @@ column customiser: an icon button opening a dialog that lists every column with 
 equivalent, Restore defaults and Done. No "Sort by" control: clicking a column's heading already
 sorts (owner).
 
+**A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, needs a spec before
+queueing.** A walk-through that teaches a new user what to set up and in what order — devices,
+printers, device profiles, and the other settings a venue needs before it trades — shown in Demo and
+Preparation (`onboardingIntent` `demo` and `prepare`). The user can leave the tutorial at any point
+and come back later to carry on where they stopped. Open questions for the spec: which steps, and
+whether each one is ticked off by doing the thing or by pressing Next; where its progress is kept (per
+person or per venue, since a box's settings belong to the venue); how it is reopened (the Demo bar,
+A246, is the obvious place); whether it spans the till as well as the dashboard; and whether it ends
+once the box goes Live. It builds on the Demo bar (A246, W36), the pretend printer (A241, W37) and
+the pretend card reader (A247, W38), so it comes after them.
+
 The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
