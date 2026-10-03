@@ -198,6 +198,9 @@ export class WtFloorCanvas extends LitElement {
 
   @property({ attribute: false }) copy: Partial<FloorCanvasCopy> = {};
 
+  /** Handed to every token, which writes a tab total as this locale writes euros. */
+  @property() locale = "";
+
   @state() private selectedId: string | null = null;
 
   @state() private draft: { id: string; posX: number; posY: number } | null = null;
@@ -291,6 +294,7 @@ export class WtFloorCanvas extends LitElement {
       >
         <wt-table-token
           .table=${t}
+          .locale=${this.locale}
           .labels=${{
             covers: copy.covers,
             toServe: copy.toServe,

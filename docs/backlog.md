@@ -3421,10 +3421,17 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     `#retakePartyFromFloor()` takes, and `#followDraft` → `#rememberOrderParty()` after a send with
     no answer takes too, putting the floor's older amount back (`apps/till/src/till-app.ts`). Traced
     in the code, not reproduced.
-- **The floor and the table screen write amounts differently (plan Task 2, 2026-09-26).** The floor
-  shows `44.00 €` while the table screen shows `44,00 €` in Spanish. The floor's format predates
-  the parties work; Task 2 now also uses it for what a party still owes. Make the floor follow the
-  locale, as the table screen does.
+- **A four-digit total does not fit a small round table on the till's floor map** (found
+  2026-10-03 by looking at the map while making its amounts follow the locale, lane C's W15). On a
+  four-seat round table at 1280 wide, dark theme, `1234,50 €` (the locale form, kept on one line by
+  the formatter's no-break space before `€`) runs past the token's right edge; with the form before
+  that change, `1234.50 €`, the amount still ran past the edge and `€` wrapped onto a second line.
+  Measured with throwaway screenshot tests; screenshots in `~/waitron-campaign-c/w15-shots/`
+  (`map-*` and `old-form-map-dark-1280.png`, not in the repository). The token is
+  `packages/ui/src/components/wt-table-token.ts`, sized by capacity in
+  `packages/ui/src/components/wt-floor-canvas.ts`. Not measured: other shapes and capacities, and
+  amounts of five digits. **Next action:** decide how a total that is wider than its token is
+  drawn (smaller text, an ellipsis, or a wider minimum size), then fix it test-first.
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when
   this is designed. For now, orders remain at table/tab level and staff select items manually
   when splitting bills; seat assignment is not a prerequisite for the service workflow.

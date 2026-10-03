@@ -89,6 +89,20 @@ test("shows an open tab's running total with the euro sign", async () => {
   expect(total?.textContent?.trim()).toBe("47.50 €");
 });
 
+test("writes an open tab's total as its locale writes euros", async () => {
+  const el = (await mountToken(table({ state: "open-tab", tabTotal: "47.50" }))) as HTMLElement & {
+    locale: string;
+    updateComplete: Promise<unknown>;
+  };
+  const total = () => el.shadowRoot!.querySelector(".occupancy .total")?.textContent;
+  el.locale = "es";
+  await el.updateComplete;
+  expect(total()).toBe("47,50\u00a0€");
+  el.locale = "en";
+  await el.updateComplete;
+  expect(total()).toBe("€47.50");
+});
+
 test("a free table shows no tab total", async () => {
   const el = await mountToken(table({ state: "free" }));
   expect(el.shadowRoot!.querySelector(".total")).toBeNull();

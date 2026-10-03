@@ -3,7 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import type { FloorTable } from "../floor.js";
 import { floorChipStyles, renderFloorChips } from "../floor-chips.js";
-import type { TimingBand } from "@waitron/shared";
+import { formatMoney, type TimingBand } from "@waitron/shared";
 
 /** Localised words the token puts beside its data; this package carries no copy of its own. */
 export interface TableTokenLabels {
@@ -250,6 +250,9 @@ export class WtTableToken extends LitElement {
 
   @property({ attribute: false }) labels: TableTokenLabels = {};
 
+  /** Writes the tab total as this locale writes euros; empty writes the amount and " €". */
+  @property() locale = "";
+
   /** Overrides the `prefers-reduced-motion` query, which is read on every render when unset. */
   @property({ attribute: false }) reducedMotion?: boolean;
 
@@ -351,7 +354,9 @@ export class WtTableToken extends LitElement {
   #occupancy(t: FloorTable): TemplateResult | typeof nothing {
     if (t.state === "open-tab" && t.tabTotal != null) {
       return html`<span class="occupancy tab-open"
-        ><span class="total">${t.tabTotal} €</span></span
+        ><span class="total"
+          >${this.locale ? formatMoney(t.tabTotal, this.locale) : `${t.tabTotal} €`}</span
+        ></span
       >`;
     }
     return nothing;
