@@ -944,10 +944,12 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
           sql`select last_seen_at from devices where id = ${deviceId}`,
         )
       ).rows[0]!.last_seen_at;
-    const setLastSeen = (msAgo: number) =>
-      suite.db.execute(
-        sql`update devices set last_seen_at = ${new Date(Date.now() - msAgo).toISOString()} where id = ${deviceId}`,
+    const setLastSeen = (msAgo: number) => {
+      const seenAt = new Date(Date.now() - msAgo).toISOString();
+      return suite.db.execute(
+        sql`update devices set last_seen_at = ${seenAt} where id = ${deviceId}`,
       );
+    };
 
     expect(await lastSeen()).toBeNull();
     expect((await request()).status).toBe(200);

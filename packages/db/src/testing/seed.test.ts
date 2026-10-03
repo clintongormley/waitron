@@ -206,7 +206,7 @@ describe("seedDevice", () => {
     const location = await seedLocation(db);
     const [till] = await db
       .insert(tills)
-      .values({ locationId: location, name: "Caja 1" })
+      .values({ locationId: location, name: "Till 1" })
       .returning({ id: tills.id });
     const { deviceId } = await seedDevice(db, { tillId: till!.id });
     const [row] = await db
