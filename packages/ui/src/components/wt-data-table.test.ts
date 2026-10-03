@@ -1731,6 +1731,16 @@ test("each filter is a compact dropdown named by its label, showing its all opti
   expect(shown()).toBe("Inactive");
 });
 
+test("the all filter option is painted as a chosen value", async () => {
+  const el = await tableS({ columns: withStatus });
+  const filter = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
+  await filter.updateComplete;
+  const shown = filter.shadowRoot!.querySelector<HTMLElement>(".trigger .value")!;
+  expect(shown.textContent).toBe("Any status");
+  expect(shown.classList.contains("placeholder")).toBe(false);
+  expect(getComputedStyle(shown).fontStyle).toBe("normal");
+});
+
 test("picking a row in a filter's open list narrows the rows and reports the choice", async () => {
   const el = await tableS({ columns: withStatus });
   const seen: unknown[] = [];

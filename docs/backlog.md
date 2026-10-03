@@ -1017,17 +1017,13 @@ Chromium; its visible focus state was inspected in light and dark at phone width
 in both themes but does not assess the focus indicator's visibility.
 
 **A table filter's "Any …" choice is drawn as a chosen value, not a hint (A193, owner
-2026-10-02) — OPEN.** The owner, on a screenshot of the Modifiers screen's status filter: _"The Any
+2026-10-02) — DONE.** The owner, on a screenshot of the Modifiers screen's status filter: _"The Any
 Status shouldn't be a hint, it is a value that appears in the dropdown"_. `wt-data-table` gives
 each column filter's `wt-combobox` a first option `{ value: "", label: allLabel }` and also passes
-`allLabel` as its `placeholder`; the combobox reads an empty value as nothing chosen and draws the
-placeholder in the grey italic prompt look (`.value.placeholder`,
-`packages/ui/src/components/wt-combobox.ts`). **Wanted:** "Any status", and every table filter's
-"Any …" choice, is drawn like any other chosen value. This is the shape A178h fixed for the
-product's "Each" with a stand-in value (`__each__`); the "Uncategorised" and "No course" choices
-noted under A178 below have it too. Pick one fix for all of them, in the combobox or the table,
-rather than a stand-in per screen — and the filter's "nothing chosen" must still mean "no filter"
-to the table's saved view (`#persistView`) and to `wt-filter-change` listeners.
+`allLabel` as its `placeholder`. The table now asks the combobox to display its offered empty-string
+option as a selected value. "Any status" and the other table-filter "Any …" choices use the ordinary
+value style. The empty string still means no filter to the saved view (`#persistView`) and to
+`wt-filter-change` listeners; their existing behavior tests remain in place.
 
 **A table filter's dropdown keeps one width whatever is chosen (A194, owner 2026-10-02) — OPEN.**
 The owner, on a screenshot of the Modifiers screen's status filter showing "Active" after "Any
