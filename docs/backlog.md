@@ -1117,8 +1117,8 @@ The form's table had no column widths, so the browser shared the spare width amo
 Default and menu columns. **Wanted:** the handle, Default and menu columns as narrow as their
 controls, and Name taking the rest. The options list now gives spare width to Name; the extras list
 keeps its grip, Preselected and remove columns at their content widths. Chromium checks cover both
-languages at phone and desktop widths. A195 asks the same of `wt-data-table`'s Actions column; that
-separate item remains open.
+languages at phone and desktop widths. A195 asked the same of `wt-data-table`'s Actions column; it is
+done too (above).
 
 **The option form opens with its names section expanded (A199, owner 2026-10-02) — DONE by A170
 (#1040):** the option window no longer folds its names at all, so they show on open on Add and Edit;
@@ -1358,7 +1358,7 @@ Descriptors line one row per field), which this extends to the empty case. Choos
 "nothing set" once, in both languages; on a variant's page an empty value shows the parent's
 value, as the fields themselves do (A172).
 
-**An Add course button beside the course dropdown (A212) — DONE.** The owner:
+**An Add course button beside the course dropdown (A212) — DONE (#1087).** The owner:
 _"perhaps we should add an "Add course" button under Courses, which would open a modal to edit
 and order the course list. Currently this lives on the kitchen page, not as a modal. need to
 figure that out"_. The course list is edited, added to and reordered on the Kitchen screen
@@ -1387,7 +1387,13 @@ otherwise the choice stays.
 **Left open:** a removed course keeps its name, because `kitchen_courses_name_key` covers inactive
 rows too, so adding a course with a removed course's name is refused as taken (measured
 2026-10-03 with a throwaway case in `apps/server/src/kitchen.test.ts`: create "Mains", deactivate
-it, create "Mains" again → `course.name_taken`).
+it, create "Mains" again → `course.name_taken`). Raised in #1087's review and not changed there:
+`wt-combobox`'s `stable-width` attribute (`packages/ui/src/components/wt-combobox.ts`) is not in
+`docs/developers/design-system.md`; and the catalogue-screen test "ignores the closed window's late
+close…" catches its guard's removal only through an unhandled error, because the late close throws
+before it changes anything a state assertion could see. #1087 also fixed two cases in
+`apps/server/src/station-move.test.ts` that failed on every run after 05:00 Madrid on 2026-10-03
+(they wrote notices under a clock pinned to 2 October and listed them under the real one).
 
 **Allergens and dietary preferences are edited in place (A213) — DONE (#1079).** The owner:
 _"for nutritional info, we can show: Allergens: Nuts, Seeds / Dietary preferences: None specified.
