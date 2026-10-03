@@ -1094,9 +1094,9 @@ component's column rule.
 **Every pinned last column keeps a content width (A235, owner 2026-10-03) — DONE.**
 The Content languages screen's `open` column uses `pinned: "end"`
 (`apps/dashboard/src/screens/content-languages-screen.ts:457`). The shared table now sizes it by its
-heading or link, as it does for `actions`. The one-row Chromium test measures the rendered Open link
-and its column at 1000px and 390px, with English and Spanish labels in both themes. The Content
-languages screen was also opened with a translation gap at desktop and phone widths in both themes.
+heading or link, as it does for `actions`. The Chromium table test measures an English Open link
+at 1000px and a Spanish Abrir link at 390px. The shared table and the Content languages screen
+were visually inspected at desktop and phone widths in both themes; the screen showed a translation gap.
 
 **A collapsible section's chevron sits just after its heading (A196, owner 2026-10-02) — DONE.**
 The owner, on the "Edit options list" form: _"the chevron (currently far right) should be just to
