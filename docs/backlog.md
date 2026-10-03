@@ -2047,6 +2047,18 @@ test (B7 below). **Next action:** owner reviews the design's B2B delivery, F1 cr
 and manual remedy, and asesor questions; approves the scope and medium before a build; and separately
 signs off fiscal issuance changes before landing.
 
+### A231d. Full invoices by email as a PDF, and on an office printer — DESIGN FOR OWNER REVIEW (2026-10-03)
+
+The owner asked, approving A231's design, that an F1 can also be emailed to the customer as a PDF and
+printed on an ordinary office printer. The [design](superpowers/specs/2026-10-03-invoice-pdf-email-and-office-printing-design.md)
+and [plan](superpowers/plans/2026-10-03-invoice-pdf-email-and-office-printing.md) cover the PDF (made
+on the server, QR first), email with the customer's express consent from a queue that never makes a
+sale wait, office printers kept apart from receipt printers, and resending from the till and the
+dashboard. The customer chooses one way to receive the original; anything after it is a «duplicado».
+Measured 2026-10-03: the owner's HP M181fw accepts `application/pdf` over IPP. It builds after A231's
+build. **Next action:** owner decides the design's six points, and the asesor answers its five
+questions. This settles A3's open "Printing A4 invoices on an office printer" design when built.
+
 ### A2. The setup wizard
 
 The restore choice now includes guided Cloud recovery of a verified test-venue snapshot. The
@@ -2344,6 +2356,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   invoice layout, a way to send a PDF to the printer over IPP (the standard office printing protocol,
   port 631; the owner's HP accepts PDF directly) and rules for which documents go to which printer.
   It would share the PDF rendering with the virtual PDF printer above.
+  _2026-10-03: designed as A231d (above), for full invoices; not built._
 
 **Open — finding and adding printers:**
 
