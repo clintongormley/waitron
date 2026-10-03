@@ -16,3 +16,10 @@ it("labels each known device kind with its localised copy, never the raw token",
 it("shows a kind it does not know as the token itself rather than throwing", () => {
   expect(deviceKindLabel("self_service_kiosk")).toBe("self_service_kiosk");
 });
+
+it.each(["constructor", "toString", "__proto__"])(
+  "shows the kind %s as itself, not a property every object inherits",
+  (kind) => {
+    expect(deviceKindLabel(kind)).toBe(kind);
+  },
+);
