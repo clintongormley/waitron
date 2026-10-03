@@ -1201,11 +1201,13 @@ through `createRequest`, except a file download, gives up after 30 seconds (the 
 2026-10-03): `createRequest` (`packages/dashboard-kit/src/request.ts`) aborts it and it fails as
 `connection.failed`, so a read the server never finishes stops loading (since lane A's W18c,
 2026-10-03, such a read fails as `connection.timed_out`, "Waitron is taking too long to answer…",
-and a fetch that fails on its own still as `connection.failed`; see A255). A read the live data store
-keeps (`packages/dashboard-kit/src/live-data.ts`) is then read again like any other failed one: at
-once if something asked for it while it waited (the live connection, the query's timed refresh, or
-a save on the same screen), otherwise the next time one of those asks. A one-off read, such as
-opening the product editor, shows the error and is read again only when the person tries again.
+and a fetch that fails on its own still as `connection.failed`; and a reader's status and a
+provider's available readers wait up to 250 seconds, SumUp's pairing status read up to 50 seconds;
+see A255). A read the live data store keeps (`packages/dashboard-kit/src/live-data.ts`) is then
+read again like any other failed one: at once if something asked for it while it waited (the live
+connection, the query's timed refresh, or a save on the same screen), otherwise the next time one
+of those asks. A one-off read, such as opening the product editor, shows the error and is read
+again only when the person tries again.
 Writes have no limit. Since lane A's W18b, a save's or other action's failure is no longer lost
 when the reads recover on the screens that show a read's and an action's failure in one place: each
 remembers whether its message came from a read (the owner's choice, 2026-10-03); the reads' recovery
@@ -1233,43 +1235,88 @@ dashboard reads wait on a card provider, and each now passes its own limit to `c
 (`packages/dashboard-kit/src/request.ts`, the `timeLimitMs` option). A reader's status
 (`GET /management-api/payments/readers/:id/status`) and the provider's available readers
 (`GET /management-api/payments/providers/:id/available-readers`) wait up to 250 seconds
-(`apps/dashboard/src/api/client.ts`), above Stripe's worst case of three 80-second attempts
-(stripe 22.6.2, `esm/stripe.esm.node.js` lines 98 and 178). The SumUp pairing dialog's status
-read waits up to 50 seconds (`packages/payments-sumup/src/dashboard/client.ts`), above SumUp's two
-20-second calls (`packages/payments-sumup/src/sumup-client.ts`, line 85). Every other read keeps
-30 seconds. A read that runs out of time now fails as `connection.timed_out` ("Waitron is taking
-too long to answer. Try again in a moment."), and a fetch that fails on its own still as
-`connection.failed`; a timed-out read the live data store keeps is read again as before. The other
-reads this entry named do not wait on an outside service, read in the code and not run: the Cloud
-status and backup status reads and the bucket settings read look only at local files and the
-database, and the Cloud network calls belong to actions, which have no limit. One read that would
-wait on a card provider, the alerts list, today fails before it reaches one (A258).
+(`apps/dashboard/src/api/client.ts`). Stripe gives up on an attempt after 80 seconds of silence
+once connected and tries three times (stated in `defaultMakeStripe`,
+`packages/payments-stripe/src/card-provider.ts`). Its timer is `req.setTimeout` (stripe 22.6.2,
+`esm/net/NodeHttpClient.js`, line 44), and Node starts a socket's timeout only once it has
+connected (measured on Node v26.7.0: a request to an address that never answered, with a 100 ms
+timeout, had not timed out after 1.5 seconds; the control, connected to a silent server, timed out
+at 104 ms). Stripe's pauses between retries add at most about 1.5 seconds (`_getSleepTimeInMS`,
+`esm/RequestSender.js`, lines 218 to 230: half a second, then one second, each randomised to
+between half and all of that, never under half a second), so three attempts that go silent once
+connected take at most about 241.5 seconds. A provider that keeps sending data slowly, or a
+connection that is slow to open, can take longer, since Stripe's limit is on silence, not on the
+whole answer (measured by the run-it review with stripe 22.6.2: with an 80 ms timeout, a body
+trickled in over 327 ms arrived complete). The SumUp pairing dialog's status read waits up to 50
+seconds (`packages/payments-sumup/src/dashboard/client.ts`), above SumUp's two 20-second calls
+(`packages/payments-sumup/src/sumup-client.ts`, line 85). Every other read keeps 30 seconds. A
+read that runs out of time now fails as `connection.timed_out` ("Waitron is taking too long to
+answer. Try again in a moment."; the two screens that read a reader's status do not show it yet,
+A259), and a fetch that fails on its own still as `connection.failed`; a timed-out read the live
+data store keeps is read again as before. The other reads this entry named do not wait on an outside
+service, read in the code and not run: the Cloud status and backup status reads and the bucket
+settings read look only at local files and the database, and the Cloud network calls belong to
+actions, which have no limit. The test-email reads (`GET /management-api/email` and
+`GET /management-api/email/message/:id`, `apps/server/src/email-inbox-api.ts`, lines 41 and 52) ask
+Mailpit over HTTP with no limit of their own (`apps/server/src/mailpit-client.ts`), but Mailpit is a
+container on the box itself (`deploy/compose.yml`, the `mailpit` service), not an outside service,
+so they keep 30 seconds. One read that would wait on a card provider, the alerts list, today fails
+before it reaches one (A258). Several long status reads at once can use up the browser's connections
+to the box (A260).
 
 **A low card-reader battery is never alerted: the alerts list asks the card provider inside a
 transaction, and the provider's key read is refused (A258, found while checking lane A's W18c,
 2026-10-03) — OPEN, unqueued.** The alerts list read (`GET /management-api/alerts`,
 `apps/server/src/alerts-api.ts`, lines 37 to 57) runs every alert source inside one
-`withTransaction`, each source in a nested one (`apps/server/src/alerts.ts`, line 105). The
+`withTransaction`, each source in a nested one (`apps/server/src/alerts.ts`, line 108). The
 card-reader battery source (`batteryAlertSource`, `apps/server/src/alert-sources.ts`, line 381,
 given the real card providers in `apps/server/src/boot.ts`) asks each provider for a reader's
 status, and the provider reads its secret key in ANOTHER `withTransaction`
 (`packages/payments-sumup/src/card-provider.ts`, lines 55 to 57;
-`packages/payments-stripe/src/card-provider.ts`, lines 93 to 95). The write queue refuses that
-second one: "write lock: a body asked for the lock it is already holding"
+`packages/payments-stripe/src/card-provider.ts`, `sealedSecretKey`, lines 102 to 104). The write
+queue refuses that second one: "write lock: a body asked for the lock it is already holding"
 (`packages/store/src/write-queue.ts`, lines 33 to 35). Measured on `main` at 2bcb4c617 with a
 throwaway experiment, not committed: with SumUp the alerts list shows `alert.source_unavailable` for
 the `card_reader` area (logged with `errorCode: unknown`) and makes no network call, so a SumUp
-reader's low battery is never alerted; with Stripe the refusal is caught (`card-provider.ts`,
-lines 223 to 224) and the reader reads as unreachable without Stripe being asked, which changes
-nothing visible because Stripe reports no battery. Control: the same status call outside a
-transaction reached the stubbed provider for both, and SumUp reported `batteryPercent: 5`. Not
-tested: the battery source's five-minute cache. History (`git log -S`): the battery source came in
-4c9bf11cf (#371, 2026-09-15), the providers' key read in its own transaction in 91caf00d9 (#378),
-and the refusal of a nested lock request in aabdde6a8 (#489, the switch to SQLite). If it is fixed
-by moving the provider call out of the transaction, take care that the alerts read does not
-instead hold the write lock for the provider's whole wait, which for Stripe can be about four
-minutes; and the alerts list would then be a dashboard read waiting on an outside service, which
-needs a limit above that wait (A255).
+reader's low battery is never alerted; with Stripe the refusal is caught (the `catch` in `status`
+that returns `{ online: false, unreachable: true }`, `card-provider.ts`, lines 230 to 231) and the
+reader reads as unreachable without Stripe being asked, which changes nothing visible because Stripe
+reports no battery. Control: the same status call outside a transaction reached the stubbed provider
+for both, and SumUp reported `batteryPercent: 5`. Not tested: the battery source's five-minute
+cache. History (`git log -S`): the battery source came in 4c9bf11cf (#371, 2026-09-15), the
+providers' key read in its own transaction in 91caf00d9 (#378), and the refusal of a nested lock
+request in aabdde6a8 (#489, the switch to SQLite). If it is fixed by moving the provider call out of
+the transaction, take care that the alerts read does not instead hold the write lock for the
+provider's whole wait, which for Stripe is about four minutes when every attempt goes silent once
+connected, and longer when Stripe sends data slowly or a connection is slow to open (A255); and the
+alerts list would then be a dashboard read waiting on an outside service, which needs a limit above
+that wait (A255).
+
+**The two screens that read a card reader's status throw the error code away, so a timed-out status
+read is not reported as one (A259, found by W18c's run-it review, 2026-10-03) — OPEN, unqueued.**
+The SumUp pairing dialog (`#pollTick`, `packages/payments-sumup/src/dashboard/sumup-add-reader.ts`,
+line 132) treats any failed status read as a failed pairing: it says "Pairing did not work. Check
+the code and try again." and unpairs the reader, even when the read only ran out of time and the
+pairing may have gone through. The Payments screen's reader details (`#loadStatuses`,
+`apps/dashboard/src/screens/payments-screen.ts`, line 405) marks the row as an error and shows its
+generic no-details text and "Unknown". Both predate W18c: they catch every rejection without its
+code. Measured by the review: injecting `{ code: "connection.timed_out" }` into the existing
+rejection fixtures left both screens' generic-message assertions passing
+(`packages/payments-sumup/src/dashboard/sumup-add-reader.test.ts`, "shows the failed copy and
+unpairs the row when a poll is rejected"; `apps/dashboard/src/screens/payments-screen.test.ts`,
+"shows the no-details copy when the reader's status could not be read"). Next step: keep the read's
+code and show `codeMessage(code)`, and decide separately whether a timed-out poll should unpair.
+
+**Several card readers' status reads at once can use up the browser's connections to the box
+(A260, found by W18c's review, 2026-10-03) — OPEN, owner decision.** With five or more active card
+readers and a stalled provider, the Payments screen's status reads (one per active reader, all at
+once, `#loadStatuses` in `apps/dashboard/src/screens/payments-screen.ts`) can hold every connection
+the browser allows to the box for up to 250 seconds, so other dashboard requests wait behind them.
+Measured 2026-10-03 in headless Chromium against a local HTTP/1.1 server: with five requests
+hanging a sixth answered in 3 ms; with six hanging it had not answered after 3 seconds. The box
+serves HTTPS through `node:https` (`apps/server/src/tls.ts`), which is HTTP/1.1, and the
+dashboard's live connection (an EventSource) already holds one connection. Raised in W18c's pull
+request (`fix/slow-read-limit`).
 
 **Empty-state text shows beside a failed read on Payments and Cloud services (A252, seen 2026-10-03
 while checking lane A's W18) — OPEN.** While its read is failing, Payments still says "No card

@@ -373,6 +373,12 @@ describe("defaultMakeStripe", () => {
   it("builds a real Stripe SDK client for the key", () => {
     expect(defaultMakeStripe("sk_test_x")).toBeInstanceOf(Stripe);
   });
+
+  it("sets Stripe's limit on silence per attempt to 80 seconds and allows two retries", () => {
+    const stripe = defaultMakeStripe("sk_test_x");
+    expect(stripe.getApiField("timeout")).toBe(80_000);
+    expect(stripe.getMaxNetworkRetries()).toBe(2);
+  });
 });
 
 describe("deferredStripeClient", () => {

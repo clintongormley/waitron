@@ -47,8 +47,15 @@ void everyClientMethodListed;
 
 export type MakeStripe = (secretKey: string) => Stripe;
 
+// The dashboard's `CARD_PROVIDER_READ_LIMIT_MS` (apps/dashboard/src/api/client.ts) is set above these.
+const STRIPE_TIMEOUT_MS = 80_000;
+const STRIPE_MAX_NETWORK_RETRIES = 2;
+
 export function defaultMakeStripe(secretKey: string): Stripe {
-  return new Stripe(secretKey);
+  return new Stripe(secretKey, {
+    timeout: STRIPE_TIMEOUT_MS,
+    maxNetworkRetries: STRIPE_MAX_NETWORK_RETRIES,
+  });
 }
 
 /** `null` is not a failure: Stripe issues restricted keys (`rk_…`) and may add prefixes we do not

@@ -8,7 +8,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * Per-call options. `as: "blob"` resolves a 2xx to its body's bytes, undecoded, for a file download; a
- * refusal is decoded exactly as without it. `timeLimitMs` replaces `READ_TIME_LIMIT_MS` for one GET.
+ * refusal is decoded exactly as without it. `timeLimitMs` replaces `READ_TIME_LIMIT_MS` for one GET other
+ * than a file download.
  */
 export interface RequestOptions {
   passive?: boolean;
