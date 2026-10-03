@@ -65,6 +65,7 @@ import type {
 } from "./screens/till-table-order-screen.js";
 import type { DraftGroup } from "./state/draft-groups.js";
 import "@waitron/ui/src/components/wt-toast.js";
+import "@waitron/ui/src/components/wt-demo-bar.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import "./screens/till-station-screen.js";
 import { CROSS_ICON_PATH } from "./widgets/station-queue.js";
@@ -981,6 +982,7 @@ export class TillApp extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         text-align: center;
       }
+
       .edit-dead-ends-actions {
         display: flex;
         justify-content: space-between;
@@ -7323,11 +7325,23 @@ export class TillApp extends LitElement {
         @menu-selected=${(e: CustomEvent<{ id: string }>) => this.#onMenuSelected(e)}
       >
         ${
-          this.onboardingIntent === undefined
-            ? nothing
-            : html`<p class="mode-indicator" data-test="mode-indicator">
-                ${t(`mode.${this.onboardingIntent}`)}
-              </p>`
+          this.onboardingIntent === "demo" || this.onboardingIntent === "prepare"
+            ? html`<wt-demo-bar
+                data-test="demo-bar"
+                .modeLabel=${t(`mode.${this.onboardingIntent}`)}
+                .navigationLabel=${t("demo_bar.navigation")}
+                .links=${[
+                  { label: t("demo_bar.dashboard"), href: "/manage" },
+                  { label: t("demo_bar.device"), href: "/", current: true },
+                  { label: t("demo_bar.email_inbox"), href: "/manage/email" },
+                ]}
+              ></wt-demo-bar>`
+            : nothing
+        }
+        ${
+          this.onboardingIntent === "live"
+            ? html`<p class="mode-indicator" data-test="mode-indicator">${t("mode.live")}</p>`
+            : nothing
         }
         ${
           this.errorKey

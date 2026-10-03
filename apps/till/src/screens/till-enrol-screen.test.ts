@@ -61,6 +61,18 @@ it("registers as a custom element", () => {
   expect(customElements.get("till-enrol-screen")).toBe(TillEnrolScreen);
 });
 
+it("guides a new device to dashboard Devices during setup and approval", async () => {
+  setLocale("en-GB");
+  const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", { api: stubApi() });
+  await flush(el);
+  const guidance = () => query(el, "[data-approval-guide]") as HTMLAnchorElement | null;
+  expect(guidance()?.href).toContain("/manage/devices");
+  expect(guidance()?.textContent).toContain("Devices");
+  await knock(el);
+  expect(query(el, "[data-number]")).not.toBeNull();
+  expect(guidance()?.href).toContain("/manage/devices");
+});
+
 it("centres the width-constrained enrolment form", async () => {
   const { el, host } = await mountWidget<TillEnrolScreen>("till-enrol-screen", {
     api: stubApi(),
