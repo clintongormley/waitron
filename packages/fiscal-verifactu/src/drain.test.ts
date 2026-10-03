@@ -900,6 +900,206 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
 });
 
 /**
+ * Route B's lookup is an AEAT round trip, so it must not run while the drain holds the venue's one
+ * writer: a sale recorded meanwhile would wait on AEAT (CLAUDE.md §5). A failed lookup still backs
+ * the batch off, but only when the reply's walk reaches the line it was made for.
+ */
+describe("drain — Route B's lookup and the write transaction", () => {
+  const FIRST = new Date("2026-07-21T00:01:00Z");
+  // The fake's 5 s wait from FIRST has passed.
+  const SECOND = new Date("2026-07-21T00:01:30Z");
+  let aeat: ReturnType<typeof createFakeAeat>;
+
+  beforeEach(() => {
+    aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z"), tiempoEsperaInicial: 5 });
+  });
+
+  /** Filed rows back to `pendiente` with no CSV, as a lost reply leaves them. */
+  const requeue = (ids: string[]) =>
+    suite.db.execute(sql`
+      update envios set estado = 'pendiente', csv = null, proximo_intento_en = ${FIRST.toISOString()}
+      where registro_id in ${ids}
+    `);
+
+  const stateOf = async (ids: string[]) => {
+    const { rows } = decodeFlags(
+      await suite.db.execute<{
+        registro_id: string;
+        estado: string;
+        csv: string | null;
+        incidencia: number;
+        proximo_intento_en: string;
+      }>(sql`
+      select registro_id, estado, csv, incidencia, proximo_intento_en from envios
+      where registro_id in ${ids}
+    `),
+    );
+    return ids.map((id) => {
+      const { estado, csv, incidencia, proximo_intento_en } = rows.find(
+        (r) => r.registro_id === id,
+      )!;
+      return { estado, csv, incidencia, proximo_intento_en };
+    });
+  };
+
+  const lookupFails = (): VerifactuClient => {
+    const real = aeat.client();
+    return {
+      submit: (cabecera, registros) => real.submit(cabecera, registros),
+      consultar: () => Promise.reject(new Error("AEAT unreachable")),
+    };
+  };
+
+  it("lets a sale be recorded while AEAT has not yet answered the lookup", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    await drain(drainDeps(staticResolver(aeat.client())), FIRST);
+    aeat.dropRegistroDuplicadoDetail(seeded.facturaKeys[0]!);
+    await requeue(seeded.registroIds);
+
+    const venue = await seedTenantWithSif(suite.db);
+    const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: steadyClock,
+      db: suite.db,
+      resolveClient: staticResolver(aeat.client()),
+    });
+
+    let lookupAsked!: () => void;
+    const asked = new Promise<void>((resolve) => {
+      lookupAsked = resolve;
+    });
+    let answer!: () => void;
+    const answered = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    const real = aeat.client();
+    const heldLookup: VerifactuClient = {
+      submit: (cabecera, registros) => real.submit(cabecera, registros),
+      consultar: async (...args) => {
+        lookupAsked();
+        await answered;
+        return real.consultar(...args);
+      },
+    };
+
+    const pass = drain(drainDeps(staticResolver(heldLookup)), SECOND);
+    let sale: Promise<unknown> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        asked,
+        pass.then(() => {
+          throw new Error("the pass ended without a lookup");
+        }),
+      ]);
+      sale = withTransaction(suite.db, (tx) => recordSale(tx, backend, saleInput(venue)));
+      const stillWaiting = new Promise<"still waiting">((resolve) => {
+        timer = setTimeout(() => resolve("still waiting"), 2_000);
+      });
+      expect(await Promise.race([sale.then(() => "recorded" as const), stillWaiting])).toBe(
+        "recorded",
+      );
+    } finally {
+      clearTimeout(timer);
+      // Released whatever happened, or the pass and the queued sale outlive the test.
+      answer();
+      await Promise.allSettled([pass, sale]);
+    }
+
+    const result = await pass;
+    expect(result.recordsAccepted).toBe(1);
+    expect((await stateOf(seeded.registroIds)).map((r) => r.estado)).toEqual(["aceptado"]);
+  });
+
+  it("files a rejection and halts its successor when the successor's lookup fails but is never reached", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    aeat.reject(seeded.facturaKeys[0]!, 1100, "Campo obligatorio ausente");
+    // The fake is chain-blind, so it stores secuencia 2 though secuencia 1 was refused.
+    await drain(drainDeps(staticResolver(aeat.client())), FIRST);
+    aeat.dropRegistroDuplicadoDetail(seeded.facturaKeys[1]!);
+    await requeue(seeded.registroIds);
+    // A fresh record on another chain, so the reply is partly accepted and carries a CSV.
+    const other = await seedSecondChain(suite.db, seeded, 5);
+
+    const result = await drain(drainDeps(staticResolver(lookupFails())), SECOND);
+
+    const [first, second, fresh] = await stateOf([...seeded.registroIds, other.registroId]);
+    expect(fresh).toMatchObject({ estado: "aceptado", csv: expect.any(String) });
+    expect(first).toMatchObject({ estado: "rechazado", csv: fresh!.csv, incidencia: true });
+    expect(second).toMatchObject({ estado: "detenido", csv: null, incidencia: true });
+    expect(result.recordsAccepted).toBe(1);
+    expect(result.recordsHalted).toBe(2);
+  });
+
+  it("backs the whole batch off, saving nothing from the reply, when a lookup it reaches fails", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    await drain(drainDeps(staticResolver(aeat.client())), FIRST);
+    aeat.dropRegistroDuplicadoDetail(seeded.facturaKeys[0]!);
+    await requeue(seeded.registroIds);
+    const other = await seedSecondChain(suite.db, seeded, 5);
+
+    await drain(drainDeps(staticResolver(lookupFails())), SECOND);
+
+    // The duplicate's row is on its second attempt, the fresh one on its first.
+    expect(await stateOf([...seeded.registroIds, other.registroId])).toEqual([
+      {
+        estado: "pendiente",
+        csv: null,
+        incidencia: true,
+        proximo_intento_en: new Date(SECOND.getTime() + backoffMs(2)).toISOString(),
+      },
+      {
+        estado: "pendiente",
+        csv: null,
+        incidencia: true,
+        proximo_intento_en: new Date(SECOND.getTime() + backoffMs(1)).toISOString(),
+      },
+    ]);
+    const acks = await suite.db.execute<{ registro_id: string }>(
+      sql`select registro_id from acks where registro_id = ${other.registroId}`,
+    );
+    expect(acks.rows).toEqual([]);
+  });
+});
+
+describe("drain — a reply line naming no record in the batch", () => {
+  it("skips that line, leaving its record claimed, and saves the others", async () => {
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    const real = aeat.client();
+    const firstLineMisnamed: VerifactuClient = {
+      submit: async (cabecera, registros) => {
+        const respuesta = await real.submit(cabecera, registros);
+        return {
+          ...respuesta,
+          RespuestaLinea: respuesta.RespuestaLinea.map((linea) =>
+            linea.RefExterna === seeded.registroIds[0]
+              ? { ...linea, RefExterna: "not-in-this-batch" }
+              : linea,
+          ),
+        };
+      },
+      consultar: (...args) => real.consultar(...args),
+    };
+
+    const result = await drain(
+      drainDeps(staticResolver(firstLineMisnamed)),
+      new Date("2026-07-21T00:01:00Z"),
+    );
+
+    const { rows } = await suite.db.execute<{ estado: string; csv: string | null }>(sql`
+      select e.estado, e.csv from envios e join registros_facturacion r on r.id = e.registro_id
+      where ${ownChain(seeded)} order by r.secuencia
+    `);
+    expect(rows).toEqual([
+      { estado: "enviando", csv: null },
+      { estado: "aceptado", csv: expect.any(String) },
+    ]);
+    expect(result.recordsAccepted).toBe(1);
+  });
+});
+
+/**
  * An anulación that meets error 3000 with `EstadoRegistroDuplicado` `Anulada`. The fake
  * (`@waitron/verifactu/testing`) stores one record per invoice and, once a cancellation is accepted,
  * reports it `Anulado` with the cancellation's own huella; why the drain reads that as AEAT holding
