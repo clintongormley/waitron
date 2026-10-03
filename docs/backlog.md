@@ -1263,8 +1263,8 @@ actions, which have no limit. The test-email reads (`GET /management-api/email` 
 Mailpit over HTTP with no limit of their own (`apps/server/src/mailpit-client.ts`), but Mailpit is a
 container on the box itself (`deploy/compose.yml`, the `mailpit` service), not an outside service,
 so they keep 30 seconds. One read that would wait on a card provider, the alerts list, today fails
-before it reaches one (A258). Several long status reads at once can use up the browser's connections
-to the box (A260).
+before it reaches one (A258). The Payments screen asks at most two readers for their status at a
+time (A260).
 
 **A low card-reader battery is never alerted: the alerts list asks the card provider inside a
 transaction, and the provider's key read is refused (A258, found while checking lane A's W18c,
@@ -1310,7 +1310,14 @@ unpairs the row when a poll is rejected"; `apps/dashboard/src/screens/payments-s
 code and show `codeMessage(code)`, and decide separately whether a timed-out poll should unpair.
 
 **Several card readers' status reads at once can use up the browser's connections to the box
-(A260, found by W18c's review, 2026-10-03) — OPEN, owner decision.** With five or more active card
+(A260, found by W18c's review, 2026-10-03) — DONE (W18c, owner's option (b)): at most two reader status reads are in
+flight from every Payments screen together, including one closed while its reads still wait; a
+load a refresh has replaced, or a closed screen, asks no further readers (`takeStatusSlot`,
+`apps/dashboard/src/screens/payments-screen.ts`). Guard: the "readers' status reads" cases in
+`apps/dashboard/src/screens/payments-screen.test.ts`; at least one of them failed under each of
+four changes tried one at a time: the limit raised to 99, the replaced-load check removed, the
+closed-screen check removed, the slot never given back. Not
+measured in a browser with the limit in place, and other screens' reads are not limited.** What it was: with five or more active card
 readers and a stalled provider, the Payments screen's status reads (one per active reader, all at
 once, `#loadStatuses` in `apps/dashboard/src/screens/payments-screen.ts`) can hold every connection
 the browser allows to the box for up to 250 seconds, so other dashboard requests wait behind them.
