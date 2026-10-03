@@ -474,6 +474,18 @@ test("focusing an empty field floats its label and draws the focus line and labe
   expect(getComputedStyle(label).color).toBe("rgb(4, 5, 6)");
 });
 
+test("a focused input keeps its focus marking regardless of a dropdown-only state attribute", async () => {
+  const el = await mount('<wt-input label="Name"></wt-input>');
+  host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-field-label-focus", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  const { field, label } = parts(el);
+  field.setAttribute("data-open", "");
+  el.focus();
+  expect(getComputedStyle(field).boxShadow).toBe("rgb(1, 2, 3) 0px -3px 0px 0px inset");
+  expect(getComputedStyle(label).color).toBe("rgb(4, 5, 6)");
+});
+
 test("a field at rest draws its bottom line from the field-line token at the resting width", async () => {
   const el = await mount('<wt-input label="Name"></wt-input>');
   host.style.setProperty("--wt-color-field-line", "rgb(7, 7, 7)");

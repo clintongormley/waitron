@@ -92,8 +92,14 @@ export class WtCombobox extends LitElement {
         max-width: calc(100% - 2 * var(--wt-space-3) - var(--wt-font-size-md) - var(--wt-space-2));
       }
 
-      /* With no search box the list takes the keys and draws no line of its own, so the field keeps
-         its focus marking while the list is open. */
+      /* The search box marks focus for an open searchable list; the trigger marks it when no search
+         box exists, even while the list holds keyboard focus. */
+      .field[data-open][data-search]:not([data-invalid], [data-disabled]) {
+        box-shadow: inset 0 calc(-1 * var(--wt-field-line-width)) 0 var(--wt-color-field-line);
+      }
+      .field[data-open][data-search]:not([data-invalid], [data-disabled]) .field-label {
+        color: var(--wt-color-text-muted);
+      }
       .field[data-open]:not([data-search], [data-invalid], [data-disabled]) {
         box-shadow: inset 0 calc(-1 * var(--wt-field-line-width-active)) 0 var(--wt-color-primary);
       }

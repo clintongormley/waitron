@@ -81,10 +81,10 @@ export const fieldStyles = css`
     background-clip: text;
     -webkit-text-fill-color: var(--wt-color-field-value);
   }
-  .field:focus-within:not([data-open]) {
+  .field:focus-within {
     box-shadow: inset 0 calc(-1 * var(--wt-field-line-width-active)) 0 var(--wt-color-primary);
   }
-  .field:focus-within:not([data-open]) .field-label {
+  .field:focus-within .field-label {
     color: var(--wt-color-field-label-focus);
   }
   .field[data-invalid],

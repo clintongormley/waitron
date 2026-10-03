@@ -1020,8 +1020,8 @@ The box carries data attributes its primitive sets, and `fieldStyles` draws each
   `--wt-color-primary` and the label `--wt-color-field-label-focus`. That line is the field's focus
   indicator; the control draws no focus ring of its own. A dropdown whose list is open (`data-open`)
   with a search box (`data-search`) drops this marking, because the search box's own line marks
-  focus. With no search box the list takes the keys and draws no line of its own, so
-  `wt-combobox`'s own styles draw the marking whenever the list is open, wherever focus is; an
+  focus. `wt-combobox` owns both open-list rules: it drops the marking when a search box is present,
+  and keeps it when there is none, wherever focus is; an
   invalid field shows its red line instead, and disabling the field closes the list without drawing
   the marking first.
 - **Invalid** (`data-invalid`, from `invalid` or a non-empty `error`): the line becomes

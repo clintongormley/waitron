@@ -1122,22 +1122,9 @@ keeps its red line and a disabled one draws neither. The light theme was inspect
 implementer; the dark theme and phone width only by the Codex review seat's screenshots.
 
 **Move the dropdown's open-list field styling out of the shared field styles (A257, owner
-2026-10-03) — OPEN.** A tidy-up, not a bug fix. After A256 the rule for how the field box looks
-while a dropdown's list is open is split across two files: the shared
-`packages/ui-core/src/field-styles.ts`, which every field primitive loads, drops the focus line
-with `.field:focus-within:not([data-open])`, and `packages/ui/src/components/wt-combobox.ts` then
-draws it again when the list has no search box. Only `wt-combobox` sets `data-open` or
-`data-search`, so the shared file holds a rule no other field can meet. **Next action:** make the
-shared focus rule a plain `.field:focus-within` (and its label rule), and have `wt-combobox`'s own
-styles do both halves: drop the line and label colour while a list with a search box is open, and
-keep them while a list without one is open. Watch the ordering. The combobox's styles come after
-`fieldStyles`, so an override with the same specificity as `.field[data-invalid]:focus-within`
-would beat the red line. Keep the `:not([data-invalid])` and `:not([data-disabled])` exclusions.
-Then update `docs/developers/design-system.md` → Forms → "Focus", which today names `data-open` as
-something `fieldStyles` draws. Guards that must stay green with no test edits:
-the open-list cases in `packages/ui/src/components/wt-combobox.test.ts`. These are the
-search-box case that drops the line, and the three cases with no search box: focus kept, invalid
-kept red, and disabling while open. A pass changes nothing on screen.
+2026-10-03) — DONE.** The shared focus rule is plain `:focus-within`; `wt-combobox` owns both
+open-list focus treatments. The combobox's searchable, searchless, invalid and disabled open-list
+checks remain unchanged.
 
 **A table's pinned Actions column keeps one narrow width (A195, owner 2026-10-02) — DONE.**
 `wt-data-table` gives its `actions` column only the space its heading or cell content needs; other
