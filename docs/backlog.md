@@ -1436,7 +1436,7 @@ reported problem or a just-added unsaved variant would sit on a hidden row, and 
 "Hide inactive". A Remove that leaves no row on screen puts focus on the link.
 
 **"New extras list…" and "New options list…" leave the modifier dropdown's list (A218) — DONE
-(this PR).** The owner: _"i don't like the new extras list and new options list in the
+(#1082).** The owner: _"i don't like the new extras list and new options list in the
 modifiers dropdown. how else could we organise those? at the very least they should be at the end
 of the list, separated from the others with a line. could we make it a single "add new
 modifier"? although then we'd need a second click to choose which, or to open a modal with two
@@ -1457,7 +1457,11 @@ its make-new choice. The blue comes from a new opt-in on `wt-combobox` options, 
 paints the row in a new token, `--wt-color-primary-text`: the primary colour itself was too faint
 on a hovered row in the light theme for axe (4.32:1). **Open:** each list still reads "Extra bread
 · Extras", and under its heading the " · Extras" is now said twice; and the price heading's "Add
-unit…" row could take the same blue.
+unit…" row could take the same blue; with three lists the dropdown already scrolls, so "+ New
+options list…" sits at or just below its bottom edge when it opens; and `--wt-color-primary-text`
+has fixed light and dark values that do not follow `--wt-color-primary`, and a tenant theme
+cannot set it (`THEMEABLE_TOKENS`, `packages/layouts/src/theme.ts`) — no screen applies a stored
+tenant theme yet.
 
 **With variants, Pricing folds and Variants becomes its own section (A219) — DONE (#1065).**
 The owner: _"when we have variants the vat and base price and status filter are overwhelming.
