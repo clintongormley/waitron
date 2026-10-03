@@ -997,8 +997,14 @@ it("puts the minimum and maximum choices side by side as clearable steppers from
   expect([min.tagName, max.tagName]).toEqual(["WT-NUMBER-STEPPER", "WT-NUMBER-STEPPER"]);
   expect([min.parentElement, max.parentElement]).toEqual([row, row]);
   expect([min.label, max.label]).toEqual([t("extras.min_picks"), t("extras.max_picks")]);
-  expect([min.hint, max.hint]).toEqual([t("extras.picks_none"), t("extras.picks_none")]);
-  expect([min.placeholder, max.placeholder]).toEqual(["", ""]);
+  expect([min.placeholder, max.placeholder]).toEqual([
+    t("extras.picks_none"),
+    t("extras.picks_none"),
+  ]);
+  expect([min.hint, max.hint]).toEqual(["", ""]);
+  const maxInput = max.shadowRoot!.querySelector("input")!;
+  expect(maxInput.value).toBe("2");
+  expect(maxInput.hasAttribute("aria-describedby")).toBe(false);
   expect([min.min, max.min]).toEqual([1, 1]);
   expect([min.clearable, max.clearable]).toEqual([true, true]);
   expect(min.increaseLabel(min.label)).toBe(
@@ -1072,6 +1078,8 @@ it.each([
         const input = field(el, name).shadowRoot!.querySelector("input")!;
         expect([input.value, input.placeholder], name).toEqual(["", word]);
         expect(input.matches(":placeholder-shown"), name).toBe(true);
+        expect(input.hasAttribute("aria-describedby"), name).toBe(false);
+        expect(field(el, name).shadowRoot!.querySelector("[data-hint]"), name).toBeNull();
         const style = getComputedStyle(input);
         const probe = document.createElement("span");
         probe.style.font = style.font;

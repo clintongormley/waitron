@@ -844,7 +844,7 @@ export class ExtraListForm extends LitElement {
               <wt-number-stepper
                 name="min-picks"
                 label=${t("extras.min_picks")}
-                hint=${t("extras.picks_none")}
+                placeholder=${t("extras.picks_none")}
                 clearable
                 .min=${1}
                 .decreaseLabel=${decreaseLabel}
@@ -861,7 +861,7 @@ export class ExtraListForm extends LitElement {
               <wt-number-stepper
                 name="max-picks"
                 label=${t("extras.max_picks")}
-                hint=${t("extras.picks_none")}
+                placeholder=${t("extras.picks_none")}
                 clearable
                 .min=${1}
                 .decreaseLabel=${decreaseLabel}
