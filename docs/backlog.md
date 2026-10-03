@@ -1024,9 +1024,9 @@ each column filter's `wt-combobox` a first option `{ value: "", label: allLabel 
 option as a selected value. "Any status" and the other table-filter "Any …" choices use the ordinary
 value style. The Orders screen's staff filter uses it too, so its "Anyone" choice appears as a value.
 The standalone product editor uses the same combobox setting for "Uncategorised" and "No course";
-a variant's inherited values still read as hints. The empty string still means no
-filter to the saved view (`#persistView`) and to `wt-filter-change` listeners; their existing
-behavior tests remain in place.
+a variant's inherited values still read as hints. Picking a table filter's "Any …" choice removes
+that filter from the saved view and from the `wt-filter-change` detail map. Other non-table dropdowns
+offering an empty "Any …" or "No …" row were outside A193; their appearance needs a separate review.
 
 **A table filter's dropdown keeps one width whatever is chosen (A194, owner 2026-10-02) — OPEN.**
 The owner, on a screenshot of the Modifiers screen's status filter showing "Active" after "Any

@@ -374,6 +374,7 @@ export class TillScheduleScreen extends LitElement {
     </section>`;
   }
 
+  /** This schedule keeps its empty NONE row as a hint, so its label also supplies the placeholder. */
   #dropdown(
     name: string,
     label: string,
