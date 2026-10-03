@@ -4578,9 +4578,15 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   are slice 3b, and watcher copies are slice 3d. Reporting attribution stays separate so one sale is
   counted once.
 - **Departments and menus** (#297) remaining: remove the legacy price and fixed-station compatibility
-  fields; per-menu modifier authoring; department hours and calendar exceptions; workforce
-  assignments; immutable department attribution and reporting; batched readiness and offer queries;
-  a replication smoke test. Same legal seller is the working assumption, to confirm before go-live.
+  fields; per-menu modifier authoring; workforce assignments; immutable department attribution and
+  reporting; batched readiness and offer queries; a replication smoke test. Same legal seller is the
+  working assumption, to confirm before go-live. Hours moved to A254.
+- **Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, not
+  planned.** The first department is named after the venue and hidden until a second exists; the
+  four-value service style splits into separate settings, and a tab no longer needs a table; hours
+  come from venue-wide day types plus a calendar; a per-department switch prints the trading name.
+  [Spec](superpowers/specs/2026-10-03-departments-service-styles-hours-design.md); §6 lists what is
+  open, including advisor questions Q21, Q14, Q27 and Q22.
 - **Counter/walk-up kitchen fire** — the #193 follow-up, the next piece of menu work.
 - **Menu draft/published state** and time-of-day / seasonal scheduling.
 - **KDS corrections deferred from #191** (owner, 2026-09-01): a moved dish must keep its kitchen
