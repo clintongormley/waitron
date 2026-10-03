@@ -648,6 +648,15 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   column stores what the converter already decided, so no SQL rounding stands behind it and a test
   asking storage to round is testing something no product path does — this engine has no exact
   decimal type. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
+- **A time stored as text and compared or sorted as text is right only while every writer stores
+  one spelling**, because the engine compares characters: `10:00:00Z` sorts after `10:00:00.500Z`,
+  and `09:00+02:00` after `07:30Z`, though each is the earlier time. Normalise at the writer, as
+  `shiftInterval` (`packages/workforce/src/clocking.ts`) and the `storedTime` helpers do. Cost: W22
+  (#1134) — shifts kept the caller's spelling, so a valid shift was refused with a raw CHECK error
+  or listed out of order; and storing UTC would have shown a +02:00 shift at its UTC hour (caught in
+  review) had the dashboard not been changed to read the stored offset. No guard spans the columns;
+  `time_entries` and `order_amendments.event_at` pin theirs with a CHECK. Receipt, and which columns have which
+  writers: [conventions-data.md](docs/developers/conventions-data.md).
 - **A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
   list, and a table that must never be corrected is declared with `appendOnly()` instead of
   `classify()`** — `applyMigrations` turns those declarations into a `RAISE(ABORT)` trigger pair
