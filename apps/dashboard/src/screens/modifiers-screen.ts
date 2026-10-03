@@ -594,7 +594,6 @@ export class ModifiersScreen extends LitElement {
       searchable
       searchLabel=${t(`${kind}.search`)}
       viewKey=${`waitron.modifiers.${kind}.table`}
-      columnsLabel=${t("table.columns")}
       customiseColumnsLabel=${t("table.customise_columns")}
       customiseLabel=${t("table.customise")}
       restoreColumnsLabel=${t("table.restore_columns")}

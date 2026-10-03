@@ -401,7 +401,6 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     ] satisfies DataTableColumn<Row>[];
     el.rows = [{ id: "1", name: "Ada", status: "Active" }];
     el.rowKey = (row) => row.id;
-    el.columnsLabel = "Columns shown";
     await el.updateComplete;
     return el;
   }

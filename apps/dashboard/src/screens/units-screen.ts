@@ -463,7 +463,6 @@ export class UnitsScreen extends LitElement {
         searchable
         searchLabel=${t("units.search")}
         viewKey="waitron.units.table"
-        columnsLabel=${t("table.columns")}
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}

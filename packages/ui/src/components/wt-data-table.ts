@@ -412,7 +412,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
         cursor: pointer;
       }
 
-      .column-choice[data-fixed] {
+      .column-choice[data-fixed],
+      .column-choice[data-unchoosable] {
         color: var(--wt-color-text-muted);
       }
 
@@ -582,7 +583,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property() filterClearLabel = "Clear";
   @property() filtersClearAllLabel = "Clear all";
   @property() filtersCloseLabel = "Close filters";
-  @property() columnsLabel = "Columns";
   @property() customiseColumnsLabel = "Customise columns";
   @property() customiseLabel = "Customise";
   @property() restoreColumnsLabel = "Restore defaults";
@@ -591,9 +591,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property() showColumnLabel = "Show";
   @property() hideColumnLabel = "Hide";
   @property() columnPositionLabel = "{position} of {total}";
-  /** When set, the tab's session storage remembers this table's sort and filter choices under this
-   * key, and the browser's local storage remembers the chosen columns under `${viewKey}:columns`;
-   * both are restored on the next visit. Search text is never persisted. */
+  /** The tab remembers sort and filter choices, and local storage remembers column visibility and
+   * order under this key. Search text is never persisted. */
   @property() viewKey?: string;
   /** Narrows rows as a typed search would, for a table whose search box its consumer draws; ignored
    * while `searchable` draws the table's own. */
@@ -804,7 +803,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
       else {
         const after = movable
           .slice(movable.indexOf(column) + 1)
-          .find((item) => ordered.includes(item.key));
+          .filter((item) => ordered.includes(item.key))
+          .sort((a, b) => ordered.indexOf(a.key) - ordered.indexOf(b.key))[0];
         if (after) ordered.splice(ordered.indexOf(after.key), 0, column.key);
         else ordered.push(column.key);
       }
@@ -814,17 +814,25 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   /** The columns drawn, in the person's order; the first column stays shown. */
   #shownColumns(): DataTableColumn<Row>[] {
-    const shown = this.#orderedColumns().filter(
+    const ordered = this.#orderedColumns();
+    const shown = ordered.filter(
       (column, index) =>
         index === 0 ||
         column.pinned === "end" ||
         column.choosable === undefined ||
         (this.columnChoices[column.key] ?? column.choosable === "shown"),
     );
-    return shown;
+    if (shown.some((column) => column !== ordered[0] && column.pinned !== "end")) return shown;
+    const firstMovable = ordered.find((column, index) => index > 0 && column.pinned !== "end");
+    return firstMovable
+      ? ordered.filter((column) => shown.includes(column) || column === firstMovable)
+      : shown;
   }
 
   #moveColumn(key: string, delta: number): void {
+    const focusedHandle = [
+      ...this.renderRoot.querySelectorAll<HTMLButtonElement>("[data-reorder]"),
+    ].find((handle) => handle.dataset.reorder === key && handle === this.shadowRoot?.activeElement);
     const movable = this.#orderedColumns().filter(
       (column, index) => index > 0 && column.pinned !== "end",
     );
@@ -834,6 +842,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const [moving] = movable.splice(from, 1);
     movable.splice(to, 0, moving!);
     this.columnOrder = movable.map((column) => column.key);
+    if (focusedHandle) void this.updateComplete.then(() => focusedHandle.focus());
     this.columnMoveAnnouncement = `${moving!.label}, ${this.columnPositionLabel.replace("{position}", String(to + 2)).replace("{total}", String(this.columns.length))}`;
     if (this.viewKey) {
       try {
@@ -877,7 +886,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
       const rows = [...this.chooserPanel.querySelectorAll<HTMLElement>("[data-column-row]")];
       const target = rows.find((row) => {
         const box = row.getBoundingClientRect();
-        return event.clientY >= box.top && event.clientY < box.bottom;
+        return (
+          event.clientX >= box.left &&
+          event.clientX < box.right &&
+          event.clientY >= box.top &&
+          event.clientY < box.bottom
+        );
       });
       const destination = target?.dataset.columnRow;
       if (destination && target?.querySelector("[data-reorder]")) {
@@ -945,14 +959,20 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   #toggleChooser(event: MouseEvent): void {
     event.preventDefault();
-    this.chooserOpen = !this.chooserOpen;
+    if (this.chooserOpen) this.#closeChooser();
+    else this.chooserOpen = true;
   }
+
+  #closeChooser = (): void => {
+    this.#endColumnDrag();
+    this.chooserOpen = false;
+  };
 
   #chooserKeydown(event: KeyboardEvent): void {
     if (event.key !== "Escape" || event.defaultPrevented || !this.chooserOpen) return;
     event.preventDefault();
     event.stopPropagation();
-    this.chooserOpen = false;
+    this.#closeChooser();
     this.chooserTrigger.focus();
   }
 
@@ -1739,7 +1759,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         class="columns-panel"
         heading=${this.customiseLabel}
         .open=${this.chooserOpen}
-        @wt-close=${() => (this.chooserOpen = false)}
+        @wt-close=${this.#closeChooser}
         @keydown=${this.#chooserKeydown}
       >
         <div class="columns-list">
@@ -1753,6 +1773,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 class="column-choice"
                 data-column-row=${column.key}
                 ?data-fixed=${fixed}
+                ?data-unchoosable=${column.choosable === undefined}
               >
                 ${
                   fixed
@@ -1782,9 +1803,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
                     data-column=${column.key}
                     aria-label=${`${isShown ? this.hideColumnLabel : this.showColumnLabel} ${column.label}`}
                     .checked=${isShown}
-                    ?disabled=${fixed ||
-                    column.choosable === undefined ||
-                    (isShown && !fixed && visibleMovable.length === 1)}
+                    ?disabled=${
+                      fixed ||
+                      column.choosable === undefined ||
+                      (isShown && !fixed && visibleMovable.length === 1)
+                    }
                     @change=${(event: Event) => {
                       event.stopPropagation();
                       this.#chooseColumn(column.key, (event.target as HTMLInputElement).checked);
@@ -1805,9 +1828,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         >
           ${this.restoreColumnsLabel}
         </wt-button>
-        <wt-button slot="footer" @click=${() => (this.chooserOpen = false)}>
-          ${this.doneLabel}
-        </wt-button>
+        <wt-button slot="footer" @click=${this.#closeChooser}> ${this.doneLabel} </wt-button>
       </wt-dialog>`;
   }
 

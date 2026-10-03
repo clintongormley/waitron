@@ -1344,7 +1344,9 @@ describe("printers-screen", () => {
         updateComplete: Promise<unknown>;
       };
       const root = table.shadowRoot!;
-      expect(root.querySelector(".columns-trigger")?.getAttribute("aria-label")).toBe(t("table.customise_columns"));
+      expect(root.querySelector(".columns-trigger")?.getAttribute("aria-label")).toBe(
+        t("table.customise_columns"),
+      );
       expect(
         [...root.querySelectorAll<HTMLInputElement>("input[data-column]")].map((box) => [
           box.dataset.column,

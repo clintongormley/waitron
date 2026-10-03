@@ -1184,7 +1184,6 @@ export class ProductList extends LitElement {
         viewKey="waitron.products.table"
         rememberExpanded
         searchOpensPath
-        columnsLabel=${t("table.columns")}
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}

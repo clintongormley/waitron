@@ -1040,7 +1040,6 @@ export class MenuPricesTable extends LitElement {
         viewKey="waitron.menus.prices"
         searchable
         searchLabel=${t("menu_prices.search")}
-        columnsLabel=${t("menu_prices.columns")}
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}

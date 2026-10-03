@@ -343,7 +343,9 @@ describe("units-screen", () => {
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     const root = table.shadowRoot!;
-    expect(root.querySelector(".columns-trigger")!.getAttribute("aria-label")).toBe(t("table.customise_columns"));
+    expect(root.querySelector(".columns-trigger")!.getAttribute("aria-label")).toBe(
+      t("table.customise_columns"),
+    );
     const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
     expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([
       ["name", true],

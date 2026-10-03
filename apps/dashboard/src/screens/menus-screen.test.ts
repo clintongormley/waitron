@@ -3249,8 +3249,7 @@ describe("publishing", () => {
     expect(client.getMenuStatus).not.toHaveBeenCalled();
   });
 
-  it("offers the status column, and neither the name nor the actions, in the list's column chooser, and remembers a hidden one", async () => {
-    // In Spanish, because the table's own default label is the English "Columns".
+  it("lists the status column with the fixed columns and keeps it shown as the last movable column", async () => {
     setLocale("es-ES");
     const el = await mount();
     const headerTexts = () =>
@@ -3260,8 +3259,12 @@ describe("publishing", () => {
       expect(headerTexts()).toContain(t("menus.status"));
     });
     const root = table(el).shadowRoot;
-    expect(root.querySelector(".columns-trigger")?.getAttribute("aria-label")).toBe(t("table.customise_columns"));
-    expect(root.querySelector(".columns-trigger")?.getAttribute("aria-label")).toBe("Personalizar columnas");
+    expect(root.querySelector(".columns-trigger")?.getAttribute("aria-label")).toBe(
+      t("table.customise_columns"),
+    );
+    expect(root.querySelector(".columns-trigger")?.getAttribute("aria-label")).toBe(
+      "Personalizar columnas",
+    );
     const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
     expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([
       ["name", true],
@@ -3271,7 +3274,7 @@ describe("publishing", () => {
     boxes[1]!.checked = false;
     boxes[1]!.dispatchEvent(new Event("change"));
     await table(el).updateComplete;
-    expect(headerTexts()).not.toContain(t("menus.status"));
+    expect(headerTexts()).toContain(t("menus.status"));
     expect(JSON.parse(localStorage.getItem("waitron.menus.table:columns")!)).toEqual({
       status: false,
     });

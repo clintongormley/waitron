@@ -437,7 +437,6 @@ export class VenueOperationsScreen extends LitElement {
     return html`<wt-data-table
       data-test=${key}
       viewKey=${viewKey}
-      columnsLabel=${t("venue.columns")}
       customiseColumnsLabel=${t("venue.customise_columns")}
       customiseLabel=${t("venue.customise")}
       restoreColumnsLabel=${t("venue.restore_columns")}

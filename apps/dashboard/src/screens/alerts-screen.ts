@@ -248,7 +248,6 @@ export class AlertsScreen extends LitElement {
             noMatchesMessage=${tableNoMatches()}
             data-test="open-alerts-table"
             viewKey="waitron.alerts.open.table"
-            columnsLabel=${t("table.columns")}
             customiseColumnsLabel=${t("table.customise_columns")}
             customiseLabel=${t("table.customise")}
             restoreColumnsLabel=${t("table.restore_columns")}
@@ -271,7 +270,6 @@ export class AlertsScreen extends LitElement {
             noMatchesMessage=${tableNoMatches()}
             data-test="handled-alerts-table"
             viewKey="waitron.alerts.handled.table"
-            columnsLabel=${t("table.columns")}
             customiseColumnsLabel=${t("table.customise_columns")}
             customiseLabel=${t("table.customise")}
             restoreColumnsLabel=${t("table.restore_columns")}

@@ -1708,7 +1708,6 @@ export class MenusScreen extends LitElement {
                   class=${this.narrow ? "narrow" : ""}
                   aria-label=${t("menus.title")}
                   viewKey="waitron.menus.table"
-                  columnsLabel=${t("table.columns")}
                   customiseColumnsLabel=${t("table.customise_columns")}
                   customiseLabel=${t("table.customise")}
                   restoreColumnsLabel=${t("table.restore_columns")}

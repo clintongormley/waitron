@@ -1549,7 +1549,6 @@ export class PaymentsScreen extends LitElement {
         noMatchesMessage=${tableNoMatches()}
         aria-label=${t("payments.readers_heading")}
         viewKey="waitron.payments.readers.table"
-        columnsLabel=${t("table.columns")}
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}

@@ -751,7 +751,6 @@ export class AdjustmentReportScreen extends LitElement {
         data-test="people"
         aria-label=${t("adjustment_report.people")}
         viewKey="waitron.adjustments.report.people"
-        columnsLabel=${t("adjustments.columns")}
         customiseColumnsLabel=${t("adjustments.customise_columns")}
         customiseLabel=${t("adjustments.customise")}
         restoreColumnsLabel=${t("adjustments.restore_columns")}
@@ -848,7 +847,6 @@ export class AdjustmentReportScreen extends LitElement {
         data-test="entries"
         aria-label=${heading}
         viewKey="waitron.adjustments.report.entries"
-        columnsLabel=${t("adjustments.columns")}
         customiseColumnsLabel=${t("adjustments.customise_columns")}
         customiseLabel=${t("adjustments.customise")}
         restoreColumnsLabel=${t("adjustments.restore_columns")}

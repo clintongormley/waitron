@@ -955,7 +955,6 @@ export class AdjustmentReasonsScreen extends LitElement {
               data-test="reasons"
               aria-label=${t("adjustments.title")}
               viewKey="waitron.adjustments.reasons.table"
-              columnsLabel=${t("adjustments.columns")}
               customiseColumnsLabel=${t("adjustments.customise_columns")}
               customiseLabel=${t("adjustments.customise")}
               restoreColumnsLabel=${t("adjustments.restore_columns")}

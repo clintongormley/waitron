@@ -551,7 +551,6 @@ export class ContentLanguagesScreen extends LitElement {
                   aria-label=${t("content_gaps.table").replace("{language}", names.of(language)!)}
                   searchable
                   searchLabel=${t("content_gaps.search")}
-                  columnsLabel=${t("table.columns")}
                   customiseColumnsLabel=${t("table.customise_columns")}
                   customiseLabel=${t("table.customise")}
                   restoreColumnsLabel=${t("table.restore_columns")}

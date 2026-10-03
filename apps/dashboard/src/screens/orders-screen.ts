@@ -347,7 +347,6 @@ export class OrdersScreen extends LitElement {
         noMatchesMessage=${tableNoMatches()}
         aria-label=${t("orders.title")}
         viewKey="waitron.orders.table"
-        columnsLabel=${t("table.columns")}
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}

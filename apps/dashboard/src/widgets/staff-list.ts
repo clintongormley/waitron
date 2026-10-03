@@ -128,7 +128,6 @@ export class StaffList extends LitElement {
         noMatchesMessage=${tableNoMatches()}
         aria-label=${t("staff.title")}
         viewKey="waitron.staff.table"
-        columnsLabel=${t("table.columns")}
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}

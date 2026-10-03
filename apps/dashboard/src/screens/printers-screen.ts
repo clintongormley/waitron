@@ -1781,7 +1781,6 @@ export class PrintersScreen extends LitElement {
         filterNoResultsLabel=${t("categories.combobox_no_results")}
         data-test="agents-table"
         viewKey="printers:agents"
-        columnsLabel=${t("table.columns")}
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}
@@ -2195,7 +2194,6 @@ export class PrintersScreen extends LitElement {
         filterNoResultsLabel=${t("categories.combobox_no_results")}
         data-test="printers-table"
         viewKey="printers:table"
-        columnsLabel=${t("table.columns")}
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}
@@ -2350,7 +2348,6 @@ export class PrintersScreen extends LitElement {
         noMatchesMessage=${tableNoMatches()}
         data-test="jobs-table"
         viewKey="printers:jobs"
-        columnsLabel=${t("table.columns")}
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}

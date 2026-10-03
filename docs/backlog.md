@@ -4273,7 +4273,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   buttons holding several facts together — **DECIDED (owner, 2026-09-29): leave it**, unsplit and
   with no chooser; (3) nothing checks that a NEW dashboard table offers the chooser; (4) where a
   screen keeps its search and filters outside the table (staff, card readers) or the table has none
-  (alerts, venue operations), the Columns button sits alone on a row above the table rather than
+  (alerts, venue operations), the Customise icon button sits alone on a row above the table rather than
   beside those controls — moving a screen's own controls into the table's toolbar would fix it;
   (5) the read-only tables a few screens draw as plain HTML tables rather than `wt-data-table`s have
   no chooser: planned against actual (`apps/dashboard/src/screens/planned-actual-screen.ts`), the
