@@ -2,10 +2,14 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  deviceMadeHereStations,
+  deviceProfiles,
+  devices,
   kitchenPrintJobLines,
   kitchenPrintJobs,
   printJobs,
   printers,
+  ticketItems,
   workingOrderLines,
   withTransaction,
 } from "@waitron/db";
@@ -13,13 +17,18 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createProduct } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createPrinter } from "@waitron/printing";
+import { createPrinter, updatePrinter } from "@waitron/printing";
 import { createStation } from "./kitchen.js";
 import { enqueueKitchenTickets, enqueueWatcherCopies } from "./kitchen-print.js";
 import type { WatcherCopies } from "./kitchen-print.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import { printedLines } from "./testing/decode-ticket.js";
-import { fireNewOrder, setupVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
+import { printedCommands, printedLines } from "./testing/decode-ticket.js";
+import {
+  fireNewOrder,
+  setupSplitExtrasVenue,
+  setupVenue,
+  useSplitExtrasDb,
+} from "./testing/split-extras-venue.js";
 import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
 import { createOpenOrder } from "./working-order.js";
 import { createWatcher, setPrinterWatcher } from "./watchers.js";
@@ -36,6 +45,124 @@ beforeAll(() => {
 });
 
 describe("watcher paper", () => {
+  it("builds an 80mm and a 58mm copy for two printers on one watcher", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const result = await withTransaction(db, async (tx) => {
+      const grill = await createStation(tx, cfg, { name: "Grill", isDefault: true });
+      const watcher = await createWatcher(tx, cfg, {
+        name: "Pase",
+        runsPass: true,
+        everyStation: false,
+        stationIds: [grill.id],
+        everyZone: true,
+        zoneIds: [],
+      });
+      const printers: string[] = [];
+      for (const width of ["80mm", "58mm"] as const) {
+        const { id } = await createPrinter(
+          tx,
+          { locationId: cfg.locationId },
+          {
+            name: `Pase ${width}`,
+            transport: "cloud_poll",
+            pollId: `poll-${randomUUID()}`,
+          },
+        );
+        await updatePrinter(tx, { locationId: cfg.locationId }, id, { paperWidth: width });
+        await setPrinterWatcher(tx, cfg, id, watcher.id);
+        printers.push(id);
+      }
+      const { id: burger } = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Burger",
+        kitchenName: "BURG with a long kitchen name for wrapping",
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      await routeProductTo(tx, cfg, burger, grill.id);
+      await fireNewOrder(tx, cfg, [{ productId: burger, quantity: "1" }]);
+      return { printers, jobs: await tx.select().from(printJobs) };
+    });
+    const [wide, narrow] = result.printers.map((printerId) => {
+      const own = result.jobs.filter((job) => job.printerId === printerId);
+      expect(own).toHaveLength(1);
+      return own[0]!.payload;
+    });
+    const widths = (payload: Uint8Array) =>
+      new Set(
+        printedCommands(payload)
+          .filter((command) => command.text !== undefined)
+          .map((command) => command.widthDots),
+      );
+    expect(widths(wide!)).toEqual(new Set([512]));
+    expect(widths(narrow!)).toEqual(new Set([360]));
+    expect(printedLines(wide!)[0]).toBe("Pase");
+    expect(printedLines(narrow!)[0]).toBe("Pase");
+    expect(
+      printedLines(wide!)
+        .map((line) => line.trim())
+        .join(" "),
+    ).toContain("BURG with a long kitchen name for wrapping");
+    expect(
+      printedLines(narrow!)
+        .map((line) => line.trim())
+        .join(" "),
+    ).toContain("BURG with a long kitchen name for wrapping");
+  });
+
+  it("leaves a made-here extra off both the station and watcher tickets on a normal send", async () => {
+    const venue = await setupSplitExtrasVenue();
+    const { cfg, products, lists, printers, stations } = venue;
+    const result = await withTransaction(db, async (tx) => {
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({
+          name: "Fryer till",
+          formFactor: "till",
+          capabilities: [],
+        })
+        .returning({ id: deviceProfiles.id });
+      const [device] = await tx
+        .insert(devices)
+        .values({
+          locationId: cfg.locationId,
+          tillId: cfg.tillId,
+          deviceProfileId: profile!.id,
+          label: "Fryer till",
+          tokenHash: `here-${randomUUID()}`,
+        })
+        .returning({ id: devices.id });
+      await tx
+        .insert(deviceMadeHereStations)
+        .values({ deviceId: device!.id, stationId: stations.fryer });
+      const orderId = await fireNewOrder(tx, { ...cfg, sendingDeviceId: device!.id }, [
+        {
+          productId: products.burger,
+          quantity: "1",
+          extras: [{ listId: lists.burger, picks: [{ productId: products.chips, quantity: 1 }] }],
+        },
+      ]);
+      return {
+        jobs: await tx.select().from(printJobs),
+        items: await tx
+          .select({ stationId: ticketItems.stationId, madeHere: ticketItems.madeHere })
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderId, orderId)),
+      };
+    });
+    expect(result.items).toContainEqual({ stationId: stations.fryer, madeHere: true });
+    expect(result.jobs.map((job) => job.printerId).sort()).toEqual(
+      [printers.grill, printers.pass].sort(),
+    );
+    for (const printerId of [printers.grill, printers.pass]) {
+      const lines = printedLines(result.jobs.find((job) => job.printerId === printerId)!.payload);
+      expect(lines).toContain("1.000 x BURG");
+      expect(lines.filter((line) => line.includes("x CHIPS"))).toEqual([]);
+    }
+  });
+
   it("separates work a watcher first sees after a station move from its usual FIRE copy", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const copies = await withTransaction(db, async (tx) => {
