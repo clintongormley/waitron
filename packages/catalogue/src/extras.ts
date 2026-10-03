@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
-import { AppError, centsToDecimal, stringToCents } from "@waitron/shared";
+import {
+  AppError,
+  centsToDecimal,
+  decimal,
+  multiplyDecimal,
+  stringToCents,
+  toScale,
+} from "@waitron/shared";
 import { extraListItems, extraLists, productModifiers } from "./schema/extras.js";
 import {
   parseExtraListInput,
@@ -18,7 +25,9 @@ export function resolveExtraPrice(
   item: ExtraListItem,
   product: { unitPrice: string } | undefined,
 ): string | undefined {
-  return item.price ?? product?.unitPrice;
+  if (item.price !== null) return item.price;
+  if (product === undefined) return undefined;
+  return toScale(multiplyDecimal(decimal(product.unitPrice), decimal(item.portion ?? "1")), 2);
 }
 
 // A list's `sort` is never written from a body (`parseExtraListInput` accepts no such key), so every

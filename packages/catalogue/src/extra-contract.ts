@@ -3,6 +3,7 @@ import type { ExtraSelection } from "@waitron/shared";
 import type { ExtraList, ExtraListItemInput, ExtraListInput } from "./modifier-list-types.js";
 import { MAX_MODIFIER_INTEGER, isProductPrice } from "./modifier-limits.js";
 import { nonBlankTranslations } from "./product-presentation.js";
+import { assertQuantityPrecision } from "./unit-validation.js";
 import "./errors.js";
 
 export type { ExtraSelection } from "@waitron/shared";
@@ -87,6 +88,16 @@ export function extraPrice(value: unknown, field: string): string | null {
   return toScale(decimal(value), 2);
 }
 
+function extraPortion(value: unknown, field: string): string {
+  if (typeof value !== "string") invalid(field);
+  try {
+    assertQuantityPrecision(value, 3, { positive: true });
+    return toScale(decimal(value), 3);
+  } catch {
+    invalid(field);
+  }
+}
+
 export function parseExtraListInput(value: unknown): ExtraListInput {
   const row = record(value, "extraList");
   keys(
@@ -113,7 +124,7 @@ export function parseExtraListInput(value: unknown): ExtraListInput {
   const items = row.items.map((entry, index): ExtraListItemInput => {
     const field = `items.${index}`;
     const item = record(entry, field);
-    keys(item, ["id", "productId", "maxQuantity", "preselected", "price"], field);
+    keys(item, ["id", "productId", "maxQuantity", "preselected", "price", "portion"], field);
     let itemId: string | undefined;
     if (item.id !== undefined) {
       itemId = id(item.id, `${field}.id`);
@@ -129,6 +140,9 @@ export function parseExtraListInput(value: unknown): ExtraListInput {
     return {
       ...(itemId === undefined ? {} : { id: itemId }),
       productId,
+      ...(item.portion === undefined
+        ? {}
+        : { portion: extraPortion(item.portion, `${field}.portion`) }),
       maxQuantity:
         item.maxQuantity === undefined ? 1 : whole(item.maxQuantity, `${field}.maxQuantity`, 1),
       preselected: bool(item.preselected, `${field}.preselected`, false),
