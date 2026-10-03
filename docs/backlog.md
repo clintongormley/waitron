@@ -5893,7 +5893,7 @@ change (owner decision 2026-09-23; PR #536).** The ticket belongs to the TILL, n
 who started it, so a late result shown on that device after a change of operator is right; the
 payment belongs to the table, so no payment is lost.
 
-**Till code that no test can reach, and small till defects — DONE (W24; found 2026-09-23, till
+**Till code that no test can reach, and small till defects — DONE (W24, #1127; found 2026-09-23, till
 coverage, PR #536).**
 
 - `till-app.ts`: the branches that switched the screen when the shell was not showing are gone,
