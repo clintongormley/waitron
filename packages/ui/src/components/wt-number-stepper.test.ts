@@ -504,9 +504,12 @@ test("the step buttons draw their icon in the primary colour with no fill or sep
   host.style.setProperty("--wt-color-stepper-button", "rgb(20, 30, 40)");
   host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
   host.style.setProperty("--wt-field-line-width-active", "3px");
+  host.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
   for (const button of [parts(el).minus, parts(el).plus]) {
     expect(getComputedStyle(button).backgroundColor).toBe("rgba(0, 0, 0, 0)");
     expect(getComputedStyle(button).color).toBe("rgb(1, 2, 3)");
+    // wt-icon sets its own text colour, so the icon must be given the button's.
+    expect(getComputedStyle(button.querySelector("wt-icon")!).color).toBe("rgb(1, 2, 3)");
     expect(getComputedStyle(button).borderLeftWidth).toBe("0px");
   }
   const button = parts(el).plus;

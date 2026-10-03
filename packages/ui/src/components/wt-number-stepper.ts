@@ -102,6 +102,11 @@ export class WtNumberStepper extends LitElement {
         background-color: var(--wt-color-stepper-button);
       }
 
+      /* wt-icon's own styles set the text colour, which would win over the button's. */
+      button wt-icon {
+        color: inherit;
+      }
+
       button:disabled wt-icon {
         opacity: var(--wt-opacity-disabled);
       }
