@@ -389,6 +389,13 @@ describe("till-schedule-screen", () => {
     expect(root(el).textContent).toContain(t("schedule.load_failed"));
   });
 
+  it("leaves a gap under the load-failed alert, before the first list's heading", async () => {
+    const api = stubApi({ listMyShifts: vi.fn().mockRejectedValue(new Error("network")) });
+    const { el } = await mount(api);
+    const alert = root(el).querySelector<HTMLElement>('[role="alert"]')!;
+    expect(Number.parseFloat(getComputedStyle(alert).marginBottom)).toBeGreaterThan(0);
+  });
+
   it("does not call a list that never loaded empty when the first load fails", async () => {
     const api = stubApi({ listMyShifts: vi.fn().mockRejectedValue(new Error("network")) });
     const { el } = await mount(api);

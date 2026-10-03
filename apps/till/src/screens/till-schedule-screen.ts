@@ -291,7 +291,7 @@ export class TillScheduleScreen extends LitElement {
     return html`
       ${
         this.loadFailed
-          ? html`<p class="status notice" role="alert">${t("schedule.load_failed")}</p>`
+          ? html`<p class="notice" role="alert">${t("schedule.load_failed")}</p>`
           : nothing
       }
       ${this.#shiftsSection()} ${this.#swapsSection()} ${this.#coverSection()}
