@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { COUNTRY_PACKS } from "../packages/country-packs/src/index.js";
 import { FISCAL_TERRITORIES, resolveFiscalModules } from "../packages/provisioning/src/index.js";
+import { blankComments } from "../packages/shared/src/source-comments.js";
 
 /**
  * The swappable fiscal regime is reached only through the descriptor's seats. Generic provisioning
@@ -13,8 +14,10 @@ import { FISCAL_TERRITORIES, resolveFiscalModules } from "../packages/provisioni
  * this allowlist. The boundary is the REGIME, not "any module": provisioning's imports of
  * `@waitron/identity` and `@waitron/layouts` are legitimate.
  *
- * Reads text, so a `from "@waitron/…"` inside a comment counts. The match is on the PREFIX
- * `from "<pkg>`, so a subpath import counts too; no regime package's name is a prefix of another's.
+ * Blanks comments before the text match. The shared reader guesses whether `/` opens a regular
+ * expression, so a wrong guess can still hide code or expose a comment. A string containing
+ * `from "@waitron/…"` can count. The match is on the PREFIX `from "<pkg>`, so a subpath import
+ * counts too; no regime package's name is a prefix of another's.
  * NOT seen: a side-effect `import "<pkg>"` (no `from`), a dynamic `import("<pkg>")`, a file
  * reaching the regime indirectly through another module, and any directory other than
  * `packages/provisioning/src` and `apps/server/src`, which are the only two checked for regime
@@ -64,7 +67,7 @@ function sourceFiles(dir: string): string[] {
 }
 
 function imports(file: string, packages: Iterable<string>): string[] {
-  const text = readFileSync(file, "utf8");
+  const text = blankComments(readFileSync(file, "utf8"));
   return [...packages].filter((pkg) => text.includes(`from "${pkg}`));
 }
 
@@ -201,6 +204,20 @@ describe("apps/server reaches a card-provider package only via the registry or t
 });
 
 describe("the detector itself", () => {
+  it("ignores a regime import inside a comment", () => {
+    const dir = mkdtempSync(join(tmpdir(), "module-seams-"));
+    const probe = join(dir, "probe.ts");
+    writeFileSync(
+      probe,
+      '// import { x } from "@waitron/fiscal-verifactu";\n/* import { y } from "@waitron/verifactu"; */\n',
+    );
+    try {
+      expect(imports(probe, REGIME_PACKAGES)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("finds a regime import in a synthetic source (positive control)", () => {
     const dir = mkdtempSync(join(tmpdir(), "module-seams-"));
     const probe = join(dir, "probe.ts");

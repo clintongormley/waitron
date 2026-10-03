@@ -988,8 +988,15 @@ no `exclude`.)
 which discovers every `packages/*` shipping `src/index.ts` + `src/errors.ts` and text-walks the
 import graph from the barrel. The thirteen hand-copied per-package versions were deleted on
 2026-08-11: six of them (the "construct an `AppError`" shape) passed with `errors.ts` fully
-unreachable. It reads text, so a `from "./errors.js"` inside a comment fakes an edge — stated in its
-header; comment-stripping was rejected because a block stripper mis-parses a `/*` inside a string.
+unreachable. It now blanks comments with `blankComments` before reading imports. The regression
+case puts both line and block commented imports in a synthetic barrel and expects no edge; a
+separate case checks that a real import after `"/*"` inside a string remains reachable. The shared
+reader guesses whether `/` opens a regular expression, so a wrong guess can still hide code or
+expose a comment. An import-like string can still fake an edge, and dynamic imports are not followed.
+
+`scripts/module-seams.test.ts` uses the same reader before its text match. Its synthetic line and
+block comment case expects no regime import; its existing positive controls still find real imports.
+An import-like string and the shared reader's regular-expression guesses remain outside that proof.
 
 **What makes a test prove nothing**
 
