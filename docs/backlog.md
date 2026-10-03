@@ -4062,6 +4062,15 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `scripts/native-form-fields.test.ts` fails on a new native one written in a screen's `.ts` source
   (A178f). Still open:
   `wt-combobox` does not sort its options, and `wt-data-table`'s `localeCompare` takes no locale.
+- **The till's schedule screen draws its load-failed alert in grey on red** (found 2026-10-03 by
+  looking at the failed-load state in both themes while fixing W14; the markup and styles date from
+  309584d9f, 2026-08-16). The alert is `<p class="status notice" role="alert">` in
+  `apps/till/src/screens/till-schedule-screen.ts`, and `.status` is declared after `.notice`, so its
+  `color: var(--wt-color-text-muted)` replaces `--wt-color-on-danger` and its `margin: 0` removes the
+  gap under the alert. Screenshots: `~/waitron-campaign-c/w14-shots/failed-*.png` (not in the
+  repository). The screen's axe suite never renders the failed state, so nothing fails on it.
+  **Next action:** drop `status` from the alert's classes, and add the failed state to
+  `till-schedule-screen.a11y.test.ts` in both themes.
 - **The counter till may start in a zone its service zone dropdown does not list** (found
   2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
   in `apps/server/src/till-api.ts`), but its starting zone comes from `resolveNewOrderZone`
