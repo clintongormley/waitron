@@ -702,6 +702,24 @@ describe("till-app: a refused adjustment", () => {
     expect(approval(el)).toBeNull();
     expect(bottomMessage(el)).toBe(codeMessage("adjustment.approval_required"));
   });
+
+  // An approver's PIN check answers only `pin.invalid` or `pin.throttled`; the apply route's own
+  // `person.not_found` names the operator (`apps/server/src/adjustments-apply.ts`), not the approver.
+  it.each(["person.not_found", "person.suspended"])(
+    "does not show %s as the approver's PIN error",
+    async (code) => {
+      const { el } = await mountApp({
+        previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+        applyAdjustment: vi.fn().mockRejectedValue({ code, personId: "w-1", status: 404 }),
+      });
+      const order = await openMesa4(el);
+      await previewComp(el, order);
+      await press(el, inDialog(el, "[data-adjust-confirm]"));
+      await pinPad(el, "7777");
+      expect(approval(el)).toBeNull();
+      expect(bottomMessage(el)).toBe(codeMessage(code));
+    },
+  );
 });
 
 describe("till-app: the adjustment flow and the operator's session", () => {

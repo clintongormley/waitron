@@ -2826,10 +2826,6 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     - **The adjustment history records who approved, but not whether the bill's discount limit,
       rather than the reason, is why.** Recording it would need a column. **Next action:** decide
       whether to record it.
-    - **The till still lists two approver refusals it can no longer receive:**
-      `APPROVER_REFUSALS` in `apps/till/src/till-app.ts` names `person.not_found` and
-      `person.suspended`, which an approver's PIN check stopped returning when every login failure
-      became `pin.invalid` (C95, #930). **Next action:** drop the two entries.
     - **A placed pay-later counter order (`ticket_then_pay` or `invoice_first`) cannot be
       adjusted:** the placed-order trigger freezes its prices, and an `invoice_first` order has
       already filed its invoice. B16 lets such an order be handed over before it is paid but did
