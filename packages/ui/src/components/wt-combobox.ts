@@ -1,5 +1,6 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
+import { classMap } from "lit/directives/class-map.js";
 import { fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
@@ -14,6 +15,9 @@ export interface ComboboxOption {
   group?: string;
   /** A row that sends `wt-combobox-action` and never becomes the value. */
   action?: true;
+  /** Draws the row's label and icon in `--wt-color-primary`, so a row that makes something new
+   * does not read as one more item of the list. */
+  primary?: true;
   /** A second, muted line under the label in the open list, and the row's accessible description.
    * The closed field shows the label alone. */
   description?: string;
@@ -199,6 +203,12 @@ export class WtCombobox extends LitElement {
       .option.active {
         outline: var(--wt-focus-ring);
         outline-offset: calc(-1 * var(--wt-focus-offset));
+      }
+
+      /* The icon names its own colour, so it is painted here too rather than inheriting. */
+      .option.primary,
+      .option.primary .icon {
+        color: var(--wt-color-primary-text);
       }
 
       /* A picture of the row's own aria-selected, never a control: an interactive checkbox inside
@@ -706,7 +716,7 @@ export class WtCombobox extends LitElement {
     return html`
       <li
         id=${rowId}
-        class=${index === this.activeIndex ? "option active" : "option"}
+        class=${classMap({ option: true, active: index === this.activeIndex, primary: Boolean(option.primary) })}
         role="option"
         aria-selected=${selected}
         aria-labelledby=${described ? `${rowId}-label` : nothing}
