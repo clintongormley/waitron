@@ -1375,6 +1375,19 @@ keeps its grip, Preselected and remove columns at their content widths. Chromium
 languages at phone and desktop widths. A195 asked the same of `wt-data-table`'s Actions column; it is
 done too (above).
 
+**An extras list with no products shows its Preselected heading one letter per line (A262, owner
+2026-10-03) — OPEN, queued.** The owner's screenshot of the extras list editor with an empty items
+table: "Preselected" runs down the page a letter at a time, making the empty table several times its
+normal height. A198's rules (#1066) set that heading to `width: 1%` with
+`overflow-wrap: anywhere` (`th:nth-child(4)`, `apps/dashboard/src/widgets/extra-list-form.ts`), so
+when there is no row whose switch holds the column open, the browser narrows it to one character and
+breaks the word wherever it can. **Wanted:** the heading readable with no rows, at phone and desktop
+width, in English and Spanish ("Preseleccionado"), without undoing A198's narrow column once rows
+exist. The options list editor gives its Default heading the same two rules
+(`th:nth-child(3)`, `apps/dashboard/src/widgets/option-list-form.ts`), so an options list with no
+options probably shows the same fault; that has not been opened to check. A198's Chromium checks did
+not cover an empty table; the fix adds that case for both editors.
+
 **The option form opens with its names section expanded (A199, owner 2026-10-02) — DONE by A170
 (#1040):** the option window no longer folds its names at all, so they show on open on Add and Edit;
 "can still be collapsed" no longer applies, because nothing folds. The
