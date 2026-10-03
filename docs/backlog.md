@@ -1187,7 +1187,9 @@ when the reads recover on the screens that show a read's and an action's failure
 remembers whether its message came from a read (the owner's choice, 2026-10-03); the reads' recovery
 clears only a read's message, and a read failing again during the outage no longer replaces an
 action's, except on Devices, where the queue reload after a wrong-number refusal still replaces that
-refusal; the replacing message is a read's, so the reads' recovery then clears it. An action that
+refusal; the replacing message is marked as a read's, so the reads' recovery clears it if a watched
+read also failed meanwhile, and otherwise it stays until the next action or until the screen is
+reopened. An action that
 saves and then re-reads counts a failure after the save as the re-read's. The reload after a
 successful action no longer clears another action's failure on Floor, Service status, Canvases,
 Staff and Payments, and a read an action takes before its write, such as Products' restore, counts
