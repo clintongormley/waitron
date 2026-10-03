@@ -593,7 +593,7 @@ export class TillExpoScreen extends LitElement {
   }
 
   #boardId(): string | null {
-    return this.embedded ? "all" : this.selected;
+    return this.embedded && !this.deviceMode ? "all" : this.selected;
   }
 
   #isCurrent(boardId: string, epoch: number): boolean {

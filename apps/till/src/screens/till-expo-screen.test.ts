@@ -272,6 +272,29 @@ describe("till-expo-screen", () => {
     expect(api.getWatcherQueue).not.toHaveBeenCalled();
   });
 
+  it("refreshes and offers Undo after Done on an embedded watcher device card", async () => {
+    const api = stubApi([], {
+      getDeviceWatcher: vi.fn().mockResolvedValue(deviceBoard(true)),
+      markDeviceWatcherDone: vi.fn().mockResolvedValue(undefined),
+    });
+    const el = await mount({
+      api,
+      embedded: true,
+      deviceMode: true,
+      initialDeviceWatcher: deviceBoard(true),
+    });
+
+    el.shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!.click();
+    await flush(el);
+    expect(api.markDeviceWatcherDone).toHaveBeenCalledWith(["ti-0"], true);
+    expect(api.getDeviceWatcher).toHaveBeenCalledTimes(1);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-undo]")!.click();
+    await flush(el);
+    expect(api.markDeviceWatcherDone).toHaveBeenCalledWith(["ti-0"], false);
+    expect(api.getDeviceWatcher).toHaveBeenCalledTimes(2);
+    expect(api.getExpoQueue).not.toHaveBeenCalled();
+  });
+
   it("shows only the removed notice for an unattended watcher that was disabled", async () => {
     const el = await mount({
       api: stubApi(),
