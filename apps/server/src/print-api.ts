@@ -1060,7 +1060,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
-  // Unfinished jobs are listed whatever their age; completed and exhausted history is bounded.
   if (deps.cfg.practiceMode === true) {
     app.get("/management-api/demo-printer/jobs", (c) =>
       run(c, log, async () => {
@@ -1106,6 +1105,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     );
   }
 
+  // Unfinished jobs are listed whatever their age; completed and exhausted history is bounded.
   app.get("/management-api/print-jobs", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

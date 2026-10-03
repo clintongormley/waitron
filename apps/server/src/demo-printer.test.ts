@@ -2,9 +2,12 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
+  kitchenStations,
   locations,
+  printAgents,
   printJobs,
   printers,
+  stationPrinters,
   tills,
   withTransaction,
 } from "@waitron/db";
@@ -33,7 +36,7 @@ async function venue(): Promise<{ locationId: string; tillId: string }> {
 }
 
 describe("the Demo printer", () => {
-  it("delivers its receipt and drawer jobs without claiming another printer's job", async () => {
+  it("delivers its receipt and drawer jobs without claiming an unrelated printer's job", async () => {
     const { locationId, tillId } = await venue();
     const demo = await configureDemoPrinter(suite.db, locationId, true);
     expect(demo).not.toBeNull();
@@ -75,7 +78,11 @@ describe("the Demo printer", () => {
   });
 
   it("deactivates the pretend printer in Live mode and cannot claim its waiting jobs", async () => {
-    const { locationId } = await venue();
+    const { locationId, tillId } = await venue();
+    const [station] = await suite.db
+      .insert(kitchenStations)
+      .values({ locationId, name: "Grill" })
+      .returning({ id: kitchenStations.id });
     const demo = await configureDemoPrinter(suite.db, locationId, true);
     await withTransaction(suite.db, (tx) =>
       enqueuePrintJob(
@@ -93,8 +100,49 @@ describe("the Demo printer", () => {
       .from(printers)
       .where(eq(printers.id, demo!.printerId));
     expect(printer?.active).toBe(false);
+    const [till] = await suite.db
+      .select({ printerId: tills.receiptPrinterId })
+      .from(tills)
+      .where(eq(tills.id, tillId));
+    expect(till?.printerId).toBeNull();
+    expect(
+      await suite.db
+        .select()
+        .from(stationPrinters)
+        .where(eq(stationPrinters.stationId, station!.id)),
+    ).toEqual([]);
     const [job] = await suite.db.select({ status: printJobs.status }).from(printJobs);
     expect(job?.status).toBe("queued");
+  });
+
+  it("uses its own inactive agent even when a real agent has the same display name", async () => {
+    const { locationId } = await venue();
+    const [realAgent] = await suite.db
+      .insert(printAgents)
+      .values({ locationId, name: "Demo printer", tokenHash: "real-agent-hash" })
+      .returning({ id: printAgents.id });
+    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    expect(demo?.agentId).not.toBe(realAgent!.id);
+    const [agent] = await suite.db
+      .select({ active: printAgents.active })
+      .from(printAgents)
+      .where(eq(printAgents.id, demo!.agentId));
+    expect(agent?.active).toBe(false);
+  });
+
+  it("waits for an in-flight delivery when stopping", async () => {
+    const { locationId } = await venue();
+    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    const job = await withTransaction(suite.db, (tx) =>
+      enqueuePrintJob(tx, { locationId }, demo!.printerId, esc().kick().bytes(), "drawer"),
+    );
+    const loop = startDemoPrinterLoop(suite.db, locationId, demo!, 10);
+    await loop.stop();
+    const [row] = await suite.db
+      .select({ status: printJobs.status })
+      .from(printJobs)
+      .where(eq(printJobs.id, job.jobId));
+    expect(row?.status).toBe("done");
   });
 
   it("delivers after the sale enqueues, and stops before closing the store", async () => {

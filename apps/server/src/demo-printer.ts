@@ -11,6 +11,7 @@ import {
 import { claimPrintJobs, reportPrintJob } from "@waitron/printing";
 
 export const DEMO_PRINTER_KEY = "WAITRON-DEMO-PRINTER";
+const DEMO_AGENT_TOKEN_HASH = "waitron-demo-printer-disabled";
 
 export interface DemoPrinterIdentity {
   printerId: string;
@@ -28,8 +29,14 @@ export async function configureDemoPrinter(
       .from(printers)
       .where(and(eq(printers.locationId, locationId), eq(printers.localKey, DEMO_PRINTER_KEY)));
     if (!practiceMode) {
-      if (existing !== undefined)
+      if (existing !== undefined) {
+        await tx
+          .update(tills)
+          .set({ receiptPrinterId: null })
+          .where(eq(tills.receiptPrinterId, existing.id));
+        await tx.delete(stationPrinters).where(eq(stationPrinters.printerId, existing.id));
         await tx.update(printers).set({ active: false }).where(eq(printers.id, existing.id));
+      }
       return null;
     }
     const printerId =
@@ -52,13 +59,23 @@ export async function configureDemoPrinter(
     const [agent] = await tx
       .select({ id: printAgents.id })
       .from(printAgents)
-      .where(and(eq(printAgents.locationId, locationId), eq(printAgents.name, "Demo printer")));
+      .where(
+        and(
+          eq(printAgents.locationId, locationId),
+          eq(printAgents.tokenHash, DEMO_AGENT_TOKEN_HASH),
+        ),
+      );
     const agentId =
       agent?.id ??
       (
         await tx
           .insert(printAgents)
-          .values({ locationId, name: "Demo printer", tokenHash: "disabled", active: false })
+          .values({
+            locationId,
+            name: "Demo printer",
+            tokenHash: DEMO_AGENT_TOKEN_HASH,
+            active: false,
+          })
           .returning({ id: printAgents.id })
       )[0]!.id;
 

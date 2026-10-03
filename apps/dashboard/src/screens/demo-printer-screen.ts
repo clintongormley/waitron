@@ -29,8 +29,6 @@ export class DemoPrinterScreen extends LitElement {
       }
       .job {
         box-sizing: border-box;
-        width: fit-content;
-        max-width: 100%;
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-surface);
@@ -73,6 +71,13 @@ export class DemoPrinterScreen extends LitElement {
     try {
       const jobs = await (this.api.background ?? this.api).listDemoPrinterJobs();
       if (!this.isConnected) return;
+      const currentIds = new Set(jobs.map((job) => job.id));
+      for (const id of this.#papers.keys()) {
+        if (!currentIds.has(id)) this.#papers.delete(id);
+      }
+      for (const job of jobs) {
+        if (!this.#papers.has(job.id)) this.#papers.set(job.id, new PrintPaper());
+      }
       this.jobs = jobs;
       this.errorKey = null;
     } catch (error) {
@@ -97,11 +102,7 @@ export class DemoPrinterScreen extends LitElement {
       ${this.jobs.length === 0 ? html`<p>${t("demo_printer.empty")}</p>` : nothing}
       <ol class="jobs">
         ${this.jobs.map((job) => {
-          let paper = this.#papers.get(job.id);
-          if (paper === undefined) {
-            paper = new PrintPaper();
-            this.#papers.set(job.id, paper);
-          }
+          const paper = this.#papers.get(job.id)!;
           return html`<li class="job" data-test="printed-job">
             <time datetime=${job.createdAt}>${new Date(job.createdAt).toLocaleString()}</time>
             ${
