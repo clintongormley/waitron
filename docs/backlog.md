@@ -1497,18 +1497,12 @@ Name every test changed in the PR. LOOK at every screen that uses it
 (`grep -rln wt-number-stepper apps`), in both themes and at phone width.
 
 **An extra is a fixed portion: a product sold by weight is offered as, say, 50 g a pick (A203,
-owner 2026-10-02) — OPEN.** The owner: _"today you can add an extra sold eg per kg, but there is
+owner 2026-10-02) — DONE.** The owner: _"today you can add an extra sold eg per kg, but there is
 nowhere to put a quantity in there. i think extras should always be a fixed amount, so eg if i add
 Jamon @ 100€/kg, we should enter the base amount of (eg) 50g, and when you add it multiple times you
-get 50->100->150 etc"_. **Today, read from the code (not reproduced):** an extras list item holds
-only `productId`, `maxQuantity`, `preselected` and `price` (`packages/catalogue/src/schema/extras.ts`);
-the till offers a whole count; nothing on the extras path reads the extra product's unit
-(`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`; `buildLineExtras`,
-`apps/server/src/modifier-selection.ts`); and `grossBasketWithOptions`
-(`packages/catalogue/src/pricing.ts`) charges the item's price, or else the product's unit price, ×
-the count × the dish count. So a per-kg product offered with no price of its own is charged its
-whole per-kg price per pick, as if each pick were a kilo. The extras list editor shows the unit
-beside the price and checks nothing about it.
+get 50->100->150 etc"_. The list item now stores a portion and the offer freezes its unit and
+price per portion. The saved child line records its physical amount and price basis; receipt and
+kitchen labels use the saved amount. The menu's published offer stays in use until republishing.
 
 **Decided (owner, 2026-10-02):**
 
@@ -1543,18 +1537,15 @@ without rounding it to `0.06`. A new or changed portion must meet current precis
 unchanged saved value remains visible and may pass through an unrelated extras-list edit so you can
 correct it later. This is the warning-only publication behavior in the [A203 design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md).
 
-**For the builder:** the portion is a new column on `extra_list_items` (quantity scale) and a
-field in `parseExtraListInput` and the editor; the till's picker and the server must compute one
-per-pick price the same way, rounded to the cent once, before it is multiplied, so they agree.
-The stored child line's quantity (`working_order_lines.quantity`, already thousandths) becomes
-picks × portion × dish count with the product's unit on it, so `editLineExtras` must divide by the
-portion as well as the dish quantity, and the receipt's `perDishOptionQuantity` (whole numbers)
-and the kitchen ticket's `extraLabel` must print an amount, with the unit's abbreviation. The
-amounts reach a sale record, so this takes the full review path (risk trigger: fiscal invariants).
+**Implementation:** `extra_list_items.portion` stores thousandths, and the list editor checks a
+new or changed portion against the product's unit. The catalogue resolves one rounded price per
+pick for both the till and server. A child line saves its physical quantity and `price_quantity`;
+held edits, sale lines, adjustments and printed amounts use that frozen basis. The amount reaches
+a sale record, so the branch takes the full review path (risk trigger: fiscal invariants).
 
 The [A203 design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md) and
 [implementation plan](superpowers/plans/2026-10-03-extra-fixed-portion.md) were approved on
-2026-10-03. The build remains open while A203 is in progress.
+2026-10-03. The implementation follows those decisions.
 
 **The extras editor's “Preselected” heading stacks one letter per line on a desktop (W49) — OPEN,
 queued after A203 (owner, 2026-10-03).** In the Add extras list dialog at
