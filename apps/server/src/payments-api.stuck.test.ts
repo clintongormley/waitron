@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPayments, withTransaction, workingOrders } from "@waitron/db";
+import { billPaymentRefunds, billPayments, withTransaction, workingOrders } from "@waitron/db";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -61,6 +61,7 @@ import { systemClock } from "./till-backend.js";
 import { createOpenOrder } from "./working-order.js";
 import { payWorkingOrderIntegrated } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { descendingIds } from "./testing/descending-ids.js";
 import "./errors.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import {
@@ -268,8 +269,7 @@ async function setup(
 }
 
 /** An open order for one Café. */
-async function openOrder(v: Venue): Promise<string> {
-  const id = randomUUID();
+async function openOrder(v: Venue, id: string = randomUUID()): Promise<string> {
   await withTransaction(suite.db, (tx) =>
     createOpenOrder(tx, v.cfg, id, [{ menuItemId: v.menuItemId, quantity: "1" }], null, {
       zoneId: v.zoneId,
@@ -1698,5 +1698,144 @@ describe("the bill payment attestation checks the manager's PIN before the write
     expect(derived).toBe(PIN_THROTTLE_FREE_ATTEMPTS + 1);
     expect(right.status).toBe(429);
     expect((await billPaymentOf(id)).state).toBe("pending");
+  });
+});
+
+describe("the manager's lists, of rows written within one millisecond", () => {
+  const AT = "2026-09-26T09:59:00.000Z";
+  const COUNT = 6;
+
+  /**
+   * `COUNT` open orders, the one for the first row written opened LAST and given the highest id,
+   * so a list read through the orders comes back reversed. Returns them in the rows' order.
+   */
+  async function ordersOpenedBackwards(v: Venue): Promise<string[]> {
+    const id = descendingIds();
+    const orders = Array.from({ length: COUNT }, () => id());
+    for (const orderId of [...orders].reverse()) await openOrder(v, orderId);
+    return orders;
+  }
+
+  /** A pending card bill payment on each order, written in the order given, all at `AT`. */
+  async function writeBillPayments(v: Venue, orders: readonly string[]): Promise<string[]> {
+    const id = descendingIds();
+    const written: string[] = [];
+    for (const workingOrderId of orders) {
+      const [row] = await suite.db
+        .insert(billPayments)
+        .values({
+          id: id(),
+          workingOrderId,
+          submissionId: randomUUID(),
+          fingerprint: "stranded",
+          kind: "contribution",
+          method: "card",
+          applied: 150,
+          state: "pending",
+          requestedBy: v.managerId,
+          tillId: v.cfg.tillId,
+          createdAt: AT,
+        })
+        .returning({ id: billPayments.id });
+      written.push(row!.id);
+    }
+    return written;
+  }
+
+  it("lists the stuck card payments in the order they were started", async () => {
+    const v = await setup();
+    const orders = await ordersOpenedBackwards(v);
+    const id = descendingIds();
+    const started: string[] = [];
+    for (const workingOrderId of orders) {
+      const [row] = await suite.db
+        .insert(payments)
+        .values({
+          id: id(),
+          workingOrderId,
+          provider: "stripe",
+          paymentRef: randomUUID(),
+          amount: 150,
+          state: "attempting",
+          createdAt: AT,
+          updatedAt: AT,
+        })
+        .returning({ id: payments.id });
+      started.push(row!.id);
+      await suite.db
+        .update(workingOrders)
+        .set({ paymentAttemptAt: MARK })
+        .where(eq(workingOrders.id, workingOrderId));
+    }
+
+    const res = await send(v, "GET", "/management-api/payments/stuck");
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { paymentId: string }[];
+    expect(body.map((row) => row.paymentId)).toEqual(started);
+  });
+
+  it("lists the pending bill payments in the order they were taken", async () => {
+    const v = await setup();
+    const taken = await writeBillPayments(v, await ordersOpenedBackwards(v));
+    // Their provider rows are written the other way round.
+    const id = descendingIds();
+    for (const billPaymentId of [...taken].reverse()) {
+      const [bill] = await suite.db
+        .select({ workingOrderId: billPayments.workingOrderId })
+        .from(billPayments)
+        .where(eq(billPayments.id, billPaymentId));
+      await suite.db.insert(payments).values({
+        id: id(),
+        workingOrderId: bill!.workingOrderId,
+        provider: "stripe",
+        paymentRef: randomUUID(),
+        amount: 150,
+        state: "attempting",
+        billPaymentId,
+        createdAt: AT,
+        updatedAt: AT,
+      });
+    }
+
+    const res = await send(v, "GET", "/management-api/payments/bill-payments");
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { billPaymentId: string }[];
+    expect(body.map((row) => row.billPaymentId)).toEqual(taken);
+  });
+
+  it("lists the pending bill refunds in the order they were asked for", async () => {
+    const v = await setup();
+    const orders = await ordersOpenedBackwards(v);
+    // The bill payments are written the other way round from their refunds.
+    const paid = (await writeBillPayments(v, [...orders].reverse())).reverse();
+    const id = descendingIds();
+    const asked: string[] = [];
+    for (const billPaymentId of paid) {
+      const [row] = await suite.db
+        .insert(billPaymentRefunds)
+        .values({
+          id: id(),
+          billPaymentId,
+          submissionId: randomUUID(),
+          fingerprint: "f",
+          appliedAmount: 100,
+          reason: "error",
+          authorizedBy: v.managerId,
+          requestedBy: v.managerId,
+          tillId: v.cfg.tillId,
+          state: "pending",
+          createdAt: AT,
+        })
+        .returning({ id: billPaymentRefunds.id });
+      asked.push(row!.id);
+    }
+
+    const res = await send(v, "GET", "/management-api/payments/bill-refunds");
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { refundId: string }[];
+    expect(body.map((row) => row.refundId)).toEqual(asked);
   });
 });

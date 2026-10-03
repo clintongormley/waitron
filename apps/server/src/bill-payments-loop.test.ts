@@ -3,9 +3,14 @@ import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPayments, incidents, type SingletonRole } from "@waitron/db";
+import { billPaymentRefunds, billPayments, incidents, type SingletonRole } from "@waitron/db";
 import { insertCapturedPayment, insertFailedPayment, payments } from "@waitron/payments";
-import { centsToDecimal, decimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
+import {
+  centsToDecimal,
+  decimal,
+  quoteLiteral,
+  workingOrderId as brandWorkingOrderId,
+} from "@waitron/shared";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import type { BillPaymentsPass } from "./bill-payments-loop.js";
 import { withPendingBillPayments } from "./boot.js";
@@ -24,6 +29,7 @@ import {
 } from "./testing/bill-venue.js";
 import "./errors.js";
 import { cancelBody } from "./testing/cancel-line.js";
+import { descendingIds } from "./testing/descending-ids.js";
 
 // The loop's half of a card bill payment (bill payments design §5.4, §8 tests 13 and 16): a pending
 // payment nothing in this process drives is settled from its provider row, never from its age.
@@ -423,6 +429,115 @@ describe("a pending card with no provider row (design §8 test 16)", () => {
     expect(pass).toMatchObject({ failed: 0 });
     expect(during).toBe("pending");
     expect(paid.json).toMatchObject({ outcome: "received" });
+  });
+});
+
+describe("rows written within one millisecond", () => {
+  const COUNT = 6;
+
+  /** Runs one pass while the database refuses every change to `ids` in `table`, so each of them
+   * lands in the pass's errors, in the order the pass reached it. */
+  async function passRefusing(table: string, ids: readonly string[]) {
+    // A trigger body takes no bound value, so the ids are written into it.
+    venue.db.run(
+      sql`create trigger refuse_these before update on ${sql.identifier(table)}
+        when old.id in (${sql.raw(ids.map(quoteLiteral).join(", "))})
+        begin select raise(abort, 'refused for the test'); end`,
+    );
+    try {
+      return await settle();
+    } finally {
+      venue.db.run(sql`drop trigger refuse_these`);
+    }
+  }
+
+  /** A bill payment on each of `bills`, written in that order, all in one millisecond. */
+  async function writeBillPayments(bills: readonly string[], state: "pending" | "received") {
+    const at = new Date().toISOString();
+    const id = descendingIds();
+    const written: string[] = [];
+    for (const workingOrderId of bills) {
+      const [row] = await inTx(venue, (tx) =>
+        tx
+          .insert(billPayments)
+          .values({
+            id: id(),
+            workingOrderId,
+            submissionId: randomUUID(),
+            fingerprint: "stranded",
+            kind: "contribution",
+            method: "card",
+            applied: 1000,
+            state,
+            receivedAt: state === "received" ? at : null,
+            requestedBy: venue.operatorId,
+            tillId: venue.device2TillId,
+            createdAt: at,
+          })
+          .returning({ id: billPayments.id }),
+      );
+      written.push(row!.id);
+    }
+    return written;
+  }
+
+  async function bills(): Promise<string[]> {
+    const opened: string[] = [];
+    for (let made = 0; made < COUNT; made++) opened.push(await tabWith(venue, "Paella"));
+    return opened;
+  }
+
+  it("settles the pending card payments in the order they were taken", async () => {
+    const taken = await writeBillPayments(await bills(), "pending");
+
+    const pass = await passRefusing("bill_payments", taken);
+
+    expect(pass.errors).toEqual(
+      taken.map((billPaymentId) => ({
+        billPaymentId,
+        error: expect.stringContaining("refused for the test") as unknown,
+      })),
+    );
+    await settle();
+  });
+
+  it("settles the pending card refunds in the order they were asked for", async () => {
+    // The payments are written the other way round from their refunds.
+    const paid = (await writeBillPayments((await bills()).reverse(), "received")).reverse();
+    const at = new Date().toISOString();
+    const id = descendingIds();
+    const asked: string[] = [];
+    for (const billPaymentId of paid) {
+      const [row] = await inTx(venue, (tx) =>
+        tx
+          .insert(billPaymentRefunds)
+          .values({
+            id: id(),
+            billPaymentId,
+            submissionId: randomUUID(),
+            fingerprint: "f",
+            appliedAmount: 100,
+            reason: "error",
+            authorizedBy: venue.operatorId,
+            requestedBy: venue.operatorId,
+            tillId: venue.device2TillId,
+            state: "pending",
+            createdAt: at,
+          })
+          .returning({ id: billPaymentRefunds.id }),
+      );
+      asked.push(row!.id);
+    }
+
+    const pass = await passRefusing("bill_payment_refunds", asked);
+
+    expect(pass.errors).toEqual(
+      asked.map((refundId) => ({
+        refundId,
+        error: expect.stringContaining("refused for the test") as unknown,
+      })),
+    );
+    await settle();
   });
 });
 

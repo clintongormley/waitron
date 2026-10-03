@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
@@ -15,6 +16,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { cardReaders } from "./schema/card-readers.js";
+import { paymentRefunds } from "./schema/payment-refunds.js";
 import { payments } from "./schema/payments.js";
 import {
   assertReversible,
@@ -25,6 +27,7 @@ import {
   expireInitiated,
   failAttempting,
   findCapturedPaymentForWorkingOrder,
+  findCapturedPaymentForWorkingOrderAnyProvider,
   findPaymentByBillPayment,
   findPaymentsByBillPayments,
   findPaymentByRef,
@@ -1501,5 +1504,141 @@ describe("recordRefund: the provider's refund id", () => {
       { payment_ref: "ref-with", provider_refund_ref: "re_123" },
       { payment_ref: "ref-without", provider_refund_ref: null },
     ]);
+  });
+});
+
+describe("rows written within one millisecond", () => {
+  const AT = "2026-07-24T10:00:00.000Z";
+  const COUNT = 6;
+
+  /** Ids, and references, that sort against the order they are made in, so a tie broken by
+   * either gives the reverse of the writing order. */
+  function descending(prefix = "") {
+    let made = 0;
+    return () => `${prefix}${(0xffffffff - made++).toString(16)}${randomUUID().slice(8)}`;
+  }
+
+  /** `COUNT` payments in `state` on one order, all created at `AT`; returns their references in
+   * the order they were written. Their settled times run backwards, against that order. */
+  async function writePayments(
+    seeded: Seeded,
+    state: "captured" | "accepted_offline" | "attempting",
+    settledAt: (written: number) => string | null,
+  ): Promise<string[]> {
+    const id = descending();
+    const ref = descending("ref-");
+    const refs: string[] = [];
+    for (let written = 0; written < COUNT; written++) {
+      const paymentRef = ref();
+      await suite.db.insert(payments).values({
+        id: id(),
+        workingOrderId: seeded.workingOrderId,
+        provider: "fake",
+        paymentRef,
+        amount: 100 * (written + 1),
+        state,
+        settledAt: settledAt(written),
+        createdAt: AT,
+        updatedAt: AT,
+      });
+      refs.push(paymentRef);
+    }
+    return refs;
+  }
+
+  it("findCapturedPaymentForWorkingOrder keeps the payment written last when they settled together", async () => {
+    const seeded = await seedTenant();
+    const refs = await writePayments(seeded, "captured", () => AT);
+
+    const found = await suite.db.transaction((tx) =>
+      findCapturedPaymentForWorkingOrder(tx, {
+        provider: "fake",
+        workingOrderId: seeded.workingOrderId,
+      }),
+    );
+
+    expect(found?.paymentRef).toBe(refs.at(-1));
+  });
+
+  it("findCapturedPaymentForWorkingOrderAnyProvider keeps the payment written last when they settled together", async () => {
+    const seeded = await seedTenant();
+    const refs = await writePayments(seeded, "captured", () => AT);
+
+    const found = await suite.db.transaction((tx) =>
+      findCapturedPaymentForWorkingOrderAnyProvider(tx, { workingOrderId: seeded.workingOrderId }),
+    );
+
+    expect(found?.paymentRef).toBe(refs.at(-1));
+  });
+
+  it("listAcceptedOffline and claimAcceptedOffline list the payments in the order they were written", async () => {
+    const seeded = await seedTenant();
+    const refs = await writePayments(seeded, "accepted_offline", (written) =>
+      new Date(Date.parse(AT) + COUNT - written).toISOString(),
+    );
+
+    const listed = await suite.db.transaction((tx) => listAcceptedOffline(tx, "fake"));
+    const claimed = await suite.db.transaction((tx) => claimAcceptedOffline(tx, "fake"));
+
+    expect(listed.map((row) => row.paymentRef)).toEqual(refs);
+    expect(claimed.map((row) => row.paymentRef)).toEqual(refs);
+  });
+
+  it("listAttempting lists the payments in the order they were written", async () => {
+    const seeded = await seedTenant();
+    const refs = await writePayments(seeded, "attempting", () => null);
+
+    const listed = await suite.db.transaction((tx) => listAttempting(tx, "fake"));
+
+    expect(listed.map((row) => row.paymentRef)).toEqual(refs);
+  });
+
+  it("recordedRefundRefs lists the refunds in the order they were written", async () => {
+    const seeded = await seedTenant();
+    const [bill] = await suite.db
+      .insert(billPayments)
+      .values({
+        workingOrderId: seeded.workingOrderId,
+        submissionId: randomUUID(),
+        fingerprint: "fingerprint",
+        kind: "contribution",
+        method: "card",
+        applied: 10_000,
+        state: "pending",
+        requestedBy: "11111111-1111-1111-1111-111111111111",
+        tillId: seeded.tillId,
+      })
+      .returning({ id: billPayments.id });
+    const [payment] = await suite.db
+      .insert(payments)
+      .values({
+        workingOrderId: seeded.workingOrderId,
+        provider: "fake",
+        paymentRef: "refunded",
+        amount: 10_000,
+        state: "partially_refunded",
+        settledAt: AT,
+        billPaymentId: bill!.id,
+      })
+      .returning({ id: payments.id });
+    const id = descending();
+    const ref = descending("re_");
+    const refs: string[] = [];
+    for (let written = 0; written < COUNT; written++) {
+      const providerRefundRef = ref();
+      await suite.db.insert(paymentRefunds).values({
+        id: id(),
+        paymentId: payment!.id,
+        provider: "fake",
+        paymentRef: "refunded",
+        amount: 100,
+        state: "succeeded",
+        providerRefundRef,
+        createdAt: AT,
+      });
+      refs.push(providerRefundRef);
+    }
+
+    expect(await suite.db.transaction((tx) => recordedRefundRefs(tx, bill!.id))).toEqual(refs);
   });
 });

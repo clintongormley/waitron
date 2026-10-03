@@ -305,7 +305,7 @@ const PAYMENT_WITH_KEY_COLUMNS = {
 /** The capture-idempotency pre-check (spec §4). A `failed` or `attempting` row does not count, so
  * a declined card stays re-chargeable. At most one captured payment per working order holds by
  * construction, not by a constraint; if there are two, the most recently settled one is returned
- * rather than throwing. */
+ * rather than throwing, and of two settled at the same instant the one written last. */
 export async function findCapturedPaymentForWorkingOrder(
   tx: Transaction,
   key: { provider: string; workingOrderId: string },
@@ -328,7 +328,7 @@ async function selectCapturedForWorkingOrder(
         inArray(payments.state, ["captured", "accepted_offline"]),
       ),
     )
-    .orderBy(sql`${payments.settledAt} desc nulls last`)
+    .orderBy(sql`${payments.settledAt} desc nulls last`, sql`${payments}.rowid desc`)
     .limit(1);
   return row === undefined ? undefined : (withDecimalAmount(row) as CapturedPaymentForOrder);
 }
@@ -378,7 +378,7 @@ export async function recordedRefundRefs(
     .where(
       and(eq(payments.billPaymentId, billPaymentId), isNotNull(paymentRefunds.providerRefundRef)),
     )
-    .orderBy(paymentRefunds.createdAt);
+    .orderBy(paymentRefunds.createdAt, sql`${paymentRefunds}.rowid`);
   return rows.map((row) => row.ref!);
 }
 
@@ -414,7 +414,7 @@ async function selectForwardable(tx: Transaction, provider: string): Promise<For
     .select(FORWARDABLE_COLUMNS)
     .from(payments)
     .where(and(eq(payments.provider, provider), eq(payments.state, "accepted_offline")))
-    .orderBy(payments.createdAt);
+    .orderBy(payments.createdAt, sql`${payments}.rowid`);
   return rows.map(withDecimalAmount);
 }
 
@@ -473,7 +473,7 @@ export async function listAttempting(
     })
     .from(payments)
     .where(and(eq(payments.provider, provider), eq(payments.state, "attempting")))
-    .orderBy(payments.createdAt);
+    .orderBy(payments.createdAt, sql`${payments}.rowid`);
   return rows.map(withDecimalAmount);
 }
 
