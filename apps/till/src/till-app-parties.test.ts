@@ -6144,6 +6144,54 @@ describe("till-app: recording an unpaid departure", () => {
     expect(api.recordUnpaidDeparture).not.toHaveBeenCalled();
   });
 
+  /** A presented bill of 18.00 whose invoice owes `amountDue` once its credit notes are counted. */
+  const creditedBill = (workingOrderId: string, amountDue: string): PartyBill => ({
+    workingOrderId,
+    partyId: "v1",
+    label: null,
+    status: "placed",
+    total: "18.00",
+    outstanding: "18.00",
+    hasPayments: false,
+    receiptAvailable: true,
+    receiptLanguage: "es-ES",
+    invoiceNumber: `A/${workingOrderId}`,
+    creditNotes: [`R/${workingOrderId}`],
+    amountDue,
+  });
+  const confirmText = (el: TillApp) =>
+    dialog(el)!
+      .shadowRoot!.querySelector("[data-departure-confirm]")!
+      .textContent!.replace(/\s+/g, " ")
+      .trim();
+
+  it("leaves out a presented bill whose credit notes cancel its invoice, and its amount from the total", async () => {
+    const { el } = await openDeparture({
+      getPartyBills: vi.fn().mockResolvedValue([tabBill, creditedBill("wo-credited", "0.00")]),
+    });
+
+    expect(dialog(el)!.bills).toEqual([
+      { workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "14.00" },
+    ]);
+    expect(confirmText(el)).toBe(
+      t("departure.confirm").replace("{amount}", formatMoney("14.00", "en")),
+    );
+  });
+
+  it("shows a partly credited presented bill at what its invoice still owes", async () => {
+    const { el } = await openDeparture({
+      getPartyBills: vi.fn().mockResolvedValue([tabBill, creditedBill("wo-part", "15.58")]),
+    });
+
+    expect(dialog(el)!.bills).toEqual([
+      { workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "14.00" },
+      { workingOrderId: "wo-part", name: "4 · Bill 2", outstanding: "15.58" },
+    ]);
+    expect(confirmText(el)).toBe(
+      t("departure.confirm").replace("{amount}", formatMoney("29.58", "en")),
+    );
+  });
+
   it("refuses an empty reason without sending anything", async () => {
     const { el } = await openDeparture();
 

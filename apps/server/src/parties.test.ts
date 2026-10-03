@@ -1299,6 +1299,7 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
       receiptLanguage: "es-ES",
       invoiceNumber: expect.stringMatching(/^A\/\d+$/),
       creditNotes: [],
+      amountDue: "18.00",
     });
     expect(total(before)).toBe("18.00");
 

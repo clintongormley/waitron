@@ -20,6 +20,7 @@ import { createOpenOrder, openTab } from "./working-order.js";
 import { outstandingOf, readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
 import { discardPartyDrafts } from "./order-drafts.js";
 import { readCreditNotes } from "./orders-list.js";
+import { readIssuedSales } from "./sale-due.js";
 import "./errors.js";
 
 /** One bill of a party, as the table screen lists it. */
@@ -45,6 +46,9 @@ export interface PartyBill {
   invoiceNumber?: string;
   /** The numbers of the sales correcting the bill's sale, oldest first; absent while no sale is filed. */
   creditNotes?: string[];
+  /** Its sale's total plus its credit notes, whether or not the bill has been paid; absent while no
+   * sale is filed. */
+  amountDue?: string;
 }
 
 export type CommandScope =
@@ -406,6 +410,10 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
     tx,
     filedSales.map((sale) => sale.id),
   );
+  const issued = await readIssuedSales(
+    tx,
+    filedSales.flatMap((sale) => (sale.workingOrderId === null ? [] : [sale.workingOrderId])),
+  );
   return bills.map((bill) => {
     const sale = filed.get(bill.workingOrderId);
     return {
@@ -423,13 +431,17 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
             receiptLanguage: sale.locale,
             invoiceNumber: formatInvoiceNumber(sale.code, sale.number),
             creditNotes: notes.get(sale.id) ?? [],
+            amountDue: issued.get(bill.workingOrderId)!.amountDue,
           }),
     };
   });
 }
 
 /** A bill as {@link readBillsOfParties} reads it, with how many lines it holds. */
-export type FamilyBill = Omit<PartyBill, "receiptAvailable" | "invoiceNumber" | "creditNotes"> & {
+export type FamilyBill = Omit<
+  PartyBill,
+  "receiptAvailable" | "invoiceNumber" | "creditNotes" | "amountDue"
+> & {
   lines: number;
 };
 
