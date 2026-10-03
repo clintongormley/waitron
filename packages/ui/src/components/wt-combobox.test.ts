@@ -1392,6 +1392,24 @@ test("with no search box, the field box keeps its focus marking while the list i
   expect(getComputedStyle(field).boxShadow).toBe("rgb(1, 2, 3) 0px -3px 0px 0px inset");
 });
 
+test("with no search box, disabling the field closes its list without a focus line in between", async () => {
+  const el = await mountWith('<wt-combobox label="Paper" search="never"></wt-combobox>');
+  host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-field-label-focus", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(16, 17, 18)");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  const { field, label, trigger, popup } = fieldParts(el);
+  await userEvent.click(trigger);
+  await vi.waitFor(() => expect(field.hasAttribute("data-open")).toBe(true));
+  el.disabled = true;
+  await el.updateComplete;
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(field.hasAttribute("data-open")).toBe(true);
+  expect(field.hasAttribute("data-disabled")).toBe(true);
+  expect(getComputedStyle(field).boxShadow).toBe("none");
+  expect(getComputedStyle(label!).color).toBe("rgb(16, 17, 18)");
+});
+
 test("with no search box, an invalid field keeps the danger line while the list is open", async () => {
   const el = await mountWith('<wt-combobox label="Paper" search="never" invalid></wt-combobox>');
   host.style.setProperty("--wt-color-danger", "rgb(13, 14, 15)");

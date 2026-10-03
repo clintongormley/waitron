@@ -502,7 +502,9 @@ export const SEARCH_THRESHOLD = 7;
     `--wt-space-3` between it and the box's trailing edge (this is A173's check, on the new
     control);
   - opening sets `data-open` on the field box and the focused line and label return to their
-    resting colours (computed `box-shadow` colour is `--wt-color-field-line`);
+    resting colours (computed `box-shadow` colour is `--wt-color-field-line`) (2026-10-03: only
+    when the list has a search box; with none, the field keeps its marking — design-system.md →
+    The field box.);
   - rows are `--wt-dropdown-row-height` tall; a hovered row's background is `--wt-color-bg`; the
     chosen row's label is `--wt-font-weight-bold` with a `wt-icon name="check"` at its trailing end;
   - the search box: background `--wt-color-surface`, border `--wt-field-line-width` solid

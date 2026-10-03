@@ -94,10 +94,10 @@ export class WtCombobox extends LitElement {
 
       /* With no search box the list takes the keys and draws no line of its own, so the field keeps
          its focus marking while the list is open. */
-      .field[data-open]:not([data-search], [data-invalid]) {
+      .field[data-open]:not([data-search], [data-invalid], [data-disabled]) {
         box-shadow: inset 0 calc(-1 * var(--wt-field-line-width-active)) 0 var(--wt-color-primary);
       }
-      .field[data-open]:not([data-search], [data-invalid]) .field-label {
+      .field[data-open]:not([data-search], [data-invalid], [data-disabled]) .field-label {
         color: var(--wt-color-field-label-focus);
       }
 
