@@ -1034,7 +1034,8 @@ status" does not move the next toolbar control. The shared combobox applies this
 the table requests it. The Chromium table test measures the width before and after choosing both a
 shorter and a longer value; the table and combobox suites passed. The rendered table was inspected
 at 390px and 1280px in light and dark themes. The owner has not confirmed whether one common width
-was intended for every filter; this uses one stable width per filter.
+was intended for every filter; this uses one stable width per filter. A filter whose longest choice
+exceeds the available phone width fills its row, and that choice is cut short in the closed control.
 
 **A table's pinned Actions column keeps one narrow width (A195, owner 2026-10-02) — OPEN.** The
 owner, on a screenshot of a one-row table whose Actions column is wide, with the menu button in

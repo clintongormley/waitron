@@ -83,17 +83,16 @@ export class WtCombobox extends LitElement {
       }
 
       :host([stable-width]) .value,
-      .width-option {
+      :host([stable-width]) .width-option {
         grid-row: 1;
         grid-column: 1;
       }
 
       .width-option {
         height: 0;
-        min-width: max-content;
         overflow: hidden;
         visibility: hidden;
-        white-space: nowrap;
+        text-wrap: nowrap;
       }
 
       /* nowrap comes from text-wrap here because no-hardcoded-chrome.test.ts's keyword-colour scan
@@ -287,6 +286,7 @@ export class WtCombobox extends LitElement {
   @property() value = "";
   /** Treat an offered empty-string option as a selection, while its value remains empty. */
   @property({ type: Boolean, attribute: "show-empty-option" }) showEmptyOption = false;
+  /** Reserve each option label's width when every possible trigger text is an offered label. */
   @property({ type: Boolean, reflect: true, attribute: "stable-width" }) stableWidth = false;
   @property({ attribute: false }) values: string[] = [];
   @property() placeholder = "";
