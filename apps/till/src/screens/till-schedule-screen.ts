@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
+import type { PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { type ComboboxOption, submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -147,7 +148,7 @@ export class TillScheduleScreen extends LitElement {
   @property({ attribute: false }) staff: StaffMember[] = [];
   @property() operatorPersonId = "";
 
-  /** The three lists: `undefined` while first loading, then the (possibly empty) rows. */
+  /** The three lists: `undefined` until a load succeeds, then the (possibly empty) rows. */
   @state() private shifts?: MyShift[];
   @state() private swaps?: MySwap[];
   @state() private absences?: MyAbsence[];
@@ -167,6 +168,19 @@ export class TillScheduleScreen extends LitElement {
     void this.#reload();
   }
 
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (
+      (changed.has("staff") || changed.has("operatorPersonId")) &&
+      !this.#colleagues().some((person) => person.personId === this.coverColleagueId)
+    ) {
+      this.coverColleagueId = "";
+    }
+  }
+
+  #colleagues(): StaffMember[] {
+    return this.staff.filter((s) => s.personId !== this.operatorPersonId);
+  }
+
   #window(): { from: string; to: string } {
     return scheduleWindow(new Date(), WINDOW_DAYS);
   }
@@ -184,12 +198,9 @@ export class TillScheduleScreen extends LitElement {
       this.swaps = swaps;
       this.absences = absences;
       this.loadFailed = false;
+      if (!shifts.some((shift) => shift.id === this.coverShiftId)) this.coverShiftId = "";
     } catch {
       this.loadFailed = true;
-      // Clear the loading state so the load-failed status shows rather than a stuck spinner.
-      this.shifts ??= [];
-      this.swaps ??= [];
-      this.absences ??= [];
     }
   }
 
@@ -274,8 +285,8 @@ export class TillScheduleScreen extends LitElement {
   }
 
   #body() {
-    if (this.shifts === undefined) {
-      return html`<p class="status">${t("schedule.loading")}</p>`;
+    if (this.shifts === undefined && !this.loadFailed) {
+      return html`<p class="status" role="status">${t("schedule.loading")}</p>`;
     }
     return html`
       ${
@@ -289,56 +300,60 @@ export class TillScheduleScreen extends LitElement {
   }
 
   #shiftsSection() {
-    const shifts = this.shifts ?? [];
+    const shifts = this.shifts;
     return html`<section class="shifts">
       <h2>${t("schedule.shifts_title")}</h2>
       ${
-        shifts.length === 0
-          ? html`<p class="status">${t("schedule.shifts_empty")}</p>`
-          : html`<ul>
-              ${shifts.map(
-                (shift) =>
-                  html`<li class="shift" data-shift=${shift.id}>
-                    <span>${this.#shiftLabel(shift)}</span>
-                  </li>`,
-              )}
-            </ul>`
+        shifts === undefined
+          ? nothing
+          : shifts.length === 0
+            ? html`<p class="status">${t("schedule.shifts_empty")}</p>`
+            : html`<ul>
+                ${shifts.map(
+                  (shift) =>
+                    html`<li class="shift" data-shift=${shift.id}>
+                      <span>${this.#shiftLabel(shift)}</span>
+                    </li>`,
+                )}
+              </ul>`
       }
     </section>`;
   }
 
   #swapsSection() {
-    const offered = (this.swaps ?? []).filter(
+    const offered = this.swaps?.filter(
       (s) => s.direction === "offered_to_me" && s.status === "requested",
     );
     return html`<section class="swaps">
       <h2>${t("schedule.swaps_title")}</h2>
       ${
-        offered.length === 0
-          ? html`<p class="status">${t("schedule.swaps_empty")}</p>`
-          : html`<ul>
-              ${offered.map(
-                (swap) =>
-                  html`<li class="swap" data-swap=${swap.id}>
-                    <span class="meta">${this.#personName(swap.requestedByPersonId)}</span>
-                    <wt-button
-                      class="accept"
-                      variant="primary"
-                      ?disabled=${this.busy}
-                      @click=${() => this.#accept(swap.id)}
-                    >
-                      ${t("schedule.accept")}
-                    </wt-button>
-                  </li>`,
-              )}
-            </ul>`
+        offered === undefined
+          ? nothing
+          : offered.length === 0
+            ? html`<p class="status">${t("schedule.swaps_empty")}</p>`
+            : html`<ul>
+                ${offered.map(
+                  (swap) =>
+                    html`<li class="swap" data-swap=${swap.id}>
+                      <span class="meta">${this.#personName(swap.requestedByPersonId)}</span>
+                      <wt-button
+                        class="accept"
+                        variant="primary"
+                        ?disabled=${this.busy}
+                        @click=${() => this.#accept(swap.id)}
+                      >
+                        ${t("schedule.accept")}
+                      </wt-button>
+                    </li>`,
+                )}
+              </ul>`
       }
     </section>`;
   }
 
   #coverSection() {
     const shifts = this.shifts ?? [];
-    const colleagues = this.staff.filter((s) => s.personId !== this.operatorPersonId);
+    const colleagues = this.#colleagues();
     return html`<section class="cover">
       <h2>${t("schedule.cover_title")}</h2>
       <div class="form">
@@ -399,24 +414,26 @@ export class TillScheduleScreen extends LitElement {
   }
 
   #absencesSection() {
-    const absences = this.absences ?? [];
+    const absences = this.absences;
     return html`<section class="absences">
       <h2>${t("schedule.absences_title")}</h2>
       ${
-        absences.length === 0
-          ? html`<p class="status">${t("schedule.absences_empty")}</p>`
-          : html`<ul>
-              ${absences.map(
-                (absence) =>
-                  html`<li class="absence" data-absence=${absence.id}>
-                    <span
-                      >${t(`schedule.kind.${absence.kind}`)} · ${absence.startsOn} –
-                      ${absence.endsOn}</span
-                    >
-                    <span class="meta">${t(`schedule.status.${absence.status}`)}</span>
-                  </li>`,
-              )}
-            </ul>`
+        absences === undefined
+          ? nothing
+          : absences.length === 0
+            ? html`<p class="status">${t("schedule.absences_empty")}</p>`
+            : html`<ul>
+                ${absences.map(
+                  (absence) =>
+                    html`<li class="absence" data-absence=${absence.id}>
+                      <span
+                        >${t(`schedule.kind.${absence.kind}`)} · ${absence.startsOn} –
+                        ${absence.endsOn}</span
+                      >
+                      <span class="meta">${t(`schedule.status.${absence.status}`)}</span>
+                    </li>`,
+                )}
+              </ul>`
       }
     </section>`;
   }

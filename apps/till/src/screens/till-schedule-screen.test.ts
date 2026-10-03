@@ -388,6 +388,100 @@ describe("till-schedule-screen", () => {
     const { el } = await mount(api);
     expect(root(el).textContent).toContain(t("schedule.load_failed"));
   });
+
+  it("does not call a list that never loaded empty when the first load fails", async () => {
+    const api = stubApi({ listMyShifts: vi.fn().mockRejectedValue(new Error("network")) });
+    const { el } = await mount(api);
+    const text = root(el).textContent!;
+    expect(root(el).querySelector('[role="alert"]')?.textContent).toContain(
+      t("schedule.load_failed"),
+    );
+    expect(text).not.toContain(t("schedule.loading"));
+    expect(text).not.toContain(t("schedule.shifts_empty"));
+    expect(text).not.toContain(t("schedule.swaps_empty"));
+    expect(text).not.toContain(t("schedule.absences_empty"));
+  });
+
+  it("keeps the loaded rows when a later reload fails", async () => {
+    const listMyShifts = vi
+      .fn()
+      .mockResolvedValueOnce(shifts)
+      .mockRejectedValueOnce(new Error("network"));
+    const { el } = await mount(stubApi({ listMyShifts }));
+    root(el).querySelector<HTMLElement>("wt-button.accept")!.click();
+    await vi.waitFor(() => expect(root(el).textContent).toContain(t("schedule.load_failed")));
+    expect(listMyShifts).toHaveBeenCalledTimes(2);
+    expect(root(el).querySelectorAll(".shift")).toHaveLength(1);
+    expect(root(el).querySelectorAll(".swap")).toHaveLength(1);
+    expect(root(el).querySelectorAll(".absence")).toHaveLength(1);
+  });
+
+  it("announces the loading line as a status while the first load is pending", async () => {
+    const api = stubApi({ listMyShifts: vi.fn().mockReturnValue(new Promise(() => {})) });
+    const { el } = await mount(api);
+    const status = root(el).querySelector('[role="status"]');
+    expect(status?.textContent?.trim()).toBe(t("schedule.loading"));
+  });
+
+  it("drops a chosen shift that a reload no longer lists, and keeps one it still lists", async () => {
+    const listMyShifts = vi
+      .fn()
+      .mockResolvedValueOnce(shifts)
+      .mockResolvedValueOnce(shifts)
+      .mockResolvedValueOnce([]);
+    const { el } = await mount(stubApi({ listMyShifts }));
+    const shift = root(el).querySelector<WtCombobox>('wt-combobox[name="cover-shift"]')!;
+    const submit = root(el).querySelector<HTMLElement>("wt-button.cover-submit")!;
+    await setSelect(el, 'wt-combobox[name="cover-shift"]', "s1");
+    await setSelect(el, 'wt-combobox[name="cover-colleague"]', "col1");
+    await el.updateComplete;
+    expect(submit.hasAttribute("disabled")).toBe(false);
+
+    root(el).querySelector<HTMLElement>("wt-button.accept")!.click();
+    await vi.waitFor(() => expect(listMyShifts).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(shift.value).toBe("s1");
+    expect(submit.hasAttribute("disabled")).toBe(false);
+
+    root(el).querySelector<HTMLElement>("wt-button.accept")!.click();
+    await vi.waitFor(() => expect(listMyShifts).toHaveBeenCalledTimes(3));
+    await flush(el);
+    expect(root(el).querySelectorAll(".shift")).toHaveLength(0);
+    expect(shift.value).toBe("");
+    expect(submit.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("drops a chosen colleague the staff list no longer offers, and keeps one it still offers", async () => {
+    const { el } = await mount(stubApi());
+    const colleague = root(el).querySelector<WtCombobox>('wt-combobox[name="cover-colleague"]')!;
+    const submit = root(el).querySelector<HTMLElement>("wt-button.cover-submit")!;
+    await setSelect(el, 'wt-combobox[name="cover-shift"]', "s1");
+    await setSelect(el, 'wt-combobox[name="cover-colleague"]', "col1");
+    await el.updateComplete;
+
+    el.staff = [...staff, { personId: "col2", displayName: "Otra" }];
+    await el.updateComplete;
+    expect(colleague.value).toBe("col1");
+    expect(submit.hasAttribute("disabled")).toBe(false);
+
+    el.staff = [
+      { personId: "me", displayName: "Yo" },
+      { personId: "col2", displayName: "Otra" },
+    ];
+    await el.updateComplete;
+    expect(colleague.value).toBe("");
+    expect(submit.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("drops a chosen colleague who becomes the operator", async () => {
+    const { el } = await mount(stubApi());
+    const colleague = root(el).querySelector<WtCombobox>('wt-combobox[name="cover-colleague"]')!;
+    await setSelect(el, 'wt-combobox[name="cover-colleague"]', "col1");
+    await el.updateComplete;
+    el.operatorPersonId = "col1";
+    await el.updateComplete;
+    expect(colleague.value).toBe("");
+  });
 });
 
 describe("localIsoDate / scheduleWindow (LOCAL wall-date window bounds)", () => {

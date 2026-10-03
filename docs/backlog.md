@@ -4062,13 +4062,6 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `scripts/native-form-fields.test.ts` fails on a new native one written in a screen's `.ts` source
   (A178f). Still open:
   `wt-combobox` does not sort its options, and `wt-data-table`'s `localeCompare` takes no locale.
-- **The till's schedule screen still has three defects the dashboard's My Schedule fixed** (C16,
-  #751; found 2026-09-27 by reading `apps/till/src/screens/till-schedule-screen.ts`, not run): its
-  failed-load catch (`:187`-`:193`) fills the lists with `[]`, so the sections say "none" beside the
-  load-failed alert; its loading line (`:278`) has no `role="status"`; and a chosen shift or
-  colleague that a reload removes stays chosen (`coverShiftId` and `coverColleagueId` are cleared
-  only after a cover request is sent, `:222`-`:223`). **Next action:** fix those three defects the
-  way the dashboard screen now does.
 - **The counter till may start in a zone its service zone dropdown does not list** (found
   2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
   in `apps/server/src/till-api.ts`), but its starting zone comes from `resolveNewOrderZone`
@@ -5852,8 +5845,7 @@ run without the code):
   skips the call), and the `?? []` on the shell's `.tabs` binding.
 - `trust-check.ts:83` (`timer` is always set by then), `widgets/station-queue.ts:501` (the bump
   button renders only when a next step exists), `session-activity.ts:67` and `:125`,
-  `screens/till-station-screen.ts:227` and four `?? []` fallbacks in
-  `screens/till-schedule-screen.ts`.
+  `screens/till-station-screen.ts:227`.
 - `api/server-router.ts` writes a tracked server's `nodeId` at `:184`, `:208` and `:214`, and
   nothing reads it.
 - `deviceKindLabel` (`apps/till/src/i18n/device-label.ts`) looks a kind up in a plain object, so
