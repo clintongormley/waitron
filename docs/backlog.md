@@ -5654,12 +5654,13 @@ characters. Left open:
     out with no reason stated any more, which may hide code a test could reach; and `cli.test.ts`
     test titles still say "before connecting" and "before opening a connection", and one title
     ("rather than opening the working directory") rests on the false reason above.
-  - `packages/fiscal-verifactu` code, found by #562 and not changed:
-    - `drain.ts`'s Route B lookup (`client.consultar`) runs inside the transaction that saves AEAT's
-      reply, so it holds the venue's single writer across an AEAT round trip (#562's review held a
-      second writer blocked while the lookup was paused), and a failed lookup rolls back the other
-      CSVs saved from that reply, which AEAT does not send again. The comment at the call now says
-      so. Moving the lookup out of the transaction is the fix, and a fiscal-adjacent change.
+  - `packages/fiscal-verifactu` code, found by #562; not changed unless marked:
+    - **`drain.ts`'s Route B lookup (`client.consultar`) no longer holds the venue's single writer
+      across an AEAT round trip: it runs before the transaction that saves AEAT's reply — PARTLY
+      DONE (W21, 2026-10-03).**
+      - **Open:** a failed lookup, when the save reaches its line, still backs the whole batch off,
+        discarding every line's outcome and the reply's receipt code (the CSV, one per
+        submission), which AEAT does not send again.
     - The inner try/catch around the log call in `aeat-transport.ts`'s `closeAll` is dead: with it
       removed, the "LOGGER fails" case still passed, because `Promise.allSettled` absorbs the
       rejection.

@@ -146,11 +146,10 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
 
 /**
  * Each chunk is claimed in its own short transaction (T1) that commits before the network call,
- * so the venue file's single writer slot is not held across `client.submit`. `client.submit` runs
- * outside any transaction; the response is persisted in a second short transaction (T2), or, if
- * `client.submit` or T2 throws, the batch is backed off in one instead. Route B's
- * `client.consultar` is the exception to the round-trip rule: it runs inside T2, so a failed
- * consulta rolls back the whole response and backs the batch off.
+ * so the venue file's single writer slot is not held across an AEAT round trip. `client.submit`
+ * and Route B's `client.consultar` lookups run outside any transaction; the response is persisted
+ * in a second short transaction (T2), or, if `client.submit` or T2 throws, the batch is backed off
+ * in one instead.
  *
  * AEAT's flow control: send when `TiempoEsperaEnvio` has elapsed since the last envío OR a full
  * envío has accumulated, whichever comes first.
@@ -213,9 +212,10 @@ async function drainDue(
     const registros: EnvioRegistro[] = batch.map(toEnvioRegistro);
     try {
       const respuesta = await client.submit(cabecera, registros);
+      const lines = await resolveLines(client, batch, respuesta);
 
       dueCount = await withTransaction(db, async (tx) => {
-        await persistResponse(tx, client, batch, respuesta, now, result);
+        await persistResponse(tx, batch, lines, respuesta.CSV ?? null, now, result);
         return countDue(tx, now);
       });
       // `@waitron/verifactu` leaves the wait undefined when AEAT's reply has no usable one. The
@@ -500,10 +500,53 @@ function cabeceraFor(row: RegistroRow): Cabecera {
   return { ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura } };
 }
 
+/** Route B's answer for one line: whether AEAT holds our huella, or the lookup's failure. */
+type Lookup = { matched: boolean } | { failed: unknown };
+
+/** A reply line matched to its claimed row. `lookup` is set exactly on the lines Route B covers. */
+interface ResolvedLine {
+  row: DueRow;
+  linea: RespuestaLinea;
+  efectivo: EstadoEfectivo;
+  lookup: Lookup | null;
+}
+
 /**
- * Resolves each response line via `resolveEstadoEfectivo` and matches it to its claimed row by
- * `RefExterna`.
- *
+ * Matches each response line to its claimed row by `RefExterna`, in AEAT's order, and makes Route
+ * B's lookups one at a time. A lookup's failure is kept rather than thrown: it backs the batch off
+ * only if `persistResponse` reaches its line, and a halted successor's line is never reached.
+ */
+async function resolveLines(
+  client: VerifactuClient,
+  batch: DueRow[],
+  respuesta: Awaited<ReturnType<VerifactuClient["submit"]>>,
+): Promise<ResolvedLine[]> {
+  const byId = new Map(batch.map((row) => [row.id, row]));
+  const lines: ResolvedLine[] = [];
+  for (const linea of respuesta.RespuestaLinea) {
+    // Skipped rather than thrown: one unmatched line must not back the whole batch off and discard
+    // every other line of this response. The skipped row stays `enviando` until
+    // `recoverStaleClaims` or a restart requeues it.
+    const row = linea.RefExterna !== undefined ? byId.get(linea.RefExterna) : undefined;
+    if (row === undefined) continue;
+    const efectivo = resolveEstadoEfectivo(linea);
+    const routeBCovers =
+      efectivo === "duplicate_unknown" ||
+      (efectivo === "duplicate_annulled" && row.tipo_registro === "anulacion");
+    lines.push({ row, linea, efectivo, lookup: routeBCovers ? await lookUp(client, row) : null });
+  }
+  return lines;
+}
+
+async function lookUp(client: VerifactuClient, row: DueRow): Promise<Lookup> {
+  try {
+    return { matched: await routeB(client, row) };
+  } catch (failed) {
+    return { failed };
+  }
+}
+
+/**
  * `halted` holds ids halted as a SUCCESSOR earlier in this same response. Lines are applied in
  * the order AEAT returned them, and AEAT's per-line verdict is chain-blind: a line reporting
  * "Correcto" for a successor of a record rejected in the same envío must not overwrite the halt
@@ -511,26 +554,19 @@ function cabeceraFor(row: RegistroRow): Cabecera {
  */
 async function persistResponse(
   tx: Transaction,
-  client: VerifactuClient,
   batch: DueRow[],
-  respuesta: Awaited<ReturnType<VerifactuClient["submit"]>>,
+  lines: ResolvedLine[],
+  csv: string | null,
   now: Date,
   result: DrainResult,
 ): Promise<void> {
   result.batchesSent += 1;
   result.recordsSubmitted += batch.length;
-  const csv = respuesta.CSV ?? null;
-  const byId = new Map(batch.map((row) => [row.id, row]));
   const halted = new Set<string>();
 
-  for (const linea of respuesta.RespuestaLinea) {
-    // Skipped rather than thrown: one unmatched line must not roll back every other line of this
-    // response. The skipped row stays `enviando` until `recoverStaleClaims` or a restart requeues it.
-    const row = linea.RefExterna !== undefined ? byId.get(linea.RefExterna) : undefined;
-    if (row === undefined) continue;
-    if (halted.has(row.id)) continue;
-    const efectivo = resolveEstadoEfectivo(linea);
-    await applyOutcome(tx, client, row, efectivo, linea, csv, now, result, halted);
+  for (const line of lines) {
+    if (halted.has(line.row.id)) continue;
+    await applyOutcome(tx, line, csv, now, result, halted);
   }
 }
 
@@ -538,10 +574,7 @@ async function persistResponse(
  * successor ids this call halts. */
 async function applyOutcome(
   tx: Transaction,
-  client: VerifactuClient,
-  row: DueRow,
-  efectivo: EstadoEfectivo,
-  linea: RespuestaLinea,
+  { row, linea, efectivo, lookup }: ResolvedLine,
   csv: string | null,
   now: Date,
   result: DrainResult,
@@ -597,7 +630,7 @@ async function applyOutcome(
       return;
     // duplicate_annulled / duplicate_unknown — error 3000; see `handleDuplicate`.
     default:
-      await handleDuplicate(tx, client, row, efectivo, csv, now, result, halted);
+      await handleDuplicate(tx, row, efectivo, lookup, csv, now, result, halted);
   }
 }
 
@@ -761,23 +794,26 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean> {
  *     `scripts/live-aeat.mjs`), no recorded run of it is cited here, and the library's fake does the
  *     same.
  *
+ * `resolveLines` makes Route B's consulta before this transaction opens; a failed one is re-thrown
+ * here, which backs the whole batch off.
+ *
  * Every halting outcome also halts this chain's successors, as a rejection does: AEAT has not
  * confirmed the huella their `RegistroAnterior` points at.
  */
 async function handleDuplicate(
   tx: Transaction,
-  client: VerifactuClient,
   row: DueRow,
   efectivo: EstadoEfectivo,
+  lookup: Lookup | null,
   csv: string | null,
   now: Date,
   result: DrainResult,
   halted: Set<string>,
 ): Promise<void> {
   const annulled = efectivo === "duplicate_annulled";
-  if (!annulled || row.tipo_registro === "anulacion") {
-    const matched = await routeB(client, row);
-    if (matched) {
+  if (lookup !== null) {
+    if ("failed" in lookup) throw lookup.failed;
+    if (lookup.matched) {
       await setEstado(tx, row.id, "aceptado", now, { csv, confirmadoEn: now });
       result.recordsAccepted += 1;
       return;
