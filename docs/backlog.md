@@ -1184,7 +1184,7 @@ the placement step keeps a save's failures in a list of their own, and Payments 
 now keep it too. Both need a choice (asked of the owner 2026-10-03): the limit's value, and whether
 each screen tracks where its message came from.
 
-**Empty-state text shows beside a failed read on Payments and Cloud services (A246, seen 2026-10-03
+**Empty-state text shows beside a failed read on Payments and Cloud services (A252, seen 2026-10-03
 while checking lane A's W18) — OPEN.** While its read is failing, Payments still says "No card
 readers yet." under an empty table, and Cloud services says "Checking Cloud connection…" under the
 failure message; the same on `main` before W18. It is the kind of empty-state text W18 removed from
