@@ -73,7 +73,7 @@ describe("a totals warning files the record and flags the totals", () => {
   );
 });
 
-describe("a malformed fingerprint warning still refuses the record, as 0.1.0's error did", () => {
+describe("a malformed fingerprint warning refuses the record like an error", () => {
   it.each<ValidationCode>(["HUELLA_FORMAT", "HUELLA_ANTERIOR_FORMAT"])("%s", async (code) => {
     injected.issues = [warning(code)];
     await expect(append()).rejects.toMatchObject({

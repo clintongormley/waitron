@@ -1335,7 +1335,6 @@ async function bootServer(
   // Resolved through the generic slot so `boot.ts` names no regime package
   // (`scripts/module-seams.test.ts`).
   const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
-  // One backend and clock, shared by the till's pays and the payments surface's stuck-payment filing.
   const tillBackend = makeFiscalBackend(setsToMigrate, filingModule, db, env);
   const till: TillConfig = {
     ...config.till,

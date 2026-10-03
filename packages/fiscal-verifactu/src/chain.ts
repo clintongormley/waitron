@@ -36,8 +36,8 @@ const TOTALS_WARNINGS: ReadonlySet<ValidationCode> = new Set([
   "IMPORTE_TOTAL_MISMATCH",
 ]);
 
-/** Warnings refused like errors: `@waitron/verifactu` 0.1.0 reported both as errors, and a
- * malformed fingerprint in this append-only chain could never be corrected. */
+/** Warnings refused like errors: a malformed fingerprint in this append-only chain could never be
+ * corrected. */
 const REFUSED_WARNINGS: ReadonlySet<ValidationCode> = new Set([
   "HUELLA_FORMAT",
   "HUELLA_ANTERIOR_FORMAT",

@@ -282,10 +282,11 @@ async function insertLocationTillSeries(
  * minted NIF comes from a module-level counter (`freshNif` above), so which one a test gets is
  * decided by how many `seedTenantWithSif` calls ran before it in the same file. The NIF is a HASHED
  * field (`IDEmisorFactura`, hashed by `@waitron/verifactu`), so a test that asserts a recorded
- * huella literal would otherwise break whenever a test is added or removed ABOVE it. Measured: the
- * same basket filed 16th in `write-path.e2e.test.ts` hashed to `38CCE164…` under NIF `20000016K`
- * and to `A1AF497F…` standalone under `20000001K`; pinning the NIF made both positions agree. Pass
- * a value no other test in the same file will mint — the counter starts at `20000001Y` and climbs.
+ * huella literal would otherwise break whenever a test is added or removed ABOVE it. Measured
+ * when the counter still minted a `K` for every NIF: the same basket filed 16th in
+ * `write-path.e2e.test.ts` hashed to `38CCE164…` under NIF `20000016K` and to `A1AF497F…`
+ * standalone under `20000001K`; pinning the NIF made both positions agree. Pass a value no other
+ * test in the same file will mint — the counter starts at `20000001Y` and climbs.
  *
  * WHAT THE OVERRIDE DOES NOT REACH. The `tenants` insert below does nothing when the row already
  * exists, so after an earlier seed the override reaches `registerSif` alone and the `tenants` row
