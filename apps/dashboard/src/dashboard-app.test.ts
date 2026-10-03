@@ -321,6 +321,7 @@ const NAV_SCREENS = [
 ] as const;
 
 const NAV_GROUP_KEYS = [
+  "nav.group.reports",
   "nav.group.menu",
   "nav.group.service",
   "nav.group.team",
@@ -1827,6 +1828,46 @@ describe("dashboard-app", () => {
     expect(currentLocale()).toBe(locale);
     const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-menu"]')!;
     expect(header.textContent!.replace(/\s+/g, " ").trim()).toBe(heading);
+  });
+
+  it.each([
+    ["es-ES", "Informes"],
+    ["en-GB", "Reporting"],
+  ])("puts the report screens under a Reporting section (%s)", async (locale, heading) => {
+    const me = {
+      ...meResponse,
+      venueLocale: locale,
+      sessionDefault: locale,
+      permissions: ["report.export", "report.view"],
+      modules: ["adjustments"],
+    };
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe: vi.fn().mockResolvedValue(me) }),
+    });
+    await flush(el);
+    const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-reports"]')!;
+    expect(header.textContent!.replace(/\s+/g, " ").trim()).toBe(heading);
+    const panel = el.shadowRoot!.querySelector("#nav-group-panel-reports")!;
+    expect(
+      [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test),
+    ).toEqual(["nav-sales", "nav-vat-return", "nav-adjustment-report", "nav-orders"]);
+  });
+
+  it("keeps Overview above the Reporting section, under no heading", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const overview = navItem(el, "overview")!;
+    const reporting = el.shadowRoot!.querySelector('[data-test="nav-group-reports"]')!;
+    expect(overview.closest("#nav-group-panel-reports")).toBeNull();
+    expect(
+      overview.compareDocumentPosition(reporting) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const headers = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".nav-group")];
+    expect(
+      headers.filter((h) => h.compareDocumentPosition(overview) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toEqual([]);
   });
 
   it("collapses the current page's group when its header is clicked, and opens it on a second click", async () => {
@@ -4920,13 +4961,14 @@ describe("the nav search", () => {
     await search(el, "");
     expect(expandedHeaders(el)).toEqual([]);
     expect(shownHeaders(el)).toEqual([
+      "nav-group-reports",
       "nav-group-menu",
       "nav-group-service",
       "nav-group-team",
       "nav-group-purchasing",
       "nav-group-configuration",
     ]);
-    expect(shownItems(el)).toEqual(["nav-overview", "nav-sales", "nav-orders"]);
+    expect(shownItems(el)).toEqual(["nav-overview"]);
   });
 
   it("never offers a page the person may not open, typed with its exact label", async () => {

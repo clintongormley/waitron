@@ -142,7 +142,16 @@ type ScreenRule = {
   requiresPermission?: string;
 };
 type NavItem = ScreenRule & { labelKey: StringKey };
-type NavGroup = { id: NavGroupId; headerKey?: StringKey; icon?: string; items: NavItem[] };
+type NavGroup = {
+  id: NavGroupId;
+  headerKey?: StringKey;
+  icon?: string;
+  items: NavItem[];
+  /** Listed after the group's module screens. */
+  lastItems?: NavItem[];
+};
+
+const coreItems = (group: NavGroup): NavItem[] => [...group.items, ...(group.lastItems ?? [])];
 /** A nav row as shown: a core item or a module's screen, labelled in the current language. */
 type NavPage = { screen: ScreenId; label: string };
 
@@ -152,14 +161,15 @@ function foldForSearch(text: string): string {
 }
 
 const NAV_GROUPS: NavGroup[] = [
+  { id: "overview", items: [{ screen: "overview", labelKey: "nav.overview" }] },
   {
     id: "reports",
+    headerKey: "nav.group.reports",
     items: [
-      { screen: "overview", labelKey: "nav.overview" },
       { screen: "sales", labelKey: "nav.sales" },
       { screen: "vat-return", labelKey: "nav.vat_return", requiresPermission: "report.export" },
-      { screen: "orders", labelKey: "nav.orders" },
     ],
+    lastItems: [{ screen: "orders", labelKey: "nav.orders" }],
   },
   {
     id: "menu",
@@ -992,7 +1002,7 @@ export class DashboardApp extends LitElement {
 
   #openGroupOf(screen: ScreenId): void {
     const group =
-      NAV_GROUPS.find((entry) => entry.items.some((item) => item.screen === screen))?.id ??
+      NAV_GROUPS.find((entry) => coreItems(entry).some((item) => item.screen === screen))?.id ??
       this.#activeScreens.get(screen)?.screen.group;
     if (group === undefined || !this.collapsedGroups.has(group)) return;
     const next = new Set(this.collapsedGroups);
@@ -1408,7 +1418,7 @@ export class DashboardApp extends LitElement {
   #permittedScreen(requested: string | null): ScreenId {
     if (this.sessionRole === "staff") return requested === "orders" ? "orders" : "my-schedule";
     if (requested === "alerts") return "alerts";
-    const item = [...NAV_GROUPS.flatMap((group) => group.items), ...UNLISTED_SCREENS].find(
+    const item = [...NAV_GROUPS.flatMap(coreItems), ...UNLISTED_SCREENS].find(
       (entry) => entry.screen === requested,
     );
     if (item && this.#mayOpen(item)) return item.screen;
@@ -1477,7 +1487,7 @@ export class DashboardApp extends LitElement {
     if (this.sessionRole === "staff")
       return [
         {
-          group: NAV_GROUPS.find((group) => group.id === "reports")!,
+          group: NAV_GROUPS.find((group) => group.id === "overview")!,
           pages: [
             { screen: "my-schedule", label: t("nav.my_schedule") },
             { screen: "orders", label: t("nav.orders") },
@@ -1485,15 +1495,18 @@ export class DashboardApp extends LitElement {
         },
       ];
     const term = foldForSearch(this.navSearch.trim());
+    const shown = (items: NavItem[] = []): NavPage[] =>
+      items
+        .filter((item) => this.#mayOpen(item))
+        .map((item) => ({ screen: item.screen, label: t(item.labelKey) }));
     return NAV_GROUPS.map((group) => {
       const permitted: NavPage[] = [
-        ...group.items
-          .filter((item) => this.#mayOpen(item))
-          .map((item) => ({ screen: item.screen, label: t(item.labelKey) })),
+        ...shown(group.items),
         ...(this.#navGroups.get(group.id) ?? []).map((screen) => ({
           screen: screen.id,
           label: tKit(screen.navLabelKey),
         })),
+        ...shown(group.lastItems),
       ];
       if (term === "") return { group, pages: permitted };
       const headerMatches =
