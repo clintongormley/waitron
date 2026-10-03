@@ -41,6 +41,8 @@ afterEach(() => {
 // Set WT_TRADING_ENV to "__ABSENT__" to model an unprovisioned box whose
 // state volume has no trading.env. WT_HANG is the one knob that changes the shared stub's behaviour
 // unconditionally: the `docker` stub sleeps that many seconds on EVERY invocation.
+// `docker image inspect` reports an image absent when its name contains WT_IMAGE_MISSING, and
+// `docker pull` fails when its arguments contain WT_IMAGE_PULL_FAIL; every other image is present.
 // `systemctl` and `sudo` are stubbed so ensure_docker's `sudo -n systemctl enable --now docker` is a
 // no-op and the suite is hermetic on Linux with or without passwordless sudo (not just on macOS,
 // which has no systemctl). `aa-enabled`, `apparmor_parser` and `install` are stubbed for the same
@@ -127,9 +129,23 @@ case "$1" in
         # catches — a client reintroduced as docker run postgres, or as compose run --entrypoint
         # psql, is taken by another arm or by none, and reads as a clean empty stamp.
         case "$args" in *psql*) exit 1 ;; esac ;;
+      config)
+        # A fixed set of image names, one per line, the shape real compose prints.
+        case "$args" in
+          *--images*) printf '%s\\n' waitron:stub axllent/mailpit:v1.31.2 waitron-print-agent:stub ;;
+          *) echo "docker stub: no arm for compose $args" >&2; exit 97 ;;
+        esac ;;
       up|down) ;;
       *) echo "docker stub: no arm for compose $args" >&2; exit 97 ;;
     esac ;;
+  image)
+    if [ "$2" = inspect ] && [ -n "\${WT_IMAGE_MISSING}" ]; then
+      case "$args" in *"\${WT_IMAGE_MISSING}"*) exit 1 ;; esac
+    fi ;;
+  pull)
+    if [ -n "\${WT_IMAGE_PULL_FAIL}" ]; then
+      case "$args" in *"\${WT_IMAGE_PULL_FAIL}"*) exit 1 ;; esac
+    fi ;;
   volume)
     case "$2" in
       inspect) exit 0 ;;
@@ -251,6 +267,8 @@ function sandbox({
   viaSymlink = false,
   selfFetchFail = false,
   selfReplaceFail = false,
+  imageMissing = "",
+  imagePullFail = "",
 } = {}) {
   const root = mkdtempSync(join(tmpdir(), "waitron-sh-"));
   dirs.push(root);
@@ -259,16 +277,22 @@ function sandbox({
   mkdirSync(boxDir, { recursive: true });
   // runningScript is the copy the case runs and refScript the one the ref serves. "repo" is this
   // repository's script; "marked" is that plus a line logging `waitron.sh-start` and each argument
-  // in <>, so a case can count the runs and see where each argument begins and ends.
+  // in <>, so a case can count the runs and see where each argument begins and ends. "pre-reset"
+  // stands in for a ref whose waitron.sh predates `--reset`: it logs its start as "marked" does, exits
+  // 0 when its first argument is `install`, and otherwise refuses that argument as an unknown
+  // command, which is what such a copy does with `--reset`.
+  const startLine = `printf 'waitron.sh-start %s\\n' "$(printf '<%s>' "$@")" >> "$WT_LOG"\n`;
   const marked = join(root, "marked-waitron.sh");
   writeFileSync(
     marked,
-    readFileSync(SCRIPT, "utf8").replace(
-      "set -euo pipefail\n",
-      `set -euo pipefail\nprintf 'waitron.sh-start %s\\n' "$(printf '<%s>' "$@")" >> "$WT_LOG"\n`,
-    ),
+    readFileSync(SCRIPT, "utf8").replace("set -euo pipefail\n", `set -euo pipefail\n${startLine}`),
   );
-  const pick = (which) => (which === "marked" ? marked : SCRIPT);
+  const preReset = join(root, "pre-reset-waitron.sh");
+  writeFileSync(
+    preReset,
+    `#!/usr/bin/env bash\n${startLine}[ "$1" = install ] && exit 0\necho "waitron.sh: unknown command '$1'" >&2\nexit 2\n`,
+  );
+  const pick = (which) => ({ marked, "pre-reset": preReset })[which] ?? SCRIPT;
   // scriptInCheckout: "repository" makes the checkout with `git init`; "worktree" writes the `.git`
   // FILE a linked worktree has, pointing nowhere, with no git involved.
   const scriptDir = scriptInCheckout ? join(root, "checkout", "deploy") : root;
@@ -335,6 +359,8 @@ function sandbox({
       WT_HANG: hang,
       WT_AA_ENABLED: apparmor ? "1" : "0",
       WT_AA_PARSE_FAIL: apparmorParseFail ? "1" : "0",
+      WT_IMAGE_MISSING: imageMissing,
+      WT_IMAGE_PULL_FAIL: imagePullFail,
     },
   };
 }
@@ -389,16 +415,28 @@ function run(sb, args, extraEnv = {}, { timeoutMs = RUN_TIMEOUT_MS } = {}) {
   return result;
 }
 
-// Every recorded `docker compose` call, less that prefix and the box's own `-f <compose file>`, which
-// is removed by its exact path because the path carries the sandbox's temporary folder. A match
-// anchored at the start reads the subcommand only while nothing else precedes it, so a check that a
-// subcommand never ran looks for its word anywhere in the call.
-function composeCalls(sb) {
+// Every recorded call, in order. A `docker compose` call is shortened to `compose` and the rest, less
+// the box's own `-f <compose file>`, which is removed by its exact path because the path carries the
+// sandbox's temporary folder.
+function loggedCalls(sb) {
   const boxFile = `-f ${join(sb.boxDir, "compose.yml")} `;
   return readFileSync(sb.log, "utf8")
+    .trimEnd()
     .split("\n")
-    .filter((line) => line.startsWith("docker compose "))
-    .map((line) => line.slice("docker compose ".length).replace(boxFile, ""));
+    .map((line) =>
+      line.startsWith("docker compose ")
+        ? `compose ${line.slice("docker compose ".length).replace(boxFile, "")}`
+        : line,
+    );
+}
+
+// The `compose` calls loggedCalls reads, without that word. A match anchored at the start reads the
+// subcommand only while nothing else precedes it, so a check that a subcommand never ran looks for its
+// word anywhere in the call.
+function composeCalls(sb) {
+  return loggedCalls(sb)
+    .filter((call) => call.startsWith("compose "))
+    .map((call) => call.slice("compose ".length));
 }
 
 describe("waitron.sh install (published main)", () => {
@@ -981,7 +1019,7 @@ describe("waitron.sh database_ahead advice", () => {
     const sb = sandbox({ dockerPs: "starting", aheadLogs: true });
     const r = run(sb, ["install"], { WAITRON_SH_MAX_HEALTH_TRIES: "1" });
     expect(r.status).not.toBe(0);
-    expect(r.stderr).toMatch(/reset.*then install/i);
+    expect(r.stderr).toContain("in one step: 'waitron.sh --reset install [ref]'");
   });
 
   it("never tells a production box to reset", () => {
@@ -993,16 +1031,16 @@ describe("waitron.sh database_ahead advice", () => {
     const r = run(sb, ["install"], { WAITRON_SH_MAX_HEALTH_TRIES: "1" });
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/newer ref/i);
-    expect(r.stderr).not.toMatch(/run 'waitron\.sh reset'/);
+    expect(r.stderr).not.toMatch(/waitron\.sh (--reset|reset)\b/);
   });
 });
 
-describe("waitron.sh reset", () => {
-  const installedBox = (sb) => {
-    writeFileSync(join(sb.boxDir, "compose.yml"), "name: waitron\n");
-    writeFileSync(join(sb.boxDir, ".env"), "WAITRON_IMAGE=waitron:pinned\n");
-  };
+function installedBox(sb) {
+  writeFileSync(join(sb.boxDir, "compose.yml"), "name: waitron\n");
+  writeFileSync(join(sb.boxDir, ".env"), "WAITRON_IMAGE=waitron:pinned\n");
+}
 
+describe("waitron.sh reset", () => {
   it("refuses when the box was never installed", () => {
     const sb = sandbox();
     const r = run(sb, ["reset", "--yes"]);
@@ -1069,6 +1107,17 @@ describe("waitron.sh reset", () => {
     expect(compose).toContainEqual(expect.stringMatching(/^up -d\b/));
   });
 
+  it("stops, naming --yes, when nobody can confirm and --yes was not given", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    const r = run(sb, ["reset"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain(
+      "reset needs confirmation — re-run with --yes for a non-interactive box",
+    );
+    expect(readFileSync(sb.log, "utf8")).not.toMatch(/docker volume rm/);
+  });
+
   it("--all also removes the state volume", () => {
     const sb = sandbox();
     installedBox(sb);
@@ -1083,6 +1132,7 @@ describe("waitron.sh reset", () => {
     const r = run(sb, ["reset", "--yes"]);
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/PRODUCTION/);
+    expect(r.stderr).toContain("re-run with --force-production.");
     expect(readFileSync(sb.log, "utf8")).not.toMatch(/docker volume rm/);
   });
 
@@ -1145,6 +1195,196 @@ describe("waitron.sh reset", () => {
     expect(calls).toMatch(/docker volume rm .*waitron_logs\b/);
     expect(calls).not.toMatch(/docker volume rm .*waitron_backups\b/);
     expect(calls).not.toMatch(/! -name tls/);
+  });
+});
+
+describe("waitron.sh --reset install", () => {
+  const builds = (sb) => loggedCalls(sb).filter((c) => c.startsWith("docker build "));
+  const removals = (sb) => loggedCalls(sb).filter((c) => c.startsWith("docker volume rm "));
+
+  it("builds the new images, then wipes the box once, then starts it once on them", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    const r = run(sb, ["--reset", "--yes", "install", "my-branch"]);
+    expect(r.status).toBe(0);
+    const log = loggedCalls(sb);
+    const lastBuild = log.findLastIndex((c) => c.startsWith("docker build "));
+    const down = log.findIndex((c) => c.startsWith("compose down "));
+    const firstRm = log.findIndex((c) => c.startsWith("docker volume rm "));
+    const emptyState = log.findIndex((c) => c.includes("! -name tls"));
+    const up = log.findIndex((c) => c.startsWith("compose up -d "));
+    const mailpitCheck = log.indexOf("docker image inspect axllent/mailpit:v1.31.2");
+    expect(lastBuild).toBeGreaterThanOrEqual(0);
+    expect(mailpitCheck).toBeGreaterThan(lastBuild);
+    expect(down).toBeGreaterThan(mailpitCheck);
+    expect(firstRm).toBeGreaterThan(down);
+    expect(emptyState).toBeGreaterThan(firstRm);
+    expect(up).toBeGreaterThan(emptyState);
+    const lifecycle = log.filter((c) => /^compose (up|down)\b/.test(c));
+    expect(lifecycle.map((c) => c.split(" ")[1])).toEqual(["down", "up"]);
+    const removed = removals(sb);
+    for (const v of ["logs", "backups", "mailpit", "print_agent"]) {
+      expect(removed).toContainEqual(expect.stringMatching(new RegExp(`waitron_${v}\\b`)));
+    }
+    expect(removed).not.toContainEqual(expect.stringMatching(/waitron_state\b/));
+    const env = readFileSync(join(sb.boxDir, ".env"), "utf8");
+    expect(env).toMatch(/^WAITRON_IMAGE=waitron:my-branch$/m);
+    expect(r.stdout).toContain("https://waitron.local/setup/trust");
+  });
+
+  it("pulls a supporting image the box lacks before taking the box down", () => {
+    const sb = sandbox({ imageMissing: "mailpit" });
+    installedBox(sb);
+    const r = run(sb, ["--reset", "--yes", "install", "my-branch"]);
+    expect(r.status).toBe(0);
+    const log = loggedCalls(sb);
+    const pull = log.indexOf("docker pull axllent/mailpit:v1.31.2");
+    expect(pull).toBeGreaterThanOrEqual(0);
+    expect(log.findIndex((c) => c.startsWith("compose down "))).toBeGreaterThan(pull);
+  });
+
+  it("stops before taking the box down when a supporting image it lacks cannot be pulled", () => {
+    const sb = sandbox({ imageMissing: "mailpit", imagePullFail: "mailpit" });
+    installedBox(sb);
+    const r = run(sb, ["--reset", "--yes", "install", "my-branch"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain(
+      "could not pull axllent/mailpit:v1.31.2, which the box needs — nothing was taken down or wiped, but the box's compose.yml and .env are already set for my-branch;",
+    );
+    expect(loggedCalls(sb)).not.toContainEqual(expect.stringMatching(/^compose (down|up)\b/));
+    expect(removals(sb)).toEqual([]);
+    expect(readFileSync(join(sb.boxDir, "compose.yml"), "utf8")).not.toBe("name: waitron\n");
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toMatch(
+      /^WAITRON_IMAGE=waitron:my-branch$/m,
+    );
+  });
+
+  it("leaves a plain branch install as it was: no supporting-image check", () => {
+    const sb = sandbox({ imageMissing: "mailpit", imagePullFail: "mailpit" });
+    installedBox(sb);
+    const r = run(sb, ["install", "my-branch"]);
+    expect(r.status).toBe(0);
+    expect(loggedCalls(sb)).not.toContainEqual(
+      expect.stringMatching(/^docker (image inspect|pull) /),
+    );
+  });
+
+  it("--all also removes the state volume", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    const r = run(sb, ["--reset", "--all", "--yes", "install"]);
+    expect(r.status).toBe(0);
+    expect(removals(sb)).toContainEqual(expect.stringMatching(/waitron_state\b/));
+  });
+
+  // The production read runs the box's CURRENT image against its current compose.yml, so it has to
+  // come before install fetches the box's files from the ref and builds or pulls its images — and a
+  // refusal after a long build would waste it. The script's own update from the ref comes earlier.
+  it("refuses on a production box before fetching the box's files or building, and wipes nothing", () => {
+    const sb = sandbox({ tradingEnv: "WAITRON_ENV=production" });
+    installedBox(sb);
+    const r = run(sb, ["--reset", "--yes", "install", "my-branch"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/PRODUCTION/);
+    expect(r.stderr).toContain(
+      "If you are sure this box is not production, re-run with --force-production before install.",
+    );
+    expect(builds(sb)).toEqual([]);
+    expect(removals(sb)).toEqual([]);
+    expect(readFileSync(join(sb.boxDir, "compose.yml"), "utf8")).toBe("name: waitron\n");
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toBe("WAITRON_IMAGE=waitron:pinned\n");
+  });
+
+  it("--force-production --yes proceeds on a production box", () => {
+    const sb = sandbox({ tradingEnv: "WAITRON_ENV=production" });
+    installedBox(sb);
+    const r = run(sb, ["--reset", "--force-production", "--yes", "install"]);
+    expect(r.status).toBe(0);
+    expect(removals(sb)).toContainEqual(expect.stringMatching(/waitron_logs\b/));
+  });
+
+  it("stops before building when nobody can confirm and --yes was not given", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    const r = run(sb, ["--reset", "install", "my-branch"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain(
+      "--reset install needs confirmation — re-run with --yes before install for a non-interactive box",
+    );
+    expect(builds(sb)).toEqual([]);
+    expect(removals(sb)).toEqual([]);
+  });
+
+  it("installs without wiping, and says so, when there is no box to reset", () => {
+    const sb = sandbox();
+    const r = run(sb, ["--reset", "--yes", "install"]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("nothing to reset");
+    expect(removals(sb)).toEqual([]);
+    expect(loggedCalls(sb)).not.toContainEqual(expect.stringContaining("! -name tls"));
+    expect(loggedCalls(sb).filter((c) => c.startsWith("compose up -d "))).toHaveLength(1);
+  });
+
+  it("keeps --reset and its options when it runs again from the ref's newer copy, and wipes once", () => {
+    const sb = sandbox({ refScript: "marked" });
+    installedBox(sb);
+    const r = run(sb, ["--reset", "--yes", "install", "my-branch"]);
+    expect(r.status).toBe(0);
+    expect(loggedCalls(sb).filter((c) => c.startsWith("waitron.sh-start "))).toEqual([
+      "waitron.sh-start <--reset><--yes><install><my-branch>",
+    ]);
+    expect(removals(sb).filter((c) => /waitron_logs\b/.test(c))).toHaveLength(1);
+  });
+
+  it("stops, keeping the box's own copy and wiping nothing, when the ref's script predates --reset", () => {
+    const sb = sandbox({ refScript: "pre-reset" });
+    installedBox(sb);
+    const before = readFileSync(sb.script, "utf8");
+    const r = run(sb, ["--reset", "--yes", "install", "old-branch"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain(
+      "old-branch's waitron.sh predates --reset install, so nothing was changed: run 'waitron.sh reset', then 'waitron.sh install old-branch'",
+    );
+    expect(readFileSync(sb.script, "utf8")).toBe(before);
+    expect(loggedCalls(sb).filter((c) => c.startsWith("waitron.sh-start "))).toEqual([]);
+    expect(loggedCalls(sb)).not.toContainEqual(
+      expect.stringMatching(/^(docker (build|pull)|compose down) /),
+    );
+    expect(removals(sb)).toEqual([]);
+    expect(readdirSync(sb.scriptDir).filter((n) => n.startsWith(".waitron.sh."))).toEqual([]);
+  });
+
+  it("without --reset, still replaces its copy with a ref's script that predates --reset and runs it", () => {
+    const sb = sandbox({ refScript: "pre-reset" });
+    installedBox(sb);
+    const r = run(sb, ["install", "old-branch"]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).not.toContain("predates");
+    expect(readFileSync(sb.script, "utf8")).toBe(readFileSync(sb.env.WT_SELF_SCRIPT, "utf8"));
+    expect(loggedCalls(sb).filter((c) => c.startsWith("waitron.sh-start "))).toEqual([
+      "waitron.sh-start <install><old-branch>",
+    ]);
+  });
+
+  it.each([
+    [
+      ["--yes", "install"],
+      "--yes goes with --reset: 'waitron.sh --reset --yes install [ref]', or 'waitron.sh reset --yes'",
+    ],
+    [
+      ["--all", "reset"],
+      "--all goes with --reset: 'waitron.sh --reset --all install [ref]', or 'waitron.sh reset --all'",
+    ],
+    [["--reset", "reset"], "--reset goes only with install: 'waitron.sh --reset install [ref]'"],
+    [["--reset"], "--reset goes only with install: 'waitron.sh --reset install [ref]'"],
+    [["--reset", "--bogus", "install"], "unknown option '--bogus'"],
+  ])("refuses %j before touching the box", (args, message) => {
+    const sb = sandbox();
+    installedBox(sb);
+    const r = run(sb, args);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain(message);
+    expect(existsSync(sb.log) ? readFileSync(sb.log, "utf8") : "").not.toMatch(/^docker /m);
   });
 });
 

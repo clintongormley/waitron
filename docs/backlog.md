@@ -4827,7 +4827,7 @@ characters. Left open:
 
 - **Resetting a box without a terminal** (owner, 2026-10-02). An operator who set the box up in
   Demo and now wants to Prepare has to wipe Demo away first, and the only wipe is
-  `waitron.sh reset` (`cmd_reset`, `deploy/waitron.sh`), run with `sudo` at the box's terminal —
+  `waitron.sh reset` or `waitron.sh --reset install` (`wipe_box`, `deploy/waitron.sh`), run with `sudo` at the box's terminal —
   which a box operator does not have. Going from Prepare to Live needs a fresh database too (one
   database per environment, CLAUDE.md §5): the Backups screen can export the venue's configuration
   and setup can import it (`apps/server/src/configuration-export-api.ts`,

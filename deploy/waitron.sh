@@ -6,6 +6,7 @@
 #   sudo bash waitron.sh install            # published main image
 #   sudo bash waitron.sh install <ref>      # build and run a branch or commit on the box
 #   sudo bash waitron.sh reset [--all]      # wipe back to a clean box (keeps the certificate)
+#   sudo bash waitron.sh --reset install [ref]   # build or pull the ref's images, wipe the box, start it on them
 #
 # Operating this file is deploy/README.md. It replaces the old install.sh / prepare.sh /
 # try-branch.sh trio; scripts/deploy-image-env.test.ts and scripts/waitron-sh.test.mjs pin it.
@@ -26,6 +27,9 @@ usage() {
 waitron.sh: usage:
   waitron.sh install [ref]     install or upgrade the box (ref defaults to main)
   waitron.sh reset [--all]     wipe the box to a clean state (keeps the certificate; --all drops it too)
+  waitron.sh --reset [--all] [--yes] [--force-production] install [ref]
+                               build or pull ref's images, then wipe the box as reset does and start it
+                               on them
 USAGE
   exit 2
 }
@@ -43,12 +47,18 @@ as_root() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo -n "$@"; fi; }
 # apt, never interactive: sudo's env_reset discards an exported DEBIAN_FRONTEND, so pass it inline.
 apt_get() { as_root env DEBIAN_FRONTEND=noninteractive apt-get "$@"; }
 
+RESET_BEFORE_INSTALL=0 RESET_ALL=0 RESET_YES=0 RESET_FORCE=0
+# The arguments as given, so the copy refresh_self hands over to gets every option too.
+WAITRON_ARGV=()
+# refresh_self looks for this exact line in a ref's waitron.sh before handing it --reset: a copy
+# without it predates --reset install and cannot run it. Keep it.
+RESET_INSTALL_SUPPORTED=1
+
 # 0. This script, from the INSTALLED ref like compose.yml, so a fix to install's own steps runs on the
 #    install that fetches it. The new copy is moved into place and run, never written over this one:
 #    bash reads a script as it runs it. WAITRON_SH_REFRESHED stops the new copy fetching again.
 refresh_self() {
   local ref="$1" self="${BASH_SOURCE[0]:-}" target dir up tmp status=0
-  shift
   [ -z "${WAITRON_SH_REFRESHED:-}" ] || return 0
   if [ ! -f "$self" ]; then
     echo "waitron.sh: not running from a file, so no copy of waitron.sh to update from ${ref}" >&2
@@ -100,13 +110,17 @@ refresh_self() {
     fi
     return 0
   fi
+  if [ "$RESET_BEFORE_INSTALL" -eq 1 ] && ! grep -q '^RESET_INSTALL_SUPPORTED=1$' "$tmp"; then
+    rm -f "$tmp"
+    die "${ref}'s waitron.sh predates --reset install, so nothing was changed: run 'waitron.sh reset', then 'waitron.sh install ${ref}'"
+  fi
   if ! mv -f "$tmp" "$self"; then
     rm -f "$tmp"
     echo "waitron.sh: could not replace $self with ${ref}'s waitron.sh — carrying on with this copy" >&2
     return 0
   fi
   echo "waitron.sh: updated $self to ${ref}'s waitron.sh; running install again from it"
-  WAITRON_SH_REFRESHED=1 exec "$BASH" "$self" install "$@"
+  WAITRON_SH_REFRESHED=1 exec "$BASH" "$self" "${WAITRON_ARGV[@]}"
 }
 
 # 1. Docker Engine + the compose plugin, and the daemon enabled on boot. `docker compose version`
@@ -312,6 +326,22 @@ select_image() {
   fi
 }
 
+# Under --reset the box is wiped before `up`, so any image `up` would pull is fetched first: a branch
+# install builds only Waitron's own two, and a pull that failed after the wipe would leave a wiped box
+# that does not start.
+ensure_images_present() {
+  local ref="$1" images img
+  local state="nothing was taken down or wiped, but the box's compose.yml and .env are already set for ${ref}"
+  images="$(docker compose -f "$WAITRON_DIR/compose.yml" config --images)" \
+    || die "could not list the images compose.yml names — ${state}; re-run this command"
+  while IFS= read -r img; do
+    [ -n "$img" ] || continue
+    docker image inspect "$img" >/dev/null 2>&1 </dev/null && continue
+    docker pull "$img" </dev/null \
+      || die "could not pull $img, which the box needs — ${state}; check the network and re-run this command"
+  done <<<"$images"
+}
+
 # The whole console instruction after a box comes up: where to go, plus the QR of the setup URL.
 print_links() {
   cat <<EOF
@@ -490,21 +520,37 @@ report_unhealthy() {
     if is_production; then
       die "the database is newer than this image. On a box with real records install a NEWER ref — do NOT reset, it would destroy the fiscal ledger."
     fi
-    die "the database is newer than this image (provisioning.database_ahead). Run 'waitron.sh reset' then install again."
+    die "the database is newer than this image (provisioning.database_ahead). Wipe the box and install again in one step: 'waitron.sh --reset install [ref]'"
   fi
   die "the box did not come up healthy — see the log lines above"
 }
 
+# With --reset, the production check and the confirmation run before the box's files are fetched or
+# any image is built or pulled: the check reads the box with its CURRENT compose.yml and image, which
+# the fetch replaces and the build or pull supersedes. refresh_self, which runs first, may already
+# have replaced this script itself. The wipe waits until the new images are in place.
 cmd_install() {
-  local ref="${1:-main}"
-  refresh_self "$ref" "$@"
+  local ref="${1:-main}" wipe="$RESET_BEFORE_INSTALL"
+  refresh_self "$ref"
   ensure_docker
+  if [ "$wipe" -eq 1 ]; then
+    if [ -f "$WAITRON_DIR/compose.yml" ]; then
+      confirm_reset
+    else
+      echo "waitron.sh: no box at $WAITRON_DIR, so nothing to reset — installing" >&2
+      wipe=0
+    fi
+  fi
   mkdir -p "$WAITRON_DIR" || die "cannot create $WAITRON_DIR — run as root, or set WAITRON_DIR to a writable path"
   fetch_box_files "$ref"
   load_print_agent_apparmor "$ref"
   disable_bluetooth_autopair
   select_image "$ref"
   cd "$WAITRON_DIR"
+  if [ "$wipe" -eq 1 ]; then
+    ensure_images_present "$ref"
+    wipe_box
+  fi
   docker compose up -d --remove-orphans
   if wait_healthy; then announce_ready; else report_unhealthy; fi
 }
@@ -518,31 +564,37 @@ rm_volume() {
     || die "could not remove volume $name — stopping the reset so the box is not left half-wiped"
 }
 
-cmd_reset() {
-  local all=0 yes=0 force_prod=0 a ans
-  for a in "$@"; do
-    case "$a" in
-      --all) all=1 ;;
-      --yes) yes=1 ;;
-      --force-production) force_prod=1 ;;
-      *) die "reset: unknown option '$a'" 2 ;;
-    esac
-  done
-  [ -f "$WAITRON_DIR/compose.yml" ] || die "no box at $WAITRON_DIR — run 'waitron.sh install' first"
+reset_option() {
+  case "$1" in
+    --all) RESET_ALL=1 ;;
+    --yes) RESET_YES=1 ;;
+    --force-production) RESET_FORCE=1 ;;
+    *) return 1 ;;
+  esac
+}
 
+# For --reset install the options go before `install`; after it, --yes is taken as the ref or ignored.
+confirm_reset() {
+  local ans force="re-run with --force-production" yes="reset needs confirmation — re-run with --yes"
+  if [ "$RESET_BEFORE_INSTALL" -eq 1 ]; then
+    force="re-run with --force-production before install"
+    yes="--reset install needs confirmation — re-run with --yes before install"
+  fi
   if is_production; then
-    [ "$force_prod" -eq 1 ] || die "refusing to reset: this box is PRODUCTION, or its environment could not be read and is treated the same way for safety. It may hold real fiscal records that cannot be recreated, and a reset would cut the AEAT chain. Recover a broken production box from a backup. If you are sure this box is not production, re-run with --force-production."
+    [ "$RESET_FORCE" -eq 1 ] || die "refusing to reset: this box is PRODUCTION, or its environment could not be read and is treated the same way for safety. It may hold real fiscal records that cannot be recreated, and a reset would cut the AEAT chain. Recover a broken production box from a backup. If you are sure this box is not production, ${force}."
     if [ -t 0 ]; then
       printf 'waitron.sh: type "production" to wipe this PRODUCTION box: ' >&2
       read -r ans; [ "$ans" = "production" ] || die "not confirmed — nothing wiped"
     fi
-  elif [ "$yes" -ne 1 ]; then
-    [ -t 0 ] || die "reset needs confirmation — re-run with --yes for a non-interactive box"
+  elif [ "$RESET_YES" -ne 1 ]; then
+    [ -t 0 ] || die "${yes} for a non-interactive box"
     printf 'waitron.sh: type "reset" to wipe this box: ' >&2
     read -r ans; [ "$ans" = "reset" ] || die "not confirmed — nothing wiped"
   fi
+}
 
-  cd "$WAITRON_DIR"
+# Run from $WAITRON_DIR. Leaves the box down; the caller starts it.
+wipe_box() {
   docker compose down --remove-orphans
   # A failed removal ABORTS the reset before the volumes further down this loop or state are touched,
   # so a box whose wipe half-failed is never restarted against surviving data with its settings
@@ -554,7 +606,7 @@ cmd_reset() {
   for v in logs backups mailpit print_agent; do
     rm_volume "waitron_${v}"
   done
-  if [ "$all" -eq 1 ]; then
+  if [ "$RESET_ALL" -eq 1 ]; then
     rm_volume waitron_state
   else
     # Empty state except tls/, keeping the CA + leaf so an already-trusting phone needs no new step.
@@ -563,17 +615,48 @@ cmd_reset() {
       --entrypoint sh app \
       -c 'find "${WAITRON_STATE_DIR:?}" -mindepth 1 -maxdepth 1 ! -name tls -exec rm -rf {} +'
   fi
+}
+
+cmd_reset() {
+  local a
+  for a in "$@"; do
+    reset_option "$a" || die "reset: unknown option '$a'" 2
+  done
+  [ -f "$WAITRON_DIR/compose.yml" ] || die "no box at $WAITRON_DIR — run 'waitron.sh install' first"
+  confirm_reset
+  cd "$WAITRON_DIR"
+  wipe_box
   docker compose up -d --remove-orphans
   if wait_healthy; then announce_ready; else report_unhealthy; fi
 }
 
 main() {
+  local first=""
+  WAITRON_ARGV=("$@")
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --reset) RESET_BEFORE_INSTALL=1 ;;
+      -h | --help) break ;;
+      -*) reset_option "$1" || die "unknown option '$1'" 2 ;;
+      *) break ;;
+    esac
+    first="${first:-$1}"
+    shift
+  done
   local verb="${1:-}"
+  case "$verb" in
+    install | reset | "" | -h | --help) ;;
+    *) die "unknown command '$verb'" 2 ;;
+  esac
+  if [ -n "$first" ]; then
+    [ "$RESET_BEFORE_INSTALL" -eq 1 ] \
+      || die "$first goes with --reset: 'waitron.sh --reset $first install [ref]', or 'waitron.sh reset $first'" 2
+    [ "$verb" = "install" ] || die "--reset goes only with install: 'waitron.sh --reset install [ref]'" 2
+  fi
   case "$verb" in
     install) shift; cmd_install "$@" ;;
     reset)   shift; cmd_reset "$@" ;;
-    ""|-h|--help) usage ;;
-    *) die "unknown command '$verb'" 2 ;;
+    *) usage ;;
   esac
 }
 

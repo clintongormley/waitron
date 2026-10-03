@@ -1440,7 +1440,8 @@ failure. Pointer: `packages/migrations/src/apply-complete.test.ts`.
 image's files and throws `provisioning.database_ahead`; there is no backward migration, so
 installing an older ref after a newer one has already migrated the database can fail to boot with
 this error. `waitron.sh`'s advice on that failure depends on the box: on one that is not stamped
-production, `waitron.sh reset` wipes the database and is the clean way back to a working box; on a
+production, it names `waitron.sh --reset install [ref]`, which wipes the database as
+`waitron.sh reset` does and installs again in one run, the clean way back to a working box; on a
 production box the script refuses to suggest that (a reset there would destroy the fiscal chain) and
 says to install a newer ref instead (#314). It has two callers (`grep -rn assertNotAhead` before
 believing otherwise): boot, in `apps/server/src/node-entry.ts`, and the bucket rebuild's
