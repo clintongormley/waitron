@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { registerIcons } from "@waitron/ui";
+import { registerIcons, type ComboboxOption } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -964,22 +964,45 @@ it("offers every unattached list of both kinds, and attaches the one chosen", as
     extraLists,
     optionLists,
   });
-  const combobox = el.shadowRoot!.querySelector<
-    HTMLElement & { options: { value: string; label: string }[] }
-  >("[data-test=add-modifier]")!;
+  const combobox = el.shadowRoot!.querySelector<HTMLElement & { options: ComboboxOption[] }>(
+    "[data-test=add-modifier]",
+  )!;
   expect(combobox.options.map((option) => option.value)).toEqual([
-    "create-extras",
-    "create-options",
     "extras:shared",
+    "create-extras",
     "options:cooked",
     "options:shared",
+    "create-options",
   ]);
   expect(combobox.options.map((option) => option.label)).toEqual([
-    t("editor.create_extra_list"),
-    t("editor.create_option_list"),
     `Extra bread · ${t("extras.title")}`,
+    t("editor.create_extra_list"),
     `Cooked · ${t("options.title")}`,
     `Cut · ${t("options.title")}`,
+    t("editor.create_option_list"),
+  ]);
+  // Each make-new choice ends its own group, drawn in the primary colour so it does not read as
+  // one more list.
+  expect(combobox.options.map((option) => option.group)).toEqual([
+    t("extras.title"),
+    t("extras.title"),
+    t("options.title"),
+    t("options.title"),
+    t("options.title"),
+  ]);
+  expect(combobox.options.map((option) => Boolean(option.primary))).toEqual([
+    false,
+    true,
+    false,
+    false,
+    true,
+  ]);
+  expect(combobox.options.map((option) => option.icon)).toEqual([
+    undefined,
+    "plus",
+    undefined,
+    undefined,
+    "plus",
   ]);
   combobox.dispatchEvent(
     new CustomEvent("wt-change", {
@@ -992,6 +1015,31 @@ it("offers every unattached list of both kinds, and attaches the one chosen", as
   expect(el.currentValue.modifiers).toEqual([
     { kind: "extras", id: "sauces" },
     { kind: "options", id: "shared" },
+  ]);
+});
+
+it("still offers a kind's make-new choice under its heading once every list of that kind is attached", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: {
+      ...product,
+      modifiers: [
+        { kind: "extras", id: "sauces" },
+        { kind: "extras", id: "shared" },
+      ],
+    },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+    extraLists,
+    optionLists: [],
+  });
+  const combobox = el.shadowRoot!.querySelector<HTMLElement & { options: ComboboxOption[] }>(
+    "[data-test=add-modifier]",
+  )!;
+  expect(combobox.options.map(({ value, group }) => ({ value, group }))).toEqual([
+    { value: "create-extras", group: t("extras.title") },
+    { value: "create-options", group: t("options.title") },
   ]);
 });
 
@@ -1120,6 +1168,45 @@ it("returns the add-a-list control to its placeholder after a choice, keeping fo
   // choice handling just returned, and a manager attaching a second list would have to find it
   // again.
   expect(el.shadowRoot!.activeElement).toBe(combobox);
+});
+
+it("draws each make-new row last under its kind's heading, and clicking it asks for that kind", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, modifiers: [] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+    extraLists,
+    optionLists,
+  });
+  const created = vi.fn();
+  el.addEventListener("wt-create-related", created);
+  const combobox = addModifier(el);
+  await combobox.updateComplete;
+  combobox.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+  await combobox.updateComplete;
+  const groups = [...combobox.shadowRoot!.querySelectorAll<HTMLElement>('[role="group"]')];
+  expect(
+    groups.map((group) => [
+      combobox
+        .shadowRoot!.getElementById(group.getAttribute("aria-labelledby")!)!
+        .textContent!.trim(),
+      [...group.querySelectorAll('[role="option"]')].at(-1)!.textContent!.trim(),
+    ]),
+  ).toEqual([
+    [t("extras.title"), t("editor.create_extra_list")],
+    [t("options.title"), t("editor.create_option_list")],
+  ]);
+  combobox.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+  await combobox.updateComplete;
+  await chooseModifier(el, t("editor.create_extra_list"));
+  await chooseModifier(el, t("editor.create_option_list"));
+  expect(created.mock.calls.map((call) => call[0].detail)).toEqual([
+    { kind: "extras" },
+    { kind: "options" },
+  ]);
+  expect(el.currentValue.modifiers).toEqual([]);
 });
 
 it("shows a refusal naming an attached list beside the Modifiers control", async () => {
