@@ -79,7 +79,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // The integrated (split-transaction) card-pay orchestration, end to end on one venue: P1 commits a
 // walk-up before `collect`, because the provider's payment row has a foreign key to

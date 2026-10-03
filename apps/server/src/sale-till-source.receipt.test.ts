@@ -36,7 +36,7 @@ import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 /**
  * Exercise device authentication through the sale route to a fiscal record.

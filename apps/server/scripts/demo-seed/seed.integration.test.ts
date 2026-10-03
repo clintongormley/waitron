@@ -30,7 +30,7 @@ import { readImageBytes } from "@waitron/media";
 import { seedDemoRestaurant } from "./seed.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
-import { nifWithControlLetter } from "../../src/testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 const LOCALE: SeedLocale = "en";
 const DAY_MS = 24 * 60 * 60 * 1000;

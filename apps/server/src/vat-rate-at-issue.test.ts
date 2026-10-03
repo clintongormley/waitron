@@ -33,7 +33,7 @@ import { addTabRound, parkOrder, placeOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // A release that ships a reduced rate of 4% from 1 January 2027, the shipped table otherwise.
 vi.mock("@waitron/catalogue/src/vat-rates.js", async (importOriginal) => {

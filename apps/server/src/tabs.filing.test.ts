@@ -37,7 +37,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 /**
  * Tabs end to end through a real `VerifactuBackend`: what paying a tab files, and that a refusal

@@ -63,7 +63,7 @@ import {
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // A line takes the VAT class the zone's published menu version froze, when its price locks, and
 // issuance files that stored class's rate on every path. Every product is published at `reduced`

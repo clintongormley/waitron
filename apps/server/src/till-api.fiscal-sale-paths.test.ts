@@ -61,7 +61,7 @@ import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { DRAWER_KICK } from "./receipt-print.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { createStation } from "./kitchen.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // `POST /api/sales`, `POST /api/pay` and the `/api/working-orders` routes driven over HTTP to a
 // GENUINE chained fiscal record, including the lost-response pay retry that must replay the ticket

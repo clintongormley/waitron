@@ -38,7 +38,7 @@ import { createOpenOrder } from "./working-order.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // The whole manifest is migrated because the seed runs the real provisioning plan and `recordSale`.
 // Each case seeds its own sale under its own working-order id, which `sales_working_order_id_key`

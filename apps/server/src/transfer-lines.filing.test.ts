@@ -35,7 +35,7 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { transferItems } from "./bill-actions.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { createOpenOrder } from "./working-order.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 /**
  * H2 after a partial transfer: each tab files its own single fiscal record, at its own locked price.

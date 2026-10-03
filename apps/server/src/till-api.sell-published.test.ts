@@ -62,7 +62,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { createTable } from "./tables.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // A till sells from each menu's PUBLISHED version, driven over HTTP to a genuine chained record:
 // the version a basket asserts, the availability the server overlays, and `/api/menu-state`.

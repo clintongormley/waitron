@@ -34,7 +34,7 @@ import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { joinTables, moveGuests } from "./table-actions.js";
 import { partyRevisionOfOrder } from "./parties.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 /**
  * Joining and merging tabs, through to what gets FILED: every case here pays through a real

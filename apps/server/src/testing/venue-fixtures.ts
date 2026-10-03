@@ -18,7 +18,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "../modules.js";
 import type { TillConfig } from "../till-config.js";
-import { nifWithControlLetter } from "./nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // Shared venue provisioning, extracted so the suites that need it stand up one fixture rather than
 // each keeping a copy.

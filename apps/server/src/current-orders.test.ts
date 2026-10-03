@@ -63,7 +63,7 @@ import {
 import "./errors.js";
 import { splitBill } from "./bill-actions.js";
 import { joinTables } from "./table-actions.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // The release reminder (spec §4 "Remind staff to release the next group"; plan D11), its snooze,
 // and the Current orders read a waiter serves from (spec §4; D8, D18, D19).

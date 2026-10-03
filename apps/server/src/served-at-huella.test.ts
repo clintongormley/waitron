@@ -43,7 +43,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { fireAll, openPartyTab, serveLine } from "./testing/serve-line.js";
 import "./errors.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // The fiscal firewall (CLAUDE.md §5): our own metadata never enters `computeHuella`. `served_at` is
 // a `working_order_lines` field the pay path never reads: `payWorkingOrder` files from the tab's

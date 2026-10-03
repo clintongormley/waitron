@@ -59,7 +59,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { ZoneOffers } from "./testing/zone-offers.js";
 import { openPartyTab } from "./testing/serve-line.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // Exercise the sale path and the chained fiscal write end to end: provision a venue, seed a
 // catalogue, sell, and read the filed record back.

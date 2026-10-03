@@ -62,7 +62,7 @@ import {
 import "./errors.js";
 import { splitBill } from "./bill-actions.js";
 import { cancelLine } from "./testing/cancel-line.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // What serving records, by quantity, on the lines of a party (spec §4, §12 item 5; plan D8, D18,
 // D19). Serving is an operational fact: it never touches a filed sale.

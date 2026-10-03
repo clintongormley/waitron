@@ -55,7 +55,7 @@ import {
   printedCommands,
   printedLines,
 } from "./testing/decode-ticket.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // The manual reprint and drawer-open routes over HTTP, against a GENUINE chained fiscal sale read
 // back and paper enqueued for it.

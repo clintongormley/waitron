@@ -25,7 +25,7 @@ import { listAdjustmentReasons } from "@waitron/adjustments";
 import { seedDemoRestaurant } from "./seed.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
-import { nifWithControlLetter } from "../../src/testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 const LOCALE: SeedLocale = "en";
 

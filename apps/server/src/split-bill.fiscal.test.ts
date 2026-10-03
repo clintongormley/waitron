@@ -33,7 +33,7 @@ import { payWorkingOrder } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // Each case provisions its own venue, so a readback count is that case's alone.
 const LOCALE = "es-ES";

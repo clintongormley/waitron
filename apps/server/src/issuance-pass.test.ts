@@ -63,7 +63,7 @@ import type { GrossOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // Path by path: a line records its classification snapshot when it is added to the order, each
 // filing path copies it onto the sale line, and nothing after it re-classifies.

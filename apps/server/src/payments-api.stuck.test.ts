@@ -62,7 +62,7 @@ import { createOpenOrder } from "./working-order.js";
 import { payWorkingOrderIntegrated } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
-import { nifWithControlLetter } from "./testing/nif.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 /**
  * The manager's way out of a card payment a crash left `attempting`: the stuck list and the
