@@ -1399,7 +1399,14 @@ longer label such as "Minimum choices" widens it further
 at 1280px and phone width, for the owner to pick from, as A202 did. A202's constraint still stands:
 stacked up/down arrows were turned down because each came to 28px tall, below `--wt-tap-min`.
 Options raised but not chosen: narrower buttons on the dashboard only, an ordinary number box on
-the dashboard with the steppers kept for touch screens, and shorter labels.
+the dashboard with the steppers kept for touch screens, and shorter labels. **The owner's starting
+point (2026-10-03):** _"maybe something simpler like amazon's number fields"_, with a screenshot of
+Amazon's basket quantity: one rounded outline, a bin icon at the left (Amazon shows it at quantity
+1, where − would remove the item), the number centred, and + at the right, with plain icons and no
+filled button squares. The icons can keep a `--wt-tap-min` tap area without drawing a box that
+size. Questions for the mockups: where the field's label goes, since that control has none; how
+the blank "No limit" value shows; and what the left button does at the lowest value, since a
+minimum of 0 is not a removal and the extras rows already have their own bin.
 
 **The extras list editor's columns move as products are added (A264, owner 2026-10-03) — OPEN,
 queued.** The owner, on two screenshots of the editor before and after adding a second product:
