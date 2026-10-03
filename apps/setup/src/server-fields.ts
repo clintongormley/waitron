@@ -25,7 +25,6 @@ export interface ServerField {
 }
 
 export const SERVER_FIELDS: Readonly<Record<string, ServerField | undefined>> = {
-  // Refused only for control characters, so advice to choose a different name cannot help.
   legalName: {
     key: "legalName",
     get message() {

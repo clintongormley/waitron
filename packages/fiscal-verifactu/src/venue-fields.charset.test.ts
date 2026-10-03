@@ -117,3 +117,14 @@ describe("the restated description cap matches the record validator's", () => {
     },
   );
 });
+
+describe("the restated legal name cap matches the record validator's", () => {
+  // Both sides of the boundary; the last character is outside the Basic Multilingual Plane, so a
+  // cap counted in UTF-16 units disagrees with the validator at 120.
+  it.each([119, 120, 121])("gives the same verdict for a legal name of %i characters", (length) => {
+    const value = "x".repeat(length - 1) + "😀";
+    expect(boundaryRefuses({ ...GOOD, legalName: value })).toBe(
+      validatorRefuses(recordFor({ nombre: value }), "NombreRazonEmisor"),
+    );
+  });
+});

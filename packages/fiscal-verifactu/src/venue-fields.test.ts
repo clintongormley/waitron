@@ -44,6 +44,15 @@ describe("validateVenueFiscalFields", () => {
     );
   });
 
+  it("refuses a legal name past AEAT's 120-character cap, counted in characters, at the boundary", () => {
+    // The last character is two UTF-16 units: a cap counted in units would refuse the 120.
+    const name = (length: number) => "x".repeat(length - 1) + "😀";
+    expect(() => validateVenueFiscalFields({ ...GOOD, legalName: name(120) })).not.toThrow();
+    expect(() => validateVenueFiscalFields({ ...GOOD, legalName: name(121) })).toThrow(
+      expect.objectContaining({ code: "setup.request_invalid", params: { field: "legalName" } }),
+    );
+  });
+
   it("refuses a control character in the operation description", () => {
     expect(() =>
       validateVenueFiscalFields({ ...GOOD, operationDescription: "Venta\u0001aqui" }),

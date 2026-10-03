@@ -1172,11 +1172,16 @@ describe("POST /setup-api/provision — the regime's rules on the operator's ven
       (b) => void (asRec(asRec(b.venue).location).operationDescription = "Barra\u0007principal"),
     ],
     // Without this row `legalName` could be wired to any other string field and every test would
-    // still pass: the legal name is only checked for control characters.
+    // still pass.
     [
       "a legal name carrying a character XML forbids",
       "legalName",
       (b) => void (asRec(b.venue).legalName = "Waitron\u0007Dev SL"),
+    ],
+    [
+      "a legal name over AEAT's 120 characters",
+      "legalName",
+      (b) => void (asRec(b.venue).legalName = "W".repeat(121)),
     ],
   ])("refuses %s, naming the field and provisioning nothing", async (_label, field, mutate) => {
     const app = new Hono();
