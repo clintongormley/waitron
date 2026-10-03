@@ -2,7 +2,18 @@ import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, ticketItems, watcherItemMarks } from "@waitron/db";
+import {
+  deviceProfiles,
+  kitchenStations,
+  locations,
+  ticketItems,
+  tills,
+  watcherItemMarks,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
+import { seedNode } from "@waitron/db/testing/seed.js";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { loginWithPin, persons } from "@waitron/identity";
@@ -86,7 +97,7 @@ async function fixture() {
     log,
   );
   const sessionCookie = `${SESSION_COOKIE}=${session.token}`;
-  return { v, app, person, pass, runner, a, b, c, sessionCookie };
+  return { v, app, person, profileId: profile!.id, pass, runner, a, b, c, sessionCookie };
 }
 
 function items(board: {
@@ -109,13 +120,10 @@ describe("watcher routes", () => {
     });
     const managed = await f.app.request("/management-api/devices");
     expect(managed.status).toBe(401);
-    const [profile] = await inTx(f.v, (tx) =>
-      tx.select({ id: deviceProfiles.id }).from(deviceProfiles).limit(1),
-    );
     const ownStation = await inTx(f.v, (tx) => createStation(tx, f.v.cfg, { name: "Grill" }));
     const joined = await enrolDeviceForTest(suite.db, f.v.cfg, {
       name: "Grill screen",
-      profileId: profile!.id,
+      profileId: f.profileId,
       stationId: ownStation.id,
     });
     const cookie = `${DEVICE_COOKIE}=${joined.deviceId}.${joined.token}`;
@@ -221,6 +229,111 @@ describe("watcher routes", () => {
       tx.select().from(watcherItemMarks).where(eq(watcherItemMarks.ticketItemId, itemId!)),
     );
     expect(personMark).toMatchObject({ doneByPersonId: f.person!.id, doneByDeviceId: null });
+  });
+
+  it("refuses foreign items atomically when Done also names a local item", async () => {
+    const f = await fixture();
+    const seated = await seat(f.v, await f.v.table("Inside"));
+    await orderForParty(f.v, seated.partyId, ["Burger"], seated.tabId);
+    const [local] = await inTx(f.v, (tx) =>
+      tx
+        .select({ id: ticketItems.id })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, seated.tabId)),
+    );
+    const [foreignLocation] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Other venue",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Restaurante",
+      })
+      .returning({ id: locations.id });
+    const [foreignTill] = await suite.db
+      .insert(tills)
+      .values({ locationId: foreignLocation!.id, name: "Other till" })
+      .returning({ id: tills.id });
+    const foreignNode = await seedNode(suite.db, brandLocationId(foreignLocation!.id));
+    const [foreignStation] = await suite.db
+      .insert(kitchenStations)
+      .values({ locationId: foreignLocation!.id, name: "Other kitchen" })
+      .returning({ id: kitchenStations.id });
+    const [foreignOrder] = await suite.db
+      .insert(workingOrders)
+      .values({ tillId: foreignTill!.id, nodeId: foreignNode, orderNumber: 1, status: "open" })
+      .returning({ id: workingOrders.id });
+    const [foreignLine] = await suite.db
+      .insert(workingOrderLines)
+      .values({
+        workingOrderId: foreignOrder!.id,
+        lineNo: 1,
+        name: "Foreign dish",
+        descriptions: { "es-ES": "Foreign dish" },
+        quantity: 1000,
+        unitPriceGross: 100,
+        vatClass: "general",
+        lineTotal: 100,
+      })
+      .returning({ id: workingOrderLines.id });
+    const [foreignItem] = await suite.db
+      .insert(ticketItems)
+      .values({
+        nodeId: foreignNode,
+        workingOrderId: foreignOrder!.id,
+        workingOrderLineId: foreignLine!.id,
+        stationId: foreignStation!.id,
+      })
+      .returning({ id: ticketItems.id });
+    for (const [path, cookie] of [
+      [`/api/watchers/${f.pass.id}/done`, f.sessionCookie],
+      ["/api/device/watcher/done", f.a.cookie],
+    ]) {
+      const response = await f.app.request(path!, {
+        method: "POST",
+        headers: { cookie: cookie!, "content-type": "application/json" },
+        body: JSON.stringify({ ticketItemIds: [local!.id, foreignItem!.id], done: true }),
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "ticketItemIds" } },
+      });
+      expect(
+        await inTx(f.v, (tx) =>
+          tx.select().from(watcherItemMarks).where(eq(watcherItemMarks.watcherId, f.pass.id)),
+        ),
+      ).toEqual([]);
+    }
+    const doneLocal = await f.app.request(`/api/watchers/${f.pass.id}/done`, {
+      method: "POST",
+      headers: { cookie: f.sessionCookie, "content-type": "application/json" },
+      body: JSON.stringify({ ticketItemIds: [local!.id], done: true }),
+    });
+    expect(doneLocal.status).toBe(204);
+    const mixedUndo = await f.app.request("/api/device/watcher/done", {
+      method: "POST",
+      headers: { cookie: f.a.cookie, "content-type": "application/json" },
+      body: JSON.stringify({ ticketItemIds: [local!.id, foreignItem!.id], done: false }),
+    });
+    expect(mixedUndo.status).toBe(400);
+    expect(
+      await inTx(f.v, (tx) =>
+        tx
+          .select({ ticketItemId: watcherItemMarks.ticketItemId })
+          .from(watcherItemMarks)
+          .where(eq(watcherItemMarks.watcherId, f.pass.id)),
+      ),
+    ).toEqual([{ ticketItemId: local!.id }]);
+    const undoLocal = await f.app.request("/api/device/watcher/done", {
+      method: "POST",
+      headers: { cookie: f.a.cookie, "content-type": "application/json" },
+      body: JSON.stringify({ ticketItemIds: [local!.id], done: false }),
+    });
+    expect(undoLocal.status).toBe(204);
+    expect(
+      await inTx(f.v, (tx) =>
+        tx.select().from(watcherItemMarks).where(eq(watcherItemMarks.watcherId, f.pass.id)),
+      ),
+    ).toEqual([]);
   });
 
   it("refuses malformed Done and returns a removed watcher's empty board to its device", async () => {

@@ -1,7 +1,13 @@
 import "./errors.js";
 import { and, eq, inArray, isNull, ne, notExists } from "drizzle-orm";
 import { AppError, worstBand } from "@waitron/shared";
-import { ticketItems, watcherItemMarks, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  ticketItems,
+  tills,
+  watcherItemMarks,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 import { orderWatchZones } from "./watch-zones.js";
@@ -129,26 +135,40 @@ export async function markWatcherItems(
   const watcher = await readWatcher(tx, cfg, watcherId);
   if (!watcher?.active) throw new AppError("watcher.not_found", { watcherId });
   if (!ticketItemIds.length) return;
+  const rows = await tx
+    .select({ id: ticketItems.id, locationId: tills.locationId })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    // The item has a denormalised order id; both paths must name the same order before we write.
+    .innerJoin(
+      workingOrders,
+      and(
+        eq(workingOrders.id, workingOrderLines.workingOrderId),
+        eq(workingOrders.id, ticketItems.workingOrderId),
+      ),
+    )
+    .innerJoin(tills, eq(tills.id, workingOrders.tillId))
+    .where(inArray(ticketItems.id, [...ticketItemIds]));
+  if (rows.some(({ locationId }) => locationId !== cfg.locationId)) {
+    throw new AppError("management.request_invalid", { field: "ticketItemIds" });
+  }
+  const localIds = rows.map(({ id }) => id);
+  if (!localIds.length) return;
   if (!done) {
     await tx
       .delete(watcherItemMarks)
       .where(
         and(
           eq(watcherItemMarks.watcherId, watcherId),
-          inArray(watcherItemMarks.ticketItemId, [...ticketItemIds]),
+          inArray(watcherItemMarks.ticketItemId, localIds),
         ),
       );
     return;
   }
-  const rows = await tx
-    .select({ id: ticketItems.id })
-    .from(ticketItems)
-    .where(inArray(ticketItems.id, [...ticketItemIds]));
-  if (!rows.length) return;
   await tx
     .insert(watcherItemMarks)
     .values(
-      rows.map(({ id }) => ({
+      localIds.map((id) => ({
         watcherId,
         ticketItemId: id,
         doneAt: at.toISOString(),
