@@ -2358,7 +2358,8 @@ export async function removeFromLine(
   operatorId: string | undefined,
 ): Promise<void> {
   const wasStarted = isStarted(target.state);
-  const extra = target.parentLineId === null ? null : await readCancelledExtra(tx, target.id);
+  const extra =
+    target.parentLineId === null ? null : await readCancelledExtra(tx, target.id, cfg.locale);
   const childItems =
     target.parentLineId === null
       ? ((await dishKitchenItems(tx, [target.id])).get(target.id) ?? []).filter(

@@ -48,6 +48,7 @@ import {
   enqueueKitchenTickets,
   enqueueStationMoved,
   orderTableLabel,
+  readCancelledExtra,
   reprintOrderTickets,
 } from "./kitchen-print.js";
 import { decodeTicket, printedCommands, printedLines } from "./testing/decode-ticket.js";
@@ -1178,6 +1179,33 @@ describe("a dish sold by the piece prints no unit", () => {
 });
 
 describe("dish extras on kitchen tickets", () => {
+  it("names a cancelled weighted extra by its saved physical amount", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const label = await asApp(cfg, async (tx) => {
+      const station = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const dish = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: station.id });
+      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, dish, [
+        { name: "Jamón", customerName: "Jamón cliente", kitchenName: "JAMÓN" },
+      ]);
+      const [kg] = await tx.select({ id: units.id }).from(units).where(eq(units.seedKey, "kg"));
+      await assignProductUnit(tx, productIds[0]!, kg!.id);
+      await tx.execute(sql`update extra_list_items set portion = 50, max_quantity = 3
+        where list_id = ${listId} and product_id = ${productIds[0]}`);
+      await fireNewOrder(tx, cfg, [
+        {
+          productId: dish,
+          quantity: "1",
+          extras: [{ listId, picks: [{ productId: productIds[0]!, quantity: 3 }] }],
+        },
+      ]);
+      const child = await tx.execute<{ id: string }>(sql`
+        select id from working_order_lines where parent_line_id is not null`);
+      return (await readCancelledExtra(tx, child.rows[0]!.id, cfg.locale)).label;
+    });
+
+    expect(label).toBe("Jamón 0.150 kg");
+  });
+
   it("prints the physical amount of a weighted extra from its saved unit", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, jobs } = await asApp(cfg, async (tx) => {

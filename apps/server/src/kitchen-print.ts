@@ -945,12 +945,14 @@ export interface CancelledExtra {
 export async function readCancelledExtra(
   tx: Transaction,
   extraLineId: string,
+  locale: string,
 ): Promise<CancelledExtra> {
   const extra = alias(workingOrderLines, "extra");
   const [row] = await tx
     .select({
       name: extra.name,
       quantity: extra.quantity,
+      unitName: extra.unitName,
       dishLineId: workingOrderLines.id,
       dishQuantity: workingOrderLines.quantity,
       dishGroupId: workingOrderLines.groupId,
@@ -965,11 +967,13 @@ export async function readCancelledExtra(
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(extra.id, extraLineId));
   const found = row!;
+  const soldInEach = (await VENUE_SERVICE.readLinesSoldInEach(tx, [extraLineId])).has(extraLineId);
   return {
     label: extraLabel(
       found.name,
       thousandthsToDecimal(found.quantity),
       thousandthsToDecimal(found.dishQuantity),
+      found.unitName === null || soldInEach ? undefined : ticketName(found.unitName, locale),
     ),
     dishLineId: found.dishLineId,
     dishGroupId: found.dishGroupId,
