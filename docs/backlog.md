@@ -2924,17 +2924,12 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   - **Task 13 (#903, standalone ordering).** A product's `ordering` is Public, Staff only or Not
     sold separately; Staff only behaves exactly as Public until guest ordering exists.
   - **Task 14 (#721, several payments against one bill, the server).** The owner's rulings at
-    landing are recorded in the design. **OPEN — reads ordered by a timestamp with no
-    tie-break:** several payment and refund reads order by a timestamp alone, so which of two rows
-    from one millisecond comes first is whatever order SQLite reads them in, and that order depends
-    on the indexes. Whether any of these reads returns the wrong order today is not checked. They
-    are `apps/server/src/payments-api.ts` (the stuck card payments, and the pending bill payments
-    and refunds), `apps/server/src/bill-payments-loop.ts` (pending bill payments and refunds), and
-    `packages/payments/src/store.ts`: its lists of payments and refunds, and
-    `selectCapturedForWorkingOrder`, which keeps the most recently settled of two captured or
-    accepted-offline payments for one order. **Next action:** write two rows with one timestamp
-    through each, with ids made to sort against the writing order, and add the `rowid` tie-break
-    wherever the order can come back different (as A123 and A136 did elsewhere).
+    landing are recorded in the design. **Its payment and refund reads ordered by a timestamp alone
+    now break a same-millisecond tie with `rowid` — DONE (W2, 2026-10-03).**
+    - **Open:** `apps/server/src/orders-list.ts` (#1027) sorts bill payments and their refunds by
+      `created_at, id` and tenders by `id` alone; ids are `randomUUID()`, so a tie, and the tenders'
+      whole order, comes out random. The plan asked for `created_at, rowid` in `readBillPayments`.
+      **Next action:** a `rowid` tie-break, with a test whose ids sort against the writing order.
   - **Task 15 (#956, several payments on the till).** Open:
     - **The generic "received more than the bill" text also answers a comp or discount.** The
       till's `bill.received_exceeds_total` text (`apps/till/src/i18n/codes.ts`, "Move fewer items,
