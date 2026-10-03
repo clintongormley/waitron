@@ -1250,6 +1250,59 @@ it("closes an allergen dropdown on Escape without closing the product's window",
   );
 });
 
+it("saves an allergen clicked in the dropdown's list after Escape ends the edit", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, allergens: {} },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const cancelled = vi.fn();
+  el.addEventListener("wt-cancel", cancelled);
+  await openSection(el, "nutrition");
+  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  await picker.updateComplete;
+  await userEvent.click(
+    picker.shadowRoot!.querySelector<HTMLElement>('[data-test="allergens-line"]')!,
+  );
+  await vi.waitFor(() =>
+    expect(picker.shadowRoot!.querySelector('[data-test="allergens"]')).not.toBeNull(),
+  );
+  const combobox =
+    picker.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      '[data-test="allergens"]',
+    )!;
+  await combobox.updateComplete;
+  await userEvent.click(combobox.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+  const panel = combobox.shadowRoot!.querySelector<HTMLElement>("#panel")!;
+  await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(true));
+  const gluten = [...combobox.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (row) => row.textContent!.trim() === allergenName("gluten"),
+  )!;
+  await userEvent.click(gluten);
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(false));
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() =>
+    expect(picker.shadowRoot!.querySelector('[data-test="allergens-line"]')).not.toBeNull(),
+  );
+  expect(picker.shadowRoot!.querySelector('[data-test="allergens-summary"]')!.textContent).toBe(
+    allergenName("gluten"),
+  );
+  expect(cancelled).not.toHaveBeenCalled();
+  expect(el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!.open).toBe(
+    true,
+  );
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit).toHaveBeenCalledOnce();
+  expect(submit.mock.calls[0]![0].detail.value.allergens).toEqual({
+    gluten: { presence: "contains" },
+  });
+});
+
 it("offers all six product dietary declarations without changing the saved set", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,

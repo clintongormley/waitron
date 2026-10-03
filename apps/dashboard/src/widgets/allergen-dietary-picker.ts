@@ -53,7 +53,6 @@ export class AllergenDietaryPicker extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) value: AllergenDietaryValue = EMPTY;
   @state() private editing: Field | null = null;
-  /** Products offer the full declaration set; modifier choices keep the four-item default. */
   @property({ attribute: false }) dietaryOptions: readonly DietaryLabel[] = DIETARY_SUITABILITY;
 
   #emit(next: AllergenDietaryValue): void {
@@ -93,12 +92,12 @@ export class AllergenDietaryPicker extends LitElement {
     if (this.editing === field) this.editing = null;
   }
 
-  /** Escape ends the edit and puts focus back on the line; leaving by Tab or a click leaves focus
-   * where it went. wt-combobox stops the Escape that closes its own open list, so that one never
-   * arrives here; this one is prevented, or the window around the editor closes with it. */
+  /** wt-combobox stops the Escape that closes its own open list, so that one never arrives here;
+   * this one is prevented, or the window around the editor closes with it. */
   #onEditorKeydown(field: Field, event: KeyboardEvent): void {
     if (event.key !== "Escape") return;
     event.preventDefault();
+    event.stopPropagation();
     this.#finishEditing(field);
     void this.#focus(`[data-test="${field}-line"]`);
   }
@@ -125,9 +124,7 @@ export class AllergenDietaryPicker extends LitElement {
       class="line"
       data-test=${`${field}-line`}
       ?disabled=${this.busy}
-      aria-label=${t("modifiers.line_edit_name")
-        .replace("{label}", label)
-        .replace("{value}", summary)}
+      aria-label=${t("modifiers.edit_named").replace("{label}", label).replace("{value}", summary)}
       @click=${(event: Event) => this.#edit(field, event)}
     >
       <span class="label">${label}:</span>

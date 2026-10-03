@@ -42,6 +42,42 @@ function deepActiveElement(): Element | null {
   return active;
 }
 
+const realChoice = {
+  allergens: {
+    label: () => allergenName("gluten"),
+    expected: { allergens: ["gluten"], dietary: [] },
+  },
+  dietary: {
+    label: () => t("editor.diet.vegan"),
+    expected: { allergens: [], dietary: ["vegan"] },
+  },
+} as const;
+
+async function chooseThroughList(
+  el: AllergenDietaryPicker,
+  field: "allergens" | "dietary",
+): Promise<HTMLElement> {
+  await userEvent.click(line(el, field));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector(`[data-test="${field}"]`)).not.toBeNull(),
+  );
+  const combobox = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    `[data-test="${field}"]`,
+  )!;
+  await combobox.updateComplete;
+  await userEvent.click(combobox.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+  const panel = combobox.shadowRoot!.querySelector<HTMLElement>("#panel")!;
+  await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(true));
+  const row = [...combobox.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (option) => option.textContent!.trim() === realChoice[field].label(),
+  );
+  if (row === undefined)
+    throw new Error(`the ${field} list offers no ${realChoice[field].label()}`);
+  await userEvent.click(row);
+  await el.updateComplete;
+  return combobox;
+}
+
 describe("allergen-dietary-picker", () => {
   it("shows each field as one line reading its name and its values, or None specified", async () => {
     const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
@@ -82,12 +118,12 @@ describe("allergen-dietary-picker", () => {
     expect(line(el, "allergens").tagName).toBe("BUTTON");
     expect(line(el, "allergens").type).toBe("button");
     expect(line(el, "allergens").getAttribute("aria-label")).toBe(
-      t("modifiers.line_edit_name")
+      t("modifiers.edit_named")
         .replace("{label}", t("modifiers.allergens"))
         .replace("{value}", [allergenName("milk"), allergenName("eggs")].join(", ")),
     );
     expect(line(el, "dietary").getAttribute("aria-label")).toBe(
-      t("modifiers.line_edit_name")
+      t("modifiers.edit_named")
         .replace("{label}", t("modifiers.dietary_preferences"))
         .replace("{value}", t("modifiers.none_specified")),
     );
@@ -213,6 +249,27 @@ describe("allergen-dietary-picker", () => {
     expect(el.shadowRoot!.querySelector('[data-test="allergens"]')).toBe(combobox);
   });
 
+  it("stops the Escape that ends the edit from reaching anything around the picker", async () => {
+    const { el, host } = await mountWidget<AllergenDietaryPicker>(
+      "dashboard-allergen-dietary-picker",
+      { value: { allergens: ["milk"], dietary: [] } },
+    );
+    const escapesAround: KeyboardEvent[] = [];
+    host.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") escapesAround.push(event);
+    });
+    line(el, "allergens").focus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="allergens"]')).not.toBeNull(),
+    );
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="allergens"]')).toBeNull(),
+    );
+    expect(escapesAround).toEqual([]);
+  });
+
   it("emits the chosen allergens and re-dispatches only its own wt-change", async () => {
     const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
       value: { allergens: [], dietary: [] },
@@ -248,6 +305,58 @@ describe("allergen-dietary-picker", () => {
     // vegan precedes vegetarian in DIETARY_SUITABILITY, so the emitted list keeps that fixed order.
     expect(changes.at(-1)).toEqual({ allergens: ["milk"], dietary: ["vegan", "vegetarian"] });
   });
+
+  it.each(["allergens", "dietary"] as const)(
+    "keeps a %s option clicked in the list once Escape ends the edit",
+    async (field) => {
+      const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
+        value: { allergens: [], dietary: [] },
+      });
+      const changes = trackChanges(el);
+      const combobox = await chooseThroughList(el, field);
+      expect(changes).toEqual([realChoice[field].expected]);
+      const panel = combobox.shadowRoot!.querySelector<HTMLElement>("#panel")!;
+      expect(panel.matches(":popover-open")).toBe(true);
+      await userEvent.keyboard("{Escape}");
+      await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(false));
+      expect(el.shadowRoot!.querySelector(`[data-test="${field}"]`)).toBe(combobox);
+      await userEvent.keyboard("{Escape}");
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector(`[data-test="${field}"]`)).toBeNull(),
+      );
+      expect(changes).toEqual([realChoice[field].expected]);
+      expect(el.value).toEqual(realChoice[field].expected);
+      expect(el.shadowRoot!.querySelector(`[data-test="${field}-summary"]`)!.textContent).toBe(
+        realChoice[field].label(),
+      );
+    },
+  );
+
+  it.each(["allergens", "dietary"] as const)(
+    "keeps a %s option clicked in the list once focus moves elsewhere",
+    async (field) => {
+      const { el, host } = await mountWidget<AllergenDietaryPicker>(
+        "dashboard-allergen-dietary-picker",
+        { value: { allergens: [], dietary: [] } },
+      );
+      const elsewhere = document.createElement("button");
+      elsewhere.textContent = "Elsewhere";
+      // Above the picker: the open list is drawn below its trigger, on top of whatever is there.
+      host.prepend(elsewhere);
+      const changes = trackChanges(el);
+      await chooseThroughList(el, field);
+      expect(changes).toEqual([realChoice[field].expected]);
+      await userEvent.click(elsewhere);
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector(`[data-test="${field}"]`)).toBeNull(),
+      );
+      expect(changes).toEqual([realChoice[field].expected]);
+      expect(el.value).toEqual(realChoice[field].expected);
+      expect(el.shadowRoot!.querySelector(`[data-test="${field}-summary"]`)!.textContent).toBe(
+        realChoice[field].label(),
+      );
+    },
+  );
 
   it("returns to the line when an edited field loses focus", async () => {
     const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
