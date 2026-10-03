@@ -1332,11 +1332,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       const zoneId = await resolveHttpOrderZone(deps, body.lines.length, body.zoneId);
       // The device supplies `tillId`; `nodeId`/`seriesId`, the SIF and chain key, stay the venue's.
-      const saleCfg = sendingCfg(
-        await deviceTillCfg({ ...deps, cfg }, c, session.device),
-        c,
-        session.device,
-      );
+      const saleCfg = sendingCfg(deviceTillCfg(cfg, session.device), c, session.device);
       if (body.tender?.method === "cash") assertTakesCash(session.device);
       const result = await recordTillSale(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
@@ -1375,11 +1371,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         requireUuidParam(body.readerId, "CardReaderId");
       }
       // Resolved after the capability firewall so its refusal keeps its status.
-      const saleCfg = sendingCfg(
-        { ...cfg, tillId: await requireSaleTillId(deps, c, device) },
-        c,
-        device,
-      );
+      const saleCfg = sendingCfg({ ...cfg, tillId: requireSaleTillId(device) }, c, device);
 
       const { provider, reader } = await resolveCardCollector(deps, device.deviceId, body.readerId);
       const outcome = await payWorkingOrderIntegrated(
@@ -1478,7 +1470,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         revision?: unknown;
       }>(c);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const revision = await withSaleTillWhenIssuing(deps, c, cfg, session.device, (saleCfg) =>
+      const revision = await withSaleTillWhenIssuing(c, cfg, session.device, (saleCfg) =>
         updateHeldOrder(
           { db: deps.db },
           sendCfg,
@@ -1514,7 +1506,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       // The device's till reaches the fiscal record only; the `order_placed` amendment keeps the
       // box's configured `cfg.tillId`, matching `cancelPlacedOrder`.
-      const saleTillId = await requireSaleTillId(deps, c, session.device);
+      const saleTillId = requireSaleTillId(session.device);
       const result = await placeOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         sendingCfg(cfg, c, session.device),
@@ -1765,9 +1757,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId, sessionId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const device = session.device;
-      await assertNotHandheld(deps, c, "drawer_open", device);
+      assertNotHandheld(device, "drawer_open");
       await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open", device);
-      const drawerCfg = await deviceTillCfg({ ...deps, cfg }, c, device);
+      const drawerCfg = deviceTillCfg(cfg, device);
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
       const attempts = overridePinAttempts(pinThrottle, session.deviceId);
       const toCheck = await drawerOverrideToCheck(deps.db, cfg, sessionId, body);
@@ -1829,7 +1821,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await readJsonBody<{ tender: TillTender }>(c);
       // The device supplies `tillId`; `nodeId`/`seriesId`, the SIF and chain key, stay the venue's.
-      const saleCfg = await deviceTillCfg({ ...deps, cfg }, c, session.device);
+      const saleCfg = deviceTillCfg(cfg, session.device);
       if (body.tender?.method === "cash") assertTakesCash(session.device);
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
@@ -1867,7 +1859,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         id,
         body.reason,
         { personId, sessionId, attempts: overridePinAttempts(pinThrottle, session.deviceId) },
-        () => requireSaleTillId(deps, c, session.device),
+        () => Promise.resolve(requireSaleTillId(session.device)),
         override,
       );
       return c.body(null, 200);
@@ -2533,7 +2525,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { revision, ...patch } = await readJsonBody<OrderLinePatch & { revision?: unknown }>(c);
       const copy = requireRevision(revision);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const saved = await withSaleTillWhenIssuing(deps, c, cfg, session.device, (saleCfg) =>
+      const saved = await withSaleTillWhenIssuing(c, cfg, session.device, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
           const revision = await updateOrderLine(tx, sendCfg, id, lineNo, patch, copy, personId);
           await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
@@ -2672,7 +2664,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = asObject(await readRawJsonBody<unknown>(c));
       const transfers = requireTransfers(body.transfers);
       const command = billCommand(personId, body);
-      const result = await withSaleTillWhenIssuing(deps, c, cfg, session.device, (saleCfg) =>
+      const result = await withSaleTillWhenIssuing(c, cfg, session.device, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
           const split = await splitBill(tx, cfg, billId, transfers, command);
           await issueIfFullyPaid(tx, fiscal, saleCfg, billId, personId);

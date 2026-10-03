@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { deviceId as brandDeviceId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceId, LocationId, NodeId } from "@waitron/shared";
 import type { Database } from "../client.js";
@@ -58,13 +59,12 @@ export async function seedKitchenStation(
 let deviceCounter = 0;
 
 /**
- * Pairs one active device at `locationId`, on `profileId` or on a new profile of `formFactor` (till
- * by default).
+ * Pairs one active device at `locationId`, or on the existing till `tillId` at that till's location,
+ * on `profileId` or on a new profile of `formFactor` (till by default).
  */
 export async function seedDevice(
   db: Database,
-  opts: {
-    locationId: LocationId;
+  opts: ({ locationId: LocationId; tillId?: never } | { tillId: string; locationId?: never }) & {
     label?: string;
     formFactor?: "till" | "phone-portrait" | "tablet-landscape";
     capabilities?: string[];
@@ -86,14 +86,20 @@ export async function seedDevice(
         .returning({ id: deviceProfiles.id })
     )[0]!.id;
   // `device_binding_rule_insert` refuses a device that is not a kds screen unless it names a till.
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId: opts.locationId, name: label })
-    .returning({ id: tills.id });
+  const [till] =
+    opts.tillId === undefined
+      ? await db
+          .insert(tills)
+          .values({ locationId: opts.locationId, name: label })
+          .returning({ id: tills.id, locationId: tills.locationId })
+      : await db
+          .select({ id: tills.id, locationId: tills.locationId })
+          .from(tills)
+          .where(eq(tills.id, opts.tillId));
   const [row] = await db
     .insert(devices)
     .values({
-      locationId: opts.locationId,
+      locationId: till!.locationId,
       deviceProfileId: profileId,
       tillId: till!.id,
       label,

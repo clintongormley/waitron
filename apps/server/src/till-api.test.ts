@@ -933,6 +933,37 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
     expect(await res.json()).toEqual(await sessionOnSeededDevice(rows[0]!.id));
   });
 
+  it("records a sighting of the session's device when one is due, at most once a minute", async () => {
+    const deviceId = await seedSessionDevice(suite.db, cfg);
+    const token = await openSession(suite.db, deviceId);
+    const request = () =>
+      guardApp(suite.db).request("/whoami", { headers: { cookie: `${SESSION_COOKIE}=${token}` } });
+    const lastSeen = async () =>
+      (
+        await suite.db.execute<{ last_seen_at: string | null }>(
+          sql`select last_seen_at from devices where id = ${deviceId}`,
+        )
+      ).rows[0]!.last_seen_at;
+    const setLastSeen = (msAgo: number) =>
+      suite.db.execute(
+        sql`update devices set last_seen_at = ${new Date(Date.now() - msAgo).toISOString()} where id = ${deviceId}`,
+      );
+
+    expect(await lastSeen()).toBeNull();
+    expect((await request()).status).toBe(200);
+    expect(await lastSeen()).not.toBeNull();
+
+    await setLastSeen(30_000);
+    const recent = await lastSeen();
+    expect((await request()).status).toBe(200);
+    expect(await lastSeen()).toBe(recent);
+
+    await setLastSeen(120_000);
+    const stale = await lastSeen();
+    expect((await request()).status).toBe(200);
+    expect(Date.parse((await lastSeen())!)).toBeGreaterThan(Date.parse(stale!));
+  });
+
   it("REJECTS (401 device.unauthorized) an open session whose device has since been revoked", async () => {
     const deviceId = await seedSessionDevice(suite.db, cfg);
     const token = await openSession(suite.db, deviceId);
@@ -1830,6 +1861,44 @@ describe("the device checks read the session's device, not the device cookie", (
     expect(await res.json()).toMatchObject({ error: { code: "device.cash_not_allowed" } });
   });
 
+  /** The cookie of a fresh till device whose profile allows `capabilities`. */
+  async function deviceCookieWith(capabilities: string[]): Promise<string> {
+    const profileId = await seedDeviceProfile(
+      suite.db,
+      `Cookie profile ${randomUUID()}`,
+      capabilities,
+      null,
+    );
+    return (await enrolTillDevice(suite.db, profileId)).cookie;
+  }
+
+  it("refuses a cash sale from a session on a device that does not take cash, though the cookie names one that does", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${await sessionOnDeviceWith(["open-cash-drawer"])}; ${await deviceCookieWith(["take-cash"])}`;
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
+        tender: { method: "cash", amount: "10.00" },
+      }),
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: { code: "device.cash_not_allowed" } });
+  });
+
+  it("refuses a drawer open from a session on a device that may not open it, though the cookie names one that may", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${await sessionOnDeviceWith(["take-cash"])}; ${await deviceCookieWith(["open-cash-drawer"])}`;
+    const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({
+      error: { code: "device.forbidden_action", params: { action: "drawer_open" } },
+    });
+  });
+
   it("refuses a drawer open sent with no device cookie from a session on a device that may not open it", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -2120,7 +2189,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     }
   });
 
-  it("POST parks an order attributed to the session's till and returns { id, orderNumber }", async () => {
+  it("POST parks an order on the configured till and returns { id, orderNumber }", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;

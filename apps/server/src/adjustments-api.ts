@@ -144,7 +144,7 @@ export function mountAdjustmentsApi(
       const toCheck = await approverToCheck(deps.db, ask, parsedApprover, deps.venueLocale);
       const answer = await withPinCheckAhead(deps.db, toCheck, attempts, (checked) => {
         const approver = withCheck(parsedApprover, checked);
-        return withSaleTillWhenIssuing(deps, c, cfg, session.device, (saleCfg) =>
+        return withSaleTillWhenIssuing(c, cfg, session.device, (saleCfg) =>
           withTransaction(deps.db, async (tx) => {
             const applied = await applyAdjustment(
               tx,

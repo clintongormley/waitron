@@ -23,8 +23,9 @@ import {
   seedSecondChain,
   type SeededDrain,
 } from "../test/drain-fixtures.js";
-import { seedSessionDevice, seedTenantWithSif } from "../test/fixtures.js";
+import { seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 // The full manifest: `recordVoid` authorizes through identity's persons and sessions.
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -114,7 +115,7 @@ describe("drain — happy path, an anulación row", () => {
       sql`insert into persons (id, created_at, display_name, pin_hash, role)
           values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
     );
-    const deviceId = await seedSessionDevice(suite.db, tillId);
+    const deviceId = (await seedDevice(suite.db, { tillId: tillId })).deviceId;
     const voidSession = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
     );
@@ -1122,7 +1123,7 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
       sql`insert into persons (id, created_at, display_name, pin_hash, role)
           values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
     );
-    const deviceId = await seedSessionDevice(suite.db, venue.tillId);
+    const deviceId = (await seedDevice(suite.db, { tillId: venue.tillId })).deviceId;
     const session = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
     );

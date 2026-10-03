@@ -180,14 +180,9 @@ function requireBillParam(id: string): string {
 }
 
 /** A sale made during a device's request files on that device's own till ({@link deviceTillCfg}). */
-async function deviceSaleCfg<C extends TillConfig>(
-  deps: TillApiDeps,
-  cfg: C,
-  c: Context,
-  device: DeviceBinding,
-): Promise<C> {
+function deviceSaleCfg<C extends TillConfig>(cfg: C, c: Context, device: DeviceBinding): C {
   return {
-    ...(await deviceTillCfg({ ...deps, cfg }, c, device)),
+    ...deviceTillCfg(cfg, device),
     sendingDeviceId: device.deviceId,
     madeHereSink: madeHereSinkFor(c),
   };
@@ -199,7 +194,6 @@ async function deviceSaleCfg<C extends TillConfig>(
  * when an invoice is due.
  */
 export async function withSaleTillWhenIssuing<T>(
-  deps: TillApiDeps,
   c: Context,
   cfg: TillConfig,
   device: DeviceBinding,
@@ -213,7 +207,7 @@ export async function withSaleTillWhenIssuing<T>(
     if (!(error instanceof SaleTillRequired)) throw error;
     for (const id of sink) if (!before.has(id)) sink.delete(id);
   }
-  return write(await deviceSaleCfg(deps, cfg, c, device));
+  return write(deviceSaleCfg(cfg, c, device));
 }
 
 /**
@@ -256,7 +250,7 @@ export function mountBillPaymentsApi(
       const body = asObject(await readRawJsonBody<unknown>(c));
       const request = parseRequest(body);
       if (request.entry !== "reader") {
-        const saleCfg = await deviceSaleCfg(deps, cfg, c, session.device);
+        const saleCfg = deviceSaleCfg(cfg, c, session.device);
         if (request.method === "cash") assertTakesCash(session.device);
         return c.json(await takeBillPayment(fiscal, saleCfg, id, request, personId));
       }
@@ -268,7 +262,7 @@ export function mountBillPaymentsApi(
       if (request.simulationOutcome !== undefined && deps.cardProvider?.provider !== "simulator") {
         throw invalid("simulationOutcome");
       }
-      const saleCfg = await deviceSaleCfg(deps, cfg, c, device);
+      const saleCfg = deviceSaleCfg(cfg, c, device);
       const { provider, reader } = await resolveCardCollector(deps, device.deviceId, readerId);
       return c.json(
         await takeReaderBillPayment(
@@ -307,7 +301,7 @@ export function mountBillPaymentsApi(
       const id = requireBillParam(c.req.param("id"));
       const paymentId = c.req.param("paymentId");
       const refund = parseRefund(asObject(await readRawJsonBody<unknown>(c)));
-      const saleCfg = await deviceSaleCfg(deps, cfg, c, session.device);
+      const saleCfg = deviceSaleCfg(cfg, c, session.device);
       return c.json(
         await refundBillPayment(
           {

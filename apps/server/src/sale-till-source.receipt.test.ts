@@ -233,8 +233,7 @@ async function seedHandheldProfile(): Promise<string> {
 /**
  * Enrol a REAL sale-capable device BOUND TO an existing register (`boundTillId`) through the
  * production join-and-accept path, and return its `waitron_device=<id>.<token>` cookie. A `till`
- * device creates its own register, so binding a SPECIFIC one is the handheld leg (`registerId`);
- * the sale route resolves `till_id` from THIS device (`requireSaleTillId`) either way.
+ * device creates its own register, so binding a SPECIFIC one is the handheld leg (`registerId`).
  */
 async function enrolTillCookie(cfg: TillConfig, boundTillId: string): Promise<string> {
   const profileId = await seedHandheldProfile();
@@ -293,7 +292,7 @@ async function login(
 }
 
 /** Ring one cash sale of two units of `menuItemId`, carrying the session + device cookies, and assert
- *  the route returned a ticket (200). The device cookie is what `requireSaleTillId` reads. */
+ *  the route returned a ticket (200). */
 async function ringSale(
   app: Hono,
   sessionCookie: string,
@@ -437,8 +436,7 @@ describe("SP-C: a sale posted with the dev-override header files under THAT devi
     const tillY = await insertTill(locationId, "Caja override");
     expect(tillY).not.toBe(tillX);
 
-    // devMode ON: `mountTillApi` forwards it to `requireSaleTillId`, which makes the override
-    // header live.
+    // devMode ON makes the override header live.
     const app = new Hono();
     mountTillApi(app, { ...apiDeps(cfg), devMode: true }, noopLog);
     const deviceY = await enrolTillDeviceId(cfg, tillY);

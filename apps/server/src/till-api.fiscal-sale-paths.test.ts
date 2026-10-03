@@ -363,9 +363,8 @@ async function readerIdOnPayment(workingOrderId: string): Promise<string | null>
 }
 
 /**
- * Enrol a `till` device and return its `waitron_device=<id>.<token>` cookie; a sale route resolves
- * its `till_id` from it (`requireSaleTillId`). Its default profile takes cash; the `/api/pay` cases
- * pass a profile declaring `integrated-card-payment`.
+ * Enrol a `till` device and return its `waitron_device=<id>.<token>` cookie. Its default profile
+ * takes cash; the `/api/pay` cases pass a profile declaring `integrated-card-payment`.
  */
 let tillDeviceCounter = 0;
 async function enrolTillCookie(
@@ -663,8 +662,6 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
   });
 });
 
-// A sale's `till_id` resolves from the authenticated enrolled device (`requireSaleTillId`); these two
-// negatives pin its fail-closed preconditions.
 describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () => {
   it("refuses POST /api/sales from a session whose device has been revoked — 401 device.unauthorized, filing nothing", async () => {
     const { cfg, available, operatorId } = await setupVenue();
@@ -701,8 +698,8 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
 
-    // A `kds_station` device binds a station and no till, so `requireSaleTillId` refuses it — the
-    // second branch, distinct from the no-cookie refusal above. Provisioning already seeds "Cocina".
+    // A `kds_station` device binds a station and no till, so `requireSaleTillId` refuses it.
+    // Provisioning already seeds "Cocina".
     const station = await withTransaction(suite.db, async (tx) => {
       return createStation(tx, cfg, { name: "Pase", isDefault: false });
     });

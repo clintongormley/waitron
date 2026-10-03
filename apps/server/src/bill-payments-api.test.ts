@@ -2615,7 +2615,7 @@ describe("the limit on wrong refund PINs", () => {
     return { clockAt, refundOn };
   }
 
-  /** The admin, who holds `sale.refund`, signed in on the staff session's till and device. */
+  /** The admin, who holds `sale.refund`, signed in on the staff session's device. */
   async function adminCookie(): Promise<string> {
     const adminSession = await inTx((tx) =>
       loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" }),
@@ -3236,7 +3236,7 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
     };
   }
 
-  /** The admin, who holds `sale.refund`, signed in on the staff session's till and device. */
+  /** The admin, who holds `sale.refund`, signed in on the staff session's device. */
   async function adminCookie(): Promise<string> {
     const adminSession = await inTx((tx) =>
       loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" }),

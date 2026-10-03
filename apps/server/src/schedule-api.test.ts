@@ -43,7 +43,7 @@ const suite = useVenueDb({
       .insert(tills)
       .values({ locationId, name: "Till 1" })
       .returning({ id: tills.id });
-    deviceId = await seedSessionDevice(db, { locationId, tillId: till!.id });
+    deviceId = await seedSessionDevice(db, { tillId: till!.id });
     const [meRow] = await db
       .insert(persons)
       .values({ displayName: "Me", pinHash: hashPin("1111"), role: "staff" })

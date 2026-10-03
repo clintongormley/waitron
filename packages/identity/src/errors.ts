@@ -22,8 +22,8 @@ declare module "@waitron/shared" {
     "pin.invalid": Record<string, never>;
     /** `min` is the policy, never the PIN. */
     "pin.too_short": { min: number };
-    /** Too many wrong PINs for this slot and person (the device at sign-in, the session's till for
-     * a till's override PIN, the dashboard's slot for its PIN attestation routes), or a new person
+    /** Too many wrong PINs for this slot and person (the device at sign-in, the session's device
+     * for a till's override PIN, the dashboard's slot for its PIN attestation routes), or a new person
      * in a slot that already holds its limit of entries. `retryAfterSeconds` is the whole seconds
      * to wait before another attempt. */
     "pin.throttled": { retryAfterSeconds: number };

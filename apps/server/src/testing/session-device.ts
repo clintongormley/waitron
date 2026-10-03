@@ -1,42 +1,17 @@
 import { eq } from "drizzle-orm";
-import { deviceProfiles, devices, withTransaction, type Database } from "@waitron/db";
+import { devices, withTransaction, type Database } from "@waitron/db";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { loginWithPin } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { SESSION_COOKIE } from "../till-session.js";
 
-let seeded = 0;
-
 /**
  * A till device on `cfg`'s own till whose profile allows every capability: the device a fixture
- * opens its shift session on when the test is about something other than the device. A direct
- * insert, because pairing a till device creates a new till rather than naming `cfg.tillId`.
+ * opens its shift session on when the test is about something other than the device.
  */
-export async function seedSessionDevice(
-  db: Database,
-  cfg: { locationId: string; tillId: string },
-): Promise<string> {
-  seeded += 1;
-  return withTransaction(db, async (tx) => {
-    const [profile] = await tx
-      .insert(deviceProfiles)
-      .values({
-        name: `Session device profile ${seeded}`,
-        formFactor: "till",
-        capabilities: [...CAPABILITY_FLAGS],
-      })
-      .returning({ id: deviceProfiles.id });
-    const [device] = await tx
-      .insert(devices)
-      .values({
-        locationId: cfg.locationId,
-        deviceProfileId: profile!.id,
-        tillId: cfg.tillId,
-        label: `Session device ${seeded}`,
-        tokenHash: "seeded",
-      })
-      .returning({ id: devices.id });
-    return device!.id;
-  });
+export async function seedSessionDevice(db: Database, cfg: { tillId: string }): Promise<string> {
+  return (await seedDevice(db, { tillId: cfg.tillId, capabilities: [...CAPABILITY_FLAGS] }))
+    .deviceId;
 }
 
 /**
@@ -45,7 +20,7 @@ export async function seedSessionDevice(
  */
 export async function revokedDeviceSessionCookie(
   db: Database,
-  cfg: { locationId: string; tillId: string },
+  cfg: { tillId: string },
   personId: string,
   pin: string,
 ): Promise<string> {

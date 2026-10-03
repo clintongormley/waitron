@@ -232,33 +232,16 @@ export async function tryReadDevice(
     rememberVerified(deviceId, token, checkedHash);
   }
 
-  // At most one sighting write a minute: this runs on every authenticated request, and the
-  // dashboard shows last-seen only to the minute (`devices-screen.ts`'s `#lastSeen`).
-  //
-  // `last_seen_at` is text, so `<` on it compares strings, which orders two instants correctly
-  // only for the one spelling its writer uses: `toISOString()`, which is what `nowIso` returns.
-  // The check on the row read spares a request the write lock; the same check in the update is
-  // what keeps concurrent requests that all read a stale row to one write.
+  // The check on the row read spares a request the write lock.
   const seenAt = nowIso();
-  const staleBefore = new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
-  if (row.lastSeenAt === null || row.lastSeenAt < staleBefore) {
+  if (sightingDue(row.lastSeenAt, seenAt)) {
     const checkedHash = row.tokenHash;
     const locked = await withTransaction(deps.db, async (tx) => {
       // A revocation, a new token or a new binding committed while this request waited for the
       // lock wins.
       const current = await readRow(tx);
       if (current === undefined || current.tokenHash !== checkedHash) return undefined;
-      await tx
-        .update(devices)
-        .set({ lastSeenAt: seenAt })
-        .where(
-          and(
-            eq(devices.id, deviceId),
-            // A never-seen device has NULL here and `<` is UNKNOWN for NULL, so the first sighting
-            // needs its own alternative or it would never be written.
-            or(isNull(devices.lastSeenAt), lt(devices.lastSeenAt, staleBefore)),
-          ),
-        );
+      await recordSighting(tx, deviceId, seenAt);
       return current;
     });
     if (locked === undefined) {
@@ -268,6 +251,42 @@ export async function tryReadDevice(
     row = locked;
   }
   return toDeviceBinding(deviceId, row);
+}
+
+// At most one sighting write a minute: it is checked on every authenticated request, and the
+// dashboard shows last-seen only to the minute (`devices-screen.ts`'s `#lastSeen`).
+//
+// `last_seen_at` is text, so `<` on it compares strings, which orders two instants correctly only
+// for the one spelling its writer uses: `toISOString()`, which is what `nowIso` returns.
+const staleBefore = (seenAt: string): string =>
+  new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
+
+/** Whether a device last seen at `lastSeenAt` is due a fresh sighting at `seenAt`. */
+export function sightingDue(lastSeenAt: string | null, seenAt: string): boolean {
+  return lastSeenAt === null || lastSeenAt < staleBefore(seenAt);
+}
+
+/**
+ * Records that `deviceId` was seen at `seenAt`, unless a sighting inside the last minute is already
+ * recorded: the same check in the update keeps concurrent requests that all read a stale row to one
+ * write.
+ */
+export async function recordSighting(
+  tx: Transaction,
+  deviceId: string,
+  seenAt: string,
+): Promise<void> {
+  await tx
+    .update(devices)
+    .set({ lastSeenAt: seenAt })
+    .where(
+      and(
+        eq(devices.id, deviceId),
+        // A never-seen device has NULL here and `<` is UNKNOWN for NULL, so the first sighting
+        // needs its own alternative or it would never be written.
+        or(isNull(devices.lastSeenAt), lt(devices.lastSeenAt, staleBefore(seenAt))),
+      ),
+    );
 }
 
 /** Throwing wrapper over {@link tryReadDevice}: every miss becomes the SAME
@@ -282,64 +301,41 @@ export async function requireDevice(
 }
 
 /**
- * The `till_id` a SALE files under, taken from the authenticated device, so a box files under the
- * till its own enrolment names. A {@link DeviceBinding} carries no node or series: the chain is
- * keyed by the node, not the device. Both refusals are setup preconditions — a sellable box must be
- * an enrolled, till-bound device — not a per-sale block (CLAUDE.md §5).
- *
- * `device` is an optional pre-resolved binding, so a route running several device guards reads it
- * once: `null` means "resolved, no device"; omitted (`undefined`) means read it here.
+ * The `till_id` a SALE files under, taken from `device`. A {@link DeviceBinding} carries no node or
+ * series: the chain is keyed by the node, not the device. The refusal is a setup precondition — a
+ * sellable device is till-bound — not a per-sale block (CLAUDE.md §5).
  */
-export async function requireSaleTillId(
-  deps: { db: Database; devMode?: boolean },
-  c: Context,
-  device?: DeviceBinding | null,
-): Promise<TillId> {
-  const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
-  if (resolved === null) throw new AppError("device.unauthorized", {});
-  if (resolved.tillId === null) throw new AppError("device.till_required", {});
-  return tillId(resolved.tillId);
+export function requireSaleTillId(device: DeviceBinding): TillId {
+  if (device.tillId === null) throw new AppError("device.till_required", {});
+  return tillId(device.tillId);
 }
 
 /**
  * The configuration `device`'s request runs under: the device's own till, and a cash drawer only
  * for a till form factor. Refuses as {@link requireSaleTillId} does.
  */
-export async function deviceTillCfg<C extends TillConfig>(
-  deps: { db: Database; devMode?: boolean; cfg: C },
-  c: Context,
-  device: DeviceBinding,
-): Promise<C> {
+export function deviceTillCfg<C extends TillConfig>(cfg: C, device: DeviceBinding): C {
   return {
-    ...deps.cfg,
-    tillId: await requireSaleTillId(deps, c, device),
+    ...cfg,
+    tillId: requireSaleTillId(device),
     allowCashDrawer: kindOfFormFactor(device.formFactor) === "till",
   };
 }
 
 /**
  * The handheld firewall: a handheld device may not reach a route that runs this guard. Enforced on
- * the server so the fence holds even if the client is bypassed. No device (an operator-session
- * till) and a non-handheld device both pass, so run it after the route's `requireSession` guard.
- * `device` as in {@link requireSaleTillId}.
+ * the server so the fence holds even if the client is bypassed.
  */
-export async function assertNotHandheld(
-  deps: { db: Database; devMode?: boolean },
-  c: Context,
-  action: string,
-  device?: DeviceBinding | null,
-): Promise<void> {
-  const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
-  if (resolved !== null && kindOfFormFactor(resolved.formFactor) === "handheld") {
+export function assertNotHandheld(device: DeviceBinding, action: string): void {
+  if (kindOfFormFactor(device.formFactor) === "handheld") {
     throw new AppError("device.forbidden_action", { action });
   }
 }
 
 /**
  * The device-capability firewall: a device whose profile does not declare `capability` is refused,
- * fail-closed, with `device.forbidden_action`. No device (an operator-session till) passes, as in
- * {@link assertNotHandheld}, so run it after the route's `requireSession` guard. `device` as in
- * {@link requireSaleTillId}.
+ * fail-closed, with `device.forbidden_action`. `device` is a pre-resolved binding, `null` for no
+ * device, which passes; omitted, the request's device cookie is read here.
  */
 export async function assertDeviceCapability(
   deps: { db: Database; devMode?: boolean },

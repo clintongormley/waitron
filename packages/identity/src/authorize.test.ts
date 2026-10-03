@@ -180,7 +180,7 @@ describe("authorize with a limit on wrong override PINs", () => {
       recordFailure: vi.fn(real.recordFailure),
       clear: vi.fn(real.clear),
     };
-    return { throttle, slot: "override:till-1" };
+    return { throttle, slot: "override:device-1" };
   }
 
   it("counts wrong override PINs and refuses pin.throttled after four, even the right PIN", async () => {
@@ -223,7 +223,7 @@ describe("authorize with a limit on wrong override PINs", () => {
     );
 
     expect(result.viaOverride).toBe(true);
-    expect(attempts.throttle.clear).toHaveBeenCalledWith("override:till-1", supervisorId);
+    expect(attempts.throttle.clear).toHaveBeenCalledWith("override:device-1", supervisorId);
   });
 
   it("neither counts nor clears an override it never checks, because the operator holds the permission", async () => {

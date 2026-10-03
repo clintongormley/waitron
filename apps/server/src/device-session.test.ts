@@ -267,26 +267,6 @@ async function probe(cookieValue: string | null): Promise<ProbeResult> {
   return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
 }
 
-/** Enrol a REAL handheld device — no station (a handheld form factor binds none) — so
- * `tryReadDevice` resolves its cookie to a `handheld` binding. Same enrol path as `enrolDeviceFixture`,
- * with the order-only kind. */
-async function enrolHandheldFixture(): Promise<{
-  cfg: TillConfig;
-  deviceId: string;
-  token: string;
-}> {
-  const { cfg } = await setupStation();
-  // A handheld is defined by a `phone-portrait`/`tablet-landscape` profile and, being sale-capable,
-  // binds an EXISTING register at enrol — the venue's own till.
-  const deviceProfileId = await seedDeviceProfile("Waiter phone profile", "phone-portrait", []);
-  const dev = await enrolDeviceForTest(suite.db, cfg, {
-    name: "Waiter phone",
-    profileId: deviceProfileId,
-    registerId: cfg.tillId,
-  });
-  return { cfg, deviceId: dev.deviceId, token: dev.token };
-}
-
 /** Run the NON-throwing `tryReadDevice` behind the shared scaffold, returning the binding or `null` it
  * resolves the cookie to — the `probe` shape, but reading the JSON-encoded value instead of catching a
  * throw (a `null` round-trips as `null`). */
@@ -295,19 +275,6 @@ async function probeTry(cookieValue: string | null): Promise<DeviceBinding | nul
     c.json((await tryReadDevice(deps, c)) ?? null),
   );
   return (await res.json()) as DeviceBinding | null;
-}
-
-/** Run `assertNotHandheld` behind the shared HTTP scaffold: `{ ok: true }` when it passes (no throw), or
- * the thrown code when it refuses. */
-async function probeAssert(
-  cookieValue: string | null,
-): Promise<{ ok: true } | { ok: false; code: string }> {
-  const { res, thrown } = await runProbe(cookieValue, async (deps, c) => {
-    await assertNotHandheld(deps, c, "record_sale");
-    return c.body(null, 204);
-  });
-  if (res.status === 204) return { ok: true };
-  return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
 }
 
 /**
@@ -559,7 +526,7 @@ describe("requireDevice (venue database)", () => {
   });
 });
 
-describe("tryReadDevice and assertNotHandheld (venue database)", () => {
+describe("tryReadDevice (venue database)", () => {
   it("tryReadDevice returns the binding for a valid cookie and null at every miss", async () => {
     const { cfg, deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
     // Success resolves to the same binding `requireDevice` returns.
@@ -586,26 +553,6 @@ describe("tryReadDevice and assertNotHandheld (venue database)", () => {
       expect(await probeTry(bad)).toBeNull();
     }
     expect(await probeTry(null)).toBeNull(); // absent cookie
-  });
-
-  it("assertNotHandheld refuses an ACTIVE handheld with device.forbidden_action", async () => {
-    const { deviceId, token } = await enrolHandheldFixture();
-    expect(await probeAssert(`${deviceId}.${token}`)).toEqual({
-      ok: false,
-      code: "device.forbidden_action",
-    });
-  });
-
-  it("assertNotHandheld passes a non-handheld device, an absent cookie, and a failed device cookie", async () => {
-    const { deviceId, token } = await enrolDeviceFixture();
-    // A kds_station device is not order-only — it never posts to a sale route, and the firewall does
-    // not block it here.
-    expect(await probeAssert(`${deviceId}.${token}`)).toEqual({ ok: true });
-    // An ordinary till carries NO device cookie: `tryReadDevice` → null → the firewall passes.
-    expect(await probeAssert(null)).toEqual({ ok: true });
-    // A malformed/unauthenticated device cookie is a miss (null), not a handheld, so it passes too —
-    // the order-only rule blocks ONLY a verified handheld, never a non-device caller.
-    expect(await probeAssert("not-a-uuid.sometoken")).toEqual({ ok: true });
   });
 });
 
@@ -642,7 +589,7 @@ describe("assertDeviceCapability (venue database)", () => {
   });
 
   it("passes when there is NO device cookie (an env-configured / legacy till)", async () => {
-    // No `waitron_device` cookie ⇒ `tryReadDevice` → null ⇒ pass, exactly as `assertNotHandheld`.
+    // No `waitron_device` cookie ⇒ `tryReadDevice` → null ⇒ pass.
     // Nothing blocks a sale on a cookie-less till (CLAUDE.md §5).
     await enrolDeviceFixture();
     expect(await probeCapability(null, "integrated-card-payment", "pay")).toEqual({
@@ -712,19 +659,42 @@ async function enrolDevDevices(): Promise<{
   };
 }
 
-describe("assertTakesCash", () => {
-  const binding = (capabilities: CapabilityFlag[]): DeviceBinding => ({
+describe("assertTakesCash, assertNotHandheld and requireSaleTillId on a resolved device", () => {
+  const binding = (
+    capabilities: CapabilityFlag[],
+    formFactor: FormFactor = "phone-portrait",
+    tillId: string | null = null,
+  ): DeviceBinding => ({
     deviceId: randomUUID(),
-    formFactor: "phone-portrait",
+    formFactor,
     label: "Waiter phone",
     locationId: randomUUID(),
     stationId: null,
     watcherId: null,
-    tillId: null,
+    tillId,
     deviceProfileId: randomUUID(),
     receiptPrinterId: null,
     paymentSlipPrinterId: null,
     capabilities,
+  });
+
+  it("assertNotHandheld refuses a handheld and passes a till and a kitchen display", () => {
+    expect(() => assertNotHandheld(binding([]), "drawer_open")).toThrow(
+      expect.objectContaining({
+        code: "device.forbidden_action",
+        params: { action: "drawer_open" },
+      }),
+    );
+    expect(() => assertNotHandheld(binding([], "till"), "drawer_open")).not.toThrow();
+    expect(() => assertNotHandheld(binding([], "kds"), "drawer_open")).not.toThrow();
+  });
+
+  it("requireSaleTillId answers the device's till, and refuses a device with none", () => {
+    const till = randomUUID();
+    expect(requireSaleTillId(binding([], "till", till))).toBe(till);
+    expect(() => requireSaleTillId(binding([], "kds"))).toThrow(
+      expect.objectContaining({ code: "device.till_required" }),
+    );
   });
 
   it("refuses a device whose profile lacks take-cash, and passes one that has it and no device", () => {
@@ -824,36 +794,6 @@ describe("tryReadDevice dev override resolves a seeded device (venue database)",
     );
     expect(binding?.deviceId).toBe(deviceId);
     expect(binding?.formFactor).toBe("kds");
-  });
-});
-
-describe("requireSaleTillId reading the device cookie itself", () => {
-  async function probeSaleTill(
-    cookieValue: string | null,
-  ): Promise<{ ok: true; tillId: string } | { ok: false; code: string }> {
-    const { res, thrown } = await runProbe(cookieValue, async (deps, c) =>
-      c.json({ tillId: await requireSaleTillId(deps, c) }),
-    );
-    if (res.status === 200)
-      return { ok: true, tillId: ((await res.json()) as { tillId: string }).tillId };
-    return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
-  }
-
-  it("returns the till an enrolled till device's cookie is bound to", async () => {
-    const { deviceId, token, tillId } = await enrolTillDeviceFixture();
-    expect(await probeSaleTill(`${deviceId}.${token}`)).toEqual({ ok: true, tillId });
-  });
-
-  it("refuses a request with no device cookie as device.unauthorized", async () => {
-    expect(await probeSaleTill(null)).toEqual({ ok: false, code: "device.unauthorized" });
-  });
-
-  it("refuses a kitchen display, which rings no sale, as device.till_required", async () => {
-    const { deviceId, token } = await enrolDeviceFixture();
-    expect(await probeSaleTill(`${deviceId}.${token}`)).toEqual({
-      ok: false,
-      code: "device.till_required",
-    });
   });
 });
 

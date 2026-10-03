@@ -1,5 +1,4 @@
-import { eq, sql } from "drizzle-orm";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { sql } from "drizzle-orm";
 import {
   invoiceSeries,
   locations,
@@ -11,7 +10,6 @@ import {
   type Transaction,
 } from "@waitron/db";
 import {
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
@@ -316,13 +314,4 @@ export async function seedTenantWithSif(
     // record walk-up sales that omit it.
     return { tillId, nodeId, seriesId };
   });
-}
-
-/** Pairs a device at `tillId`'s location and returns its id: the device a shift session is opened on. */
-export async function seedSessionDevice(db: Database, tillId: string): Promise<string> {
-  const [till] = await db
-    .select({ locationId: tills.locationId })
-    .from(tills)
-    .where(eq(tills.id, tillId));
-  return (await seedDevice(db, { locationId: brandLocationId(till!.locationId) })).deviceId;
 }

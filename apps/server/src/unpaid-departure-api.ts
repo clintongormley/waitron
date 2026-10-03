@@ -50,7 +50,7 @@ export function mountUnpaidDepartureApi(
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
       const request = parseDeparture(asObject(await readRawJsonBody<unknown>(c)));
-      const saleTillId = await requireSaleTillId(deps, c, session.device);
+      const saleTillId = requireSaleTillId(session.device);
       const attempts = overridePinAttempts(pinThrottle, session.deviceId);
       const toCheck = await overrideToCheck(
         deps.db,

@@ -3,12 +3,14 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { and, eq, isNull } from "drizzle-orm";
 import { AppError, deviceId as brandDeviceId, isUuid } from "@waitron/shared";
 import type { DeviceId } from "@waitron/shared";
-import { deviceProfiles, devices, withTransaction } from "@waitron/db";
+import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { authorize, hashSessionToken, sessions, type Permission } from "@waitron/identity";
 import {
   deviceBindingColumns,
   deviceProfileJoin,
+  recordSighting,
+  sightingDue,
   toDeviceBinding,
   type DeviceBinding,
 } from "./device-session.js";
@@ -77,6 +79,7 @@ export async function requireSession(
         personId: sessions.personId,
         deviceId: sessions.deviceId,
         active: devices.active,
+        lastSeenAt: devices.lastSeenAt,
         ...deviceBindingColumns,
       })
       .from(sessions)
@@ -86,6 +89,9 @@ export async function requireSession(
       .where(and(eq(sessions.tokenHash, hashSessionToken(token)), isNull(sessions.endedAt)));
     if (found === undefined) throw new AppError("session.required", {});
     if (!found.active) throw new AppError("device.unauthorized", {});
+    // Write routes read no device cookie, so the session's requests keep its device's sighting.
+    const seenAt = nowIso();
+    if (sightingDue(found.lastSeenAt, seenAt)) await recordSighting(tx, found.deviceId, seenAt);
     if (options.permission !== undefined) {
       await authorize(tx, { sessionId: found.id, permission: options.permission });
     }

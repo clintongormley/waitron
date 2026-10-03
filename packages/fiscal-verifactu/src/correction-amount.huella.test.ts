@@ -9,11 +9,12 @@ import { hashPin, loginWithPin } from "@waitron/identity";
 import { centsToDecimal, seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedSessionDevice, seedTenantWithSif } from "../test/fixtures.js";
+import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 /**
  * A corrective invoice is filed at the cent amounts its `sales` and `sale_lines` rows store; of
@@ -43,7 +44,7 @@ beforeEach(async () => {
     sql`insert into persons (id, created_at, display_name, pin_hash, role)
         values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'supervisor') returning id`,
   );
-  const deviceId = await seedSessionDevice(suite.db, tillId);
+  const deviceId = (await seedDevice(suite.db, { tillId: tillId })).deviceId;
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId: rows[0]!.id, pin: "1234" }),
   );

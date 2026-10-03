@@ -12,8 +12,9 @@ import { DEFAULT_SKIP_RETRY_MS, drain, type DrainDeps } from "./drain.js";
 import { reconcile, type ReconcileDeps } from "./reconcile.js";
 import { toAeatDate } from "./registro-row.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
-import { seedSessionDevice, seedTenantWithSif } from "../test/fixtures.js";
+import { seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 // The drain fixtures stamp `fecha_expedicion_factura` = 2026-07-20, inside this one period.
 const SERVER_NOW = new Date("2026-07-21T00:00:00Z");
@@ -118,7 +119,7 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
     sql`insert into persons (id, created_at, display_name, pin_hash, role)
         values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
   );
-  const deviceId = await seedSessionDevice(suite.db, tillId);
+  const deviceId = (await seedDevice(suite.db, { tillId: tillId })).deviceId;
   const voidSession = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
   );

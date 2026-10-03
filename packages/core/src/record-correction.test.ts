@@ -20,12 +20,8 @@ import type { RecordCorrectionInput } from "./record-correction.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
-import {
-  seedBareSale,
-  seedRectificativeSeries,
-  seedSessionDevice,
-  seedTenant,
-} from "../test/fixtures.js";
+import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 let tillId: TillId;
 let nodeId: NodeId;
@@ -70,7 +66,7 @@ async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): P
 
 /** Opens a shift session for `personId` at this tenant's till and returns its id. */
 async function openSession(personId: string): Promise<string> {
-  const deviceId = await seedSessionDevice(suite.db, tillId);
+  const deviceId = (await seedDevice(suite.db, { tillId: tillId })).deviceId;
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId, pin: "1234" }),
   );
