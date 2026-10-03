@@ -18,6 +18,7 @@ import {
 import { listExpoQueue, listStationQueue, markCollected } from "./working-order.js";
 import { createWatcher } from "./watchers.js";
 import { listWatcherQueue, markWatcherItems } from "./watcher-board.js";
+import { serveLine } from "./testing/serve-line.js";
 import "./errors.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -88,6 +89,8 @@ describe("what takes a paid table bill's dishes off today's kitchen screens", ()
       markWatcherItems(tx, v.cfg, watcherId, [item!.id], false, { personId: OPERATOR }, new Date()),
     );
     expect(await onWatcher(v, watcherId, tabId)).toBe(true);
+    await inTx(v, (tx) => serveLine(tx, v.cfg, tabId, 1));
+    expect(await onWatcher(v, watcherId, tabId)).toBe(false);
 
     await markCollected({ db: v.db }, v.cfg, tabId);
     expect(await onStationQueue(v, stationId, tabId)).toBe(false);

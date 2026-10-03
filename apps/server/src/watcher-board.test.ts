@@ -11,6 +11,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { createPinThrottle } from "@waitron/identity";
 import { createStation } from "./kitchen.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { bumpGroupReady, markGroupAway, placeGroups } from "./order-groups.js";
@@ -26,19 +27,28 @@ import {
   inTx,
   OPERATOR,
   orderForParty,
+  pay,
   placeByHand,
   seat,
   setupPartyVenue,
 } from "./testing/party-venue.js";
 import { moveGuests } from "./table-actions.js";
+import { serveLine } from "./testing/serve-line.js";
+import { overridePinAttempts } from "./till-api.js";
 import { createWatcher, removeWatcher } from "./watchers.js";
 import { listWatcherQueue, markWatcherItems } from "./watcher-board.js";
 import {
   addTabRound,
+  cancelPlacedOrder,
   carveOffLines,
+  createOpenOrder,
+  fireableLineColumns,
+  fireLines,
   listExpoQueue,
   listStationQueue,
   listTablesWithState,
+  markCollected,
+  markServed,
   updateOrderLine,
 } from "./working-order.js";
 import "./errors.js";
@@ -359,19 +369,52 @@ describe("watcher board", () => {
       ),
     );
     expect((await read()).orders).toHaveLength(1);
-    await inTx(v, (tx) =>
-      tx
-        .update(workingOrderLines)
-        .set({ servedQuantity: 500 })
-        .where(eq(workingOrderLines.id, items[0]!.workingOrderLineId)),
+    await inTx(v, (tx) => serveLine(tx, v.cfg, party.tabId, 1));
+    expect((await read()).orders[0]!.groups[0]!.items).toHaveLength(1);
+    await inTx(v, (tx) => serveLine(tx, v.cfg, party.tabId, 2));
+    expect((await read()).orders).toEqual([]);
+  });
+
+  it("keeps a partially served dish until serveLine serves its remainder", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const watcherId = await inTx(
+      v,
+      async (tx) =>
+        (
+          await createWatcher(tx, v.cfg, {
+            name: "Pass",
+            everyStation: true,
+            stationIds: [],
+            everyZone: true,
+            zoneIds: [],
+            runsPass: false,
+          })
+        ).id,
     );
-    expect((await read()).orders[0]!.groups[0]!.items).toHaveLength(2);
+    const party = await seat(v, await v.table("Partial service"));
     await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, party.partyId, {
+        billId: party.tabId,
+        groups: [{ lines: [{ menuItemId: v.item("Burger"), quantity: "2" }], release: "fire" }],
+        operatorId: OPERATOR,
+      }),
+    );
+    const [line] = await inTx(v, (tx) =>
       tx
-        .update(workingOrderLines)
-        .set({ servedAt: new Date().toISOString() })
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
+    const command = await commandFor(v, party.partyId);
+    await inTx(v, (tx) =>
+      markServed(tx, v.cfg, party.partyId, [{ lineId: line!.id, quantity: "1" }], {
+        ...command,
+        submissionId: randomUUID(),
+      }),
+    );
+    const read = () => inTx(v, (tx) => listWatcherQueue(tx, v.cfg, watcherId));
+    expect((await read()).orders[0]!.groups[0]!.items).toHaveLength(1);
+    await inTx(v, (tx) => serveLine(tx, v.cfg, party.tabId, 1));
     expect((await read()).orders).toEqual([]);
   });
 
@@ -395,12 +438,9 @@ describe("watcher board", () => {
     await orderForParty(v, party.partyId, ["Burger"], party.tabId);
     const read = () => inTx(v, (tx) => listWatcherQueue(tx, v.cfg, watcherId));
     expect((await read()).orders).toHaveLength(1);
-    await inTx(v, (tx) =>
-      tx
-        .update(workingOrders)
-        .set({ collectedAt: new Date().toISOString() })
-        .where(eq(workingOrders.id, party.tabId)),
-    );
+    await pay(v, party.tabId, "12.00");
+    expect((await read()).orders).toHaveLength(1);
+    await markCollected({ db: v.db }, v.cfg, party.tabId);
     expect((await read()).orders).toEqual([]);
     const heldParty = await seat(v, await v.table("Held table"));
     await inTx(v, (tx) =>
@@ -411,13 +451,39 @@ describe("watcher board", () => {
       }),
     );
     expect((await read()).orders[0]!.groups[0]!.items[0]!.firedAt).toBeNull();
-    await inTx(v, (tx) =>
-      tx
-        .update(workingOrders)
-        .set({ status: "abandoned" })
-        .where(eq(workingOrders.id, heldParty.tabId)),
+    await placeByHand(v, heldParty.tabId);
+    await cancelPlacedOrder(
+      { db: v.db, backend: v.backend, clock: v.clock },
+      v.cfg,
+      heldParty.tabId,
+      "Guests left",
+      {
+        personId: OPERATOR,
+        sessionId: "unused",
+        attempts: overridePinAttempts(createPinThrottle(), "unused"),
+      },
+      () => Promise.reject(new Error("a bill without an invoice needs no sale till")),
     );
     expect((await read()).orders).toEqual([]);
+    const [heldItem] = await inTx(v, (tx) =>
+      tx
+        .select({ id: ticketItems.id })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, heldParty.tabId)),
+    );
+    await expect(
+      inTx(v, (tx) =>
+        markWatcherItems(
+          tx,
+          v.cfg,
+          randomUUID(),
+          [heldItem!.id],
+          true,
+          { personId: OPERATOR },
+          new Date(),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "watcher.not_found" });
     const missingItem = randomUUID();
     await inTx(v, (tx) =>
       markWatcherItems(
@@ -619,6 +685,58 @@ describe("watcher board", () => {
       expect(
         items.find((item) => item.crossRefs?.some((ref) => ref.name === "AGUA"))!.crossRefs,
       ).toEqual([{ kind: "for", name: "AGUA", stationName: null }]);
+
+      const terrace = (await createZone(tx, venue.cfg, { name: "Terrace" })).id;
+      const terraceOffers = await offerProducts(tx, venue.cfg, {
+        zone: { zoneId: terrace },
+        serviceMode: "table_tab",
+      });
+      const runnerId = (
+        await createWatcher(tx, venue.cfg, {
+          name: "Terrace runner",
+          everyStation: true,
+          stationIds: [],
+          everyZone: false,
+          zoneIds: [terrace],
+          runsPass: false,
+        })
+      ).id;
+      const terraceOrderId = randomUUID();
+      await createOpenOrder(
+        tx,
+        venue.cfg,
+        terraceOrderId,
+        terraceOffers.toOfferLines([
+          {
+            productId: venue.products.burger,
+            quantity: "1",
+            extras: [
+              {
+                listId: venue.lists.burger,
+                picks: [{ productId: venue.products.chips, quantity: 1 }],
+              },
+            ],
+          },
+        ]),
+        null,
+        { zoneId: terrace },
+      );
+      const terraceLines = await tx
+        .select(fireableLineColumns)
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, terraceOrderId))
+        .orderBy(workingOrderLines.lineNo);
+      await fireLines(tx, venue.cfg, terraceOrderId, terraceLines);
+      const runner = await listWatcherQueue(tx, venue.cfg, runnerId);
+      expect(runner.orders.map((order) => order.orderId)).toEqual([terraceOrderId]);
+      const runnerItems = runner.orders[0]!.courses.flatMap((course) => course.items);
+      expect(runnerItems.map((item) => [item.name, item.stationName])).toEqual([
+        ["BURG", "Grill"],
+        ["CHIPS", "Fryer"],
+      ]);
+      expect(runnerItems.find((item) => item.name === "CHIPS")!.crossRefs).toEqual([
+        { kind: "for", name: "BURG", stationName: "Grill" },
+      ]);
     });
   });
 });
