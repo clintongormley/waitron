@@ -4420,7 +4420,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   language alphabetically rather than the default. The receipt fills the variant's text per
   receipt language before it gets there (`apps/server/src/working-order.ts`), so whether any
   surface shows the difference is unknown; reproduce before fixing.
-- **The menu section form's customer-name hints skip the default language — DONE (W11; found
+- **The menu section form's customer-name hints skip the default language — DONE (W11, #1112; found
   2026-10-02 during A172).** Each blank customer-facing name in
   `apps/dashboard/src/widgets/section-details-form.ts` now hints the default language's name, then
   the internal name, because the form passes its default language to `optionalTextFields` as the
