@@ -296,6 +296,8 @@ export const en = {
   "extras.price_invalid":
     "Enter a price with up to two decimal places, or leave it blank to charge the product's own.",
   "extras.duplicate_product": "This product is already on the list. Remove one of the two rows.",
+  "extras.has_variants": "Has variants, so it can't be an extra",
+  "extras.has_variants_remove": "Has variants, so it can't be an extra. Remove it from this list.",
 
   "nav.receipts": "Receipts",
   "receipts.title": "Receipts",
@@ -2356,6 +2358,9 @@ export const es: Record<StringKey, string> = {
   "extras.price_invalid":
     "Introduce un precio con un máximo de dos decimales, o déjalo vacío para cobrar el del producto.",
   "extras.duplicate_product": "Este producto ya está en la lista. Quita una de las dos filas.",
+  "extras.has_variants": "Tiene variantes, así que no puede ser un extra",
+  "extras.has_variants_remove":
+    "Tiene variantes, así que no puede ser un extra. Quítalo de esta lista.",
 
   "nav.receipts": "Recibos",
   "receipts.title": "Recibos",

@@ -1730,8 +1730,8 @@ of a variant's `unitId` first. A203 (extras as a fixed portion) allows for a var
 noted the Products list shows no unit in its price column; A208 builds it ("€19.00 each",
 "€48.00 / kg").
 
-**A product with variants is not offered in an extras list's product dropdown (A223, owner
-2026-10-02) — DECIDED, ready to build.** Today the dropdown (`extra-list-form.ts`, `#itemsSection`) offers every
+**An extras list's product dropdown greys a product with variants and says why (A223, owner
+2026-10-02) — DONE.** Before this, the dropdown (`extra-list-form.ts`, `#itemsSection`) offered every
 top-level product, but saving a list that names one with an Active variant is refused with
 `extras.product_has_variants` (`assertNoParentsWithVariants`, `packages/catalogue/src/extras.ts`),
 because the till never offers such a product as an extra (`readExtraProducts`,
@@ -1739,9 +1739,34 @@ because the till never offers such a product as an extra (`readExtraProducts`,
 variants themselves as choices. **Wanted:** such a product is left out of the dropdown, or shown
 greyed and unpickable. **Decided (owner, 2026-10-02):** greyed, with A210's second line saying
 why ("Has variants, so it can't be an extra"; Spanish to match), so a search for it does not just
-come up empty. That needs `wt-combobox` to draw a disabled option, which it cannot today. **Also:** a
+come up empty. That needs `wt-combobox` to draw a disabled option, which it could not before A223. **Also:** a
 product already on a list that later gains its first Active variant is silently dropped by the
 till; the list form should mark that row.
+**Run before building:** the existing cases pin both refusals and the till's omission, and pass:
+"an extras list and products with variants" in `packages/catalogue/src/extras.test.ts` (an Active
+variant counts whether Available or not; a product whose only variant is Inactive is accepted),
+"an extra that is a parent with Active variants" in `offered-modifiers.test.ts`, and the two
+"mountCatalogueApi — extras lists and products with variants" cases in
+`apps/server/src/catalogue-api.test.ts`. The "Also" state is refused too: giving a listed product
+an Active variant, from the parent's editor or by making a variant Active, answers
+`product.offered_as_extra` (#578; "a product an extras list offers" in
+`packages/catalogue/src/product-editor.test.ts` and the second of those server cases). Reading
+every write of `products` outside tests found no other path that sets a parent or makes a row
+Active, so the row mark is for rows written some other way (as the tests above write them).
+Built: `ComboboxOption` gained `disabled`: marked `aria-disabled="true"`, label and icon in
+`--wt-color-text-muted` (a primary row too), no hover background, still matched by the search and
+reached by the arrows (the WAI-ARIA practice for a listbox's disabled options), but never chosen by
+a click, Enter or Space, nor by type-ahead on the closed trigger. The extras picker offers a product with an Active
+variant that way, with "Has variants, so it can't be an extra" ("Tiene variantes, así que no puede
+ser un extra") as its second line. A listed row whose product has an Active variant says the same
+under its name, plus "Remove it from this list." ("Quítalo de esta lista."), from the moment the
+form opens; a save is refused in the form, beside that row and in the bottom message, with Save
+disabled until the row is removed. Axe scores no contrast inside an `aria-disabled` row (measured:
+a disabled row painted in the panel's own colour passed every axe case), so the combobox's a11y
+cases measure the greyed label and second line against the panel themselves, 4.5:1 in both themes.
+Seen, not changed: at 390px the items table is wider than its scrolling box with or without the
+mark (scroll width 496 in a 356 box), and the mark wraps in the narrow product column, so a marked
+row is about twice as tall as its neighbours.
 
 **Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
 label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and

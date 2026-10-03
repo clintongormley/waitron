@@ -1674,3 +1674,149 @@ it("starts again when reopened: no messages and Save working", async () => {
   expect(await bottomOf(el)).toBe("");
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
+
+const WINE = "cccccccc-3333-4333-8333-cccccccccccc";
+const CIDER = "dddddddd-4444-4444-8444-dddddddddddd";
+
+function variant(name: string, flags: { active: boolean; available: boolean }) {
+  return {
+    id: crypto.randomUUID(),
+    name,
+    customerName: null,
+    kitchenName: null,
+    image: null,
+    unitPrice: null,
+    ...flags,
+    effective: { unitPrice: "4.00", vatClass: "general" as const, primaryCategoryId: null },
+  };
+}
+
+/** Wine's only Active variant is Unavailable, which the server still refuses
+ * (`assertNoParentsWithVariants`, packages/catalogue/src/extras.ts); cider's only variant is
+ * Inactive, which it accepts. */
+const withVariants: Product[] = [
+  ...products,
+  product({
+    id: WINE,
+    name: "Wine",
+    customerName: { es: "Vino de la casa" },
+    kitchenName: "WINE",
+    variants: [variant("Glass", { active: true, available: false })],
+  }),
+  product({
+    id: CIDER,
+    name: "Cider",
+    customerName: { es: "Sidra" },
+    kitchenName: "CIDER",
+    variants: [variant("Bottle", { active: false, available: true })],
+  }),
+];
+
+it("offers a product with an Active variant greyed, saying why on its second line, in English and Spanish", async () => {
+  const expected = {
+    en: "Has variants, so it can't be an extra",
+    es: "Tiene variantes, así que no puede ser un extra",
+  };
+  for (const locale of ["en", "es"] as const) {
+    setLocale(locale);
+    try {
+      const { el } = await mount({ products: withVariants });
+      expect(picker(el).options, locale).toEqual([
+        { value: BACON, label: "Bacon" },
+        { value: EGG, label: "Fried egg" },
+        { value: WINE, label: "Wine", disabled: true, description: expected[locale] },
+        { value: CIDER, label: "Cider" },
+      ]);
+    } finally {
+      setLocale("en");
+      cleanupWidgets();
+    }
+  }
+});
+
+it("adds no row for a greyed product pressed in the picker", async () => {
+  const { el } = await mount({ products: withVariants });
+  const combobox = await openPicker(el);
+  const wine = [...combobox.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (row) => row.querySelector(".option-label")?.textContent === "Wine",
+  )!;
+  expect(wine.getAttribute("aria-disabled")).toBe("true");
+
+  wine.click();
+  await el.updateComplete;
+
+  expect(el.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(0);
+  expect(text(el, "added-status")).toBe("");
+});
+
+it("finds a greyed product by a search, with its reason, rather than coming up empty", async () => {
+  const { el } = await mount({ products: withVariants });
+  const combobox = await openPicker(el);
+
+  await userEvent.type(combobox.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "win");
+  await combobox.updateComplete;
+
+  const rows = [...combobox.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
+  expect(
+    rows.map((row) => [
+      row.querySelector(".option-label")!.textContent,
+      row.querySelector(".option-description")!.textContent,
+      row.getAttribute("aria-disabled"),
+    ]),
+  ).toEqual([["Wine", "Has variants, so it can't be an extra", "true"]]);
+  expect(combobox.shadowRoot!.querySelector(".empty")).toBeNull();
+});
+
+const wineOnList: ExtraList = {
+  ...addons,
+  items: [
+    { id: BACON_ITEM, productId: WINE, maxQuantity: 1, preselected: false, price: null },
+    { id: EGG_ITEM, productId: EGG, maxQuantity: 1, preselected: false, price: null },
+  ],
+};
+
+it("marks a listed product that has an Active variant on its row before any save, in English and Spanish", async () => {
+  const expected = {
+    en: "Has variants, so it can't be an extra. Remove it from this list.",
+    es: "Tiene variantes, así que no puede ser un extra. Quítalo de esta lista.",
+  };
+  for (const locale of ["en", "es"] as const) {
+    setLocale(locale);
+    try {
+      const { el } = await mount({ value: wineOnList, products: withVariants });
+      expect(text(el, "item-0-product-error"), locale).toBe(expected[locale]);
+      expect(el.shadowRoot!.querySelector('[data-test="item-1-product-error"]')).toBeNull();
+      expect(await bottomOf(el), locale).toBe("");
+      expect(saveOf(el).hasAttribute("disabled"), locale).toBe(false);
+    } finally {
+      setLocale("en");
+      cleanupWidgets();
+    }
+  }
+});
+
+it("does not mark a listed product whose only variant is Inactive", async () => {
+  const { el } = await mount({
+    value: { ...wineOnList, items: [{ ...wineOnList.items[0]!, productId: CIDER }] },
+    products: withVariants,
+  });
+  expect(el.shadowRoot!.querySelector('[data-test="item-0-product-error"]')).toBeNull();
+});
+
+it("refuses to save a list holding a product with an Active variant, and saves once that row is removed", async () => {
+  const { el, host } = await mount({ value: wineOnList, products: withVariants });
+  const submitted = record(host);
+
+  await click(el, "save");
+
+  expect(submitted).toEqual([]);
+  expect(text(el, "item-0-product-error")).toBe(t("extras.has_variants_remove"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await click(el, "remove-item-0");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]!.items.map((item) => item.productId)).toEqual([EGG]);
+});
