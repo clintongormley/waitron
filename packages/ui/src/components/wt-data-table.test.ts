@@ -3230,6 +3230,67 @@ const pinnedColumns = (pinned?: "end"): DataTableColumn<Row>[] => [
   },
 ];
 
+test.each([
+  { label: "Actions", buttonText: "⋮" },
+  { label: "Acciones", buttonText: "⋮" },
+  { label: "Actions", buttonText: "Longer action" },
+])(
+  "a one-row table gives its pinned $label column only the width its heading or $buttonText button needs",
+  async ({ label, buttonText }) => {
+    const el = await table({
+      rows: [rows[0]!],
+      columns: [
+        { key: "name", label: "Name", cell: (row) => row.name },
+        {
+          key: "actions",
+          label,
+          pinned: "end",
+          cell: () => html`<button aria-label="More actions">${buttonText}</button>`,
+        },
+      ],
+    });
+    el.style.width = "1000px";
+    await el.updateComplete;
+
+    const heading = el.shadowRoot!.querySelector<HTMLTableCellElement>("th[data-pinned=end]")!;
+    const cell = el.shadowRoot!.querySelector<HTMLTableCellElement>("td[data-pinned=end]")!;
+    const button = cell.querySelector("button")!;
+    const labelRange = document.createRange();
+    labelRange.selectNodeContents(heading);
+    const contentWidth = Math.max(
+      labelRange.getBoundingClientRect().width,
+      button.getBoundingClientRect().width,
+    );
+    const style = getComputedStyle(heading);
+    const neededWidth =
+      contentWidth + parseFloat(style.paddingInlineStart) + parseFloat(style.paddingInlineEnd);
+
+    expect(heading.getBoundingClientRect().width).toBeLessThanOrEqual(neededWidth + 2);
+    expect(cell.getBoundingClientRect().width).toBeCloseTo(
+      heading.getBoundingClientRect().width,
+      0,
+    );
+    expect(cell.scrollWidth).toBeLessThanOrEqual(cell.clientWidth);
+    expect(el.shadowRoot!.querySelector("th")!.getBoundingClientRect().width).toBeGreaterThan(
+      heading.getBoundingClientRect().width * 2,
+    );
+  },
+);
+
+test("a multi-word Actions heading wraps instead of taking half a phone-width table", async () => {
+  const el = await table({
+    rows: [rows[0]!],
+    columns: [
+      { key: "name", label: "Name", cell: (row) => row.name },
+      { key: "actions", label: "Actions for this row", pinned: "end", cell: () => "⋮" },
+    ],
+  });
+  el.style.width = "390px";
+  await el.updateComplete;
+  const heading = el.shadowRoot!.querySelector("th[data-pinned=end]")!;
+  expect(heading.getBoundingClientRect().width).toBeLessThan(el.getBoundingClientRect().width / 3);
+});
+
 async function narrowTable(pinned?: "end", props: Partial<WtDataTable<Row>> = {}) {
   const el = await table({ columns: pinnedColumns(pinned), ...props });
   el.style.width = "240px";

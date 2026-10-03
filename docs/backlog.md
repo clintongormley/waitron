@@ -1037,15 +1037,18 @@ at 390px and 1280px in light and dark themes. The owner has not confirmed whethe
 was intended for every filter; this uses one stable width per filter. A filter whose longest choice
 exceeds the available phone width fills its row, and that choice is cut short in the closed control.
 
-**A table's pinned Actions column keeps one narrow width (A195, owner 2026-10-02) — OPEN.** The
-owner, on a screenshot of a one-row table whose Actions column is wide, with the menu button in
-empty space: _"The pinned Actions column should be a fixed size, not resizing and so adding extra
-whitespace"_. `wt-data-table`'s `table` is `width: 100%`, so the browser shares the width the
-columns do not need among all of them, the pinned `actions` column (CLAUDE.md §3, A155) included.
-**Wanted:** the actions column is always as narrow as its content — the menu button and its
-heading — and the spare width goes to the other columns. Its heading sets that width too, and
-"Acciones" is longer than "Actions": LOOK in both languages, and at phone width, where the column
-stays pinned at the screen's edge.
+**A table's pinned Actions column keeps one narrow width (A195, owner 2026-10-02) — DONE.**
+`wt-data-table` gives its `actions` column only the space its heading or cell content needs; other
+columns take the spare width. The one-row Chromium test measures the column with both “Actions” and
+“Acciones”, and the table and accessibility suites passed. Rendered one-row tables were inspected
+at 1280px and 390px, in English and Spanish labels and both themes. A198's options list form uses
+its own table (`apps/dashboard/src/widgets/option-list-form.ts:580`), so it cannot reuse the shared
+component's column rule.
+
+**Pinned Open column on Content languages — OPEN.** That screen declares `key: "open"` with
+`pinned: "end"` (`apps/dashboard/src/screens/content-languages-screen.ts:457`), so A195's rule for
+`actions` does not size it. Decide whether all pinned last columns should take their content width
+before changing this separate column.
 
 **A collapsible section's chevron sits just after its heading (A196, owner 2026-10-02) — DONE.**
 The owner, on the "Edit options list" form: _"the chevron (currently far right) should be just to

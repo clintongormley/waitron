@@ -105,6 +105,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
         background: var(--wt-color-surface);
       }
 
+      [data-actions][data-pinned="end"] {
+        width: 0;
+      }
+
       /* A collapsed border is drawn where the cell sits unscrolled, so the edge that must travel with
          it is drawn by the cell itself. */
       [data-pinned="end"]::before {
@@ -1074,6 +1078,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 scope="col"
                 data-align=${column.align ?? "start"}
                 data-pinned=${column.pinned ?? nothing}
+                data-actions=${column.key === "actions" ? "" : nothing}
                 aria-sort=${
                   column.sortValue === undefined
                     ? nothing
@@ -1342,6 +1347,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                         <td
                           data-align=${column.align ?? "start"}
                           data-pinned=${column.pinned ?? nothing}
+                          data-actions=${column.key === "actions" ? "" : nothing}
                           data-row-activate=${column.activatesRow === false ? "false" : nothing}
                           @click=${
                             column.pinned &&
@@ -1416,6 +1422,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                       role="gridcell"
                       data-align=${column.align ?? "start"}
                       data-pinned=${column.pinned ?? nothing}
+                      data-actions=${column.key === "actions" ? "" : nothing}
                       data-row-activate=${column.activatesRow === false ? "false" : nothing}
                       @click=${
                         column.pinned && column.activatesRow !== false && activate !== undefined
