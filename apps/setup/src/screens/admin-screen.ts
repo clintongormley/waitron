@@ -4,10 +4,9 @@ import { focusFirstInvalid, submitOnEnter, baseStyles } from "@waitron/ui";
 import { deriveDisplayName } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { passwordIcon } from "../password-icon.js";
-import { actionsStyles, fieldStyles } from "../form-styles.js";
+import { actionsStyles, fieldStyles, introStyles, pairStyles } from "../form-styles.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
@@ -29,46 +28,39 @@ const FIELDS: readonly AdminField[] = [
 interface FieldText {
   label: StringKey;
   error: StringKey;
-  helpLabel: StringKey;
-  help: StringKey;
+  hint: StringKey;
 }
 
 const FIELD_TEXT: Record<AdminField, FieldText> = {
   firstNames: {
     label: "admin.first_names.label",
     error: "admin.first_names.error",
-    helpLabel: "admin.first_names.help_label",
-    help: "admin.first_names.help",
+    hint: "admin.first_names.hint",
   },
   lastNames: {
     label: "admin.last_names.label",
     error: "admin.last_names.error",
-    helpLabel: "admin.last_names.help_label",
-    help: "admin.last_names.help",
+    hint: "admin.last_names.hint",
   },
   displayName: {
     label: "admin.display_name.label",
     error: "admin.display_name.error",
-    helpLabel: "admin.display_name.help_label",
-    help: "admin.display_name.help",
+    hint: "admin.display_name.hint",
   },
   email: {
     label: "admin.email.label",
     error: "admin.email.error",
-    helpLabel: "admin.email.help_label",
-    help: "admin.email.help",
+    hint: "admin.email.hint",
   },
   password: {
     label: "admin.password.label",
     error: "admin.password.error",
-    helpLabel: "admin.password.help_label",
-    help: "admin.password.help",
+    hint: "admin.password.hint",
   },
   pin: {
     label: "admin.pin.label",
     error: "admin.pin.error",
-    helpLabel: "admin.pin.help_label",
-    help: "admin.pin.help",
+    hint: "admin.pin.hint",
   },
 };
 
@@ -78,6 +70,8 @@ export class SetupAdminScreen extends LitElement {
     baseStyles,
     fieldStyles,
     actionsStyles,
+    introStyles,
+    pairStyles,
     css`
       :host {
         display: block;
@@ -185,6 +179,7 @@ export class SetupAdminScreen extends LitElement {
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
       class="field"
       label=${t(text.label)}
+      hint=${t(text.hint)}
       data-test=${key}
       name=${fieldPurpose.name}
       autocomplete=${fieldPurpose.autocomplete}
@@ -195,7 +190,6 @@ export class SetupAdminScreen extends LitElement {
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
     >
-      <wt-help-tooltip slot="help" aria-label=${t(text.helpLabel)}>${t(text.help)}</wt-help-tooltip>
       ${
         type === "password"
           ? html`<wt-button
@@ -229,9 +223,10 @@ export class SetupAdminScreen extends LitElement {
     const field = (key: AdminField, type?: string) => this.#field(key, errors.has(key), type);
     return html`
       <h1>${t("admin.heading")}</h1>
-      <p>${t("admin.intro")}</p>
-      ${field("firstNames")} ${field("lastNames")} ${field("displayName")}
-      ${field("email", "email")} ${field("password", "password")} ${field("pin", "password")}
+      <p class="intro">${t("admin.intro")}</p>
+      <div class="pair">${field("firstNames")} ${field("lastNames")}</div>
+      ${field("displayName")} ${field("email", "email")}
+      <div class="pair">${field("password", "password")} ${field("pin", "password")}</div>
       <wt-form-actions .error=${errors.size > 0 ? t("admin.fix_fields") : ""}>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
           >${t("admin.back")}</wt-button

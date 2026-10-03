@@ -89,6 +89,7 @@ export { readableTextColor, isHexColor, CATEGORY_PALETTE } from "./category-colo
 
 export { WtLozenge } from "./components/wt-lozenge.js";
 export { WtCountBadge, type WtCountBadgeTone } from "./components/wt-count-badge.js";
+export { WtChoiceRow } from "./components/wt-choice-row.js";
 export { WtToast, type WtToastTone } from "./components/wt-toast.js";
 export { WtNotice } from "./components/wt-notice.js";
 export { WtLanguageChooser, type WtLocaleOption } from "./components/wt-language-chooser.js";

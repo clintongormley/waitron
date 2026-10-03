@@ -23,7 +23,13 @@ import { currentLocale, format, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { RECEIPT_LANGUAGES } from "../receipt-languages.js";
-import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
+import {
+  actionsStyles,
+  errorStyles,
+  fieldStyles,
+  introStyles,
+  pairStyles,
+} from "../form-styles.js";
 import { dispatchSetupAdvance, dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { VenueDefaults, ProvisionBody } from "../api/client.js";
@@ -96,22 +102,33 @@ const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
   "rectificativeSeriesCode",
 ];
 
-const FIELD_HELP: Record<TextField, StringKey> = {
+type HintedField =
+  "taxId" | "legalName" | "name" | "addressLine1" | "addressLine2" | "postalCode" | "city";
+type HelpedField = Exclude<TextField, HintedField>;
+
+/** A short explanation shown in the empty field. */
+const FIELD_HINT: Record<HintedField, StringKey> = {
+  taxId: "venue.hint.tax_id",
+  legalName: "venue.hint.legal_name",
+  name: "venue.hint.name",
+  addressLine1: "venue.hint.address_line1",
+  addressLine2: "venue.hint.address_line2",
+  postalCode: "venue.hint.postal_code",
+  city: "venue.hint.city",
+};
+
+/** An explanation too long for a hint, or for a field that starts filled in, so a hint would never show. */
+const FIELD_HELP: Record<HelpedField, StringKey> = {
   country: "venue.help.country",
-  taxId: "venue.help.tax_id",
-  legalName: "venue.help.legal_name",
-  name: "venue.help.name",
   operationDescription: "venue.help.operation_description",
-  addressLine1: "venue.help.address_line1",
-  addressLine2: "venue.help.address_line2",
-  postalCode: "venue.help.postal_code",
-  city: "venue.help.city",
   province: "venue.help.province",
   dayCutover: "venue.help.day_cutover",
   tillName: "venue.help.till_name",
   seriesCode: "venue.help.series_code",
   rectificativeSeriesCode: "venue.help.rectificative_series_code",
 };
+
+const hasHint = (key: TextField): key is HintedField => key in FIELD_HINT;
 const FIELD_NOUNS: Record<TextField, StringKey> = {
   country: "venue.field.country",
   taxId: "venue.field.tax_id",
@@ -144,9 +161,17 @@ export class SetupVenueScreen extends LitElement {
     fieldStyles,
     errorStyles,
     actionsStyles,
+    introStyles,
+    pairStyles,
     css`
       :host {
         display: block;
+      }
+
+      .facts {
+        margin: 0 0 var(--wt-space-4);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
 
       h2 {
@@ -539,7 +564,7 @@ export class SetupVenueScreen extends LitElement {
     return format("venue.check_field", { field: t(FIELD_NOUNS[key]) });
   }
 
-  #help(key: TextField): TemplateResult {
+  #help(key: HelpedField): TemplateResult {
     return html`<wt-help-tooltip
       slot="help"
       aria-label=${format("venue.help_with_field", { field: t(FIELD_NOUNS[key]) })}
@@ -557,12 +582,13 @@ export class SetupVenueScreen extends LitElement {
       autocomplete=${FIELD_AUTOCOMPLETE[key]}
       data-test=${key}
       type=${type}
+      hint=${hasHint(key) ? t(FIELD_HINT[key]) : ""}
       ?invalid=${error !== ""}
       ?required=${key !== "addressLine2"}
       error=${error}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
-      >${this.#help(key)}</wt-input
+      >${hasHint(key) ? nothing : this.#help(key)}</wt-input
     >`;
   }
 
@@ -571,9 +597,10 @@ export class SetupVenueScreen extends LitElement {
     const area = this.#area(pack);
     const jurisdiction = this.#jurisdiction(pack, area);
     const selectProvince = t("venue.select_province");
-    const fiscalTerritory = format("venue.fiscal_territory", {
-      territory: jurisdiction?.id ?? selectProvince,
-    });
+    const fiscalTerritory =
+      jurisdiction === undefined
+        ? undefined
+        : format("venue.fiscal_territory", { territory: jurisdiction.id });
     const timeZone = format("venue.time_zone", {
       zone: area?.timeZone ?? pack?.defaultTimeZone ?? "—",
     });
@@ -592,7 +619,7 @@ export class SetupVenueScreen extends LitElement {
     ].join(" ");
     return html`
       <h1>${t("venue.heading")}</h1>
-      <p>${this.#demo ? t("venue.intro_demo") : t("venue.intro")}</p>
+      <p class="intro">${this.#demo ? t("venue.intro_demo") : t("venue.intro")}</p>
 
       ${
         this.#demo && this.values.operationDescription === ""
@@ -606,7 +633,7 @@ export class SetupVenueScreen extends LitElement {
               >`
           : nothing
       }
-      <h2>${this.#demo ? t("venue.section.location") : t("venue.section.business")}</h2>
+      ${this.#demo ? nothing : html`<h2>${t("venue.section.business")}</h2>`}
       <wt-combobox
         class="field"
         label=${t("venue.label.country")}
@@ -682,8 +709,10 @@ export class SetupVenueScreen extends LitElement {
       }
       ${this.#field(t("venue.label.address_line1"), "addressLine1")}
       ${this.#field(t("venue.label.address_line2"), "addressLine2")}
-      ${this.#field(t("venue.label.postal_code"), "postalCode")}
-      ${this.#field(t("venue.label.city"), "city")}
+      <div class="pair">
+        ${this.#field(t("venue.label.postal_code"), "postalCode")}
+        ${this.#field(t("venue.label.city"), "city")}
+      </div>
       ${
         pack !== undefined && pack.administrativeAreas.length > 0
           ? html`<wt-combobox
@@ -708,8 +737,13 @@ export class SetupVenueScreen extends LitElement {
             >`
           : this.#field(t("venue.label.province_region"), "province")
       }
-      <p data-test="fiscalTerritory">${fiscalTerritory}</p>
-      <p data-test="timeZone">${timeZone}</p>
+      <p class="facts" data-test="facts">
+        ${
+          fiscalTerritory === undefined
+            ? nothing
+            : html`<span data-test="fiscalTerritory">${fiscalTerritory}</span> · `
+        }<span data-test="timeZone">${timeZone}</span>
+      </p>
       ${
         this.#demo
           ? nothing

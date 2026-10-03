@@ -418,9 +418,7 @@ describe("setup-venue-screen", () => {
     const events = collect(host);
     await fillValid(el);
     await type(el, "province", "");
-    expect(q(el, "[data-test=fiscalTerritory]")!.textContent).toBe(
-      "Fiscal territory: Select province",
-    );
+    expect(q(el, "[data-test=fiscalTerritory]")).toBeNull();
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
     expect(events).toEqual([]);
@@ -836,15 +834,24 @@ describe("A2 shop form", () => {
     q(returned.el, "[data-test=next]")!.click();
     expect((replay[0]!.detail as { patch: ProvisionBody }).patch.venue).toEqual(venue);
   });
-  it("explains each missing text field and provides help and visible required markers", async () => {
+  it("explains each missing text field and provides a hint and visible required markers", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { defaults });
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
-    for (const field of ["taxId", "legalName", "name", "addressLine1", "postalCode", "city"]) {
+    const expected = {
+      taxId: ["Enter the tax ID.", "Of the business that issues the invoices"],
+      legalName: ["Enter the legal name.", "As on the business's tax documents"],
+      name: ["Enter the location name.", "The name you use for this location"],
+      addressLine1: ["Enter the street address.", "Street and building number"],
+      postalCode: ["Enter the postal code.", "Used to suggest the province"],
+      city: ["Enter the city.", "Town or city"],
+    };
+    for (const [field, [error, hint]] of Object.entries(expected)) {
       const input = q(el, `[data-test=${field}]`)!;
-      expect(input.getAttribute("error")).not.toBe("");
+      expect(input.getAttribute("error")).toBe(error);
       expect(input.hasAttribute("required")).toBe(true);
-      expect(input.querySelector("wt-help-tooltip")).not.toBeNull();
+      expect(input.getAttribute("hint")).toBe(hint);
+      expect(input.querySelector("wt-help-tooltip")).toBeNull();
     }
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(q(el, "wt-form-actions")).not.toBeNull();
@@ -966,6 +973,7 @@ it("derives invoice language from the retained province after leaving Demo", asy
 
 it("shows the fiscal territory under the province, not above the address", async () => {
   const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+  await type(el, "province", "28");
   const nodes = [...el.shadowRoot!.querySelectorAll("[data-test]")].map((n) =>
     n.getAttribute("data-test"),
   );
@@ -1087,9 +1095,7 @@ it("refuses a draft country that has no venue-setup pack and derives nothing fro
   expect(q(el, "[data-test=taxId]")!.getAttribute("label")).toBe("Tax ID");
   expect(el.shadowRoot!.querySelectorAll('input[name="invoiceLocales"]')).toHaveLength(0);
   expect(q(el, "[data-test=province]")!.tagName).toBe("WT-INPUT");
-  expect(q(el, "[data-test=fiscalTerritory]")!.textContent).toBe(
-    "Fiscal territory: Select province",
-  );
+  expect(q(el, "[data-test=fiscalTerritory]")).toBeNull();
   expect(q(el, "[data-test=timeZone]")!.textContent).toBe("Time zone: —");
   q(el, "[data-test=next]")!.click();
   await el.updateComplete;
@@ -1197,8 +1203,11 @@ describe("setup-venue-screen in Spanish", () => {
     expect(q(el, "[data-test=legalName]")!.getAttribute("error")).toBe(
       "Introduce la razón social.",
     );
-    expect(q(el, "[data-test=legalName] wt-help-tooltip")!.getAttribute("aria-label")).toBe(
-      "Ayuda sobre la razón social",
+    expect(q(el, "[data-test=legalName]")!.getAttribute("hint")).toBe(
+      "Como en sus documentos fiscales",
+    );
+    expect(q(el, "[data-test=seriesCode] wt-help-tooltip")!.getAttribute("aria-label")).toBe(
+      "Ayuda sobre el código de la serie de facturas",
     );
     expect(q(el, "[data-test=timeZone]")!.textContent).toBe("Zona horaria: Europe/Madrid");
     expect(q(el, "[data-test=back]")!.textContent).toBe("Volver");
@@ -1342,5 +1351,115 @@ describe("one receipt language", () => {
     expect(q(el, "#invoice-locales-error")!.textContent).toBe(t("venue.error.invoice_locales"));
     expect(t("venue.label.invoice_locales")).toBe("Receipt language");
     expect(t("venue.error.invoice_locales")).toBe("Choose the receipt language.");
+  });
+});
+
+describe("setup-venue-screen layout", () => {
+  afterEach(() => setLocale("en-GB"));
+
+  const top = (el: SetupVenueScreen, field: string) =>
+    q(el, `[data-test=${field}]`)!.getBoundingClientRect().top;
+
+  it("explains the short fields with a hint in the field and keeps help for the long explanations", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    const hinted = [
+      "taxId",
+      "legalName",
+      "name",
+      "addressLine1",
+      "addressLine2",
+      "postalCode",
+      "city",
+    ];
+    expect(
+      Object.fromEntries(
+        hinted.map((field) => [field, q(el, `[data-test=${field}]`)!.getAttribute("hint")]),
+      ),
+    ).toEqual({
+      taxId: "Of the business that issues the invoices",
+      legalName: "As on the business's tax documents",
+      name: "The name you use for this location",
+      addressLine1: "Street and building number",
+      addressLine2: "Floor, unit or other detail",
+      postalCode: "Used to suggest the province",
+      city: "Town or city",
+    });
+    for (const field of hinted) {
+      expect(q(el, `[data-test=${field}] wt-help-tooltip`), field).toBeNull();
+    }
+    const helped = [
+      "country",
+      "province",
+      "operationDescription",
+      "dayCutover",
+      "tillName",
+      "seriesCode",
+      "rectificativeSeriesCode",
+    ];
+    for (const field of helped) {
+      expect(q(el, `[data-test=${field}] wt-help-tooltip[slot=help]`), field).not.toBeNull();
+    }
+    expect(q(el, "fieldset.locales legend wt-help-tooltip")).not.toBeNull();
+  });
+
+  it("explains the short fields in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    expect(
+      ["taxId", "name", "addressLine1", "addressLine2", "postalCode", "city"].map((field) =>
+        q(el, `[data-test=${field}]`)!.getAttribute("hint"),
+      ),
+    ).toEqual([
+      "Del negocio que emite las facturas",
+      "El nombre que usas para este local",
+      "Calle y número",
+      "Piso, puerta u otro detalle",
+      "Sirve para proponer la provincia",
+      "Pueblo o ciudad",
+    ]);
+  });
+
+  it("drops the lone Location heading on the demo form", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "demo" },
+    });
+    expect(el.shadowRoot!.querySelectorAll("h2")).toHaveLength(0);
+  });
+
+  it("keeps the Business, Location and Invoicing headings on the full form", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    expect([...el.shadowRoot!.querySelectorAll("h2")].map((h) => h.textContent!.trim())).toEqual([
+      "Business",
+      "Location",
+      "Invoicing",
+    ]);
+  });
+
+  it("puts postal code and city side by side where there is room, and stacks them at phone width", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    host.style.width = "620px";
+    expect(top(el, "city")).toBe(top(el, "postalCode"));
+    expect(top(el, "postalCode")).toBeGreaterThan(top(el, "addressLine2"));
+    host.style.width = "330px";
+    expect(top(el, "city")).toBeGreaterThan(top(el, "postalCode"));
+  });
+
+  it("shows the time zone alone until a province settles the fiscal territory, then both on one muted line", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+    const facts = q(el, "[data-test=facts]")!;
+    expect(getComputedStyle(facts).color).toBe("rgb(7, 8, 9)");
+    expect(facts.textContent!.replace(/\s+/g, " ").trim()).toBe("Time zone: Europe/Madrid");
+    expect(q(el, "[data-test=fiscalTerritory]")).toBeNull();
+    await type(el, "province", "28");
+    expect(q(el, "[data-test=facts]")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
+      "Fiscal territory: ES-common · Time zone: Europe/Madrid",
+    );
+  });
+
+  it("shows the intro in the muted text colour", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+    expect(getComputedStyle(q(el, ".intro")!).color).toBe("rgb(7, 8, 9)");
   });
 });

@@ -500,3 +500,63 @@ describe("setup-admin-screen form messages", () => {
     expect(events.map((e) => e.kind)).toEqual(["patch", "goto"]);
   });
 });
+
+describe("setup-admin-screen layout", () => {
+  const top = (el: SetupAdminScreen, field: string) =>
+    q(el, `[data-test=${field}]`)!.getBoundingClientRect().top;
+
+  it("explains each field with a hint in the field, and no help buttons", async () => {
+    const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+    const hints = Object.fromEntries(
+      ["firstNames", "lastNames", "displayName", "email", "password", "pin"].map((field) => [
+        field,
+        q(el, `[data-test=${field}]`)!.getAttribute("hint"),
+      ]),
+    );
+    expect(hints).toEqual({
+      firstNames: "As on your ID",
+      lastNames: "As on your ID",
+      displayName: "The name colleagues see",
+      email: "To sign in and recover your account",
+      password: "To sign in to the dashboard",
+      pin: "Digits, to sign in at the till",
+    });
+    expect(el.shadowRoot!.querySelector("wt-help-tooltip")).toBeNull();
+  });
+
+  it("explains each field in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+    expect(q(el, "[data-test=firstNames]")!.getAttribute("hint")).toBe("Como en tu documento");
+    expect(q(el, "[data-test=displayName]")!.getAttribute("hint")).toBe(
+      "El nombre que ven tus compañeros",
+    );
+    expect(q(el, "[data-test=email]")!.getAttribute("hint")).toBe(
+      "Para entrar y recuperar tu cuenta",
+    );
+    expect(q(el, "[data-test=password]")!.getAttribute("hint")).toBe("Para entrar en el panel");
+    expect(q(el, "[data-test=pin]")!.getAttribute("hint")).toBe("Cifras, para entrar en la caja");
+  });
+
+  it("puts first and last name side by side, and password and PIN, where there is room", async () => {
+    const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+    host.style.width = "620px";
+    expect(top(el, "lastNames")).toBe(top(el, "firstNames"));
+    expect(top(el, "pin")).toBe(top(el, "password"));
+    expect(top(el, "displayName")).toBeGreaterThan(top(el, "firstNames"));
+    expect(top(el, "email")).toBeGreaterThan(top(el, "displayName"));
+  });
+
+  it("stacks every field at phone width", async () => {
+    const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+    host.style.width = "330px";
+    expect(top(el, "lastNames")).toBeGreaterThan(top(el, "firstNames"));
+    expect(top(el, "pin")).toBeGreaterThan(top(el, "password"));
+  });
+
+  it("shows the intro in the muted text colour", async () => {
+    const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+    host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+    expect(getComputedStyle(q(el, ".intro")!).color).toBe("rgb(7, 8, 9)");
+  });
+});
