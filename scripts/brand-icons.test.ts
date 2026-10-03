@@ -85,3 +85,38 @@ describe("the detector itself", () => {
     expect('publicDir: "../../packages/ui/brand/public"'.match(PUBLIC_DIR)).toBeNull();
   });
 });
+
+/**
+ * The dashboard's banner shows the lockup through an `<img>`, which cannot read a CSS custom
+ * property, so its dark-theme copy carries the dark token values literally. Weaker than its name: it
+ * reads `colors.css` as TEXT and takes each value from the `prefers-color-scheme: dark` block alone,
+ * so a `data-theme="dark"` block that disagrees with it is not seen.
+ */
+describe("the dark-theme lockup", () => {
+  const BRAND = join(REPO_ROOT, "packages", "ui", "brand");
+  const colors = readFileSync(
+    join(REPO_ROOT, "packages", "ui-core", "src", "tokens", "colors.css"),
+    "utf8",
+  );
+  const darkBlock = colors.slice(colors.indexOf("@media (prefers-color-scheme: dark)"));
+  const token = (css: string, name: string): string => {
+    const value = css.match(new RegExp(`--wt-color-${name}:\\s*(#[0-9a-f]{6});`))?.[1];
+    if (value === undefined) throw new Error(`colors.css declares no --wt-color-${name}`);
+    return value;
+  };
+
+  it("is the lockup's drawing painted with the dark theme's primary and text colours", () => {
+    const light = readFileSync(join(BRAND, "waitron-lockup.svg"), "utf8");
+    const lightWaiter = `<g fill="${token(colors, "primary")}"`;
+    const lightWord = `<g fill="${token(colors, "text")}"`;
+    expect({ waiter: light.includes(lightWaiter), word: light.includes(lightWord) }).toEqual({
+      waiter: true,
+      word: true,
+    });
+    expect(readFileSync(join(BRAND, "waitron-lockup-dark.svg"), "utf8")).toBe(
+      light
+        .replace(lightWaiter, `<g fill="${token(darkBlock, "primary")}"`)
+        .replace(lightWord, `<g fill="${token(darkBlock, "text")}"`),
+    );
+  });
+});

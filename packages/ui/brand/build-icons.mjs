@@ -17,6 +17,7 @@ const pub = join(here, "public");
 const inkscape = process.env.INKSCAPE ?? "inkscape";
 
 const MARK_BLUE_DARK = "#4c8dff"; // mirrors --wt-color-primary dark; hand-kept in step, see README
+const WORD_INK_DARK = "#eceef2"; // mirrors --wt-color-text dark; hand-kept in step, see README
 const ICON_CANVAS = 136; // mark is 124.64 x 117.09, so this leaves an even margin on the long axis
 
 /**
@@ -117,12 +118,13 @@ write(
 const scale = 100 / mark.h;
 const gap = 30;
 const wordX = mark.w * scale + gap;
-write(
-  join(here, "waitron-lockup.svg"),
+const lockup = (markFill, wordFill) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${word.x} ${word.y} ${wordX + word.w} ${word.h}">` +
-    `<g fill="${mark.fill}" transform="scale(${scale.toFixed(4)})">${mark.body}</g>` +
-    `<g fill="${word.fill}" transform="translate(${wordX.toFixed(1)},0)">${word.body}</g></svg>\n`,
-);
+  `<g fill="${markFill}" transform="scale(${scale.toFixed(4)})">${mark.body}</g>` +
+  `<g fill="${wordFill}" transform="translate(${wordX.toFixed(1)},0)">${word.body}</g></svg>\n`;
+write(join(here, "waitron-lockup.svg"), lockup(mark.fill, word.fill));
+// For an `<img>` on a dark ground, which cannot read the theme's tokens.
+write(join(here, "waitron-lockup-dark.svg"), lockup(MARK_BLUE_DARK, WORD_INK_DARK));
 
 const scratch = mkdtempSync(join(tmpdir(), "waitron-icons-"));
 try {

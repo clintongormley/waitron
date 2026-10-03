@@ -1191,8 +1191,18 @@ failure message; the same on `main` before W18. It is the kind of empty-state te
 Roster and Planned vs actual.
 
 **The WAITRON wordmark is nearly invisible in the dashboard's banner in dark mode (A225, seen
-2026-10-02 while checking A206) — OPEN, not investigated.** The dark lettering of the lockup sits on
-the dark banner; the running figure stays visible. Seen at 1280 wide on every screen.
+2026-10-02 while checking A206) — DONE.** The dark lettering of the lockup sat on the dark banner.
+The owner chose to keep the banner's `<img>` and let the browser swap in a dark-theme file by the
+computer's dark-mode setting: the banner is now a `<picture>` whose dark source is
+`packages/ui/brand/waitron-lockup-dark.svg`, written by `build-icons.mjs`. The login card and setup
+wizard were already readable; they paint their inline logo with the tokens.
+
+**The dark logo's colours are copies of the dark theme's (A248, 2026-10-03, from A225) — OPEN, a
+standing note.** `waitron-lockup-dark.svg` is shown through an `<img>`, which cannot read CSS
+variables, so it carries `#4c8dff` (`--wt-color-primary`, dark) and `#eceef2` (`--wt-color-text`,
+dark) literally, from `build-icons.mjs`. Change either token and change the generator, then re-run it.
+`scripts/brand-icons.test.ts` fails when they drift, weaker than its name: it reads `colors.css` as
+text, from the `prefers-color-scheme: dark` block alone.
 
 **The Products screen as a category tree (A208) — DONE.** Spec
 [2026-10-02-products-category-tree-design.md](superpowers/specs/2026-10-02-products-category-tree-design.md);

@@ -8,6 +8,8 @@ import { DashboardApp } from "./dashboard-app.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
 import { diag } from "./diagnostics.js";
 import indexHtml from "../index.html?raw";
+import darkLockup from "../../../packages/ui/brand/waitron-lockup-dark.svg?raw";
+import lightLockup from "../../../packages/ui/brand/waitron-lockup.svg?raw";
 
 /**
  * Stubs `window.matchMedia` for the drawer breakpoint only; every other query delegates to the real
@@ -726,6 +728,32 @@ describe("dashboard-app", () => {
     expect(venueName(el)!.textContent?.trim()).toBe("Deli Test SL");
     expect(modeIndicator(el)?.textContent?.trim()).toBe("Preparación");
     expect(logoutBtn(el)).toBeNull();
+  });
+
+  it("swaps the banner's logo for the dark-theme lockup when the computer is in dark mode", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+
+    // Vite may inline a small SVG as a data URL, rewriting its quotes and spacing on the way, so
+    // the served drawing is compared with the file's once both are parsed.
+    const drawing = (svg: string) =>
+      new XMLSerializer()
+        .serializeToString(new DOMParser().parseFromString(svg, "image/svg+xml").documentElement)
+        .replace(/\s+/g, " ");
+    const served = async (url: string) => drawing(await (await fetch(url)).text());
+    const picture = brandBanner(el)!.querySelector("picture")!;
+    const sources = await Promise.all(
+      [...picture.querySelectorAll("source")].map(async (s) => ({
+        media: s.media,
+        dark: (await served(s.srcset)) === drawing(darkLockup),
+      })),
+    );
+    expect(sources).toEqual([{ media: "(prefers-color-scheme: dark)", dark: true }]);
+    const img = picture.querySelector<HTMLImageElement>('img[alt="Waitron"]')!;
+    expect(await served(img.src)).toBe(drawing(lightLockup));
   });
 
   it("shows an account-action link before probing an existing management session", async () => {
