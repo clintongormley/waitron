@@ -1661,6 +1661,156 @@ test("a long description wraps inside the panel rather than widening it", async 
   );
 });
 
+const WITH_DISABLED: ComboboxOption[] = [
+  { value: "rye", label: "Rye" },
+  { value: "wine", label: "Wine", disabled: true, description: "Has variants." },
+  { value: "olives", label: "Olives" },
+];
+
+/** Playwright waits for an aria-disabled element to become enabled before clicking it; a person can
+ * still press a greyed row. */
+const FORCE = { force: true } as const;
+
+function changesOf(el: WtCombobox): unknown[] {
+  const changes: unknown[] = [];
+  el.addEventListener("wt-change", (event) => changes.push((event as CustomEvent).detail));
+  return changes;
+}
+
+test("a disabled option is marked aria-disabled and drawn in the muted token, its label and its description alike", async () => {
+  const el = await mountWith('<wt-combobox label="Product"></wt-combobox>', WITH_DISABLED);
+  host.style.setProperty("--wt-color-text", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+  await userEvent.click(fieldParts(el).trigger);
+  const [rye, wine] = optionRows(el);
+  expect(wine!.getAttribute("aria-disabled")).toBe("true");
+  expect(rye!.hasAttribute("aria-disabled")).toBe(false);
+  expect(getComputedStyle(wine!.querySelector(".option-label")!).color).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(wine!.querySelector(".option-description")!).color).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(rye!.querySelector(".option-label")!).color).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(wine!).cursor).toBe("not-allowed");
+  expect(getComputedStyle(rye!).cursor).toBe("pointer");
+});
+
+test("a hovered disabled option does not paint the hover background a choosable one does", async () => {
+  const el = await mountWith('<wt-combobox label="Product"></wt-combobox>', WITH_DISABLED);
+  host.style.setProperty("--wt-color-bg", "rgb(4, 5, 6)");
+  await userEvent.click(fieldParts(el).trigger);
+  const [rye, wine] = optionRows(el);
+  await userEvent.hover(wine!);
+  expect(getComputedStyle(wine!).backgroundColor).not.toBe("rgb(4, 5, 6)");
+  await userEvent.hover(rye!);
+  expect(getComputedStyle(rye!).backgroundColor).toBe("rgb(4, 5, 6)");
+});
+
+test("clicking a disabled option chooses nothing, sends no change and leaves the list open", async () => {
+  const el = await mountWith('<wt-combobox label="Product"></wt-combobox>', WITH_DISABLED);
+  const changes = changesOf(el);
+  await userEvent.click(fieldParts(el).trigger);
+  await userEvent.click(optionRows(el)[1]!, FORCE);
+  expect(el.value).toBe("");
+  expect(changes).toEqual([]);
+  expect(fieldParts(el).popup.matches(":popover-open")).toBe(true);
+  // A choosable row still chooses afterwards.
+  await userEvent.click(optionRows(el)[2]!);
+  expect(changes).toEqual([{ value: "olives" }]);
+});
+
+test("the arrows reach a disabled option, and Enter on it chooses nothing and submits nothing", async () => {
+  const el = await mountWith('<wt-combobox label="Product"></wt-combobox>', WITH_DISABLED);
+  const changes = changesOf(el);
+  await userEvent.click(fieldParts(el).trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+  expect(search.getAttribute("aria-activedescendant")).toBe(optionRows(el)[1]!.id);
+  const [enterPrevented] = pressKeys(search, "Enter");
+  expect(enterPrevented).toBe(true);
+  await el.updateComplete;
+  expect(el.value).toBe("");
+  expect(changes).toEqual([]);
+  expect(fieldParts(el).popup.matches(":popover-open")).toBe(true);
+  await userEvent.keyboard("{ArrowDown}{Enter}");
+  expect(changes).toEqual([{ value: "olives" }]);
+});
+
+test("without a search box, Enter and Space on a disabled option choose nothing", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Product" search="never"></wt-combobox>',
+    WITH_DISABLED,
+  );
+  const changes = changesOf(el);
+  await userEvent.click(fieldParts(el).trigger);
+  const list = el.shadowRoot!.querySelector<HTMLElement>(".list")!;
+  await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+  expect(list.getAttribute("aria-activedescendant")).toBe(optionRows(el)[1]!.id);
+  expect(pressKeys(list, "Enter", " ")).toEqual([true, true]);
+  await el.updateComplete;
+  expect(el.value).toBe("");
+  expect(changes).toEqual([]);
+  expect(fieldParts(el).popup.matches(":popover-open")).toBe(true);
+});
+
+test("in a multiple choice, a disabled option is never toggled on", async () => {
+  const el = await mountWith('<wt-combobox label="Product" multiple></wt-combobox>', WITH_DISABLED);
+  const changes = changesOf(el);
+  await userEvent.click(fieldParts(el).trigger);
+  await userEvent.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+  await userEvent.click(optionRows(el)[1]!, FORCE);
+  expect(el.values).toEqual([]);
+  expect(changes).toEqual([]);
+});
+
+test("a disabled action row sends no action", async () => {
+  const el = await mountWith('<wt-combobox label="Unit"></wt-combobox>', [
+    { value: "add-unit", label: "Add unit…", action: true, disabled: true },
+  ]);
+  const actions = vi.fn();
+  el.addEventListener("wt-combobox-action", actions);
+  await userEvent.click(fieldParts(el).trigger);
+  await userEvent.click(optionRows(el)[0]!, FORCE);
+  await userEvent.keyboard("{ArrowDown}{Enter}");
+  expect(actions).not.toHaveBeenCalled();
+});
+
+test("a search finds a disabled option and shows it with its description, named by its label", async () => {
+  const el = await mountWith('<wt-combobox label="Product"></wt-combobox>', WITH_DISABLED);
+  await userEvent.click(fieldParts(el).trigger);
+  await userEvent.type(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "wi");
+  const rows = optionRows(el);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.getAttribute("aria-disabled")).toBe("true");
+  expect(el.shadowRoot!.querySelector(".empty")).toBeNull();
+  await expect.element(page.elementLocator(rows[0]!)).toHaveAccessibleName("Wine");
+  await expect.element(page.elementLocator(rows[0]!)).toHaveAccessibleDescription("Has variants.");
+});
+
+test("type-ahead on a closed list without a search box steps over a disabled option", async () => {
+  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', [
+    { value: "pepper", label: "Pepper", disabled: true },
+    { value: "paper", label: "Paper" },
+  ]);
+  const changes = changesOf(el);
+  fieldParts(el).trigger.focus();
+  pressKeys(fieldParts(el).trigger, "p");
+  await el.updateComplete;
+  expect(el.value).toBe("paper");
+  expect(changes).toEqual([{ value: "paper" }]);
+});
+
+test("type-ahead in an open list without a search box moves onto a disabled option, as the arrows do", async () => {
+  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', [
+    { value: "pepper", label: "Pepper", disabled: true },
+    { value: "paper", label: "Paper" },
+  ]);
+  const changes = changesOf(el);
+  await userEvent.click(fieldParts(el).trigger);
+  const list = el.shadowRoot!.querySelector<HTMLElement>(".list")!;
+  pressKeys(list, "p");
+  await el.updateComplete;
+  expect(list.getAttribute("aria-activedescendant")).toBe(optionRows(el)[0]!.id);
+  expect(changes).toEqual([]);
+});
+
 const GROUPED: ComboboxOption[] = [
   { value: "ana", label: "Ana", group: "Staff" },
   { value: "luis", label: "Luis", group: "Staff" },

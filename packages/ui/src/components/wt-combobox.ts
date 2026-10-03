@@ -21,6 +21,8 @@ export interface ComboboxOption {
   /** A second, muted line under the label in the open list, and the row's accessible description.
    * The closed field shows the label alone. */
   description?: string;
+  /** Shown, matched by the search and reachable by the arrows, but never chosen or run. */
+  disabled?: boolean;
 }
 
 /** With `search="auto"`, the search box shows only when there are more options than this. */
@@ -206,6 +208,11 @@ export class WtCombobox extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      .option[aria-disabled="true"] {
+        color: var(--wt-color-text-muted);
+        cursor: not-allowed;
+      }
+
       .icon,
       .tick {
         flex: none;
@@ -214,7 +221,7 @@ export class WtCombobox extends LitElement {
       /* --wt-color-bg, not --wt-color-surface-raised: raised equals the panel's own surface in the
          light theme, so it would be invisible. Hover adds background; .active adds an outline — the
          two compose. */
-      .option:hover {
+      .option:not([aria-disabled="true"]):hover {
         background: var(--wt-color-bg);
       }
 
@@ -424,6 +431,7 @@ export class WtCombobox extends LitElement {
   }
 
   private activateOption(option: ComboboxOption, sourceEvent: Event): void {
+    if (option.disabled) return;
     if (option.action) this.runAction(option.value, sourceEvent);
     else this.commitSelection(option.value, sourceEvent);
   }
@@ -520,8 +528,14 @@ export class WtCombobox extends LitElement {
 
   /** The index of the option the typed text picks: the next one after `from` when the text is one
    * repeated letter, so pressing it again steps on, otherwise the first from `from` on. Action rows
-   * are never picked. -1 when nothing matches. */
-  private typeAhead(key: string, options: ComboboxOption[], from: number): number {
+   * are never picked, nor disabled ones with `skipDisabled`, which the closed trigger sets because
+   * there the pick is chosen at once. -1 when nothing matches. */
+  private typeAhead(
+    key: string,
+    options: ComboboxOption[],
+    from: number,
+    skipDisabled = false,
+  ): number {
     clearTimeout(this.typedReset);
     this.typedReset = setTimeout(() => (this.typed = ""), TYPE_AHEAD_RESET_MS);
     this.typed += key.toLowerCase();
@@ -531,7 +545,8 @@ export class WtCombobox extends LitElement {
     for (let step = 0; step < options.length; step += 1) {
       const index = (start + step) % options.length;
       const option = options[index]!;
-      if (!option.action && option.label.toLowerCase().startsWith(text)) return index;
+      if (option.action || (skipDisabled && option.disabled)) continue;
+      if (option.label.toLowerCase().startsWith(text)) return index;
     }
     return -1;
   }
@@ -579,7 +594,7 @@ export class WtCombobox extends LitElement {
     // All options, not the filtered ones: the search text left from the last opening is not shown.
     const options = this.options;
     const current = this.indexOfChosen(options);
-    const index = this.typeAhead(event.key, options, current);
+    const index = this.typeAhead(event.key, options, current, true);
     if (index >= 0 && index !== current) this.commitSelection(options[index]!.value, event);
   }
 
@@ -739,6 +754,7 @@ export class WtCombobox extends LitElement {
         class=${classMap({ option: true, active: index === this.activeIndex, primary: Boolean(option.primary) })}
         role="option"
         aria-selected=${selected}
+        aria-disabled=${option.disabled ? "true" : nothing}
         aria-labelledby=${described ? `${rowId}-label` : nothing}
         aria-describedby=${described ? `${rowId}-description` : nothing}
         @click=${(event: MouseEvent) => {
