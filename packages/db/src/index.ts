@@ -112,6 +112,8 @@ export { receiptReprints } from "./schema/receipt-reprints.js";
 export { kitchenPrintJobLines } from "./schema/kitchen-print-job-lines.js";
 export { kitchenPrintJobs } from "./schema/kitchen-print-jobs.js";
 export { stationPrinters } from "./schema/station-printers.js";
+export { watchers, watcherStations, watcherZones, watcherPrinters } from "./schema/watchers.js";
+export { watcherItemMarks } from "./schema/watcher-item-marks.js";
 export { type AllergenMap, catalogues, categories, products } from "./schema/catalogue.js";
 export { locationCatalogues } from "./schema/location-catalogues.js";
 export { ingredients, recipeLines } from "./schema/recipes.js";
@@ -201,7 +203,12 @@ export {
 } from "./reserved-identity.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
-export { billPartyTableLabels, orderTableLabels, partyTableLabels } from "./party-table-labels.js";
+export {
+  billPartyTableLabels,
+  orderTableLabels,
+  partySurvivors,
+  partyTableLabels,
+} from "./party-table-labels.js";
 export { withTransaction } from "./tenancy.js";
 export { isRefusal, isUniqueViolation } from "./unique-violation.js";
 export {

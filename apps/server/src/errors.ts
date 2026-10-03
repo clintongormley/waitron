@@ -40,6 +40,8 @@ declare module "@waitron/shared" {
     "printer.bluetooth_not_discovered": { address: string };
     /** Forget names an address the named print agent does not currently report as paired. */
     "printer.bluetooth_not_paired": { address: string };
+    /** One printer cannot print both station tickets and watcher copies. */
+    "printer.makes_and_watches": { id: string };
     "password.throttled": { retryAfterSeconds: number };
     /** Too many public invitation/reset attempts reached this process in the current window. */
     "account_action.rate_limited": Record<string, never>;
@@ -601,6 +603,10 @@ declare module "@waitron/shared" {
     "zone.name_taken": { name: string };
     /** A kitchen-station name already exists in this venue. `name` is the operator's own text. */
     "station.name_taken": { name: string };
+    /** No watcher with this id in this venue. */
+    "watcher.not_found": { watcherId: string };
+    /** A switched-on watcher already has this name in this venue. */
+    "watcher.name_taken": { name: string };
     // `station.not_found` is declared in @waitron/db's errors.ts.
     /**
      * No kitchen notice with this id in this venue (for a station's own display, at its station).
@@ -691,8 +697,7 @@ declare module "@waitron/shared" {
      */
     "device.not_found": { deviceId: string };
     /**
-     * A join request was accepted under a station-binding profile (`kds_station`) with NO station.
-     * Distinct from `station.not_found`, raised when a station WAS supplied but is unusable.
+     * A join request was accepted under a kitchen-screen profile with no station and no watcher.
      */
     "device.station_required": Record<string, never>;
     /**

@@ -9,6 +9,8 @@ import {
   nowIso,
   printAgents,
   printJobs,
+  watchers,
+  stationPrinters,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -40,6 +42,7 @@ import { printingAlertSource } from "./alert-sources.js";
 import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import type { Logger } from "./logger.js";
 import { mountPrintApi } from "./print-api.js";
+import { createStation } from "./kitchen.js";
 import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
 import { formatPrinterTestPage } from "./printer-test-page.js";
@@ -164,7 +167,7 @@ function mountApp(
 
 async function send(
   app: Hono,
-  method: "GET" | "POST" | "PATCH",
+  method: "GET" | "POST" | "PATCH" | "PUT",
   path: string,
   opts: { body?: unknown; cookie?: string; bearer?: string } = {},
 ): Promise<Response> {
@@ -1216,6 +1219,52 @@ describe("mountPrintApi — management: agents", () => {
 });
 
 describe("mountPrintApi — management: printers CRUD", () => {
+  it("sets a printer watcher and refuses invalid, unauthorized and conflicting attachments", async () => {
+    const app = mountApp();
+    const { agentId } = await joinAndAccept(app);
+    const printerId = await createPrinterVia(app, agentId, "Watcher copy");
+    const [watcher] = await suite.db
+      .insert(watchers)
+      .values({ locationId, name: `Pass ${randomUUID()}`, everyStation: true, everyZone: true })
+      .returning({ id: watchers.id });
+    const path = `/management-api/printers/${printerId}/watcher`;
+    for (const body of [{}, { watcherId: 42 }]) {
+      const response = await send(app, "PUT", path, { cookie: managerCookie, body });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "watcherId" } },
+      });
+    }
+    expect((await send(app, "PUT", path, { body: { watcherId: watcher!.id } })).status).toBe(401);
+    expect(
+      (await send(app, "PUT", path, { cookie: staffCookie, body: { watcherId: watcher!.id } }))
+        .status,
+    ).toBe(403);
+    expect(
+      (await send(app, "PUT", path, { cookie: managerCookie, body: { watcherId: randomUUID() } }))
+        .status,
+    ).toBe(404);
+    expect(
+      (await send(app, "PUT", path, { cookie: managerCookie, body: { watcherId: watcher!.id } }))
+        .status,
+    ).toBe(204);
+    const rows = (await (
+      await send(app, "GET", "/management-api/printers", { cookie: managerCookie })
+    ).json()) as Record<string, unknown>[];
+    expect(rows.find((row) => row.id === printerId)).toMatchObject({ watcherId: watcher!.id });
+    expect(rows.find((row) => row.id === printerId)).not.toHaveProperty("ticketScope");
+    expect(
+      (await send(app, "PUT", path, { cookie: managerCookie, body: { watcherId: null } })).status,
+    ).toBe(204);
+    const station = await withTransaction(suite.db, (tx) =>
+      createStation(tx, cfg, { name: `Grill ${randomUUID()}` }),
+    );
+    await suite.db.insert(stationPrinters).values({ stationId: station.id, printerId });
+    expect(
+      (await send(app, "PUT", path, { cookie: managerCookie, body: { watcherId: watcher!.id } }))
+        .status,
+    ).toBe(409);
+  });
   it("creates, lists, updates and deactivates a printer", async () => {
     const app = mountApp();
     const { agentId } = await joinAndAccept(app);
@@ -1245,10 +1294,10 @@ describe("mountPrintApi — management: printers CRUD", () => {
         id: string;
         name: string;
         host: string;
-        ticketScope: string;
       }[]
     ).find((r) => r.id === printerId)!;
-    expect(patched).toMatchObject({ name: "Cocina 2", host: "10.0.0.20", ticketScope: "order" });
+    expect(patched).toMatchObject({ name: "Cocina 2", host: "10.0.0.20" });
+    expect(patched).not.toHaveProperty("ticketScope");
 
     const deactivate = await send(app, "POST", `/management-api/printers/${printerId}/deactivate`, {
       cookie: managerCookie,
@@ -1305,9 +1354,10 @@ describe("mountPrintApi — management: printers CRUD", () => {
     expect(res.status).toBe(204);
     const rows = (await (
       await send(app, "GET", "/management-api/printers", { cookie: managerCookie })
-    ).json()) as { id: string; port: number; ticketScope: string; localKey: string | null }[];
+    ).json()) as { id: string; port: number; localKey: string | null }[];
     const row = rows.find((r) => r.id === printerId)!;
-    expect(row).toMatchObject({ port: 9300, ticketScope: "order", localKey: null });
+    expect(row).toMatchObject({ port: 9300, localKey: null });
+    expect(row).not.toHaveProperty("ticketScope");
   });
 
   it("update rejects a non-boolean active → 400", async () => {

@@ -2,10 +2,8 @@
  * Device join-and-accept binding, plus direct cases over `resolveDeviceBinding` and
  * `requireDeviceBinding`.
  *
- * What the join-and-accept cases pin is the binding RULE: `resolveDeviceBinding` picks the station
- * or the register, and the database refuses any other shape through `device_binding_rule_insert` /
- * `_update`, created by `packages/db/drizzle/0001_behavioural_triggers.sql` and driven by
- * `scripts/behavioural-triggers.test.ts` and `packages/db/src/schema/devices.trigger.test.ts`.
+ * What the join-and-accept cases pin is the binding rule: a kitchen screen has one station or
+ * watcher, while a till or handheld binds a register.
  */
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -25,6 +23,7 @@ import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { requireDeviceBinding, resolveDeviceBinding } from "./device.js";
+import { createWatcher, removeWatcher } from "./watchers.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -37,6 +36,63 @@ interface SeededVenue {
   cfg: TillConfig;
   stationId: string;
 }
+
+async function watcher(cfg: TillConfig): Promise<string> {
+  const made = await withTransaction(suite.db, (tx) =>
+    createWatcher(tx, cfg, {
+      name: "Pass",
+      everyStation: true,
+      stationIds: [],
+      everyZone: true,
+      zoneIds: [],
+      runsPass: false,
+    }),
+  );
+  return made.id;
+}
+
+describe("watcher screen binding", () => {
+  it("binds a kitchen screen to exactly one live watcher", async () => {
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile("kds", "Watcher screen");
+    const watcherId = await watcher(cfg);
+    const dev = await enrolDeviceForTest(suite.db, cfg, {
+      name: "Pass screen",
+      profileId,
+      watcherId,
+    });
+    const { rows } = await suite.db.execute<{
+      station_id: string | null;
+      watcher_id: string | null;
+    }>(sql`select station_id, watcher_id from devices where id = ${dev.deviceId}`);
+    expect(rows).toEqual([{ station_id: null, watcher_id: watcherId }]);
+  });
+
+  it("refuses missing, duplicate, and switched-off kitchen screen targets", async () => {
+    const { cfg, stationId } = await setupVenue();
+    const profileId = await seedProfile("kds", "Watcher screen");
+    const watcherId = await watcher(cfg);
+    await expect(
+      enrolDeviceForTest(suite.db, cfg, { name: "None", profileId }),
+    ).rejects.toMatchObject({ code: "device.station_required" });
+    await expect(
+      enrolDeviceForTest(suite.db, cfg, { name: "Both", profileId, stationId, watcherId }),
+    ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "watcherId" } });
+    await withTransaction(suite.db, (tx) => removeWatcher(tx, cfg, watcherId));
+    await expect(
+      enrolDeviceForTest(suite.db, cfg, { name: "Removed", profileId, watcherId }),
+    ).rejects.toMatchObject({ code: "watcher.not_found" });
+  });
+
+  it("refuses a watcher target for a till profile", async () => {
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile("till", "Till screen");
+    const watcherId = await watcher(cfg);
+    await expect(
+      enrolDeviceForTest(suite.db, cfg, { name: "Till", profileId, watcherId }),
+    ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "watcherId" } });
+  });
+});
 
 /** A fresh tenant + venue + one station + one seeded `tills` row ('Caja 1'). Every test calls it,
  * and `useVenueDb` empties the data tables between tests, so the device and till counts each case

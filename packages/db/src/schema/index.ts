@@ -22,6 +22,8 @@ export * from "./receipt-reprints.js";
 export * from "./kitchen-print-job-lines.js";
 export * from "./kitchen-print-jobs.js";
 export * from "./station-printers.js";
+export * from "./watchers.js";
+export * from "./watcher-item-marks.js";
 export * from "./drawer-opens.js";
 export * from "./catalogue.js";
 export * from "./location-catalogues.js";

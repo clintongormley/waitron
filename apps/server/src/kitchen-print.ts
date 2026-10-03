@@ -20,6 +20,8 @@ import {
   printJobs,
   printers,
   stationPrinters,
+  watcherPrinters,
+  watchers,
   ticketItems,
   ticketState,
   parties,
@@ -44,6 +46,9 @@ import { readRestOfOrder } from "./rest-of-order.js";
 import { partyFamilies, partyFamily } from "./parties.js";
 import type { KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
+import { listWatchers, watcherSees } from "./watchers.js";
+import type { WatcherFollows } from "./watchers.js";
+import { orderWatchZones } from "./watch-zones.js";
 import "./errors.js";
 
 /**
@@ -88,9 +93,44 @@ export function extraLabel(name: string, quantity: Decimal, dishQuantity: Decima
 interface PrinterMapping {
   stationId: string;
   printerId: string;
-  ticketScope: "station" | "order";
   paperWidth: PaperWidth;
   resolution: Resolution;
+}
+
+export type WatcherCopies = "all" | "none" | { newSince: string };
+
+interface WatcherPrinter extends EscSetting {
+  printerId: string;
+  watcherId: string;
+  watcherName: string;
+  follows: WatcherFollows;
+}
+
+async function readWatcherPrinters(tx: Transaction, cfg: TillConfig): Promise<WatcherPrinter[]> {
+  const rows = await tx
+    .select({
+      printerId: watcherPrinters.printerId,
+      watcherId: watcherPrinters.watcherId,
+      paperWidth: printers.paperWidth,
+      resolution: printers.resolution,
+    })
+    .from(watcherPrinters)
+    .innerJoin(printers, eq(printers.id, watcherPrinters.printerId))
+    .innerJoin(watchers, eq(watchers.id, watcherPrinters.watcherId))
+    .where(
+      and(
+        eq(watchers.locationId, cfg.locationId),
+        eq(watchers.active, true),
+        eq(printers.active, true),
+      ),
+    );
+  if (rows.length === 0) return [];
+  const followed = new Map((await listWatchers(tx, cfg)).map((watcher) => [watcher.id, watcher]));
+  return rows.map((row) => ({
+    ...row,
+    watcherName: followed.get(row.watcherId)!.name,
+    follows: followed.get(row.watcherId)!,
+  }));
 }
 
 /**
@@ -107,7 +147,6 @@ async function printerMappings(
     .select({
       stationId: stationPrinters.stationId,
       printerId: stationPrinters.printerId,
-      ticketScope: printers.ticketScope,
       paperWidth: printers.paperWidth,
       resolution: printers.resolution,
     })
@@ -308,6 +347,9 @@ export async function orderTableLabel(
 interface OrderHeader {
   orderNumber: string;
   tableLabel: string | null;
+  id: string;
+  partyId: string | null;
+  deliveryTableId: string | null;
 }
 
 /** Each order's number and table ({@link orderTableLabels}), keyed by order. */
@@ -330,7 +372,13 @@ async function readOrderHeaders(
   return new Map(
     orders.map((order) => [
       order.id,
-      { orderNumber: String(order.orderNumber), tableLabel: labels.get(order.id)! },
+      {
+        id: order.id,
+        partyId: order.partyId,
+        deliveryTableId: order.deliveryTableId,
+        orderNumber: String(order.orderNumber),
+        tableLabel: labels.get(order.id)!,
+      },
     ]),
   );
 }
@@ -345,67 +393,47 @@ async function readOrderHeader(
 
 /** A kitchen ticket's printers, all of one layout so they share its bytes. */
 interface KitchenRoute {
-  /** A `station`-scope printer's route names the one station; an `order`-scope printer's is null. */
-  station: string | null;
+  station: string;
   stationIds: string[];
   printers: PrinterMapping[];
 }
 
 /** One kitchen print job: its printer, the stations and lines its paper carries, and its bytes. */
-type KitchenJob = Omit<KitchenRoute, "printers"> & {
+type KitchenJob = Omit<KitchenRoute, "printers" | "station"> & {
+  station: string | null;
   printerId: string;
+  watcherId?: string;
   lineIds: string[];
   bytes: Uint8Array;
 };
 
-/** Each station's printer mappings, in the order of the list they came from, with their place in it. */
-type MappingsByStation = ReadonlyMap<string, readonly (PrinterMapping & { at: number })[]>;
+/** Each station's printer mappings, in the order of the list they came from. */
+type MappingsByStation = ReadonlyMap<string, readonly PrinterMapping[]>;
 
 function mappingsByStation(mappings: readonly PrinterMapping[]): MappingsByStation {
-  const byStation = new Map<string, (PrinterMapping & { at: number })[]>();
-  mappings.forEach((mapping, at) => {
+  const byStation = new Map<string, PrinterMapping[]>();
+  mappings.forEach((mapping) => {
     const bucket = byStation.get(mapping.stationId) ?? [];
-    bucket.push({ ...mapping, at });
+    bucket.push(mapping);
     byStation.set(mapping.stationId, bucket);
   });
   return byStation;
 }
 
 /**
- * Which printers get a ticket for which stations, in job order. For each INVOLVED station, in the
- * order given, each attached `station`-scope printer gets a ticket of that station's own items;
- * every `order`-scope (group) printer attached to an involved station, or to one of
- * `orderScopeAlsoAt`'s, gets ONE consolidated ticket of the whole event, deduped by printer id,
- * which lists, and is linked to, only the involved stations. `mappings` may name other stations.
+ * Each involved station's printers, grouped by layout in station order.
  */
 function routeKitchenTickets(
   stationIds: readonly string[],
-  orderScopeAlsoAt: readonly string[],
   mappings: MappingsByStation,
 ): KitchenRoute[] {
   if (stationIds.length === 0) return [];
   const routes: KitchenRoute[] = [];
-  const groupPrinters = new Map<string, PrinterMapping>();
   for (const stationId of stationIds) {
     const attached = mappings.get(stationId) ?? [];
-    for (const printer of attached) {
-      if (printer.ticketScope === "order") groupPrinters.set(printer.printerId, printer);
-    }
-    const stationScope = attached.filter((printer) => printer.ticketScope === "station");
-    for (const printers of groupByLayout(stationScope)) {
+    for (const printers of groupByLayout(attached)) {
       routes.push({ station: stationId, stationIds: [stationId], printers });
     }
-  }
-  // Back in the list's order, as walking the whole list would add them.
-  const orderScope = [...new Set([...stationIds, ...orderScopeAlsoAt])]
-    .flatMap((stationId) => mappings.get(stationId) ?? [])
-    .filter((mapping) => mapping.ticketScope === "order")
-    .sort((a, b) => a.at - b.at);
-  for (const mapping of orderScope) {
-    if (!groupPrinters.has(mapping.printerId)) groupPrinters.set(mapping.printerId, mapping);
-  }
-  for (const printers of groupByLayout([...groupPrinters.values()])) {
-    routes.push({ station: null, stationIds: [...stationIds], printers });
   }
   return routes;
 }
@@ -424,13 +452,17 @@ async function planKitchenTickets(
     reprint,
     mark,
     from,
-    orderScopeAlsoAt = [],
+    makers = true,
+    watchers: copies = "all",
+    rerouted,
     restOfOrderExcept,
   }: {
     reprint: boolean;
     mark?: "HOLD" | "FIRE";
     from?: string;
-    orderScopeAlsoAt?: readonly string[];
+    makers?: boolean;
+    watchers?: WatcherCopies;
+    rerouted?: ReadonlyMap<string, { stationId: string; stationName: string }>;
     restOfOrderExcept?: ReadonlySet<string>;
   },
 ): Promise<KitchenJob[]> {
@@ -438,9 +470,9 @@ async function planKitchenTickets(
 
   const stationIds = [...new Set(firedItems.map((f) => f.stationId))];
 
-  const mappingRows = await printerMappings(tx, [...new Set([...stationIds, ...orderScopeAlsoAt])]);
-
-  if (mappingRows.length === 0) return [];
+  const mappingRows = makers ? await printerMappings(tx, stationIds) : [];
+  const watcherRows = copies === "none" ? [] : await readWatcherPrinters(tx, cfg);
+  if (mappingRows.length === 0 && watcherRows.length === 0) return [];
 
   const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
 
@@ -483,14 +515,11 @@ async function planKitchenTickets(
   const jobs: KitchenJob[] = [];
   const routes = routeKitchenTickets(
     stations.map((station) => station.id),
-    orderScopeAlsoAt,
     mappingsByStation(mappingRows),
   );
   const restRoutes = routes.filter(
     (route) =>
-      route.station !== null &&
-      stationById.get(route.station)?.showsRestOfOrder &&
-      !restOfOrderExcept?.has(route.station),
+      stationById.get(route.station)?.showsRestOfOrder && !restOfOrderExcept?.has(route.station),
   );
   const rest = restRoutes.length === 0 ? [] : (await readRestOfOrder(tx, [orderId])).get(orderId)!;
   const eachByIdentity =
@@ -508,42 +537,33 @@ async function planKitchenTickets(
     firedAt: new Date(),
   };
   for (const route of routes) {
-    const station = route.station === null ? null : stationById.get(route.station)!;
+    const station = stationById.get(route.station)!;
     const bytes = formatKitchenTicket(
-      station === null
-        ? {
-            ...head,
-            scope: "order",
-            stations: stations.map((each): KitchenTicketStation => ({
-              stationName: each.name,
-              items: each.items,
-            })),
-          }
-        : {
-            ...head,
-            scope: "station",
-            stationName: station.name,
-            items: station.items,
-            ...(restRoutes.includes(route)
-              ? {
-                  alsoOnOrder: {
-                    locale: cfg.locale,
-                    items: rest
-                      .filter((item) => item.stationId !== route.station)
-                      .map((item) => ({
-                        qty: item.quantity,
-                        unit:
-                          item.unitName === null || eachByIdentity.has(item.workingOrderLineId)
-                            ? undefined
-                            : ticketName(item.unitName, cfg.locale),
-                        name: item.name,
-                        stationName: item.stationName,
-                        held: item.held,
-                      })),
-                  },
-                }
-              : {}),
-          },
+      {
+        ...head,
+        scope: "station",
+        stationName: station.name,
+        items: station.items,
+        ...(restRoutes.includes(route)
+          ? {
+              alsoOnOrder: {
+                locale: cfg.locale,
+                items: rest
+                  .filter((item) => item.stationId !== route.station)
+                  .map((item) => ({
+                    qty: item.quantity,
+                    unit:
+                      item.unitName === null || eachByIdentity.has(item.workingOrderLineId)
+                        ? undefined
+                        : ticketName(item.unitName, cfg.locale),
+                    name: item.name,
+                    stationName: item.stationName,
+                    held: item.held,
+                  })),
+              },
+            }
+          : {}),
+      },
       route.printers[0]!,
     );
     const lineIds = [
@@ -563,10 +583,91 @@ async function planKitchenTickets(
       });
     }
   }
+  if (watcherRows.length > 0) {
+    const printable = await withoutMadeHere(tx, firedItems);
+    const zoneId = (await orderWatchZones(tx, cfg, [order])).get(orderId) ?? null;
+    const byWatcher = new Map<string, WatcherPrinter[]>();
+    for (const printer of watcherRows) {
+      const group = byWatcher.get(printer.watcherId) ?? [];
+      group.push(printer);
+      byWatcher.set(printer.watcherId, group);
+    }
+    for (const printers of [...byWatcher.values()].sort((a, b) =>
+      a[0]!.watcherName.localeCompare(b[0]!.watcherName),
+    )) {
+      const watcher = printers[0]!;
+      if (
+        typeof copies === "object" &&
+        watcherSees(watcher.follows, { stationId: copies.newSince, zoneId })
+      )
+        continue;
+      const seen = stations.filter((station) =>
+        watcherSees(watcher.follows, { stationId: station.id, zoneId }),
+      );
+      if (seen.length === 0) continue;
+      const sections = new Map<string | null, FiredItem[]>();
+      for (const fired of printable) {
+        if (!seen.some((station) => station.id === fired.stationId)) continue;
+        const previous = rerouted?.get(fired.workingOrderLineId);
+        const from =
+          previous !== undefined &&
+          !watcherSees(watcher.follows, { stationId: previous.stationId, zoneId })
+            ? previous.stationName
+            : null;
+        sections.set(from, [...(sections.get(from) ?? []), fired]);
+      }
+      for (const [from, sectionItems] of sections) {
+        const sectionStations = seen.filter((station) =>
+          sectionItems.some((item) => item.stationId === station.id),
+        );
+        const stationTicketSections = sectionStations.map((station): KitchenTicketStation => ({
+          stationName: station.name,
+          items: arrangeTicketItems(
+            sectionItems
+              .filter((item) => item.stationId === station.id)
+              .map((item) => {
+                const entry = itemsByLine.get(item.workingOrderLineId)!;
+                const printed = atFiredQuantity(entry.item, item);
+                return {
+                  lineNo: entry.lineNo,
+                  item: entry.group === null ? printed : { ...printed, group: entry.group },
+                };
+              })
+              .sort((a, b) => groupOrder(a.item) - groupOrder(b.item) || a.lineNo - b.lineNo)
+              .map((entry) => entry.item),
+            grouping,
+          ),
+        }));
+        const lineIds = [...new Set(sectionItems.map((item) => item.workingOrderLineId))];
+        for (const layout of groupByLayout(printers)) {
+          const bytes = formatKitchenTicket(
+            {
+              ...head,
+              mark: from === null ? mark : undefined,
+              from: from === null ? head.from : { stationName: from, locale: cfg.locale },
+              scope: "watcher",
+              watcherName: watcher.watcherName,
+              stations: stationTicketSections,
+            },
+            layout[0]!,
+          );
+          for (const printer of layout)
+            jobs.push({
+              printerId: printer.printerId,
+              watcherId: watcher.watcherId,
+              station: null,
+              stationIds: [],
+              lineIds,
+              bytes,
+            });
+        }
+      }
+    }
+  }
   return jobs;
 }
 
-/** Enqueue each job and link it to the bill and to every station and line its paper carries. */
+/** Enqueue each job; only station tickets receive bill, station and line links. */
 async function enqueueKitchenJobs(
   tx: Transaction,
   cfg: TillConfig,
@@ -577,6 +678,7 @@ async function enqueueKitchenJobs(
   const printCfg: PrintConfig = { locationId: cfg.locationId };
   for (const job of jobs) {
     const { jobId } = await enqueuePrintJob(tx, printCfg, job.printerId, job.bytes);
+    if (job.watcherId !== undefined) continue;
     await linkKitchenJob(tx, jobId, orderId, job.stationIds, reprint);
     await tx
       .insert(kitchenPrintJobLines)
@@ -585,21 +687,45 @@ async function enqueueKitchenJobs(
 }
 
 /**
- * Enqueue the kitchen tickets for a set of just-fired lines ({@link planKitchenTickets}), each job
- * linked to the bill and to every station its ticket carries (`kitchen_print_jobs`) and to every
- * line it carries (`kitchen_print_job_lines`). Answers whether any job was enqueued.
+ * Enqueue the kitchen tickets for a set of just-fired lines ({@link planKitchenTickets}). Station
+ * jobs receive bill, station and line links. Answers whether any job was enqueued.
  */
 export async function enqueueKitchenTickets(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
   firedItems: FiredItem[],
-  { mark, from }: { mark?: "HOLD" | "FIRE"; from?: string } = {},
+  {
+    mark,
+    from,
+    watchers,
+  }: { mark?: "HOLD" | "FIRE"; from?: string; watchers?: WatcherCopies } = {},
 ): Promise<boolean> {
   const jobs = await planKitchenTickets(tx, cfg, orderId, firedItems, {
     reprint: false,
     mark,
     from,
+    watchers,
+  });
+  await enqueueKitchenJobs(tx, cfg, orderId, jobs, false);
+  return jobs.length > 0;
+}
+
+export async function enqueueWatcherCopies(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  items: FiredItem[],
+  options: {
+    mark?: "HOLD" | "FIRE";
+    rerouted?: ReadonlyMap<string, { stationId: string; stationName: string }>;
+  } = {},
+): Promise<boolean> {
+  const jobs = await planKitchenTickets(tx, cfg, orderId, items, {
+    reprint: false,
+    makers: false,
+    watchers: "all",
+    ...options,
   });
   await enqueueKitchenJobs(tx, cfg, orderId, jobs, false);
   return jobs.length > 0;
@@ -683,11 +809,10 @@ async function withoutMadeHere<T extends { workingOrderLineId: string }>(
 
 /**
  * Record a kitchen notice per item for a RECALL ({@link recallLines}) or VOID ({@link removeFromLine})
- * of a line that had already fired, then enqueue a correction slip per item where its station has
- * an active printer; callers pass only fired lines. The notice is recorded whether or not a printer
- * exists, so a station screen sees every correction. Each slip goes to every active printer on the
- * line's station, whatever its scope, and prints the item through {@link buildTicketItems}, at the
- * item's quantity. The header's never-block argument applies unchanged.
+ * of a line that had already fired, then enqueue a correction slip per item for its station and
+ * watchers; callers pass only fired lines. The notice is recorded whether or not a printer exists,
+ * so a station screen sees every correction. Each slip prints the item through
+ * {@link buildTicketItems}, at the item's quantity. The header's never-block argument applies unchanged.
  *
  * A void must call this before deleting the line: the delete cascades its ticket item away, and both
  * the notice and the slip re-read the line from `working_order_lines`.
@@ -719,6 +844,7 @@ export async function enqueueStationMoved(
   orderId: string,
   items: CorrectionItem[],
   toStationName: string,
+  toStationId: string,
 ): Promise<void> {
   if (items.length === 0) return;
   await VENUE_SERVICE.recordKitchenNotices(
@@ -735,13 +861,24 @@ export async function enqueueStationMoved(
   const fired = items.filter((item) => item.group === undefined);
   const held = items.filter((item) => item.group !== undefined);
   if (fired.length > 0)
-    await printCorrectionSlips(tx, cfg, orderId, fired, {
-      kind: "TO STATION",
-      toStation: toStationName,
-      locale: cfg.locale,
-    });
+    await printCorrectionSlips(
+      tx,
+      cfg,
+      orderId,
+      fired,
+      {
+        kind: "TO STATION",
+        toStation: toStationName,
+        locale: cfg.locale,
+      },
+      undefined,
+      { kind: "followed_until", toStationId },
+    );
   if (held.length > 0)
-    await printCorrectionSlips(tx, cfg, orderId, held, { kind: "HOLD CANCELLED" });
+    await printCorrectionSlips(tx, cfg, orderId, held, { kind: "HOLD CANCELLED" }, undefined, {
+      kind: "followed_until",
+      toStationId,
+    });
 }
 
 /**
@@ -871,7 +1008,12 @@ function toNoticeItem(item: CorrectionItem) {
   };
 }
 
-/** One slip per item, to every active printer on its station, headed with the order's CURRENT table. */
+type WatcherSlipRule =
+  | { kind: "follows" }
+  | { kind: "followed_in"; zoneIds: readonly (string | null)[] }
+  | { kind: "followed_until"; toStationId: string };
+
+/** One slip per item, to its station and eligible watcher printers, headed with the current table. */
 async function printCorrectionSlips(
   tx: Transaction,
   cfg: TillConfig,
@@ -879,15 +1021,23 @@ async function printCorrectionSlips(
   items: CorrectionItem[],
   change: CorrectionChange,
   knownHeader?: OrderHeader,
+  watchers: WatcherSlipRule = { kind: "follows" },
 ): Promise<void> {
   const stationIds = [...new Set(items.map((i) => i.stationId))];
   const mappingRows = await printerMappings(tx, stationIds);
-  if (mappingRows.length === 0) return;
+  const watcherRows = await readWatcherPrinters(tx, cfg);
+  if (mappingRows.length === 0 && watcherRows.length === 0) return;
 
   const lineIds = [...new Set(items.map((i) => i.workingOrderLineId))];
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
   const stationNames = await readStations(tx, stationIds);
   const header = knownHeader ?? (await readOrderHeader(tx, cfg, orderId));
+  const watcherItems = watcherRows.length === 0 ? [] : await withoutMadeHere(tx, items);
+  const zoneId =
+    watcherRows.length === 0 || watchers.kind === "followed_in"
+      ? null
+      : ((await orderWatchZones(tx, cfg, [header])).get(orderId) ?? null);
+  const watcherLineIds = new Set(watcherItems.map((item) => item.workingOrderLineId));
 
   const printersByStation = new Map<string, (EscSetting & { printerId: string })[]>();
   for (const mapping of mappingRows) {
@@ -905,11 +1055,25 @@ async function printCorrectionSlips(
 
   for (const target of items) {
     const attachedPrinters = printersByStation.get(target.stationId);
-    // A line whose station has no active printer produced no paper — nothing to correct there.
-    if (attachedPrinters === undefined) continue;
+    const watcherPrinters = watcherLineIds.has(target.workingOrderLineId)
+      ? watcherRows.filter((printer) => {
+          const sees = (stationId: string, zone: string | null) =>
+            watcherSees(printer.follows, { stationId, zoneId: zone });
+          switch (watchers.kind) {
+            case "follows":
+              return sees(target.stationId, zoneId);
+            case "followed_in":
+              return watchers.zoneIds.some((zone) => sees(target.stationId, zone));
+            case "followed_until":
+              return sees(target.stationId, zoneId) && !sees(watchers.toStationId, zoneId);
+          }
+        })
+      : [];
+    const targets = [...(attachedPrinters ?? []), ...watcherPrinters];
+    if (targets.length === 0) continue;
     const entry = itemsByLine.get(target.workingOrderLineId)!;
     const item = atFiredQuantity(entry.item, target);
-    for (const group of groupByLayout(attachedPrinters)) {
+    for (const group of groupByLayout(targets)) {
       const bytes = formatCorrectionSlip(
         {
           ...change,
@@ -928,11 +1092,12 @@ async function printCorrectionSlips(
   }
 }
 
-/** An order's fired kitchen work, and the table and order number its correction slips name. */
+/** An order's fired kitchen work and its table, order number and pre-move zone. */
 export interface SentWork {
   tableLabel: string | null;
   orderNumber: string;
   ticketItemIds: ReadonlySet<string>;
+  zoneId: string | null;
 }
 
 /** Read before a path moves an order's lines to another table. */
@@ -945,10 +1110,17 @@ export async function readSentWork(
     .select({ id: ticketItems.id })
     .from(ticketItems)
     .where(and(eq(ticketItems.workingOrderId, orderId), isNotNull(ticketItems.firedAt)));
-  if (fired.length === 0) return { tableLabel: null, orderNumber: "", ticketItemIds: new Set() };
+  if (fired.length === 0)
+    return { tableLabel: null, orderNumber: "", ticketItemIds: new Set(), zoneId: null };
+  const header = await readOrderHeader(tx, cfg, orderId);
+  const zoneId =
+    (await readWatcherPrinters(tx, cfg)).length === 0
+      ? null
+      : ((await orderWatchZones(tx, cfg, [header])).get(orderId) ?? null);
   return {
-    ...(await readOrderHeader(tx, cfg, orderId)),
+    ...header,
     ticketItemIds: new Set(fired.map((row) => row.id)),
+    zoneId,
   };
 }
 
@@ -956,7 +1128,7 @@ export async function readSentWork(
  * Tell the kitchen of sent work that moved to another table. When the table a correction slip names
  * for `toOrderId` now differs from the one `before` read, each of `before`'s fired items now on
  * `toOrderId` gets a `moved` notice, at the quantity its ticket asks for, and a MOVED slip where its
- * station has an active printer. `splitFrom` maps a ticket item a split made to the one it copied.
+ * station or a watcher has an active printer. `splitFrom` maps a ticket item a split made to the one it copied.
  * `force` tells the kitchen whatever the two labels read: a bill moved to or from the counter can
  * read the same on both sides.
  */
@@ -1054,6 +1226,15 @@ async function notifyMoved(
       movedFrom: { tableLabel: before.tableLabel, orderNumber: before.orderNumber },
     },
     header,
+    {
+      kind: "followed_in",
+      zoneIds: [
+        before.zoneId,
+        ...((await readWatcherPrinters(tx, cfg)).length === 0
+          ? []
+          : [(await orderWatchZones(tx, cfg, [header])).get(toOrderId) ?? null]),
+      ],
+    },
   );
 }
 
@@ -1103,11 +1284,20 @@ export async function readPartiesSentWork(
     cfg.locationId,
     [...sent.values()].map(({ bill }) => bill),
   );
+  const zones =
+    (await readWatcherPrinters(tx, cfg)).length === 0
+      ? new Map<string, string | null>()
+      : await orderWatchZones(
+          tx,
+          cfg,
+          [...sent.values()].map(({ bill }) => bill),
+        );
   for (const { bill, fired } of sent.values()) {
     work.set(bill.id, {
       tableLabel: labels.get(bill.id)!,
       orderNumber: String(bill.orderNumber),
       ticketItemIds: fired,
+      zoneId: zones.get(bill.id) ?? null,
     });
   }
   return work;
@@ -1139,14 +1329,11 @@ export async function enqueueMovedSlipsFor(
 interface ReprintPart {
   items: FiredItem[];
   mark?: "HOLD";
-  orderScopeAlsoAt: string[];
 }
 
 /**
  * What a Reprint of each of `orderIds` prints: every fired item across every round, and the held
- * items of each still-held group whose HOLD ticket was queued, marked HOLD. Pass printers are chosen
- * over both parts: a pass printer's failed ticket can name a station it is not attached to, and no
- * print but a reprint on that printer linked to that station clears it.
+ * items of each still-held group whose HOLD ticket was queued, marked HOLD.
  */
 async function readReprintParts(
   tx: Transaction,
@@ -1196,14 +1383,7 @@ async function readReprintParts(
     orderIds.map((id) => {
       const firedItems = firedByOrder.get(id)!;
       const heldItems = heldByOrder.get(id)!;
-      const parts = [
-        { items: firedItems, orderScopeAlsoAt: heldItems.map((item) => item.stationId) },
-        {
-          items: heldItems,
-          mark: "HOLD",
-          orderScopeAlsoAt: firedItems.map((item) => item.stationId),
-        },
-      ] as const;
+      const parts = [{ items: firedItems }, { items: heldItems, mark: "HOLD" }] as const;
       return [id, parts];
     }),
   );
@@ -1234,7 +1414,7 @@ async function readReprintTargets(
     const pairs = new Set<string>();
     for (const part of parts) {
       const involved = [...new Set(part.items.map((item) => item.stationId))];
-      for (const route of routeKitchenTickets(involved, part.orderScopeAlsoAt, mappings)) {
+      for (const route of routeKitchenTickets(involved, mappings)) {
         for (const printer of route.printers) {
           for (const stationId of route.stationIds) pairs.add(`${printer.printerId}|${stationId}`);
         }
@@ -1247,11 +1427,10 @@ async function readReprintTargets(
 
 /**
  * Reprint an order's kitchen tickets ({@link readReprintParts}). Each ticket is marked REPRINT and
- * stamped with the reprint time, not the original fire time. Both tickets for one printer and
- * station, or for one pass printer, go as ONE job: as two, the later one's printing would clear
- * every earlier failure for that bill and station on that printer, including tickets it does not
- * carry ({@link readPrintProblems}). It changes no line, ticket item or group event. An order with
- * nothing to print is a no-op.
+ * stamped with the reprint time, not the original fire time. Fired and HOLD sections for one
+ * printer go as one job; for a station printer, separate jobs could clear an earlier failure for
+ * dishes the later section does not carry ({@link readPrintProblems}). It changes no line, ticket
+ * item or group event. An order with nothing to print is a no-op.
  */
 export async function reprintOrderTickets(
   tx: Transaction,
@@ -1261,12 +1440,12 @@ export async function reprintOrderTickets(
   const [fired, held] = (await readReprintParts(tx, [orderId])).get(orderId)!;
   const jobs = await planKitchenTickets(tx, cfg, orderId, fired.items, {
     reprint: true,
-    orderScopeAlsoAt: fired.orderScopeAlsoAt,
+    watchers: "all",
   });
   const holdJobs = await planKitchenTickets(tx, cfg, orderId, held.items, {
     reprint: true,
     mark: held.mark,
-    orderScopeAlsoAt: held.orderScopeAlsoAt,
+    watchers: "all",
     restOfOrderExcept: new Set(fired.items.map((item) => item.stationId)),
   });
   for (const hold of holdJobs) {

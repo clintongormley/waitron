@@ -11,6 +11,7 @@ import {
 } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
 import { seedFloor } from "./seed-floor.js";
+import { seedWatchers } from "./seed-watchers.js";
 import { seedStaff } from "./seed-staff.js";
 import { seedAdjustmentReasons } from "./seed-adjustments.js";
 import { seedMedia } from "./seed-media.js";
@@ -42,12 +43,13 @@ export async function seedDemoRestaurant(
   demoSeedEnvironment(process.env);
 
   const products = await withTransaction(db, async (tx) => {
-    const { productsByImage, menuIds } = await seedCatalogues(tx, {
+    const { productsByImage, menuIds, stationIds } = await seedCatalogues(tx, {
       locationId,
       locale,
     });
     await seedOptionLists(tx, { productsByImage, locale });
     await seedFloor(tx, { locationId, locale, menuIds });
+    await seedWatchers(tx, { locationId, locale, stationIds });
     await seedStaff(tx);
     await seedAdjustmentReasons(tx, { locale });
     await seedMedia(tx, { productsByImage });

@@ -102,8 +102,15 @@ import {
   type FireControl,
 } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
+import {
+  createWatcher,
+  listWatchers,
+  removeWatcher,
+  updateWatcher,
+  type WatcherInput,
+} from "./watchers.js";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
-import { readJsonBody } from "@waitron/server-kit";
+import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import { requireBodyUuid, requireEnum, requireNullableBodyUuid } from "@waitron/server-kit";
 import {
   clearManagementCookie,
@@ -257,6 +264,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "placement.invalid": 400,
   "station.not_found": 404,
   "station.name_taken": 409,
+  "watcher.not_found": 404,
+  "watcher.name_taken": 409,
   "course.not_found": 404,
   "course.name_taken": 409,
   "device_profile.not_found": 404,
@@ -297,6 +306,37 @@ function requireTableId(id: string): string {
 function requireStationId(id: string): string {
   if (!isUuid(id)) throw new AppError("station.not_found", { stationId: id });
   return id;
+}
+
+function requireWatcherId(id: string): string {
+  if (!isUuid(id)) throw new AppError("watcher.not_found", { watcherId: id });
+  return id;
+}
+
+function parseWatcherBody(body: unknown): WatcherInput {
+  if (typeof body !== "object" || body === null || Array.isArray(body))
+    throw new AppError("management.request_invalid", { field: "body" });
+  const value = body as Record<string, unknown>;
+  if (typeof value.name !== "string")
+    throw new AppError("management.request_invalid", { field: "name" });
+  for (const flag of ["everyStation", "everyZone", "runsPass"] as const)
+    if (typeof value[flag] !== "boolean")
+      throw new AppError("management.request_invalid", { field: flag });
+  for (const list of ["stationIds", "zoneIds"] as const)
+    if (
+      !Array.isArray(value[list]) ||
+      !(value[list] as unknown[]).every((id) => typeof id === "string")
+    )
+      throw new AppError("management.request_invalid", { field: list });
+  return {
+    name: value.name,
+    everyStation: value.everyStation as boolean,
+    stationIds: value.stationIds as string[],
+    everyZone: value.everyZone as boolean,
+    zoneIds: value.zoneIds as string[],
+    runsPass: value.runsPass as boolean,
+    displayOrder: parseDisplayOrder(value.displayOrder),
+  };
 }
 
 function requireCourseId(id: string): string {
@@ -1651,6 +1691,47 @@ export function mountManagementApi(
   );
 
   // ── Kitchen stations and routing ──
+  app.get("/management-api/watchers", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      return c.json(await withVenueAuth(deps, sessionId, (tx) => listWatchers(tx, cfg)));
+    }),
+  );
+
+  app.post("/management-api/watchers", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const input = parseWatcherBody(await readRawJsonBody(c));
+      return c.json(
+        await withVenueAuth(deps, sessionId, (tx) => createWatcher(tx, cfg, input)),
+        201,
+      );
+    }),
+  );
+
+  app.put("/management-api/watchers/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const id = requireWatcherId(c.req.param("id"));
+      const input = parseWatcherBody(await readRawJsonBody(c));
+      await withVenueAuth(deps, sessionId, (tx) => updateWatcher(tx, cfg, id, input));
+      return c.body(null, 204);
+    }),
+  );
+
+  app.delete("/management-api/watchers/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const id = requireWatcherId(c.req.param("id"));
+      await withVenueAuth(deps, sessionId, (tx) => removeWatcher(tx, cfg, id));
+      return c.body(null, 204);
+    }),
+  );
+
   app.post("/management-api/stations", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

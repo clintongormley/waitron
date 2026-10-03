@@ -292,19 +292,22 @@ describe("devSetup against a real venue directory", () => {
     ]);
   });
 
-  it("enrols a till, handheld and kitchen display via the real enrol path", async () => {
+  it("enrols a till, handheld and two kitchen displays via the real enrol path", async () => {
     const rows = await readVenue(async (db) => {
       const result = await db.execute<{
         label: string;
         form_factor: string;
         register_name: string | null;
         station_name: string | null;
+        watcher_name: string | null;
       }>(
-        sql`select d.label, dp.form_factor, t.name as register_name, ks.name as station_name
+        sql`select d.label, dp.form_factor, t.name as register_name, ks.name as station_name,
+                   w.name as watcher_name
             from devices d
             join device_profiles dp on dp.id = d.device_profile_id
             left join tills t on t.id = d.till_id
             left join kitchen_stations ks on ks.id = d.station_id
+            left join watchers w on w.id = d.watcher_id
             order by d.label`,
       );
       return result.rows;
@@ -315,13 +318,28 @@ describe("devSetup against a real venue directory", () => {
         form_factor: "phone-portrait",
         register_name: "Mostrador",
         station_name: null,
+        watcher_name: null,
       },
-      { label: "Mostrador", form_factor: "till", register_name: "Mostrador", station_name: null },
+      {
+        label: "Mostrador",
+        form_factor: "till",
+        register_name: "Mostrador",
+        station_name: null,
+        watcher_name: null,
+      },
       {
         label: "Pantalla Cocina",
         form_factor: "kds",
         register_name: null,
         station_name: "Kitchen",
+        watcher_name: null,
+      },
+      {
+        label: "Pantalla Pase",
+        form_factor: "kds",
+        register_name: null,
+        station_name: null,
+        watcher_name: "Pass",
       },
     ]);
   });

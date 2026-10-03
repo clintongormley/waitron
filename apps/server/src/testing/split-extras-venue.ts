@@ -21,8 +21,9 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "../till-config.js";
 import { createStation } from "../kitchen.js";
-import { createPrinter, updatePrinter } from "@waitron/printing";
+import { createPrinter } from "@waitron/printing";
 import { attachPrinterToStation } from "../station-printers.js";
+import { createWatcher, setPrinterWatcher } from "../watchers.js";
 import { setClaim } from "@waitron/venue-service";
 import { createTable } from "../tables.js";
 import { seatTable } from "../parties.js";
@@ -108,14 +109,21 @@ export async function setupSplitExtrasVenue() {
       tx,
       { locationId: cfg.locationId },
       {
-        name: "PASE",
+        name: "Pase",
         transport: "cloud_poll",
         pollId: `poll-${randomUUID()}`,
       },
     );
     printers.pass = pass.id;
-    await updatePrinter(tx, { locationId: cfg.locationId }, pass.id, { ticketScope: "order" });
-    await attachPrinterToStation(tx, { stationId: stations.grill, printerId: pass.id });
+    const watcher = await createWatcher(tx, cfg, {
+      name: "Pase",
+      runsPass: true,
+      everyStation: false,
+      stationIds: [stations.grill, stations.fryer],
+      everyZone: true,
+      zoneIds: [],
+    });
+    await setPrinterWatcher(tx, cfg, pass.id, watcher.id);
 
     const food = await createCategory(tx, { name: "Food" });
     const burgers = await createCategory(tx, { name: "Burgers", parentId: food.id });

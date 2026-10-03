@@ -146,6 +146,7 @@ import type {
   CounterWaitingOrder,
   UnpaidDepartureRequest,
   DeviceStation,
+  WatcherBoard,
   DeadEndAnswer,
   DraftSubmission,
   FloorZone,
@@ -1202,6 +1203,7 @@ export class TillApp extends LitElement {
   }
   /** Prefetched by the boot probe, so the station screen does not read `GET /api/device/station` again. */
   @state() private initialDeviceStation?: DeviceStation;
+  @state() private initialDeviceWatcher?: WatcherBoard;
   /** The issuer identity printed on the ticket (venue name + NIF), read once from `getTill` on boot. */
   @state() private issuer?: TicketIssuer;
   /** Offers available in the counter's current service zone. Each carries a distinct menu-item ID,
@@ -1547,7 +1549,9 @@ export class TillApp extends LitElement {
       this.#url.write(
         {
           "till-tab": key,
-          ...(retainDestination ? {} : { "till-view": null, "till-station": null }),
+          ...(retainDestination
+            ? {}
+            : { "till-view": null, "till-station": null, "till-watcher": null }),
         },
         replace,
       );
@@ -1568,6 +1572,7 @@ export class TillApp extends LitElement {
       {
         "till-view": destination,
         "till-station": destination === "station" ? this.#url.read("till-station") : null,
+        "till-watcher": destination === "expo" ? this.#url.read("till-watcher") : null,
       },
       true,
     );
@@ -1660,6 +1665,8 @@ export class TillApp extends LitElement {
     // `#boot` re-runs, and the branches below only ever set a mode, so reset first.
     this.handheldMode = false;
     this.deviceMode = false;
+    this.initialDeviceStation = undefined;
+    this.initialDeviceWatcher = undefined;
     this.#deviceKind = "till";
     this.deviceName = undefined;
     const previousDeviceId = this.deviceId;
@@ -1694,7 +1701,8 @@ export class TillApp extends LitElement {
       if (kind === "handheld") {
         this.handheldMode = true;
       } else if (kind === "kds_station") {
-        this.initialDeviceStation = await this.api.getDeviceStation();
+        if (identity.watcherId) this.initialDeviceWatcher = await this.api.getDeviceWatcher();
+        else this.initialDeviceStation = await this.api.getDeviceStation();
         if (!this.isConnected) return;
         this.deviceMode = true;
         this.#setScreen("station");
@@ -6707,7 +6715,7 @@ export class TillApp extends LitElement {
   #pushDrill(drill: Drill): void {
     if (isTillDestination(drill.kind)) {
       if (!this.#allowsDestination(drill.kind)) return;
-      this.#url.write({ "till-view": drill.kind, "till-station": null });
+      this.#url.write({ "till-view": drill.kind, "till-station": null, "till-watcher": null });
     }
     this.#dismissStationChoices();
     diag.record("info", "nav", { screen: drill.kind });
@@ -6718,7 +6726,7 @@ export class TillApp extends LitElement {
   #popDrill(): void {
     this.#dismissStationChoices();
     if (isTillDestination(this.drill?.kind))
-      this.#url.write({ "till-view": null, "till-station": null });
+      this.#url.write({ "till-view": null, "till-station": null, "till-watcher": null });
     diag.record("info", "nav", { screen: this.activeTabKey });
     this.drill = undefined;
   }
@@ -6933,6 +6941,7 @@ export class TillApp extends LitElement {
       .bumpMode=${this.bumpMode}
       .deviceMode=${this.deviceMode}
       .initialDeviceStation=${this.initialDeviceStation}
+      .initialDeviceWatcher=${this.initialDeviceWatcher}
       .menus=${tableTab ? this.tableMenus : this.menus}
       .selectedMenuId=${tableTab ? this.tableSelectedCatalogueId : this.selectedCatalogueId}
       .selectedDiet=${this.selectedDiet}
@@ -7029,14 +7038,21 @@ export class TillApp extends LitElement {
           .operatorPersonId=${this.operatorPersonId}
         ></till-schedule-screen>`;
       case "station":
-        return html`<till-station-screen
-          slot="drill"
-          .api=${this.api}
-          .bumpMode=${this.bumpMode}
-          .fireControl=${this.fireControl}
-          .deviceMode=${this.deviceMode}
-          .initialDeviceStation=${this.initialDeviceStation}
-        ></till-station-screen>`;
+        return this.initialDeviceWatcher
+          ? html`<till-expo-screen
+              slot="drill"
+              .api=${this.api}
+              .deviceMode=${this.deviceMode}
+              .initialDeviceWatcher=${this.initialDeviceWatcher}
+            ></till-expo-screen>`
+          : html`<till-station-screen
+              slot="drill"
+              .api=${this.api}
+              .bumpMode=${this.bumpMode}
+              .fireControl=${this.fireControl}
+              .deviceMode=${this.deviceMode}
+              .initialDeviceStation=${this.initialDeviceStation}
+            ></till-station-screen>`;
       case "expo":
         return html`<till-expo-screen
           slot="drill"

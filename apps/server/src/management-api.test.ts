@@ -186,6 +186,81 @@ async function createZone(name: string): Promise<string> {
   return ((await res.json()) as { id: string }).id;
 }
 
+describe("/management-api/watchers", () => {
+  const body = {
+    name: "Pass",
+    everyStation: true,
+    stationIds: [],
+    everyZone: true,
+    zoneIds: [],
+    runsPass: true,
+    displayOrder: 3,
+  };
+  it("creates, lists, replaces, and removes a watcher over HTTP", async () => {
+    const created = await req(
+      "/watchers",
+      { method: "POST", body: JSON.stringify({ ...body, name: unique("Pass") }) },
+      managerCookie,
+    );
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const list = await req("/watchers", { method: "GET" }, managerCookie);
+    expect(list.status).toBe(200);
+    expect(await list.json()).toContainEqual(
+      expect.objectContaining({ id, runsPass: true, everyZone: true }),
+    );
+    const updated = await req(
+      `/watchers/${id}`,
+      { method: "PUT", body: JSON.stringify({ ...body, name: unique("Runner"), runsPass: false }) },
+      managerCookie,
+    );
+    expect(updated.status).toBe(204);
+    const removed = await req(`/watchers/${id}`, { method: "DELETE" }, managerCookie);
+    expect(removed.status).toBe(204);
+    expect(
+      await (await req("/watchers", { method: "GET" }, managerCookie)).json(),
+    ).not.toContainEqual(expect.objectContaining({ id }));
+  });
+  it("refuses malformed watcher bodies with the offending field", async () => {
+    for (const [patch, field] of [
+      [null, "body"],
+      [{ ...body, name: 3 }, "name"],
+      [{ ...body, everyStation: "yes" }, "everyStation"],
+      [{ ...body, stationIds: [3] }, "stationIds"],
+      [{ ...body, everyZone: null }, "everyZone"],
+      [{ ...body, zoneIds: [3] }, "zoneIds"],
+      [{ ...body, runsPass: 1 }, "runsPass"],
+      [{ ...body, displayOrder: 0.5 }, "displayOrder"],
+    ] as const) {
+      const res = await req(
+        "/watchers",
+        { method: "POST", body: JSON.stringify(patch) },
+        managerCookie,
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+  });
+  it("requires a management session with venue configuration permission", async () => {
+    expect((await req("/watchers", { method: "GET" })).status).toBe(401);
+    expect((await req("/watchers", { method: "GET" }, staffCookie)).status).toBe(403);
+    expect(
+      (await req("/watchers", { method: "POST", body: JSON.stringify(body) }, staffCookie)).status,
+    ).toBe(403);
+  });
+  it("returns watcher.not_found for malformed and absent route ids", async () => {
+    for (const id of ["bad", randomUUID()]) {
+      const res = await req(`/watchers/${id}`, { method: "DELETE" }, managerCookie);
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({
+        error: { code: "watcher.not_found", params: { watcherId: id } },
+      });
+    }
+  });
+});
+
 describe("/management-api/zones", () => {
   it("POST creates (201 { id }) + GET lists it (manager)", async () => {
     const name = unique("Comedor");

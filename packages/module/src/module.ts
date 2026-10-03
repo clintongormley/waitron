@@ -426,6 +426,12 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     workingOrderIds: readonly string[],
   ): Promise<ReadonlyMap<string, ServiceMode>>;
+  /** Each named order's recorded service zone in one read; an order with no context is absent. */
+  findOrderZones(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    workingOrderIds: readonly string[],
+  ): Promise<ReadonlyMap<string, string>>;
   listLineContexts(
     tx: Transaction,
     cfg: { locationId: LocationId },

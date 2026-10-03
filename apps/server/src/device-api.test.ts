@@ -44,6 +44,8 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { decimal } from "@waitron/shared";
 import "./errors.js";
+import { createWatcher } from "./watchers.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
 
 // Every test provisions its OWN tenant, and `tenants` is a singleton (id = 1), so the per-test reset
 // is what makes that legal twice in one file: `useVenueDb` empties every data table after each `it`.
@@ -1218,6 +1220,43 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
 });
 
 describe("GET /api/device/me + station (SP-A.2 §16)", () => {
+  it("exposes a watcher's binding on the device and management surfaces", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const [profile] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: "Watch KDS", formFactor: "kds", capabilities: [] })
+      .returning({ id: deviceProfiles.id });
+    const watcher = await withTransaction(suite.db, (tx) =>
+      createWatcher(tx, venue.cfg, {
+        name: "Pass",
+        everyStation: true,
+        stationIds: [],
+        everyZone: true,
+        zoneIds: [],
+        runsPass: false,
+      }),
+    );
+    const joined = await enrolDeviceForTest(suite.db, venue.cfg, {
+      name: "Pass screen",
+      profileId: profile!.id,
+      watcherId: watcher.id,
+    });
+    const me = await send(app, "GET", "/api/device/me", {
+      cookie: `${DEVICE_COOKIE}=${joined.deviceId}.${joined.token}`,
+    });
+    expect(me.status).toBe(200);
+    expect(await me.json()).toMatchObject({ stationId: null, watcherId: watcher.id });
+    const managed = await send(app, "GET", "/management-api/devices", {
+      cookie: venue.managerCookie,
+    });
+    expect(managed.status).toBe(200);
+    expect(
+      ((await managed.json()) as { id: string; watcherId: string | null }[]).find(
+        (d) => d.id === joined.deviceId,
+      ),
+    ).toMatchObject({ watcherId: watcher.id });
+  });
   it("reports an enrolled handheld's formFactor + name, station null", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
@@ -1251,6 +1290,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
       formFactor: "till",
       name: "Caja hw",
       stationId: null,
+      watcherId: null,
       tillId,
       receiptPrinterId: printerId,
     });

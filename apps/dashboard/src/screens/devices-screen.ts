@@ -24,6 +24,7 @@ import type {
   ReaderRow,
   Station,
   Till,
+  Watcher,
 } from "../api/client.js";
 
 /**
@@ -183,6 +184,7 @@ export class DevicesScreen extends LitElement {
   @state() private submitting = false;
   @state() private devices: DeviceRow[] = [];
   @state() private stations: Station[] = [];
+  @state() private watchers: Watcher[] = [];
   @state() private deviceProfiles: DeviceProfile[] = [];
   @state() private printers: Printer[] = [];
   // A row with no entry opens at DEFAULT_HARDWARE: the device list carries no hardware.
@@ -195,7 +197,7 @@ export class DevicesScreen extends LitElement {
   @state() private openRequestId: string | null = null;
   @state() private challenges: Record<string, string[]> = {};
   @state() private chosenProfileId = "";
-  @state() private chosenStationId = "";
+  @state() private chosenBinding = "";
   @state() private chosenRegisterId = "";
   // Separate from `armedRevokeId`, so arming a Deny does not disarm a Revoke in the list below it.
   @state() private armedDenyId: string | null = null;
@@ -231,6 +233,9 @@ export class DevicesScreen extends LitElement {
         }),
         this.#queries.watch("listStations", [], (value) => {
           this.stations = value;
+        }),
+        this.#queries.watch("listWatchers", [], (value) => {
+          this.watchers = value;
         }),
         this.#queries.watch("listDeviceProfiles", [], (value) => {
           this.deviceProfiles = value;
@@ -292,7 +297,7 @@ export class DevicesScreen extends LitElement {
     this.errorKey = null;
     this.openRequestId = id;
     this.chosenProfileId = "";
-    this.chosenStationId = "";
+    this.chosenBinding = "";
     this.chosenRegisterId = "";
     if (this.challenges[id] !== undefined) return;
     try {
@@ -334,7 +339,7 @@ export class DevicesScreen extends LitElement {
     const profile = this.#chosenProfile();
     if (profile === undefined) return false;
     const binding = bindingOf(profile.formFactor);
-    if (binding === "station") return this.chosenStationId !== "";
+    if (binding === "station") return this.chosenBinding !== "";
     if (binding === "register") return this.chosenRegisterId !== "";
     return true;
   }
@@ -354,7 +359,12 @@ export class DevicesScreen extends LitElement {
       await this.api.acceptDeviceJoinRequest(request.id, {
         choice,
         profileId: profile.id,
-        ...(binding === "station" ? { stationId: this.chosenStationId } : {}),
+        ...(binding === "station" && this.chosenBinding.startsWith("station:")
+          ? { stationId: this.chosenBinding.slice("station:".length) }
+          : {}),
+        ...(binding === "station" && this.chosenBinding.startsWith("watcher:")
+          ? { watcherId: this.chosenBinding.slice("watcher:".length) }
+          : {}),
         ...(binding === "register" ? { registerId: this.chosenRegisterId } : {}),
       });
       this.openRequestId = null;
@@ -522,6 +532,16 @@ export class DevicesScreen extends LitElement {
     return this.stations.find((s) => s.id === stationId)?.name ?? t("devices.no_station");
   }
 
+  #bindingName(device: DeviceRow): string {
+    if (device.watcherId !== null) {
+      const name = this.watchers.find((watcher) => watcher.id === device.watcherId)?.name;
+      return name === undefined
+        ? t("devices.watcher_removed")
+        : `${t("devices.watcher_prefix")}${name}`;
+    }
+    return this.#stationName(device.stationId);
+  }
+
   #lastSeen(iso: string | null): string {
     if (iso === null) return t("devices.last_seen_never");
     return formatIsoMinute(iso);
@@ -587,9 +607,7 @@ export class DevicesScreen extends LitElement {
               <span data-test="device-profile-${device.id}"
                 >${this.#profileName(device.deviceProfileId)}</span
               >
-              <span data-test="device-station-${device.id}"
-                >${this.#stationName(device.stationId)}</span
-              >
+              <span data-test="device-station-${device.id}">${this.#bindingName(device)}</span>
               <span data-test="device-status-${device.id}"
                 >${device.active ? t("devices.status_active") : t("devices.status_revoked")}</span
               >
@@ -756,19 +774,32 @@ export class DevicesScreen extends LitElement {
     if (binding === "none") return nothing;
     if (binding === "station") {
       return html`<wt-combobox
-        data-test="join-station"
-        name="stationId"
-        label=${t("devices.station")}
+        data-test="join-binding"
+        name="binding"
+        label=${t("devices.shows")}
         search="auto"
-        placeholder=${t("devices.join_pick_station")}
+        placeholder=${t("devices.join_pick_binding")}
         searchPlaceholder=${t("categories.combobox_search")}
         noResultsLabel=${t("categories.combobox_no_results")}
         .options=${[
-          { value: "", label: t("devices.join_pick_station") },
-          ...this.stations.map((station) => ({ value: station.id, label: station.name })),
+          { value: "", label: t("devices.join_pick_binding") },
+          ...this.stations
+            .filter((station) => station.active)
+            .map((station) => ({
+              value: `station:${station.id}`,
+              label: station.name,
+              group: t("devices.stations_group"),
+            })),
+          ...this.watchers
+            .filter((watcher) => watcher.active)
+            .map((watcher) => ({
+              value: `watcher:${watcher.id}`,
+              label: watcher.name,
+              group: t("devices.watchers_group"),
+            })),
         ]}
-        .value=${this.chosenStationId}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => (this.chosenStationId = e.detail.value)}
+        .value=${this.chosenBinding}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => (this.chosenBinding = e.detail.value)}
       ></wt-combobox>`;
     }
     return html`<wt-combobox
@@ -819,7 +850,7 @@ export class DevicesScreen extends LitElement {
           .value=${this.chosenProfileId}
           @wt-change=${(e: CustomEvent<{ value: string }>) => {
             this.chosenProfileId = e.detail.value;
-            this.chosenStationId = "";
+            this.chosenBinding = "";
             this.chosenRegisterId = "";
           }}
         ></wt-combobox>
@@ -846,6 +877,11 @@ export class DevicesScreen extends LitElement {
                     >`,
                 )}
               </div>`
+      }
+      ${
+        this.errorKey && this.openRequestId === request.id
+          ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
+          : nothing
       }
       <wt-button
         slot="footer"
@@ -885,7 +921,7 @@ export class DevicesScreen extends LitElement {
 
       ${this.#renderAcceptDialog()}
       ${
-        this.errorKey
+        this.errorKey && this.openRequestId === null
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
           : nothing
       }

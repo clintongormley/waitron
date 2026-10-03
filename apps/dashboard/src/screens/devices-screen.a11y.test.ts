@@ -13,6 +13,7 @@ import type {
   Printer,
   Station,
   Till,
+  Watcher,
 } from "../api/client.js";
 
 /**
@@ -45,12 +46,28 @@ const stations: Station[] = [
   },
 ];
 
+const watchers: Watcher[] = [
+  {
+    id: "w1",
+    name: "Pass",
+    everyStation: true,
+    stationIds: [],
+    everyZone: true,
+    zoneIds: [],
+    runsPass: true,
+    displayOrder: 0,
+    active: true,
+    printerIds: [],
+  },
+];
+
 const devices: DeviceRow[] = [
   {
     id: "d1",
     madeHereStationIds: [],
     kind: "kds_station",
     stationId: "s1",
+    watcherId: null,
     label: "Pantalla Cocina",
     active: true,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
@@ -62,6 +79,7 @@ const devices: DeviceRow[] = [
     madeHereStationIds: [],
     kind: "kds_station",
     stationId: null,
+    watcherId: null,
     label: "Pase",
     active: false,
     lastSeenAt: null,
@@ -119,7 +137,7 @@ const printers: Printer[] = [
     port: 9100,
     localKey: null,
     pollId: null,
-    ticketScope: "station",
+    watcherId: null,
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,
@@ -131,6 +149,7 @@ function stubApi(pairingOpen = false): DashboardApi {
   return {
     listDevices: vi.fn().mockResolvedValue(devices),
     listStations: vi.fn().mockResolvedValue(stations),
+    listWatchers: vi.fn().mockResolvedValue(watchers),
     listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
     listPrinters: vi.fn().mockResolvedValue(printers),
     listTills: vi.fn().mockResolvedValue(tills),
@@ -238,6 +257,13 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     await flush(el);
     await chooseOption(el.shadowRoot!.querySelector("[data-test=join-profile]")!, "dp3");
     await el.updateComplete;
+    const binding = el.shadowRoot!.querySelector("[data-test=join-binding]")!;
+    await userEvent.click(binding.shadowRoot!.querySelector(".trigger")!);
+    expect(
+      Array.from(binding.shadowRoot!.querySelectorAll(".group-heading")).map((group) =>
+        group.textContent?.trim(),
+      ),
+    ).toEqual(["Estaciones", "Puntos de seguimiento"]);
     await expectNoA11yViolations(host);
   });
 });
@@ -253,7 +279,7 @@ describe("devices-screen a11y — the numeric match", () => {
     await flush(el);
     await chooseOption(el.shadowRoot!.querySelector("[data-test=join-profile]")!, "dp3");
     await el.updateComplete;
-    await chooseOption(el.shadowRoot!.querySelector("[data-test=join-station]")!, "s1");
+    await chooseOption(el.shadowRoot!.querySelector("[data-test=join-binding]")!, "station:s1");
     await el.updateComplete;
     return el;
   }
@@ -285,7 +311,7 @@ describe("devices-screen a11y — the numeric match", () => {
 
     await chooseOption(el.shadowRoot!.querySelector("[data-test=join-profile]")!, "dp3");
     await el.updateComplete;
-    await chooseOption(el.shadowRoot!.querySelector("[data-test=join-station]")!, "s1");
+    await chooseOption(el.shadowRoot!.querySelector("[data-test=join-binding]")!, "station:s1");
     await el.updateComplete;
 
     el.shadowRoot!.querySelector<HTMLElement>('[data-choice="47"]')!.focus();

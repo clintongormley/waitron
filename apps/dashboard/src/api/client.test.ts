@@ -1983,6 +1983,20 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     });
   });
 
+  it("acceptDeviceJoinRequest sends a watcher binding without a station binding", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ deviceId: "j1", name: "Pass", formFactor: "kds" }));
+    const api = new DashboardApi("", fetchImpl);
+    await api.acceptDeviceJoinRequest("j1", { choice: "47", profileId: "dp3", watcherId: "w1" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-join-requests/j1/accept", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ choice: "47", profileId: "dp3", watcherId: "w1" }),
+    });
+  });
+
   it("acceptDeviceJoinRequest rejects with device.join_mismatch when the number was wrong", async () => {
     const fetchImpl = vi
       .fn()
@@ -2253,7 +2267,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
       port: 9100,
       localKey: null,
       pollId: null,
-      ticketScope: "station",
+      watcherId: null,
       active: true,
     },
   ];
@@ -2476,7 +2490,6 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     const patch = {
       name: "Cocina 2",
       host: "10.0.0.20",
-      ticketScope: "order" as const,
       active: true,
     };
     await expect(api.updatePrinter("p1", patch)).resolves.toBeUndefined();
@@ -2485,6 +2498,18 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(patch),
+    });
+  });
+
+  it("sets a printer's watcher through its management route", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await api.setPrinterWatcher("p1", "w1");
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1/watcher", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ watcherId: "w1" }),
     });
   });
 

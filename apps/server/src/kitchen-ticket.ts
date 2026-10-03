@@ -1,17 +1,13 @@
 /**
  * Formats kitchen tickets and correction slips into ESC/POS bytes. Pure: no state, no database.
  *
- * A `station` ticket lists its own printable items under the station's name and may end with
- * the rest of the order. An `order` ticket is the pass copy: printable fired items grouped under
- * their station's name.
+ * A station ticket lists its own printable items and may end with the rest of the order. A watcher
+ * ticket groups the items it follows under their station names.
  *
  * `esc()` has no bold, so ASCII markers stand in for emphasis.
  */
 import { esc, prepareText, wrapText, type EscSetting } from "@waitron/printing";
 import { stringToThousandths, thousandthsToDecimal } from "@waitron/shared";
-
-/** The printed header of an `order`-scope ticket. */
-const ORDER_HEADER = "PASE";
 
 /** One fired line. Modifiers and cross-references print beneath the item. */
 export interface KitchenTicketItem {
@@ -62,7 +58,8 @@ export type KitchenTicket = {
       alsoOnOrder?: { locale: string; items: OtherStationItem[] };
     }
   | {
-      scope: "order";
+      scope: "watcher";
+      watcherName: string;
       tableLabel: string;
       orderNumber: string;
       firedAt: Date;
@@ -199,7 +196,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
 
   if (ticket.reprint === true) b.line("*** REPRINT ***");
   if (ticket.mark !== undefined) b.line(`*** ${ticket.mark} ***`);
-  text(ticket.scope === "station" ? ticket.stationName : ORDER_HEADER);
+  text(ticket.scope === "station" ? ticket.stationName : ticket.watcherName);
   text(ticket.tableLabel);
   text(ticket.orderNumber);
   b.line(hhmm(ticket.firedAt));

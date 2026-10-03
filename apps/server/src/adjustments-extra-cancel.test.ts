@@ -15,6 +15,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
+import { createPrinter } from "@waitron/printing";
 import { listStationNotices, writePrintHeldWork } from "@waitron/venue-service";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { placeGroups } from "./order-groups.js";
@@ -30,6 +31,7 @@ import {
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { createWatcher, setPrinterWatcher } from "./watchers.js";
 import "./errors.js";
 
 // Cancelling one extra of a dish the kitchen already has (B11g): the kitchen is told which extra to
@@ -227,6 +229,41 @@ async function noticesDuring(act: () => Promise<void>) {
 }
 
 describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
+  it("sends EXTRA CANCELLED from the adjustment action to the dish's watcher", async () => {
+    const printerId = await inTx(venue, async (tx) => {
+      const watcher = await createWatcher(tx, venue.cfg, {
+        name: `Extra ${randomUUID()}`,
+        runsPass: false,
+        everyStation: false,
+        stationIds: [venue.stationId],
+        everyZone: true,
+        zoneIds: [],
+      });
+      const printer = await createPrinter(
+        tx,
+        { locationId: venue.cfg.locationId },
+        {
+          name: `Extra ${randomUUID()}`,
+          transport: "cloud_poll",
+          pollId: randomUUID(),
+        },
+      );
+      await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
+      return printer.id;
+    });
+    try {
+      const billId = await billOf("hamburger", "fire");
+      const before = (await jobs()).filter((job) => job.printerId === printerId).length;
+      await cancelGherkins(billId);
+      const added = (await jobs()).filter((job) => job.printerId === printerId).slice(before);
+      expect(added).toHaveLength(1);
+      expect(printedLines(added[0]!.payload).join(" ")).toContain("HAMB");
+      expect(printedLines(added[0]!.payload).join(" ")).toContain("Gherkins");
+      expect(printedLines(added[0]!.payload).join(" ")).toContain("CHANGED");
+    } finally {
+      await inTx(venue, (tx) => setPrinterWatcher(tx, venue.cfg, printerId, null));
+    }
+  });
   it("prints one CHANGED slip of the dish as it now stands, and the extra to take off", async () => {
     const billId = await billOf("hamburger", "fire");
 

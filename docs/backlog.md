@@ -235,10 +235,35 @@ release against the current rules. A station chosen by hand stays while switched
 without an alert. Otherwise, with no replacement, the dish stays at its old station and raises an
 alert. A dish made at the till is never moved or re-routed
 ([plan](superpowers/plans/2026-10-01-moving-dishes-slice-3c3.md)). What is left:
-- **3d**, watchers ([plan](superpowers/plans/2026-10-01-watchers-slice-3d.md)): named watchers on
-  Prep Stations that screens and printers attach to, each with its own Done, Away unchanged, and
-  the "one ticket per order" printer setting retired (owner, 2026-10-01); approved and queued as
-  lane E's PF8.
+- **3d**, watchers ([plan](superpowers/plans/2026-10-01-watchers-slice-3d.md)): the pass and runners
+  follow stations and service zones on screen and paper. Each watcher has its own Done, while Away
+  stays shared. Watcher printers replace whole-order printing; an existing printer set to
+  "one ticket per order" keeps printing its attached stations' tickets until you attach it to a
+  watcher (owner, 2026-10-01). PF8 is in progress in lane D.
+- **Show how many dishes are being made on the table plan — OPEN (3d, W16).** The plan has no such
+  count; adding one needs another value from `listTablesWithState`.
+- **Refresh the floor without a staff action — OPEN (3d, W16).** `till-floor-screen.ts` reads on
+  events handled by `till-app.ts`'s `floor-refresh`, not on a timer. Polling would read
+  `listTablesWithState` every few seconds on every till; choose the interval and cost first.
+- **Drop `printers.ticket_scope` at the next reset — OPEN (3d, W20).** Printing no longer reads the
+  column. Dropping it rebuilds `printers`, so leave it until the venue reset that permits the rebuild.
+- **Clear a failed watcher copy without printing or resending — OPEN (3d, P9).** A Reprint does not
+  clear its failed job because watcher copies have no station or bill link.
+- **Avoid repeat watcher configuration reads during a table move — OPEN (3d).**
+  `readSentWork`, `enqueueMovedSlips`, and `printCorrectionSlips` each read watcher printers in the
+  move flow. Measure the query count on a moved order with a watcher printer, then pass one read
+  through the transaction if it repeats unchanged configuration.
+- **Show one watcher in a canvas card — OPEN (3d, P15).** The ordinary embedded pass card still
+  shows All stations; a watcher-bound device opens its own board.
+- **Alert when a watcher's screens go dark — OPEN (3d, P17).** The existing dark-screen alert is
+  station scoped, while a watcher can follow several stations.
+- **Move an enrolled kitchen screen between stations and watchers without joining again — OPEN
+  (3d, P18).** Its binding is selected at joining; changing that binding needs a separate action.
+- **Keep watcher Done marks through a `ticket_items` rebuild — OPEN (3d).**
+  `watcher_item_marks` cascades from `ticket_items`, so a rebuild empties those marks.
+- **Keep the two watcher filtering rules together — OPEN (3d).** The server's `watcherSees` and
+  Prep Stations' `watchersSeeing` each have a hand-copied test table. Neither test detects a change
+  to the other rule.
 - After approval the owner ruled that a dish made at the till is never held and the till lists
   what to make ("Make now"); 3c-2, 3c-3 and 3d were amended to match.
 - **Three follow-ups 3c-1 left:** the kitchen screen's column view has no per-order card, so it
@@ -2357,6 +2382,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     - A failed ticket on a pass printer (one ticket for the whole order) shows on the card of
       every station it covered, even where that station's own printer printed; it stops showing at
       a station once a Reprint of the bill would not link that pass printer to that station.
+      _2026-10-01 (slice 3d): the whole-order printer is gone; a watcher's copy is linked to no
+      station and shows no printing problem (W23)._
     - Finish table drops the problem of a bill that transfers emptied (read, not run; not
       re-checked by B6a).
     - After a merge, a reprint of the absorbed bill that was still waiting at the merge clears
@@ -5395,7 +5422,7 @@ recommendation are in lane B's question of 2026-10-03; the measurement branch
 - **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23; narrowed by A92 and by C127's second pull request (#1039), which renamed the `pg` handles to `suite`, dropped five `.sqlite.` infixes and retitled the `bytea` test).**
   Still open: `apps/server/src/working-order-reads.sqlite.test.ts` keeps its `.sqlite.` infix
   because the approved slice 3d plan (`docs/superpowers/plans/2026-10-01-watchers-slice-3d.md`,
-  lane E's PF8, not started) runs it by that name; rename it once PF8 has landed. The `pg` handle
+  now PF8 in lane D) runs it by that name; rename it once PF8 has landed. The `pg` handle
   stays in `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and `inmutabilidad.test.ts`,
   the fiscal gates no runner edits.
   `generatePassword` has a caller in `apps/server/src/break-glass.ts` and remains exported.

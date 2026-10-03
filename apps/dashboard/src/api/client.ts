@@ -483,6 +483,19 @@ export interface Station {
   forgottenAfterMinutes: number;
 }
 
+export interface Watcher {
+  id: string;
+  name: string;
+  everyStation: boolean;
+  stationIds: string[];
+  everyZone: boolean;
+  zoneIds: string[];
+  runsPass: boolean;
+  displayOrder: number;
+  active: boolean;
+  printerIds: string[];
+}
+
 export type BumpMode = "line" | "ticket";
 
 export interface Course {
@@ -497,6 +510,7 @@ export interface DeviceRow {
   madeHereStationIds: string[];
   kind: string;
   stationId: string | null;
+  watcherId: string | null;
   label: string;
   active: boolean;
   lastSeenAt: string | null;
@@ -738,8 +752,6 @@ export interface PurchaseInvoicePatch {
 
 export type PrintTransport = "usb" | "network_tcp" | "bluetooth" | "cloud_poll";
 
-export type PrintTicketScope = "station" | "order";
-
 export type PrintPaperWidth = "58mm" | "80mm";
 export type PrintResolution = "180dpi" | "203dpi";
 
@@ -767,7 +779,7 @@ export interface Printer {
   port: number | null;
   localKey: string | null;
   pollId: string | null;
-  ticketScope: PrintTicketScope;
+  watcherId: string | null;
   paperWidth: PrintPaperWidth;
   resolution: PrintResolution;
   hasCashDrawer: boolean;
@@ -832,7 +844,6 @@ export interface PrinterPatch {
   port?: number | null;
   localKey?: string | null;
   pollId?: string | null;
-  ticketScope?: PrintTicketScope;
   paperWidth?: PrintPaperWidth;
   resolution?: PrintResolution;
   hasCashDrawer?: boolean;
@@ -2228,6 +2239,10 @@ export class DashboardApi {
     return this.#request<Station[]>("/management-api/stations", "GET");
   }
 
+  listWatchers(): Promise<Watcher[]> {
+    return this.#request<Watcher[]>("/management-api/watchers", "GET");
+  }
+
   createStation(input: {
     name: string;
     displayOrder?: number;
@@ -2350,7 +2365,13 @@ export class DashboardApi {
    * `device.join_mismatch`, so the caller refreshes rather than offering a second attempt. */
   acceptDeviceJoinRequest(
     id: string,
-    input: { choice: string; profileId: string; stationId?: string; registerId?: string },
+    input: {
+      choice: string;
+      profileId: string;
+      stationId?: string;
+      watcherId?: string;
+      registerId?: string;
+    },
   ): Promise<{ deviceId: string; name: string; formFactor: FormFactor }> {
     return this.#request<{ deviceId: string; name: string; formFactor: FormFactor }>(
       `/management-api/device-join-requests/${id}/accept`,
@@ -2559,6 +2580,12 @@ export class DashboardApi {
 
   updatePrinter(id: string, patch: PrinterPatch): Promise<void> {
     return this.#request<void>(`/management-api/printers/${id}`, "PATCH", patch);
+  }
+
+  setPrinterWatcher(printerId: string, watcherId: string | null): Promise<void> {
+    return this.#request<void>(`/management-api/printers/${printerId}/watcher`, "PUT", {
+      watcherId,
+    });
   }
 
   deactivatePrinter(id: string): Promise<void> {

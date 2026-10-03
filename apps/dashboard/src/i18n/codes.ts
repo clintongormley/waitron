@@ -508,6 +508,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That printer no longer exists",
     es: "Esa impresora ya no existe",
   },
+  "printer.makes_and_watches": {
+    en: "This printer prints station tickets. Turn its stations off first, or it would print some dishes twice.",
+    es: "Esta impresora imprime comandas de estación. Desactiva primero sus estaciones, o imprimiría algunos platos dos veces.",
+  },
+  "watcher.not_found": {
+    en: "That watcher no longer exists",
+    es: "Ese punto de seguimiento ya no existe",
+  },
   "working_order.not_found": {
     en: "That bill was not found",
     es: "No se encontró esa cuenta",

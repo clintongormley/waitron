@@ -1,6 +1,6 @@
 /**
- * The device binding rule: a `kds`-profile device binds a kitchen station and no register, and every
- * other form factor binds a register and no station. The form factor lives in another table, so the
+ * The device binding rule: a `kds`-profile device binds a station or watcher and no register, and
+ * every other form factor binds a register and neither. The form factor lives in another table, so the
  * rule is two triggers in `packages/db/drizzle/0001_behavioural_triggers.sql`.
  *
  * `scripts/behavioural-triggers.test.ts` pins the same triggers with hand-written SQL; every case here
@@ -20,7 +20,7 @@ import type { LocationId } from "@waitron/shared";
 
 const TOKEN_HASH = "scrypt$00$00";
 
-describe("devices binding-rule trigger (form factor → station XOR register)", () => {
+describe("devices binding-rule trigger (form factor → station or watcher XOR register)", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let db: Database;
   let locationId: LocationId;

@@ -17,6 +17,29 @@ import type {
 
 afterEach(cleanupWidgets);
 
+it("renders a bound watcher in the kitchen display card", async () => {
+  const board = { watcher: { id: "pass", name: "Pass", runsPass: true, active: true }, orders: [] };
+  const tab: TabDef = {
+    key: "kitchen",
+    title: "Kitchen",
+    columns: 24,
+    cards: [{ type: "kds-board", colSpan: 24, rowSpan: 12, config: {} }],
+  };
+  const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+    tab,
+    store: new WorkingOrderStore(),
+    capabilities: ["act-as-kds"],
+    deviceMode: true,
+    initialDeviceWatcher: board,
+  });
+  const screen = el.shadowRoot!.querySelector<
+    HTMLElement & { deviceMode: boolean; initialDeviceWatcher: unknown }
+  >("till-expo-screen");
+  expect(screen).not.toBeNull();
+  expect(screen!.deviceMode).toBe(true);
+  expect(screen!.initialDeviceWatcher).toBe(board);
+});
+
 const counterTab: TabDef = {
   key: "counter",
   title: "Counter",

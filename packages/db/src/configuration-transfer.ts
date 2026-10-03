@@ -18,6 +18,9 @@ export const CORE_CONFIGURATION_TRANSFER = {
       locationColumns: ["location_id"],
       omit: ["needs_clearing_since"],
     },
+    { name: "watchers", locationColumns: ["location_id"] },
+    { name: "watcher_stations" },
+    { name: "watcher_zones" },
     {
       name: "print_agents",
       locationColumns: ["location_id"],
@@ -31,6 +34,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
       reconnect: true,
     },
     { name: "station_printers" },
+    { name: "watcher_printers" },
     { name: "tenant_themes" },
     { name: "tenant_receipts" },
   ],

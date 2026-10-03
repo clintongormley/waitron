@@ -28,6 +28,7 @@ import { parkOrder, placeOrder } from "./working-order.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { deploymentEnvironment } from "./config.js";
 import { stationOutputAlertSource } from "./alert-sources.js";
+import { createWatcher } from "./watchers.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -290,6 +291,53 @@ describe("station output status", () => {
     expect(
       await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
     ).toEqual([]);
+  });
+
+  it("does not count a watcher screen as Grill's own screen", async () => {
+    const f = await setup();
+    await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    const [profile] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: "KDS", formFactor: "kds", capabilities: [] })
+      .returning({ id: deviceProfiles.id });
+    const pass = await withTransaction(suite.db, (tx) =>
+      createWatcher(tx, f.venue.cfg, {
+        name: "Pass",
+        everyStation: false,
+        stationIds: [f.grill],
+        everyZone: true,
+        zoneIds: [],
+        runsPass: false,
+      }),
+    );
+    await suite.db.insert(devices).values({
+      locationId: f.venue.cfg.locationId,
+      watcherId: pass.id,
+      deviceProfileId: profile!.id,
+      label: "Dark pass",
+      tokenHash: "hash",
+      lastSeenAt: "2026-10-02T17:55:00.000Z",
+    });
+    expect(
+      await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
+    ).toEqual([]);
+    await suite.db.insert(devices).values({
+      locationId: f.venue.cfg.locationId,
+      stationId: f.grill,
+      deviceProfileId: profile!.id,
+      label: "Dark Grill",
+      tokenHash: "hash",
+      lastSeenAt: "2026-10-02T17:55:00.000Z",
+    });
+    await suite.db
+      .update(devices)
+      .set({ lastSeenAt: "2026-10-02T18:05:00.000Z" })
+      .where(eq(devices.watcherId, pass.id));
+    expect(
+      await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
+    ).toEqual([
+      { stationId: f.grill, stationName: "Cocina", lastSeenAt: "2026-10-02T17:55:00.000Z" },
+    ]);
   });
 
   it("ignores old waiting dishes and revoked screens", async () => {

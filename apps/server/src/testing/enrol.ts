@@ -9,7 +9,13 @@ import type { TillConfig } from "../till-config.js";
 export async function enrolDeviceForTest(
   db: Database,
   cfg: TillConfig,
-  input: { name: string; profileId: string; stationId?: string; registerId?: string },
+  input: {
+    name: string;
+    profileId: string;
+    stationId?: string;
+    watcherId?: string;
+    registerId?: string;
+  },
 ): Promise<{ deviceId: string; token: string }> {
   return withTransaction(db, async (tx) => {
     const made = await createJoinRequest(tx, cfg, { kind: "device", label: input.name });
@@ -17,6 +23,7 @@ export async function enrolDeviceForTest(
       choice: made.verificationNumber,
       profileId: input.profileId,
       stationId: input.stationId ?? null,
+      watcherId: input.watcherId ?? null,
       registerId: input.registerId ?? null,
     });
     /* v8 ignore start -- the fixture always passes the request's own number */

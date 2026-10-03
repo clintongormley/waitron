@@ -2,6 +2,7 @@ import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { RouteTarget, RoutingModel, ExceptionInput, RouteExplanation } from "../routing.js";
 import type { RoutingChange, RoutingMove } from "../routing-types.js";
 import type { WeeklyInterval, RoutingMoment } from "../routing.js";
+import type { WatcherView } from "./watchers-seen.js";
 
 export interface OutputsDown {
   printersDown: {
@@ -32,9 +33,17 @@ export interface PrepStationsView {
   zones: { id: string; name: string; active?: boolean }[];
   products: { id: string; name: string }[];
   testProducts: { id: string; name: string }[];
-  printers: { id: string; name: string }[];
+  printers: { id: string; name: string; watcherId?: string | null }[];
   stationPrinters: { stationId: string; printerId: string }[];
-  devices: { id: string; label: string; stationId: string | null; kind: string; active: boolean }[];
+  devices: {
+    id: string;
+    label: string;
+    stationId: string | null;
+    watcherId: string | null;
+    kind: string;
+    active: boolean;
+  }[];
+  watchers: WatcherView[];
 }
 interface ListedProduct {
   id: string;
@@ -49,6 +58,10 @@ export type StationInput = {
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
 };
+export type WatcherInput = Pick<
+  WatcherView,
+  "name" | "everyStation" | "stationIds" | "everyZone" | "zoneIds" | "runsPass"
+> & { displayOrder?: number };
 export class PrepStationsApi {
   constructor(
     private readonly request: DashboardRequest,
@@ -62,15 +75,17 @@ export class PrepStationsApi {
     return this.request<T>(path, "GET", undefined, { passive: this.passive });
   }
   async load(): Promise<PrepStationsView> {
-    const [routing, stations, categories, zones, products, printers, devices] = await Promise.all([
-      this.#read<RoutingModel>("/management-api/venue-service/routing"),
-      this.#read<PrepStation[]>("/management-api/stations"),
-      this.#read<PrepStationsView["categories"]>("/management-api/categories"),
-      this.#read<PrepStationsView["zones"]>("/management-api/zones"),
-      this.#read<ListedProduct[]>("/management-api/products"),
-      this.#read<PrepStationsView["printers"]>("/management-api/printers"),
-      this.#read<PrepStationsView["devices"]>("/management-api/devices"),
-    ]);
+    const [routing, stations, categories, zones, products, printers, devices, watchers] =
+      await Promise.all([
+        this.#read<RoutingModel>("/management-api/venue-service/routing"),
+        this.#read<PrepStation[]>("/management-api/stations"),
+        this.#read<PrepStationsView["categories"]>("/management-api/categories"),
+        this.#read<PrepStationsView["zones"]>("/management-api/zones"),
+        this.#read<ListedProduct[]>("/management-api/products"),
+        this.#read<PrepStationsView["printers"]>("/management-api/printers"),
+        this.#read<PrepStationsView["devices"]>("/management-api/devices"),
+        this.#read<WatcherView[]>("/management-api/watchers"),
+      ]);
     const stationPrinters = (
       await Promise.all(
         stations.map((s) =>
@@ -99,6 +114,7 @@ export class PrepStationsApi {
       printers,
       stationPrinters,
       devices,
+      watchers,
     };
   }
   preview(change: RoutingChange): Promise<RoutingMove[]> {
@@ -124,6 +140,15 @@ export class PrepStationsApi {
   }
   async createStation(input: StationInput): Promise<{ id: string }> {
     return this.request<{ id: string }>("/management-api/stations", "POST", input);
+  }
+  createWatcher(input: WatcherInput): Promise<{ id: string }> {
+    return this.request("/management-api/watchers", "POST", input);
+  }
+  updateWatcher(id: string, input: WatcherInput): Promise<void> {
+    return this.request(`/management-api/watchers/${id}`, "PUT", input);
+  }
+  removeWatcher(id: string): Promise<void> {
+    return this.request(`/management-api/watchers/${id}`, "DELETE");
   }
   updateStation(
     id: string,

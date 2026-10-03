@@ -24,6 +24,8 @@ import { stationPrintersDown } from "./station-outputs-down.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import { listMadeHereStations, setMadeHereStations } from "./made-here.js";
+import { listWatcherQueue, markWatcherItems } from "./watcher-board.js";
+import { parseWatcherDoneBody } from "./watcher-done-body.js";
 
 /**
  * `cfg` is the FULL `TillConfig` because the verbs this surface calls are typed on it; the routes
@@ -82,6 +84,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device_profile.not_found": 404,
   "device.not_found": 404,
   "station.not_found": 404,
+  "watcher.not_found": 404,
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,
@@ -190,9 +193,43 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         formFactor: device.formFactor,
         name: device.label,
         stationId: device.stationId,
+        watcherId: device.watcherId,
         tillId: device.tillId,
         receiptPrinterId: device.receiptPrinterId,
       });
+    }),
+  );
+
+  app.get("/api/device/watcher", (c) =>
+    run(c, log, async () => {
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      if (device.watcherId === null) throw new AppError("device.unauthorized", {});
+      const watcherId = device.watcherId;
+      return c.json(
+        await withTransaction(deps.db, (tx) => listWatcherQueue(tx, deps.cfg, watcherId)),
+      );
+    }),
+  );
+
+  app.post("/api/device/watcher/done", (c) =>
+    run(c, log, async () => {
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      if (device.watcherId === null) throw new AppError("device.unauthorized", {});
+      const watcherId = device.watcherId;
+      const body = parseWatcherDoneBody(await readJsonBody(c));
+      const at = new Date();
+      await withTransaction(deps.db, (tx) =>
+        markWatcherItems(
+          tx,
+          deps.cfg,
+          watcherId,
+          body.ticketItemIds,
+          body.done,
+          { deviceId: device.deviceId },
+          at,
+        ),
+      );
+      return c.body(null, 204);
     }),
   );
 
@@ -277,6 +314,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             id: devices.id,
             formFactor: deviceProfiles.formFactor,
             stationId: devices.stationId,
+            watcherId: devices.watcherId,
             deviceProfileId: devices.deviceProfileId,
             label: devices.label,
             active: devices.active,

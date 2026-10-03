@@ -18,6 +18,7 @@ import type {
   ReceiptPrintMode,
   Station,
   Till,
+  Watcher,
 } from "../api/client.js";
 
 const PRINT_MODES: readonly ReceiptPrintMode[] = ["auto", "on_request", "never"];
@@ -88,6 +89,8 @@ export class PrintingRulesScreen extends LitElement {
   );
   @state() private printers: Printer[] = [];
   @state() private stations: Station[] = [];
+  @state() private watchers: Watcher[] = [];
+  @state() private printerErrors: Record<string, string> = {};
   @state() private printerStations: Record<string, string[]> = {};
   @state() private tills: Till[] = [];
   @state() private locations: LocationSummary[] = [];
@@ -126,6 +129,9 @@ export class PrintingRulesScreen extends LitElement {
       this.#queries.watch("listStations", [], (value) => {
         this.stations = value;
       }),
+      this.#queries.watch("listWatchers", [], (value) => {
+        this.watchers = value;
+      }),
       this.#queries.watch("listTills", [], (value) => {
         this.tills = value;
       }),
@@ -134,15 +140,23 @@ export class PrintingRulesScreen extends LitElement {
       }),
     ]);
   }
-  async #mutate(action: () => Promise<unknown>): Promise<void> {
+  async #mutate(action: () => Promise<unknown>, printerId?: string): Promise<void> {
     if (this.saving) return;
     this.saving = true;
     this.errorKey = null;
     try {
       await action();
       await this.#load();
+      if (printerId && (this.printerStations[printerId] ?? []).length === 0) {
+        this.printerErrors = { ...this.printerErrors, [printerId]: "" };
+      }
     } catch (error) {
-      this.errorKey = codeOf(error);
+      const code = codeOf(error);
+      if (printerId && code === "printer.makes_and_watches") {
+        this.printerErrors = { ...this.printerErrors, [printerId]: code };
+      } else {
+        this.errorKey = code;
+      }
     } finally {
       this.saving = false;
     }
@@ -167,21 +181,29 @@ export class PrintingRulesScreen extends LitElement {
       <wt-card>
         <div class="row">
           <span class="details">${printer.name}</span>
-          <wt-switch
-            label=${t("printers.ticket_scope")}
-            name="ticketScope"
-            data-test="printer-ticket-scope-${printer.id}"
-            .checked=${live(printer.ticketScope === "order")}
+          <wt-combobox
+            name="watcherId"
+            label=${t("printers.watcher_copies")}
+            search="auto"
+            searchPlaceholder=${t("categories.combobox_search")}
+            noResultsLabel=${t("categories.combobox_no_results")}
+            .options=${[
+              { value: "", label: t("printers.watcher_no") },
+              ...this.watchers
+                .filter((watcher) => watcher.active)
+                .map((watcher) => ({ value: watcher.id, label: watcher.name })),
+            ]}
+            .value=${live(printer.watcherId ?? "")}
             .disabled=${this.saving}
-            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-              const checked = event.detail.checked;
-              void this.#mutate(() =>
-                this.api.updatePrinter(printer.id, {
-                  ticketScope: checked ? "order" : "station",
-                }),
+            data-test="printer-watcher-${printer.id}"
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              void this.#mutate(
+                () => this.api.setPrinterWatcher(printer.id, event.detail.value || null),
+                printer.id,
               );
             }}
-          ></wt-switch>
+          ></wt-combobox>
         </div>
         <div class="stations" role="group" aria-label=${t("printers.stations_title")}>
           <strong>${t("printers.stations_title")}</strong>
@@ -198,13 +220,15 @@ export class PrintingRulesScreen extends LitElement {
                       aria-label=${station.name}
                       data-test="station-toggle-${printer.id}-${station.id}"
                       .checked=${live((this.printerStations[printer.id] ?? []).includes(station.id))}
-                      .disabled=${this.saving}
+                      .disabled=${this.saving || printer.watcherId !== null}
                       @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
                         const checked = event.detail.checked;
-                        void this.#mutate(() =>
-                          checked
-                            ? this.api.attachPrinterToStation(station.id, printer.id)
-                            : this.api.detachPrinterFromStation(station.id, printer.id),
+                        void this.#mutate(
+                          () =>
+                            checked
+                              ? this.api.attachPrinterToStation(station.id, printer.id)
+                              : this.api.detachPrinterFromStation(station.id, printer.id),
+                          printer.id,
                         );
                       }}
                     ></wt-switch>
@@ -212,6 +236,8 @@ export class PrintingRulesScreen extends LitElement {
                 )
           }
         </div>
+        ${printer.watcherId !== null ? html`<p>${t("printers.watcher_station_disabled")}</p>` : nothing}
+        ${this.printerErrors[printer.id] ? html`<p class="error" role="alert">${t("printers.watcher_conflict")}</p>` : nothing}
       </wt-card>
     </li>`;
   }

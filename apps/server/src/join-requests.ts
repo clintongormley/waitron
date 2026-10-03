@@ -326,6 +326,7 @@ export async function acceptDeviceJoinRequest(
     choice: string;
     profileId: string;
     stationId?: string | null;
+    watcherId?: string | null;
     registerId?: string | null;
   },
 ): Promise<AcceptResult> {
@@ -352,6 +353,7 @@ export async function acceptDeviceJoinRequest(
     profileId: input.profileId,
     name: row.label,
     stationId: input.stationId,
+    watcherId: input.watcherId,
     registerId: input.registerId,
   });
 
@@ -359,6 +361,7 @@ export async function acceptDeviceJoinRequest(
     id: row.id,
     locationId: row.locationId,
     stationId: binding.stationId,
+    watcherId: binding.watcherId,
     tillId: binding.tillId,
     deviceProfileId: input.profileId,
     label: row.label,

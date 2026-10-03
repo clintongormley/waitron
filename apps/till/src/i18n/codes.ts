@@ -3,6 +3,10 @@ import { currentLocale, pickLocale } from "./t.js";
 // An operator must never see a raw wire code: a code missing from this table degrades to the GENERIC
 // sentence. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "watcher.not_found": {
+    en: "That watcher no longer exists.",
+    es: "Ese punto de seguimiento ya no existe.",
+  },
   "working_order.out_of_date": {
     en: "Someone else changed this order. Reload it and make your change again",
     es: "Otra persona ha cambiado este pedido. Vuelve a cargarlo y repite el cambio",

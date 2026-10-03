@@ -59,6 +59,7 @@ const view: PrepStationsView = {
   printers: [],
   stationPrinters: [],
   devices: [],
+  watchers: [],
 };
 function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
   return {
@@ -82,6 +83,173 @@ function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
     ...overrides,
   } as unknown as PrepStationsApi;
 }
+it("shows watcher cards and station and tester follow lines", async () => {
+  setLocale("en");
+  const pass = {
+    id: "pass",
+    name: "Pass",
+    active: true,
+    displayOrder: 0,
+    everyStation: true,
+    stationIds: [],
+    everyZone: true,
+    zoneIds: [],
+    runsPass: true,
+    printerIds: ["printer"],
+  };
+  const runner = {
+    id: "runner",
+    name: "Terrace runner",
+    active: true,
+    displayOrder: 1,
+    everyStation: false,
+    stationIds: ["bar"],
+    everyZone: false,
+    zoneIds: ["terrace"],
+    runsPass: false,
+    printerIds: [],
+  };
+  const a = api({
+    load: vi.fn().mockResolvedValue({
+      ...view,
+      zones: [{ id: "terrace", name: "Terrace", active: true }],
+      printers: [{ id: "printer", name: "Expo printer" }],
+      devices: [
+        {
+          id: "device",
+          label: "Pass screen",
+          kind: "kds_station",
+          active: true,
+          stationId: null,
+          watcherId: "pass",
+        },
+      ],
+      watchers: [pass, runner],
+    }),
+    explain: vi.fn().mockResolvedValue({
+      route: { kind: "station", stationId: "bar" },
+      decidedBy: { kind: "default" },
+      fallbacks: [],
+      noReplacement: false,
+      stations: [],
+    }),
+  });
+  const el = await mount(a);
+  expect(q(el, '[data-test="watcher-pass"]')?.textContent).toContain("Follows: every station");
+  expect(q(el, '[data-test="watcher-pass"]')?.textContent).toContain("For: every service zone");
+  expect(q(el, '[data-test="watcher-pass"]')?.textContent).toContain("Runs the pass");
+  expect(q(el, '[data-test="watcher-pass"]')?.textContent).toContain("Pass screen");
+  expect(q(el, '[data-test="watcher-pass"]')?.textContent).toContain("Expo printer");
+  expect(q(el, '[data-test="watcher-runner"]')?.textContent).toContain("Follows: Bar");
+  expect(q(el, '[data-test="watcher-runner"]')?.textContent).toContain("For: Terrace");
+  expect(q(el, '[data-test="station-bar"]')?.textContent).toContain(
+    "Watched by: Pass, Terrace runner",
+  );
+  q(el, '[data-test="new-watcher"]');
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="test-product"]')?.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
+  );
+  await settle(el);
+  expect(q(el, '[data-test="test-answer"]')?.textContent).toContain("Watched by: Pass");
+  window.history.replaceState(null, "", "/manage?dashboard=prep-stations");
+});
+
+it("creates, edits and confirms removal of a watcher", async () => {
+  setLocale("en");
+  const pass = {
+    id: "pass",
+    name: "Pass",
+    active: true,
+    displayOrder: 0,
+    everyStation: true,
+    stationIds: [],
+    everyZone: true,
+    zoneIds: [],
+    runsPass: true,
+    printerIds: [],
+  };
+  const a = api({
+    load: vi.fn().mockResolvedValue({ ...view, watchers: [pass] }),
+    createWatcher: vi.fn(),
+    updateWatcher: vi.fn(),
+    removeWatcher: vi.fn(),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="new-watcher"]')!.click();
+  await settle(el);
+  expect(q(el, '[data-test="watcher-modal"]')).not.toBeNull();
+  q(el, '[data-test="watcher-modal"] watcher-form')!.dispatchEvent(
+    new CustomEvent("watcher-save", {
+      detail: {
+        input: {
+          name: "Runner",
+          everyStation: true,
+          stationIds: [],
+          everyZone: true,
+          zoneIds: [],
+          runsPass: false,
+        },
+      },
+    }),
+  );
+  await settle(el);
+  expect(a.createWatcher).toHaveBeenCalled();
+  q(el, '[data-test="edit-watcher-pass"]')!.click();
+  await settle(el);
+  q(el, '[data-test="watcher-modal"] watcher-form')!.dispatchEvent(
+    new CustomEvent("watcher-save", {
+      detail: {
+        input: {
+          name: "Pass",
+          everyStation: true,
+          stationIds: [],
+          everyZone: true,
+          zoneIds: [],
+          runsPass: true,
+        },
+      },
+    }),
+  );
+  await settle(el);
+  expect(a.updateWatcher).toHaveBeenCalledWith("pass", expect.any(Object));
+  q(el, '[data-test="remove-watcher-pass"]')!.click();
+  await settle(el);
+  expect(q(el, '[data-test="remove-watcher-modal"]')?.textContent).toContain("Remove Pass?");
+  q(el, '[data-test="confirm-remove-watcher"]')!.click();
+  await settle(el);
+  expect(a.removeWatcher).toHaveBeenCalledWith("pass");
+});
+
+it("names no watcher for a routed dish and says nothing for no preparation", async () => {
+  setLocale("en");
+  const a = api({
+    explain: vi
+      .fn()
+      .mockResolvedValueOnce({
+        route: { kind: "station", stationId: "bar" },
+        decidedBy: { kind: "default" },
+        fallbacks: [],
+        noReplacement: false,
+        stations: [],
+      })
+      .mockResolvedValueOnce({
+        route: { kind: "no_preparation" },
+        decidedBy: { kind: "claim", categoryId: "cocktails" },
+        fallbacks: [],
+        noReplacement: false,
+        stations: [],
+      }),
+  });
+  const el = await mount(a);
+  const select = q(el, '[data-test="test-product"]')!;
+  select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bread" } }));
+  await settle(el);
+  expect(q(el, '[data-test="test-answer"]')?.textContent).toContain("No watcher follows it.");
+  select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bread" } }));
+  await settle(el);
+  expect(q(el, '[data-test="test-answer"]')?.textContent).not.toContain("watcher follows");
+  window.history.replaceState(null, "", "/manage?dashboard=prep-stations");
+});
 async function mount(a: PrepStationsApi): Promise<PrepStationsScreen> {
   const host = document.createElement("div");
   applyTokens(host);
@@ -1036,6 +1204,31 @@ it("lists exceptions by position as sentences and identifies both warnings", asy
   expect(rows[1]!.textContent).toContain("Cocktails from Terrace → Old bar");
   expect(rows[1]!.textContent).toContain("Never used: an exception above always catches it first");
   expect(rows[1]!.textContent).toContain("Its station is switched off");
+});
+it("sorts equal-position exceptions by id and restores that order after cancellation", async () => {
+  const tied = {
+    ...exceptionView,
+    routing: {
+      ...exceptionView.routing,
+      exceptions: exceptionView.routing.exceptions.map((row) => ({ ...row, position: 10 })),
+    },
+  };
+  const a = api({ load: vi.fn().mockResolvedValue(tied), reorderExceptions: vi.fn() });
+  const el = await mount(a);
+  const ids = () =>
+    [...el.shadowRoot!.querySelectorAll('[data-test="exceptions"] tbody tr')].map((row) =>
+      row.getAttribute("data-id"),
+    );
+  expect(ids()).toEqual(["a", "b"]);
+  q(el, '[data-test="drag-b"]')!.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }),
+  );
+  await settle(el);
+  expect(ids()).toEqual(["b", "a"]);
+  q(el, '[data-test="cancel-routing"]')!.click();
+  await settle(el);
+  expect(ids()).toEqual(["a", "b"]);
+  expect(a.reorderExceptions).not.toHaveBeenCalled();
 });
 it("moves the second exception up by keyboard and sends the complete new order", async () => {
   const a = api({

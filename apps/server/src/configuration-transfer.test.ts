@@ -36,9 +36,15 @@ import {
   categories,
   deviceProfiles,
   diningTables,
+  floorZones,
   kitchenStations,
   printAgents,
   printers,
+  watchers,
+  watcherStations,
+  watcherZones,
+  watcherPrinters,
+  CORE_CONFIGURATION_TRANSFER,
   products,
   sales,
   withTransaction,
@@ -1097,6 +1103,111 @@ it("transfers a station's rest of the order switch", async () => {
     .from(kitchenStations)
     .where(eq(kitchenStations.name, "Pase"));
   expect(imported).toEqual([{ showsRestOfOrder: true }]);
+});
+
+it("transfers a watcher with its station, zone, and printer in configuration export", async () => {
+  const source = await applyVenue(planVenue(venue("B13572470"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, async (tx) => {
+    const [station] = await tx
+      .insert(kitchenStations)
+      .values({ locationId: source.locationId, name: "Grill" })
+      .returning({ id: kitchenStations.id });
+    const [zone] = await tx
+      .insert(floorZones)
+      .values({ locationId: source.locationId, name: "Terrace" })
+      .returning({ id: floorZones.id });
+    const [printer] = await tx
+      .insert(printers)
+      .values({
+        locationId: source.locationId,
+        name: "Pass printer",
+        transport: "network_tcp",
+        host: "10.0.0.8",
+      })
+      .returning({ id: printers.id });
+    const [watcher] = await tx
+      .insert(watchers)
+      .values({
+        locationId: source.locationId,
+        name: "Pass",
+        everyStation: false,
+        everyZone: false,
+        runsPass: true,
+      })
+      .returning({ id: watchers.id });
+    await tx.insert(watcherStations).values({ watcherId: watcher!.id, stationId: station!.id });
+    await tx.insert(watcherZones).values({ watcherId: watcher!.id, zoneId: zone!.id });
+    await tx.insert(watcherPrinters).values({ watcherId: watcher!.id, printerId: printer!.id });
+  });
+  const declared = CORE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+  expect(declared).toEqual(
+    expect.arrayContaining(["watchers", "watcher_stations", "watcher_zones", "watcher_printers"]),
+  );
+  expect(declared).not.toContain("watcher_item_marks");
+  expect(declared).not.toContain("devices");
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-01T12:00:00Z"),
+    versions,
+  );
+  await applyVenue(planVenue(venue("B97531866"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await withTransaction(targetSuite.db, async (tx) => {
+    const [watcher] = await tx.select().from(watchers).where(eq(watchers.name, "Pass"));
+    const [station] = await tx
+      .select()
+      .from(watcherStations)
+      .where(eq(watcherStations.watcherId, watcher!.id));
+    const [zone] = await tx
+      .select()
+      .from(watcherZones)
+      .where(eq(watcherZones.watcherId, watcher!.id));
+    const [printer] = await tx
+      .select()
+      .from(watcherPrinters)
+      .where(eq(watcherPrinters.watcherId, watcher!.id));
+    return { watcher, station, zone, printer };
+  });
+  expect(imported.watcher).toMatchObject({
+    name: "Pass",
+    everyStation: false,
+    everyZone: false,
+    runsPass: true,
+  });
+  expect(imported.station?.stationId).toBe(
+    (
+      await targetSuite.db
+        .select({ id: kitchenStations.id })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.name, "Grill"))
+    )[0]?.id,
+  );
+  expect(imported.zone?.zoneId).toBe(
+    (
+      await targetSuite.db
+        .select({ id: floorZones.id })
+        .from(floorZones)
+        .where(eq(floorZones.name, "Terrace"))
+    )[0]?.id,
+  );
+  expect(imported.printer?.printerId).toBe(
+    (
+      await targetSuite.db
+        .select({ id: printers.id })
+        .from(printers)
+        .where(eq(printers.name, "Pass printer"))
+    )[0]?.id,
+  );
 });
 
 it("leaves a table's clearing state behind", async () => {

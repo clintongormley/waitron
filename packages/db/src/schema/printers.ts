@@ -9,7 +9,7 @@ import { locations } from "./tenants.js";
  */
 export const printTransport = enumType(["usb", "network_tcp", "bluetooth", "cloud_poll"]);
 
-/** What a printer prints: `station`, one ticket per kitchen station; `order`, one per whole order. */
+/** Existing printer rows retain this unused column until the planned venue reset (`docs/backlog.md`). */
 export const printTicketScope = enumType(["station", "order"]);
 
 /** The paper roll's width: 30 columns of text on 58mm, 42 on 80mm. */

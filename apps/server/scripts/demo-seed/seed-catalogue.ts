@@ -37,6 +37,7 @@ export interface SeedCataloguesResult {
   productsByImage: Map<string, string>;
   menuItemsByProduct: Map<string, string>;
   menuIds: { restaurant: string; lunch: string; deli: string; drinks: string };
+  stationIds: StationIds;
 }
 
 type StationIds = Record<"kitchen" | "bar" | "deli", string> & {
@@ -223,5 +224,6 @@ export async function seedCatalogues(
     productsByImage,
     menuItemsByProduct,
     menuIds: { restaurant: casaId, lunch: diaId, deli: deliId, drinks: drinksId },
+    stationIds,
   };
 }

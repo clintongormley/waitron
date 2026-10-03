@@ -11,6 +11,7 @@ describe("VENUE_SERVICE", () => {
       "describeMakers",
       "findOrderContext",
       "findOrderModes",
+      "findOrderZones",
       "getOrderContext",
       "listLineContexts",
       "listServiceZones",

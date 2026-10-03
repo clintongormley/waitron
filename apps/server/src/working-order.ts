@@ -84,6 +84,7 @@ import {
   workingOrderLines,
   workingOrders,
   workingOrderStatus,
+  watcherItemMarks,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
@@ -167,6 +168,7 @@ import {
   enqueueCorrectionSlips,
   enqueueExtraCancelled,
   enqueueKitchenTickets,
+  enqueueWatcherCopies,
   firedQuantity,
   isStarted,
   ordersWithPrintProblem,
@@ -1866,7 +1868,7 @@ async function finishRelease(
   const ordinary = [...fired, ...extras.filter((item) => item.firedAt !== null)].filter(
     (item) => !rerouted.has(item.workingOrderLineId),
   );
-  await enqueueKitchenTickets(tx, cfg, orderId, ordinary, { mark });
+  await enqueueKitchenTickets(tx, cfg, orderId, ordinary, { mark, watchers: "none" });
   const byOldStation = new Map<string, { from: string; items: FiredItem[] }>();
   for (const item of fired) {
     const old = rerouted.get(item.workingOrderLineId);
@@ -1876,7 +1878,14 @@ async function finishRelease(
     byOldStation.set(old.stationId, bucket);
   }
   for (const { from, items } of byOldStation.values())
-    await enqueueKitchenTickets(tx, cfg, orderId, items, { from });
+    await enqueueKitchenTickets(tx, cfg, orderId, items, { from, watchers: "none" });
+  await enqueueWatcherCopies(
+    tx,
+    cfg,
+    orderId,
+    [...fired, ...extras.filter((item) => item.firedAt !== null)],
+    { mark, rerouted },
+  );
   if (released.length > 0) await bumpRevision(tx, [orderId]);
 }
 
@@ -3585,6 +3594,13 @@ async function splitTicketItem(
     workingOrderLineId: splitLineId,
     quantity: movedThousandths,
   });
+  const marks = await tx
+    .select()
+    .from(watcherItemMarks)
+    .where(eq(watcherItemMarks.ticketItemId, ticketItemId));
+  if (marks.length) {
+    await tx.insert(watcherItemMarks).values(marks.map((mark) => ({ ...mark, ticketItemId: id })));
+  }
   return id;
 }
 
@@ -6336,6 +6352,23 @@ export async function listExpoQueue(
   locationId?: string,
 ): Promise<ExpoOrder[]> {
   const loc = locationId ?? cfg.locationId;
+  return readPassBoard(
+    tx,
+    loc,
+    sql`exists (
+      select 1 from ${ticketItems} tix
+      where tix.working_order_id = ${workingOrders.id}
+        and tix.made_here = 0
+        and tix.away_at is null)`,
+  );
+}
+
+/** Build every section of the selected pass orders before a watcher narrows their items. */
+export async function readPassBoard(
+  tx: Transaction,
+  locationId: string,
+  scope: SQL,
+): Promise<ExpoOrder[]> {
   const rows = await tx
     .select({
       itemId: ticketItems.id,
@@ -6386,13 +6419,7 @@ export async function listExpoQueue(
         eq(ticketItems.madeHere, false),
         ne(workingOrders.status, "abandoned"),
         isNull(workingOrders.collectedAt),
-        // An order leaves once every item is away. `served_at` is a separate floor marker, not
-        // consulted here.
-        sql`exists (
-          select 1 from ${ticketItems} tix
-          where tix.working_order_id = ${workingOrders.id}
-            and tix.made_here = 0
-            and tix.away_at is null)`,
+        scope,
       ),
     )
     .orderBy(
@@ -6412,7 +6439,7 @@ export async function listExpoQueue(
   );
   const tableLabels = await orderTableLabels(
     tx,
-    loc,
+    locationId,
     [...new Map(rows.map((row) => [row.orderId, row])).values()].map((row) => ({
       id: row.orderId,
       partyId: row.partyId,

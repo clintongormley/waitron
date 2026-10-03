@@ -7,6 +7,7 @@ import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { getDeviceProfile, kindOfFormFactor } from "@waitron/layouts";
 import type { DeviceKind, FormFactor } from "@waitron/layouts";
 import { requireLiveStation } from "./kitchen.js";
+import { readWatcher } from "./watchers.js";
 import type { TillConfig } from "./till-config.js";
 
 /** A device's kind is DERIVED from its profile's form factor via {@link kindOfFormFactor}. */
@@ -109,31 +110,55 @@ export async function resolveDeviceBinding(
   tx: Transaction,
   cfg: TillConfig,
   locationId: string,
-  input: { profileId: string; name: string; stationId?: string | null; registerId?: string | null },
-): Promise<{ stationId: string | null; tillId: string | null; formFactor: FormFactor }> {
+  input: {
+    profileId: string;
+    name: string;
+    stationId?: string | null;
+    watcherId?: string | null;
+    registerId?: string | null;
+  },
+): Promise<{
+  stationId: string | null;
+  watcherId: string | null;
+  tillId: string | null;
+  formFactor: FormFactor;
+}> {
   const profile = await getDeviceProfile(tx, input.profileId);
   // `profileId` is the admin's choice in the accept dialog, so one that names no profile — unknown,
   // or deleted meanwhile — is a client-recoverable refusal, not a server fault.
   if (profile === undefined) throw new AppError("device_profile.not_found", {});
 
-  // A kds device carries `station_id`, every other form factor `till_id`;
-  // `device_binding_rule_insert / _update` (`packages/db/drizzle/0001_behavioural_triggers.sql`)
-  // refuses any other shape.
+  // A kitchen screen carries one station or watcher; other form factors carry a till.
   let stationId: string | null = null;
+  let watcherId: string | null = null;
   let tillId: string | null = null;
   switch (kindOfFormFactor(profile.formFactor)) {
     case "kds_station":
-      if (input.stationId == null) throw new AppError("device.station_required", {});
-      await requireLiveStation(tx, cfg, input.stationId);
-      stationId = input.stationId;
+      if (input.stationId != null && input.watcherId != null)
+        throw new AppError("management.request_invalid", { field: "watcherId" });
+      if (input.stationId == null && input.watcherId == null)
+        throw new AppError("device.station_required", {});
+      if (input.stationId != null) {
+        await requireLiveStation(tx, cfg, input.stationId);
+        stationId = input.stationId;
+      } else if (input.watcherId != null) {
+        const watcher = await readWatcher(tx, cfg, input.watcherId);
+        if (!watcher?.active)
+          throw new AppError("watcher.not_found", { watcherId: input.watcherId });
+        watcherId = input.watcherId;
+      }
       break;
     case "till":
+      if (input.watcherId != null)
+        throw new AppError("management.request_invalid", { field: "watcherId" });
       tillId = await createRegister(tx, locationId, input.name);
       break;
     case "handheld":
+      if (input.watcherId != null)
+        throw new AppError("management.request_invalid", { field: "watcherId" });
       if (input.registerId == null) throw new AppError("device.register_required", {});
       tillId = await requireLiveRegister(tx, cfg, locationId, input.registerId);
       break;
   }
-  return { stationId, tillId, formFactor: profile.formFactor };
+  return { stationId, watcherId, tillId, formFactor: profile.formFactor };
 }

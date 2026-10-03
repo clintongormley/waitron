@@ -1348,6 +1348,7 @@ export interface DeviceIdentity {
   formFactor: string;
   name: string;
   stationId: string | null;
+  watcherId?: string | null;
   /** The `tills` row a sale-capable device rings against; `null` for a `kds_station`. */
   tillId?: string | null;
   /** The per-device receipt printer; `null` when none. */
@@ -1477,6 +1478,26 @@ export interface ExpoOrder {
    *  Not read by `till-expo-screen`, which derives the band from each item's `queuedAt` and
    *  thresholds. */
   worstBand: TimingBand;
+}
+
+export interface WatcherSummary {
+  id: string;
+  name: string;
+  runsPass: boolean;
+}
+export interface WatcherCourse extends ExpoCourse {
+  allReady: boolean;
+}
+export interface WatcherGroup extends ExpoGroup {
+  allReady: boolean;
+}
+export interface WatcherOrder extends Omit<ExpoOrder, "courses" | "groups"> {
+  courses: WatcherCourse[];
+  groups: WatcherGroup[];
+}
+export interface WatcherBoard {
+  watcher: WatcherSummary & { active: boolean };
+  orders: WatcherOrder[];
 }
 
 /**
@@ -2215,6 +2236,14 @@ export class TillApi {
     return this.#request<DeviceStation>("/api/device/station", "GET", undefined, options.signal);
   }
 
+  getDeviceWatcher(options: ReadOptions = {}): Promise<WatcherBoard> {
+    return this.#request<WatcherBoard>("/api/device/watcher", "GET", undefined, options.signal);
+  }
+
+  async markDeviceWatcherDone(ticketItemIds: string[], done: boolean): Promise<void> {
+    await this.#request<void>("/api/device/watcher/done", "POST", { ticketItemIds, done });
+  }
+
   /**
    * This enrolled device's OWN identity → `GET /api/device/me`. A missing, rejected or revoked cookie
    * rejects `device.unauthorized` (401) — the signal that this browser is not an enrolled device.
@@ -2296,8 +2325,25 @@ export class TillApi {
    * into groups for a seated party's bill, ACROSS all stations, oldest first. See {@link ExpoOrder}
    * for what the server excludes.
    */
-  getExpoQueue(): Promise<ExpoOrder[]> {
-    return this.#request<ExpoOrder[]>("/api/expo/queue", "GET");
+  getExpoQueue(options: ReadOptions = {}): Promise<ExpoOrder[]> {
+    return this.#request<ExpoOrder[]>("/api/expo/queue", "GET", undefined, options.signal);
+  }
+
+  listWatchers(): Promise<WatcherSummary[]> {
+    return this.#request<WatcherSummary[]>("/api/watchers", "GET");
+  }
+
+  getWatcherQueue(id: string, options: ReadOptions = {}): Promise<WatcherBoard> {
+    return this.#request<WatcherBoard>(
+      `/api/watchers/${id}/queue`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  async markWatcherDone(id: string, ticketItemIds: string[], done: boolean): Promise<void> {
+    await this.#request<void>(`/api/watchers/${id}/done`, "POST", { ticketItemIds, done });
   }
 
   /**
