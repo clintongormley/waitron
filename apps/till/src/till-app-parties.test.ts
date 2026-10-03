@@ -6722,6 +6722,61 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     expect(offered(el)).toBeNull();
   });
 
+  it("shows a completed table cancel while the credit-note read has not answered", async () => {
+    const server = billServer();
+    const { el } = await openCancel(server);
+    server.getPartyBills.mockImplementationOnce(() => new Promise<PartyBill[]>(() => undefined));
+    await typeReason(el, "Wrong table");
+
+    await confirmCancel(el);
+
+    expect(server.cancelOrder).toHaveBeenCalledOnce();
+    expect(dialog(el)!.busy).toBe(false);
+    expect(doneText(el)).toBe(t("cancel_credit.done_unnumbered"));
+  });
+
+  it("shows a table cancel refusal while the follow-up bills read has not answered", async () => {
+    const server = billServer(async () => {
+      throw { code: "bill.payments_received", status: 409 };
+    });
+    const { el } = await openCancel(server);
+    server.getPartyBills.mockImplementationOnce(() => new Promise<PartyBill[]>(() => undefined));
+    await typeReason(el, "Wrong table");
+
+    await confirmCancel(el);
+
+    expect(server.cancelOrder).toHaveBeenCalledOnce();
+    expect(dialog(el)!.busy).toBe(false);
+    expect(bottom(el)).toBe(t("cancel_credit.refused_payments"));
+  });
+
+  it("keeps the retry's credit note number when the earlier bills read answers late", async () => {
+    let sends = 0;
+    const server = billServer(async () => {
+      sends++;
+      if (sends === 1) throw { code: "working_order.not_placed", status: 409 };
+    });
+    const { el } = await openCancel(server);
+    let answerFirst: (bills: PartyBill[]) => void = () => undefined;
+    server.getPartyBills.mockImplementationOnce(
+      () => new Promise<PartyBill[]>((resolve) => (answerFirst = resolve)),
+    );
+    await typeReason(el, "Wrong table");
+
+    await confirmCancel(el);
+    expect(dialog(el)!.busy).toBe(false);
+    expect(dialog(el)!.refusal).not.toBeNull();
+
+    await confirmCancel(el);
+    expect(server.cancelOrder).toHaveBeenCalledTimes(2);
+    expect(doneText(el)).toBe(t("cancel_credit.done").replace("{number}", "R/3"));
+
+    answerFirst([tabBill, { ...cancelled, creditNotes: [] }]);
+    await flush(el, 5);
+
+    expect(doneText(el)).toBe(t("cancel_credit.done").replace("{number}", "R/3"));
+  });
+
   it("an earlier operator's cancel answering after a sign-out leaves the next operator's PIN prompt open", async () => {
     let sends = 0;
     let answerFirst: () => void = () => undefined;

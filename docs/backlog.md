@@ -3102,13 +3102,12 @@ The original walkthrough is retained under *Detail → Setup wizard*.
         the approvers fetch). The unpaid-departure and refund dialogs fetch theirs the same way and
         predate B32; a time limit belongs on all three together. Raised by B32's review by reading
         only; nobody reproduced a stalled answer.
-      - **The table's cancel keeps the dialog busy until the party's bills are read again.** After
-        a cancel or a refusal on the table path the dialog waits for that read before showing a
-        result (`#onCancelCredited` and `#onCancelCreditRefused` in `apps/till/src/till-app.ts`),
-        and the read (`getPartyBills`, `apps/till/src/api/client.ts`) has no time limit, so a read
-        that never answers leaves the dialog busy with no result shown though the cancel has
-        finished. Found by reading while reviewing B34, which changed the counter path to show its
-        result first; not reproduced on the table path.
+      - **Done by A233: the table's cancel dialog shows its result before the bills read.** A
+        successful cancel first shows the unnumbered result, then adds the credit-note number when
+        the bills answer. A refusal first releases the busy dialog, then a bills read can resolve an
+        uncertain refusal as a completed cancel. The two Chromium cases in
+        `apps/till/src/till-app-parties.test.ts` hold the bills read unanswered to check both
+        immediate results; the existing completed-read cases check the credit-note number.
     - **Done by B34 (#1077, 2026-10-03; owner, 2026-10-02): a counter order invoiced when it was placed and still
       unpaid can be cancelled with a credit note at the till.** It is the same action as B32's on a
       table's bill. On the counter's waiting list (`apps/till/src/widgets/counter-waiting.ts`), an
