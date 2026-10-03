@@ -855,7 +855,7 @@ only for its own write. Sites that follow it include `tryReadDevice`
 `readAgentJoinStatus` (`apps/server/src/join-requests.ts`), which read inside one transaction and
 verify after it closes.
 
-The PIN, manager-password and own-password checks follow it in two halves (W1). The route first
+The PIN, manager-password and own-password checks follow it in two halves (W1, #1117). The route first
 calls `checkPin` (`packages/identity/src/credential.ts`), `checkManagerPassword`
 (`packages/identity/src/manager-login.ts`) or `checkOwnPassword` (`packages/identity/src/profile.ts`)
 with no transaction open, and hands the result to the check inside its transaction
