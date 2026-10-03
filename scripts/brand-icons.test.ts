@@ -10,7 +10,8 @@ import { describe, expect, it } from "vitest";
  * `<link>` inside an HTML comment counts as real; `rel='icon'` in single quotes,
  * `rel="shortcut icon"` and `rel="icon shortcut"` are all legal HTML and all missed; an icon
  * declared through a web app manifest instead of a `<link>` is invisible; and a `publicDir` built
- * by anything other than the one literal `new URL(...)` shape below is not matched.
+ * by anything other than the one literal `new URL(...)` shape below is not matched. The lockup
+ * colour check at the end of the file has its own note.
  */
 const REPO_ROOT = join(import.meta.dirname, "..");
 const BRAND_PUBLIC = join(REPO_ROOT, "packages", "ui", "brand", "public");
@@ -89,23 +90,31 @@ describe("the detector itself", () => {
 /**
  * The dashboard's banner shows the lockup through an `<img>`, which cannot read a CSS custom
  * property, so its dark-theme copy carries the dark token values literally. Weaker than its name: it
- * reads `colors.css` as TEXT and takes each value from the `prefers-color-scheme: dark` block alone,
- * so a `data-theme="dark"` block that disagrees with it is not seen.
+ * reads `colors.css` as TEXT, takes each light value from the file's first declaration and each dark
+ * value from the `@media (prefers-color-scheme: dark)` block, so a `[data-theme]` block that
+ * disagrees with either is not seen.
  */
-describe("the dark-theme lockup", () => {
+describe("the lockups' colours", () => {
   const BRAND = join(REPO_ROOT, "packages", "ui", "brand");
   const colors = readFileSync(
     join(REPO_ROOT, "packages", "ui-core", "src", "tokens", "colors.css"),
     "utf8",
   );
-  const darkBlock = colors.slice(colors.indexOf("@media (prefers-color-scheme: dark)"));
+  const darkStart = colors.indexOf("@media (prefers-color-scheme: dark)");
+  if (darkStart === -1)
+    throw new Error("colors.css has no @media (prefers-color-scheme: dark) block");
+  // The block's rules are indented, so the first unindented `}` closes the block itself.
+  const darkEnd = colors.indexOf("\n}\n", darkStart);
+  if (darkEnd === -1)
+    throw new Error("colors.css's @media (prefers-color-scheme: dark) block has no closing brace");
+  const darkBlock = colors.slice(darkStart, darkEnd);
   const token = (css: string, name: string): string => {
     const value = css.match(new RegExp(`--wt-color-${name}:\\s*(#[0-9a-f]{6});`))?.[1];
     if (value === undefined) throw new Error(`colors.css declares no --wt-color-${name}`);
     return value;
   };
 
-  it("is the lockup's drawing painted with the dark theme's primary and text colours", () => {
+  it("paints the light lockup with the light tokens and the dark lockup with the dark ones", () => {
     const light = readFileSync(join(BRAND, "waitron-lockup.svg"), "utf8");
     const lightWaiter = `<g fill="${token(colors, "primary")}"`;
     const lightWord = `<g fill="${token(colors, "text")}"`;

@@ -38,9 +38,11 @@ change these with it.
 and `apps/server/src/trust-page-logo.ts` holds a copy of the whole lockup for the certificate page,
 which must stay one self-contained string with nothing to fetch. `scripts/trust-page-logo.test.ts`
 compares the two DRAWINGS and deliberately ignores paint, so it will not catch a colour that drifts.
-`scripts/brand-icons.test.ts` does check the dark lockup's two colours against `colors.css`, weaker
-than that sounds: it reads the file as text, from the `prefers-color-scheme: dark` block alone, and
-checks neither the favicon nor the certificate page's copy.
+`scripts/brand-icons.test.ts` does check both lockups' two colours against `colors.css`, weaker than
+that sounds: it reads the file as text, takes each light value from the file's first declaration
+and each dark value from the `@media (prefers-color-scheme: dark)` block, so a `[data-theme]` block
+that disagrees with either is not seen, and it checks neither the favicon nor the certificate page's
+copy.
 
 The setup wizard (`apps/setup/src/setup-app.ts`) also draws the lockup inline, but copies nothing:
 it imports `waitron-lockup.svg` as-is through a `?raw` import and repaints its two top-level groups
@@ -86,8 +88,11 @@ Hand-run, not a build step — Inkscape is not a workspace dependency, so nothin
 hook can call it. Set `INKSCAPE` if the binary is not on PATH. It prints what it wrote and which
 Inkscape it used.
 
-Re-running it twice over on one machine, with Inkscape 1.4.4 (dcaf3e7), reproduced all four derived
-files byte for byte. That is the whole experiment: it is not a claim about other Inkscape builds,
+On 2026-10-03, one re-run over the committed files on one machine, with Inkscape 1.4.4 (dcaf3e7),
+left all seven files it wrote — `public/favicon.svg`, `waitron-lockup.svg`,
+`waitron-lockup-dark.svg`, `public/apple-touch-icon.png`, `public/icon-192.png`,
+`public/icon-512.png` and `public/favicon.ico` — byte for byte unchanged (`git status` reported none
+of them modified). That is the whole experiment: it is not a claim about other Inkscape builds,
 which may well render differently.
 
 ## If the mark is redrawn

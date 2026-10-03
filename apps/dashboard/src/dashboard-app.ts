@@ -415,8 +415,14 @@ export class DashboardApp extends LitElement {
         gap: var(--wt-space-3);
       }
 
-      picture {
+      .brand-logo-picture {
         display: contents;
+      }
+
+      /* Hidden because under display: contents it becomes an item of the identity row and adds a
+         gap before the logo. */
+      .brand-logo-picture > source {
+        display: none;
       }
 
       .brand-logo {
@@ -1285,7 +1291,7 @@ export class DashboardApp extends LitElement {
               ></wt-button>`
             : nothing
         }
-        <picture>
+        <picture class="brand-logo-picture">
           <source media="(prefers-color-scheme: dark)" srcset=${WAITRON_LOGO_DARK_URL} />
           <img class="brand-logo" src=${WAITRON_LOGO_URL} alt="Waitron" />
         </picture>
