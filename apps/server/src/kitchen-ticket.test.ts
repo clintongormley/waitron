@@ -66,11 +66,12 @@ describe("formatKitchenTicket", () => {
     ]);
   });
 
-  it("prints the origin on an order-scope ticket", () => {
+  it("prints the origin on a watcher's ticket", () => {
     const lines = printedLines(
       formatKitchenTicket(
         {
-          scope: "order",
+          scope: "watcher",
+          watcherName: "Pase",
           tableLabel: "Mesa 4",
           orderNumber: "A-17",
           firedAt: new Date(2026, 7, 17, 14, 30),
@@ -81,7 +82,7 @@ describe("formatKitchenTicket", () => {
       ),
     );
     expect(lines).toEqual([
-      "PASE",
+      "Pase",
       "Mesa 4",
       "A-17",
       "14:30",
@@ -300,7 +301,8 @@ describe("formatKitchenTicket", () => {
     it("prints a pass header, table/order/time, and groups items under each station sub-header in order", () => {
       const bytes = formatKitchenTicket(
         {
-          scope: "order",
+          scope: "watcher",
+          watcherName: "Pase",
           tableLabel: "Mesa 4",
           orderNumber: "A-17",
           firedAt: new Date(2026, 7, 17, 14, 30),
@@ -313,7 +315,7 @@ describe("formatKitchenTicket", () => {
       );
 
       const text = decodeTicket(bytes);
-      expect(text).toContain("PASE");
+      expect(text).toContain("Pase");
       expect(text).toContain("Mesa 4");
       expect(text).toContain("A-17");
       expect(text).toContain("14:30");
@@ -331,10 +333,11 @@ describe("formatKitchenTicket", () => {
       expect([...bytes.slice(-CUT_BYTES.length)]).toEqual(CUT_BYTES);
     });
 
-    it("does not crash on a zero-station order ticket, and still ends in a cut", () => {
+    it("ends a zero-station watcher ticket in a cut", () => {
       const bytes = formatKitchenTicket(
         {
-          scope: "order",
+          scope: "watcher",
+          watcherName: "Pase",
           tableLabel: "Mesa 4",
           orderNumber: "A-17",
           firedAt: new Date(2026, 7, 17, 14, 30),
@@ -342,7 +345,7 @@ describe("formatKitchenTicket", () => {
         },
         KITCHEN_80,
       );
-      expect(decodeTicket(bytes)).toContain("PASE");
+      expect(decodeTicket(bytes)).toContain("Pase");
       expect([...bytes.slice(-CUT_BYTES.length)]).toEqual(CUT_BYTES);
     });
   });
@@ -787,7 +790,14 @@ describe("the reprint mark and a party's group numbers", () => {
     ) =>
       printedLines(
         formatKitchenTicket(
-          { scope: "order", tableLabel: "Mesa 4", orderNumber: "A-17", firedAt: at, stations },
+          {
+            scope: "watcher",
+            watcherName: "Pase",
+            tableLabel: "Mesa 4",
+            orderNumber: "A-17",
+            firedAt: at,
+            stations,
+          },
           KITCHEN_80,
         ),
       );
@@ -797,7 +807,7 @@ describe("the reprint mark and a party's group numbers", () => {
         { stationName: "Cocina", items: [{ qty: 1, name: "Steak", group: 3 }] },
       ]),
     ).toEqual([
-      "PASE",
+      "Pase",
       "Mesa 4",
       "A-17",
       "14:30",
@@ -820,7 +830,7 @@ describe("the reprint mark and a party's group numbers", () => {
         },
       ]),
     ).toEqual([
-      "PASE",
+      "Pase",
       "Mesa 4",
       "A-17",
       "14:30",
@@ -987,7 +997,8 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
     const lines = printedLines(
       formatKitchenTicket(
         {
-          scope: "order",
+          scope: "watcher",
+          watcherName: "Pase",
           mark: "HOLD",
           tableLabel: "Mesa 4",
           orderNumber: "A-17",
@@ -999,7 +1010,7 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
     );
     expect(lines).toEqual([
       "*** HOLD ***",
-      "PASE",
+      "Pase",
       "Mesa 4",
       "A-17",
       "14:30",

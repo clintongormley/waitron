@@ -46,6 +46,7 @@ import {
 import type { TillConfig } from "./till-config.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
+import { createWatcher, setPrinterWatcher } from "./watchers.js";
 import { createTable } from "./tables.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { republishMenus } from "./testing/publish-menu.js";
@@ -4261,22 +4262,31 @@ describe("advance HOLD tickets (Task 6)", () => {
       expect((await groupRow(created.id)).holdPrintedAt).not.toBeNull();
     });
 
-    it("sends the HOLD ticket to an order-scope printer too, as its pass copy", async () => {
+    it("marks a HOLD ticket printed when only a watcher's printer receives it", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
+      await db.update(printers).set({ active: false }).where(eq(printers.id, v.printerId));
       const pass = await inTx(async (tx) => {
         const { id } = await createPrinter(
           tx,
           { locationId: v.cfg.locationId },
           { name: "Pase", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
         );
-        await tx.update(printers).set({ ticketScope: "order" }).where(eq(printers.id, id));
-        await attachPrinterToStation(tx, { stationId: v.stationId, printerId: id });
+        const watcher = await createWatcher(tx, v.cfg, {
+          name: "Pase",
+          runsPass: true,
+          everyStation: false,
+          stationIds: [v.stationId],
+          everyZone: true,
+          zoneIds: [],
+        });
+        await setPrinterWatcher(tx, v.cfg, id, watcher.id);
         return id;
       });
       const s = await seated(v);
 
-      await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "fish")] }]);
+      const [held] = (await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "fish")] }]))
+        .groups;
 
       const jobs = await db
         .select({ id: printJobs.id, payload: printJobs.payload })
@@ -4284,9 +4294,10 @@ describe("advance HOLD tickets (Task 6)", () => {
         .where(eq(printJobs.printerId, pass));
       const [station, ...rest] = await head(v, s);
       expect(jobs.map((job) => ticketLines(printedLines(job.payload).join("\n")))).toEqual([
-        ["*** HOLD ***", "PASE", ...rest, "GROUP 1", station, `1.000 x ${DISHES.fish.kitchen}`],
+        ["*** HOLD ***", "Pase", ...rest, "GROUP 1", station, `1.000 x ${DISHES.fish.kitchen}`],
       ]);
-      expect(await linkedJobs()).toEqual([...(await jobIds(v)), jobs[0]!.id]);
+      expect(await linkedJobs()).toEqual([]);
+      expect((await groupRow(held!.id)).holdPrintedAt).not.toBeNull();
     });
 
     it("records no HOLD ticket where no active printer took one, and the group fires as before", async () => {
