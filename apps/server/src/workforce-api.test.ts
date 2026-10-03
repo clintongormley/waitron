@@ -335,8 +335,6 @@ describe("mountWorkforceApi — shift routes", () => {
   });
 
   it("400s a non-parseable startsAt on add (management.request_invalid, never a 500)", async () => {
-    // "nope" is a string, so requireBodyString passes it, and addShift's `NaN >= NaN` interval guard
-    // is false: only the route-level timestamp screen refuses it.
     const app = mountApp();
     const versionId = await draftVersion("2026-04-27");
     const res = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {

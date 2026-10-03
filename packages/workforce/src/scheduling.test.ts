@@ -419,8 +419,7 @@ describe("addShift", () => {
     expect(code).toBe("shift.invalid");
   });
 
-  it("rejects an UNPARSEABLE startsAt/endsAt — shift.invalid, not a driver 22007", async () => {
-    // `Date.parse` gives NaN and `NaN >= NaN` is false, so only an explicit NaN check refuses this.
+  it("rejects an UNPARSEABLE startsAt/endsAt — shift.invalid", async () => {
     const versionId = await run((tx) =>
       backend.createRosterVersion(tx, { locationId, period: "2026-10-05" }),
     );
@@ -525,6 +524,141 @@ describe("updateShift / removeShift", () => {
     expect(await codeOfRejection(() => run((tx) => backend.removeShift(tx, { shiftId })))).toBe(
       "roster.not_draft",
     );
+  });
+});
+
+describe("a shift's times are stored in one spelling", () => {
+  async function addOn(period: string, startsAt: string, endsAt: string) {
+    const versionId = await run((tx) => backend.createRosterVersion(tx, { locationId, period }));
+    const shiftId = await run((tx) =>
+      backend.addShift(tx, {
+        versionId,
+        personId,
+        locationId,
+        startsAt,
+        startsOffsetMinutes: 0,
+        endsAt,
+        endsOffsetMinutes: 0,
+        role: null,
+      }),
+    );
+    return { versionId, shiftId };
+  }
+
+  async function storedTimes(shiftId: string) {
+    const row = await suite.db.execute<{ starts_at: string; ends_at: string }>(
+      sql`select starts_at, ends_at from shifts where id = ${shiftId}`,
+    );
+    return row.rows[0];
+  }
+
+  it("stores another offset, and fractional seconds, as the UTC whole second", async () => {
+    const { shiftId } = await addOn(
+      "2027-01-04",
+      "2027-01-04T10:00:00+02:00",
+      "2027-01-04T17:00:00.900Z",
+    );
+    expect(await storedTimes(shiftId)).toEqual({
+      starts_at: "2027-01-04T08:00:00Z",
+      ends_at: "2027-01-04T17:00:00Z",
+    });
+  });
+
+  it("accepts a valid shift whose two spellings sort the wrong way as text", async () => {
+    // As text "…T10:00:00+02:00" sorts after "…T09:00:00Z", though it is the earlier instant.
+    const { shiftId } = await addOn(
+      "2027-01-11",
+      "2027-01-11T10:00:00+02:00",
+      "2027-01-11T09:00:00Z",
+    );
+    expect(await storedTimes(shiftId)).toEqual({
+      starts_at: "2027-01-11T08:00:00Z",
+      ends_at: "2027-01-11T09:00:00Z",
+    });
+  });
+
+  it("refuses an interval inside one second — shift.invalid, not a raw CHECK error", async () => {
+    const versionId = await run((tx) =>
+      backend.createRosterVersion(tx, { locationId, period: "2027-01-18" }),
+    );
+    const rejection = await captureError(() =>
+      run((tx) =>
+        backend.addShift(tx, {
+          versionId,
+          personId,
+          locationId,
+          startsAt: "2027-01-18T09:00:00Z",
+          startsOffsetMinutes: 0,
+          endsAt: "2027-01-18T09:00:00.500Z",
+          endsOffsetMinutes: 0,
+          role: null,
+        }),
+      ),
+    );
+    expect(rejection).toMatchObject({
+      code: "shift.invalid",
+      params: { reason: "ends_not_after_starts" },
+    });
+  });
+
+  it("refuses a year outside 0000–9999, whose ISO spelling has another width", async () => {
+    const versionId = await run((tx) =>
+      backend.createRosterVersion(tx, { locationId, period: "2027-01-25" }),
+    );
+    const rejection = await captureError(() =>
+      run((tx) =>
+        backend.addShift(tx, {
+          versionId,
+          personId,
+          locationId,
+          startsAt: "2027-01-25T09:00:00Z",
+          startsOffsetMinutes: 0,
+          endsAt: "+010000-01-01T00:00:00Z",
+          endsOffsetMinutes: 0,
+          role: null,
+        }),
+      ),
+    );
+    expect(rejection).toMatchObject({
+      code: "shift.invalid",
+      params: { reason: "year_out_of_range" },
+    });
+  });
+
+  it("lists a week's shifts in time order, whatever spelling each was added in", async () => {
+    const { versionId } = await addOn("2027-02-01", "2027-02-01T09:00:00Z", "2027-02-01T12:00:00Z");
+    await run((tx) =>
+      backend.addShift(tx, {
+        versionId,
+        personId,
+        locationId,
+        startsAt: "2027-02-01T10:00:00+02:00",
+        startsOffsetMinutes: 0,
+        endsAt: "2027-02-01T09:30:00Z",
+        endsOffsetMinutes: 0,
+        role: null,
+      }),
+    );
+    const snapshot = await run((tx) => backend.getRoster(tx, { locationId, period: "2027-02-01" }));
+    expect(snapshot.shifts.map((shift) => shift.startsAt)).toEqual([
+      "2027-02-01T08:00:00Z",
+      "2027-02-01T09:00:00Z",
+    ]);
+  });
+
+  it("stores an edited time in the same spelling", async () => {
+    const { shiftId } = await addOn("2027-02-08", "2027-02-08T09:00:00Z", "2027-02-08T17:00:00Z");
+    await run((tx) =>
+      backend.updateShift(tx, {
+        shiftId,
+        startsAt: "2027-02-08T12:30:00.250+02:00",
+        endsAt: "2027-02-08T16:00:00+01:00",
+      }),
+    );
+    expect(await storedTimes(shiftId)).toEqual({
+      starts_at: "2027-02-08T10:30:00Z",
+      ends_at: "2027-02-08T15:00:00Z",
+    });
   });
 });
 

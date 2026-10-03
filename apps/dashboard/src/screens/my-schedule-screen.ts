@@ -6,6 +6,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
+import { wallClock } from "../date-utils.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import {
   absenceKindName,
@@ -32,12 +33,6 @@ type ScheduleRead = "roster" | "shifts" | "swaps" | "absences";
 export function scheduleWindow(now: Date, days: number): { from: string; to: string } {
   const to = new Date(now.getTime() + days * 86_400_000);
   return { from: now.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
-}
-
-/** The instant shifted by its stored wall offset, read in UTC, is the local wall clock. */
-function wallClock(iso: string, offsetMinutes: number): { date: string; time: string } {
-  const shifted = new Date(Date.parse(iso) + offsetMinutes * 60_000);
-  return { date: shifted.toISOString().slice(0, 10), time: shifted.toISOString().slice(11, 16) };
 }
 
 /**

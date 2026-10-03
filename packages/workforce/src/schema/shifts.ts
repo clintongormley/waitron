@@ -46,8 +46,7 @@ export const shifts = table(
     // ±14h, the wall-offset domain `sales` and `time_entries` use.
     check("shifts_starts_offset_ck", sql`${t.startsOffsetMinutes} between -840 and 840`),
     check("shifts_ends_offset_ck", sql`${t.endsOffsetMinutes} between -840 and 840`),
-    // Weaker than it reads: both columns are text, so this compares spellings, and a pair spelled
-    // differently can be judged wrongly either way. See `assertShiftInterval` (../clocking.ts).
+    // Compares text, so it is right only for the one spelling `shiftInterval` (../clocking.ts) writes.
     check("shifts_interval_ck", sql`${t.endsAt} > ${t.startsAt}`),
   ],
 );

@@ -14,6 +14,16 @@ const shift: Shift = {
   role: "bar",
   rosterVersionId: "v1",
 };
+const offsetShift: Shift = {
+  ...shift,
+  id: "s2",
+  startsAt: "2027-01-04T07:00:00Z",
+  startsOffsetMinutes: 120,
+  endsAt: "2027-01-04T15:00:00Z",
+  endsOffsetMinutes: 120,
+};
+const inputValue = (el: ShiftDialog, test: string) =>
+  el.shadowRoot!.querySelector<HTMLElement & { value: string }>(`[data-test=${test}]`)!.value;
 // wt-input announces edits through a composed `wt-change` CustomEvent (`detail.value`), never a
 // host-level native `input` (its internal onInput calls `event.stopPropagation()`).
 const setInput = (el: ShiftDialog, test: string, value: string) => {
@@ -72,6 +82,64 @@ describe("shift-dialog", () => {
         role: "bar",
       },
     });
+  });
+
+  it("pre-fills a +02:00 shift with its wall-clock times and saves it back unchanged", async () => {
+    const { el } = await mountWidget<ShiftDialog>("dashboard-shift-dialog", {
+      open: true,
+      day: "2027-01-04",
+      personId: "p1",
+      shift: { ...offsetShift },
+    });
+    expect(inputValue(el, "shift-start")).toBe("09:00");
+    expect(inputValue(el, "shift-end")).toBe("17:00");
+    const update = capture(el, "update-shift");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+    await el.updateComplete;
+    expect(update).toHaveBeenCalledExactlyOnceWith({
+      shiftId: "s2",
+      patch: {
+        startsAt: "2027-01-04T07:00:00Z",
+        startsOffsetMinutes: 120,
+        endsAt: "2027-01-04T15:00:00Z",
+        endsOffsetMinutes: 120,
+        role: "bar",
+      },
+    });
+  });
+
+  it("saves an edited wall-clock start before the offset as the previous UTC day", async () => {
+    const { el } = await mountWidget<ShiftDialog>("dashboard-shift-dialog", {
+      open: true,
+      day: "2027-01-04",
+      personId: "p1",
+      shift: { ...offsetShift },
+    });
+    const update = capture(el, "update-shift");
+    setInput(el, "shift-start", "00:30");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+    await el.updateComplete;
+    expect(update).toHaveBeenCalledExactlyOnceWith({
+      shiftId: "s2",
+      patch: {
+        startsAt: "2027-01-03T22:30:00Z",
+        startsOffsetMinutes: 120,
+        endsAt: "2027-01-04T15:00:00Z",
+        endsOffsetMinutes: 120,
+        role: "bar",
+      },
+    });
+  });
+
+  it("pre-fills an offset-0 shift with its stored times", async () => {
+    const { el } = await mountWidget<ShiftDialog>("dashboard-shift-dialog", {
+      open: true,
+      day: "2026-03-02",
+      personId: "p1",
+      shift,
+    });
+    expect(inputValue(el, "shift-start")).toBe("09:00");
+    expect(inputValue(el, "shift-end")).toBe("13:00");
   });
 
   it("emits remove-shift for an existing shift", async () => {
