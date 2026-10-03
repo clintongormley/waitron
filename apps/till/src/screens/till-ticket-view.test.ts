@@ -213,7 +213,7 @@ describe("till-ticket-view", () => {
     const rows = el.shadowRoot!.querySelectorAll(".line");
     expect(rows[1]!.textContent).toContain("Jamón");
     expect(rows[1]!.textContent).toContain("0.150 kg");
-    expect(rows[1]!.textContent).not.toContain("×");
+    expect(rows[1]!.textContent).not.toContain("x");
   });
 
   it("shows a filed Each extra as x3 instead of its translated unit abbreviation", async () => {

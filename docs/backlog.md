@@ -1587,10 +1587,11 @@ price per portion. The saved child line records its physical amount and price ba
 kitchen labels use the saved amount. The menu's published offer stays in use until republishing.
 
 **An extra sold by the piece prints as `x3` on receipts, kitchen tickets and the till (W53,
-owner 2026-10-03) — DONE.** The presentation reads the saved unit identity: Each shows its pick
-count per dish, while weight and volume retain the total physical amount and saved abbreviation.
+owner 2026-10-03) — DONE.** The working line context saves whether its unit is Each when the line
+is added. Each shows its pick count per dish, while weight and volume retain the total physical amount and saved abbreviation.
 This amends the display decision in the [A203 design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md);
-the filed sale amount and fiscal record are unchanged.
+the filed sale amount and fiscal record are unchanged. The new context column defaults to false on
+existing rows; reset pre-production venues before using W53 to reprint their older sales.
 
 **Decided (owner, 2026-10-02):**
 

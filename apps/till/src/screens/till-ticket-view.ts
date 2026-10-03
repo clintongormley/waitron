@@ -42,8 +42,6 @@ function lineName(descriptions: Record<string, string>, locale: string): string 
   return descriptions[locale] ?? Object.values(descriptions)[0] ?? "";
 }
 
-/** The SAME `×` (U+00D7) the printed receipt (`apps/server/src/receipt-ticket.ts`) and the basket use. */
-
 interface LineGroup {
   dish: TillSaleLine;
   options: TillSaleLine[];

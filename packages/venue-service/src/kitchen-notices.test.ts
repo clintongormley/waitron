@@ -342,11 +342,12 @@ describe("recordKitchenNotices", () => {
       {
         name: "Croqueta",
         unit: { id: EACH_UNIT_ID, abbreviation: EACH_UNIT.abbreviation, precision: 0 },
+        soldInEach: true,
       },
-      { name: "Gilda", unit: { ...seededEach!, abbreviation: { en: "pc" } } },
-      { name: "Pulpo", unit: kg! },
-      { name: "Almendras", unit: gram! },
-      { name: "Pan", unit: lookalike! },
+      { name: "Gilda", unit: { ...seededEach!, abbreviation: { en: "pc" } }, soldInEach: true },
+      { name: "Pulpo", unit: kg!, soldInEach: false },
+      { name: "Almendras", unit: gram!, soldInEach: false },
+      { name: "Pan", unit: lookalike!, soldInEach: false },
     ];
     const lineIds: string[] = [];
     for (const [index, sold] of soldIn.entries()) {
@@ -376,6 +377,7 @@ describe("recordKitchenNotices", () => {
         unitId: sold.unit.id,
         unitName: sold.unit.abbreviation,
         unitPrecision: sold.unit.precision,
+        soldInEach: sold.soldInEach,
         vatClass: "reduced",
       });
       lineIds.push(line!.id);

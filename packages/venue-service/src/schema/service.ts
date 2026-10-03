@@ -226,6 +226,7 @@ export const workingLineContexts = table(
     unitId: id("unit_id").notNull(),
     unitName: json<Record<string, string>>("unit_name").notNull(),
     unitPrecision: count("unit_precision").notNull(),
+    soldInEach: flag("sold_in_each").notNull().default(false),
     // Not enumText: see departments.default_service_mode.
     hardwareUnit: label("hardware_unit"),
     // Not enumText: see departments.default_service_mode.

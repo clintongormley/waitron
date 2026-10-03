@@ -836,10 +836,7 @@ export async function listWorkingLineContexts(
   }));
 }
 
-/**
- * Which of `lineIds` were sold in Each: by the unit id their context froze, and for a stored unit
- * by that unit's current seed key; a line with no context is not.
- */
+/** Which of `lineIds` were sold in Each when their context was recorded. */
 export async function readLinesSoldInEach(
   tx: Transaction,
   lineIds: readonly string[],
@@ -848,13 +845,11 @@ export async function readLinesSoldInEach(
   const rows = await tx
     .select({
       workingOrderLineId: workingLineContexts.workingOrderLineId,
-      id: workingLineContexts.unitId,
-      seedKey: units.seedKey,
+      soldInEach: workingLineContexts.soldInEach,
     })
     .from(workingLineContexts)
-    .leftJoin(units, eq(units.id, workingLineContexts.unitId))
     .where(inArray(workingLineContexts.workingOrderLineId, [...lineIds]));
-  return new Set(rows.filter(isEachUnit).map((row) => row.workingOrderLineId));
+  return new Set(rows.filter((row) => row.soldInEach).map((row) => row.workingOrderLineId));
 }
 
 /**
@@ -887,6 +882,21 @@ export async function recordWorkingLineContexts(
     throw new AppError("department.not_found", { departmentId: context.departmentId });
   }
   const byMenuItem = new Map(offers.offers.map((offer) => [offer.id, offer]));
+  const unitIds = [
+    ...new Set(
+      lines
+        .map((line) => line.unit?.id ?? byMenuItem.get(line.menuItemId)?.unit.id)
+        .filter((id): id is string => id !== undefined),
+    ),
+  ];
+  const unitRows =
+    unitIds.length === 0
+      ? []
+      : await tx
+          .select({ id: units.id, seedKey: units.seedKey })
+          .from(units)
+          .where(inArray(units.id, unitIds));
+  const seedKeyById = new Map(unitRows.map((unit) => [unit.id, unit.seedKey]));
   const versions = new Map(offers.menus.map((menu) => [menu.id, menu.versionId]));
   const versionOf = (menuId: string): string => {
     const versionId = versions.get(menuId);
@@ -903,6 +913,7 @@ export async function recordWorkingLineContexts(
           menuItemId: line.menuItemId,
         });
       }
+      const unitId = line.unit?.id ?? offer.unit.id;
       return {
         workingOrderLineId: line.workingOrderLineId,
         menuItemId: offer.id,
@@ -912,9 +923,13 @@ export async function recordWorkingLineContexts(
         departmentId: context.departmentId,
         departmentName: department.name,
         categoryName: offer.category ?? "Uncategorised",
-        unitId: line.unit?.id ?? offer.unit.id,
+        unitId,
         unitName: line.unit?.name ?? offer.unit.name,
         unitPrecision: line.unit?.precision ?? offer.unit.precision,
+        soldInEach: isEachUnit({
+          id: unitId,
+          seedKey: seedKeyById.get(unitId) ?? null,
+        }),
         hardwareUnit: line.unit === undefined ? offer.unit.hardwareUnit : line.unit.hardwareUnit,
         vatClass: offer.vatClass,
         allergens: offer.allergens,

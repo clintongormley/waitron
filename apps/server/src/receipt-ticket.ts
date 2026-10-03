@@ -81,8 +81,6 @@ export interface FormatReceiptInput {
   duplicate?: boolean;
 }
 
-/** The per-dish option-quantity badge (`×2`). */
-
 /**
  * A filed line's goods name (art. 7.1.e): the names' locale, then any description; "" only for an
  * empty map, so a catalogue defect still prints rather than blocking the paper.

@@ -34,7 +34,6 @@ import type { AdjustKind, AdjustTarget } from "./adjustment-dialog.js";
 import type { AdjustDetail } from "../screens/till-table-order-screen.js";
 import type { Station, TabLine } from "../api/client.js";
 
-/** The same `×` (U+00D7) the printed receipt and the settled-ticket view use. */
 const QTY_BADGE = "×";
 
 function pickQuantityBadge(quantity: number): string {
