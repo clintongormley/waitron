@@ -782,7 +782,11 @@ it("reuses the submission id when a station move gets no answer", async () => {
   emit(el.shadowRoot!.querySelector("till-station-choice-dialog")!, "station-chosen", {
     stationId: "kitchen",
   });
-  await new Promise((resolve) => setTimeout(resolve, 600));
+  // One pause before the second try runs on real time; wait for that try.
+  await vi.waitFor(() => expect(moveDishStation).toHaveBeenCalledTimes(2), {
+    timeout: 4000,
+    interval: 50,
+  });
   await flush(el);
   expect(moveDishStation).toHaveBeenCalledTimes(2);
   expect(moveDishStation.mock.calls[0]![1].submissionId).toBe(

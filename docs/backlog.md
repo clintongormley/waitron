@@ -2872,13 +2872,14 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       timer for the stays-open tests.
     - The till's "Amount off (€)" writes the euro sign into the label rather than taking the
       venue's currency. How a comp or discount appears on the invoice is still asesor Q29.
-  - **Eight till tests wait a fixed real time for a round's retries** (found 2026-09-30, B13). They
-    slept `2 * SUBMIT_RETRY_PAUSE_MS + 50` ms while the retries pause on real time, in
-    `apps/till/src/till-app-drafts.test.ts`, `till-app-menu-refresh.test.ts` and
-    `till-app-parties.test.ts`; two more in `apps/till/src/till-app-adjustments.test.ts` sleep on an
-    adjustment's resends. On 2026-10-02 `git grep 'setTimeout(resolve, 2 \* SUBMIT_RETRY_PAUSE_MS'`
-    over `apps/till/src` finds two such sleeps, both in `till-app-drafts.test.ts`, so recount first.
-    **Next action:** wait for what each asserts on instead of a fixed time.
+  - **Two till tests wait a fixed real time for a resend to give up** (found 2026-09-30, B13). In
+    `apps/till/src/till-app-bill-payments.test.ts`, the cases that send the next operator's same
+    payment, and same refund, under the id of one that got no answer after its operator logged
+    out each sleep `SUBMIT_RETRY_PAUSE_MS` after failing the lost send: the one retry pause, after
+    which the send sees the session has ended and gives up, before the next operator signs in.
+    Neither case reads anything that marks the giving up.
+    **Next action:** run that pause on fake timers, as the lost-reply case in
+    `till-app-drafts.test.ts`'s "a Send the session outlives" does.
   - **A till request's `frozenExtras` and `frozenOptions` are taken as already settled, prices
     included** (found in #903's review; I believe it predates that branch). `priceOrderLines`
     (`apps/server/src/working-order.ts`) trusts them as sent: a unit-level `parkOrder` call given
@@ -3353,9 +3354,6 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     zero, a captured card payment with no sale still takes the recovery branch first, settling at
     the captured amount with all of it recorded as tip; the below-zero case with a capture was not
     run.
-  - In the till's table screen, the check that treats an unreadable reminder time as "never due"
-    (`reminderDueAt`, `apps/till/src/state/release-reminder.ts`) has no test of its own: the
-    review removed it and no test failed. **Next action:** a case with a malformed `dueAt`.
   - **Task 4 (#832, every paper names all of a party's tables).** At 390 px a pass card whose
     label wraps also wraps its "2 min" onto two lines (`apps/till/src/screens/till-expo-screen.ts`);
     nothing overflows. **DECIDED (owner, 2026-09-29): leave it** — after payment, the station queue
