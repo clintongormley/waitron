@@ -895,6 +895,35 @@ it("clears a failed refresh's message from the open form once the server answers
   expect(await bottomOf(el)).toBe("");
 });
 
+it("fills in the language list of a screen opened while the server could not be reached, once it answers again", async () => {
+  const liveData = new LiveData();
+  const down = { code: "connection.failed" };
+  const stub = apiStub();
+  const api = Object.assign(
+    apiStub({
+      getProfile: vi.fn().mockRejectedValueOnce(down).mockImplementation(stub.getProfile),
+      getLocales: vi.fn().mockRejectedValueOnce(down).mockImplementation(stub.getLocales),
+    }),
+    { liveData },
+  );
+  const { el } = await mountWidget<ProfileScreen>("dashboard-profile-screen", {
+    api: api as unknown as DashboardApi,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+      codeMessage("connection.failed"),
+    ),
+  );
+  liveData.refresh();
+  const language = () =>
+    [...el.shadowRoot!.querySelectorAll(".row")]
+      .find((row) => row.querySelector(".field-label")!.textContent === t("profile.language"))
+      ?.querySelector(".field-value")!
+      .textContent!.trim();
+  await vi.waitFor(() => expect(language()).toBe("English"));
+  expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+});
+
 describe("your profile — validation, refusals and the remaining actions", () => {
   async function baseProfile(overrides: Record<string, unknown> = {}) {
     return { ...(await apiStub().getProfile()), ...overrides };
