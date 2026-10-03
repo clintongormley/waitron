@@ -18,6 +18,38 @@ function filed(quantity: string, lineGross: string) {
 }
 
 describe("ticketLinesFrom", () => {
+  it("keeps a weighted extra's filed thousandths for the amount printed beneath its dish", () => {
+    const dish = filed("1.000", "2.00");
+    const child = {
+      ...filed("0.150", "0.03"),
+      descriptions: { "es-ES": "Jamón" },
+      unitName: { es: "kg" },
+      parentLineNo: 1,
+    };
+    const lines = ticketLinesFrom({ lines: [dish, child] }, [
+      { listUnitGross: null },
+      { listUnitGross: null },
+    ]);
+
+    expect(lines[1]).toMatchObject({ quantity: "0.150", unitName: { es: "kg" } });
+  });
+
+  it("prints a whole-unit extra without thousandths", () => {
+    const child = {
+      ...filed("3.000", "0.90"),
+      descriptions: { "es-ES": "Aceitunas" },
+      unitName: { es: "ud" },
+      unitPrecision: 0,
+      parentLineNo: 1,
+    };
+    const lines = ticketLinesFrom({ lines: [filed("1.000", "2.00"), child] }, [
+      { listUnitGross: null },
+      { listUnitGross: null },
+    ]);
+
+    expect(lines[1]).toMatchObject({ quantity: "3", unitName: { es: "ud" } });
+  });
+
   it("carries a line's total at its list price only where a comp or a discount changed it", () => {
     const lines = ticketLinesFrom(
       { lines: [filed("1.000", "3.00"), filed("1.000", "3.33"), filed("2.500", "29.23")] },
@@ -31,5 +63,18 @@ describe("ticketLinesFrom", () => {
       ["29.23", "32.48"],
     ]);
     expect(lines.map((line) => Object.hasOwn(line, "listGross"))).toEqual([false, false, true]);
+  });
+
+  it("shows the list total for a discounted extra priced by frozen portions", () => {
+    const child = {
+      ...filed("0.150", "0.02"),
+      descriptions: { "es-ES": "Jamón" },
+      unitName: { "es-ES": "kg" },
+      priceQuantity: "0.050",
+      parentLineNo: 1,
+    };
+    const [line] = ticketLinesFrom({ lines: [child] }, [{ listUnitGross: decimal("0.01") }]);
+
+    expect(line).toMatchObject({ quantity: "0.150", gross: "0.02", listGross: "0.03" });
   });
 });

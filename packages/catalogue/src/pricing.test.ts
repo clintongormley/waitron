@@ -34,6 +34,34 @@ const weight = (unitPrice: string, vatClass: PriceableProduct["vatClass"]): Pric
 const ON = "2026-09-27";
 
 describe("priceBasket — difference method", () => {
+  it("prices a frozen extra by portions while retaining its physical amount", () => {
+    const gross = grossLockedLines([
+      {
+        grossUnitPrice: "0.01",
+        quantity: "0.150",
+        priceQuantity: "0.050",
+        vatClass: "reduced",
+        name: "Jamón",
+        descriptions: { en: "Ham" },
+        category: "Food",
+        unitName: { en: "kg" },
+        unitPrecision: 3,
+        parentLineNo: 1,
+      },
+    ]);
+
+    expect(gross.lines[0]).toMatchObject({
+      quantity: "0.150",
+      priceQuantity: "0.050",
+      grossUnitPrice: "0.01",
+      lineGross: "0.03",
+    });
+    expect(rateLines(gross, ON).lines[0]).toMatchObject({
+      quantity: "0.150",
+      priceQuantity: "0.050",
+      lineGross: "0.03",
+    });
+  });
   it("carries selected variant presentation facts through live and locked pricing", () => {
     const product: PriceableProduct = {
       ...each("4.10", "general"),
@@ -183,6 +211,39 @@ describe("priceBasket — difference method", () => {
 describe("grossBasketWithOptions — the gross figures, which take no date", () => {
   const plain = (items: { product: PriceableProduct; quantity: string }[]) =>
     items.map((item) => ({ ...item, options: [] }));
+
+  it("prices three 0.050 kg portions per dish at the rounded price of each pick", () => {
+    const gross = grossBasketWithOptions([
+      {
+        product: each("2.00", "reduced"),
+        quantity: "2",
+        options: [
+          {
+            name: "Jamón",
+            descriptions: { en: "Ham" },
+            priceDelta: "0.01",
+            vatClass: "general",
+            quantity: 3,
+            physicalQuantity: "0.150",
+            priceQuantity: "0.050",
+            unitName: { en: "kg" },
+            unitPrecision: 3,
+          },
+        ],
+      },
+    ]);
+
+    expect(gross.lines[1]).toMatchObject({
+      quantity: "0.300",
+      priceQuantity: "0.050",
+      unitName: { en: "kg" },
+      unitPrecision: 3,
+      grossUnitPrice: "0.01",
+      lineGross: "0.06",
+      vatClass: "general",
+    });
+    expect(gross.total).toBe("4.06");
+  });
 
   it("gives each line's GROSS unitPrice×quantity, its gross unit and its class, and rating keeps the net base apart", () => {
     const items = plain([

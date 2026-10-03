@@ -53,6 +53,7 @@ import {
   advanceTicketItem,
   bumpCourseReady,
   createOpenOrder,
+  splitLinesWithinOrder,
   fireCourse,
   fireLines,
   getHeldOrder,
@@ -93,7 +94,7 @@ import {
 } from "./testing/zone-offers.js";
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { createException, setClaim } from "@waitron/venue-service";
+import { createException, setClaim, writePrintHeldWork } from "@waitron/venue-service";
 import {
   replaceStationHours,
   setStationFallback,
@@ -105,6 +106,7 @@ import { openPartyTab, serveLine } from "./testing/serve-line.js";
 import { inTx, join, orderForParty, seat, setupPartyVenue, split } from "./testing/party-venue.js";
 import "./errors.js";
 import { cancelLine } from "./testing/cancel-line.js";
+import { placeGroups } from "./order-groups.js";
 
 const LOCALE = "es-ES";
 
@@ -1347,6 +1349,145 @@ describe("listHeldOrders", () => {
 });
 
 describe("getHeldOrder", () => {
+  it("keeps an over-precise published extra portion exact after the unit precision falls", async () => {
+    const { cfg, catalogueId, zoneId, cafeId, premiumCafeOfferId, kgUnitId } = await setupVenue();
+    const extra = await withTransaction(db, async (tx) => {
+      const product = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Jamón",
+        unitId: kgUnitId,
+        unitPrice: "0.27",
+        vatClass: "general",
+      });
+      const list = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Portions",
+          minPicks: 0,
+          maxPicks: 3,
+          items: [{ productId: product.id, portion: "0.055", maxQuantity: 3, price: null }],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
+      await republishMenus(tx);
+      return { listId: list.id, productId: product.id };
+    });
+    await withTransaction(db, (tx) => catalogue.updateUnit(tx, kgUnitId, { precision: 2 }, LOCALE));
+    await withTransaction(db, (tx) => republishMenus(tx));
+
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        {
+          menuItemId: premiumCafeOfferId,
+          quantity: "1",
+          extras: [{ listId: extra.listId, picks: [{ productId: extra.productId, quantity: 3 }] }],
+        },
+      ],
+    });
+
+    const child = await db.execute<{
+      quantity: number;
+      price_quantity: number;
+      unit_precision: number;
+      line_total: number;
+    }>(sql`select quantity, price_quantity, unit_precision, line_total from working_order_lines
+      where working_order_id = ${id} and parent_line_id is not null`);
+    expect(child.rows).toEqual([
+      { quantity: 165, price_quantity: 55, unit_precision: 2, line_total: 3 },
+    ]);
+  });
+
+  it("parks weighted extras with physical quantity and the frozen per-pick basis", async () => {
+    const { cfg, catalogueId, zoneId, cafeId, premiumCafeOfferId, kgUnitId } = await setupVenue();
+    const extra = await withTransaction(db, async (tx) => {
+      const product = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Jamón staff",
+        customerName: { [CONTENT_LANGUAGE]: "Jamón customer" },
+        kitchenName: "Jamón kitchen",
+        unitId: kgUnitId,
+        unitPrice: "0.27",
+        vatClass: "general",
+      });
+      const list = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Jamones staff",
+          customerName: { [CONTENT_LANGUAGE]: "Jamones customer" },
+          kitchenName: "Jamones kitchen",
+          minPicks: 0,
+          maxPicks: 3,
+          active: true,
+          items: [
+            {
+              productId: product.id,
+              portion: "0.050",
+              maxQuantity: 3,
+              preselected: false,
+              price: null,
+            },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
+      await republishMenus(tx);
+      return { listId: list.id, productId: product.id };
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        {
+          menuItemId: premiumCafeOfferId,
+          quantity: "2",
+          extras: [{ listId: extra.listId, picks: [{ productId: extra.productId, quantity: 3 }] }],
+        },
+      ],
+    });
+
+    const rows = await db.execute<{
+      quantity: number;
+      price_quantity: number;
+      unit_name: string;
+      unit_precision: number;
+      unit_price_gross: number;
+      line_total: number;
+    }>(sql`
+      select quantity, price_quantity, unit_name, unit_precision, unit_price_gross, line_total
+      from working_order_lines where working_order_id = ${id} and parent_line_id is not null`);
+    expect(rows.rows).toEqual([
+      {
+        quantity: 300,
+        price_quantity: 50,
+        unit_name: JSON.stringify({ en: "kg" }),
+        unit_precision: 3,
+        unit_price_gross: 1,
+        line_total: 6,
+      },
+    ]);
+
+    const revision = await revisionOf(id);
+    await withTransaction(db, (tx) =>
+      updateOrderLine(tx, cfg, id, 1, { note: "Sin sal" }, revision),
+    );
+    const after = await db.execute<{
+      quantity: number;
+      price_quantity: number;
+      line_total: number;
+    }>(sql`
+      select quantity, price_quantity, line_total from working_order_lines
+      where working_order_id = ${id} and parent_line_id is not null`);
+    expect(after.rows).toEqual([{ quantity: 300, price_quantity: 50, line_total: 6 }]);
+  });
+
   it("keeps a fractional item's unit snapshot after the live unit is renamed", async () => {
     const { cfg, catalogueId, zoneId } = await setupVenue();
     const { productId, menuItemId, unitId } = await withTransaction(db, async (tx) => {
@@ -5620,6 +5761,332 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
 });
 
 describe("a cancel's extras cascade (FIX 2)", () => {
+  it("rescales a held kitchen ticket by the extra's frozen 50 g portion", async () => {
+    const { cfg, cafeId, catalogueId, kgUnitId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await attachedPrinter(tx, cfg, { name: "Cocina", isDefault: true }, "P-Cocina");
+      const { station: extrasStation } = await attachedPrinter(
+        tx,
+        cfg,
+        { name: "Emplatado" },
+        "P-Emplatado",
+      );
+      const extrasCategory = await createCategory(tx, { name: "Extras" });
+      await setClaim(tx, cfg, extrasCategory.id, { kind: "station", stationId: extrasStation.id });
+      const extra = await createProduct(tx, {
+        catalogueId,
+        categoryId: extrasCategory.id,
+        name: "Jamón",
+        unitId: kgUnitId,
+        unitPrice: "0.27",
+        vatClass: "general",
+      });
+      const list = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Jamón list",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 3,
+          active: true,
+          items: [
+            {
+              productId: extra.id,
+              portion: "0.050",
+              maxQuantity: 3,
+              preselected: false,
+              price: null,
+            },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
+      await writePrintHeldWork(tx, true);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId, partyId } = await openPartyTab(tx, cfg, { tableId });
+      const offers = await tableOffers(tx, cfg);
+      await placeGroups(tx, cfg, partyId, {
+        operatorId: OPERATOR,
+        groups: [
+          {
+            release: "hold",
+            lines: offers.toOfferLines([
+              {
+                productId: cafeId,
+                quantity: "2",
+                extras: [{ listId: list.id, picks: [{ productId: extra.id, quantity: 3 }] }],
+              },
+            ]),
+          },
+        ],
+      });
+      const [{ revision }] = await tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, tabId));
+      const beforeJobs = await tx.select({ id: printJobs.id }).from(printJobs);
+      await updateOrderLine(tx, cfg, tabId, 1, { quantity: "3" }, revision!);
+      const changedJobs = (
+        await tx.select({ id: printJobs.id, payload: printJobs.payload }).from(printJobs)
+      )
+        .filter((job) => !beforeJobs.some((before) => before.id === job.id))
+        .map((job) => decodeTicket(job.payload));
+      expect(changedJobs.join("\n")).toContain("+0.150 kg x Jamón");
+      const rows = await tx.execute<{
+        quantity: number;
+        price_quantity: number;
+        line_total: number;
+        ticket_quantity: number;
+      }>(sql`
+        select wol.quantity, wol.price_quantity, wol.line_total, ti.quantity as ticket_quantity
+        from working_order_lines wol
+        join ticket_items ti on ti.working_order_line_id = wol.id
+        where wol.working_order_id = ${tabId} and wol.parent_line_id is not null`);
+      expect(rows.rows).toEqual([
+        { quantity: 450, price_quantity: 50, line_total: 9, ticket_quantity: 450 },
+      ]);
+      const [{ revision: nextRevision }] = await tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, tabId));
+      const beforeNoteJobs = await tx.select({ id: printJobs.id }).from(printJobs);
+      await updateOrderLine(tx, cfg, tabId, 1, { note: "Sin sal" }, nextRevision!);
+      const noteJobs = (
+        await tx.select({ id: printJobs.id, payload: printJobs.payload }).from(printJobs)
+      )
+        .filter((job) => !beforeNoteJobs.some((before) => before.id === job.id))
+        .map((job) => decodeTicket(job.payload));
+      expect(noteJobs.join("\n")).toContain("+0.450 kg x Jamón");
+    });
+  });
+
+  it("voids the physical 50 g child amount when a fired dish is cancelled or reduced", async () => {
+    const { cfg, cafeId, catalogueId, kgUnitId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const extrasStation = await createStation(tx, cfg, { name: "Emplatado" });
+      const extrasCategory = await createCategory(tx, { name: "Extras" });
+      await setClaim(tx, cfg, extrasCategory.id, { kind: "station", stationId: extrasStation.id });
+      const extra = await createProduct(tx, {
+        catalogueId,
+        categoryId: extrasCategory.id,
+        name: "Jamón",
+        unitId: kgUnitId,
+        unitPrice: "0.27",
+        vatClass: "general",
+      });
+      const list = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Jamón list",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 3,
+          active: true,
+          items: [
+            {
+              productId: extra.id,
+              portion: "0.050",
+              maxQuantity: 3,
+              preselected: false,
+              price: null,
+            },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
+      await addRound(tx, cfg, tabId, [
+        {
+          productId: cafeId,
+          quantity: "2",
+          extras: [{ listId: list.id, picks: [{ productId: extra.id, quantity: 1 }] }],
+        },
+      ]);
+      const fired = await tx.execute<{
+        quantity: number;
+        made_here: number;
+        fired_at: string | null;
+      }>(sql`
+        select ti.quantity, ti.made_here, ti.fired_at from ticket_items ti
+        join working_order_lines wol on wol.id = ti.working_order_line_id
+        where wol.working_order_id = ${tabId} and wol.parent_line_id is not null`);
+      expect(fired.rows).toHaveLength(1);
+      expect(fired.rows[0]).toMatchObject({ quantity: 100, made_here: 0 });
+      expect(fired.rows[0]!.fired_at).not.toBeNull();
+
+      await cancelLine(tx, cfg, tabId, 1, "1");
+
+      const notices = await tx.execute<{ quantity: number }>(sql`
+        select quantity from kitchen_notices
+        where working_order_id = ${tabId} and kind = 'void'
+        order by quantity`);
+      expect(notices.rows.map((row) => row.quantity)).toEqual([50, 1000]);
+
+      const reducedTableId = await makeTable(tx, cfg);
+      const { tabId: reducedTabId } = await openPartyTab(tx, cfg, { tableId: reducedTableId });
+      await addRound(tx, cfg, reducedTabId, [
+        {
+          productId: cafeId,
+          quantity: "2",
+          extras: [{ listId: list.id, picks: [{ productId: extra.id, quantity: 1 }] }],
+        },
+      ]);
+      const [{ revision: reducedRevision }] = await tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, reducedTabId));
+      await updateOrderLine(tx, cfg, reducedTabId, 1, { quantity: "1" }, reducedRevision!);
+      const reducedNotices = await tx.execute<{ quantity: number }>(sql`
+        select quantity from kitchen_notices
+        where working_order_id = ${reducedTabId} and kind = 'void'
+        order by quantity`);
+      expect(reducedNotices.rows.map((row) => row.quantity)).toEqual([50, 1000]);
+    });
+  });
+
+  it("splits a 50 g child with its dish without changing either frozen price", async () => {
+    const { cfg, cafeId, catalogueId, kgUnitId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      const extra = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Jamón",
+        unitId: kgUnitId,
+        unitPrice: "0.27",
+        vatClass: "general",
+      });
+      const list = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Jamón list",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 3,
+          active: true,
+          items: [
+            {
+              productId: extra.id,
+              portion: "0.050",
+              maxQuantity: 3,
+              preselected: false,
+              price: null,
+            },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
+      const tableId = await makeTable(tx, cfg);
+      const tabId = await openExtrasTab(tx, cfg, tableId, [
+        {
+          productId: cafeId,
+          quantity: "2",
+          extras: [{ listId: list.id, picks: [{ productId: extra.id, quantity: 3 }] }],
+        },
+      ]);
+
+      await splitLinesWithinOrder(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }], {
+        splitExtras: true,
+      });
+      const rows = await tx
+        .select({
+          parentLineId: workingOrderLines.parentLineId,
+          quantity: workingOrderLines.quantity,
+          priceQuantity: workingOrderLines.priceQuantity,
+          lineTotal: workingOrderLines.lineTotal,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(workingOrderLines.lineNo);
+      expect(rows).toHaveLength(4);
+      expect(
+        rows.map(({ quantity, priceQuantity, lineTotal }) => [quantity, priceQuantity, lineTotal]),
+      ).toEqual([
+        [1000, 1000, 150],
+        [150, 50, 3],
+        [1000, 1000, 150],
+        [150, 50, 3],
+      ]);
+    });
+  });
+
+  it("keeps one frozen 50 g extra portion when one of two dishes is cancelled", async () => {
+    const { cfg, cafeId, catalogueId, kgUnitId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      const extra = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Jamón",
+        unitId: kgUnitId,
+        unitPrice: "0.27",
+        vatClass: "general",
+      });
+      const list = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Jamón list",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 3,
+          active: true,
+          items: [
+            {
+              productId: extra.id,
+              portion: "0.050",
+              maxQuantity: 3,
+              preselected: false,
+              price: null,
+            },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
+      const tableId = await makeTable(tx, cfg);
+      const tabId = await openExtrasTab(tx, cfg, tableId, [
+        {
+          productId: cafeId,
+          quantity: "2",
+          extras: [{ listId: list.id, picks: [{ productId: extra.id, quantity: 1 }] }],
+        },
+      ]);
+
+      await cancelLine(tx, cfg, tabId, 1, "1");
+
+      const lines = await tx
+        .select({
+          id: workingOrderLines.id,
+          parentLineId: workingOrderLines.parentLineId,
+          quantity: workingOrderLines.quantity,
+          priceQuantity: workingOrderLines.priceQuantity,
+          lineTotal: workingOrderLines.lineTotal,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(workingOrderLines.lineNo);
+      expect(lines).toHaveLength(2);
+      expect(lines[0]).toMatchObject({
+        parentLineId: null,
+        quantity: 1000,
+        priceQuantity: 1000,
+      });
+      expect(lines[1]).toMatchObject({
+        parentLineId: lines[0]!.id,
+        quantity: 50,
+        priceQuantity: 50,
+        lineTotal: 1,
+      });
+    });
+  });
+
   /** Attach an extras list whose one product may be picked TWICE, returning the ids the wire needs. A
    *  list that ACCEPTS a tally of two AND an item cap of two, so a doubled pick SUMS to a per-dish
    *  quantity of 2 rather than being dropped, and is valid. */
@@ -6210,6 +6677,98 @@ it("shows the dish's own allergens and diet beside a frozen options answer", asy
 });
 
 describe("frozen answers through a fractional quantity edit", () => {
+  it("keeps three frozen 50 g picks per dish when a held edit omits extras", async () => {
+    const { cfg, cafeId, catalogueId, kgUnitId } = await setupVenue();
+    const seeded = await withTransaction(db, async (tx) => {
+      const extra = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Jamón",
+        unitId: kgUnitId,
+        unitPrice: "0.27",
+        vatClass: "general",
+      });
+      const list = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Jamón list",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 3,
+          active: true,
+          items: [
+            {
+              productId: extra.id,
+              portion: "0.050",
+              maxQuantity: 3,
+              preselected: false,
+              price: null,
+            },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
+      return { extraId: extra.id, listId: list.id };
+    });
+    const id = randomUUID();
+    await parkProducts(cfg, {
+      id,
+      lines: [
+        {
+          productId: cafeId,
+          quantity: "2",
+          extras: [{ listId: seeded.listId, picks: [{ productId: seeded.extraId, quantity: 3 }] }],
+        },
+      ],
+    });
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(before[1]).toMatchObject({ quantity: 300, priceQuantity: 50, lineTotal: 6 });
+
+    await withTransaction(db, (tx) => updateOrderLine(tx, cfg, id, 1, { quantity: "3" }, 0));
+
+    const after = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(after).toHaveLength(2);
+    expect(after[1]).toMatchObject({
+      id: before[1]!.id,
+      quantity: 450,
+      priceQuantity: 50,
+      unitPriceGross: 1,
+      lineTotal: 9,
+    });
+  });
+
+  it("reads a frozen priced portion separately from the physical held quantity", async () => {
+    const { cfg, cafeOfferId, zoneId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: cafeOfferId, quantity: "1" }],
+    });
+    await db
+      .update(workingOrderLines)
+      .set({ quantity: 150, priceQuantity: 50, unitPriceGross: 1, lineTotal: 3 })
+      .where(eq(workingOrderLines.workingOrderId, id));
+
+    const read = await withTransaction(db, (tx) => readStoredOrder(tx, id));
+    expect(read.gross.lines[0]).toMatchObject({
+      quantity: "0.150",
+      priceQuantity: "0.050",
+      grossUnitPrice: "0.01",
+      lineGross: "0.03",
+    });
+  });
+
   it.each(["menu", "product"])(
     "preserves the answers on a %s-priced offer and the locked price when a weighed dish's quantity changes",
     async (source) => {

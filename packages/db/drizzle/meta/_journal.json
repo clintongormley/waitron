@@ -512,6 +512,20 @@
       "when": 1790998196488,
       "tag": "0072_device_binding_watcher_sql",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "6",
+      "when": 1791009537850,
+      "tag": "0073_extra_price_quantity",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "6",
+      "when": 1791009698077,
+      "tag": "0074_extra_price_quantity_freeze",
+      "breakpoints": true
     }
   ]
 }

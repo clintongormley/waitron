@@ -43,6 +43,7 @@ import {
   decimal,
   decimalToCents,
   decimalToThousandths,
+  divideDecimal,
   locationId as brandLocationId,
   partyDisplayName,
   MONEY_SCALE,
@@ -88,6 +89,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
+  EACH_UNIT_ID,
   MAX_UNIT_PRECISION,
   assertQuantityPrecision,
   classifyLine,
@@ -299,6 +301,8 @@ function offerModifiers(offer: ZoneMenuOffer, defaultLanguage: string): OfferMod
         maxQuantity: item.maxQuantity,
         preselected: item.preselected,
         price: item.price,
+        portion: item.portion,
+        unit: item.unit,
       })),
     });
   }
@@ -414,7 +418,11 @@ export async function priceOrderLines(
   lineRows: WorkingOrderLineInsert[];
   gross: GrossLines;
   identities: OrderLineIdentity[];
-  lineContexts: { workingOrderLineId: string; menuItemId: string }[];
+  lineContexts: {
+    workingOrderLineId: string;
+    menuItemId: string;
+    unit?: ExtraChild["unitContext"];
+  }[];
   /** The zone's offers the lines were priced from, for `recordLineContexts`. */
   offers: ZoneOffers;
 }> {
@@ -520,7 +528,13 @@ export async function priceOrderLines(
         note: string | null;
         makeAt: string | null;
       }
-    | { kind: "child"; productId: string; menuItemId: string; extraListId: string };
+    | {
+        kind: "child";
+        productId: string;
+        menuItemId: string;
+        extraListId: string;
+        unit?: ExtraChild["unitContext"];
+      };
   const items: BasketItemWithOptions[] = [];
   const lineMeta: LineMeta[] = [];
   for (const line of lines) {
@@ -589,6 +603,10 @@ export async function priceOrderLines(
         // Always set, so the dish's class is never inherited.
         vatClass: child.vatClass,
         quantity: child.quantity,
+        physicalQuantity: child.physicalQuantity,
+        priceQuantity: child.priceQuantity,
+        unitName: child.unitContext?.id === EACH_UNIT_ID ? undefined : child.unitName,
+        unitPrecision: child.unitContext?.id === EACH_UNIT_ID ? undefined : child.unitPrecision,
       })),
     });
     // A CHILD row takes no course: kitchen coursing is per dish.
@@ -606,6 +624,7 @@ export async function priceOrderLines(
         productId: child.productId,
         menuItemId: line.menuItemId,
         extraListId: child.listId,
+        unit: child.unitContext,
       });
     }
   }
@@ -670,6 +689,9 @@ export async function priceOrderLines(
       unitName: line.unitName,
       unitPrecision: line.unitPrecision,
       quantity: stringToThousandths(line.quantity),
+      ...(line.priceQuantity === undefined
+        ? {}
+        : { priceQuantity: stringToThousandths(line.priceQuantity) }),
       // The gross unit price LOCKED at add time: a retrieved order is filed from it without a
       // re-price, so a later catalogue price change never moves the filed total. Never derived as
       // `line_total ÷ quantity`, which drifts for a weighed line.
@@ -700,6 +722,7 @@ export async function priceOrderLines(
   const lineContexts = lineMeta.map((meta, index) => ({
     workingOrderLineId: ids[index]!,
     menuItemId: meta.menuItemId,
+    ...(meta.kind === "child" && meta.unit !== undefined ? { unit: meta.unit } : {}),
   }));
   return { lineRows, gross, identities, lineContexts, offers };
 }
@@ -732,6 +755,7 @@ const storedLineColumns = {
   grossUnitPrice: workingOrderLines.unitPriceGross,
   listUnitPriceGross: workingOrderLines.listUnitPriceGross,
   quantity: workingOrderLines.quantity,
+  priceQuantity: workingOrderLines.priceQuantity,
   vatClass: workingOrderLines.vatClass,
   name: workingOrderLines.name,
   descriptions: workingOrderLines.descriptions,
@@ -814,6 +838,7 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
     locked: {
       grossUnitPrice: centsToDecimal(line.grossUnitPrice),
       quantity: thousandthsToDecimal(line.quantity),
+      priceQuantity: thousandthsToDecimal(line.priceQuantity),
       vatClass: line.vatClass as VatClass,
       name: line.name,
       descriptions: line.descriptions,
@@ -2232,7 +2257,11 @@ export interface PricedTabRound {
   tabId: string;
   /** One row per line and per extras child, in the order the lines were sent. */
   rows: WorkingOrderLineInsert[];
-  lineContexts: { workingOrderLineId: string; menuItemId: string }[];
+  lineContexts: {
+    workingOrderLineId: string;
+    menuItemId: string;
+    unit?: ExtraChild["unitContext"];
+  }[];
   offers: ZoneOffers;
 }
 
@@ -2330,7 +2359,8 @@ export async function removeFromLine(
   operatorId: string | undefined,
 ): Promise<void> {
   const wasStarted = isStarted(target.state);
-  const extra = target.parentLineId === null ? null : await readCancelledExtra(tx, target.id);
+  const extra =
+    target.parentLineId === null ? null : await readCancelledExtra(tx, target.id, cfg.locale);
   const childItems =
     target.parentLineId === null
       ? ((await dishKitchenItems(tx, [target.id])).get(target.id) ?? []).filter(
@@ -2340,10 +2370,15 @@ export async function removeFromLine(
   const removedQuantity = (item: (typeof childItems)[number]) =>
     removed === null
       ? item.firedQuantity
-      : removed *
-        perDishOptionQuantity(
-          thousandthsToDecimal(item.lineQuantity),
-          thousandthsToDecimal(target.quantity),
+      : decimalToThousandths(
+          multiplyDecimal(
+            thousandthsToDecimal(removed),
+            divideDecimal(
+              thousandthsToDecimal(item.lineQuantity),
+              thousandthsToDecimal(target.quantity),
+              3,
+            ),
+          ),
         );
   const voided =
     target.firedAt !== null
@@ -2414,6 +2449,7 @@ export async function removeFromLine(
     .select({
       id: workingOrderLines.id,
       quantity: workingOrderLines.quantity,
+      priceQuantity: workingOrderLines.priceQuantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
     })
     .from(workingOrderLines)
@@ -2471,25 +2507,56 @@ export async function partyAfterEdit(
 
 /** A dish's extras child, and how many of it go with one of the dish. */
 export interface KeptExtra {
-  child: { id: string; unitPriceGross: Decimal };
+  child: { id: string; unitPriceGross: Decimal; priceQuantity?: Decimal };
   perDish: number;
 }
 
 /** The stored extras children of a dish of `dishQuantity` thousandths, as a reduction keeps them. */
 export function keptExtrasOf(
-  children: readonly { id: string; quantity: number; unitPriceGross: number }[],
+  children: readonly {
+    id: string;
+    quantity: number;
+    priceQuantity: number;
+    unitPriceGross: number;
+  }[],
   dishQuantity: number,
 ): KeptExtra[] {
   const dish = thousandthsToDecimal(dishQuantity);
   return children.map((child) => ({
-    child: { id: child.id, unitPriceGross: centsToDecimal(child.unitPriceGross) },
-    perDish: perDishOptionQuantity(thousandthsToDecimal(child.quantity), dish),
+    child: {
+      id: child.id,
+      unitPriceGross: centsToDecimal(child.unitPriceGross),
+      priceQuantity: thousandthsToDecimal(child.priceQuantity),
+    },
+    perDish: perDishExtraPicks(
+      thousandthsToDecimal(child.quantity),
+      dish,
+      thousandthsToDecimal(child.priceQuantity),
+    ),
   }));
 }
 
 /** An extras child's quantity once its dish is `dishQuantity`. */
-export function extraQuantityFor(perDish: number, dishQuantity: Decimal): Decimal {
-  return multiplyDecimal(dishQuantity, decimal(String(perDish)));
+export function extraQuantityFor(
+  perDish: number,
+  dishQuantity: Decimal,
+  priceQuantity: Decimal = decimal("1"),
+): Decimal {
+  return multiplyDecimal(multiplyDecimal(dishQuantity, decimal(String(perDish))), priceQuantity);
+}
+
+function perDishExtraPicks(
+  childQuantity: string,
+  dishQuantity: string,
+  priceQuantity: string,
+): number {
+  return Number(
+    divideDecimal(
+      decimal(childQuantity),
+      multiplyDecimal(decimal(dishQuantity), decimal(priceQuantity)),
+      0,
+    ),
+  );
 }
 
 /** Each child's quantity and total follow its dish to `dishQuantity`, at the child's stored gross
@@ -2500,12 +2567,13 @@ async function rescaleExtras(
   dishQuantity: Decimal,
 ): Promise<void> {
   for (const { child, perDish } of kept) {
-    const quantity = extraQuantityFor(perDish, dishQuantity);
+    const priceQuantity = child.priceQuantity ?? decimal("1");
+    const quantity = extraQuantityFor(perDish, dishQuantity, priceQuantity);
     await tx
       .update(workingOrderLines)
       .set({
         quantity: decimalToThousandths(quantity),
-        lineTotal: decimalToCents(grossLineTotal(child.unitPriceGross, quantity)),
+        lineTotal: decimalToCents(grossLineTotal(child.unitPriceGross, quantity, priceQuantity)),
       })
       .where(eq(workingOrderLines.id, child.id));
   }
@@ -2542,7 +2610,9 @@ async function reduceLine(
   for (const { child, perDish } of children) {
     await tx
       .update(ticketItems)
-      .set({ quantity: decimalToThousandths(extraQuantityFor(perDish, remaining)) })
+      .set({
+        quantity: decimalToThousandths(extraQuantityFor(perDish, remaining, child.priceQuantity)),
+      })
       .where(eq(ticketItems.workingOrderLineId, child.id));
   }
   await clampServed(tx, [target.id, ...children.map(({ child }) => child.id)]);
@@ -3106,6 +3176,8 @@ export interface TabLine {
    * tells the two apart. */
   parentLineNo: number | null;
   quantity: string;
+  /** Physical amount represented by one priced portion, frozen with the line. */
+  priceQuantity: string;
   /** Decimal places the line's unit takes, frozen at add time (0 = sold by the unit). */
   unitPrecision: number | null;
   unitPriceGross: string;
@@ -3156,6 +3228,7 @@ export async function readTabLines(
       id: workingOrderLines.id,
       parentLineId: workingOrderLines.parentLineId,
       quantity: workingOrderLines.quantity,
+      priceQuantity: workingOrderLines.priceQuantity,
       unitPrecision: workingOrderLines.unitPrecision,
       unitPriceGross: workingOrderLines.unitPriceGross,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
@@ -3196,6 +3269,7 @@ export async function readTabLines(
       productId: row.productId,
       parentLineNo: row.parentLineId === null ? null : (lineNoById.get(row.parentLineId) ?? null),
       quantity: thousandthsToDecimal(row.quantity),
+      priceQuantity: thousandthsToDecimal(row.priceQuantity),
       unitPrecision: row.unitPrecision,
       unitPriceGross: centsToDecimal(row.unitPriceGross),
       ...(row.listUnitPriceGross === null
@@ -3247,8 +3321,12 @@ export async function readOrderRevision(tx: Transaction, orderId: string): Promi
  * The same composition `grossRows` uses for a line's gross total, so a split line's `line_total` is
  * identical to an add-time line's.
  */
-function grossLineTotal(grossUnit: string, quantity: string): Decimal {
-  return toScale(multiplyDecimal(decimal(grossUnit), decimal(quantity)), MONEY_SCALE);
+function grossLineTotal(grossUnit: string, quantity: string, priceQuantity: string = "1"): Decimal {
+  return divideDecimal(
+    multiplyDecimal(decimal(grossUnit), decimal(quantity)),
+    decimal(priceQuantity),
+    MONEY_SCALE,
+  );
 }
 
 /**
@@ -3300,6 +3378,7 @@ export async function carveOffLines(
       optionSnapshots: workingOrderLines.optionSnapshots,
       quantity: workingOrderLines.quantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
+      priceQuantity: workingOrderLines.priceQuantity,
       vatClass: workingOrderLines.vatClass,
       category: workingOrderLines.category,
       unitName: workingOrderLines.unitName,
@@ -3332,6 +3411,7 @@ export async function carveOffLines(
     ...l,
     quantity: thousandthsToDecimal(l.quantity),
     unitPriceGross: centsToDecimal(l.unitPriceGross),
+    priceQuantity: thousandthsToDecimal(l.priceQuantity),
   }));
   const byLineNo = new Map(sourceLines.map((l) => [l.lineNo, l]));
   const lineNoById = new Map(sourceLines.map((l) => [l.id, l.lineNo]));
@@ -3406,11 +3486,11 @@ export async function carveOffLines(
       const remaining = subtractDecimal(decimal(line.quantity), moved);
       const children = childLineNos.map((childLineNo) => {
         const row = byLineNo.get(childLineNo)!;
-        const perDish = perDishOptionQuantity(row.quantity, line.quantity);
+        const perDish = perDishExtraPicks(row.quantity, line.quantity, row.priceQuantity);
         return {
           row,
-          remaining: extraQuantityFor(perDish, remaining),
-          moved: extraQuantityFor(perDish, moved),
+          remaining: extraQuantityFor(perDish, remaining, row.priceQuantity),
+          moved: extraQuantityFor(perDish, moved, row.priceQuantity),
         };
       });
       // An extra that is not a whole count a dish would split into parts that do not add up to it,
@@ -3465,7 +3545,9 @@ export async function carveOffLines(
         .update(workingOrderLines)
         .set({
           quantity: decimalToThousandths(remaining),
-          lineTotal: decimalToCents(grossLineTotal(row.unitPriceGross, remaining)),
+          lineTotal: decimalToCents(
+            grossLineTotal(row.unitPriceGross, remaining, row.priceQuantity),
+          ),
         })
         .where(eq(workingOrderLines.id, row.id));
       await clampServed(tx, [row.id]);
@@ -3486,8 +3568,9 @@ export async function carveOffLines(
         optionSnapshots: row.optionSnapshots ?? [],
         quantity: movedThousandths,
         unitPriceGross: decimalToCents(row.unitPriceGross),
+        priceQuantity: decimalToThousandths(row.priceQuantity),
         vatClass: row.vatClass,
-        lineTotal: decimalToCents(grossLineTotal(row.unitPriceGross, moved)),
+        lineTotal: decimalToCents(grossLineTotal(row.unitPriceGross, moved, row.priceQuantity)),
         category: row.category,
         unitName: row.unitName,
         unitPrecision: row.unitPrecision,
@@ -4004,6 +4087,7 @@ interface EditableLine {
   /** Set on a variant line: the variant's parent, the dish whose lists the line answered. */
   parentProductId: string | null;
   quantity: Decimal;
+  priceQuantity: Decimal;
   unitPriceGross: Decimal;
   unitPrecision: number | null;
   note: string | null;
@@ -4217,6 +4301,7 @@ async function readEditableOrder(
       productId: workingOrderLines.productId,
       parentProductId: products.parentId,
       quantity: workingOrderLines.quantity,
+      priceQuantity: workingOrderLines.priceQuantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       unitPrecision: workingOrderLines.unitPrecision,
@@ -4251,6 +4336,7 @@ async function readEditableOrder(
     productId: row.productId,
     parentProductId: row.parentProductId,
     quantity: thousandthsToDecimal(row.quantity),
+    priceQuantity: thousandthsToDecimal(row.priceQuantity),
     unitPriceGross: centsToDecimal(row.unitPriceGross),
     unitPrecision: row.unitPrecision,
     note: row.note,
@@ -4508,7 +4594,7 @@ async function applyLineEdits(
         ? {
             kept: parent.children.map((child) => ({
               child,
-              perDish: perDishOptionQuantity(child.quantity, parent.quantity),
+              perDish: perDishExtraPicks(child.quantity, parent.quantity, child.priceQuantity),
             })),
             added: [],
             removed: [],
@@ -4726,7 +4812,9 @@ async function applyLineEdits(
           .map(({ child, perDish }) =>
             correctionFor(
               child,
-              decimalToThousandths(extraQuantityFor(perDish, thousandthsToDecimal(removed))),
+              decimalToThousandths(
+                extraQuantityFor(perDish, thousandthsToDecimal(removed), child.priceQuantity),
+              ),
             ),
           ),
       ]),
@@ -4832,7 +4920,11 @@ async function applyLineEdits(
         if (child.ticket !== null)
           await tx
             .update(ticketItems)
-            .set({ quantity: decimalToThousandths(extraQuantityFor(perDish, quantity)) })
+            .set({
+              quantity: decimalToThousandths(
+                extraQuantityFor(perDish, quantity, child.priceQuantity),
+              ),
+            })
             .where(eq(ticketItems.id, child.ticket.id));
   }
 
@@ -5068,7 +5160,7 @@ async function planHeldCorrections(
           edit.modified
             ? (child.ticket?.firedQuantity ?? 0)
             : (child.ticket?.firedQuantity ?? 0) -
-                decimalToThousandths(extraQuantityFor(perDish, edit.quantity)),
+                decimalToThousandths(extraQuantityFor(perDish, edit.quantity, child.priceQuantity)),
         ),
       ),
     ]),
@@ -5079,8 +5171,8 @@ async function planHeldCorrections(
           edit.parent,
           child,
           edit.modified
-            ? decimalToThousandths(extraQuantityFor(perDish, edit.quantity))
-            : decimalToThousandths(extraQuantityFor(perDish, edit.quantity)) -
+            ? decimalToThousandths(extraQuantityFor(perDish, edit.quantity, child.priceQuantity))
+            : decimalToThousandths(extraQuantityFor(perDish, edit.quantity, child.priceQuantity)) -
                 (child.ticket?.firedQuantity ?? 0),
         ),
       ),

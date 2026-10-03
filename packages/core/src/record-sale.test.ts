@@ -1477,6 +1477,7 @@ describe("recordSale — what each line sold and how it was classified", () => {
       "menu_version_id",
       "line_gross",
       "classification",
+      "price_quantity",
     ];
     const tableColumns = await rows<{ name: string }>(
       sql`select name from pragma_table_info('sale_lines')`,

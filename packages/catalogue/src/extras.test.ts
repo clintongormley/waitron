@@ -29,6 +29,7 @@ import {
 } from "./extras.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { setProductVariants, type VariantWrite } from "./variants.js";
+import { createUnit, updateUnit } from "./units.js";
 
 // With no `content_languages` row, `readContentLanguages` falls back to the language passed in.
 // `useVenueDb` empties every data table after each test, so the products are re-made per test.
@@ -83,6 +84,167 @@ const breadList = () => ({
 });
 
 describe("extra list CRUD", () => {
+  it("refuses a new portion finer than the extra product's unit", async () => {
+    const productId = await run(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "kg" }, precision: 2, abbreviation: { en: "kg" } },
+        "en",
+      );
+      const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        name: "Cheese",
+        unitId: unit.id,
+        unitPrice: "100.00",
+        vatClass: "reduced",
+      });
+      return product.id;
+    });
+
+    const error = await refusal((tx) =>
+      createExtraList(tx, { name: "Cheese", items: [{ productId, portion: "0.055" }] }, "en"),
+    );
+    expect(error).toMatchObject({
+      code: "extras.invalid",
+      params: { field: "items.0.portion" },
+    });
+  });
+
+  it("requires an explicit portion when first offering a weighed product", async () => {
+    const productId = await run(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
+        "en",
+      );
+      const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        name: "Cheese",
+        unitId: unit.id,
+        unitPrice: "100.00",
+        vatClass: "reduced",
+      });
+      return product.id;
+    });
+
+    const error = await refusal((tx) =>
+      createExtraList(tx, { name: "Cheese", items: [{ productId }] }, "en"),
+    );
+    expect(error).toMatchObject({
+      code: "extras.invalid",
+      params: { field: "items.0.portion" },
+    });
+  });
+
+  it("requires an explicit portion for a whole-gram hardware unit", async () => {
+    const productId = await run(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "gram" }, precision: 0, abbreviation: { en: "g" } },
+        "en",
+      );
+      await tx.execute(sql`update units set hardware_unit = 'g' where id = ${unit.id}`);
+      const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        name: "Cheese",
+        unitId: unit.id,
+        unitPrice: "0.10",
+        vatClass: "reduced",
+      });
+      return product.id;
+    });
+
+    const error = await refusal((tx) =>
+      createExtraList(tx, { name: "Cheese", items: [{ productId }] }, "en"),
+    );
+    expect(error).toMatchObject({
+      code: "extras.invalid",
+      params: { field: "items.0.portion" },
+    });
+  });
+
+  it("refuses a non-one portion for an Each extra", async () => {
+    const error = await refusal((tx) =>
+      createExtraList(
+        tx,
+        { name: "Bread", items: [{ productId: breads.rye, portion: "2" }] },
+        "en",
+      ),
+    );
+    expect(error).toMatchObject({
+      code: "extras.invalid",
+      params: { field: "items.0.portion" },
+    });
+  });
+
+  it("stores a weighed portion exactly through a database read", async () => {
+    const productId = await run(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
+        "en",
+      );
+      const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        name: "Cheese",
+        unitId: unit.id,
+        unitPrice: "100.00",
+        vatClass: "reduced",
+      });
+      return product.id;
+    });
+
+    const created = await run((tx) =>
+      createExtraList(tx, { name: "Cheese", items: [{ productId, portion: "0.050" }] }, "en"),
+    );
+    const read = await run((tx) => getExtraList(tx, created.id));
+    expect(created.items[0]!.portion).toBe("0.050");
+    expect(read.items[0]!.portion).toBe("0.050");
+  });
+
+  it("keeps an unchanged saved portion after the product unit loses precision", async () => {
+    const { productId, unitId } = await run(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
+        "en",
+      );
+      const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        name: "Cheese",
+        unitId: unit.id,
+        unitPrice: "100.00",
+        vatClass: "reduced",
+      });
+      return { productId: product.id, unitId: unit.id };
+    });
+    const created = await run((tx) =>
+      createExtraList(tx, { name: "Cheese", items: [{ productId, portion: "0.055" }] }, "en"),
+    );
+    await run((tx) => updateUnit(tx, unitId, { precision: 2 }, "en"));
+
+    const updated = await run((tx) =>
+      updateExtraList(
+        tx,
+        created.id,
+        { name: "Cheeses", items: [{ id: created.items[0]!.id, productId, portion: "0.055" }] },
+        "en",
+      ),
+    );
+    expect(updated.name).toBe("Cheeses");
+    expect(updated.items[0]!.portion).toBe("0.055");
+  });
+
   it("keeps each item's own terms, in the body's order, and leaves a null price to the product", async () => {
     const created = await run((tx) => createExtraList(tx, breadList(), "en"));
     const read = await run((tx) => getExtraList(tx, created.id));

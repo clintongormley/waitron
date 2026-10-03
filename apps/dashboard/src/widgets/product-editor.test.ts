@@ -3726,6 +3726,59 @@ const showInactiveLink = (el: ProductEditor) =>
 const followsInDocument = (first: Element, second: Element) =>
   Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
 
+it("names the offered lists and menus before saving a product unit change", async () => {
+  const kg = { id: "kg", name: { en: "Kilogram" }, abbreviation: { en: "kg" } };
+  const usage = [
+    {
+      productId: "coffee",
+      productName: "Coffee",
+      lists: [{ id: "extras", name: "Toppings", menus: [{ id: "lunch", name: "Lunch" }] }],
+    },
+  ];
+  const api = { getProductExtraUsage: vi.fn().mockResolvedValue(usage) };
+  const el = await mountPricing(saved, {
+    units: [unit, kg],
+    api: api as unknown as ProductEditor["api"],
+  });
+  await openUnits(el);
+  await chooseOption(sharedField(el, "wt-combobox", "unit"), kg.id);
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("[data-test=unit-usage-warning]")?.textContent)
+    .toContain("Toppings");
+  expect(el.shadowRoot!.querySelector("[data-test=unit-usage-warning]")?.textContent).toContain(
+    "Lunch",
+  );
+  expect(saveButton(el).disabled).toBe(false);
+});
+
+it("drops a unit-usage reply after the editor is reseeded for another product", async () => {
+  let reply!: (value: unknown[]) => void;
+  const api = {
+    getProductExtraUsage: vi
+      .fn()
+      .mockImplementation(() => new Promise((resolve) => (reply = resolve))),
+  };
+  const kg = { id: "kg", name: { en: "Kilogram" }, abbreviation: { en: "kg" } };
+  const el = await mountPricing(saved, {
+    units: [unit, kg],
+    api: api as unknown as ProductEditor["api"],
+  });
+  await openUnits(el);
+  await chooseOption(sharedField(el, "wt-combobox", "unit"), kg.id);
+  el.value = { ...saved, id: "tea", name: "Tea" };
+  await el.updateComplete;
+  reply([
+    {
+      productId: "coffee",
+      productName: "Coffee",
+      lists: [{ id: "x", name: "Toppings", menus: [] }],
+    },
+  ]);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=unit-usage-warning]")).toBeNull();
+});
+
 it("draws Pricing with no box, headed like the editor's other open sections, the price above VAT", async () => {
   const el = await mountPricing(saved);
   const section = pricing(el);

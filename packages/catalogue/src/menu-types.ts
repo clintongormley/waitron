@@ -191,6 +191,15 @@ export interface AccessibleCatalogue {
  */
 export interface OfferedExtraItem {
   productId: string;
+  /** Physical amount supplied by one pick, in the effective product unit. */
+  portion: string;
+  unit: {
+    id: string;
+    name: Record<string, string>;
+    abbreviation: Record<string, string>;
+    precision: number;
+    hardwareUnit: "kg" | "g" | "mg" | null;
+  };
   name: string;
   customerName: Record<string, string> | null;
   kitchenName: string | null;

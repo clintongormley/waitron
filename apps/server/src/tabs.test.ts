@@ -711,6 +711,33 @@ describe("readTabLines", () => {
     expect(child.state).toBeNull();
   });
 
+  it("returns a child line's frozen priced portion to the till", async () => {
+    const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
+    const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        {
+          menuItemId: cafeOffer,
+          quantity: "1",
+          extras: [{ listId: extraListId, picks: [{ productId: aguaId, quantity: 1 }] }],
+        },
+      ]),
+    );
+    await db
+      .update(workingOrderLines)
+      .set({ quantity: 150, priceQuantity: 50 })
+      .where(
+        and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.productId, aguaId)),
+      );
+
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    expect(lines.find((line) => line.productId === aguaId)).toMatchObject({
+      quantity: "0.150",
+      priceQuantity: "0.050",
+    });
+  });
+
   it("reads a split-off chips line's own fired time and kitchen state", async () => {
     useSplitExtrasDb(db);
     const venue = await setupSplitExtrasVenue();

@@ -5,7 +5,7 @@ import { catalogues, CORE_MIGRATIONS, products, withTransaction } from "@waitron
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS, productUnits } from "@waitron/catalogue";
+import { CATALOGUE_MIGRATIONS, createExtraList, productUnits } from "@waitron/catalogue";
 import { hashPin, IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
@@ -19,6 +19,8 @@ let cookie: string;
 
 beforeEach(async () => {
   // Child-to-parent order: product_units RESTRICTs deletes of the units and products it references.
+  await suite.db.execute(sql`delete from extra_list_items`);
+  await suite.db.execute(sql`delete from extra_lists`);
   await suite.db.execute(sql`delete from product_units`);
   await suite.db.execute(sql`delete from units`);
   await suite.db.execute(sql`delete from products`);
@@ -242,6 +244,40 @@ describe("unit management routes", () => {
     const res = await send("GET", `/management-api/units/${unit.id}/products`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([{ id: p1, name: "A", active: true }]);
+  });
+
+  it("names an extra's list before a unit precision edit without blocking the edit", async () => {
+    const unit = (await (
+      await send("POST", "/management-api/units", {
+        name: { en: "kilogram" },
+        precision: 3,
+        abbreviation: { en: "kg" },
+      })
+    ).json()) as { id: string };
+    const { productId, listId } = await withTransaction(suite.db, async (tx) => {
+      const productId = await seedProduct(tx, await seedCatalogue(tx), "Jamón", unit.id);
+      const list = await createExtraList(
+        tx,
+        { name: "Toppings", items: [{ productId, portion: "0.055", price: "0.01" }] },
+        "en",
+      );
+      return { productId, listId: list.id };
+    });
+
+    const usage = await send("GET", `/management-api/units/${unit.id}/extra-usage`);
+    expect(usage.status).toBe(200);
+    expect(await usage.json()).toEqual([
+      {
+        productId,
+        productName: "Jamón",
+        lists: [{ id: listId, name: "Toppings", menus: [] }],
+      },
+    ]);
+    const changed = await send("PATCH", `/management-api/units/${unit.id}`, { precision: 2 });
+    expect(changed.status).toBe(200);
+    expect((await changed.json()).precision).toBe(2);
+    const retained = await suite.db.execute(sql`select portion from extra_list_items`);
+    expect(retained.rows[0]?.portion).toBe(55);
   });
 
   it("GET /management-api/units/:id/products 404s an unknown unit", async () => {

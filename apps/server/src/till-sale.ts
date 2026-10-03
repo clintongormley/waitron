@@ -130,10 +130,10 @@ export interface TillSaleRequest {
 export interface TillSaleLine {
   /** locale → text: the line's goods descriptions, snapshotted at add-time and filed verbatim. */
   descriptions: Record<string, string>;
-  /** Unit label frozen with the filed line; null for a modifier child. */
+  /** Unit label frozen with the filed line, including a weighted extra child. */
   unitName?: Record<string, string> | null;
   unitPrecision?: number | null;
-  /** The filed quantity, trailing-zero-trimmed for display ("2.000" reads "2"). */
+  /** The filed quantity; weighted extra children retain the saved fractional scale for display. */
   quantity: string;
   /** The GROSS (VAT-inclusive) line total the line was filed at, as a decimal string. */
   gross: string;

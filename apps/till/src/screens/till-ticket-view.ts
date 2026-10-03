@@ -505,12 +505,17 @@ export class TillTicketView extends LitElement {
               ${group.options.map(
                 // The per-dish count is recovered from the filed COMBINED child quantity.
                 (option) => {
-                  const perDish = perDishOptionQuantity(option.quantity, group.dish.quantity);
-                  const badge = perDish > 1 ? ` ${QTY_BADGE}${perDish}` : "";
+                  let amount: string;
+                  if (option.unitName == null) {
+                    const perDish = perDishOptionQuantity(option.quantity, group.dish.quantity);
+                    amount = perDish > 1 ? ` ${QTY_BADGE}${perDish}` : "";
+                  } else {
+                    amount = ` ${option.quantity} ${resolveSnapshotText(option.unitName, language, language)}`;
+                  }
                   return html`
                     <li class="line option">
                       <span class="line-name"
-                        >${lineName(option.descriptions, language)}${badge}</span
+                        >${lineName(option.descriptions, language)}${amount}</span
                       >
                       ${lineGross(option, format)}
                     </li>

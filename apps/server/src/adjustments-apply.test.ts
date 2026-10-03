@@ -595,6 +595,29 @@ describe("a line discount (plan D4)", () => {
     expect((await recordedOn(billId))[0]).toMatchObject({ reduction: 105 });
   });
 
+  it("discounts a frozen three-portion extra at its price basis and keeps its physical amount", async () => {
+    const { billId } = await bill([{ name: "Pizza", olives: 1 }]);
+    const extraId = await lineIdOf(venue, billId, 2);
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ quantity: 150, priceQuantity: 50, unitPriceGross: 1, lineTotal: 3 })
+        .where(eq(workingOrderLines.id, extraId)),
+    );
+
+    await adjust(billId, { lineId: extraId, action: "discount_amount", amount: "0.03" });
+
+    expect(await priced(billId)).toEqual([
+      ["Pizza", "1.000", "9.00", null, "9.00"],
+      ["Olives", "0.150", "0.00", "0.01", "0.00"],
+    ]);
+    expect((await recordedOn(billId))[0]).toMatchObject({
+      beforeAmount: 3,
+      reduction: 3,
+      nominalValue: 3,
+    });
+  });
+
   it("discounts part of a line by splitting that part off first", async () => {
     const { billId } = await bill([{ name: "Croquetas", quantity: "5" }]);
 

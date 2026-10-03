@@ -150,6 +150,7 @@ export const workingOrderLines = table(
     unitName: json<Record<string, string>>("unit_name"),
     unitPrecision: count("unit_precision"),
     quantity: quantity("quantity").notNull(),
+    priceQuantity: quantity("price_quantity").notNull().default(1000),
     // The GROSS (VAT-inclusive) unit price LOCKED at add time — the authoritative input the FILED
     // sale_lines are rebuilt from. Stored rather than recovered as `line_total ÷ quantity`, which
     // DRIFTS for a weighed line (9.99/kg × 0.333 → 3.33 stored, 3.33 ÷ 0.333 = 10.00 ≠ 9.99).

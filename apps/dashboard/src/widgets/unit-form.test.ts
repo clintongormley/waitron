@@ -53,6 +53,35 @@ async function shownPrecision(el: UnitForm): Promise<string | undefined> {
 }
 
 describe("unit-form", () => {
+  it("warns with the affected extras list and menu on a precision edit while Save stays available", async () => {
+    const getUnitExtraUsage = vi.fn().mockResolvedValue([
+      {
+        productId: "p1",
+        productName: "Jamón",
+        lists: [{ id: "l1", name: "Toppings", menus: [{ id: "m1", name: "Dinner" }] }],
+      },
+    ]);
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["en"],
+      value: { id: "u1", name: { en: "kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+      api: { getUnitExtraUsage },
+    });
+
+    await chooseOption(precisionBox(el), "2");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=precision-usage-warning]")).not.toBeNull(),
+    );
+    expect(
+      el.shadowRoot!.querySelector("[data-test=precision-usage-warning]")!.textContent,
+    ).toContain("Jamón: Toppings (Dinner)");
+    expect(getUnitExtraUsage).toHaveBeenCalledWith("u1");
+    expect(saveOf(el).disabled).toBe(false);
+    await chooseOption(precisionBox(el), "3");
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=precision-usage-warning]")).toBeNull();
+  });
+
   it("picks the precision from a required shared dropdown, its help text as the hint", async () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,

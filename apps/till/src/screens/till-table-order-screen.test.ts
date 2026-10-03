@@ -2148,6 +2148,14 @@ describe("till-table-order-screen", () => {
       ],
     };
     const extraItem = (productId: string, name: string, preselected: boolean) => ({
+      portion: "1",
+      unit: {
+        name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
+        hardwareUnit: null,
+        id: "00000000-0000-0000-0000-000000000001",
+        abbreviation: { en: "ea", es: "ud", ca: "u", eu: "u", gl: "u" },
+        precision: 0,
+      },
       productId,
       name,
       customerName: { es: `${name} carta` },
@@ -2415,6 +2423,38 @@ describe("till-table-order-screen", () => {
           extras: [{ listId: "list-extras", picks: [{ productId: "p-cheese", quantity: 2 }] }],
           note: "sin sal",
         },
+      });
+    });
+
+    it("reopens a 0.150 kg child as three 0.050 kg picks per dish", async () => {
+      const weighted: OfferedModifier = {
+        ...extrasList,
+        items: [{ ...extraItem("p-cheese", "Jamón", false), portion: "0.050", price: "0.01" }],
+      };
+      const dish: TillProduct = { ...burger, offeredModifiers: [weighted] };
+      const child: TabLine = {
+        ...cheeseChild,
+        name: "Jamón",
+        quantity: "0.300",
+        priceQuantity: "0.050",
+        unitPriceGross: "0.01",
+      };
+      const { el } = await mount({
+        products: [dish],
+        lines: [{ ...burgerLine, quantity: "2.000" }, child],
+        revision: 3,
+      });
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      expect(
+        picker
+          .shadowRoot!.querySelector('[data-test="pick-list-extras-p-cheese-count"]')!
+          .textContent!.trim(),
+      ).toBe("3");
+      const seen = captureChange(el);
+      picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      expect(seen.event!.detail.patch).toMatchObject({
+        extras: [{ listId: "list-extras", picks: [{ productId: "p-cheese", quantity: 3 }] }],
       });
     });
 

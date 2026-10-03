@@ -279,7 +279,12 @@ export const en = {
   "extras.all_products_listed": "Every product is already on the list.",
   "extras.unknown_product": "Product not found",
   "extras.reorder": "Drag to reorder",
-  "extras.price": "Price",
+  "extras.price": "Price per portion",
+  "extras.portion": "Portion",
+  "extras.portion_required": "Enter the amount supplied by one pick.",
+  "extras.portion_invalid": "Enter a positive amount that fits this product's unit.",
+  "extras.portion_saved_warning":
+    "Saved portion {amount} exceeds this unit's current precision. You can keep it or enter a new valid amount.",
   "extras.max_quantity": "Maximum quantity",
   "extras.preselected": "Preselected",
   "extras.name_required": "Enter a name.",
@@ -717,6 +722,10 @@ export const en = {
   "units.precision_help": "Choose 0, 1, 2 or 3 decimal places.",
   "units.precision_help_label": "About decimal places",
   "units.precision_invalid": "Choose a whole number from 0 to 3.",
+  "units.precision_usage_warning":
+    "Changing precision affects portions in these extras lists and menus:",
+  "units.precision_usage_unavailable":
+    "Could not check which extras lists and menus use this unit.",
   "units.filter_precision_all": "All precisions",
   "units.actions": "Actions",
   "units.empty": "No units yet.",
@@ -1266,6 +1275,9 @@ export const en = {
   "editor.edit_courses": "Edit courses…",
   "editor.choose": "Choose…",
   "editor.unit_each": "Each",
+  "editor.unit_usage_warning":
+    "Changing this unit affects portions in these extras lists and menus:",
+  "editor.unit_usage_unavailable": "Could not check which extras lists and menus use this unit.",
   "editor.change_category": "Change",
   "editor.content": "Product details",
   "editor.description": "Description",
@@ -2009,6 +2021,8 @@ export const en = {
   "menu_preview.product_moved": "{name} moved from {from} to {to}",
   "menu_preview.price_changed": "{name} price changed from {from} to {to}",
   "menu_preview.changed_fields": "{name}: {fields}",
+  "menu_preview.extra_unit_changed":
+    "{list}: {name} unit changed from {from} ({fromPrecision} decimal places) to {to} ({toPrecision} decimal places)",
   "menu_preview.section_added": "Section {name} added under {place}",
   "menu_preview.section_removed": "Section {name} removed from {place}",
   "menu_preview.section_renamed": "{name} renamed",
@@ -2041,6 +2055,8 @@ export const en = {
     "1 shortcut on {menu}'s {layout} layout points at something no longer in this menu. It stays as an empty space until you remove or replace it.",
   "menu_preview.shortcut_missing":
     "{count} shortcuts on {menu}'s {layout} layout point at things no longer in this menu. They stay as empty spaces until you remove or replace them.",
+  "menu_preview.extra_portion_precision":
+    "{product} in {list} has a saved portion of {amount}, which exceeds the unit's {precision} decimal places. Check it before publishing.",
   "menu_preview.publish": "Publish {menu}",
   "menu_preview.publishing": "Publishing {menu}…",
   "menu_preview.only_this_menu":
@@ -2375,7 +2391,13 @@ export const es: Record<StringKey, string> = {
   "extras.all_products_listed": "Todos los productos ya están en la lista.",
   "extras.unknown_product": "Producto no encontrado",
   "extras.reorder": "Arrastrar para reordenar",
-  "extras.price": "Precio",
+  "extras.price": "Precio por porción",
+  "extras.portion": "Porción",
+  "extras.portion_required": "Introduce la cantidad que aporta una selección.",
+  "extras.portion_invalid":
+    "Introduce una cantidad positiva que se ajuste a la unidad del producto.",
+  "extras.portion_saved_warning":
+    "La porción guardada {amount} supera la precisión actual de esta unidad. Puedes conservarla o introducir una cantidad válida.",
   "extras.max_quantity": "Cantidad máxima",
   "extras.preselected": "Preseleccionado",
   "extras.name_required": "Introduce un nombre.",
@@ -2821,6 +2843,10 @@ export const es: Record<StringKey, string> = {
   "units.precision_help": "Elige 0, 1, 2 o 3 decimales.",
   "units.precision_help_label": "Acerca de los decimales",
   "units.precision_invalid": "Elige un número entero entre 0 y 3.",
+  "units.precision_usage_warning":
+    "Cambiar la precisión afecta a las porciones de estas listas de extras y cartas:",
+  "units.precision_usage_unavailable":
+    "No se pudo comprobar qué listas de extras y cartas usan esta unidad.",
   "units.filter_precision_all": "Todas las precisiones",
   "units.actions": "Acciones",
   "units.empty": "Todavía no hay unidades.",
@@ -3371,6 +3397,10 @@ export const es: Record<StringKey, string> = {
   "editor.edit_courses": "Editar cursos…",
   "editor.choose": "Elegir…",
   "editor.unit_each": "Unidad",
+  "editor.unit_usage_warning":
+    "Cambiar esta unidad afecta a las porciones de estas listas de extras y cartas:",
+  "editor.unit_usage_unavailable":
+    "No se pudo comprobar qué listas de extras y cartas usan esta unidad.",
   "editor.change_category": "Cambiar",
   "editor.content": "Detalles del producto",
   "editor.description": "Descripción",
@@ -4113,6 +4143,8 @@ export const es: Record<StringKey, string> = {
   "menu_preview.product_moved": "Se ha movido {name}: antes en {from}; ahora en {to}",
   "menu_preview.price_changed": "Ha cambiado el precio de {name} de {from} a {to}",
   "menu_preview.changed_fields": "{name}: {fields}",
+  "menu_preview.extra_unit_changed":
+    "{list}: la unidad de {name} ha cambiado de {from} ({fromPrecision} decimales) a {to} ({toPrecision} decimales)",
   "menu_preview.section_added": "Se ha añadido la sección {name} en {place}",
   "menu_preview.section_removed": "Se ha quitado la sección {name} de {place}",
   "menu_preview.section_renamed": "Se ha cambiado el nombre de {name}",
@@ -4146,6 +4178,8 @@ export const es: Record<StringKey, string> = {
     "1 acceso directo de la página {layout} de {menu} apunta a un elemento que ya no está en este menú. Permanece como un espacio vacío hasta que lo quites o reemplaces.",
   "menu_preview.shortcut_missing":
     "{count} accesos directos de la página {layout} de {menu} apuntan a elementos que ya no están en este menú. Permanecen como espacios vacíos hasta que los quites o reemplaces.",
+  "menu_preview.extra_portion_precision":
+    "{product} en {list} tiene una porción guardada de {amount}, que supera los {precision} decimales de la unidad. Revísala antes de publicar.",
   "menu_preview.publish": "Publicar {menu}",
   "menu_preview.publishing": "Publicando {menu}…",
   "menu_preview.only_this_menu":

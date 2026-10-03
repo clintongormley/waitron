@@ -46,6 +46,7 @@ export function madeHereSinkFor(c: Context): Set<string> {
 export async function readMadeHereItems(
   db: Database,
   lineIds: ReadonlySet<string>,
+  locale: string,
 ): Promise<MadeHereItem[]> {
   if (lineIds.size === 0) return [];
   const ids = [...lineIds];
@@ -69,14 +70,19 @@ export async function readMadeHereItems(
   const foundIds = rows.map((row) => row.lineId);
   const children = await db
     .select({
+      id: workingOrderLines.id,
       parentLineId: workingOrderLines.parentLineId,
       name: workingOrderLines.name,
       quantity: workingOrderLines.quantity,
+      unitName: workingOrderLines.unitName,
     })
     .from(workingOrderLines)
     .where(inArray(workingOrderLines.parentLineId, foundIds))
     .orderBy(workingOrderLines.lineNo);
-  const each = await VENUE_SERVICE.readLinesSoldInEach(db, foundIds);
+  const each = await VENUE_SERVICE.readLinesSoldInEach(db, [
+    ...foundIds,
+    ...children.map((child) => child.id),
+  ]);
   return rows.map((row) => ({
     lineId: row.lineId,
     name: staffPresentationName(row),
@@ -91,13 +97,16 @@ export async function readMadeHereItems(
           child.name,
           thousandthsToDecimal(child.quantity),
           thousandthsToDecimal(row.lineQuantity),
+          child.unitName === null || each.has(child.id)
+            ? undefined
+            : (child.unitName[locale] ?? Object.values(child.unitName)[0]),
         ),
       ),
     note: row.note,
   }));
 }
 
-export function madeHereAnswer(db: Database): MiddlewareHandler {
+export function madeHereAnswer(db: Database, locale: string): MiddlewareHandler {
   return async (c, next) => {
     await next();
     const ids = c.get("madeHereSink");
@@ -111,7 +120,7 @@ export function madeHereAnswer(db: Database): MiddlewareHandler {
       return;
     const body: unknown = await c.res.clone().json();
     if (typeof body !== "object" || body === null || Array.isArray(body)) return;
-    const items = await readMadeHereItems(db, ids);
+    const items = await readMadeHereItems(db, ids, locale);
     if (items.length === 0) return;
     c.res = new Response(JSON.stringify({ ...body, madeHere: items }), {
       status: c.res.status,

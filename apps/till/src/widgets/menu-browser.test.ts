@@ -993,6 +993,14 @@ describe("till-menu-browser", () => {
 
     it("still offers a product not sold separately as an extra on a dish that lists it", async () => {
       const extra = {
+        portion: "1",
+        unit: {
+          name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
+          hardwareUnit: null,
+          id: "00000000-0000-0000-0000-000000000001",
+          abbreviation: { en: "ea", es: "ud", ca: "u", eu: "u", gl: "u" },
+          precision: 0,
+        },
         productId: "p-cola",
         name: "Cola",
         customerName: null,

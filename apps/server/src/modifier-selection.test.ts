@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { OptionLabel, OptionList, ResolvedExtraList } from "@waitron/catalogue";
+import {
+  EACH_UNIT,
+  type OptionLabel,
+  type OptionList,
+  type ResolvedExtraList,
+} from "@waitron/catalogue";
 import {
   buildLineExtras,
   editLineExtras,
@@ -68,8 +73,18 @@ const breads: ResolvedExtraList = {
       maxQuantity: 2,
       preselected: false,
       price: "1.50",
+      portion: "1",
+      unit: EACH_UNIT,
     },
-    { id: "item-rye", productId: "product-rye", maxQuantity: 1, preselected: false, price: "0.00" },
+    {
+      id: "item-rye",
+      productId: "product-rye",
+      maxQuantity: 1,
+      preselected: false,
+      price: "0.00",
+      portion: "1",
+      unit: EACH_UNIT,
+    },
   ],
 };
 const drinks: ResolvedExtraList = {
@@ -88,6 +103,8 @@ const drinks: ResolvedExtraList = {
       maxQuantity: 3,
       preselected: false,
       price: "4.50",
+      portion: "1",
+      unit: EACH_UNIT,
     },
   ],
 };
@@ -127,6 +144,51 @@ const products = new Map<string, ExtraProductFacts>([
 ]);
 
 describe("buildLineExtras", () => {
+  it("carries the physical amount, priced portion and unit of a weighed pick", () => {
+    const weighted = {
+      ...drinks,
+      items: [
+        {
+          ...drinks.items[0]!,
+          portion: "0.050",
+          price: "0.01",
+          unit: {
+            id: "unit-kg",
+            name: { en: "Kilogram" },
+            abbreviation: { en: "kg", es: "kg" },
+            precision: 3,
+            hardwareUnit: "kg" as const,
+          },
+        },
+      ],
+    };
+    const { extraChildren } = buildLineExtras(
+      { extras: [weighted], options: [] },
+      products,
+      { extras: [{ listId: weighted.id, picks: [{ productId: "product-wine", quantity: 3 }] }] },
+      "en",
+    );
+
+    expect(extraChildren).toMatchObject([
+      {
+        productId: "product-wine",
+        quantity: 3,
+        physicalQuantity: "0.150",
+        priceQuantity: "0.050",
+        unitName: { en: "kg", es: "kg" },
+        unitPrecision: 3,
+        unitContext: {
+          id: "unit-kg",
+          name: { en: "Kilogram" },
+          precision: 3,
+          hardwareUnit: "kg",
+        },
+        price: "0.01",
+        vatClass: "general",
+      },
+    ]);
+  });
+
   it("freezes the list's and the chosen label's three names onto one snapshot, carrying no id", () => {
     const { optionSnapshots } = buildLineExtras(
       { extras: [], options: [cooked] },
@@ -181,6 +243,16 @@ describe("buildLineExtras", () => {
         vatClass: "general",
         // The picks per dish as sent — this function never multiplies by the dish count.
         quantity: 2,
+        physicalQuantity: "2",
+        priceQuantity: "1",
+        unitName: EACH_UNIT.abbreviation,
+        unitPrecision: 0,
+        unitContext: {
+          id: EACH_UNIT.id,
+          name: EACH_UNIT.name,
+          precision: 0,
+          hardwareUnit: null,
+        },
       },
     ]);
   });
@@ -397,6 +469,7 @@ describe("editLineExtras", () => {
     extraListId: string | null;
     quantity: string;
     unitPriceGross: string;
+    priceQuantity?: string;
   };
   const child = (
     productId: string,
@@ -464,6 +537,74 @@ describe("editLineExtras", () => {
       added: [[breads.id, "product-sourdough", "1.50", 2]],
       removed: ["0.10"],
     });
+  });
+
+  it("keeps three weighted picks from their frozen portion after the live portion changes", () => {
+    const weighted = {
+      ...drinks,
+      items: [{ ...drinks.items[0]!, portion: "0.100", price: "0.05" }],
+    };
+    const stored = {
+      ...child("product-wine", drinks.id, "0.150", "0.01"),
+      priceQuantity: "0.050",
+    };
+
+    expect(
+      edit(
+        [weighted],
+        [{ listId: drinks.id, picks: [{ productId: "product-wine", quantity: 3 }] }],
+        [stored],
+      ),
+    ).toEqual({
+      kept: [["product-wine", "0.01", 3]],
+      added: [],
+      removed: [],
+    });
+  });
+
+  it("adds a weighted pick with its physical amount, priced portion and unit", () => {
+    const weighted = {
+      ...drinks,
+      items: [
+        {
+          ...drinks.items[0]!,
+          portion: "0.050",
+          price: "0.01",
+          unit: {
+            id: "unit-kg",
+            name: { en: "Kilogram" },
+            abbreviation: { en: "kg", es: "kg" },
+            precision: 3,
+            hardwareUnit: "kg" as const,
+          },
+        },
+      ],
+    };
+
+    const result = editLineExtras(
+      [weighted],
+      products,
+      [{ listId: weighted.id, picks: [{ productId: "product-wine", quantity: 3 }] }],
+      { children: [], dishQuantity: "2" },
+    );
+
+    expect(result.added).toMatchObject([
+      {
+        productId: "product-wine",
+        quantity: 3,
+        physicalQuantity: "0.150",
+        priceQuantity: "0.050",
+        unitName: { en: "kg", es: "kg" },
+        unitPrecision: 3,
+        unitContext: {
+          id: "unit-kg",
+          name: { en: "Kilogram" },
+          precision: 3,
+          hardwareUnit: "kg",
+        },
+        price: "0.01",
+      },
+    ]);
   });
 
   it("adds a pick of a product no stored child holds, priced from its list now, and removes the child", () => {

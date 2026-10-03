@@ -25,6 +25,14 @@ function offeredItem(
   declarations: Partial<Pick<OfferedExtraItem, "addAllergens" | "suitableFor">> = {},
 ): OfferedExtraItem {
   return {
+    portion: "1",
+    unit: {
+      name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
+      hardwareUnit: null,
+      id: "00000000-0000-0000-0000-000000000001",
+      abbreviation: { en: "ea", es: "ud", ca: "u", eu: "u", gl: "u" },
+      precision: 0,
+    },
     productId,
     name: staff,
     customerName: { es: `${staff} carta` },

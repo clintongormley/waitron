@@ -143,6 +143,15 @@ export type MenuChange = {
   | { kind: "price_changed"; productId: string; name: string; from: string; to: string }
   | { kind: "product_changed"; productId: string; name: string; fields: ProductChangeField[] }
   | {
+      kind: "extra_unit_changed";
+      productId: string;
+      name: string;
+      listId: string;
+      listName: string;
+      from: { abbreviation: Record<string, string>; precision: number };
+      to: { abbreviation: Record<string, string>; precision: number };
+    }
+  | {
       kind: "section_added" | "section_removed";
       sectionId: string;
       name: string;
@@ -185,7 +194,17 @@ export interface MenuPreview {
   clashes: MenuClash[];
   hash: string;
   changes: MenuChange[];
-  warnings: { kind: "shortcut_missing"; layoutName: string; name: string }[];
+  warnings: (
+    | { kind: "shortcut_missing"; layoutName: string; name: string }
+    | {
+        kind: "extra_portion_precision";
+        listName: string;
+        name: string;
+        portion: string;
+        abbreviation: Record<string, string>;
+        precision: number;
+      }
+  )[];
   /** The menu's publication state, as `menuStatus` answers it. */
   status: MenuStatus;
   /** What the publish would make live. */

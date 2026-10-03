@@ -18,6 +18,7 @@ import type {
 } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
+import { localizedName } from "../i18n/localized.js";
 import { describeSetting } from "./price-source.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -230,15 +231,28 @@ export class MenuPreviewPanel extends LitElement {
 
   #warningWords(warnings = this.preview?.warnings ?? []): string[] {
     const groups = new Map<string, number>();
-    for (const warning of warnings)
-      groups.set(warning.layoutName, (groups.get(warning.layoutName) ?? 0) + 1);
-    return [...groups].map(([layout, count]) =>
-      fill(count === 1 ? "menu_preview.shortcut_missing_one" : "menu_preview.shortcut_missing", {
-        count: String(count),
-        menu: this.menuName,
-        layout,
-      }),
-    );
+    const portions: string[] = [];
+    for (const warning of warnings) {
+      if (warning.kind === "extra_portion_precision") {
+        portions.push(
+          fill("menu_preview.extra_portion_precision", {
+            list: warning.listName,
+            product: warning.name,
+            amount: `${warning.portion} ${localizedName(warning.abbreviation)}`.trim(),
+            precision: String(warning.precision),
+          }),
+        );
+      } else groups.set(warning.layoutName, (groups.get(warning.layoutName) ?? 0) + 1);
+    }
+    return [...groups]
+      .map(([layout, count]) =>
+        fill(count === 1 ? "menu_preview.shortcut_missing_one" : "menu_preview.shortcut_missing", {
+          count: String(count),
+          menu: this.menuName,
+          layout,
+        }),
+      )
+      .concat(portions);
   }
 
   /** One place inside a sentence. */
@@ -292,6 +306,19 @@ export class MenuPreviewPanel extends LitElement {
           name: change.name,
           fields: change.fields.map((field) => t(PRODUCT_FIELDS[field])).join(", "),
         });
+      case "extra_unit_changed": {
+        const locale = currentLocale().slice(0, 2);
+        const unit = (abbreviations: Record<string, string>) =>
+          abbreviations[locale] ?? abbreviations.en ?? Object.values(abbreviations)[0] ?? "";
+        return fill("menu_preview.extra_unit_changed", {
+          list: change.listName,
+          name: change.name,
+          from: unit(change.from.abbreviation),
+          fromPrecision: String(change.from.precision),
+          to: unit(change.to.abbreviation),
+          toPrecision: String(change.to.precision),
+        });
+      }
       case "section_added":
         return this.#at(
           "menu_preview.section_added",

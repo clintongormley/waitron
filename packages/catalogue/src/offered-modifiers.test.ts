@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, products as productRows, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -22,6 +22,17 @@ import * as extraProjection from "./extra-projection.js";
 import * as productModifiers from "./product-modifiers.js";
 import * as optionsModule from "./options.js";
 import { seedVenue } from "../test/fixtures.js";
+import { EACH_UNIT } from "./units.js";
+import type { OfferedExtraItem } from "./menu-types.js";
+
+expectTypeOf<OfferedExtraItem["portion"]>().toEqualTypeOf<string>();
+expectTypeOf<OfferedExtraItem["unit"]>().toEqualTypeOf<{
+  id: string;
+  name: Record<string, string>;
+  abbreviation: Record<string, string>;
+  precision: number;
+  hardwareUnit: "kg" | "g" | "mg" | null;
+}>();
 
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
@@ -162,6 +173,22 @@ const attach = async (
 };
 
 describe("what a product offers", () => {
+  it("keeps an extra's portion and effective unit in the offer", async () => {
+    await run((tx) => attach(tx, ["extras"]));
+
+    const offered = await run((tx) =>
+      readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]),
+    );
+    const [list] = offered.get(ids.burger)!;
+    expect(list!.kind).toBe("extras");
+    if (list!.kind !== "extras") return;
+    expect(list!.items[0]).toMatchObject({
+      productId: ids.bacon,
+      portion: "1.000",
+      unit: { precision: 0, abbreviation: { en: "ea" } },
+    });
+  });
+
   it("walks the product's own attachment order", async () => {
     const seeded = await run(async (tx) => {
       return attach(tx, ["options", "extras"]);
@@ -251,6 +278,8 @@ describe("what a product offers", () => {
           customerName: { en: "Smoked streaky bacon" },
           kitchenName: "BCN",
           price: "1.50",
+          portion: "1.000",
+          unit: EACH_UNIT,
           vatClass: "reduced",
           maxQuantity: 2,
           preselected: true,
@@ -263,6 +292,8 @@ describe("what a product offers", () => {
           customerName: { en: "Aged manchego" },
           kitchenName: "CHS",
           price: "2.00",
+          portion: "1.000",
+          unit: EACH_UNIT,
           vatClass: "general",
           maxQuantity: 1,
           preselected: false,
@@ -277,6 +308,8 @@ describe("what a product offers", () => {
           customerName: { en: "Gordal olives" },
           kitchenName: "OLV",
           price: "0.75",
+          portion: "1.000",
+          unit: EACH_UNIT,
           vatClass: "reduced",
           maxQuantity: 1,
           preselected: false,

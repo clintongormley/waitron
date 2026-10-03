@@ -79,6 +79,25 @@ const sauces: ExtraList = {
 };
 
 describe("extra list authoring contract", () => {
+  it("keeps a positive three-place portion for a weighed extra", () => {
+    const parsed = parseExtraListInput({
+      ...breadsBody,
+      items: [{ ...sourdough, portion: "0.050" }],
+    });
+    expect(parsed.items[0]).toMatchObject({ productId: sourdoughProductId, portion: "0.050" });
+  });
+
+  it.each(["0", "-0.050", "0.0001", "1000000000", null, 0])(
+    "refuses invalid portion %s at the item field",
+    (portion) => {
+      expect(() =>
+        parseExtraListInput({ ...breadsBody, items: [{ ...sourdough, portion }] }),
+      ).toThrowError(
+        expect.objectContaining({ code: "extras.invalid", params: { field: "items.0.portion" } }),
+      );
+    },
+  );
+
   it("keeps item order and every field, defaulting the optional ones", () => {
     const parsed = parseExtraListInput({
       name: "Bread",
@@ -505,6 +524,17 @@ describe("extra selections at order time", () => {
 });
 
 describe("resolveExtraPrice", () => {
+  it("rounds a borrowed unit price once per portion", () => {
+    expect(
+      resolveExtraPrice({ ...sourdough, portion: "0.050", price: null }, { unitPrice: "100.00" }),
+    ).toBe("5.00");
+    expect(
+      resolveExtraPrice({ ...sourdough, portion: "0.050", price: null }, { unitPrice: "0.27" }),
+    ).toBe("0.01");
+    expect(
+      resolveExtraPrice({ ...sourdough, portion: "0.050", price: "0.00" }, { unitPrice: "100.00" }),
+    ).toBe("0.00");
+  });
   const item: ExtraListItem = {
     id: ryeItemId,
     productId: ryeProductId,

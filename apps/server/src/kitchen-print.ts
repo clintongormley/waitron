@@ -84,8 +84,14 @@ function ticketName(text: Record<string, string>, locale: string): string {
   return Object.values(text)[0]!;
 }
 
-/** Add ` x<n>` to the supplied extra name when the dish carries more than one of it each. */
-export function extraLabel(name: string, quantity: Decimal, dishQuantity: Decimal): string {
+/** Display the physical amount for measured extras and the per-dish count for Each extras. */
+export function extraLabel(
+  name: string,
+  quantity: Decimal,
+  dishQuantity: Decimal,
+  unitName?: string,
+): string {
+  if (unitName !== undefined) return `${name} ${quantity} ${unitName}`;
   const perDish = perDishOptionQuantity(quantity, dishQuantity);
   return perDish > 1 ? `${name} x${perDish}` : name;
 }
@@ -219,7 +225,6 @@ async function buildTicketItems(
     quantity: thousandthsToDecimal(row.quantity),
   }));
   const lineById = new Map(lineRows.map((row) => [row.id, row]));
-  const eachByIdentity = await VENUE_SERVICE.readLinesSoldInEach(tx, lineIds);
 
   // Ordered by `line_no` so the picks print in the order they were offered.
   const childRecord = alias(ticketItems, "ticket_child_record");
@@ -230,6 +235,7 @@ async function buildTicketItems(
       parentLineId: workingOrderLines.parentLineId,
       lineNo: workingOrderLines.lineNo,
       quantity: workingOrderLines.quantity,
+      unitName: workingOrderLines.unitName,
       name: workingOrderLines.name,
       kitchenName: workingOrderLines.kitchenName,
       variantName: workingOrderLines.variantName,
@@ -246,19 +252,32 @@ async function buildTicketItems(
     ...row,
     quantity: thousandthsToDecimal(row.quantity),
   }));
+  const eachByIdentity = await VENUE_SERVICE.readLinesSoldInEach(tx, [
+    ...lineIds,
+    ...childRows.map((row) => row.id),
+  ]);
   // The per-dish pick count is recovered from the stored combined child quantity. Every child's
   // parent is in `lineById` because children are read by parent id.
   const modifiersByParent = new Map<string, string[]>();
   const crossRefsByParent = new Map<string, string[]>();
   for (const child of childRows) {
     const parent = lineById.get(child.parentLineId!)!;
+    const extraUnit =
+      child.unitName == null || eachByIdentity.has(child.id)
+        ? undefined
+        : ticketName(child.unitName, cfg.locale);
     if (child.recordId !== null) {
       const refs = crossRefsByParent.get(child.parentLineId!) ?? [];
       refs.push(
         crossRefText(
           {
             kind: "with",
-            name: extraLabel(kitchenPresentationName(child), child.quantity, parent.quantity),
+            name: extraLabel(
+              kitchenPresentationName(child),
+              child.quantity,
+              parent.quantity,
+              extraUnit,
+            ),
             stationName: child.stationName!,
           },
           cfg.locale,
@@ -268,7 +287,7 @@ async function buildTicketItems(
       continue;
     }
     const names = modifiersByParent.get(child.parentLineId!) ?? [];
-    names.push(extraLabel(child.name, child.quantity, parent.quantity));
+    names.push(extraLabel(child.name, child.quantity, parent.quantity, extraUnit));
     modifiersByParent.set(child.parentLineId!, names);
   }
 
@@ -926,12 +945,14 @@ export interface CancelledExtra {
 export async function readCancelledExtra(
   tx: Transaction,
   extraLineId: string,
+  locale: string,
 ): Promise<CancelledExtra> {
   const extra = alias(workingOrderLines, "extra");
   const [row] = await tx
     .select({
       name: extra.name,
       quantity: extra.quantity,
+      unitName: extra.unitName,
       dishLineId: workingOrderLines.id,
       dishQuantity: workingOrderLines.quantity,
       dishGroupId: workingOrderLines.groupId,
@@ -946,11 +967,13 @@ export async function readCancelledExtra(
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(extra.id, extraLineId));
   const found = row!;
+  const soldInEach = (await VENUE_SERVICE.readLinesSoldInEach(tx, [extraLineId])).has(extraLineId);
   return {
     label: extraLabel(
       found.name,
       thousandthsToDecimal(found.quantity),
       thousandthsToDecimal(found.dishQuantity),
+      found.unitName === null || soldInEach ? undefined : ticketName(found.unitName, locale),
     ),
     dishLineId: found.dishLineId,
     dishGroupId: found.dishGroupId,

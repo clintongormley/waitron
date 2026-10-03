@@ -29,6 +29,14 @@ function offeredItem(
   preselected = false,
 ) {
   return {
+    portion: "1",
+    unit: {
+      name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
+      hardwareUnit: null,
+      id: "00000000-0000-0000-0000-000000000001",
+      abbreviation: { en: "ea", es: "ud", ca: "u", eu: "u", gl: "u" },
+      precision: 0,
+    },
     productId,
     name: staff,
     customerName: { es: `${staff} carta`, en: `${staff} menu` },
@@ -241,6 +249,38 @@ async function openPicker(product: TillProduct, tile: string, store: WorkingOrde
 }
 
 describe("till-modifier-picker", () => {
+  it("shows the exact amount and unit supplied by a priced extra pick", async () => {
+    const portioned = {
+      ...extrasList,
+      maxPicks: null,
+      items: [
+        {
+          ...offeredItem("p-ham", "Jamón", "5.00", 3),
+          portion: "0.050",
+          unit: {
+            id: "unit-kg",
+            name: { en: "Kilogram" },
+            abbreviation: { en: "kg", es: "kg" },
+            precision: 3,
+            hardwareUnit: "kg",
+          },
+        },
+      ],
+    } satisfies OfferedModifier;
+    const { picker } = await openPicker(
+      { ...burger, offeredModifiers: [portioned] },
+      "Burger",
+      new WorkingOrderStore(),
+    );
+
+    expect(picker.shadowRoot!.querySelector(".option-name")!.textContent!.trim()).toBe(
+      "Jamón · 0.050 kg",
+    );
+    expect(picker.shadowRoot!.querySelector(".option-delta")!.textContent!.trim()).toBe(
+      formatMoney("5.00", currentLocale()),
+    );
+  });
+
   it("registers as a custom element", () => {
     expect(customElements.get("till-modifier-picker")).toBe(TillModifierPicker);
   });

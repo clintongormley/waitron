@@ -271,6 +271,33 @@ it("names a deleted extra-only product on its own line in English and Spanish", 
   ]);
 });
 
+it("names an extra's list and old and new units in both languages", async () => {
+  const el = await mount({
+    preview: preview([
+      {
+        kind: "extra_unit_changed",
+        productId: "p-ham",
+        name: "Jamón",
+        listId: "l-extras",
+        listName: "Extras",
+        from: { abbreviation: { en: "g", es: "g" }, precision: 0 },
+        to: { abbreviation: { en: "kg", es: "kg" }, precision: 3 },
+        source: "shared_product",
+      },
+    ]),
+  });
+  expect(items(el, "changes")).toEqual([
+    "Extras: Jamón unit changed from g (0 decimal places) to kg (3 decimal places) — shared product",
+  ]);
+
+  setLocale("es-ES");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(items(el, "changes")).toEqual([
+    "Extras: la unidad de Jamón ha cambiado de g (0 decimales) a kg (3 decimales) — producto compartido",
+  ]);
+});
+
 /** A dish's VAT change, a variant's own (named in the variants too), and an extra's. */
 const VAT_CHANGES: MenuChange[] = [
   {
@@ -508,6 +535,31 @@ it.each(["en-GB", "es-ES"])(
     el.result = { kind: "published", number: 3 };
     await el.updateComplete;
     expect(text(q(el, '[data-test="result"]'))).toContain(expected);
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "shows an exact over-precision extra portion without disabling Publish (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const warning = {
+      kind: "extra_portion_precision" as const,
+      listName: "Extras",
+      name: "Extra lemon",
+      portion: "0.055",
+      abbreviation: { en: "kg", es: "kg" },
+      precision: 2,
+    };
+    const el = await mount({ preview: preview([], [warning]) });
+    const words = items(el, "warnings").join(" ");
+    expect(words).toContain("Extras");
+    expect(words).toContain("Extra lemon");
+    expect(words).toContain("0.055 kg");
+    expect(words).toContain(locale === "en-GB" ? "2 decimal places" : "2 decimales");
+    expect(q(el, '[data-test="publish"]')).not.toBeNull();
+    q(el, '[data-test="publish"]')!.click();
+    await el.updateComplete;
+    expect(text(q(el, '[data-test="publish-confirmation"]'))).toContain("0.055 kg");
   },
 );
 

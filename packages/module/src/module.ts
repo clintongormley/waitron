@@ -155,6 +155,14 @@ export type ZoneOfferedModifier =
         readonly kitchenName: string | null;
         /** GROSS, as published. */
         readonly price: string;
+        readonly portion: string;
+        readonly unit: {
+          readonly id: string;
+          readonly name: Readonly<Record<string, string>>;
+          readonly abbreviation: Readonly<Record<string, string>>;
+          readonly precision: number;
+          readonly hardwareUnit: "kg" | "g" | "mg" | null;
+        };
         readonly vatClass: string;
         readonly maxQuantity: number;
         readonly preselected: boolean;
@@ -461,7 +469,16 @@ export interface VenueServiceContribution {
     tx: Transaction,
     cfg: { locationId: LocationId },
     workingOrderId: string,
-    lines: readonly { workingOrderLineId: string; menuItemId: string }[],
+    lines: readonly {
+      workingOrderLineId: string;
+      menuItemId: string;
+      unit?: {
+        id: string;
+        name: Record<string, string>;
+        precision: number;
+        hardwareUnit: "kg" | "g" | "mg" | null;
+      };
+    }[],
     offers: ZoneOffers,
   ): Promise<void>;
   copyOrderContext(

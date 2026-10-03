@@ -3569,6 +3569,14 @@ describe("till-app", () => {
     maxPicks: null,
     items: [
       {
+        portion: "1",
+        unit: {
+          name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
+          hardwareUnit: null,
+          id: "00000000-0000-0000-0000-000000000001",
+          abbreviation: { en: "ea", es: "ud", ca: "u", eu: "u", gl: "u" },
+          precision: 0,
+        },
         productId: "p-milk",
         name: "Leche extra",
         customerName: { es: "Leche extra carta" },

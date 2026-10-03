@@ -586,6 +586,40 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     expect(text).toMatch(/0\.375 kg\s+Jamón[^\n]*4,50/u);
   });
 
+  it("prints a weighted extra's filed physical amount and frozen unit beneath its dish", () => {
+    const result: TillSaleResult = {
+      ...FILED_SALE,
+      lines: [
+        {
+          descriptions: { "es-ES": "Tostada" },
+          quantity: "1",
+          gross: "2.00",
+          parentLineNo: null,
+        },
+        {
+          descriptions: { "es-ES": "Jamón" },
+          quantity: "0.150",
+          gross: "0.03",
+          unitName: { es: "kg" },
+          unitPrecision: 3,
+          parentLineNo: 1,
+        },
+      ],
+      total: "2.03",
+    };
+
+    const text = decodeTicket(
+      formatReceipt({
+        result,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    );
+    expect(text).toMatch(/Tostada[\s\S]*Jamón 0\.150 kg[^\n]*0,03/u);
+  });
+
   it("prints the unit abbreviation of the invoice language, not whichever one is stored first", () => {
     // Nothing re-keys a unit's abbreviation map onto the invoice locales (as
     // `toInvoiceLineDescriptions` does a line's `descriptions`), so the receipt must match the tag

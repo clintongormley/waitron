@@ -20,6 +20,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   EACH_UNIT,
+  assignProductUnit,
   createProduct,
   readContentLanguages,
   units,
@@ -47,6 +48,7 @@ import {
   enqueueKitchenTickets,
   enqueueStationMoved,
   orderTableLabel,
+  readCancelledExtra,
   reprintOrderTickets,
 } from "./kitchen-print.js";
 import { decodeTicket, printedCommands, printedLines } from "./testing/decode-ticket.js";
@@ -72,6 +74,7 @@ import {
   setupSplitExtrasVenue,
 } from "./testing/split-extras-venue.js";
 import { openPartyTab } from "./testing/serve-line.js";
+import { readLinesSoldInEach } from "@waitron/venue-service";
 import { cancelLine } from "./testing/cancel-line.js";
 
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
@@ -1176,6 +1179,75 @@ describe("a dish sold by the piece prints no unit", () => {
 });
 
 describe("dish extras on kitchen tickets", () => {
+  it("names a cancelled weighted extra by its saved physical amount", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const label = await asApp(cfg, async (tx) => {
+      const station = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const dish = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: station.id });
+      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, dish, [
+        { name: "Jamón", customerName: "Jamón cliente", kitchenName: "JAMÓN" },
+      ]);
+      const [kg] = await tx.select({ id: units.id }).from(units).where(eq(units.seedKey, "kg"));
+      await assignProductUnit(tx, productIds[0]!, kg!.id);
+      await tx.execute(sql`update extra_list_items set portion = 50, max_quantity = 3
+        where list_id = ${listId} and product_id = ${productIds[0]}`);
+      await fireNewOrder(tx, cfg, [
+        {
+          productId: dish,
+          quantity: "1",
+          extras: [{ listId, picks: [{ productId: productIds[0]!, quantity: 3 }] }],
+        },
+      ]);
+      const child = await tx.execute<{ id: string }>(sql`
+        select id from working_order_lines where parent_line_id is not null`);
+      return (await readCancelledExtra(tx, child.rows[0]!.id, cfg.locale)).label;
+    });
+
+    expect(label).toBe("Jamón 0.150 kg");
+  });
+
+  it("prints the physical amount of a weighted extra from its saved unit", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { printerId, jobs } = await asApp(cfg, async (tx) => {
+      const station = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      await attachPrinterToStation(tx, { stationId: station.id, printerId });
+      const dish = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: station.id });
+      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, dish, [
+        { name: "Jamón", customerName: "Jamón cliente", kitchenName: "JAMÓN" },
+      ]);
+      const [kg] = await tx.select({ id: units.id }).from(units).where(eq(units.seedKey, "kg"));
+      await assignProductUnit(tx, productIds[0]!, kg!.id);
+      await tx.execute(sql`update extra_list_items set portion = 50, max_quantity = 3
+        where list_id = ${listId} and product_id = ${productIds[0]}`);
+      await fireNewOrder(tx, cfg, [
+        {
+          productId: dish,
+          quantity: "1",
+          extras: [{ listId, picks: [{ productId: productIds[0]!, quantity: 3 }] }],
+        },
+      ]);
+      const saved = await tx.execute<{
+        id: string;
+        quantity: number;
+        unit_name: string | null;
+      }>(sql`
+        select id, quantity, unit_name from working_order_lines where parent_line_id is not null`);
+      expect(saved.rows).toHaveLength(1);
+      expect(saved.rows[0]!.quantity).toBe(150);
+      expect(JSON.parse(saved.rows[0]!.unit_name!)).toMatchObject({ es: "kg" });
+      expect(await readLinesSoldInEach(tx, [saved.rows[0]!.id])).toEqual(new Set());
+      const context = await tx.execute<{ unit_precision: number; hardware_unit: string }>(sql`
+        select unit_precision, hardware_unit from working_line_contexts
+        where working_order_line_id = ${saved.rows[0]!.id}`);
+      expect(context.rows).toEqual([{ unit_precision: 3, hardware_unit: "kg" }]);
+      return { printerId, jobs: await printJobsFor(tx) };
+    });
+
+    const ticket = decodeTicket(jobs.find((job) => job.printerId === printerId)!.payload);
+    expect(ticket).toContain("+ Jamón 0.150 kg");
+  });
+
   it("prints split chips once on Fryer paper and cross-references both station and watcher paper", async () => {
     const venue = await setupSplitExtrasVenue();
     const { cfg, products, lists, printers } = venue;
@@ -1224,6 +1296,31 @@ describe("dish extras on kitchen tickets", () => {
       expect(decodeTicket(job.payload)).not.toContain("Patatas fritas");
       expect(decodeTicket(job.payload)).not.toContain("Hamburguesa clásica");
     }
+  });
+
+  it("prints a split-off measured extra's saved amount on both station tickets", async () => {
+    const venue = await setupSplitExtrasVenue();
+    const { cfg, products, lists, printers } = venue;
+    const jobs = await asApp(cfg, async (tx) => {
+      const [kg] = await tx.select({ id: units.id }).from(units).where(eq(units.seedKey, "kg"));
+      await assignProductUnit(tx, products.chips, kg!.id);
+      await tx.execute(sql`update extra_list_items set portion = 50, max_quantity = 3
+        where list_id = ${lists.burger} and product_id = ${products.chips}`);
+      await fireNewOrder(tx, cfg, [
+        {
+          productId: products.burger,
+          quantity: "1",
+          extras: [{ listId: lists.burger, picks: [{ productId: products.chips, quantity: 3 }] }],
+        },
+      ]);
+      return printJobsFor(tx);
+    });
+
+    const paper = (printerId: string) =>
+      decodeTicket(jobs.find((job) => job.printerId === printerId)!.payload);
+    expect(paper(printers.grill)).toContain("CHIPS 0.150 kg de Fryer");
+    expect(paper(printers.fryer)).toContain("0.150 kg x CHIPS");
+    expect(paper(printers.fryer)).toContain("para BURG en Grill");
   });
 
   it("keeps an unclaimed cheese as a modifier without a Fryer job", async () => {

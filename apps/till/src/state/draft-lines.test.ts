@@ -90,6 +90,14 @@ function variant(id: string, unitPrice: string): LiveVariant {
 
 function extraItem(productId: string, price: string, available = true) {
   return {
+    portion: "1",
+    unit: {
+      name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
+      hardwareUnit: null,
+      id: "00000000-0000-0000-0000-000000000001",
+      abbreviation: { en: "ea", es: "ud", ca: "u", eu: "u", gl: "u" },
+      precision: 0,
+    },
     productId,
     name: `${productId} staff`,
     customerName: null,

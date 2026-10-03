@@ -5,6 +5,7 @@ import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   createUnit,
   deleteUnit,
+  extraOfferUsageForUnitPrecisionChange,
   getUnit,
   listUnits,
   productsUsingUnit,
@@ -89,6 +90,19 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
         await gated(sessionId, async (tx) => {
           await getUnit(tx, id); // 404 for an unknown unit
           return productsUsingUnit(tx, id);
+        }),
+      );
+    }),
+  );
+
+  app.get("/management-api/units/:id/extra-usage", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = unitId(c);
+      return c.json(
+        await gated(sessionId, async (tx) => {
+          await getUnit(tx, id);
+          return extraOfferUsageForUnitPrecisionChange(tx, id);
         }),
       );
     }),

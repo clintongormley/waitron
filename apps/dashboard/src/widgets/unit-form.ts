@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -7,7 +7,8 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
-import type { Unit, UnitInput } from "../api/client.js";
+import type { DashboardApi, Unit, UnitInput } from "../api/client.js";
+import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
@@ -55,6 +56,7 @@ export class UnitForm extends LitElement {
   @property({ attribute: false }) locales: string[] = [];
   @property({ attribute: false }) value: Unit | null = null;
   @property({ attribute: false }) fieldErrors: UnitFormErrors = {};
+  @property({ attribute: false }) api?: Pick<DashboardApi, "getUnitExtraUsage">;
 
   @state() private names: Record<string, string> = {};
   @state() private abbreviations: Record<string, string> = {};
@@ -62,6 +64,9 @@ export class UnitForm extends LitElement {
   @state() private attempted = false;
   /** Refusal keys the operator has since changed the field of, or submitted past. */
   @state() private dismissed = new Set<string>();
+  @state() private precisionUsage: ExtraOfferUsage[] = [];
+  @state() private precisionUsageUnavailable = false;
+  #usageGeneration = 0;
 
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
     const needsDraft =
@@ -69,6 +74,9 @@ export class UnitForm extends LitElement {
       changed.has("value") ||
       (changed.has("locales") && Object.keys(this.names).length === 0);
     if (this.open && needsDraft) {
+      this.#usageGeneration++;
+      this.precisionUsage = [];
+      this.precisionUsageUnavailable = false;
       this.names = {
         ...(this.value?.name ?? {}),
         ...Object.fromEntries(
@@ -153,6 +161,23 @@ export class UnitForm extends LitElement {
     event.stopPropagation();
     this.precision = event.detail.value;
     this.#dismiss("precision");
+    void this.#readPrecisionUsage();
+  }
+
+  async #readPrecisionUsage(): Promise<void> {
+    const generation = ++this.#usageGeneration;
+    this.precisionUsage = [];
+    this.precisionUsageUnavailable = false;
+    const id = this.value?.id;
+    if (!this.open || !id || !this.api || this.precision === String(this.value?.precision)) return;
+    try {
+      const usage = await this.api.getUnitExtraUsage(id);
+      if (generation === this.#usageGeneration && this.open && this.value?.id === id)
+        this.precisionUsage = usage;
+    } catch {
+      if (generation === this.#usageGeneration && this.open && this.value?.id === id)
+        this.precisionUsageUnavailable = true;
+    }
   }
 
   #submit(event: Event): void {
@@ -260,6 +285,30 @@ export class UnitForm extends LitElement {
             >${t("units.precision_help")}</wt-help-tooltip
           >
         </wt-combobox>
+        ${
+          this.precisionUsage.length
+            ? html`<p data-test="precision-usage-warning">
+                ${t("units.precision_usage_warning")}
+                ${this.precisionUsage.map((product) =>
+                  product.lists.map(
+                    (list) =>
+                      html`<span>${product.productName}: ${list.name}</span>${
+                          list.menus.length
+                            ? html` (${list.menus.map((menu) => menu.name).join(", ")})`
+                            : nothing
+                        } `,
+                  ),
+                )}
+              </p>`
+            : nothing
+        }
+        ${
+          this.precisionUsageUnavailable
+            ? html`<p data-test="precision-usage-unavailable">
+                ${t("units.precision_usage_unavailable")}
+              </p>`
+            : nothing
+        }
         <wt-form-actions slot="footer" .error=${bottom}>
           <wt-button
             slot="cancel"

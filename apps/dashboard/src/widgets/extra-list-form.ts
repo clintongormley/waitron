@@ -4,6 +4,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
+import { priceForExtraPortion } from "@waitron/catalogue/src/extra-contract.js";
+import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
 import { resolveContentText, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -35,6 +37,7 @@ interface DraftItem {
   maxQuantity: string;
   preselected: boolean;
   price: string;
+  portion?: string;
 }
 
 /**
@@ -99,6 +102,11 @@ export class ExtraListForm extends LitElement {
         margin: var(--wt-space-1) 0 0;
         font-size: var(--wt-font-size-sm);
       }
+      .portion-warning {
+        color: var(--wt-color-warning);
+        font-size: var(--wt-font-size-sm);
+        margin: var(--wt-space-1) 0;
+      }
       .item-actions {
         display: flex;
         flex-wrap: wrap;
@@ -124,6 +132,10 @@ export class ExtraListForm extends LitElement {
       }
       td:nth-child(4) {
         width: 1%;
+      }
+      td wt-input[name$="-portion"] {
+        display: block;
+        margin-bottom: var(--wt-space-2);
       }
       th:nth-child(4) {
         white-space: normal;
@@ -223,6 +235,7 @@ export class ExtraListForm extends LitElement {
       maxQuantity: String(item.maxQuantity),
       preselected: item.preselected,
       price: item.price ?? "",
+      ...(item.portion === undefined ? {} : { portion: item.portion }),
     }));
     this.addedMessage = "";
     this.attempted = false;
@@ -241,8 +254,47 @@ export class ExtraListForm extends LitElement {
     return this.#productById.get(productId)?.variants.some((variant) => variant.active) ?? false;
   }
 
-  #inheritedPrice(productId: string): string {
-    return this.#productById.get(productId)?.unitPrice ?? "";
+  #inheritedPrice(item: DraftItem): string {
+    if (item.portion === "") return "";
+    if (item.portion) {
+      try {
+        assertQuantityPrecision(item.portion, 3, { positive: true });
+      } catch {
+        return "";
+      }
+    }
+    return (
+      priceForExtraPortion(
+        { price: null, ...(item.portion ? { portion: item.portion } : {}) },
+        this.#productById.get(item.productId)?.unitPrice,
+      ) ?? ""
+    );
+  }
+
+  #requiresPortion(productId: string): boolean {
+    const product = this.#productById.get(productId);
+    return (
+      product !== undefined &&
+      (product.pricingUnit === "weight" || (product.unit?.precision ?? 0) > 0)
+    );
+  }
+
+  #savedPortionOverPrecision(item: DraftItem): boolean {
+    if (
+      item.portion === undefined ||
+      item.portion !== this.value?.items.find((saved) => saved.id === item.id)?.portion
+    )
+      return false;
+    try {
+      assertQuantityPrecision(
+        item.portion,
+        this.#productById.get(item.productId)?.unit?.precision ?? 0,
+        { positive: true },
+      );
+      return false;
+    } catch {
+      return true;
+    }
   }
 
   /** The abbreviation, else the name, and Each for a product with no unit — the word the product
@@ -292,6 +344,7 @@ export class ExtraListForm extends LitElement {
     if (field === "maxQuantity") return "max-quantity";
     if (field === "preselected") return "preselected";
     if (field === "price") return "price";
+    if (field === "portion") return "portion";
     return null;
   }
 
@@ -323,7 +376,7 @@ export class ExtraListForm extends LitElement {
       "items",
       ...this.languages.languages.map((locale) => `customer-name-${locale}`),
     ]);
-    const rowShown = new Set(["product", "max-quantity", "price"]);
+    const rowShown = new Set(["product", "max-quantity", "price", "portion"]);
     const removed: string[] = [];
     for (const [key, message] of Object.entries(this.serverErrors)) {
       if (this.dismissed.has(key)) continue;
@@ -384,6 +437,7 @@ export class ExtraListForm extends LitElement {
         maxQuantity: "1",
         preselected: false,
         price: "",
+        ...(this.#requiresPortion(productId) ? { portion: "" } : {}),
       };
       this.items = [...this.items, item];
       this.addedMessage = t("extras.product_added").replace("{name}", this.#productName(productId));
@@ -437,6 +491,23 @@ export class ExtraListForm extends LitElement {
       const price = item.price.trim();
       if (price !== "" && !isProductPrice(price))
         validation[`item-${index}-price`] = t("extras.price_invalid");
+      if (item.portion !== undefined) {
+        if (!item.portion.trim())
+          validation[`item-${index}-portion`] = t("extras.portion_required");
+        else if (
+          item.portion !== this.value?.items.find((saved) => saved.id === item.id)?.portion
+        ) {
+          try {
+            assertQuantityPrecision(
+              item.portion,
+              this.#productById.get(item.productId)?.unit?.precision ?? 0,
+              { positive: true },
+            );
+          } catch {
+            validation[`item-${index}-portion`] = t("extras.portion_invalid");
+          }
+        }
+      }
       // One offer per product per list: two rows for the same product would give the diner two ways
       // to pick the same thing on different terms, which is why `parseExtraListInput` refuses the
       // second one naming `items.N.productId`.
@@ -476,6 +547,7 @@ export class ExtraListForm extends LitElement {
         maxQuantity: wholeWithin(item.maxQuantity.trim(), 1)!,
         preselected: item.preselected,
         price: item.price.trim() || null,
+        ...(item.portion === undefined ? {} : { portion: item.portion.trim() }),
       })),
     };
   }
@@ -588,6 +660,30 @@ export class ExtraListForm extends LitElement {
         ></wt-switch>
       </td>
       <td>
+        ${
+          this.#requiresPortion(item.productId) || item.portion !== undefined
+            ? html`<wt-input
+                name=${`item-${index}-portion`}
+                label=${t("extras.portion")}
+                required
+                hint=${this.#unitLabel(item.productId)}
+                .disabled=${this.busy}
+                .value=${item.portion ?? ""}
+                .error=${errors[`item-${index}-portion`] ?? ""}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  this.#editItem(item.id, { portion: event.detail.value }, "portion");
+                }}
+              ></wt-input>`
+            : nothing
+        }
+        ${
+          this.#savedPortionOverPrecision(item)
+            ? html`<p class="portion-warning" data-test=${`item-${index}-portion-warning`}>
+                ${t("extras.portion_saved_warning").replace("{amount}", item.portion ?? "")}
+              </p>`
+            : nothing
+        }
         <wt-price-input
           name=${`item-${index}-price`}
           label=${t("extras.price")}
@@ -595,7 +691,7 @@ export class ExtraListForm extends LitElement {
           fixed-unit
           unit=${this.#unitLabel(item.productId)}
           locale=${currentLocale()}
-          placeholder=${this.#inheritedPrice(item.productId)}
+          placeholder=${this.#inheritedPrice(item)}
           .disabled=${this.busy}
           .value=${item.price}
           .error=${errors[`item-${index}-price`] ?? ""}

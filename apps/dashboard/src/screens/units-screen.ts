@@ -482,6 +482,7 @@ export class UnitsScreen extends LitElement {
       >
       <dashboard-unit-form
         .open=${this.editorOpen}
+        .api=${this.api}
         .busy=${this.busy}
         .locales=${this.languages?.languages ?? []}
         .value=${this.editing}

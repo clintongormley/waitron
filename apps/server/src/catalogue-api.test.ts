@@ -3263,6 +3263,24 @@ describe("mountCatalogueApi — extras lists", () => {
     return ((await res.json()) as { extraList: ExtraList }).extraList;
   }
 
+  it("shows a manager the extras lists using a product and refuses staff", async () => {
+    const app = mountApp();
+    const [alioli] = await twoProducts(app);
+    const list = await createListVia(app, sauces([alioli]));
+    const path = `/management-api/products/${alioli}/extra-usage`;
+
+    const response = await send(app, "GET", path);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([
+      {
+        productId: alioli,
+        productName: expect.stringContaining("Alioli"),
+        lists: [{ id: list.id, name: "Salsas", menus: [] }],
+      },
+    ]);
+    expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);
+  });
+
   it("POST creates a list (201) with all three names, its bounds and its items in body order", async () => {
     const app = mountApp();
     const [alioli, brava] = await twoProducts(app);
@@ -3517,6 +3535,47 @@ describe("mountCatalogueApi — extras lists and products with variants", () => 
     unitPrice: null,
     available: true,
     active,
+  });
+
+  it("includes an inherited variant's extras list in its parent's unit-change usage", async () => {
+    const app = mountApp();
+    const parentId = await createNamedProductVia(app, `Wine ${crypto.randomUUID()}`);
+    const created = await send(app, "PUT", `/management-api/products/${parentId}/editor`, {
+      body: { ...(await editor(app, parentId)), variants: [copa(true)] },
+    });
+    expect(created.status).toBe(200);
+    const variantId = ((await created.json()) as Editor).variants[0]!.id;
+    const list = await send(app, "POST", "/management-api/modifiers/extras", {
+      body: { name: "Wine extras", items: [{ productId: variantId }] },
+    });
+    expect(list.status).toBe(201);
+    const { extraList } = (await list.json()) as { extraList: ExtraList };
+
+    const response = await send(app, "GET", `/management-api/products/${parentId}/extra-usage`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([
+      {
+        productId: variantId,
+        productName: "Copa",
+        lists: [{ id: extraList.id, name: "Wine extras", menus: [] }],
+      },
+    ]);
+
+    const [each] = (
+      await suite.db.execute<{ id: string }>(sql`select id from units where seed_key = 'each'`)
+    ).rows;
+    await suite.db.execute(
+      sql`insert into product_units (product_id, unit_id) values (${variantId}, ${each!.id})`,
+    );
+    const after = await send(app, "GET", `/management-api/products/${parentId}/extra-usage`);
+    expect(after.status).toBe(200);
+    expect(await after.json()).toEqual([
+      {
+        productId: variantId,
+        productName: "Copa",
+        lists: [{ id: extraList.id, name: "Wine extras", menus: [] }],
+      },
+    ]);
   });
 
   it("answers 409 extras.product_has_variants to a list naming a product with an Active variant, on create and on update", async () => {

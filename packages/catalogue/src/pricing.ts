@@ -57,6 +57,8 @@ export interface LockedLine {
   grossUnitPrice: string;
   /** The stored quantity, validated against the snapshotted unit precision. */
   quantity: string;
+  /** Physical amount bought by one stored gross price; ordinary lines use one. */
+  priceQuantity?: string;
   vatClass: VatClass;
   name: string;
   /** locale -> customer-facing text. */
@@ -121,6 +123,7 @@ interface PricingRow {
   /** GROSS (VAT-inclusive) price per selected unit. */
   grossUnit: Decimal;
   quantity: string;
+  priceQuantity?: string;
   vatClass: VatClass;
   name: string;
   descriptions: Record<string, string>;
@@ -144,6 +147,7 @@ function grossRows(rows: readonly PricingRow[]): GrossLines {
     descriptions: row.descriptions,
     optionSnapshots: row.optionSnapshots ?? [],
     quantity: row.quantity,
+    ...(row.priceQuantity === undefined ? {} : { priceQuantity: row.priceQuantity }),
     category: row.category,
     unitName: row.unitName,
     unitPrecision: row.unitPrecision,
@@ -154,7 +158,14 @@ function grossRows(rows: readonly PricingRow[]): GrossLines {
     kitchenName: row.kitchenName ?? null,
     vatClass: row.vatClass,
     grossUnitPrice: toScale(row.grossUnit, MONEY_SCALE),
-    lineGross: toScale(multiplyDecimal(row.grossUnit, decimal(row.quantity)), MONEY_SCALE),
+    lineGross:
+      row.priceQuantity === undefined
+        ? toScale(multiplyDecimal(row.grossUnit, decimal(row.quantity)), MONEY_SCALE)
+        : divideDecimal(
+            multiplyDecimal(row.grossUnit, decimal(row.quantity)),
+            decimal(assertQuantityPrecision(row.priceQuantity, 3, { positive: true })),
+            MONEY_SCALE,
+          ),
   }));
   return { lines, total: sumDecimals(lines.map((line) => line.lineGross)) };
 }
@@ -226,6 +237,7 @@ export function grossLockedLines(lines: readonly LockedLine[]): GrossLines {
     lines.map((line) => ({
       grossUnit: decimal(line.grossUnitPrice),
       quantity: line.quantity,
+      priceQuantity: line.priceQuantity,
       vatClass: line.vatClass,
       name: line.name,
       descriptions: line.descriptions,
@@ -256,9 +268,12 @@ export interface SelectedOption {
   /** Absent or null leaves the child without a kitchen name — a child never borrows the dish's,
    * which names a different thing. */
   kitchenName?: string | null;
-  /** How many of THIS option, per dish; ABSENT means 1. The child is priced at
-   * `dishQuantity × quantity`, so a dish ×3 carrying an option ×2 prices the option 6 times. */
+  /** How many picks of THIS option per dish; ABSENT means 1. */
   quantity?: number;
+  physicalQuantity?: string;
+  priceQuantity?: string;
+  unitName?: Record<string, string>;
+  unitPrecision?: number;
 }
 
 /** A basket line that carries the dish plus the modifiers selected on it. */
@@ -302,13 +317,17 @@ export function grossBasketWithOptions(items: readonly BasketItemWithOptions[]):
     for (const opt of item.options) {
       rows.push({
         grossUnit: decimal(opt.priceDelta),
-        quantity: multiplyDecimal(decimal(item.quantity), decimal(String(opt.quantity ?? 1))),
+        quantity: multiplyDecimal(
+          decimal(item.quantity),
+          decimal(opt.physicalQuantity ?? String(opt.quantity ?? 1)),
+        ),
+        ...(opt.priceQuantity === undefined ? {} : { priceQuantity: opt.priceQuantity }),
         vatClass: opt.vatClass ?? item.product.vatClass,
         name: opt.name,
         descriptions: opt.descriptions,
         category: item.product.category,
-        unitName: null,
-        unitPrecision: null,
+        unitName: opt.unitName ?? null,
+        unitPrecision: opt.unitPrecision ?? null,
         parentLineNo,
         kitchenName: opt.kitchenName ?? null,
       });

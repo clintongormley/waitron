@@ -32,7 +32,7 @@ export interface PricedRow {
  * A line a bill discount is spread over.
  *
  * - `addedOrder` decides a tie between equal remainders, lower first: the line's `line_no`.
- * - `gross` must be `grossUnit × quantity` rounded to the cent, as the pricing code rounds it.
+ * - `gross` must be `grossUnit × quantity ÷ priceQuantity` rounded to the cent.
  * - `exact` is true for a row the caller may split into at most two rows at whole-cent prices: a
  *   whole-number quantity on a dish with no extras. It is false for a weighed row, and for every row
  *   of a dish that has extras; such a row keeps one row and takes the nearest whole-cent unit price
@@ -43,6 +43,8 @@ export interface SpreadLine {
   addedOrder: number;
   gross: Decimal;
   quantity: string;
+  /** Physical amount bought by one grossUnit; absent for ordinary per-unit lines. */
+  priceQuantity?: string;
   grossUnit: Decimal;
   exact: boolean;
 }
@@ -90,41 +92,52 @@ function amount(count: bigint): Decimal {
   return thousandthsToDecimal(Number(count));
 }
 
-/** The line total in cents for `price` cents a unit over `quantity` thousandths, half up. */
-function totalAt(price: bigint, quantity: bigint): bigint {
+/** The line total in cents for `price` cents per `priceQuantity` thousandths, half up. */
+function totalAt(price: bigint, quantity: bigint, priceQuantity = THOUSAND): bigint {
   const product = price * quantity;
-  const whole = product / THOUSAND;
-  return (product % THOUSAND) * 2n >= THOUSAND ? whole + 1n : whole;
+  const whole = product / priceQuantity;
+  return (product % priceQuantity) * 2n >= priceQuantity ? whole + 1n : whole;
 }
 
 /** The highest price in `[from, ceiling]` whose total is at most `total`; `from`'s must be. */
-function highestAtMost(total: bigint, from: bigint, ceiling: bigint, quantity: bigint): bigint {
+function highestAtMost(
+  total: bigint,
+  from: bigint,
+  ceiling: bigint,
+  quantity: bigint,
+  priceQuantity = THOUSAND,
+): bigint {
   let low = from;
   let high = ceiling;
   while (low < high) {
     const middle = (low + high + 1n) / 2n;
-    if (totalAt(middle, quantity) <= total) low = middle;
+    if (totalAt(middle, quantity, priceQuantity) <= total) low = middle;
     else high = middle - 1n;
   }
   return low;
 }
 
 /** `nearestWeighedUnitPrice` in counts; `target` lies within `[0, totalAt(ceiling)]`. */
-function nearestPrice(ceiling: bigint, quantity: bigint, target: bigint): bigint {
+function nearestPrice(
+  ceiling: bigint,
+  quantity: bigint,
+  target: bigint,
+  priceQuantity = THOUSAND,
+): bigint {
   // The lowest price reaching the target; the total only rises with the price.
   let low = 0n;
   let high = ceiling;
   while (low < high) {
     const middle = (low + high) / 2n;
-    if (totalAt(middle, quantity) >= target) high = middle;
+    if (totalAt(middle, quantity, priceQuantity) >= target) high = middle;
     else low = middle + 1n;
   }
-  const reached = totalAt(low, quantity);
+  const reached = totalAt(low, quantity, priceQuantity);
   if (reached > target && low > 0n) {
     const below = low - 1n;
-    if (target - totalAt(below, quantity) < reached - target) return below;
+    if (target - totalAt(below, quantity, priceQuantity) < reached - target) return below;
   }
-  return highestAtMost(reached, low, ceiling, quantity);
+  return highestAtMost(reached, low, ceiling, quantity, priceQuantity);
 }
 
 /**
@@ -197,6 +210,7 @@ interface Item {
   gross: bigint;
   price: bigint;
   quantity: bigint;
+  priceQuantity: bigint;
   share: bigint;
 }
 
@@ -214,11 +228,16 @@ function sharesOf(lines: readonly SpreadLine[], discount: Decimal): Item[] {
     orders.add(line.addedOrder);
     const price = unitCents(line.grossUnit);
     const quantity = line.exact ? wholeUnits(line.quantity) * THOUSAND : thousandths(line.quantity);
+    const priceQuantity =
+      line.priceQuantity === undefined ? THOUSAND : thousandths(line.priceQuantity);
+    if (line.exact && priceQuantity !== THOUSAND) {
+      throw new RangeError(`line ${line.lineId}'s exact quantity needs a unit price basis`);
+    }
     const gross = cents(line.gross, "gross");
-    if (gross !== totalAt(price, quantity)) {
+    if (gross !== totalAt(price, quantity, priceQuantity)) {
       throw new RangeError(`line ${line.lineId}'s gross is not its unit price times its quantity`);
     }
-    return { line, gross, price, quantity, share: 0n };
+    return { line, gross, price, quantity, priceQuantity, share: 0n };
   });
   const bill = items.reduce((sum, item) => sum + item.gross, 0n);
   if (wanted > bill) {
@@ -299,8 +318,13 @@ export function spreadBillDiscount(
       taken.set(item, item.share);
       continue;
     }
-    const price = nearestPrice(item.price, item.quantity, item.gross - item.share);
-    const took = item.gross - totalAt(price, item.quantity);
+    const price = nearestPrice(
+      item.price,
+      item.quantity,
+      item.gross - item.share,
+      item.priceQuantity,
+    );
+    const took = item.gross - totalAt(price, item.quantity, item.priceQuantity);
     nearest.set(item, price);
     taken.set(item, took);
     overshoot += took - item.share;

@@ -178,6 +178,42 @@ describe("discountShares", () => {
 });
 
 describe("spreadBillDiscount", () => {
+  it("discounts three fixed portions using their frozen price basis while retaining physical quantity", () => {
+    const extra: SpreadLine = {
+      lineId: "ham",
+      addedOrder: 1,
+      gross: d("0.03"),
+      grossUnit: d("0.01"),
+      quantity: "0.150",
+      priceQuantity: "0.050",
+      exact: false,
+    };
+
+    expect(spreadBillDiscount([extra], d("0.03")).get("ham")).toEqual({
+      reduction: "0.03",
+      newGrossUnit: "0.00",
+      rows: [{ quantity: "0.150", unitGross: "0.00" }],
+    });
+  });
+
+  it("prices a partial portion without requiring a rounded portion count", () => {
+    const partial: SpreadLine = {
+      lineId: "slice",
+      addedOrder: 1,
+      gross: d("0.01"),
+      grossUnit: d("0.03"),
+      quantity: "0.001",
+      priceQuantity: "0.003",
+      exact: false,
+    };
+
+    expect(spreadBillDiscount([partial], d("0.01")).get("slice")).toEqual({
+      reduction: "0.01",
+      newGrossUnit: "0.01",
+      rows: [{ quantity: "0.001", unitGross: "0.01" }],
+    });
+  });
+
   describe("on one line (a line discount)", () => {
     it("takes 10% off a €30.00 bottle exactly", () => {
       const result = spreadBillDiscount([line("bottle", 1, "30.00", "1", true)], d("3.00"));

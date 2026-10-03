@@ -42,7 +42,7 @@ import {
   decimal,
   decimalToCents,
   decimalToThousandths,
-  grossOf,
+  divideDecimal,
   MONEY_SCALE,
   multiplyDecimal,
   subtractDecimal,
@@ -127,6 +127,7 @@ interface Row {
   name: string;
   variantName: string | null;
   quantity: number;
+  priceQuantity: number;
   unit: number;
   list: number | null;
   unitPrecision: number | null;
@@ -182,13 +183,17 @@ interface Plan {
 
 const ZERO = decimal("0");
 
-function gross(unitCents: number, quantity: number): Decimal {
-  return grossOf(centsToDecimal(unitCents), thousandthsToDecimal(quantity));
+function gross(row: Row, quantity: number, unitCents = row.unit): Decimal {
+  return divideDecimal(
+    multiplyDecimal(centsToDecimal(unitCents), thousandthsToDecimal(quantity)),
+    thousandthsToDecimal(row.priceQuantity),
+    MONEY_SCALE,
+  );
 }
 
 /** A row's value before any adjustment (plan D21), for `quantity` of it. */
 function listValue(row: Row, quantity: number): Decimal {
-  return gross(row.list ?? row.unit, quantity);
+  return gross(row, quantity, row.list ?? row.unit);
 }
 
 async function readRows(tx: Transaction, orderId: string): Promise<Row[]> {
@@ -200,6 +205,7 @@ async function readRows(tx: Transaction, orderId: string): Promise<Row[]> {
       name: workingOrderLines.name,
       variantName: workingOrderLines.variantName,
       quantity: workingOrderLines.quantity,
+      priceQuantity: workingOrderLines.priceQuantity,
       unit: workingOrderLines.unitPriceGross,
       list: workingOrderLines.listUnitPriceGross,
       unitPrecision: workingOrderLines.unitPrecision,
@@ -231,14 +237,22 @@ function familyAt(family: readonly Row[], dishQuantity: number): Map<string, num
   const [dish, ...children] = family;
   const quantity = thousandthsToDecimal(dishQuantity);
   const kept = keptExtrasOf(
-    children.map((row) => ({ id: row.id, quantity: row.quantity, unitPriceGross: row.unit })),
+    children.map((row) => ({
+      id: row.id,
+      quantity: row.quantity,
+      priceQuantity: row.priceQuantity,
+      unitPriceGross: row.unit,
+    })),
     dish!.quantity,
   );
   return new Map([
     [dish!.id, dishQuantity],
     ...kept.map(
       ({ child, perDish }) =>
-        [child.id, decimalToThousandths(extraQuantityFor(perDish, quantity))] as const,
+        [
+          child.id,
+          decimalToThousandths(extraQuantityFor(perDish, quantity, child.priceQuantity)),
+        ] as const,
     ),
   ]);
 }
@@ -336,8 +350,9 @@ function spread(subjects: readonly Subject[], discount: Decimal): Change[] {
   const lines: SpreadLine[] = subjects.map(({ row, quantity, exact }) => ({
     lineId: row.id,
     addedOrder: row.lineNo,
-    gross: gross(row.unit, quantity),
+    gross: gross(row, quantity),
     quantity: thousandthsToDecimal(quantity),
+    priceQuantity: thousandthsToDecimal(row.priceQuantity),
     grossUnit: centsToDecimal(row.unit),
     exact,
   }));
@@ -358,7 +373,7 @@ function zeroed(subjects: readonly Subject[]): Change[] {
       row,
       carved,
       rows: [{ quantity: thousandthsToDecimal(quantity), unitGross: ZERO }],
-      reduction: gross(row.unit, quantity),
+      reduction: gross(row, quantity),
     }));
 }
 
@@ -398,7 +413,7 @@ export async function planAdjustment(
     if (ask.action === "cancel" || ask.action === "comp") throw invalid("lineId");
     if (ask.quantity !== undefined) throw invalid("quantity");
     const families = new Set(rows.flatMap((row) => row.parentLineId ?? []));
-    before = sumDecimals(rows.map((row) => gross(row.unit, row.quantity)));
+    before = sumDecimals(rows.map((row) => gross(row, row.quantity)));
     changes = spread(
       rows.map((row) => ({
         row,
@@ -433,7 +448,7 @@ export async function planAdjustment(
       cancelLeft = left;
       reduction = sumDecimals(
         family.map((row) =>
-          subtractDecimal(gross(row.unit, row.quantity), gross(row.unit, left.get(row.id)!)),
+          subtractDecimal(gross(row, row.quantity), gross(row, left.get(row.id)!)),
         ),
       );
       nominal = sumDecimals(family.map((row) => listValue(row, row.quantity - left.get(row.id)!)));
@@ -479,7 +494,7 @@ export async function planAdjustment(
           exact: family.length === 1 && target.parentLineId === null && !weighed,
         }));
       }
-      before = sumDecimals(subjects.map(({ row, quantity }) => gross(row.unit, quantity)));
+      before = sumDecimals(subjects.map(({ row, quantity }) => gross(row, quantity)));
       const discount = requestedDiscount(ask, before);
       changes = ask.action === "comp" ? zeroed(subjects) : spread(subjects, discount);
       if (ask.action === "comp" && !partial) compedExtras = family.slice(1).map((row) => row.id);
@@ -590,24 +605,28 @@ function shareOf(
   rows: readonly Row[],
   comped: CompedLines,
   quantityOf: (row: Row) => number,
-  priceOf: (unitCents: number, quantity: number) => Decimal,
+  priceOf: (row: Row, quantity: number, unitCents: number) => Decimal,
 ): BillShare {
   const rowIds = new Set(comped.rows);
   const dishIds = new Set(comped.dishes);
   const wasComped = (row: Row) => rowIds.has(row.id) || dishIds.has(row.id);
-  const listed = (row: Row) => priceOf(row.list ?? row.unit, quantityOf(row));
+  const listed = (row: Row) => priceOf(row, quantityOf(row), row.list ?? row.unit);
   const discounts = rows
     .filter((row) => !wasComped(row))
     .map((row) => {
-      const off = subtractDecimal(listed(row), priceOf(row.unit, quantityOf(row)));
+      const off = subtractDecimal(listed(row), priceOf(row, quantityOf(row), row.unit));
       return compareDecimal(off, ZERO) > 0 ? off : ZERO;
     });
   return { discount: sumDecimals(discounts), value: sumDecimals(rows.map(listed)) };
 }
 
-/** `unitCents × quantity`, not rounded to the cent. */
-function exactly(unitCents: number, quantity: number): Decimal {
-  return multiplyDecimal(centsToDecimal(unitCents), thousandthsToDecimal(quantity));
+/** The unrounded value at the row's frozen price basis. */
+function exactly(row: Row, quantity: number, unitCents: number): Decimal {
+  return divideDecimal(
+    multiplyDecimal(centsToDecimal(unitCents), thousandthsToDecimal(quantity)),
+    thousandthsToDecimal(row.priceQuantity),
+    6,
+  );
 }
 
 /**
@@ -703,12 +722,23 @@ async function approvedBy(
   return approver.personId;
 }
 
-async function setPrice(tx: Transaction, lineId: string, row: PricedRow): Promise<void> {
+async function setPrice(
+  tx: Transaction,
+  lineId: string,
+  row: PricedRow,
+  priceQuantity: number,
+): Promise<void> {
   await tx
     .update(workingOrderLines)
     .set({
       unitPriceGross: decimalToCents(row.unitGross),
-      lineTotal: decimalToCents(grossOf(row.unitGross, row.quantity)),
+      lineTotal: decimalToCents(
+        divideDecimal(
+          multiplyDecimal(row.unitGross, row.quantity),
+          thousandthsToDecimal(priceQuantity),
+          MONEY_SCALE,
+        ),
+      ),
     })
     .where(eq(workingOrderLines.id, lineId));
 }
@@ -758,11 +788,11 @@ async function reprice(
           twoRows.map(({ lineNo, change }) => ({ lineNo, quantity: change.rows[1]!.quantity })),
         );
   for (const { id, change } of subjects) {
-    await setPrice(tx, id, change.rows[0]!);
+    await setPrice(tx, id, change.rows[0]!, change.row.priceQuantity);
     const second = seconds.get(id);
     if (second !== undefined) {
       splits.push({ from: id, to: second.id });
-      await setPrice(tx, second.id, change.rows[1]!);
+      await setPrice(tx, second.id, change.rows[1]!, change.row.priceQuantity);
     }
   }
   return splits;

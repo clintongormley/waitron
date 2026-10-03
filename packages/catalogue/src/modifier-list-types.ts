@@ -47,12 +47,13 @@ export type OptionListInput = Omit<OptionList, "id" | "labels"> & { labels: Opti
 export interface ExtraListItem {
   id: string;
   productId: string;
+  /** Amount supplied by one pick, in the product's effective unit. */
+  portion?: string;
   /** Per-dish cap for this product; at least 1, where 1 means "one or none". */
   maxQuantity: number;
   preselected: boolean;
-  /** A GROSS (VAT-inclusive) two-place decimal string — the column stores the amount as a count of
-   * whole cents and the read converts it. null means "charge the product's `unitPrice`" — its own,
-   * or its parent's where a variant leaves it blank; see `resolveExtraPrice` in extras.ts. */
+  /** A GROSS (VAT-inclusive) two-place decimal string per portion. null derives it from the
+   * product's effective unit price and the portion; see `resolveExtraPrice` in extras.ts. */
   price: string | null;
 }
 
