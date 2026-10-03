@@ -105,7 +105,9 @@ export class VariantForm extends LitElement {
 
   #cancel(event: Event): void {
     event.stopPropagation();
-    if (this.busy) return;
+    // The dialog reports a close it was told to make a task later, once the product editor has
+    // already closed this form.
+    if (this.busy || !this.open) return;
     this.dispatchEvent(new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }));
   }
 

@@ -331,6 +331,19 @@ it("cancels from the button and from the modal's own dismissal", async () => {
   expect(submit).not.toHaveBeenCalled();
 });
 
+it("does not report a cancel when it is closed by the form that opened it", async () => {
+  const el = await mountForm({ value: halfPortion });
+  const cancel = vi.fn();
+  el.addEventListener("wt-cancel", cancel);
+
+  el.open = false;
+  await el.updateComplete;
+  await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+  await closeReportsDelivered();
+
+  expect(cancel).not.toHaveBeenCalled();
+});
+
 it("does nothing while the save it already started is in flight", async () => {
   const el = await mountForm({ value: halfPortion, busy: true });
   const submit = vi.fn();
