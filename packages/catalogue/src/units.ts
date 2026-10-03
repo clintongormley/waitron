@@ -7,7 +7,7 @@ import { AppError } from "@waitron/shared";
 import { findContentTranslationGap } from "./content-languages.js";
 import { productUnits, units } from "./schema/units.js";
 import { validateUnitPrecision } from "./unit-validation.js";
-import { clearedPricingUnit } from "./variant-fallback.js";
+import { clearedPricingUnit, isTopLevelProduct, productWithId } from "./variant-fallback.js";
 export {
   MAX_UNIT_PRECISION,
   assertQuantityPrecision,
@@ -158,6 +158,8 @@ export async function updateUnit(
   return row;
 }
 
+/** Give a product its unit. A variant has none of its own (it always reads its parent's), so its id
+ * answers as an id that names no product. */
 export async function assignProductUnit(
   tx: Transaction,
   productId: string,
@@ -169,7 +171,7 @@ export async function assignProductUnit(
   const [product] = await tx
     .select({ id: products.id })
     .from(products)
-    .where(eq(products.id, productId));
+    .where(productWithId(productId, "top-level"));
   if (product === undefined) throw new AppError("product.not_found", { productId });
   await tx.insert(productUnits).values({ productId, unitId }).onConflictDoUpdate({
     target: productUnits.productId,
@@ -179,8 +181,8 @@ export async function assignProductUnit(
 
 /** Move the listed products onto the target unit, scoped to the products still on `sourceUnitId`:
  * one another manager has already moved elsewhere is left where it is, and an id not currently on
- * `sourceUnitId` (an unknown id included) is skipped, never an error. A `null` target instead
- * deletes those rows, so the product becomes Each and a variant reads its parent's unit. */
+ * `sourceUnitId` (an unknown id included), or a variant's, is skipped, never an error. A `null`
+ * target instead deletes those rows, so the product becomes Each. */
 export async function reassignProductsToUnit(
   tx: Transaction,
   sourceUnitId: string,
@@ -189,7 +191,13 @@ export async function reassignProductsToUnit(
 ): Promise<void> {
   const scope = and(
     eq(productUnits.unitId, sourceUnitId),
-    inArray(productUnits.productId, productIds),
+    inArray(
+      productUnits.productId,
+      tx
+        .select({ id: products.id })
+        .from(products)
+        .where(and(inArray(products.id, productIds), isTopLevelProduct)),
+    ),
   );
   if (targetUnitId === null) {
     // The UPDATE runs BEFORE the DELETE so it can scope by the product_units rows still present.
@@ -210,13 +218,14 @@ export async function reassignProductsToUnit(
   await tx.update(productUnits).set({ unitId: targetUnitId }).where(scope);
 }
 
-/** Remove a product's unit assignment: a top-level product then reads as Each, a variant as its
- * parent's unit. It leaves `pricing_unit` alone, so the caller sets that. A no-op when there is no row. */
+/** Remove a product's unit assignment: a top-level product then reads as Each. It leaves
+ * `pricing_unit` alone, so the caller sets that. A no-op when there is no row. */
 export async function clearProductUnit(tx: Transaction, productId: string): Promise<void> {
   await tx.delete(productUnits).where(eq(productUnits.productId, productId));
 }
 
-/** The products that assign this unit, ordered by product id. */
+/** The products that assign this unit, ordered by product id. A row a variant still stores is not
+ * listed: a variant always reads its parent's unit. */
 export async function productsUsingUnit(
   tx: Transaction,
   unitId: string,
@@ -225,7 +234,7 @@ export async function productsUsingUnit(
     .select({ id: products.id, name: products.name, active: products.active })
     .from(productUnits)
     .innerJoin(products, eq(products.id, productUnits.productId))
-    .where(eq(productUnits.unitId, unitId))
+    .where(and(eq(productUnits.unitId, unitId), isTopLevelProduct))
     .orderBy(asc(products.id));
 }
 
@@ -237,5 +246,7 @@ export async function deleteUnit(tx: Transaction, unitId: string): Promise<void>
   if (references.length > 0) {
     throw new AppError("unit.in_use", { products: references });
   }
+  // Only variants' rows, which no read uses, are left on the unit; its foreign key restricts.
+  await tx.delete(productUnits).where(eq(productUnits.unitId, unitId));
   await tx.delete(units).where(eq(units.id, unitId));
 }

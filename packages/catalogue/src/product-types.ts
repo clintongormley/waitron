@@ -152,6 +152,8 @@ export interface ProductEditorInput {
   description: Record<string, string> | null;
   kitchenName: string | null;
   image: string | null;
+  /** Always null on a variant, whose unit is its parent's: a variant's save refuses any other value
+   * and clears a unit the variant still stores. */
   unitId: string | null;
   unitPrice: string | null;
   /** Writes `products.active`; Delete sends false and Restore true. Required, like `available`. */
@@ -187,6 +189,7 @@ export interface InheritedValues {
   image: string | null;
   unitPrice: string;
   vatClass: VatClass;
+  /** The parent's unit, which is always the variant's. */
   unitId: string | null;
   /** The parent's category, which is always the variant's. */
   primaryCategoryId: string | null;

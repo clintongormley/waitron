@@ -129,6 +129,8 @@ export function parseProductEditorInput(
   const description =
     body.description === null ? null : translations(body.description, "description");
   const unitId = nullableId(body.unitId, "unitId");
+  // A variant's unit is always its parent's.
+  if (isVariant && unitId !== null) invalid("unitId");
   // A body still on the membership contract is refused rather than having its categories ignored.
   if (body.categoryIds !== undefined) invalid("categoryIds");
   // A body still carrying labels is refused rather than having them silently dropped.

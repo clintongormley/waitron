@@ -50,6 +50,19 @@ export async function plantStoredCategory(
   await tx.update(products).set({ categoryId }).where(eq(products.id, productId));
 }
 
+/** Writes a `product_units` row and a `pricing_unit` straight into a product, past every product
+ * path: how a test sets up a variant still holding a unit of its own, which a variant's save now
+ * clears. */
+export async function plantStoredUnit(
+  tx: Transaction,
+  productId: string,
+  unitId: string,
+  pricingUnit: "each" | "weight",
+): Promise<void> {
+  await tx.insert(productUnits).values({ productId, unitId });
+  await tx.update(products).set({ pricingUnit }).where(eq(products.id, productId));
+}
+
 export interface SeededVenue {
   locationId: string;
   tillId: TillId;

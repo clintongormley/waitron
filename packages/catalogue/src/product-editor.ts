@@ -81,7 +81,7 @@ async function readInherited(tx: Transaction, parentId: string): Promise<Inherit
 }
 
 /** A product's editor value, or a variant's: its own stored values, and its parent's beside them.
- * A variant has no category of its own, so a category it still stores is never read back. */
+ * A variant has no category or unit of its own, so one it still stores is never read back. */
 export async function readProductEditor(
   tx: Transaction,
   productId: string,
@@ -91,6 +91,7 @@ export async function readProductEditor(
     return {
       ...row,
       primaryCategoryId: null,
+      unitId: null,
       inherited: await readInherited(tx, row.parentId),
       modifiers: [],
       variants: [],

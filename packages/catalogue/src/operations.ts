@@ -131,8 +131,8 @@ export interface UpdateProductInput {
    * product with no parent, as it does a blank `vatClass` and `dietaryDeclarations`. */
   unitPrice?: string | null;
   vatClass?: VatClass | null;
-  /** `null` clears the unit (the product then reads as Each, and a variant as its parent's unit); a
-   * real id sets it; omitted leaves it unchanged unless the legacy `pricingUnit` is supplied. */
+  /** `null` clears the unit (a product then reads as Each); a real id sets it, on a product with no
+   * parent only; omitted leaves it unchanged unless the legacy `pricingUnit` is supplied. */
   unitId?: string | null;
   pricingUnit?: PricingUnit;
   categoryId?: string | null;
