@@ -269,7 +269,7 @@ returned the local checkout under `.../repos/verifactu`.
 
 Do NOT use a root-level `pnpm link --global @waitron/verifactu` here. At the workspace root it exits
 0 but does NOT redirect the workspace-nested consumers — `apps/server`, `packages/fiscal-verifactu`
-and `packages/provisioning` go on resolving the published `0.1.0` — so it looks applied while
+and `packages/provisioning` go on resolving the published release — so it looks applied while
 changing nothing that matters. (This was proven by the extraction branch's run-it reviewer.)
 
 Keep that entry out of the commit (the other `pnpm.overrides` entries are committed security

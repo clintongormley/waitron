@@ -41,10 +41,19 @@ export interface SeededTill {
 // `registro_sif_instalacion_uq`.
 let nifSequence = 0;
 
-/** A fresh, plausible-looking NIF. Nothing validates its checksum digit. */
+const NIF_CONTROL_LETTERS = "TRWAGMYFPDXBNJZSQVHLCKE";
+
+/**
+ * An eight-digit personal NIF with its correct control letter (the number modulo 23). The library
+ * refuses a wrong letter before it builds, sends or looks up a record.
+ */
+export function nifWithControlLetter(digits: number): string {
+  return `${String(digits).padStart(8, "0")}${NIF_CONTROL_LETTERS[digits % 23]!}`;
+}
+
 function freshNif(): string {
   nifSequence += 1;
-  return `${String(10_000_000 + nifSequence).padStart(8, "0")}K`;
+  return nifWithControlLetter(10_000_000 + nifSequence);
 }
 
 /**
@@ -242,6 +251,7 @@ export function altaFor(
         BaseImponibleOimporteNoSujeto: "102.02",
         CuotaRepercutida: "21.43",
         TipoImpositivo: "21.00",
+        ClaveRegimen: "01",
         CalificacionOperacion: "S1",
       },
     ],

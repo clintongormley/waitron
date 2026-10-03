@@ -1335,9 +1335,11 @@ async function bootServer(
   // Resolved through the generic slot so `boot.ts` names no regime package
   // (`scripts/module-seams.test.ts`).
   const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
+  const tillBackend = makeFiscalBackend(setsToMigrate, filingModule, db, env);
   const till: TillConfig = {
     ...config.till,
     orderFlow,
+    simplifiedInvoiceLimit: tillBackend.simplifiedInvoiceLimit,
     practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
   };
   // The venue's default DISPLAY locale. The override is the RAW `till.localeOverride`, not the
@@ -1367,8 +1369,6 @@ async function bootServer(
     environment: config.environment,
     incidents: recordIncidentOnce,
   });
-  // One backend and clock, shared by the till's pays and the payments surface's stuck-payment filing.
-  const tillBackend = makeFiscalBackend(setsToMigrate, filingModule, db, env);
   const tillClock = systemClock();
   mountTillApi(
     app,

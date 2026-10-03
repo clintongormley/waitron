@@ -30,8 +30,8 @@ describe("record-one-sale against a real venue directory", () => {
     workDir = await mkdtemp(join(tmpdir(), "waitron-record-one-sale-"));
     // Two directories, so the suite can show which one a sale reaches. Separate databases, so the
     // same NIF in both is not a conflict.
-    preproduction = await makeBox("venue", "50000000K");
-    production = await makeBox("other-venue", "50000000K");
+    preproduction = await makeBox("venue", "50000000R");
+    production = await makeBox("other-venue", "50000000R");
   }, 180_000);
 
   afterAll(async () => {

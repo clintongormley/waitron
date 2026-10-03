@@ -18,17 +18,19 @@ function alta(
     DescripcionOperacion: "Venta",
     Desglose: [
       {
+        ClaveRegimen: "01",
         CalificacionOperacion: "S1",
-        TipoImpositivo: "21.00",
+        TipoImpositivo: "0.00",
         BaseImponibleOimporteNoSujeto: overrides.ImporteTotal,
         CuotaRepercutida: "0.00",
       },
     ],
     CuotaTotal: "0.00",
+    Macrodato: "S",
     Encadenamiento: { PrimerRegistro: "S" },
     SistemaInformatico: {
       NombreRazon: "Waitron",
-      NIF: "B12345678",
+      NIF: "B12345674",
       NombreSistemaInformatico: "Waitron POS",
       IdSistemaInformatico: "WT",
       Version: "1.0.0",
@@ -47,35 +49,27 @@ describe("the grid sizes a real receipt QR can have", () => {
     [
       "shortest: preproduction, 1-character series, 0.00",
       "preproduction",
-      "B12345678",
+      "B12345674",
       "A",
       "0.00",
       41,
     ],
-    ["production, 1-character series, 0.00", "production", "B12345678", "A", "0.00", 45],
+    ["production, 1-character series, 0.00", "production", "B12345674", "A", "0.00", 45],
     [
       "longest series: production, 60 characters that all need escaping, -123456789012.34",
       "production",
-      "B12345678",
+      "B12345674",
       "/".repeat(60),
       "-123456789012.34",
       65,
     ],
     [
-      "a 9-character NIF of euro signs and that series (validate.ts checks NIF length only)",
-      "production",
-      "€".repeat(9),
-      "/".repeat(60),
-      "-123456789012.34",
-      69,
-    ],
-    [
       "longest grid in practice: a series `qrcode`'s mode search cannot compress as cheaply, same NIF and amount",
       "production",
-      "€".repeat(9),
+      "B12345674",
       "a/////".repeat(10),
       "-123456789012.34",
-      73,
+      65,
     ],
   ] as const)("%s", (_label, environment, nif, series, amount, squares) => {
     const record = buildAltaRecord(
@@ -91,8 +85,8 @@ describe("the grid sizes a real receipt QR can have", () => {
   /**
    * `qrcode` picks the cheapest encoding mode per run of text, so a run of literal `/` in the series
    * costs little once escaped to `%2F` — the cases above are real link lengths, not the worst case for
-   * grid size. This builds the longest link `validate.ts` accepts as a STRING (€×9 NIF, 60 `/` in the
-   * series, the longest amount, the production endpoint — 380 characters) and forces the WHOLE thing
+   * grid size. This builds the longest link `validate.ts` accepts as a STRING (a 9-character NIF, 60 `/` in the
+   * series, the longest amount, the production endpoint — 308 characters) and forces the WHOLE thing
    * through byte mode, which can encode every character, so the library's own mode search should never
    * need more bits than this for the same content. That "never" is checked here on this sampled link,
    * not proven for every link `validate.ts` could accept.
@@ -100,7 +94,7 @@ describe("the grid sizes a real receipt QR can have", () => {
   it("bounds the grid size above: the longest accepted link, forced through byte mode", () => {
     const record = buildAltaRecord(
       alta({
-        IDEmisorFactura: "€".repeat(9),
+        IDEmisorFactura: "B12345674",
         NumSerieFactura: "/".repeat(60),
         ImporteTotal: "-123456789012.34",
       }),

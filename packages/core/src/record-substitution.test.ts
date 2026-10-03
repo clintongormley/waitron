@@ -74,7 +74,7 @@ const steadyClock: TrustedClock = fixedClock(() => ({
 }));
 
 /** The recipient every F3 must carry. */
-const RECIPIENT = { taxId: "B12345678", legalName: "Acme Corp SL", countryCode: "ES" };
+const RECIPIENT = { taxId: "B12345674", legalName: "Acme Corp SL", countryCode: "ES" };
 
 /** An ordinary simplified (F2) ticket, settled immediately, so "the F3 is unsettled" is not
  * vacuous. */
@@ -332,7 +332,7 @@ describe("recordSubstitution — the F3 sale", () => {
     expect(row?.total).toBe(1441);
     expect(row?.correctsSaleId).toBe(null); // an F3 is NOT a corrective invoice — it corrects nothing
     expect(row?.fiscalState).toBe("recorded");
-    expect(row?.counterpartyTaxId).toBe("B12345678");
+    expect(row?.counterpartyTaxId).toBe("B12345674");
     expect(row?.counterpartyLegalName).toBe("Acme Corp SL");
     expect(row?.counterpartyCountryCode).toBe("ES");
     expect(row?.locale).toBe("es-ES");
@@ -673,4 +673,83 @@ it("stores no corrected line on a substitution's line, even when the caller name
     .where(eq(saleLines.saleId, saleId));
   expect(saved.every((line) => line.correctsLineId === null)).toBe(true);
   expect(saved.length).toBeGreaterThan(0);
+});
+
+describe("recordSubstitution — the customer is checked where it enters", () => {
+  /** Rows an F3 writes or spends; a refusal must leave every one where the ticket left it. */
+  async function state() {
+    const [series] = await suite.db
+      .select({ next: invoiceSeries.nextNumber })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, seriesId));
+    return {
+      sales: await countRows("sales"),
+      substitutions: await countRows("sale_substitutions"),
+      records: await countRows("fake_fiscal_records"),
+      next: series!.next,
+    };
+  }
+
+  async function refusal(
+    backend: FiscalBackend,
+    counterparty: RecordSubstitutionInput["counterparty"],
+  ) {
+    const { saleId: ticket } = await sellTicket(backend);
+    const before = await state();
+    const error = await captureError(() => substitute(backend, [ticket], { counterparty }));
+    expect(await state()).toEqual(before);
+    return error;
+  }
+
+  it("refuses a Spanish tax ID with a wrong check letter, naming the field and writing nothing", async () => {
+    const error = await refusal(new FakeFiscalBackend(suite.db), {
+      ...RECIPIENT,
+      taxId: "B12345678",
+    });
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("counterparty.invalid");
+    expect((error as AppError).params).toEqual({ field: "taxId" });
+  });
+
+  it("files the tax ID as its country writes it: spaces out, letters upper case", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: ticket } = await sellTicket(backend);
+    const { saleId: f3Id } = await substitute(backend, [ticket], {
+      counterparty: { ...RECIPIENT, taxId: " b 1234567 4 " },
+    });
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, f3Id));
+    expect(row?.counterpartyTaxId).toBe("B12345674");
+  });
+
+  it("checks no tax ID for a country with no checker of its own", async () => {
+    // The fake files any country; a real regime refuses a recipient it cannot file on its own.
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: ticket } = await sellTicket(backend);
+    const { saleId: f3Id } = await substitute(backend, [ticket], {
+      counterparty: { taxId: "anything", legalName: "Acme", countryCode: "ZZ" },
+    });
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, f3Id));
+    expect(row?.counterpartyTaxId).toBe("anything");
+  });
+
+  it("refuses a legal name over the regime's cap, counted in characters, and accepts one at it", async () => {
+    const backend = new FakeFiscalBackend(suite.db, { recipientNameMaxLength: 5 });
+    // Five characters, six UTF-16 units: a cap counted in units would refuse it.
+    const atCap = "Acme😀";
+    const { saleId: ticket } = await sellTicket(backend);
+    await substitute(backend, [ticket], { counterparty: { ...RECIPIENT, legalName: atCap } });
+
+    const error = await refusal(backend, { ...RECIPIENT, legalName: "Acme SL" });
+    expect((error as AppError).code).toBe("counterparty.invalid");
+    expect((error as AppError).params).toEqual({ field: "legalName" });
+  });
+
+  it("caps no legal name for a regime that sets none", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: ticket } = await sellTicket(backend);
+    await substitute(backend, [ticket], {
+      counterparty: { ...RECIPIENT, legalName: "x".repeat(500) },
+    });
+    expect(await countRows("sale_substitutions")).toBe(1);
+  });
 });

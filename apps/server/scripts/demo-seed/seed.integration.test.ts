@@ -30,6 +30,7 @@ import { readImageBytes } from "@waitron/media";
 import { seedDemoRestaurant } from "./seed.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 const LOCALE: SeedLocale = "en";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -43,7 +44,7 @@ const suite = useVenueDb({
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(95_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(95_000_000 + nifCounter);
 }
 
 interface Venue {
@@ -105,6 +106,7 @@ function tillConfigFor(venue: Venue): TillConfig {
     locale: SEED_INVOICE_LOCALE[LOCALE],
     invoiceLocales: [SEED_INVOICE_LOCALE[LOCALE]],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
 }

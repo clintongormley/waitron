@@ -35,6 +35,7 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { transferItems } from "./bill-actions.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { createOpenOrder } from "./working-order.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 /**
  * H2 after a partial transfer: each tab files its own single fiscal record, at its own locked price.
@@ -74,7 +75,7 @@ function systemClock(): TrustedClock {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(60_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
@@ -87,6 +88,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
 }

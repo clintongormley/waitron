@@ -419,7 +419,7 @@ describe("configuration transfer database path", () => {
     expect(transferred.tables.print_agents).toHaveLength(1);
     expect(transferred.tables.print_agents![0]).not.toHaveProperty("host");
 
-    const target = await applyVenue(planVenue(venue("B87654321"), ALL_MODULES), {
+    const target = await applyVenue(planVenue(venue("B87654323"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
       beforeCommit: async (tx, result) => {

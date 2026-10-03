@@ -17,6 +17,7 @@ import type { Transaction } from "@waitron/db";
 import { AppError, centsToDecimal, stringToCents } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { Counterparty, FiscalBackend, FiscalRecordRef, TrustedClock } from "@waitron/fiscal";
+import { checkedCounterparty } from "./counterparty.js";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { deriveVatBreakdown } from "./record-sale.js";
@@ -88,6 +89,10 @@ export async function recordSubstitution(
       "recordSubstitution: substitutedSaleIds must not contain duplicate ids — a ticket may be substituted at most once per F3",
     );
   }
+
+  // Before anything is read or written, so a customer the record cannot carry is refused where it
+  // is entered rather than by the regime's filing.
+  const counterparty = checkedCounterparty(backend, input.counterparty);
 
   // Derived before anything is written; refused when a line total is past the cent and the
   // breakdown no longer sums to the total (`deriveVatBreakdown`).
@@ -198,9 +203,9 @@ export async function recordSubstitution(
       invoiceLocales: input.invoiceLocales,
       fiscalBackend: backend.id,
       fiscalState: "recorded",
-      counterpartyTaxId: input.counterparty.taxId,
-      counterpartyLegalName: input.counterparty.legalName,
-      counterpartyCountryCode: input.counterparty.countryCode,
+      counterpartyTaxId: counterparty.taxId,
+      counterpartyLegalName: counterparty.legalName,
+      counterpartyCountryCode: counterparty.countryCode,
     })
     .returning({ id: sales.id });
 
@@ -268,7 +273,7 @@ export async function recordSubstitution(
       descriptionOfOperation: location.operationDescription,
       total: centsToDecimal(totalCents),
       vatBreakdown,
-      counterparty: input.counterparty,
+      counterparty,
     },
     { substitutedSaleIds: input.substitutedSaleIds },
   );

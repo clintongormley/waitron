@@ -62,6 +62,7 @@ import {
 import "./errors.js";
 import { splitBill } from "./bill-actions.js";
 import { cancelLine } from "./testing/cancel-line.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // What serving records, by quantity, on the lines of a party (spec §4, §12 item 5; plan D8, D18,
 // D19). Serving is an operational fact: it never touches a filed sale.
@@ -130,7 +131,7 @@ async function setupVenue(): Promise<Venue> {
     planVenue(
       {
         country: "ES",
-        taxId: `${String(62_000_000 + taxIds).padStart(8, "0")}K`,
+        taxId: nifWithControlLetter(62_000_000 + taxIds),
         legalName: "Servido SL",
         location: {
           name: "Sala",
@@ -167,6 +168,7 @@ async function setupVenue(): Promise<Venue> {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
   return inTx(async (tx) => {

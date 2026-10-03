@@ -37,6 +37,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 /**
  * Tabs end to end through a real `VerifactuBackend`: what paying a tab files, and that a refusal
@@ -61,7 +62,7 @@ const suiteB = useVenueDb(venueDbOptions);
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(60_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
@@ -74,6 +75,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
 }

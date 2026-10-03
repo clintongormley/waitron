@@ -41,7 +41,7 @@ vi.mock("./issuance-pass.js", async (importOriginal) => {
 });
 
 const LOCALE = "es-ES";
-const NIF = "76900001K";
+const NIF = "76900001F";
 const ISSUED_AT = new Date("2026-09-25T11:30:00.000Z");
 const WORKING_ORDER_ID = randomUUID();
 
@@ -142,6 +142,7 @@ async function fileOneSale(db: Database) {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
   const seeded = await withTransaction(db, async (tx) => {

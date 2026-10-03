@@ -599,7 +599,7 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
   // the byte, not merely "passes the validator". A filed record is append-only and hash-chained, so
   // a value written wrong here stays wrong (CLAUDE.md §5).
   //
-  // The three GOLDEN literals were recorded from `main` at `2ae3baa98`, BEFORE any of this branch's
+  // The GOLDEN amounts were recorded from `main` at `2ae3baa98`, BEFORE any of this branch's
   // code existed, in a throwaway `git worktree` detached at that commit. The capture appended a
   // temporary test to this same file which seeded `seedTenantWithSif(pg.db, { nif: PINNED_NIF })`,
   // filed this exact basket in `main`'s own line shape — the options answer on the dish line's
@@ -609,33 +609,34 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
   //
   //     pnpm --filter @waitron/fiscal-verifactu test write-path
   //
+  // The huella was re-recorded when `PINNED_NIF`'s check letter was corrected (`29999999K` →
+  // `29999999H`); @waitron/verifactu 0.1.0 and 0.2.1 hash the basket alike (receipt: that commit).
+  //
   // WHY THE NIF IS PINNED, and why it is not decoration. `IDEmisorFactura` is one of the eight
   // fields the huella hashes (in `@waitron/verifactu`), and `seedTenantWithSif` mints it
-  // from a counter that advances once per call in a file. The first capture of this basket was
-  // taken standalone and hashed to `A1AF497F…` under NIF `20000001K`; the same basket run 16th in
-  // THIS file hashed to `38CCE164…` under `20000016K`. Both are correct records of their own
-  // inputs. Without the pin, a golden literal here would fail the day anyone adds or removes a test
+  // from a counter that advances once per call in a file, so the same basket run standalone and
+  // run 16th in THIS file hashed differently. Both are correct records of their own inputs. Without the pin, a golden literal here would fail the day anyone adds or removes a test
   // ABOVE it — a gate that cries wolf. With it, the literal is a property of the basket: recorded
   // at `2ae3baa98` both standalone and appended to the end of this file, the two runs agreed.
   //
   // WHAT A WRONG ANSWER PRINTS, so this is a measurement and not a formality. Ran here with the
   // child line's `vatRate` moved from "10.00" to "21.00" and NOTHING else touched: `cuota_total`
   // came back "2.54" and the huella
-  // `A445E2BA3E533EE363B05CA272293EC015AE419B4785C4946F0D3E8BD57C0AF3` — both different, so an
+  // `0D6371BC6C18C1FADD8068169F876774C4E27D14432010D30F119C2F2B4F718D` — both different, so an
   // extra's VAT rate, which is the picked product's own and the figure this rework could have moved,
   // is a figure this fixture can see. WHAT THAT PROBE DOES NOT COVER:
   // `importe_total` stayed "14.41". It is `sale.total` copied verbatim (`ImporteTotal: sale.total`,
   // `./backend.ts`), an explicit field of `saleInput` rather than anything derived from the lines,
   // so the third literal is pinned against the CALLER's total and not against the basket.
   const GOLDEN = {
-    huella: "C43623FCC6F00D21DD31D4BABBDBA1A1FD05D466B84677C2F46594C31ED8536A",
+    huella: "41CC8A6277A13E2D9A4023620B238DC4D5DCBB96451F6579DBFFB458799456DC",
     importe_total: "14.41",
     cuota_total: "2.31",
   };
 
-  /** Above anything `freshNif` mints (it starts at `20000001K` and climbs one per seeded test), so
+  /** Above anything `freshNif` mints (it starts at `20000001Y` and climbs one per seeded test), so
    *  this test's hashed `IDEmisorFactura` cannot collide with another test's in this file. */
-  const PINNED_NIF = "29999999K";
+  const PINNED_NIF = "29999999H";
 
   /** One frozen options answer. All six names carry DIFFERENT text, so a projection that stored the
    *  wrong one could not satisfy the assertion below. */
@@ -817,7 +818,7 @@ describe("a variant's names are not part of the huella", () => {
   // recorded and read back inside a transaction that is then ROLLED BACK, as the parent_line_id block
   // above does, so the second re-allocates the same `A/1` against the same empty chain.
   const ROLLBACK = new Error("rollback: huella captured");
-  const PINNED_NIF = "29999998K";
+  const PINNED_NIF = "29999998V";
 
   async function huellaFor(variant: {
     name: string;

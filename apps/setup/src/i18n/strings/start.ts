@@ -124,8 +124,9 @@ export const startEn = {
     "If it is still running, two servers would sell from the same records, and that cannot be undone. Switch it off for good before you go on.",
   "old_box.gone": "The old server is switched off for good.",
 
+  // The message's 120 is `NOMBRE_RAZON_MAX` (`packages/fiscal-verifactu/src/venue-fields.ts`).
   "server_fields.legal_name":
-    "This name contains characters the tax agency's records cannot carry — they are invisible, so you will not see them. Typing the name out instead of pasting it usually clears them.",
+    "Keep the name to 120 characters or fewer, and remove any hidden characters the tax agency's records cannot carry — typing the name out instead of pasting it usually clears them.",
   // The message's 38 is `MAX_BASE_CODE_LENGTH` (`packages/fiscal-verifactu/src/reserved-series.ts`).
   "server_fields.series_code":
     "Use letters, numbers, and the characters / _ . and - only, up to 38 characters.",
@@ -265,7 +266,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "old_box.gone": "El servidor anterior está apagado para siempre.",
 
   "server_fields.legal_name":
-    "Este nombre contiene caracteres que los registros de la Agencia Tributaria no admiten; son invisibles, así que no los verás. Suele bastar con escribir el nombre en lugar de pegarlo.",
+    "Usa 120 caracteres como máximo y quita los caracteres ocultos que los registros de la Agencia Tributaria no admiten; suele bastar con escribir el nombre en lugar de pegarlo.",
   "server_fields.series_code":
     "Usa solo letras, números y los caracteres / _ . y - (hasta 38 caracteres).",
   "server_fields.operation_description":

@@ -1,6 +1,7 @@
 // The entire public surface of @waitron/core. Re-exports only — no logic here.
 export { formatInvoiceNumber, recordSale } from "./record-sale.js";
 export type { RecordSaleInput, RecordSaleLine, RecordSaleTender } from "./record-sale.js";
+export { refuseOverSimplifiedLimit } from "./simplified-limit.js";
 export { settleSale } from "./settle-sale.js";
 export type { SettleSaleInput, SettleSaleTender } from "./settle-sale.js";
 export { recordVoid } from "./record-void.js";

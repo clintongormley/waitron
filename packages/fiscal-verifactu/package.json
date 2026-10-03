@@ -21,7 +21,7 @@
     "@waitron/module": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
-    "@waitron/verifactu": "^0.1.0",
+    "@waitron/verifactu": "^0.2.1",
     "drizzle-orm": "^0.45.3",
     "undici": "^8.11.2"
   },
@@ -29,6 +29,7 @@
     "@types/node": "^26.0.0",
     "@vitest/coverage-v8": "^4.1.11",
     "@waitron/catalogue": "workspace:*",
+    "@waitron/country-packs": "workspace:*",
     "@waitron/identity": "workspace:*",
     "@waitron/migrations": "workspace:*",
     "@waitron/server-kit": "workspace:*",

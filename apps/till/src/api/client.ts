@@ -137,6 +137,9 @@ export interface TillInfo {
   nodeId: string;
   /** The venue's routable servers, primary first; `[]` when no membership document is held. */
   servers: TillServer[];
+  /** The largest total a sale with no named customer may have, as a decimal string, or null when
+   * the venue's fiscal regime sets none. The counter basket refuses an edit that would pass it. */
+  simplifiedInvoiceLimit: string | null;
 }
 
 /**

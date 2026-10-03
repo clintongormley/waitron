@@ -27,7 +27,7 @@ import {
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
-import { recordSale, settleSale } from "@waitron/core";
+import { recordSale, refuseOverSimplifiedLimit, settleSale } from "@waitron/core";
 import type { SettleSaleTender } from "@waitron/core";
 import {
   associatePaymentWithSale,
@@ -77,6 +77,7 @@ import {
   readInvoiceNumber,
   refuseOrderPaymentMarked,
   refuseRefundInProgress,
+  storedOrderTotal,
   toVatBreakdown,
 } from "./working-order.js";
 import type { TillSaleDeps } from "./working-order.js";
@@ -305,16 +306,6 @@ async function readPaymentLines(
     );
 }
 
-async function billTotal(tx: Transaction, workingOrderId: string): Promise<Decimal> {
-  const [line] = await tx
-    .select({ id: workingOrderLines.id })
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, workingOrderId))
-    .limit(1);
-  // The same pricing the invoice is issued from; a lineless bill totals nothing.
-  return line === undefined ? ZERO : (await priceStoredOrder(tx, workingOrderId)).total;
-}
-
 function fundsOf(
   workingOrderId: string,
   total: Decimal,
@@ -419,7 +410,7 @@ export async function assertBillInvariant(
   for (const workingOrderId of workingOrderIds) {
     const held = payments.filter(({ row }) => row.workingOrderId === workingOrderId);
     if (held.length === 0) continue;
-    const funds = fundsOf(workingOrderId, await billTotal(tx, workingOrderId), held);
+    const funds = fundsOf(workingOrderId, await storedOrderTotal(tx, workingOrderId), held);
     const excess = subtractDecimal(addDecimal(funds.received, funds.reserved), funds.total);
     if (compareDecimal(excess, ZERO) > 0) {
       throw new AppError("bill.received_exceeds_total", { workingOrderId, excess: money(excess) });
@@ -658,7 +649,7 @@ async function issueWhenFullyPaid(
   // A card refund still pending leaves the bill's received money unknown.
   if (refunds.some((refund) => refund.state === "pending")) return notYet;
   const held = moneyOf(rows, refunds);
-  const total = options.total ?? (await billTotal(tx, workingOrderId));
+  const total = options.total ?? (await storedOrderTotal(tx, workingOrderId));
   if (compareDecimal(total, ZERO) === 0) return { invoice: null, total };
   if (compareDecimal(fundsOf(workingOrderId, total, held).received, total) !== 0) {
     return { invoice: null, total };
@@ -916,7 +907,7 @@ export async function previewBillPayment(
     await requireOpenBill(tx, workingOrderId);
     const held = await readPaymentMoney(tx, [workingOrderId]);
     const { request } = await allocationRequestFor(tx, workingOrderId, ask, held);
-    const funds = fundsOf(workingOrderId, await billTotal(tx, workingOrderId), held);
+    const funds = fundsOf(workingOrderId, await storedOrderTotal(tx, workingOrderId), held);
     return previewAllocation(funds, request, { tipsEnabled: cfg.tipsEnabled });
   });
 }
@@ -1028,7 +1019,9 @@ async function beginBillPayment(
   await refuseOrderPaymentMarked(tx, [workingOrderId]);
   const held = await readPaymentMoney(tx, [workingOrderId]);
   const { request, items } = await allocationRequestFor(tx, workingOrderId, req, held);
-  const total = await billTotal(tx, workingOrderId);
+  const total = await storedOrderTotal(tx, workingOrderId);
+  // Before any money is taken: the invoice this bill pays towards could never be issued.
+  refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, total);
   const allocation = confirmAllocation(
     fundsOf(workingOrderId, total, held),
     request,

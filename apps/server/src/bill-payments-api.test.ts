@@ -144,7 +144,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     planVenue(
       {
         country: "ES",
-        taxId: "61000001K",
+        taxId: "61000001E",
         legalName: "Cuentas SL",
         location: {
           name: "Sala",
@@ -181,6 +181,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
   const seeded = await withTransaction(db, async (tx) => {

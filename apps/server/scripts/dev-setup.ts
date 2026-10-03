@@ -219,7 +219,7 @@ async function provisionVenue(
     planVenue(
       {
         country: "ES",
-        taxId: "50000000K",
+        taxId: "50000000R",
         legalName: "Waitron Dev SL",
         location: {
           name: "Sala principal",
@@ -289,6 +289,7 @@ async function seedDemoDevices(
     locale: SEED_INVOICE_LOCALE[seedLocale],
     invoiceLocales: [SEED_INVOICE_LOCALE[seedLocale]],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
 

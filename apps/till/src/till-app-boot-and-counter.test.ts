@@ -1079,6 +1079,111 @@ describe("till-app counter menus and service zones", () => {
   });
 });
 
+/** The first element matching `selector` anywhere under `root`, through shadow roots. */
+function deepFind(root: Element, selector: string): Element | null {
+  const tree = root.shadowRoot ?? root;
+  const direct = tree.querySelector(selector);
+  if (direct !== null) return direct;
+  for (const child of tree.querySelectorAll("*")) {
+    const found = child.shadowRoot === null ? null : deepFind(child, selector);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+describe("till-app simplified-invoice limit", () => {
+  // The counter with its basket card, so the basket's own buttons are on screen.
+  const limitedTill = {
+    ...till,
+    simplifiedInvoiceLimit: "3.00",
+    canvas: {
+      ...tillCanvas,
+      tabs: [
+        {
+          ...tillCanvas.tabs[0]!,
+          cards: [
+            { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
+            { type: "basket", colSpan: 4, rowSpan: 6, config: {} },
+          ],
+        },
+      ],
+    } satisfies CanvasDef,
+  };
+  /** The banner's words, with the no-break space a formatted amount carries read as a space. */
+  const said = (el: TillApp) => banner(el)!.textContent!.replace(/\s/g, " ");
+
+  it("refuses a line that would take the basket past the limit, saying so in its own words", async () => {
+    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(limitedTill) });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "2");
+    await el.updateComplete;
+    expect(banner(el)).toBeNull();
+
+    c.store.addProduct(c.products[0]!, "1");
+    await el.updateComplete;
+    expect(c.store.total).toBe("3.00");
+    expect(c.store.lines).toHaveLength(1);
+    expect(said(el)).toBe(
+      "El pedido pasaría de 3,00 €, el máximo que admite esta caja sin una factura completa a nombre del cliente, y no puede emitirla. Quita algo del pedido.",
+    );
+  });
+
+  it("refuses raising a line's quantity past the limit from the basket's own button", async () => {
+    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(limitedTill) });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "2");
+    await flush(el);
+    const basket = deepFind(el, "till-basket")!;
+    basket.shadowRoot!.querySelector<HTMLElement>(".step-inc")!.click();
+    await flush(el);
+    expect(c.store.lines[0]!.quantity).toBe("2");
+    expect(said(el)).toContain("3,00 €");
+  });
+
+  it("refuses nothing for a server that sends no limit", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "9");
+    await el.updateComplete;
+    expect(c.store.total).toBe("13.50");
+    expect(banner(el)).toBeNull();
+  });
+
+  it("shows the server's refusal of a sale past the limit in its own words, naming the limit", async () => {
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockRejectedValue({
+        code: "sale.total_exceeds_simplified_limit",
+        total: "3010.01",
+        limit: "3010.00",
+        status: 409,
+      }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(said(el)).toBe(
+      "El pedido pasaría de 3010,00 €, el máximo que admite esta caja sin una factura completa a nombre del cliente, y no puede emitirla. Quita algo del pedido.",
+    );
+    expect(c.store.lines).toHaveLength(1);
+  });
+
+  it("words the refusal without the amount when the server names no limit", async () => {
+    const { el } = await mountApp({
+      recordSale: vi
+        .fn()
+        .mockRejectedValue({ code: "sale.total_exceeds_simplified_limit", status: 409 }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(banner(el)!.textContent).toBe(
+      "Este pedido supera el máximo que admite esta caja sin una factura completa a nombre del cliente, y no puede emitirla. Quita algo del pedido",
+    );
+  });
+});
+
 describe("till-app integrated card collection", () => {
   it("sends the reader the operator picked", async () => {
     const pay = vi.fn().mockResolvedValue({ outcome: "declined" });

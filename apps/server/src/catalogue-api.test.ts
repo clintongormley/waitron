@@ -289,6 +289,7 @@ function venueCfg(): TillConfig {
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
 }

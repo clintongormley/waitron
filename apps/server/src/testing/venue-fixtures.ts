@@ -18,6 +18,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "../modules.js";
 import type { TillConfig } from "../till-config.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // Shared venue provisioning, extracted so the suites that need it stand up one fixture rather than
 // each keeping a copy.
@@ -47,6 +48,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     // ticket_then_pay so `placeOrder` FIRES the lines to the kitchen (open → placed) without filing a
     // fiscal doc — the lightest fire path that puts real ticket items on the station queue.
     orderFlow: "ticket_then_pay",
@@ -56,7 +58,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(74_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(74_000_000 + nifCounter);
 }
 
 /**

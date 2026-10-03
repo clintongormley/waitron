@@ -194,7 +194,6 @@ export function rateLines(gross: GrossLines, on: string): PricedLines {
 
 /** Prices a live basket: gross unit from the product's `unitPrice`, rate its `vatClass`'s on `on`, a
  * local calendar date `YYYY-MM-DD`. */
-// Defaulted only for fiscal-verifactu's golden `write-path.e2e.test.ts`, which stays unedited.
 export function priceBasket(items: readonly BasketItem[], on: string = localToday()): PricedLines {
   return rateLines(
     grossRows(

@@ -107,6 +107,16 @@ declare module "@waitron/shared" {
      * exchanged by two F3s. A duplicate id within one call's list is refused earlier, as a plain
      * Error. */
     "sale.already_substituted": { saleId: string };
+    /** A sale with no named customer (a simplified invoice) whose total is over the fiscal
+     * regime's `simplifiedInvoiceLimit`. Thrown by `refuseOverSimplifiedLimit` before anything
+     * commits or money moves: by `recordSale`, on the base plus VAT it files, and by the till's paths
+     * where a basket or bill is entered, grown or paid. Both amounts are decimal strings. */
+    "sale.total_exceeds_simplified_limit": { total: string; limit: string };
+    /** A full invoice's customer the record could not carry: `taxId` fails its country's tax ID
+     * check (for example, a wrong control character), or `legalName` is longer than the fiscal regime's
+     * `recipientNameMaxLength`. Thrown by `recordSubstitution` before anything is read or
+     * written. The value itself is not carried: it is a customer's personal data. */
+    "counterparty.invalid": { field: "taxId" | "legalName" };
     /** A VAT breakdown's bases and taxes, summed and compared by value, do not equal the total; a
      * chained record that disagrees with its own total cannot be repaired. Thrown before anything
      * is written: by `recordSale` for a supplied breakdown, compared as given and at the cent; and

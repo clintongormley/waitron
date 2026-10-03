@@ -4,8 +4,9 @@
 //
 // No sentence promises a later check by the server: the daily payments check looks at each day once,
 // and the fiscal reconciliation sweep has no production caller. Only `alert.source_unavailable`
-// promises an automatic retry, because an open dashboard asks for its alerts again every minute;
-// a sentence that asks for a retry or a restart asks the owner to do it.
+// and `fiscal.estado_desconocido` promise an automatic retry: an open dashboard asks for its alerts
+// again every minute, and the drain puts such a record back to waiting (`awaitReadableAnswer`,
+// `@waitron/fiscal-verifactu`); a sentence that asks for a retry or a restart asks the owner to do it.
 
 // An open payment incident swallows later detections for the same till and code, so its figures
 // are from when it was raised, and a bill payment's alert may stand for more than one payment.
@@ -104,6 +105,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "The tax agency (AEAT) accepted an invoice record but reported a problem: {mensaje} (code {codigo}).",
     es: "La AEAT ha aceptado un registro de facturación, pero ha indicado un problema: {mensaje} (código {codigo}).",
   },
+  "fiscal.estado_desconocido": {
+    en: "The tax agency (AEAT) answered for an invoice record without a status Waitron recognises, so it is not known whether AEAT kept it. Waitron will send it again. AEAT's message: {mensaje} (code {codigo}).",
+    es: "La AEAT ha respondido sobre un registro de facturación sin un estado que Waitron reconozca, así que no se sabe si la AEAT lo ha guardado. Waitron lo volverá a enviar. Mensaje de la AEAT: {mensaje} (código {codigo}).",
+  },
   "fiscal.duplicado_anulado": {
     en: "The tax agency (AEAT) already holds this invoice record as cancelled. Sending on this chain is on hold. Contact support.",
     es: "La AEAT ya tiene este registro de facturación como anulado. El envío de esta cadena está en espera. Contacta con soporte.",
@@ -123,6 +128,10 @@ export const ALERT_MESSAGES: Readonly<
   "fiscal.record_totals_disagree": {
     en: "An invoice's totals do not match its tax lines. The tax agency accepts it, but check that sale's prices.",
     es: "Los totales de una factura no coinciden con sus líneas de impuestos. La AEAT la acepta, pero revisa los precios de esa venta.",
+  },
+  "fiscal.record_flagged": {
+    en: "An invoice record has a problem the tax agency (AEAT) accepts, though it may flag it. Contact support.",
+    es: "Un registro de facturación tiene un problema que la AEAT acepta, aunque puede señalarlo. Contacta con soporte.",
   },
   "fiscal.reconcile_no_trace": {
     en: "Invoice {numSerieFactura} was sent, but the tax agency (AEAT) has no record of it. Contact support.",

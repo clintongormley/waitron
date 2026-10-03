@@ -63,6 +63,7 @@ import {
 import "./errors.js";
 import { splitBill } from "./bill-actions.js";
 import { joinTables } from "./table-actions.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // The release reminder (spec §4 "Remind staff to release the next group"; plan D11), its snooze,
 // and the Current orders read a waiter serves from (spec §4; D8, D18, D19).
@@ -131,7 +132,7 @@ async function setupVenue(): Promise<Venue> {
     planVenue(
       {
         country: "ES",
-        taxId: `${String(63_000_000 + taxIds).padStart(8, "0")}K`,
+        taxId: nifWithControlLetter(63_000_000 + taxIds),
         legalName: "Comandas SL",
         location: {
           name: "Sala",
@@ -168,6 +169,7 @@ async function setupVenue(): Promise<Venue> {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
   return inTx(async (tx) => {

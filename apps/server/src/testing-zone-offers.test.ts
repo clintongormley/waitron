@@ -75,6 +75,7 @@ async function seedVenue(db: Database): Promise<Venue> {
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "ticket_then_pay",
   };
   return withTransaction(db, async (tx) => {

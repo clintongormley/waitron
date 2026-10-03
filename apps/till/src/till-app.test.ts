@@ -7556,6 +7556,36 @@ describe("till-app", () => {
       expect(tenderPay(el).stage).toBe("collect");
     });
 
+    it("collect-order: an order over the simplified-invoice limit is refused in its own words, naming the limit", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        collectOrder: vi.fn().mockRejectedValue({
+          code: "sale.total_exceeds_simplified_limit",
+          total: "3150.00",
+          limit: "3010.00",
+          status: 409,
+        }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "place-order");
+      await flush(el);
+
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+      await flush(el);
+
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toBe(
+        t("sale.over_simplified_limit").replace("{amount}", () =>
+          formatMoney("3010.00", currentLocale()),
+        ),
+      );
+      expect(banner.textContent).toContain("3010,00");
+      expect(ticket(el)).toBeNull();
+      expect(tenderPay(el).stage).toBe("collect");
+    });
+
     it("collect-order: a NETWORK failure (no answer) shows sale.unconfirmed, basket kept", async () => {
       // Collect is a terminal fiscal-file moment (Mode T files immediate, Mode I settles the deferred
       // invoice), so a `collectOrder` whose `fetch` got no answer has the same "did it file?" ambiguity

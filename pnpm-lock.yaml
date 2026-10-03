@@ -325,8 +325,8 @@ importers:
         specifier: workspace:*
         version: link:../print-agent
       '@waitron/verifactu':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.2.1
+        version: 0.2.1
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -708,6 +708,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@waitron/country-packs':
+        specifier: workspace:*
+        version: link:../country-packs
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
@@ -1046,8 +1049,8 @@ importers:
         specifier: workspace:*
         version: link:../sync-enrolment
       '@waitron/verifactu':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.2.1
+        version: 0.2.1
       drizzle-orm:
         specifier: ^0.45.3
         version: 0.45.3(@electric-sql/pglite@0.5.8)(@types/pg@8.23.1)(pg@8.23.0)
@@ -1064,6 +1067,9 @@ importers:
       '@waitron/catalogue':
         specifier: workspace:*
         version: link:../catalogue
+      '@waitron/country-packs':
+        specifier: workspace:*
+        version: link:../country-packs
       '@waitron/identity':
         specifier: workspace:*
         version: link:../identity
@@ -1541,8 +1547,8 @@ importers:
         specifier: workspace:*
         version: link:../fiscal-verifactu
       '@waitron/verifactu':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.2.1
+        version: 0.2.1
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -3764,8 +3770,8 @@ packages:
   '@vitest/utils@4.1.11':
     resolution: {integrity: sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ==}
 
-  '@waitron/verifactu@0.1.0':
-    resolution: {integrity: sha512-6eT+y27OmMOttUsoAPbCaI97Wl9XA8uak77pWZjkevB22bM0fnVwTd/cUtnyCqzfdbdO7rLGaQPXMC8OpA0IJA==}
+  '@waitron/verifactu@0.2.1':
+    resolution: {integrity: sha512-xR/CSRdEFDMhVua/3viiJI28F48nVbl6HfvIfOdLQKt0hXPVOHIijBOmArl0UQxiKdgPLyxyPp+gZ4Q+z96viw==}
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -7375,7 +7381,7 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
 
-  '@waitron/verifactu@0.1.0':
+  '@waitron/verifactu@0.2.1':
     dependencies:
       fast-xml-parser: 5.11.1
 

@@ -134,7 +134,7 @@ let killSpy: MockInstance<typeof process.kill>;
 async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSeriesId: string }> {
   await admin
     .insert(tenants)
-    .values({ id: 1, country: "ES", taxId: "90222222H", legalName: "Promote E2E Cloud SL" })
+    .values({ id: 1, country: "ES", taxId: "90222222F", legalName: "Promote E2E Cloud SL" })
     .onConflictDoNothing();
   await admin
     .insert(locations)

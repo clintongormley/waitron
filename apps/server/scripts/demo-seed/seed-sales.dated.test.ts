@@ -17,7 +17,7 @@ import { seedSales } from "./seed-sales.js";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const offsetAt = (instant: Date) => -instant.getTimezoneOffset();
 
-// A reduced rate of 11% from yesterday's local date, the shipped table otherwise.
+// A reduced rate of 4% from yesterday's local date, the shipped table otherwise.
 const CHANGE = vi.hoisted(() => {
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const local = new Date(yesterday.getTime() - yesterday.getTimezoneOffset() * 60_000);
@@ -29,7 +29,7 @@ vi.mock("@waitron/catalogue/src/vat-rates.js", async (importOriginal) => {
     ...original.VAT_RATE_TABLE,
     reduced: [
       { from: null, rate: "10.00" },
-      { from: CHANGE, rate: "11.00" },
+      { from: CHANGE, rate: "4.00" },
     ],
   };
   return {
@@ -51,7 +51,7 @@ describe("seedSales across a rate change", () => {
       planVenue(
         {
           country: "ES",
-          taxId: "81000001K",
+          taxId: "81000001G",
           legalName: "Casa Delgado SL",
           location: {
             name: "Sala principal",
@@ -110,7 +110,7 @@ describe("seedSales across a rate change", () => {
     expect(before.length).toBeGreaterThan(0);
     expect(from.length).toBeGreaterThan(0);
     expect(new Set(before.map(({ vatRate }) => vatRate))).toEqual(new Set([1000]));
-    expect(new Set(from.map(({ vatRate }) => vatRate))).toEqual(new Set([1100]));
+    expect(new Set(from.map(({ vatRate }) => vatRate))).toEqual(new Set([400]));
     expect(Date.now() - Date.parse(lines[0]!.issuedAt)).toBeLessThan(3.5 * DAY_MS);
   });
 });

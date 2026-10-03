@@ -114,6 +114,18 @@ describe("zero-rate sales", () => {
   });
 });
 
+describe("the VAT regime on each filed line", () => {
+  it("files every line of a sale under the general regime, ClaveRegimen 01", async () => {
+    const { saleId } = await sell();
+    const [row] = await suite.db
+      .select({ desglose: registrosFacturacion.desglose })
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.saleId, saleId));
+    const desglose = row!.desglose as { ClaveRegimen?: string }[];
+    expect(desglose.map((line) => line.ClaveRegimen)).toEqual(["01", "01"]);
+  });
+});
+
 describe("registerNode", () => {
   it("reports the node's live SIF registration", async () => {
     const registration = await withTransaction(suite.db, (tx) => backend.registerNode(tx, nodeId));
@@ -311,7 +323,7 @@ describe("recordCorrection — refusals", () => {
         descriptionOfOperation: "Venta en establecimiento",
         total: decimal("12.10"),
         vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
-        counterparty: { taxId: "B12345678", legalName: "Cliente SL", countryCode: "ES" },
+        counterparty: { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
       });
     });
 
@@ -347,7 +359,7 @@ describe("recordSubstitution — refusals", () => {
       descriptionOfOperation: "Canje de tiques simplificados",
       total: decimal("123.45"),
       vatBreakdown: [{ rate: decimal("21.00"), base: decimal("102.02"), tax: decimal("21.43") }],
-      counterparty: { taxId: "B12345678", legalName: "Cliente Empresarial SL", countryCode: "ES" },
+      counterparty: { taxId: "B12345674", legalName: "Cliente Empresarial SL", countryCode: "ES" },
       ...overrides,
     };
   }
@@ -399,7 +411,7 @@ describe("recordSubstitution — refusals", () => {
         descriptionOfOperation: "Venta en establecimiento",
         total: decimal("12.10"),
         vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
-        counterparty: { taxId: "B12345678", legalName: "Cliente SL", countryCode: "ES" },
+        counterparty: { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
       });
     });
 
@@ -484,7 +496,7 @@ describe("recordSale — invoice type selection", () => {
         descriptionOfOperation: "Venta en establecimiento",
         total: decimal("12.10"),
         vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
-        counterparty: { taxId: "B12345678", legalName: "Cliente SL", countryCode: "ES" },
+        counterparty: { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
       });
     });
     const [row] = await suite.db
@@ -536,7 +548,7 @@ describe("recordSale — invoice type selection", () => {
 
   it("names a Spanish recipient on the stored F1 record", async () => {
     await sellWithRecipient("88888888-8888-4888-8888-888888888888", 998, {
-      taxId: "B12345678",
+      taxId: "B12345674",
       legalName: "Cliente SL",
       countryCode: "ES",
     });
@@ -546,7 +558,7 @@ describe("recordSale — invoice type selection", () => {
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.numSerieFactura, "A/998"));
     expect(row?.destinatarios).toEqual({
-      IDDestinatario: [{ NombreRazon: "Cliente SL", NIF: "B12345678" }],
+      IDDestinatario: [{ NombreRazon: "Cliente SL", NIF: "B12345674" }],
     });
   });
 

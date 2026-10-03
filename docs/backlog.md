@@ -2070,8 +2070,9 @@ required, so the refusal is one route away, not one feature away.
   still a full invoice naming no recipient** — the shape A1 corrected everywhere else. Not free to
   fix: it reproduces AEAT's vector-1 hash and the exact-XML expectations in `xml/serialize.test.ts`
   would all move.
-- **`packages/fiscal-verifactu`'s `venue-fields.ts` restates three rules the validator owns** (the
-  series-code set, the description cap and the control-character range), kept honest by a drift guard.
+- **`packages/fiscal-verifactu` restates rules the validator owns** — `venue-fields.ts` its venue-field
+  patterns and caps, `backend.ts` its simplified-invoice limit — kept honest by drift guards
+  (`record-limits.test.ts` compares the limit and the recipient name cap with the validator's verdict).
   Exporting the patterns from the library instead was DEFERRED on purpose (owner, 2026-09-12) — it
   widens an audited fiscal library's public surface and the drift guard already closes the risk.
   Revisit when something else needs those patterns.
@@ -2102,8 +2103,7 @@ chosen before invoice issue. The legal basis and dated primary-source excerpts a
 details, A230's tax-ID check-letter validation, a separate full-invoice series (A1e), every issuance
 path, receipt-printer delivery, VAT reporting and mixed/split payments. F3 conversion of an already
 issued F2, F1's R1–R4 correction path and foreign-recipient `IDOtro`/`IDType` remain separate decisions.
-A230's validator is itself blocked on an owner decision about the 0.2.0 dependency and unedited golden
-test (B7 below). **Next action:** owner reviews the design's B2B delivery, F1 credit/refund limitation
+**Next action:** owner reviews the design's B2B delivery, F1 credit/refund limitation
 and manual remedy, and asesor questions; approves the scope and medium before a build; and separately
 signs off fiscal issuance changes before landing.
 
@@ -4686,18 +4686,42 @@ approved.
 
 ### B7. Provisioning and build debt
 
-**`@waitron/verifactu` 0.2.0 (A230, owner 2026-10-03) — BLOCKED on an owner decision.** 0.2.0 hashes,
-builds and serialises exactly what 0.1.0 did for the same input (both suites' captured inputs fed to
-both published packages, 2026-10-03), but its validator refuses every sale Waitron builds today: no
-`ClaveRegimen` on a VAT line (`packages/fiscal-verifactu/src/backend.ts`), which AEAT's rules make
-mandatory, so today's filings likely lack a required field (not tried against AEAT). It also refuses
-test tax IDs with a wrong check letter, including the golden fingerprint test's pinned one, so that
-test cannot pass unedited. 0.1.0's lookup state names were wrong (`Correcta` for AEAT's `Correcto`),
-so `reconcile.ts` would not recognise a real AEAT status. On 0.2.0, 156 of 420 fiscal-verifactu and
-699 of 7,775 apps/server tests fail. The options, the extra refusals that can reach a till (€3,010
-simplified-invoice limit, a customer tax ID's check letter, a VAT of 0.00 on a tiny base) and the
-recommendation are in lane B's question of 2026-10-03; the measurement branch
-`feat/service-verifactu-0-2-0` is local only.
+**`@waitron/verifactu` 0.2.1 (A230, owner 2026-10-03) — DONE on this branch.** Waitron moved from
+0.1.0 to `^0.2.1` (0.2.1 is A230a: the library now accepts a zero VAT amount when the base times the
+rate rounds to 0.00). The fingerprint, built record and XML are unchanged for the same input (both
+published packages fed the same records; controls showed a difference is reported). Done with it:
+`ClaveRegimen: "01"` on every VAT line; the lookup states `Correcto`/`AceptadoConErrores`/`Anulado`
+(0.1.0's names would not have matched a real AEAT answer); a missing `TiempoEsperaEnvio`; a reply
+line with no readable status gets its own branch (`fiscal.estado_desconocido`); `validate` is given
+the record's own generation time as `now`; validation warnings are split by code (totals →
+`fiscal.record_totals_disagree`, the rest filed and flagged `fiscal.record_flagged`); a voided sale's
+lookup is read through its cancellation; test tax IDs carry a correct check letter and the golden
+test's pinned one was corrected with its fingerprint re-pinned (owner-approved). Caught at entry: a
+sale over €3,010.00 (`sale.total_exceeds_simplified_limit`, limit from the fiscal seat), a customer's
+tax ID or legal name in `recordSubstitution` (`counterparty.invalid`), a venue legal name over 120
+characters. Left open:
+  - **A resent cancellation AEAT already holds now counts as accepted when AEAT's stored fingerprint
+    matches the cancellation's** (`drain.ts`'s `handleDuplicate`; a mismatch still halts with
+    `fiscal.duplicado_anulado`). Shown against the library's fake only; what real AEAT answers to a
+    resent cancellation is not established. The owner may want to confirm this choice.
+  - **`HUELLA_MISMATCH` is filed and flagged, not refused.** It is not expected to occur, since
+    Waitron's own builder computes the fingerprint; nothing tests that it cannot. Refusing it may be
+    preferred since a wrong fingerprint is permanent.
+  - **No sale over €3,010 can be made at all**: Waitron issues only simplified invoices and no screen
+    accepts a customer's tax ID, so a full invoice is not offered. Spain's legal ceiling for a
+    simplified invoice in hospitality is €3,000 (RD 1619/2012 art. 4.2, quoted in
+    [verifactu-findings.md](compliance/verifactu-findings.md) and the
+    [full-invoices design](superpowers/specs/2026-10-03-full-invoices-at-till-design.md)); the
+    branch refuses over €3,010, the limit `@waitron/verifactu`'s validator applies (3,000 plus its
+    10.00 tolerance), as the owner asked.
+  - **A voided sale whose lookup AEAT answers under the sale's own reference** is not handled; not
+    shown to happen either way.
+  - **An unusable `TiempoEsperaEnvio` is not recorded** anywhere (the raw value is dropped).
+  - **The till's find-bill pay shows the generic sale error for an over-limit refusal**: the
+    find-bill dialog (`apps/till/src/widgets/find-bill-dialog.ts`) takes its error as a plain
+    string key, so it cannot carry the amount the collect and table-bill paths now show.
+  - **A dev venue built before A230 keeps the tax ID `50000000K`**, whose sales 0.2.1 refuses;
+    `wa-wt reset demo <name>` rebuilds it with `50000000R`.
 
 - **Resetting a box without a terminal** (owner, 2026-10-02). An operator who set the box up in
   Demo and now wants to Prepare has to wipe Demo away first, and the only wipe is
@@ -5388,12 +5412,11 @@ recommendation are in lane B's question of 2026-10-03; the measurement branch
       rejection.
     - Removing `appendToChain`'s nested `tx.transaction` makes no test fail (`chain.test.ts`'s
       header says so); the protection it gives a losing attempt has no test holding it.
-    - `chain.ts` raises `fiscal.record_totals_disagree` for every warning the validator returns.
-      `@waitron/verifactu@0.1.0` emits two, both totals checks, so it is right today; nothing
-      fails if the library adds a warning of another kind.
-    - The frozen `write-path.e2e.test.ts` points at `test/fixtures.ts:249-256` and
-      `test/write-path-fixtures.ts:37-44`, which have moved; the receipt they cite is back in
-      `test/fixtures.ts`. Correct them only in a change allowed to touch that file.
+    - `write-path.e2e.test.ts` (lines 414 and 418) points at `test/fixtures.ts:249-256` for a
+      receipt of one basket hashing differently filed 16th and filed standalone, and at
+      `test/write-path-fixtures.ts:37-44` for `steadyClock`. The receipt is now at
+      `test/fixtures.ts:285-289` and `steadyClock` at `test/write-path-fixtures.ts:27-39`. Correct
+      them only in a change allowed to touch that file.
   - `apps/setup` code, found by #567. `#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`, so a
     rejected or uncertain fiscal-test banner, and an accepted result, survive leaving that screen and
     coming back, even after the certificate changes (found by reading, not run; whether that is
@@ -6340,10 +6363,10 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
 
 **Fiscal (each behind its own review, owner sign-off at land):**
 
-- **The three alta builders are triplicated** — `recordSale`/`recordCorrection`/`recordSubstitution`
-  in `packages/fiscal-verifactu/src/backend.ts`. Safe seam: a helper taking the assembled
-  `Omit<AltaInput,"Encadenamiento">` plus a `buildDesglose`; needs a huella-invariance re-run across
-  all three.
+- **The three alta builders repeat their record assembly** — `recordSale`/`recordCorrection`/
+  `recordSubstitution` in `packages/fiscal-verifactu/src/backend.ts`; the VAT lines already share
+  `toDetalleDesglose`. Safe seam: a helper taking the assembled `Omit<AltaInput,"Encadenamiento">`;
+  needs a huella-invariance re-run across all three.
 - `mirror-bundle.ts`'s `r.series ?? []` branch is un-exercised; export `ID_SISTEMA_MAX_LENGTH`
   when either package is next touched; `insertNodeSeriesTx`'s held-code check is SELECT-then-INSERT.
 

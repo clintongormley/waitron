@@ -101,7 +101,7 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
-    await drain(drainDeps(resolveClient), DRAIN_AT); // AEAT now holds it Correcta; ours aceptado; drainer wrote an ack
+    await drain(drainDeps(resolveClient), DRAIN_AT); // AEAT now holds it Correcto; ours aceptado; drainer wrote an ack
 
     // Model a genuinely lost acknowledgement: our side never persisted the response, so it still
     // reads `pendiente`, has no CSV, was never claimed (`enviado_en` null), and carries no ack.
@@ -118,7 +118,7 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     // The audit still REPORTS the mismatch (localState read from the pre-correction snapshot).
     expect(result.lostAck.map((m) => m.recordId)).toEqual([seeded.registroIds[0]]);
     expect(result.lostAck[0]!.localState).toBe("pendiente");
-    expect(result.lostAck[0]!.reportedState).toBe("Correcta");
+    expect(result.lostAck[0]!.reportedState).toBe("Correcto");
 
     // AND it corrected the estado…
     const env = await envioFor(seeded.registroIds[0]!);

@@ -25,6 +25,8 @@ import type { Transaction } from "@waitron/db";
  */
 export class NoneBackend implements FiscalBackend {
   readonly id = "none";
+  readonly simplifiedInvoiceLimit = null;
+  readonly recipientNameMaxLength = null;
 
   registerNode(_tx: Transaction, nodeId: NodeId): Promise<NodeRegistration> {
     return Promise.resolve({

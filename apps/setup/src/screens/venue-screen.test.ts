@@ -546,6 +546,18 @@ describe("setup-venue-screen", () => {
     expect(el.shadowRoot!.activeElement).toBeNull();
   });
 
+  it("explains a refused legal name beside the field, naming the length cap as well as hidden characters", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      invalidField: "legalName",
+    });
+    const input = q(el, "[data-test=legalName]")!;
+    await (input as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(input.hasAttribute("invalid")).toBe(true);
+    const said = input.shadowRoot!.querySelector("[data-error]")!.textContent!;
+    expect(said).toContain("120 characters");
+    expect(said).toContain("hidden characters");
+  });
+
   it("maps the server's nested field path onto this form's own field", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       invalidField: "location.operationDescription",

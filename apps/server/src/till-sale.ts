@@ -39,7 +39,12 @@ import {
   recordManualCardPayment,
 } from "@waitron/payments";
 import type { CapturedPaymentForOrder, PaymentProvider, PaymentResult } from "@waitron/payments";
-import { formatInvoiceNumber, recordSale, settleSale } from "@waitron/core";
+import {
+  formatInvoiceNumber,
+  recordSale,
+  refuseOverSimplifiedLimit,
+  settleSale,
+} from "@waitron/core";
 import type { FiscalBackend, ReceiptQrText } from "@waitron/fiscal";
 import {
   createOpenOrder,
@@ -950,6 +955,8 @@ async function payIntegrated(
             invalidMakeAt: "ignore",
           })
         : await priceStoredOrderForIssuance(tx, req.id);
+    // Before the reader is asked: P3 could never file this sale.
+    refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, order.gross.total);
     const wasPlaced = locked?.status === "placed";
     if (compareDecimal(order.gross.total, ZERO) === 0) {
       // Nothing to charge, so the reader is not asked and no tip is taken; called only to refuse a

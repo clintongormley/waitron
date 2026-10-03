@@ -123,6 +123,7 @@ async function setupVenue(): Promise<Venue> {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
   return inTx(async (tx) => {

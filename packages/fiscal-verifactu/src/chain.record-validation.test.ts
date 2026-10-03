@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
 import { sales, withTransaction } from "@waitron/db";
@@ -168,6 +168,40 @@ describe("a record whose totals disagree with themselves is written, filed and f
   });
 });
 
+describe("a record's dates are checked against the time it was generated, not this machine's clock", () => {
+  // `saleInput` issues at 2026-03-01T13:05:00+01:00 from the trusted clock (`steadyClock`). Only
+  // `Date` is faked, so the wall clock is the one thing that moves.
+  const GENERATED = new Date("2026-03-01T13:05:00+01:00");
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function sellWithWallClockAt(wallClock: Date) {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(wallClock);
+    await useSeriesCode("FS");
+    return sell();
+  }
+
+  it("records a sale while the wall clock is days behind it, with no incident", async () => {
+    const { saleId } = await sellWithWallClockAt(new Date(GENERATED.getTime() - 3 * 86_400_000));
+    expect(saleId).toBeDefined();
+    expect((await suite.db.execute(sql`select code from incidents`)).rows).toEqual([]);
+  });
+
+  it("raises no incident while the wall clock is two hours behind on the same day", async () => {
+    await sellWithWallClockAt(new Date(GENERATED.getTime() - 2 * 3_600_000));
+    expect((await suite.db.execute(sql`select code from incidents`)).rows).toEqual([]);
+  });
+
+  it("records a sale while the wall clock is years ahead of it, with no incident", async () => {
+    const { saleId } = await sellWithWallClockAt(new Date("2029-06-01T12:00:00Z"));
+    expect(saleId).toBeDefined();
+    expect((await suite.db.execute(sql`select code from incidents`)).rows).toEqual([]);
+  });
+});
+
 describe("a recipient's name is checked as closely as the issuer's", () => {
   /** A business customer's name is typed or pasted at the till, and `registros_facturacion` is
    * append-only, so a control character stored there could never be taken out again.
@@ -210,7 +244,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
         descriptionOfOperation: "Venta en establecimiento",
         total: decimal("12.10"),
         vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
-        counterparty: { taxId: "B12345678", legalName, countryCode: "ES" },
+        counterparty: { taxId: "B12345674", legalName, countryCode: "ES" },
       });
     });
   }
@@ -250,7 +284,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
 
     const [registro] = await suite.db.select().from(registrosFacturacion);
     expect(registro?.destinatarios).toEqual({
-      IDDestinatario: [{ NombreRazon: "Cliente SL", NIF: "B12345678" }],
+      IDDestinatario: [{ NombreRazon: "Cliente SL", NIF: "B12345674" }],
     });
   });
 });

@@ -260,6 +260,88 @@ describe("drain — flow control (envio_flujo)", () => {
 });
 
 /**
+ * `@waitron/verifactu` reports no `TiempoEsperaEnvio` when AEAT's reply carries no usable wait. The
+ * reply is still saved, nothing more is sent this pass, and the next gate is set from the last wait
+ * AEAT did give, never from the missing one.
+ */
+describe("drain — a reply with no usable TiempoEsperaEnvio", () => {
+  const NOW = new Date("2026-07-21T00:01:00Z");
+  let seeded: SeededDrain;
+  let deps: DrainDeps;
+
+  function withoutWait(client: VerifactuClient): VerifactuClient {
+    return {
+      ...client,
+      submit: async (cabecera, registros) => ({
+        ...(await client.submit(cabecera, registros)),
+        TiempoEsperaEnvio: undefined,
+      }),
+    };
+  }
+
+  beforeEach(async () => {
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    seeded = await seedPendingEnvios(suite.db, { count: 6 });
+    deps = {
+      db: suite.db,
+      resolveClient: staticResolver(withoutWait(aeat.client())),
+      skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+      environment: "production",
+      maxRegistrosPorEnvio: 3,
+    };
+  });
+
+  afterEach(async () => {
+    await suite.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
+    await suite.db.execute(sql`delete from envio_flujo`);
+  });
+
+  async function flujo() {
+    const { rows } = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ proximo_envio_en: string; tiempo_espera_seg: number }>(
+        sql`select proximo_envio_en, tiempo_espera_seg from envio_flujo`,
+      ),
+    );
+    return rows[0];
+  }
+
+  it("saves the reply but sends no second full chunk in the same pass", async () => {
+    const result = await drain(deps, NOW);
+
+    expect(result.batchesSent).toBe(1);
+    expect(result.recordsAccepted).toBe(3);
+    const { rows } = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ estado: string; csv: string | null }>(
+        sql`select estado, csv from envios where ${ownChain(seeded)}`,
+      ),
+    );
+    expect(rows.filter((r) => r.estado === "aceptado" && r.csv !== null)).toHaveLength(3);
+    expect(rows.filter((r) => r.estado === "pendiente")).toHaveLength(3);
+  });
+
+  it("gates the next send on the last wait AEAT gave", async () => {
+    await suite.db.execute(sql`
+      insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+      values (1, ${new Date("2026-07-21T00:00:00Z").toISOString()}, 120)
+    `);
+
+    const result = await drain(deps, NOW);
+
+    const gate = new Date(NOW.getTime() + 120_000);
+    expect(await flujo()).toEqual({ proximo_envio_en: gate.toISOString(), tiempo_espera_seg: 120 });
+    expect(result.nextDueAt).toEqual(gate);
+  });
+
+  it("gates the next send on the initial 60 seconds when AEAT has never given a wait", async () => {
+    const result = await drain(deps, NOW);
+
+    const gate = new Date(NOW.getTime() + 60_000);
+    expect(await flujo()).toEqual({ proximo_envio_en: gate.toISOString(), tiempo_espera_seg: 60 });
+    expect(result.nextDueAt).toEqual(gate);
+  });
+});
+
+/**
  * A row left `enviando` past `RECUPERACION_ENVIANDO_MS` is a claim abandoned while this process
  * stays up. A restart's claims are requeued by `resetInFlightClaims` instead.
  */
@@ -749,7 +831,15 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
       NombreRazonEmisor: seeded.legalName,
       TipoFactura: "F2",
       DescripcionOperacion: "Venta en establecimiento (registro distinto, misma identidad)",
-      Desglose: [],
+      Desglose: [
+        {
+          ClaveRegimen: "01",
+          CalificacionOperacion: "S1",
+          BaseImponibleOimporteNoSujeto: "10.00",
+          TipoImpositivo: "21.00",
+          CuotaRepercutida: "2.10",
+        },
+      ],
       CuotaTotal: "2.10",
       ImporteTotal: "12.10",
       Encadenamiento: { PrimerRegistro: "S" },
@@ -805,7 +895,275 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     // accepted there even though it is halted locally: the fake, like AEAT, is chain-blind.
     const stored = aeat.stored();
     expect(stored.find((s) => s.key === seeded.facturaKeys[0])?.huella).toBe("D".repeat(64));
-    expect(stored.find((s) => s.key === seeded.facturaKeys[1])?.estado).toBe("Correcta");
+    expect(stored.find((s) => s.key === seeded.facturaKeys[1])?.estado).toBe("Correcto");
+  });
+});
+
+/**
+ * An anulación that meets error 3000 with `EstadoRegistroDuplicado` `Anulada`. The fake
+ * (`@waitron/verifactu/testing`) stores one record per invoice and, once a cancellation is accepted,
+ * reports it `Anulado` with the cancellation's own huella; why the drain reads that as AEAT holding
+ * this very anulación is in `handleDuplicate`'s doc in `./drain.ts`. Built through
+ * `recordSale`/`recordVoid`, so the rows are the ones the product writes.
+ */
+describe("drain — error 3000 Anulada on a resent anulación", () => {
+  let aeat: ReturnType<typeof createFakeAeat>;
+  let backend: VerifactuBackend;
+  let venue: Awaited<ReturnType<typeof seedTenantWithSif>>;
+  let voidSessionId: string;
+  // Envíos default to the wall-clock insert time, so a minute past it has them due.
+  let firstPass: Date;
+  let secondPass: Date;
+
+  beforeEach(async () => {
+    venue = await seedTenantWithSif(suite.db);
+    const { rows: mgr } = await suite.db.execute<{ id: string }>(
+      sql`insert into persons (id, created_at, display_name, pin_hash, role)
+          values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
+    );
+    const session = await withTransaction(suite.db, (tx) =>
+      loginWithPin(tx, { tillId: venue.tillId, personId: mgr[0]!.id, pin: "1234" }),
+    );
+    voidSessionId = session.id;
+    aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z"), tiempoEsperaInicial: 5 });
+    backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: steadyClock,
+      db: suite.db,
+      resolveClient: staticResolver(aeat.client()),
+    });
+    firstPass = new Date(Date.now() + 60_000);
+    secondPass = new Date(firstPass.getTime() + backoffMs(1) + 1_000);
+  });
+
+  const sell = () => withTransaction(suite.db, (tx) => recordSale(tx, backend, saleInput(venue)));
+
+  const voidSale = (saleId: Awaited<ReturnType<typeof sell>>["saleId"]) =>
+    withTransaction(suite.db, (tx) =>
+      recordVoid(tx, backend, saleId, "staff error", { sessionId: voidSessionId }),
+    );
+
+  /** The chain's rows in order: tipo, estado and incidencia per secuencia. */
+  const chainRows = async () =>
+    decodeFlags(
+      await withTransaction(suite.db, (tx) =>
+        tx.execute<{ tipo_registro: string; estado: string; incidencia: number }>(sql`
+          select r.tipo_registro, e.estado, e.incidencia from envios e
+          join registros_facturacion r on r.id = e.registro_id
+          where r.node_id = ${venue.nodeId} order by r.secuencia
+        `),
+      ),
+    ).rows;
+
+  const anulacionId = async () => {
+    const { rows } = await suite.db.execute<{ id: string }>(sql`
+      select id from registros_facturacion
+      where node_id = ${venue.nodeId} and tipo_registro = 'anulacion'
+    `);
+    return rows[0]!.id;
+  };
+
+  const incidentCodes = async () =>
+    (
+      await withTransaction(suite.db, (tx) =>
+        tx.execute<{ code: string }>(sql`select code from incidents order by code`),
+      )
+    ).rows.map((r) => r.code);
+
+  it("files an anulación whose first reply line had no readable status, and halts nothing behind it", async () => {
+    const sale = await sell();
+    await voidSale(sale.saleId);
+    const anulacion = await anulacionId();
+    const stripAnulacionStatus = (client: VerifactuClient): VerifactuClient => ({
+      ...client,
+      submit: async (cabecera, registros) => {
+        const respuesta = await client.submit(cabecera, registros);
+        return {
+          ...respuesta,
+          RespuestaLinea: respuesta.RespuestaLinea.map((linea) =>
+            linea.RefExterna === anulacion ? { ...linea, EstadoRegistro: undefined } : linea,
+          ),
+        };
+      },
+    });
+    await drain(drainDeps(staticResolver(stripAnulacionStatus(aeat.client()))), firstPass);
+    expect((await chainRows()).map((r) => r.estado)).toEqual(["aceptado", "pendiente"]);
+
+    await sell();
+    const result = await drain(drainDeps(staticResolver(aeat.client())), secondPass);
+
+    expect((await chainRows()).map((r) => [r.tipo_registro, r.estado])).toEqual([
+      ["alta", "aceptado"],
+      ["anulacion", "aceptado"],
+      ["alta", "aceptado"],
+    ]);
+    expect(result.recordsAccepted).toBe(2);
+    expect(result.recordsHalted).toBe(0);
+    expect(await incidentCodes()).toEqual(["fiscal.estado_desconocido"]);
+  });
+
+  it("files a resent anulación AEAT already accepted, and halts nothing behind it", async () => {
+    const sale = await sell();
+    await voidSale(sale.saleId);
+    await drain(drainDeps(staticResolver(aeat.client())), firstPass);
+    const anulacion = await anulacionId();
+    // As a restart reset or a lost reply leaves it: pending again, though AEAT holds it.
+    await suite.db.execute(sql`
+      update envios set estado = 'pendiente', proximo_intento_en = ${firstPass.toISOString()}
+      where registro_id = ${anulacion}
+    `);
+
+    await sell();
+    const result = await drain(drainDeps(staticResolver(aeat.client())), secondPass);
+
+    const rows = await chainRows();
+    expect(rows.map((r) => r.estado)).toEqual(["aceptado", "aceptado", "aceptado"]);
+    expect(result.recordsAccepted).toBe(2);
+    expect(result.recordsHalted).toBe(0);
+    expect(await incidentCodes()).toEqual([]);
+    const { rows: confirmed } = await suite.db.execute<{
+      csv: string | null;
+      confirmado_en: string | null;
+    }>(sql`select csv, confirmado_en from envios where registro_id = ${anulacion}`);
+    expect(confirmed[0]?.csv).toEqual(expect.any(String));
+    expect(confirmed[0]?.confirmado_en).toBe(secondPass.toISOString());
+  });
+
+  it("still halts an anulación when what AEAT holds as Anulada carries another huella", async () => {
+    const sale = await sell();
+    await drain(drainDeps(staticResolver(aeat.client())), firstPass);
+    // AEAT's copy of the sale's identity is Anulada, but under the ALTA's huella, not ours.
+    const [altaKey] = aeat.stored().map((s) => s.key);
+    aeat.annul(altaKey!);
+    await voidSale(sale.saleId);
+    await sell();
+
+    const result = await drain(drainDeps(staticResolver(aeat.client())), secondPass);
+
+    expect(await chainRows()).toEqual([
+      { tipo_registro: "alta", estado: "aceptado", incidencia: false },
+      { tipo_registro: "anulacion", estado: "detenido", incidencia: true },
+      { tipo_registro: "alta", estado: "detenido", incidencia: true },
+    ]);
+    expect(result.recordsAccepted).toBe(0);
+    expect(result.recordsHalted).toBe(2);
+    expect(await incidentCodes()).toEqual(["fiscal.duplicado_anulado"]);
+  });
+});
+
+/**
+ * A line whose own status is missing or unrecognised (`status_unknown`): the reply says nothing about
+ * whether AEAT stored the record. The fake is made to drop the status from every line it returns.
+ */
+describe("drain — a reply line with no recognisable status", () => {
+  const NOW = new Date("2026-07-21T00:01:00Z");
+  let aeat: ReturnType<typeof createFakeAeat>;
+  let consultas = 0;
+
+  function withoutLineStatus(client: VerifactuClient): VerifactuClient {
+    return {
+      submit: async (cabecera, registros) => {
+        const respuesta = await client.submit(cabecera, registros);
+        return {
+          ...respuesta,
+          RespuestaLinea: respuesta.RespuestaLinea.map((linea) => ({
+            ...linea,
+            EstadoRegistro: undefined,
+          })),
+        };
+      },
+      consultar: async (...args) => {
+        consultas += 1;
+        return client.consultar(...args);
+      },
+    };
+  }
+
+  beforeEach(() => {
+    aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z"), tiempoEsperaInicial: 5 });
+    consultas = 0;
+  });
+
+  it("puts the record back to wait for a later send, flagged, with a warning incident carrying the reply's CSV", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    // The second record is rejected, so the stripped reply hides a refusal as well as an accept.
+    aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
+    const result = await drain(drainDeps(staticResolver(withoutLineStatus(aeat.client()))), NOW);
+
+    const rows = decodeFlags(
+      await withTransaction(suite.db, (tx) =>
+        tx.execute<{
+          estado: string;
+          incidencia: number;
+          proximo_intento_en: string;
+          csv: string | null;
+        }>(sql`
+        select e.estado, e.incidencia, e.proximo_intento_en, e.csv from envios e
+        join registros_facturacion r on r.id = e.registro_id
+        where r.node_id = ${seeded.nodeId} order by r.secuencia
+      `),
+      ),
+    );
+    const retryAt = new Date(NOW.getTime() + backoffMs(1)).toISOString();
+    expect(rows.rows).toEqual([
+      { estado: "pendiente", incidencia: true, proximo_intento_en: retryAt, csv: null },
+      { estado: "pendiente", incidencia: true, proximo_intento_en: retryAt, csv: null },
+    ]);
+    expect(consultas).toBe(0);
+    expect(result.recordsAccepted).toBe(0);
+    expect(result.recordsHalted).toBe(0);
+    expect(result.nextDueAt?.toISOString()).toBe(retryAt);
+
+    const acks = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ registro_id: string }>(
+        sql`select registro_id from acks where ${ownChain(seeded)}`,
+      ),
+    );
+    expect(acks.rows).toEqual([]);
+
+    const inc = parseParams(
+      await withTransaction(suite.db, (tx) =>
+        tx.execute<{ code: string; severity: string; params: string }>(
+          sql`select code, severity, params from incidents order by params`,
+        ),
+      ),
+    );
+    expect(inc.rows).toHaveLength(2);
+    for (const incident of inc.rows) {
+      expect(incident.code).toBe("fiscal.estado_desconocido");
+      expect(incident.severity).toBe("warning");
+    }
+    const byId = new Map(inc.rows.map((i) => [i.params.registroId, i.params]));
+    const [first, second] = seeded.registroIds;
+    // A partly accepted envío carries a CSV; AEAT never returns it again, so the incident keeps it.
+    expect(byId.get(first!)).toEqual({
+      registroId: first,
+      estado: null,
+      codigo: null,
+      mensaje: null,
+      csv: expect.any(String),
+    });
+    expect(byId.get(second!)).toMatchObject({
+      registroId: second,
+      codigo: 1100,
+      mensaje: "Campo obligatorio ausente",
+    });
+  });
+
+  it("files the record on the next send once AEAT's answer is readable again", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    await drain(drainDeps(staticResolver(withoutLineStatus(aeat.client()))), NOW);
+
+    // The first send stored the record at AEAT, so the resend meets its duplicate check (3000,
+    // `Correcta`), which reads as an accept.
+    const later = new Date(NOW.getTime() + backoffMs(1));
+    const result = await drain(drainDeps(staticResolver(aeat.client())), later);
+
+    const rows = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ estado: string }>(sql`select estado from envios where ${ownChain(seeded)}`),
+    );
+    expect(rows.rows.map((r) => r.estado)).toEqual(["aceptado"]);
+    expect(result.recordsAccepted).toBe(1);
   });
 });
 
@@ -1009,7 +1367,7 @@ describe("drain — the deployment-environment guard", () => {
     try {
       const seeded = await seedPendingEnvios(suite.db, { count: 3, entorno: null });
       cleanupNodeId = seeded.nodeId;
-      const healthy = await seedIndependentChain(suite.db, seeded, {
+      const healthy = await seedIndependentChain(suite.db, {
         sifId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
         secuencia: 1,
         entorno: "production",

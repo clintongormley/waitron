@@ -31,7 +31,7 @@ let till: SeededTill;
 let substitutionSeriesId: string;
 
 const RECIPIENT: Counterparty = {
-  taxId: "B12345678",
+  taxId: "B12345674",
   legalName: "Cliente Empresarial SL",
   countryCode: "ES",
 };
@@ -208,6 +208,14 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
     expect(row?.tipoRectificativa).toBeNull();
     expect(row?.facturasRectificadas).toBeNull();
     expect(row?.importeRectificacion).toBeNull();
+  });
+
+  it("files every line of the F3 under the general regime, ClaveRegimen 01", async () => {
+    const ticketId = await recordTicket(1);
+    const substitutionId = await substitute([ticketId]);
+    const row = await rawRegistro(substitutionId);
+
+    expect(row.desglose?.map((line) => line.ClaveRegimen)).toEqual(["01"]);
   });
 
   it("stores a huella that recomputes from its own columns, hashing the positive ImporteTotal", async () => {

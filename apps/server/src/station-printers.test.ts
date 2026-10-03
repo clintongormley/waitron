@@ -55,6 +55,7 @@ async function setupVenue(): Promise<TillConfig> {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
 }

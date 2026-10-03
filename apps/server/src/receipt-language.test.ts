@@ -83,7 +83,7 @@ async function venueWith(
     planVenue(
       {
         country: "ES",
-        taxId: "66000001K",
+        taxId: "66000001Y",
         legalName: "Idiomes SL",
         location: {
           name: "Sala",
@@ -120,6 +120,7 @@ async function venueWith(
       ...(envLocale === undefined ? {} : { WAITRON_TILL_LOCALE: envLocale }),
     }),
     orderFlow: "prepay",
+    simplifiedInvoiceLimit: null,
   };
   const { menuItemId, staffId, profileId, printerId } = await withTransaction(db, async (tx) => {
     await tx.execute(

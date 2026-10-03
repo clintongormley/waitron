@@ -25,6 +25,7 @@ import { listAdjustmentReasons } from "@waitron/adjustments";
 import { seedDemoRestaurant } from "./seed.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 const LOCALE: SeedLocale = "en";
 
@@ -37,7 +38,7 @@ const suite = useVenueDb({
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(90_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(90_000_000 + nifCounter);
 }
 
 interface Venue {

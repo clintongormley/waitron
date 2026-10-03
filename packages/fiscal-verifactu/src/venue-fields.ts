@@ -18,13 +18,16 @@ export interface VenueFiscalFields {
   readonly operationDescription: string;
 }
 
-/* The next three constants restate rules `@waitron/verifactu` owns, which exports only the
+/* The next four constants restate rules `@waitron/verifactu` owns, which exports only the
  * whole-record validator; ./venue-fields.charset.test.ts compares each against its verdict. */
 
 /** The character set the validator applies to `NumSerieFactura` (`NUMSERIE_PATTERN`). */
 const NUMSERIE_CHARSET = /^[A-Za-z0-9/_.-]+$/;
 /** AEAT's cap on DescripcionOperacion, as `validate` applies it. */
 const DESCRIPTION_MAX = 500;
+/** AEAT's cap on a NombreRazon, the issuer's and a recipient's alike, counted in characters (code
+ * points) as `validate` counts it. */
+export const NOMBRE_RAZON_MAX = 120;
 /** The C0 control characters XML forbids (`CONTROL_CHAR_PATTERN`). Tab, line feed and carriage
  * return are deliberately NOT in the range — XML permits those three — which is why this is not a
  * blanket `\x00-\x1F`. */
@@ -69,7 +72,12 @@ export function validateVenueFiscalFields(venue: VenueFiscalFields): void {
     // NumSerieFactura's 60 characters.
     if (code.length > MAX_BASE_CODE_LENGTH) refuse(field);
   }
-  if (CONTROL_CHARS.test(venue.legalName)) refuse("legalName");
+  if (
+    CONTROL_CHARS.test(venue.legalName) ||
+    Array.from(venue.legalName).length > NOMBRE_RAZON_MAX
+  ) {
+    refuse("legalName");
+  }
   validateOperationDescription(venue.operationDescription);
 }
 

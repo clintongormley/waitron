@@ -2225,6 +2225,13 @@ describe("startServer, against a migrated venue directory", () => {
       expect(staff.status).toBe(200);
       expect(await staff.json()).toEqual([]);
 
+      // The enabled fiscal backend's simplified-invoice limit reaches the till's boot read.
+      const till = await fetch(`http://127.0.0.1:${port}/api/till`);
+      expect(till.status).toBe(200);
+      expect(
+        ((await till.json()) as { simplifiedInvoiceLimit: unknown }).simplifiedInvoiceLimit,
+      ).toBe("3010.00");
+
       // A bare 404: no setup routes, and no till SPA catch-all since WAITRON_TILL_APP_DIR is unset.
       const status = await fetch(`http://127.0.0.1:${port}/setup-api/status`);
       expect(status.status).toBe(404);
@@ -2977,7 +2984,11 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
   let till2: string;
 
   beforeAll(async () => {
-    const cfg: TillConfig = { ...loadTillConfig(TILL_ENV), orderFlow: "prepay" };
+    const cfg: TillConfig = {
+      ...loadTillConfig(TILL_ENV),
+      orderFlow: "prepay",
+      simplifiedInvoiceLimit: null,
+    };
     // The FK on `devices` needs a real `tills` row per bound device.
     const insertTill = async (name: string): Promise<string> => {
       const [row] = await sharedDb

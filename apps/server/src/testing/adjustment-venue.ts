@@ -276,7 +276,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     planVenue(
       {
         country: "ES",
-        taxId: "62000003K",
+        taxId: "62000003F",
         legalName: "Ajustes SL",
         location: {
           name: "Sala",
@@ -313,6 +313,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
   const seeded = await withTransaction(db, async (tx) => {

@@ -5,7 +5,13 @@ import { recordIncident } from "@waitron/core";
 import { AppError } from "@waitron/shared";
 import type { NodeId, SaleId, TillId } from "@waitron/shared";
 import { isUniqueViolation, type Transaction } from "@waitron/db";
-import type { AltaInput, AnulacionInput, Encadenamiento } from "@waitron/verifactu";
+import type {
+  AltaInput,
+  AnulacionInput,
+  Encadenamiento,
+  ValidationCode,
+  ValidationIssue,
+} from "@waitron/verifactu";
 import { buildAltaRecord, buildAnulacionRecord, validate } from "@waitron/verifactu";
 import { currentSif } from "./registro-sif.js";
 import type { SifRegistration } from "./registro-sif.js";
@@ -23,6 +29,19 @@ import { registrosFacturacion } from "./schema/registros.js";
  * position whatever wrote it, including a writer that never went through this file.
  */
 const MAX_APPEND_ATTEMPTS = 3;
+
+/** `validate`'s amount cross-checks: AEAT accepts a breach under its own ±10.00 tolerance. */
+const TOTALS_WARNINGS: ReadonlySet<ValidationCode> = new Set([
+  "CUOTA_TOTAL_MISMATCH",
+  "IMPORTE_TOTAL_MISMATCH",
+]);
+
+/** Warnings refused like errors: a malformed fingerprint in this append-only chain could never be
+ * corrected. */
+const REFUSED_WARNINGS: ReadonlySet<ValidationCode> = new Set([
+  "HUELLA_FORMAT",
+  "HUELLA_ANTERIOR_FORMAT",
+]);
 
 /**
  * Inputs for one record, MINUS `Encadenamiento` — the huella depends on the predecessor, which is
@@ -155,16 +174,22 @@ async function attemptAppend(
       ? buildAltaRecord({ ...registro.input, Encadenamiento: encadenamiento })
       : buildAnulacionRecord({ ...registro.input, Encadenamiento: encadenamiento });
 
-  // Refuse a record AEAT could not accept BEFORE it reaches the append-only table. This is the one
-  // seam every record type passes through (alta and anulación, so sale, void, correction and
-  // substitution alike), and the first moment the COMPLETE record exists — the chain pointer and
-  // the huella are filled in above — so what is checked is what will be stored.
+  // Refuse a record AEAT could not accept, or with a malformed fingerprint, BEFORE it reaches the
+  // append-only table. This is the one seam every record type passes through (alta and anulación,
+  // so sale, void, correction and substitution alike), and the first moment the COMPLETE record
+  // exists — the chain pointer and the huella are filled in above — so what is checked is what
+  // will be stored.
   //
-  // Only error severity REFUSES. `validate`'s warnings are the amount cross-checks, which AEAT
-  // accepts under its own ±10.00 tolerance; blocking a sale for one would refuse a record the
-  // authority would have taken. They are raised as an incident after the insert below.
-  const issues = validate(record);
-  const blocking = issues.filter((issue) => issue.severity === "error");
+  // Errors REFUSE, and so do `REFUSED_WARNINGS`. `@waitron/verifactu` makes a check a warning when
+  // AEAT accepts the record anyway, so blocking a sale for one would refuse a record the authority
+  // would have taken; they are raised as incidents after the insert below.
+  //
+  // Dates are judged against the trusted instant the record was generated from, never the wall
+  // clock, which on a box can disagree with the trusted clock.
+  const issues = validate(record, { now: registro.input.generadoEn });
+  const blocking = issues.filter(
+    (issue) => issue.severity === "error" || REFUSED_WARNINGS.has(issue.code),
+  );
   if (blocking.length > 0) {
     throw new AppError("fiscal.record_invalid", {
       fields: blocking.map((issue) => issue.field),
@@ -197,29 +222,47 @@ async function attemptAppend(
     .set({ secuencia, ultimoRegistroId: inserted.id, ultimaHuella: row.huella })
     .where(eq(cadenas.nodeId, nodeId));
 
-  // A warning does not block: AEAT accepts these under its own tolerance. But our totals
-  // disagreeing with our own VAT lines is a bug in the money while the venue keeps selling, so it
-  // is raised where a human can find it rather than left in a log line.
+  // Our totals disagreeing with our own VAT lines is a bug in the money while the venue keeps
+  // selling, and any other warning is a record AEAT may flag, so both are raised where a human can
+  // find them rather than left in a log line.
   //
   // On the caller's transaction: an incident that committed while its sale rolled back would
   // report a failure for a sale that never existed.
   const warnings = issues.filter((issue) => issue.severity === "warning");
-  if (warnings.length > 0) {
-    await recordIncident(tx, {
-      tillId: registro.tillId,
-      saleId: registro.saleId,
-      error: new AppError("fiscal.record_totals_disagree", {
-        fields: warnings.map((issue) => issue.field),
-        codes: warnings.map((issue) => issue.code),
-      }),
-      severity: "warning",
-      // The record's own generation instant, never `new Date()`: a wall-clock read here would
-      // stamp an incident at an instant nothing else in the transaction shares.
-      detectedAt: registro.input.generadoEn,
-    });
+  const totals = warnings.filter((issue) => TOTALS_WARNINGS.has(issue.code));
+  const others = warnings.filter((issue) => !TOTALS_WARNINGS.has(issue.code));
+  if (totals.length > 0) {
+    await raiseWarning(
+      tx,
+      registro,
+      new AppError("fiscal.record_totals_disagree", fieldsOf(totals)),
+    );
+  }
+  if (others.length > 0) {
+    await raiseWarning(tx, registro, new AppError("fiscal.record_flagged", fieldsOf(others)));
   }
 
   return { id: inserted.id, secuencia, huella: row.huella };
+}
+
+function fieldsOf(issues: ValidationIssue[]): { fields: string[]; codes: string[] } {
+  return { fields: issues.map((issue) => issue.field), codes: issues.map((issue) => issue.code) };
+}
+
+async function raiseWarning(
+  tx: Transaction,
+  registro: PendingRegistro,
+  error: AppError,
+): Promise<void> {
+  await recordIncident(tx, {
+    tillId: registro.tillId,
+    saleId: registro.saleId,
+    error,
+    severity: "warning",
+    // The record's own generation instant, never `new Date()`: a wall-clock read here would
+    // stamp an incident at an instant nothing else in the transaction shares.
+    detectedAt: registro.input.generadoEn,
+  });
 }
 
 /**

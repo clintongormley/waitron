@@ -62,6 +62,7 @@ import { createOpenOrder } from "./working-order.js";
 import { payWorkingOrderIntegrated } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 /**
  * The manager's way out of a card payment a crash left `attempting`: the stuck list and the
@@ -98,7 +99,7 @@ beforeAll(() => {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(79_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(79_000_000 + nifCounter);
 }
 
 const stripeSeat: CardProviderContribution = createStripeCardProvider((() => {
@@ -167,6 +168,7 @@ async function setup(
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
   const seeded = await withTransaction(suite.db, async (tx) => {

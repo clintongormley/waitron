@@ -34,6 +34,7 @@ import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { joinTables, moveGuests } from "./table-actions.js";
 import { partyRevisionOfOrder } from "./parties.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 /**
  * Joining and merging tabs, through to what gets FILED: every case here pays through a real
@@ -72,7 +73,7 @@ function systemClock(): TrustedClock {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(60_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
@@ -85,6 +86,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
 }

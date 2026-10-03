@@ -297,7 +297,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
           planVenue(
             {
               country: "ES",
-              taxId: "74000001K",
+              taxId: "74000001P",
               legalName: "Stream Loop SL",
               location: {
                 name: "Sala principal",
@@ -471,7 +471,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
           kitPath,
           "--confirm-old-box-gone",
           "--confirm-venue",
-          "74000001K",
+          "74000001P",
         ],
         env: {
           WAITRON_STATE_DIR: dirsB.state,

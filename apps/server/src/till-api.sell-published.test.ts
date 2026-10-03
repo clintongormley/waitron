@@ -62,6 +62,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { createTable } from "./tables.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // A till sells from each menu's PUBLISHED version, driven over HTTP to a genuine chained record:
 // the version a basket asserts, the availability the server overlays, and `/api/menu-state`.
@@ -105,7 +106,7 @@ beforeAll(() => {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(70_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(70_000_000 + nifCounter);
 }
 
 interface Lunch {
@@ -176,6 +177,7 @@ async function setupLunch(): Promise<Lunch> {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
   const seeded = await withTransaction(suite.db, async (tx) => {

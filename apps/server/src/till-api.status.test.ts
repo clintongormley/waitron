@@ -99,6 +99,7 @@ function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
 }

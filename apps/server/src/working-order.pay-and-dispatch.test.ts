@@ -77,6 +77,7 @@ import { collectOrder, payWorkingOrder } from "./till-sale.js";
 import { overridePinAttempts } from "./till-api.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // The working-order verbs driven on a venue provisioned through `applyVenue`, with a real
 // `VerifactuBackend` on the settle path, so a case here can follow an order through
@@ -135,7 +136,7 @@ function systemClock(): TrustedClock {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(60_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
@@ -148,6 +149,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     // The venue provisions with the DEFAULT `prepay` mode; a mode-specific test overrides both the
     // cfg field AND the location's `order_flow` column via `modeVenue` (below).
     orderFlow: "prepay",

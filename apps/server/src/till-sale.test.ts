@@ -59,6 +59,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { ZoneOffers } from "./testing/zone-offers.js";
 import { openPartyTab } from "./testing/serve-line.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // Exercise the sale path and the chained fiscal write end to end: provision a venue, seed a
 // catalogue, sell, and read the filed record back.
@@ -96,7 +97,7 @@ function systemClock(): TrustedClock {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(50_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(50_000_000 + nifCounter);
 }
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
@@ -109,6 +110,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
 }

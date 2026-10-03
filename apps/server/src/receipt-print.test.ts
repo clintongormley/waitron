@@ -71,6 +71,7 @@ import {
 import { readReceiptOrder } from "./receipt-order.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { printingAlertSource } from "./alert-sources.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 /**
  * The auto-print hook: a `print_jobs` outbox row and a `drawer_opens` audit row written atomically
@@ -120,7 +121,7 @@ function systemClock(): TrustedClock {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(60_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
 function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConfig {
@@ -132,6 +133,7 @@ function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConf
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow,
   };
 }

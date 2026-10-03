@@ -55,7 +55,7 @@ declare module "@waitron/shared" {
 
     /**
      * `attemptAppend` (./chain.ts) refused a record that `@waitron/verifactu`'s `validate` reports
-     * as one AEAT could not accept. Raised BEFORE the insert, so nothing is written and the chain
+     * as one AEAT could not accept, or as having a malformed fingerprint. Raised BEFORE the insert, so nothing is written and the chain
      * head does not move: `registros_facturacion` is append-only and hash-chained, so refusing a
      * record is the only remedy that leaves the venue repairable.
      *
@@ -73,6 +73,13 @@ declare module "@waitron/shared" {
      * `recordIncident`. Params never carry the amounts (see `fiscal.record_invalid`).
      */
     "fiscal.record_totals_disagree": { fields: string[]; codes: string[] };
+
+    /**
+     * `attemptAppend` (./chain.ts) wrote a record that `validate` warned about for a reason other
+     * than its totals — one AEAT accepts but reports back. Never thrown; params as
+     * `fiscal.record_totals_disagree`.
+     */
+    "fiscal.record_flagged": { fields: string[]; codes: string[] };
 
     /**
      * `./drain.ts`'s `applyOutcome`: AEAT rejected this record outright. Constructed, never thrown —
@@ -97,10 +104,23 @@ declare module "@waitron/shared" {
     };
 
     /**
+     * `./drain.ts`: AEAT's reply line for this record has a missing or unrecognised status, so
+     * whether AEAT stored it is unknown. A warning: the record waits for a later send. `estado` is
+     * the line's raw status text; `csv` is the envío's, kept because AEAT never returns it again.
+     */
+    "fiscal.estado_desconocido": {
+      registroId: string;
+      estado: string | null;
+      codigo: number | null;
+      mensaje: string | null;
+      csv: string | null;
+    };
+
+    /**
      * `./drain.ts`'s `handleDuplicate` (error 3000): AEAT's own copy of this identity is `Anulada`,
-     * so the invoice number is burned and this record can never become a confirmed accept. Halts
-     * the record and its chain's successors. No `codigo`/`mensaje` params: they would only ever
-     * repeat 3000.
+     * and the record is a sale, or a cancellation whose fingerprint differs from the one AEAT
+     * holds or for which AEAT returns no record. Halts the record and its chain's successors. No
+     * `codigo`/`mensaje` params: they would only ever repeat 3000.
      */
     "fiscal.duplicado_anulado": { registroId: string };
 
@@ -127,7 +147,7 @@ declare module "@waitron/shared" {
     };
 
     /**
-     * `./reconcile.ts`: a record we believe accepted that AEAT reports as `AceptadaConErrores`. A
+     * `./reconcile.ts`: a record we believe accepted that AEAT reports as `AceptadoConErrores`. A
      * WARNING, and a separate code from `fiscal.reconcile_drift_anulada` rather than one code with
      * the state as a param, because the two need different severities and operator responses.
      */
@@ -139,7 +159,7 @@ declare module "@waitron/shared" {
     };
 
     /**
-     * `./reconcile.ts`: a record we believe accepted that AEAT reports as `Anulada` — the authority
+     * `./reconcile.ts`: a record we believe accepted that AEAT reports as `Anulado` — the authority
      * holds as annulled a record our books count live. An error an operator must resolve.
      */
     "fiscal.reconcile_drift_anulada": {

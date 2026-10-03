@@ -61,6 +61,7 @@ import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { DRAWER_KICK } from "./receipt-print.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { createStation } from "./kitchen.js";
+import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 
 // `POST /api/sales`, `POST /api/pay` and the `/api/working-orders` routes driven over HTTP to a
 // GENUINE chained fiscal record, including the lost-response pay retry that must replay the ticket
@@ -103,7 +104,7 @@ function systemClock(): TrustedClock {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(60_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
@@ -116,6 +117,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
 }
