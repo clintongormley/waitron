@@ -35,8 +35,8 @@ export const baseStyles = css`
  * (`opacity: 0`) hit-target layer, not the visible control — applying this fragment's opacity
  * declaration there would make that invisible input visible whenever disabled. It still reads
  * `var(--wt-opacity-disabled)` directly for its half of the treatment.
- * wt-number-stepper also leaves this fragment off its buttons: their fill stays opaque while only
- * the symbol fades, so its disabled cursor is set separately.
+ * wt-number-stepper also leaves this fragment off its buttons: only the symbol fades, so its
+ * disabled cursor is set separately.
  */
 export const disabledStyles = css`
   opacity: var(--wt-opacity-disabled);

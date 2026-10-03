@@ -149,7 +149,8 @@ const panel = (theme: "light" | "dark") => `
       <wt-number-stepper
         label="Máximo"
         name="maximo"
-        placeholder="∞"
+        min="1"
+        clearable
       >
       </wt-number-stepper>
       <wt-number-stepper

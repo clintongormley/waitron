@@ -79,9 +79,11 @@
      quoting a list of consumers here: it has gone stale once already. */
   --wt-cell-name-max-width: 140px;
 
-  /* Both widths include the two buttons; the wide one leaves room for word placeholders. */
-  --wt-stepper-field-width: 152px;
-  --wt-stepper-field-width-wide: 184px;
+  /* The narrowest box: both buttons and room for a three-digit number between them. */
+  --wt-stepper-field-width: 88px;
+  /* Below --wt-tap-min by an owner decision (A263): the number keeps the two buttons apart, and
+     24px is WCAG 2.2's level AA minimum target (2.5.8). */
+  --wt-stepper-button-width: 24px;
 
   /* The room a price field leaves for its amount where nothing stretches it: "9999.99" at
      --wt-font-size-md, with its 12px padding on each side. A sign drawn by `locale` widens the box

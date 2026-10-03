@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { fieldLabel, fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
+import { fieldLabel, fieldStyles } from "@waitron/ui-core/field-styles";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
@@ -32,7 +32,7 @@ export class WtNumberStepper extends LitElement {
         /* A row aligned by baseline must line up the number text, not a button. */
         align-self: baseline;
         display: grid;
-        grid-template-columns: minmax(var(--wt-tap-min), 1fr) repeat(2, var(--wt-tap-min));
+        grid-template-columns: var(--wt-stepper-button-width) 1fr var(--wt-stepper-button-width);
         align-items: stretch;
       }
 
@@ -46,59 +46,60 @@ export class WtNumberStepper extends LitElement {
         height: 0;
         overflow: hidden;
         visibility: hidden;
-        padding-inline-start: var(--wt-space-2);
-        padding-inline-end: calc(2 * var(--wt-tap-min) + var(--wt-space-2));
+        font-size: var(--wt-font-size-sm);
+        padding-inline: var(--wt-space-2);
       }
 
       .field[data-label-required]::before {
         content: attr(data-label-text) "*";
-        padding-inline-end: calc(2 * var(--wt-tap-min) + var(--wt-space-2) + var(--wt-space-1));
+        padding-inline-end: calc(var(--wt-space-2) + var(--wt-space-1));
       }
 
       .field-label {
-        inset-inline-start: var(--wt-space-2);
-        inset-inline-end: calc(2 * var(--wt-tap-min) + var(--wt-space-2));
+        inset-inline: var(--wt-space-2);
       }
 
       .field-control {
-        grid-column: 1;
+        grid-column: 1 / -1;
         grid-row: 1;
         width: 0;
         min-width: 100%;
         box-sizing: border-box;
-        padding-inline: var(--wt-space-2);
-        text-align: start;
+        padding-inline: var(--wt-stepper-button-width);
+        text-align: center;
       }
 
       button {
+        grid-row: 1;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        height: 100%;
-        padding: 0;
+        width: var(--wt-stepper-button-width);
+        margin-block-start: calc(var(--wt-space-3) + var(--wt-font-size-sm));
+        /* The hover tint stops short of the box's bottom line, which stays whole. */
+        padding: 0 0 var(--wt-field-line-width-active);
+        background-clip: content-box;
         border: 0;
-        border-inline-start: 1px solid var(--wt-color-surface);
-        background: var(--wt-color-stepper-button);
+        background-color: transparent;
         color: var(--wt-color-primary);
         font: inherit;
         cursor: pointer;
       }
 
+      .field[data-compact] button {
+        margin-block-start: 0;
+      }
+
       button[data-step="-1"] {
-        grid-column: 2;
-        grid-row: 1;
+        grid-column: 1;
       }
 
       button[data-step="1"] {
         grid-column: 3;
-        grid-row: 1;
-        border-start-end-radius: var(--wt-radius-md);
       }
 
       button:not(:disabled):hover {
-        background: var(--wt-color-stepper-button-hover);
+        background-color: var(--wt-color-stepper-button);
       }
 
       button:disabled wt-icon {
@@ -123,6 +124,8 @@ export class WtNumberStepper extends LitElement {
   @property({ type: Boolean, reflect: true }) invalid = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
+  /** − on `min` clears the box to blank instead of being disabled there. */
+  @property({ type: Boolean }) clearable = false;
   /** Each is given `label`, naming the button after its field. */
   @property({ attribute: false }) decreaseLabel: (label: string) => string = (label) =>
     `Decrease ${label}`;
@@ -144,6 +147,11 @@ export class WtNumberStepper extends LitElement {
     event.stopPropagation();
     const current = this.current();
     if (current === null && delta === -1) return;
+    if (this.clearable && delta === -1 && current !== null && current <= this.min) {
+      this.value = "";
+      dispatchWtChange(this, event, { value: this.value });
+      return;
+    }
     const max = this.max ?? Number.POSITIVE_INFINITY;
     const next =
       current === null
@@ -165,7 +173,7 @@ export class WtNumberStepper extends LitElement {
     const hasHint = this.hint !== "";
     const describedBy = [...(hasHint ? [this.hintId] : []), ...(hasError ? [this.errorId] : [])];
     const inputId = this.name || this.generatedInputId;
-    const atMin = current === null || current <= this.min;
+    const atMin = current === null || (!this.clearable && current <= this.min);
     const atMax = this.max !== null && current !== null && current >= this.max;
     const showLabel = this.label !== "" && !this.hideLabel;
     const invalid = this.invalid || hasError;
@@ -174,11 +182,7 @@ export class WtNumberStepper extends LitElement {
         <div
           class="field"
           part="field"
-          data-label=${fieldLabelState({
-            value: this.value,
-            hint: this.hint,
-            placeholder: this.placeholder,
-          })}
+          data-label="float"
           ?data-invalid=${invalid}
           ?data-disabled=${this.disabled}
           ?data-compact=${!showLabel}
