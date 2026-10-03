@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./done-screen.js";
-import { BACKUP_SETUP_URL, type SetupDoneScreen } from "./done-screen.js";
+import { BACKUP_SETUP_URL, SetupDoneScreen } from "./done-screen.js";
+import "./review-screen.js";
+import type { SetupReviewScreen } from "./review-screen.js";
 import type { SetupApi } from "../api/client.js";
 
 const q = (el: SetupDoneScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
@@ -24,15 +26,17 @@ async function mountDone(
   return el;
 }
 
+const RESTART_EN = "The server is restarting — once it is back, open it here:";
+
 afterEach(() => {
   setLocale("en-GB");
   cleanupWidgets();
 });
 
 describe("setup-done-screen", () => {
-  it("announces the restart into trading on the provision/restore path", async () => {
+  it("announces the restart on the provision/restore path", async () => {
     const el = await mountDone(() => new Promise(() => {}));
-    expect(el.shadowRoot!.textContent).toContain("restarting into trading mode");
+    expect(el.shadowRoot!.textContent).toContain(RESTART_EN);
   });
 
   it.each([
@@ -180,21 +184,16 @@ describe("setup-done-screen", () => {
   });
 
   it("lists the box's reachability links on the provision/restore path", async () => {
-    const el = await mountDone(() => new Promise(() => {}), { hostname: "waitron.local" });
+    const el = await mountDone(() => new Promise(() => {}));
     const links = el.shadowRoot!.querySelector("[data-test=links]")!;
-    const hrefs = [...links.querySelectorAll("a")].map((a) =>
-      (a as HTMLAnchorElement).getAttribute("href"),
-    );
-    expect(hrefs).toContain("/");
-    expect(hrefs).toContain("/manage");
-    expect(hrefs).toContain("/manage/email");
-    expect(hrefs).toContain("http://waitron.local:9110");
+    const hrefs = [...links.querySelectorAll("wt-choice-row")].map((row) => row.href);
+    expect(hrefs).toEqual(["/", "/manage", "/manage/email"]);
   });
 
   it("does not promise trading mode on the mirror path", async () => {
     const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
     const text = el.shadowRoot!.textContent!;
-    expect(text).not.toContain("restarting into trading mode");
+    expect(text).not.toContain(RESTART_EN);
     expect(text.replace(/\s+/g, " ")).toContain("no till and no dashboard");
   });
 
@@ -249,11 +248,11 @@ describe("setup-done-screen", () => {
     expect(q(el, "h1")!.textContent!.trim()).toBe("Configuración completada");
     expect(q(el, "[data-test=mode-indicator]")!.textContent!.trim()).toBe("Preparación");
     const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
-    expect(text).toContain("El servidor se está reiniciando en modo de venta.");
-    const links = [...q(el, "[data-test=links]")!.querySelectorAll("a")].map((a) =>
-      a.textContent!.trim(),
+    expect(text).toContain("El servidor se está reiniciando: cuando vuelva, ábrelo desde aquí:");
+    const links = [...q(el, "[data-test=links]")!.querySelectorAll("wt-choice-row")].map(
+      (row) => row.heading,
     );
-    expect(links).toEqual(["Caja", "Panel", "Bandeja de correo", "Agente de impresión"]);
+    expect(links).toEqual(["Caja", "Panel", "Bandeja de correo"]);
     expect(q(el, "[data-test=backup-nudge] a")!.textContent!.trim()).toBe(
       "Configura ahora las copias de seguridad",
     );
@@ -323,5 +322,216 @@ describe("setup-done-screen", () => {
     await el.updateComplete;
     expect(q(el, "h1")!.textContent!.trim()).toBe("Configuración completada");
     expect(q(el, "[data-test=mode-indicator]")!.textContent!.trim()).toBe("En vivo");
+  });
+});
+
+/** Every element under `root`, including those inside nested shadow roots. */
+function deepElements(root: ParentNode): Element[] {
+  return [...root.querySelectorAll("*")].flatMap((element) => [
+    element,
+    ...(element.shadowRoot ? deepElements(element.shadowRoot) : []),
+  ]);
+}
+
+const PILL_LOOK = [
+  "border-top-left-radius",
+  "border-bottom-right-radius",
+  "padding-top",
+  "padding-right",
+  "padding-bottom",
+  "padding-left",
+  "background-color",
+  "border-top-color",
+  "border-top-width",
+  "border-top-style",
+  "font-weight",
+  "color",
+] as const;
+
+const pillLook = (pill: HTMLElement) => {
+  const style = getComputedStyle(pill);
+  return PILL_LOOK.map((name) => `${name}: ${style.getPropertyValue(name)}`);
+};
+
+describe("setup-done-screen layout", () => {
+  it("offers the till, dashboard and email inbox as choice rows with headings only", async () => {
+    const el = await mountDone(() => new Promise(() => {}));
+    const rows = [...q(el, "[data-test=links]")!.querySelectorAll("wt-choice-row")];
+    expect(q(el, "[data-test=links]")!.classList.contains("choices")).toBe(true);
+    expect(rows.map((row) => [row.heading, row.href])).toEqual([
+      ["Till", "/"],
+      ["Dashboard", "/manage"],
+      ["Email inbox", "/manage/email"],
+    ]);
+    expect(rows.map((row) => row.childNodes.length)).toEqual([0, 0, 0]);
+    expect(q(el, "[data-test=links]")!.querySelectorAll("a")).toHaveLength(0);
+  });
+
+  it("names each choice row for tests, as the mode screen does", async () => {
+    const el = await mountDone(() => new Promise(() => {}));
+    const hrefOf = (test: string) =>
+      el.shadowRoot!.querySelector<HTMLElement & { href: string }>(`[data-test=${test}]`)?.href;
+    expect(["link-till", "link-dashboard", "link-email"].map(hrefOf)).toEqual([
+      "/",
+      "/manage",
+      "/manage/email",
+    ]);
+  });
+
+  it.each([
+    ["an ordinary setup", {}],
+    ["a rebuild", { rebuilt: true }],
+  ] as const)(
+    "mentions the print agent's port 9110 nowhere but the device steps, after %s",
+    async (_, extra) => {
+      const el = await mountDone(() => new Promise(() => {}), {
+        onboardingIntent: "live",
+        breakGlassSecret: "bg-9f3a",
+        ...extra,
+      });
+      const steps = q(el, "[data-test=device-steps]");
+      const outside = deepElements(el.shadowRoot!).filter((element) => !steps?.contains(element));
+      const mentions = outside.filter(
+        (element) =>
+          [...element.childNodes].some(
+            (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.includes("9110"),
+          ) || [...element.attributes].some((attribute) => attribute.value.includes("9110")),
+      );
+      expect(mentions.map((element) => element.outerHTML)).toEqual([]);
+    },
+  );
+
+  it("introduces the links with one muted sentence that promises no trading mode", async () => {
+    const { el, host } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
+      api: apiWith(() => new Promise(() => {})),
+      startDelayMs: 0,
+    });
+    host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+    const intro = q(el, ".intro")!;
+    expect(intro.textContent!.trim()).toBe(RESTART_EN);
+    expect(getComputedStyle(intro).color).toBe("rgb(7, 8, 9)");
+    const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
+    expect(text).not.toContain("trading mode");
+    expect(text).not.toContain("Once the server is trading");
+  });
+
+  it("draws the mode pill exactly as the review screen draws its own, directly under the heading", async () => {
+    const { el: done } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
+      api: apiWith(() => new Promise(() => {})),
+      startDelayMs: 0,
+      onboardingIntent: "prepare",
+    });
+    const { el: review } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+      draft: { mode: "prepare" },
+    });
+    const pill = q(done, "[data-test=mode-indicator]")!;
+    expect(pillLook(pill)).toEqual(
+      pillLook(review.shadowRoot!.querySelector<HTMLElement>("[data-test=mode-badge]")!),
+    );
+    expect(pill.parentElement!.previousElementSibling!.localName).toBe("h1");
+  });
+
+  it("follows the tokens for the mode pill's gap below it", async () => {
+    const { el, host } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
+      api: apiWith(() => new Promise(() => {})),
+      startDelayMs: 0,
+      onboardingIntent: "live",
+    });
+    host.style.setProperty("--wt-space-3", "19px");
+    const block = q(el, "[data-test=mode-indicator]")!.parentElement!;
+    expect(getComputedStyle(block).marginBottom).toBe("19px");
+  });
+
+  it("draws no mode pill when no mode was chosen", async () => {
+    const el = await mountDone(() => new Promise(() => {}));
+    expect(q(el, "[data-test=mode-indicator]")).toBeNull();
+  });
+
+  it("puts the rebuilt device steps in a card, as a list", async () => {
+    const el = await mountDone(() => new Promise(() => {}), { rebuilt: true });
+    const steps = q(el, "[data-test=device-steps]")!;
+    expect(steps.localName).toBe("wt-card");
+    expect(steps.querySelectorAll(":scope > ul > li")).toHaveLength(3);
+  });
+
+  it("puts the backup nudge in a card, its link coloured as the wizard's help links", async () => {
+    const { el, host } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
+      api: apiWith(() => new Promise(() => {})),
+      startDelayMs: 0,
+      onboardingIntent: "live",
+    });
+    host.style.setProperty("--wt-color-primary", "rgb(31, 32, 33)");
+    const nudge = q(el, "[data-test=backup-nudge]")!;
+    expect(nudge.localName).toBe("wt-card");
+    expect(getComputedStyle(nudge.querySelector("a")!).color).toBe("rgb(31, 32, 33)");
+  });
+
+  it("draws the break-glass box from tokens, with a warning edge at its start", async () => {
+    const { el, host } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
+      api: apiWith(() => new Promise(() => {})),
+      startDelayMs: 0,
+      breakGlassSecret: "bg-9f3a",
+    });
+    host.style.setProperty("--wt-space-1", "5px");
+    host.style.setProperty("--wt-space-2", "9px");
+    host.style.setProperty("--wt-space-3", "13px");
+    host.style.setProperty("--wt-space-4", "21px");
+    host.style.setProperty("--wt-radius-lg", "17px");
+    host.style.setProperty("--wt-radius-md", "11px");
+    host.style.setProperty("--wt-font-size-lg", "23px");
+    host.style.setProperty("--wt-color-warning", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-color-surface", "rgb(4, 5, 6)");
+    const box = getComputedStyle(q(el, "[data-test=break-glass]")!);
+    expect([box.paddingTop, box.paddingRight, box.paddingBottom, box.paddingLeft]).toEqual([
+      "21px",
+      "21px",
+      "21px",
+      "21px",
+    ]);
+    expect(box.borderTopLeftRadius).toBe("17px");
+    expect(box.backgroundColor).toBe("rgb(4, 5, 6)");
+    expect([box.borderTopColor, box.borderRightColor, box.borderLeftColor]).toEqual([
+      "rgb(1, 2, 3)",
+      "rgb(1, 2, 3)",
+      "rgb(1, 2, 3)",
+    ]);
+    expect([box.borderTopWidth, box.borderLeftWidth]).toEqual(["1px", "5px"]);
+    const heading = getComputedStyle(q(el, "[data-test=break-glass] h2")!);
+    expect(heading.fontSize).toBe("23px");
+    expect([heading.marginTop, heading.marginBottom]).toEqual(["0px", "9px"]);
+    const secret = getComputedStyle(q(el, "[data-test=break-glass-secret]")!);
+    expect(secret.fontSize).toBe("23px");
+    expect(secret.borderTopLeftRadius).toBe("11px");
+    expect([secret.marginTop, secret.paddingTop, secret.paddingLeft]).toEqual([
+      "9px",
+      "9px",
+      "13px",
+    ]);
+  });
+
+  it.each([
+    ["an ordinary setup", { onboardingIntent: "live" }, ["links", "break-glass", "backup-nudge"]],
+    ["a rebuild", { rebuilt: true }, ["links", "device-steps", "break-glass"]],
+  ] as const)("spaces its blocks by the same token after %s", async (_, extra, order) => {
+    const { el, host } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
+      api: apiWith(() => new Promise(() => {})),
+      startDelayMs: 0,
+      breakGlassSecret: "bg-9f3a",
+      ...extra,
+    });
+    host.style.setProperty("--wt-space-4", "21px");
+    const blocks = order.map((id) => q(el, `[data-test=${id}]`)!.getBoundingClientRect());
+    const gaps = blocks.slice(1).map((block, i) => Math.round(block.top - blocks[i]!.bottom));
+    expect(gaps).toEqual([21, 21]);
+  });
+
+  it("writes its styles in tokens only: no rem or em, no hex colour, no fallback value", () => {
+    const css = [SetupDoneScreen.styles]
+      .flat(Infinity as 1)
+      .map((sheet) => (sheet as { cssText: string }).cssText)
+      .join("\n");
+    expect(css.match(/\d(rem|em)\b/g)).toBeNull();
+    expect(css.match(/#[0-9a-f]{3,8}\b/gi)).toBeNull();
+    expect(css.match(/var\(--[\w-]+\s*,/g)).toBeNull();
   });
 });

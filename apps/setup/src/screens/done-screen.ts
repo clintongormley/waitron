@@ -2,7 +2,10 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import { actionsStyles, statusStyles } from "../form-styles.js";
+import "@waitron/ui/src/components/wt-card.js";
+import "@waitron/ui/src/components/wt-choice-row.js";
+import { actionsStyles, helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
+import { modePill, modePillStyles } from "../mode-pill.js";
 import type { SetupApi } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { t } from "../i18n/t.js";
@@ -17,67 +20,60 @@ export const BACKUP_SETUP_URL = "/manage/backup";
 @customElement("setup-done-screen")
 export class SetupDoneScreen extends LitElement {
   static override styles = [
+    helpLinkStyles,
     baseStyles,
     statusStyles,
     actionsStyles,
+    introStyles,
+    modePillStyles,
     css`
       :host {
         display: block;
       }
+      .mode {
+        margin: 0 0 var(--wt-space-3);
+      }
+      .intro {
+        margin: 0 0 var(--wt-space-4);
+      }
+      .choices,
+      wt-card,
       .break-glass {
-        margin: 1rem 0;
-        padding: 1rem;
-        border: 2px solid var(--wt-color-warning, #b45309);
-        border-radius: 0.5rem;
+        margin: var(--wt-space-4) 0;
+      }
+      wt-card p {
+        margin: 0 0 var(--wt-space-2);
+      }
+      wt-card ul {
+        margin: 0;
+      }
+      .break-glass {
+        padding: var(--wt-space-4);
+        border: 1px solid var(--wt-color-warning);
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-warning);
+        border-radius: var(--wt-radius-lg);
+        background: var(--wt-color-surface);
       }
       .break-glass h2 {
-        margin-top: 0;
-        font-size: 1rem;
+        margin: 0 0 var(--wt-space-2);
+        font-size: var(--wt-font-size-lg);
       }
       .break-glass-warning {
-        font-weight: 600;
+        margin: 0;
+        font-weight: var(--wt-font-weight-bold);
       }
       .break-glass-secret {
         display: block;
-        margin-top: 0.5rem;
-        padding: 0.5rem 0.75rem;
+        margin: var(--wt-space-2) 0 0;
+        padding: var(--wt-space-2) var(--wt-space-3);
         font-family: var(--wt-font-family-mono);
-        font-size: 1.1rem;
+        font-size: var(--wt-font-size-lg);
         word-break: break-all;
         user-select: all;
-        /* --wt-color-surface-sunken is not a token this design system defines (see
-           packages/ui-core/src/tokens/colors.css), so the hardcoded light fallback that stood here
-           painted in BOTH themes: axe measured the code against the dark theme's text at a contrast
-           of 1.06, i.e. the operator's one-and-only break-glass code was unreadable. */
         background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);
         border: 1px solid var(--wt-color-border);
-        border-radius: 0.375rem;
-      }
-      .backup-nudge {
-        margin: 1rem 0;
-        padding: 1rem;
-        border: 1px solid var(--wt-color-border, #cbd5e1);
-        border-radius: 0.5rem;
-      }
-      .mode-indicator {
-        display: inline-block;
-        margin: 0 0 1rem;
-        padding: 0.25rem 0.75rem;
-        border-radius: 999px;
-        border: 1px solid var(--wt-color-border);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font-weight: 700;
-      }
-      .nudge-link {
-        display: inline-block;
-        margin-top: 0.5rem;
-        color: var(--wt-color-primary, #1f6feb);
-        text-decoration: underline;
-      }
-      .links a {
-        color: var(--wt-color-primary, #1f6feb);
+        border-radius: var(--wt-radius-md);
       }
     `,
   ];
@@ -101,8 +97,6 @@ export class SetupDoneScreen extends LitElement {
   @property({ type: Boolean }) rebuilt = false;
 
   @property({ attribute: false }) reload: () => void = location.reload.bind(location);
-
-  @property() hostname: string = location.hostname;
 
   /** A pause before the first poll so the box has begun its restart. */
   @property({ type: Number }) startDelayMs = 800;
@@ -175,28 +169,34 @@ export class SetupDoneScreen extends LitElement {
       ${
         this.onboardingIntent === undefined
           ? nothing
-          : html`<p class="mode-indicator" data-test="mode-indicator">
-              ${t(`done.mode.${this.onboardingIntent}`)}
-            </p>`
+          : html`<div class="mode">${modePill(this.onboardingIntent, "mode-indicator")}</div>`
       }
-      <p>${t("done.restarting")}</p>
-      <div class="links" data-test="links">
-        <p>${t("done.links_intro")}</p>
-        <ul>
-          <li><a href="/">${t("done.link.till")}</a></li>
-          <li><a href="/manage">${t("done.link.dashboard")}</a></li>
-          <li><a href="/manage/email">${t("done.link.email")}</a></li>
-          <li><a href=${`http://${this.hostname}:9110`}>${t("done.link.print_agent")}</a></li>
-        </ul>
+      <p class="intro">${t("done.restarting")}</p>
+      <div class="choices" data-test="links">
+        <wt-choice-row
+          data-test="link-till"
+          heading=${t("done.link.till")}
+          href="/"
+        ></wt-choice-row>
+        <wt-choice-row
+          data-test="link-dashboard"
+          heading=${t("done.link.dashboard")}
+          href="/manage"
+        ></wt-choice-row>
+        <wt-choice-row
+          data-test="link-email"
+          heading=${t("done.link.email")}
+          href="/manage/email"
+        ></wt-choice-row>
       </div>
       ${this.rebuilt ? this.#deviceSteps() : nothing} ${this.#breakGlass()}
       ${
         this.onboardingIntent === "demo" || this.rebuilt
           ? nothing
-          : html`<div class="backup-nudge" data-test="backup-nudge">
+          : html`<wt-card data-test="backup-nudge">
               <p>${t("done.backup_nudge")}</p>
-              <a class="nudge-link" href=${BACKUP_SETUP_URL}>${t("done.backup_link")}</a>
-            </div>`
+              <a href=${BACKUP_SETUP_URL}>${t("done.backup_link")}</a>
+            </wt-card>`
       }
       ${
         this.ready
@@ -211,14 +211,14 @@ export class SetupDoneScreen extends LitElement {
   }
 
   #deviceSteps(): TemplateResult {
-    return html`<div class="links" data-test="device-steps">
+    return html`<wt-card data-test="device-steps">
       <p>${t("done.devices.intro")}</p>
       <ul>
         <li>${t("done.devices.local")}</li>
         <li>${t("done.devices.ip")}</li>
         <li>${t("done.devices.print_agent")}</li>
       </ul>
-    </div>`;
+    </wt-card>`;
   }
 
   #renderJoinStalled(): TemplateResult {

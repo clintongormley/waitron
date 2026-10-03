@@ -7,6 +7,7 @@ import { helpLinkStyles, actionsStyles, errorStyles, statusStyles } from "../for
 import { dispatchProvisionRequested, dispatchSetupGoto } from "../events.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { format, t } from "../i18n/t.js";
+import { modePill, modePillStyles } from "../mode-pill.js";
 
 /** Renders the provision state the shell maps onto its props; the shell does the POST
  * (`apps/setup/src/setup-app.ts`). */
@@ -18,6 +19,7 @@ export class SetupProvisioningScreen extends LitElement {
     statusStyles,
     errorStyles,
     actionsStyles,
+    modePillStyles,
     css`
       :host {
         display: block;
@@ -32,13 +34,6 @@ export class SetupProvisioningScreen extends LitElement {
       .in-flight h1,
       .in-flight p {
         margin: 0;
-      }
-      .mode-indicator {
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-full);
-        padding: var(--wt-space-1) var(--wt-space-3);
-        background: var(--wt-color-surface-raised);
-        font-weight: var(--wt-font-weight-bold);
       }
       .in-flight wt-spinner {
         width: var(--wt-space-6);
@@ -119,13 +114,7 @@ export class SetupProvisioningScreen extends LitElement {
             : t("provisioning.heading")
         }
       </h1>
-      ${
-        this.onboardingIntent
-          ? html`<p class="mode-indicator" data-test="mode-indicator">
-              ${t(`done.mode.${this.onboardingIntent}`)}
-            </p>`
-          : nothing
-      }
+      ${this.onboardingIntent ? modePill(this.onboardingIntent, "mode-indicator") : nothing}
       <wt-spinner label=${t("provisioning.busy")}></wt-spinner>
       <p class="status" data-test="status">${t("provisioning.keep_open")}</p>
     </div>`;

@@ -38,3 +38,32 @@ describe.each(["light", "dark"] as const)("wt-choice-row a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 });
+
+describe.each(["light", "dark"] as const)("wt-choice-row link a11y (%s theme)", (theme) => {
+  const LINK = '<wt-choice-row heading="Dashboard" href="/manage"></wt-choice-row>';
+
+  test("at rest", async () => {
+    await mountThemed(LINK, theme);
+    await expectNoA11yViolations(host);
+  });
+
+  test("focused", async () => {
+    const el = await mountThemed(LINK, theme);
+    el.focus();
+    expect(el.shadowRoot!.activeElement?.localName).toBe("a");
+    await expectNoA11yViolations(host);
+  });
+
+  test("hovered", async () => {
+    const el = await mountThemed(
+      '<wt-choice-row heading="Till" href="/">Sell from this screen.</wt-choice-row>',
+      theme,
+    );
+    const link = el.shadowRoot!.querySelector("a")!;
+    const atRest = getComputedStyle(link).backgroundColor;
+    await userEvent.hover(link);
+    expect(link.matches(":hover")).toBe(true);
+    expect(getComputedStyle(link).backgroundColor).not.toBe(atRest);
+    await expectNoA11yViolations(host);
+  });
+});
