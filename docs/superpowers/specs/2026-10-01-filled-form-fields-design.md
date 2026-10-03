@@ -64,7 +64,7 @@ Two things make this more than a stylesheet change:
    bottom line, greyed text. A filled-in value is pure black in light and pure white in dark.
 8. The open dropdown: a search box at the top, 48px rows, the hovered row tinted, the chosen row
    bold with a tick. While the list is open the FIELD loses its focus marking, because the search
-   box is where typing goes. The search box is outlined, not filled: the list's own background, a
+   box is where typing goes. (2026-10-03: only when the list has a search box; with none, the field keeps its marking — design-system.md → The field box.) The search box is outlined, not filled: the list's own background, a
    1px blue line all round and 8px corners. A soft shadow under the search area separates it from
    the rows, in place of a dividing line.
 9. The colours, worked out with WCAG's contrast formula (table in section 6).
@@ -149,11 +149,11 @@ draws each:
 | --- | --- | --- |
 | `data-label="rest"` | empty, not focused, no hint, no placeholder, and the type is not a date or time type | label 16px (2026-10-02: now the value's size, A184), vertically centred, `--wt-color-text-muted` |
 | `data-label="float"` | any other case | label 12px at the top left; value and hint sit under it |
-| `:focus-within` on `.field` | the control has focus (and, for a dropdown, its list is closed) | line 2px `--wt-color-primary`; label `--wt-color-field-label-focus` |
+| `:focus-within` on `.field` | the control has focus (and, for a dropdown, its list is closed) (2026-10-03: only when the list has a search box; with none, the field keeps its marking — design-system.md → The field box.) | line 2px `--wt-color-primary`; label `--wt-color-field-label-focus` |
 | `data-invalid` | `invalid` or a non-empty `error` | line 2px `--wt-color-danger`; label `--wt-color-danger` |
 | `data-disabled` | `disabled` | fill `--wt-color-field-fill-disabled`; dashed line; label and value `--wt-color-text-muted` |
 | `data-compact` | no label is drawn: `hide-label`, or no `label` at all | height `--wt-tap-min` instead of `--wt-field-height`; the hint or placeholder sits vertically centred |
-| `data-open` | a dropdown's list is open | the focus marking is dropped (owner decision 8) |
+| `data-open` | a dropdown's list is open | the focus marking is dropped (owner decision 8) (2026-10-03: only when the list has a search box; with none, the field keeps its marking — design-system.md → The field box.) |
 
 - **An invalid field keeps its red marking while it has focus.** A failed submission puts focus on
   the first invalid field (`focusFirstInvalid`), so the red line and label win over the focused
@@ -281,7 +281,7 @@ list panel follows owner decision 8: rows `--wt-dropdown-row-height` (48px), hov
 the search box outlined (`--wt-color-surface` background, `--wt-field-line-width` of
 `--wt-color-primary` all round, `--wt-radius-md` corners) with `--wt-shadow-1` under the search
 area. While the panel is open the field box drops its focus marking (`data-open` on the field box
-overrides `:focus-within`). The consuming app registers the `chevron-down` and `check` icons. The
+overrides `:focus-within`). (2026-10-03: only when the list has a search box; with none, the field keeps its marking — design-system.md → The field box.) The consuming app registers the `chevron-down` and `check` icons. The
 dashboard registers `chevron-down` today (`apps/dashboard/src/icons.ts`); no app registers a `check`
 icon yet, and setup registers no icons at all, so each app gains what it lacks.
 

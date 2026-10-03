@@ -1355,7 +1355,7 @@ test("focusing the closed trigger draws the focus line and label colour, and no 
   expect(getComputedStyle(trigger).outlineStyle).toBe("none");
 });
 
-test("opening sets data-open, and the field box drops its focus marking while the list is open", async () => {
+test("opening sets data-open, and with a search box the field box drops its focus marking while the list is open", async () => {
   const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
   host.style.setProperty("--wt-color-field-line", "rgb(7, 7, 7)");
   host.style.setProperty("--wt-color-text-muted", "rgb(8, 8, 8)");
@@ -1374,6 +1374,51 @@ test("opening sets data-open, and the field box drops its focus marking while th
   await userEvent.keyboard("{Escape}");
   await vi.waitFor(() => expect(field.hasAttribute("data-open")).toBe(false));
   expect(getComputedStyle(field).boxShadow).toBe("rgb(1, 2, 3) 0px -2px 0px 0px inset");
+});
+
+test("with no search box, the field box keeps its focus marking while the list is open", async () => {
+  const el = await mountWith('<wt-combobox label="Paper" search="never"></wt-combobox>');
+  host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-field-label-focus", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  const { field, label, trigger, popup } = fieldParts(el);
+  await userEvent.click(trigger);
+  await vi.waitFor(() => expect(field.hasAttribute("data-open")).toBe(true));
+  expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector('[role="listbox"]'));
+  expect(getComputedStyle(field).boxShadow).toBe("rgb(1, 2, 3) 0px -3px 0px 0px inset");
+  expect(getComputedStyle(label!).color).toBe("rgb(4, 5, 6)");
+  trigger.focus();
+  expect(popup.matches(":popover-open")).toBe(true);
+  expect(getComputedStyle(field).boxShadow).toBe("rgb(1, 2, 3) 0px -3px 0px 0px inset");
+});
+
+test("with no search box, disabling the field closes its list without a focus line in between", async () => {
+  const el = await mountWith('<wt-combobox label="Paper" search="never"></wt-combobox>');
+  host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-field-label-focus", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(16, 17, 18)");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  const { field, label, trigger, popup } = fieldParts(el);
+  await userEvent.click(trigger);
+  await vi.waitFor(() => expect(field.hasAttribute("data-open")).toBe(true));
+  el.disabled = true;
+  await el.updateComplete;
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(field.hasAttribute("data-open")).toBe(true);
+  expect(field.hasAttribute("data-disabled")).toBe(true);
+  expect(getComputedStyle(field).boxShadow).toBe("none");
+  expect(getComputedStyle(label!).color).toBe("rgb(16, 17, 18)");
+});
+
+test("with no search box, an invalid field keeps the danger line while the list is open", async () => {
+  const el = await mountWith('<wt-combobox label="Paper" search="never" invalid></wt-combobox>');
+  host.style.setProperty("--wt-color-danger", "rgb(13, 14, 15)");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  const { field, label, trigger } = fieldParts(el);
+  await userEvent.click(trigger);
+  await vi.waitFor(() => expect(field.hasAttribute("data-open")).toBe(true));
+  expect(getComputedStyle(field).boxShadow).toBe("rgb(13, 14, 15) 0px -3px 0px 0px inset");
+  expect(getComputedStyle(label!).color).toBe("rgb(13, 14, 15)");
 });
 
 test("an error marks the field box invalid as the invalid property does", async () => {
