@@ -667,9 +667,12 @@ each column's name was searched across `packages/` and `apps/` for a text compar
 `>`, `localeCompare` and `.sort`) and for its writers. That was a reading sweep, not a run, and
 `day` columns were not part of it.
 
-- **One spelling on every product writer.** Every instant column found compared or sorted as text
-  is written through `nowIso()`, a `Date`'s `toISOString()` or the `ts` mapping, which is also
-  `toISOString()`. `time_entries` and `order_amendments` pin it in the database as well: `time_entries_event_at_second_ck` and
+- **One spelling on every product writer.** Apart from `shifts`, whose `shiftInterval`
+  (`packages/workforce/src/clocking.ts`) stores the UTC whole second without milliseconds, every
+  other instant column found compared or sorted as text is written through `nowIso()`, a `Date`'s
+  `toISOString()` or the `ts` mapping, which is also `toISOString()` — one spelling per column
+  either way. `time_entries` and `order_amendments` pin it in the database as well:
+  `time_entries_event_at_second_ck` and
   `time_entries_recorded_at_second_ck` (`packages/workforce/drizzle/0000_baseline.sql`) and
   `order_amendments_event_at_second_ck` (`packages/db/drizzle/0000_baseline.sql`), each a `glob`
   for the whole-second `.000Z` spelling. The paging cursors that are compared with `created_at` or
@@ -688,19 +691,19 @@ each column's name was searched across `packages/` and `apps/` for a text compar
   anything after them is dropped unread (`06:00garbage` reads as `06:00`) — traced by reading.
 - **Writers that skip the helpers.** The configuration import
   (`importConfigurationTables`, `apps/server/src/configuration-transfer.ts`) copies the time values
-  in a bundle's rows as written, without the normalising helpers; `station_hours` and `department_hours` travel in a
-  bundle (`packages/venue-service/src/configuration-transfer.ts`), as do several `created_at`
-  columns that are ordered. A bundle a Waitron venue exported carries that venue's spellings, so it
-  takes a hand-edited bundle to store another. The demo seed
-  (`apps/server/scripts/demo-seed/seed-floor.ts`) writes `department_hours` as `HH:MM` beside the
-  route's `HH:MM:SS`; the only text comparison there is an `order by`, which two-digit hours still
-  sort correctly, but its unique index sees `12:00` and `12:00:00` as different values.
+  in a bundle's rows as written, without the normalising helpers; `station_hours` and
+  `department_hours` travel in a bundle (`packages/venue-service/src/configuration-transfer.ts`),
+  as do several `created_at` columns that are ordered. A bundle a Waitron venue exported carries
+  that venue's spellings, so it takes a hand-edited bundle to store another.
   `station_hours_distinct_ck` (`packages/venue-service/src/schema/station-times.ts`,
-  `opens_at <> closes_at`) compares text too, so a station opening at `12:00` and closing at
-  `12:00:00` passes it.
+  `opens_at <> closes_at`) compares text, so an imported station row opening at `12:00` and
+  closing at `12:00:00` passes it. The demo seed (`apps/server/scripts/demo-seed/seed-floor.ts`)
+  writes `department_hours` as `HH:MM` beside the route's `HH:MM:SS`; the only text comparison
+  there is an `order by`, which two-digit hours still sort correctly, but its unique index sees
+  `12:00` and `12:00:00` as different values.
 
-Nothing guards it across these columns. A new text time column, or a new writer of an old one, is seen by
-nothing unless its table carries a CHECK like the ones above.
+Nothing guards the one-spelling rule across these columns. A new text time column, or a new writer
+of an old one, is seen by nothing unless its table carries a CHECK like the ones above.
 
 ## A new table is classified `ledger`, `state` or `local` (swap design §2.1) in its module's `<MODULE>_CLASSIFICATION` list via `classify()` (`@waitron/sync-enrolment`), and a table that must never be corrected is declared with `appendOnly()` instead
 
