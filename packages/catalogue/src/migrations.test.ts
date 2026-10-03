@@ -219,6 +219,7 @@ describe("the catalogue migration set carries no tenant column", () => {
       extra_lists_picks_ck: `"extra_lists"."min_picks" >= 0 and ("extra_lists"."max_picks" is null or "extra_lists"."max_picks" >= "extra_lists"."min_picks")`,
       extra_list_items_qty_ck: `"extra_list_items"."max_quantity" >= 1`,
       extra_list_items_price_ck: `"extra_list_items"."price" >= 0`,
+      extra_list_items_portion_ck: `"extra_list_items"."portion" > 0`,
       product_modifiers_one_reference_ck: `("product_modifiers"."extra_list_id" is null) <> ("product_modifiers"."option_list_id" is null)`,
       sections_role_ck: `"sections"."role" in ('section', 'menu_root', 'home_layout')`,
       section_members_one_ref_ck: `("section_members"."product_id" is null or "section_members"."child_section_id" is null) and (("section_members"."product_id" is null and "section_members"."child_section_id" is null) = ("section_members"."missing_name" is not null))`,
