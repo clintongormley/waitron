@@ -109,6 +109,7 @@ const suite = useVenueDb({
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
       tipsEnabled: false,
+      simplifiedInvoiceLimit: null,
       orderFlow: "ticket_then_pay",
     };
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {

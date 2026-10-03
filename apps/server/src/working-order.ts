@@ -125,7 +125,7 @@ import type {
   ResolvedExtraList,
   VatClass,
 } from "@waitron/catalogue";
-import { formatInvoiceNumber, recordSale } from "@waitron/core";
+import { formatInvoiceNumber, recordSale, refuseOverSimplifiedLimit } from "@waitron/core";
 import type {
   FloorAnnotator,
   MakerResolver,
@@ -861,6 +861,31 @@ export async function priceStoredOrder(
   return (await readStoredOrder(tx, workingOrderId)).gross;
 }
 
+/** What a persisted order's stored lines total, the figure its invoice is issued at; a lineless
+ * order totals nothing. */
+export async function storedOrderTotal(tx: Transaction, workingOrderId: string): Promise<Decimal> {
+  const [line] = await tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, workingOrderId))
+    .limit(1);
+  return line === undefined ? decimal("0.00") : (await priceStoredOrder(tx, workingOrderId)).total;
+}
+
+/**
+ * Refuses, on the caller's transaction and so before anything it wrote commits, an order whose
+ * stored lines now total over the regime's simplified-invoice limit (`cfg.simplifiedInvoiceLimit`).
+ * Every write that can grow an order's total ends with it.
+ */
+export async function refuseOrderOverSimplifiedLimit(
+  tx: Transaction,
+  cfg: TillConfig,
+  workingOrderId: string,
+): Promise<void> {
+  if (cfg.simplifiedInvoiceLimit === null) return;
+  refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, await storedOrderTotal(tx, workingOrderId));
+}
+
 /** {@link priceStoredOrder}, with the working-order line each gross line was priced from. */
 export async function readStoredOrder(
   tx: Transaction,
@@ -1011,6 +1036,7 @@ export async function createOpenOrder(
     placement.invalidMakeAt ?? "refuse",
   );
   const { gross, identities, lineContexts, offers } = pricedLines;
+  refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, gross.total);
   const lineRows = pricedLines.lineRows.map((row) => ({
     ...row,
     creditedTo: placement.creditedTo ?? null,
@@ -2249,6 +2275,7 @@ export async function insertTabRound(
       groupId: workingOrderLines.groupId,
     });
   await VENUE_SERVICE.recordLineContexts(tx, cfg, round.tabId, round.lineContexts, round.offers);
+  await refuseOrderOverSimplifiedLimit(tx, cfg, round.tabId);
   return inserted;
 }
 
@@ -2961,7 +2988,6 @@ export async function moveOrderLines(
   toTabId: string,
   lineNos: number[] | undefined,
 ): Promise<string[]> {
-  void cfg;
   // A self-transfer would allocate line numbers that collide with the rows being moved.
   if (fromTabId === toTabId) {
     throw new AppError("tab.merge_self", { tabId: fromTabId });
@@ -3028,6 +3054,7 @@ export async function moveOrderLines(
           source.map((line) => line.id),
         ),
       );
+    await refuseOrderOverSimplifiedLimit(tx, cfg, toTabId);
   }
   return source.map((line) => line.id);
 }
@@ -3501,6 +3528,8 @@ export async function carveOffLines(
   }
   if (fromTabId !== toTabId) {
     await copyKitchenPrintLinks(tx, fromTabId, toTabId, movedLineIds);
+    // Whole lines were checked as they moved (`moveOrderLines`); the parts split off were not.
+    if (partials.length > 0) await refuseOrderOverSimplifiedLimit(tx, cfg, toTabId);
   }
   return { splitFrom, splitLines };
 }
@@ -4931,6 +4960,7 @@ async function applyLineEdits(
   }
   await assertBillInvariant(tx, [orderId]);
   const changed = changes.length > 0 || plan.removed.length > 0 || plan.fresh.length > 0;
+  if (changed) await refuseOrderOverSimplifiedLimit(tx, cfg, orderId);
   if (changed) {
     await partyAfterEdit(
       tx,

@@ -12,7 +12,7 @@ import { localToday } from "@waitron/catalogue/src/vat-rates.js";
 import { customerPresentationText } from "@waitron/catalogue/src/product-presentation.js";
 import { currentContentLanguages } from "@waitron/ui";
 import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
-import { addDecimal, decimal, sumDecimals } from "@waitron/shared";
+import { addDecimal, compareDecimal, decimal, subtractDecimal, sumDecimals } from "@waitron/shared";
 import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
 import { orderLineMergeKey } from "./draft-lines.js";
@@ -94,12 +94,21 @@ export interface OrderLine {
   earlierPriceUnknown?: true;
 }
 
-/** `"product-selected"` is a widget-to-widget broadcast that does NOT mutate the basket. */
-export type WorkingOrderEvent = "changed" | "product-selected";
+/** `"product-selected"` is a widget-to-widget broadcast that does NOT mutate the basket.
+ * `"refused"` reports an edit the basket refused, carrying {@link BasketRefusal}. */
+export type WorkingOrderEvent = "changed" | "product-selected" | "refused";
+
+/** An edit refused because it would take the basket past the simplified-invoice limit. */
+export interface BasketRefusal {
+  code: "sale.total_exceeds_simplified_limit";
+  limit: string;
+}
 
 export type WorkingOrderListener = (payload?: unknown) => void;
 
 type Priced = ReturnType<typeof priceBasket>;
+
+const ZERO = decimal("0.00");
 
 /** A priced line wants the CUSTOMER text already resolved. */
 function toPriceable(line: OrderLine): BasketItem {
@@ -199,6 +208,31 @@ export class WorkingOrderStore {
   #editLock: object | null = null;
   #loadGeneration = 0;
   #lastAdded?: OrderLine;
+  #limit: Decimal | null = null;
+
+  /**
+   * The largest total a sale with no named customer may have (the server's
+   * `simplifiedInvoiceLimit`), or null for none. An add or a change that would take the total past
+   * it is refused with a `"refused"` event and leaves the basket as it was; one that keeps it, or
+   * makes it smaller, is not.
+   */
+  set simplifiedInvoiceLimit(limit: string | null) {
+    this.#limit = limit === null ? null : decimal(limit);
+  }
+
+  /** Whether replacing `before`'s gross with `after`'s would take the total past the limit, said
+   * with a `"refused"` event when it would. */
+  #passesLimit(before: Decimal, after: Decimal): boolean {
+    if (this.#limit === null || compareDecimal(after, before) <= 0) return false;
+    const next = addDecimal(subtractDecimal(this.total, before), after);
+    if (compareDecimal(next, this.#limit) <= 0) return false;
+    const refusal: BasketRefusal = {
+      code: "sale.total_exceeds_simplified_limit",
+      limit: this.#limit,
+    };
+    this.emit("refused", refusal);
+    return true;
+  }
 
   /** Changes only on {@link clear} and {@link loadFrom}. */
   get id(): string {
@@ -339,6 +373,7 @@ export class WorkingOrderStore {
   addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
     if (this.#refusesEdits) return;
     const line = newLine(product, quantity, selection);
+    if (this.#passesLimit(ZERO, lineGross(line))) return;
     this.#lines.push(line);
     this.#lastAdded = line;
     this.#changedLines();
@@ -353,8 +388,14 @@ export class WorkingOrderStore {
     if (this.#refusesEdits) return;
     const line = newLine(product, quantity, selection);
     const into = mergeTarget(this.#lines, line);
+    const merged =
+      into === undefined
+        ? undefined
+        : { ...into, quantity: addDecimal(decimal(into.quantity), decimal(quantity)) };
+    if (this.#passesLimit(into === undefined ? ZERO : lineGross(into), lineGross(merged ?? line)))
+      return;
     if (into === undefined) this.#lines.push(line);
-    else into.quantity = addDecimal(decimal(into.quantity), decimal(quantity));
+    else into.quantity = merged!.quantity;
     this.#lastAdded = into ?? line;
     this.#changedLines();
   }
@@ -370,6 +411,12 @@ export class WorkingOrderStore {
     if (this.#refusesEdits) return;
     const line = this.#lines[index];
     if (!line) return;
+    const candidate: OrderLine = { ...line };
+    delete candidate.extras;
+    delete candidate.options;
+    delete candidate.optionSnapshots;
+    applySelection(candidate, selection);
+    if (this.#passesLimit(lineGross(line), lineGross(candidate))) return;
     delete line.extras;
     delete line.options;
     delete line.optionSnapshots;
@@ -385,10 +432,12 @@ export class WorkingOrderStore {
     if (index < 0 || index >= this.#lines.length) {
       return;
     }
-    assertQuantityPrecision(quantity, productUnit(this.#lines[index]!.product).precision, {
+    const line = this.#lines[index]!;
+    assertQuantityPrecision(quantity, productUnit(line.product).precision, {
       positive: true,
     });
-    this.#lines[index]!.quantity = quantity;
+    if (this.#passesLimit(lineGross(line), lineGross({ ...line, quantity }))) return;
+    line.quantity = quantity;
     this.#invalidatePricing();
     this.#markDirty();
     this.emit("changed");

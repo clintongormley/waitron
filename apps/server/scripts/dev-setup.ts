@@ -289,6 +289,7 @@ async function seedDemoDevices(
     locale: SEED_INVOICE_LOCALE[seedLocale],
     invoiceLocales: [SEED_INVOICE_LOCALE[seedLocale]],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
 

@@ -207,7 +207,7 @@ import {
   withUnavailable,
 } from "./state/menu-refresh.js";
 import type { ShellAffordance } from "./widgets/tab-shell.js";
-import type { OrderLine } from "./state/working-order.js";
+import type { BasketRefusal, OrderLine } from "./state/working-order.js";
 import type { StoredLines } from "./widgets/basket.js";
 import { adjustableListing } from "./state/adjust-target.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
@@ -294,6 +294,7 @@ const PERMANENT_SALE_REFUSALS = new Set([
 /** Table refusals shown in their code's own words. */
 const TABLE_REFUSALS = new Set([
   "order.payment_in_flight",
+  "sale.total_exceeds_simplified_limit",
   "table.not_shared",
   "table.not_joined",
   "table.already_in_party",
@@ -498,7 +499,17 @@ const ACTIONABLE_REFUSALS = new Set([
   "order.payment_in_flight",
   "product.unavailable",
   "product.not_sold_separately",
+  "sale.total_exceeds_simplified_limit",
 ]);
+
+/** A refusal for passing the simplified-invoice limit that names the limit, as the server sends it. */
+function overLimitOf(error: unknown): { overLimit: string } | undefined {
+  const refusal = error as { code?: string; limit?: unknown } | undefined;
+  return refusal?.code === "sale.total_exceeds_simplified_limit" &&
+    typeof refusal.limit === "string"
+    ? { overLimit: refusal.limit }
+    : undefined;
+}
 
 /** Hand-over refusals shown in their code's own words. */
 const HAND_OVER_REFUSALS = new Set([
@@ -514,6 +525,8 @@ const UNSELLABLE_LINE_REFUSALS = new Set(["product.unavailable", "product.not_so
 /** A counter pay, place or hold refusal: its own message when it is actionable, else `fallback`. */
 function counterError(error: unknown, fallback: StringKey): CounterError {
   if (isPaymentsReceived(error)) return "bill.pay_with_bill_payments";
+  const overLimit = overLimitOf(error);
+  if (overLimit !== undefined) return overLimit;
   const code = (error as { code?: string } | undefined)?.code;
   return code !== undefined && ACTIONABLE_REFUSALS.has(code) ? { code } : fallback;
 }
@@ -682,6 +695,8 @@ type CounterError =
   | { billPayments: string }
   /** `lineChange`: refused for a change to a line, not a move of items. */
   | { excess: string; lineChange?: true }
+  /** An order past the simplified-invoice limit, `overLimit` being the limit. */
+  | { overLimit: string }
   | { takenOver: string; unsent?: true }
   | { partyChanged: PartyChange }
   | { billChanged: BillChange }
@@ -752,6 +767,10 @@ function errorText(error: CounterError): string | TemplateResult {
         ></span
       >`;
   }
+  if ("overLimit" in error)
+    return t("sale.over_simplified_limit").replace("{amount}", () =>
+      formatMoney(error.overLimit, currentLocale()),
+    );
   if ("billPayments" in error)
     return [
       t("table.bill_to_pay").replace("{amount}", () =>
@@ -1096,6 +1115,9 @@ export class TillApp extends LitElement {
     // Subscribed before any widget, so the marks this sets inside the basket's own notification
     // reach every later listener in that same notification.
     this.#store.subscribe(() => this.#evaluateBasket(false));
+    this.#store.on("refused", (payload) => {
+      this.errorKey = { overLimit: (payload as BasketRefusal).limit };
+    });
   }
 
   @state() private screen: Screen = "lock";
@@ -1648,6 +1670,8 @@ export class TillApp extends LitElement {
       this.courses = till.courses;
       this.cardProvider = till.cardProvider;
       this.tipsEnabled = till.tipsEnabled;
+      // A server too old to send it sets no limit.
+      this.#store.simplifiedInvoiceLimit = till.simplifiedInvoiceLimit ?? null;
       this.activeReaders = till.activeReaders ?? [];
       this.defaultReaderId = till.defaultReaderId;
       this.receipt = till.receipt ?? {};

@@ -136,6 +136,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
   const { tables, counter, productIds } = await withTransaction(db, async (tx) => {

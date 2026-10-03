@@ -3,7 +3,7 @@
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError, locationId, nodeId, seriesId, tillId } from "@waitron/shared";
-import type { LocationId, NodeId, SeriesId, TillId } from "@waitron/shared";
+import type { Decimal, LocationId, NodeId, SeriesId, TillId } from "@waitron/shared";
 import { locations, nodes, orderFlow, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { isUnset } from "./env-value.js";
@@ -47,10 +47,20 @@ export interface TillConfig {
   madeHereSink?: Set<string>;
   /**
    * Read from the till's location row by `readOrderFlow`, not the environment — which is why
-   * `loadTillConfig` returns `Omit<TillConfig, "orderFlow">`: no placeholder mode can reach a dispatch.
+   * `loadTillConfig` returns a {@link TillIdentityConfig}: no placeholder mode can reach a dispatch.
    */
   orderFlow: OrderFlow;
+  /**
+   * The largest total a sale with no named customer may have, from the fiscal backend's
+   * `simplifiedInvoiceLimit` at boot, or null when the regime sets none. Every path that enters,
+   * grows or pays an order holds it to this (`refuseOverSimplifiedLimit`, `@waitron/core`).
+   */
+  simplifiedInvoiceLimit: Decimal | null;
 }
+
+/** What the environment alone says about the till: boot adds the rest from the database and the
+ * fiscal backend. */
+export type TillIdentityConfig = Omit<TillConfig, "orderFlow" | "simplifiedInvoiceLimit">;
 
 /** Only the variable NAME travels in the error, never the value. */
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -70,7 +80,7 @@ function brand<T>(key: string, fn: (value: string) => T, raw: string): T {
   }
 }
 
-export function loadTillConfig(env: NodeJS.ProcessEnv): Omit<TillConfig, "orderFlow"> {
+export function loadTillConfig(env: NodeJS.ProcessEnv): TillIdentityConfig {
   const rawLocale = env.WAITRON_TILL_LOCALE;
   const locale = rawLocale === undefined || rawLocale === "" ? "es-ES" : rawLocale;
 
@@ -105,9 +115,7 @@ const TILL_ID_VARS = [
  * None of the four ids set is setup mode (`undefined`), not a fault. Some but not all set is a
  * misconfiguration, refused rather than silently degraded to setup mode.
  */
-export function tryLoadTillConfig(
-  env: NodeJS.ProcessEnv,
-): Omit<TillConfig, "orderFlow"> | undefined {
+export function tryLoadTillConfig(env: NodeJS.ProcessEnv): TillIdentityConfig | undefined {
   const present = TILL_ID_VARS.filter((v) => !isUnset(env[v]));
   if (present.length === 0) return undefined;
   if (present.length < TILL_ID_VARS.length) {

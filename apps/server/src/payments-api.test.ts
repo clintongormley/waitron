@@ -189,6 +189,7 @@ function cfgOf(venue: Venue): TillConfig {
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "ticket_then_pay",
   };
 }

@@ -1612,6 +1612,32 @@ describe("recordSale — a regime's simplified-invoice limit", () => {
     expect(series!.next).toBe(1);
   });
 
+  it("measures the base plus VAT it files, as the authority does, not the stated total", async () => {
+    // A derived breakdown with every line at the cent is not checked against the stated total
+    // (`deriveVatBreakdown`), so the two can differ; base 2736.37 at 10% files 2736.37 + 273.64.
+    const line = {
+      lineNo: 1,
+      name: "Banquete",
+      descriptions: { "es-ES": "Banquete" },
+      quantity: "1",
+      unitPrice: "2736.37",
+      vatRate: "10.00",
+      lineTotal: "2736.37",
+    };
+    const overByBreakdown = { total: "3010.00", lines: [line], settlement: { kind: "deferred" } };
+    const error = await captureError(() =>
+      run(limited(), overByBreakdown as Partial<RecordSaleInput>),
+    );
+    expect((error as AppError).params).toEqual({ total: "3010.01", limit: "3010.00" });
+
+    await run(limited(), {
+      ...overByBreakdown,
+      total: "9999.00",
+      lines: [{ ...line, unitPrice: "10.00", lineTotal: "10.00" }],
+    } as Partial<RecordSaleInput>);
+    expect(await countRows("sales")).toBe(1);
+  });
+
   it("files any total for a regime that sets no limit", async () => {
     await run(new FakeFiscalBackend(suite.db), saleOf("99999.99"));
     expect(await countRows("sales")).toBe(1);

@@ -171,9 +171,12 @@ export async function recordSale(
     assertSumsTo(vatBreakdown, total);
   }
 
-  // An ordinary sale names no customer, so it is a simplified invoice. Refused before anything is
-  // written, like the breakdown above.
-  refuseOverSimplifiedLimit(backend.simplifiedInvoiceLimit, total);
+  // An ordinary sale names no customer, so it is a simplified invoice, held to the regime's limit
+  // on the base plus VAT it files. Refused before anything is written, like the breakdown above.
+  refuseOverSimplifiedLimit(
+    backend.simplifiedInvoiceLimit,
+    sumDecimals(vatBreakdown.flatMap((g) => [g.base, g.tax])),
+  );
 
   // Verification must run against exactly the state this transaction is about to extend; one
   // write transaction runs on the venue file at a time (`withTransaction`,

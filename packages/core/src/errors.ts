@@ -109,8 +109,8 @@ declare module "@waitron/shared" {
     "sale.already_substituted": { saleId: string };
     /** A sale with no named customer (a simplified invoice) whose total is over the fiscal
      * regime's `simplifiedInvoiceLimit`. Thrown by `refuseOverSimplifiedLimit` before anything is
-     * written or charged: by `recordSale`, and by the till's paths where a basket or bill is
-     * entered, grown or paid. Both amounts are decimal strings. */
+     * written or charged: by `recordSale`, on the base plus VAT it files, and by the till's paths
+     * where a basket or bill is entered, grown or paid. Both amounts are decimal strings. */
     "sale.total_exceeds_simplified_limit": { total: string; limit: string };
     /** A full invoice's customer the record could not carry: `taxId` fails its country's check
      * (a wrong control character), or `legalName` is longer than the fiscal regime's

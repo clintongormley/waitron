@@ -131,6 +131,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This venue has no credit note series set up. Tell a manager",
     es: "Este local no tiene una serie de facturas rectificativas. Avisa a un responsable",
   },
+  "sale.total_exceeds_simplified_limit": {
+    en: "This order is over the most a sale can be without a full invoice naming the customer, which this till cannot issue. Take something off the order.",
+    es: "Este pedido supera el máximo de una venta sin factura completa a nombre del cliente, que esta caja no puede emitir. Quita algo del pedido.",
+  },
   "sale.correction_exceeds_total": {
     en: "That correction is more than is left of the invoice after its earlier corrections",
     es: "Esa rectificación supera lo que queda de la factura tras sus rectificaciones anteriores",

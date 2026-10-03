@@ -121,6 +121,7 @@ describe("the category report reconciles with the till's sales", () => {
       locale: LOCALE,
       invoiceLocales: [LOCALE],
       tipsEnabled: false,
+      simplifiedInvoiceLimit: null,
       orderFlow: "prepay",
     };
 

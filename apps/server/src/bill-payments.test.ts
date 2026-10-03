@@ -158,6 +158,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
   return withTransaction(db, async (tx) => {

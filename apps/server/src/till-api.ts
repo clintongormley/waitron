@@ -345,6 +345,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "sale.correction_line_not_reversed": 409,
   "sale.total_mismatch": 409,
   "sale.correction_exceeds_total": 409,
+  // Permanent for the same basket or bill until it is made smaller.
+  "sale.total_exceeds_simplified_limit": 409,
   "sale.voided": 409,
   "sale.already_settled": 409,
   "working_order.not_settled": 409,
@@ -1079,6 +1081,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // The till polls each server's `GET /api/node` to follow the primary across a failover.
         nodeId: deps.cfg.nodeId,
         servers: routableServers(held),
+        // So the basket refuses an order over it as it is entered, not at the pay step.
+        simplifiedInvoiceLimit: deps.cfg.simplifiedInvoiceLimit,
       });
     }),
   );

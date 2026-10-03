@@ -291,6 +291,7 @@ function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
 }
@@ -1169,11 +1170,24 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // `node_membership` holds no row (the server-list test below writes one and removes it again).
       nodeId: cfg.nodeId,
       servers: [],
+      // This suite's configuration carries no regime limit.
+      simplifiedInvoiceLimit: null,
     });
     // Nothing sensitive: no pin, certificate, connection string or AEAT verification url reaches the
     // wire. `verificationUrl` is named exactly rather than a bare `url`, because `servers[].url` is a
     // BY-DESIGN wire key (the address the till is told to dial) that a bare alternative would trip on.
     expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|verificationUrl|cert/i);
+  });
+
+  it("GET /api/till carries the regime's simplified-invoice limit, so the basket can refuse at entry", async () => {
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...deps(suite.db), cfg: { ...cfg, simplifiedInvoiceLimit: decimal("3010.00") } },
+      collect([]),
+    );
+    const body = (await (await app.request("/api/till")).json()) as Record<string, unknown>;
+    expect(body.simplifiedInvoiceLimit).toBe("3010.00");
   });
 
   it("GET /api/till lists the venue's servers from the membership document, primary first, evicted and address-less nodes excluded", async () => {

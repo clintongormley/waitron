@@ -5,7 +5,7 @@ import { DEFAULTS } from "@waitron/scheduler";
 import { resolveLitestreamBin } from "@waitron/stream/litestream.js";
 import { parseBoxAddresses } from "./box-reach.js";
 import { tryLoadTillConfig } from "./till-config.js";
-import type { TillConfig } from "./till-config.js";
+import type { TillIdentityConfig } from "./till-config.js";
 import { isUnset } from "./env-value.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import "./errors.js";
@@ -86,7 +86,7 @@ export interface ServerConfig {
   /** This till's fiscal identity (`tryLoadTillConfig`); `orderFlow` is a per-location column, not
    * an env var. Undefined when none of the four `WAITRON_TILL_*_ID` are set — SETUP MODE; a partial
    * set throws. */
-  till?: Omit<TillConfig, "orderFlow">;
+  till?: TillIdentityConfig;
   /** The WebAuthn Relying Party ID: a bare domain, no scheme or port. A passkey is only offered
    * back on the RP ID it was registered under. Defaults to `localhost`; REQUIRED in production. */
   managementRpId: string;

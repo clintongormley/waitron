@@ -142,6 +142,7 @@ async function fileOneSale(db: Database) {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
   const seeded = await withTransaction(db, async (tx) => {

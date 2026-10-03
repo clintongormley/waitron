@@ -149,6 +149,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     // The venue provisions with the DEFAULT `prepay` mode; a mode-specific test overrides both the
     // cfg field AND the location's `order_flow` column via `modeVenue` (below).
     orderFlow: "prepay",

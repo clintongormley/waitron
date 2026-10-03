@@ -94,6 +94,7 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<TillConfig>
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
 }
@@ -507,6 +508,7 @@ async function setupTabVenue(): Promise<{
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
   };
   const { cafeId, aguaId, tableId, offers } = await withTransaction(db, async (tx) => {

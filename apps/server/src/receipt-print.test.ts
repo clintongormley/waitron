@@ -133,6 +133,7 @@ function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConf
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
     orderFlow,
   };
 }
