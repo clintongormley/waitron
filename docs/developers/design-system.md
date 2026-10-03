@@ -628,26 +628,24 @@ stored "all" does not wait: it is kept only while its column is rendered with a 
 an `initial`, and otherwise cleared and the stored view rewritten without it, so a layout that
 leaves the column out forgets that "all" was chosen.
 
-A column marked `choosable` is offered in a column chooser the toolbar draws at its trailing end: a
-button reading `columnsLabel` that opens a panel of one labelled checkbox per choosable column,
-each named `<column key>-column`, over the table rather than pushing it down. The panel opens inside
-the screen, and scrolls its choices when it is taller than the screen. It closes on Escape, which
-returns focus to the button, and on a press outside it. A column without `choosable` is always shown and not offered. The last column
-still shown cannot be hidden — its checkbox is disabled — and if every column would be hidden, by
-the columns' defaults or by a stored choice, the first is shown. A hidden column keeps its filter in the panel, which keeps narrowing rows, and search
-still reads it; it stops sorting the rows while hidden, but `sortKey` still names it, so showing it
-again restores the sort. With a `viewKey`, the choice is remembered per browser in local storage
-under `<viewKey>:columns` as `{ [column key]: boolean }`, apart from the sort and filter memory in
-session storage. An entry applies only to a column that is choosable now, and one that is not `true`
-or `false` is ignored; blocked storage, malformed JSON or a stored list reads as nothing stored. A
-new `viewKey` restores the choice stored under it, or the defaults when there is none.
+A table with `choosable` columns draws a Customise columns icon button at the toolbar's trailing
+end. Its dialog lists every column in table order with an eye control. The first column and any
+`pinned: "end"` column are fixed, with no drag handle and a disabled eye. Other columns move by
+pointer drag or by the handle's arrow keys. The dialog's Restore defaults button resets order and
+visibility. Escape closes it and returns focus to the trigger. The first column remains shown, and
+the last visible movable column cannot be hidden. A hidden column keeps its filter in the Filters
+panel, which keeps narrowing rows, and search still reads it; it stops sorting the rows while
+hidden, but `sortKey` still names it, so showing it again restores the sort. With a `viewKey`,
+visibility is remembered per browser in local storage under `<viewKey>:columns` as
+`{ [column key]: boolean }`, and order under `<viewKey>:column-order` as a list of keys. Unknown
+stored keys are ignored and newly added columns take their declared place. Sort and filter memory
+remains in session storage. Blocked storage and malformed JSON leave the defaults in place.
 
 Every list a dashboard screen or dashboard module shows as its main content with `wt-data-table`
-offers the chooser for every column except the one that names the row and the one holding the row's
+offers customisation for every column except the one that names the row and the one holding the row's
 buttons, which are always shown. A column starts shown unless the screen has a reason to hide it
-(the menu Prices tab's combined price does); the table passes a translated `columnsLabel`
-(`table.columns` in the dashboard, the menu Prices tab's own `menu_prices.columns`, or the module's
-own key) and a `viewKey` of its own. A table inside a dialog or picker does not offer one, and a
+(the menu Prices tab's combined price does); the table passes translated dialog labels and a
+`viewKey` of its own. A table inside a dialog or picker does not offer customisation, and a
 list whose only other column is its buttons (servers) has nothing to offer.
 
 In tree mode the table keeps a match's ancestor rows and tells each cell, via its second argument's

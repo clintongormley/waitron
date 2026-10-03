@@ -401,7 +401,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
         height: 1px;
         overflow: hidden;
         clip-path: inset(50%);
-        white-space: nowrap;
       }
 
       .column-choice {
