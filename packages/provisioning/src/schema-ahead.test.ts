@@ -15,19 +15,21 @@ const PHANTOM: MigrationSetSource = {
 
 /** Answers the TWO queries `journalHashes` makes per set, in order: the `sqlite_master` presence
  * probe, then the journal read. */
-function dbWith(hashes: readonly string[]) {
+function dbWith(hashes: readonly string[], tableName = CORE.table) {
   let call = 0;
   return {
     execute: () =>
       Promise.resolve(
-        call++ % 2 === 0 ? { rows: [{ n: 1 }] } : { rows: hashes.map((hash) => ({ hash })) },
+        call++ % 2 === 0
+          ? { rows: [{ name: tableName }] }
+          : { rows: hashes.map((hash) => ({ hash })) },
       ),
   } as never;
 }
 
 /** A database whose journal table does not exist: the catalogue reports it absent, and the journal
  *  read is never reached — the never-migrated set. */
-const dbWithoutJournal = { execute: () => Promise.resolve({ rows: [{ n: 0 }] }) } as never;
+const dbWithoutJournal = { execute: () => Promise.resolve({ rows: [] }) } as never;
 
 describe("unknownHashes", () => {
   it("returns the database hashes the image has no file for", () => {
@@ -61,7 +63,9 @@ describe("findAheadSets", () => {
   // Control for the test above: without it, `[]` is also what a `findAheadSets` that never reads
   // files at all would return.
   it("reads the image's files for a set whose journal table exists", async () => {
-    await expect(findAheadSets(dbWith(["a"]), [PHANTOM], null)).rejects.toMatchObject({
+    await expect(
+      findAheadSets(dbWith(["a"], PHANTOM.table), [PHANTOM], null),
+    ).rejects.toMatchObject({
       code: "migrations.set_missing",
     });
   });
