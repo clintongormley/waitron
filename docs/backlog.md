@@ -1731,7 +1731,7 @@ noted the Products list shows no unit in its price column; A208 builds it ("€1
 "€48.00 / kg").
 
 **An extras list's product dropdown greys a product with variants and says why (A223, owner
-2026-10-02) — DONE.** Before this, the dropdown (`extra-list-form.ts`, `#itemsSection`) offered every
+2026-10-02) — DONE (#1098).** Before this, the dropdown (`extra-list-form.ts`, `#itemsSection`) offered every
 top-level product, but saving a list that names one with an Active variant is refused with
 `extras.product_has_variants` (`assertNoParentsWithVariants`, `packages/catalogue/src/extras.ts`),
 because the till never offers such a product as an extra (`readExtraProducts`,
