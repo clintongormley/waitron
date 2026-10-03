@@ -213,13 +213,14 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-/** Who may open a screen is read from its sidebar entry; a screen with none keeps its rule here. */
+/** Core screens with no sidebar entry whose access rule #permittedScreen reads from here. */
 const UNLISTED_SCREENS: ScreenRule[] = [{ screen: "email", requiresManager: true }];
 
 /**
  * Owns session discovery, permitted URL navigation and language preferences.
  * The login screen stays visible until getMe confirms a session. Staff can open My schedule and
- * Orders; other roles can restore a destination from their visible sidebar entries.
+ * Orders; other roles can restore a destination from their visible sidebar entries, the alerts
+ * screen, and the UNLISTED_SCREENS entries their role may open.
  *
  * A locale change recreates the screen subtree so translated text updates. Disconnect guards
  * prevent late responses from changing browser history or the shared locale after teardown.
@@ -507,7 +508,7 @@ export class DashboardApp extends LitElement {
          apps/till/src/screens/till-counter-screen.ts:111. */
       @media (max-width: 48rem) {
         /* A phone cannot fit the lockup, the legal name, the mode pill and the trailing controls on
-           one line, so the name, the pill and a demo's inbox link take a second row and the
+           one line, so the name, the pill and the inbox link, when shown, take a second row and the
            trailing controls stay at the trailing edge of the first. The lockup's column is the one
            that shrinks, so the trailing controls keep the first row. */
         .brand-banner {

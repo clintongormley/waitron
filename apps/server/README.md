@@ -280,8 +280,8 @@ never prints a decrypted credential.
 
 Demo and Prepare capture invitation and password-reset email in Mailpit when you have not configured
 SMTP. Sign in as a manager and open the **Email inbox** link in the dashboard's top bar to read a
-message and follow its account link. The inbox is served through Waitron's authenticated API; Mailpit's own ports bind to
-the box loopback only.
+message and follow its account link. The inbox is served through Waitron's authenticated API;
+Mailpit's own ports bind to the box loopback only.
 
 `pnpm dev:setup`, `pnpm dev:reset`, `pnpm dev:onboard`, `pnpm dev:reset:onboard`, and the `wa-wt`
 worktree launcher also start Mailpit. During local development you can inspect its own UI at

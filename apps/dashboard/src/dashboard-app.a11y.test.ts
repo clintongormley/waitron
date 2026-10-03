@@ -127,11 +127,13 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
   });
 
   it.each([
-    ["signed in", true],
-    ["signed out", false],
+    ["demo", "signed in", true],
+    ["demo", "signed out", false],
+    ["prepare", "signed in", true],
+    ["prepare", "signed out", false],
   ] as const)(
-    "a demo's banner, with its email inbox link, renders accessibly %s",
-    async (_state, signedIn) => {
+    "when the intent is %s, the banner, with its email inbox link, renders accessibly %s",
+    async (intent, _state, signedIn) => {
       const api = signedIn
         ? stubApi({
             getMe: vi.fn().mockResolvedValue({
@@ -141,7 +143,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
               venueLocale: "es-ES",
               sessionDefault: "es-ES",
               venueName: "Deli Test SL",
-              onboardingIntent: "demo",
+              onboardingIntent: intent,
               permissions: [],
               modules: [],
             }),
@@ -153,7 +155,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
               venueDefault: "es-ES",
               loginDefault: "es-ES",
               venueName: "Deli Test SL",
-              onboardingIntent: "demo",
+              onboardingIntent: intent,
             }),
           });
       const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);

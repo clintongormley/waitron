@@ -1201,8 +1201,8 @@ controls"). In a demo or a venue preparing to go live (both capture account emai
 SMTP is set up), an "Email inbox" link to `/manage/email` (the inbox screen, the address the setup
 wizard's done page links to) sits just before the language chooser: signed out it always shows, and
 signed in it shows only to a session that may open the inbox screen (a manager or an admin). The
-sidebar has no entry for that screen. Below the drawer breakpoint it goes on the second row, after
-the mode pill, so the lockup keeps its room on the first.
+sidebar has no entry for that screen. Below the drawer breakpoint the link goes on the second row,
+after the mode pill, so the lockup keeps its room on the first.
 
 When the session may see alerts, the alerts bell (`dashboard-alerts-bell`, a `wt-row-actions` with
 the `bell` icon and a `wt-count-badge` in its `badge` slot) sits immediately before the account menu.

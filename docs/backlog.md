@@ -953,7 +953,8 @@ signed out always, and signed in only to a session that may open the Test inbox 
 or an admin). Outside a demo there is no link. At 48rem wide or less it moves to the banner's second
 row, after the mode pill, because on the first row it squeezed the Waitron lockup to nothing at
 360px wide.
-(2026-10-03: A227, below, shows the link in a venue preparing to go live too.)
+(2026-10-03: A227, below, shows the link in a venue preparing to go live too, and removes the
+sidebar's Test inbox entry.)
 
 **The sidebar no longer lists the email inbox; the top-bar link is the way in (A227, owner
 2026-10-03) — DONE (#PR).** The sidebar's "Test inbox" entry is gone, and with it the `nav.email`
