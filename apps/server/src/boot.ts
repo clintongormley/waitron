@@ -1923,10 +1923,8 @@ async function bootServer(
   // committed (`@waitron/db`'s `withTransaction`). Nothing connects, so nothing can drop and there
   // is no batch of changes to miss, which is why no snapshot refresh is broadcast on startup.
   const unsubscribeFromChanges = subscribeToChanges(changeSubscriber(liveEvents, log));
-  undoOnFailure.push(async () => {
-    unsubscribeFromChanges();
-    liveEvents.close();
-  });
+  undoOnFailure.push(async () => liveEvents.close());
+  undoOnFailure.push(async () => unsubscribeFromChanges());
 
   // `config.environment` is the value `assertDeploymentMatches` pinned against the database at boot.
   //
@@ -2064,11 +2062,9 @@ async function bootServer(
         }),
       })
     : undefined;
-  undoOnFailure.push(async () => {
-    cloudController.abort();
-    await cloudWorker;
-    await cloudSnapshots;
-  });
+  undoOnFailure.push(async () => cloudSnapshots);
+  undoOnFailure.push(async () => cloudWorker);
+  undoOnFailure.push(async () => cloudController.abort());
   return makeStartedServer(
     server,
     health,

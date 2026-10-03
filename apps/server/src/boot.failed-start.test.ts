@@ -390,6 +390,70 @@ describe("a start that fails after the venue folder is opened gives the folder b
     expect(vi.mocked(runCloudSnapshotLoop).mock.calls.at(-1)![0].signal.aborted).toBe(true);
   }, 60_000);
 
+  it("waits for the cloud snapshot loop when the cloud worker refuses to stop", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = {
+      ...(await tradingEnv(venueDir, state, { landing: true })),
+      WAITRON_CLOUD_ORIGIN: "https://cloud.example",
+    };
+    const failure = new Error("interfaces unreadable");
+    failLandingAfterMdns(failure);
+    vi.mocked(runCloudWorker).mockImplementationOnce(
+      ({ signal }) =>
+        new Promise<void>((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(new Error("cloud worker stop failed")), {
+            once: true,
+          });
+        }),
+    );
+    let snapshotStopped = false;
+    vi.mocked(runCloudSnapshotLoop).mockImplementationOnce(
+      ({ signal }) =>
+        new Promise<void>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              setTimeout(() => {
+                snapshotStopped = true;
+                resolve();
+              }, 200);
+            },
+            { once: true },
+          );
+        }),
+    );
+
+    await expect(startServer(env)).rejects.toBe(failure);
+    expect(snapshotStopped).toBe(true);
+    expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60_000);
+
+  it("closes live events when unsubscribing from the change feed throws during failed start", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = await tradingEnv(venueDir, state, { landing: true });
+    const failure = new Error("interfaces unreadable");
+    failLandingAfterMdns(failure);
+    const { subscribeToChanges: realSubscribe } =
+      await vi.importActual<typeof import("@waitron/db")>("@waitron/db");
+    vi.mocked(subscribeToChanges).mockImplementationOnce((listener) => {
+      const off = realSubscribe(listener);
+      return () => {
+        off();
+        throw new Error("unsubscribe failed");
+      };
+    });
+    const liveEventsClose = vi.spyOn(LiveEvents.prototype, "close");
+    try {
+      await expect(startServer(env)).rejects.toBe(failure);
+      expect(liveEventsClose).toHaveBeenCalledOnce();
+      expect(readVenueHolder(venueDir)).toBeNull();
+    } finally {
+      liveEventsClose.mockRestore();
+    }
+  }, 60_000);
+
   it("while an adoption is pending, when a step after the listener is started throws", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
