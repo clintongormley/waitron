@@ -1207,6 +1207,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                       search="auto"
                       placeholder=${column.filter.allLabel}
                       show-empty-option
+                      stable-width
                       searchPlaceholder=${this.filterSearchPlaceholder}
                       noResultsLabel=${this.filterNoResultsLabel}
                       .options=${[

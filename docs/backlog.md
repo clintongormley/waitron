@@ -1028,16 +1028,13 @@ a variant's inherited values still read as hints. Picking a table filter's "Any 
 that filter from the saved view and from the `wt-filter-change` detail map. Other non-table dropdowns
 offering an empty "Any …" or "No …" row were outside A193; their appearance needs a separate review.
 
-**A table filter's dropdown keeps one width whatever is chosen (A194, owner 2026-10-02) — OPEN.**
-The owner, on a screenshot of the Modifiers screen's status filter showing "Active" after "Any
-status": _"the dropdown shouldn't resize based on the current value - it should be a fixed size"_.
-`wt-data-table` sets no width on its `.table-filter` comboboxes, so each trigger is as wide as the
-text it shows, and choosing a value moves every control after it on the toolbar. **Wanted:** each
-filter keeps one width while its value changes. Read here, not confirmed with the owner: that width
-fits the filter's longest choice, so no choice is cut; if one fixed width for every filter was
-meant, ask. Measuring the longest choice is the combobox's job if it is to hold for every
-dropdown, the table's if only for filters — decide which, and LOOK at phone width, where the
-filters wrap below the search box.
+**A table filter's dropdown keeps one width whatever is chosen (A194, owner 2026-10-02) — DONE.**
+Each table filter reserves room for its longest offered label, so choosing "Active" after "Any
+status" does not move the next toolbar control. The shared combobox applies this sizing only when
+the table requests it. The Chromium table test measures the width before and after choosing both a
+shorter and a longer value; the table and combobox suites passed. The rendered table was inspected
+at 390px and 1280px in light and dark themes. The owner has not confirmed whether one common width
+was intended for every filter; this uses one stable width per filter.
 
 **A table's pinned Actions column keeps one narrow width (A195, owner 2026-10-02) — OPEN.** The
 owner, on a screenshot of a one-row table whose Actions column is wide, with the menu button in
