@@ -1,6 +1,6 @@
 # A till is a device — design (A238, piece 1 of 3)
 
-Status: design approved in conversation with the owner, 2026-10-03; this written spec awaits review.
+Status: approved by the owner, 2026-10-03, including the designer's defaults marked below.
 Backlog: A238 (`docs/backlog.md`). Pieces 2 and 3 are separate backlog entries and are NOT in this
 spec.
 
@@ -47,7 +47,7 @@ The owner expected a Prepare or Live venue to start with no devices and add each
    Its other sections (kitchen routing, receipt print mode, drawer policy) stay as they are for now;
    kitchen routing is to move elsewhere later (backlog A242). The per-till "Opens the cash drawer"
    switch added on 2026-10-02 (B29) goes: a till that must not open a shared drawer gets its own
-   profile. (Designer's proposal, put to the owner and not yet answered.)
+   profile. (Designer's proposal, approved with the spec.)
 8. Demo venues start with no devices too. Sample sales are recorded with source `demo_seed`.
 9. This ships with a **venue reset**: existing venues, the owner's box included, are wiped and set up
    again. No code carries existing data across.
@@ -117,8 +117,7 @@ line-language triggers, which find an order's location through its till today an
 
 **Device names become unique within a location**, replacing the till name rule
 (`tills_tenant_location_name_key`). A source shown as a device's name has to identify one device.
-`device.register_name_taken` is renamed `device.name_taken`. This is the designer's default, not an
-owner decision; strike it in review if unwanted.
+`device.register_name_taken` is renamed `device.name_taken`. This is the designer's default, approved with the spec.
 
 ### Hashes
 
@@ -165,8 +164,7 @@ hand when the venue's drawer policy is `gated`.
 - `payment_slip_printer_id`: new, the device's current payment slip printer, read by
   `payment-slip-print.ts` instead of the receipt printer.
 
-Defaults (the designer's, offered to the owner on 2026-10-03 without objection; strike any in
-review):
+Defaults (the designer's, approved with the spec):
 
 - A newly paired device starts on the first printer in each of its profile's lists, or none.
 - When a printer leaves a profile's list, or a device moves to another profile, each affected device

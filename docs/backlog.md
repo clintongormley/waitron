@@ -3752,12 +3752,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **A till is a device (A238) — DESIGNED, spec awaiting owner review (2026-10-03).** The `tills`
+- **A till is a device (A238) — DESIGNED, spec approved (owner, 2026-10-03).** The `tills`
   table goes; every record names its source (usually the device; otherwise the dashboard or a named
   background job); a device's profile decides whether it takes cash and opens the drawer, and lists the receipt and payment slip printers its devices may switch between mid-service; setup creates no
   till; the receipt, payment-slip and reprint routes print on the device's current printers. Ships with a
-  venue reset. Spec: `docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`. Next: the
-  owner reviews the spec, then a plan, then it is queued for a campaign lane. Pieces 2 and 3 follow
+  venue reset. Spec: `docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`. Next: a plan,
+  reviewed against the spec, then it is queued for a campaign lane. Pieces 2 and 3 follow
   it (A239, A240).
 
 - **Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner,
