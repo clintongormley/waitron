@@ -5781,20 +5781,16 @@ export class TillApp extends LitElement {
   }
 
   /** The bills the departure leaves unpaid: those still owing something, named as the table
-   * screen names them. */
+   * screen names them. An invoiced bill owes what the departure records for it, its invoice's
+   * amount due, which its credit notes reduce. */
   #departingBills(): DepartingBill[] {
     const party = this.orderParty?.displayName ?? "";
-    return shownBills(this.partyBills).flatMap((bill, index) =>
-      owing(bill) && compareDecimal(decimal(bill.outstanding), decimal("0")) > 0
-        ? [
-            {
-              workingOrderId: bill.workingOrderId,
-              name: billName(party, index),
-              outstanding: bill.outstanding,
-            },
-          ]
-        : [],
-    );
+    return shownBills(this.partyBills).flatMap((bill, index) => {
+      const due = bill.amountDue ?? bill.outstanding;
+      return owing(bill) && compareDecimal(decimal(due), decimal("0")) > 0
+        ? [{ workingOrderId: bill.workingOrderId, name: billName(party, index), outstanding: due }]
+        : [];
+    });
   }
 
   #departingNow(id: number): Departing | null {

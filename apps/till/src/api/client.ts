@@ -1610,6 +1610,8 @@ export interface PartyBill {
   /** The numbers of the credit notes correcting the invoice, oldest first; absent while no sale is
    * filed. */
   creditNotes?: string[];
+  /** What the bill's sale owes: its total plus its credit notes; absent while no sale is filed. */
+  amountDue?: string;
 }
 
 /**

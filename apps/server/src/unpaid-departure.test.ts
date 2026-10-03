@@ -697,6 +697,51 @@ describe("a bill that owes nothing", () => {
   });
 });
 
+describe("what the departure dialog lists for each bill (GET /api/parties/:id/bills)", () => {
+  async function billsOf(partyId: string): Promise<Record<string, unknown>[]> {
+    const listed = await send(venue.app, venue.cookie, "GET", `/api/parties/${partyId}/bills`);
+    expect(listed.status).toBe(200);
+    return listed.json as unknown as Record<string, unknown>[];
+  }
+
+  it("reads a presented bill whose credit note cancels its invoice as owing nothing, leaving its outstanding as it was", async () => {
+    const party = await seatedWith(venue);
+    const placedId = await placedCounterBillMovedTo(venue, invoiceFirstZone, party);
+    await credit(placedId, "14.88", "-18.00");
+
+    const bill = (await billsOf(party.partyId)).find((b) => b.workingOrderId === placedId);
+
+    expect(bill).toMatchObject({ status: "placed", outstanding: "18.00", amountDue: "0.00" });
+  });
+
+  it("reads a partly credited presented bill at what its invoice still owes, the amount the departure then records", async () => {
+    const party = await seatedWith(venue);
+    const placedId = await placedCounterBillMovedTo(venue, invoiceFirstZone, party);
+    await creditTwoEuros(placedId);
+
+    const bill = (await billsOf(party.partyId)).find((b) => b.workingOrderId === placedId);
+    const answer = await depart(party.partyId, {
+      expectedPartyRevision: revisionOf(party.partyId),
+      reason: REASON,
+    });
+
+    expect(bill).toMatchObject({ outstanding: "18.00", amountDue: "15.58" });
+    expect(answer.status).toBe(200);
+    expect(answer.json.departures).toEqual([
+      expect.objectContaining({ workingOrderId: placedId, amount: "15.58" }),
+    ]);
+  });
+
+  it("gives no amount due for a bill with no invoice", async () => {
+    const party = await seatedWith(venue, "Caña");
+
+    const bill = (await billsOf(party.partyId)).find((b) => b.workingOrderId === party.tabId);
+
+    expect(bill).toMatchObject({ status: "open", outstanding: "3.00" });
+    expect(bill).not.toHaveProperty("amountDue");
+  });
+});
+
 describe("two departures at once, and a failure part-way", () => {
   it("records a party once when two departures of it are sent together", async () => {
     const party = await seatedWith(venue, "Botella tinto");
