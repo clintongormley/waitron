@@ -1053,11 +1053,24 @@ it("paints the choices heading from tokens", async () => {
   const { el, host } = await mount({ value: addons });
   host.style.setProperty("--wt-color-text-muted", "rgb(41, 42, 43)");
   host.style.setProperty("--wt-font-size-sm", "11px");
+  host.style.setProperty("--wt-space-3", "13px");
   const group = el.shadowRoot!.querySelector('fieldset[data-test="picks"]')!;
   const legend = group.querySelector("legend")!;
   expect(getComputedStyle(legend).color).toBe("rgb(41, 42, 43)");
   expect(getComputedStyle(legend).fontSize).toBe("11px");
+  expect(getComputedStyle(legend).marginBlockEnd).toBe("13px");
   expect(getComputedStyle(group).borderTopStyle).toBe("none");
+});
+
+it("leaves the product editor's group-heading gap between the choices heading and the boxes", async () => {
+  const { el } = await mount({ value: addons });
+  const group = el.shadowRoot!.querySelector('fieldset[data-test="picks"]')!;
+  const legend = group.querySelector("legend")!;
+  const row = el.shadowRoot!.querySelector('[data-test="picks-row"]')!;
+  const space = parseFloat(getComputedStyle(group).getPropertyValue("--wt-space-3"));
+  expect(space).toBeGreaterThan(0);
+  const gap = row.getBoundingClientRect().top - legend.getBoundingClientRect().bottom;
+  expect(gap).toBeCloseTo(space, 0);
 });
 
 it.each([

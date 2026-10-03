@@ -74,6 +74,7 @@ export class ExtraListForm extends LitElement {
       }
       .group-label {
         padding: 0;
+        margin-block-end: var(--wt-space-3);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
