@@ -4896,7 +4896,11 @@ async function applyLineEdits(
         if (child.ticket !== null)
           await tx
             .update(ticketItems)
-            .set({ quantity: decimalToThousandths(extraQuantityFor(perDish, quantity)) })
+            .set({
+              quantity: decimalToThousandths(
+                extraQuantityFor(perDish, quantity, child.priceQuantity),
+              ),
+            })
             .where(eq(ticketItems.id, child.ticket.id));
   }
 
