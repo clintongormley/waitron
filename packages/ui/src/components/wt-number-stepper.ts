@@ -129,7 +129,7 @@ export class WtNumberStepper extends LitElement {
   @property({ type: Boolean, reflect: true }) invalid = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
-  /** − on `min` clears the box to blank instead of being disabled there. */
+  /** − on any finite number at or below `min`, a fraction included, clears the box to blank. */
   @property({ type: Boolean }) clearable = false;
   /** Each is given `label`, naming the button after its field. */
   @property({ attribute: false }) decreaseLabel: (label: string) => string = (label) =>
@@ -146,17 +146,22 @@ export class WtNumberStepper extends LitElement {
     return this.value.trim() === "" || !Number.isInteger(n) ? null : n;
   }
 
+  private clears(): boolean {
+    const n = Number(this.value);
+    return this.clearable && this.value.trim() !== "" && Number.isFinite(n) && n <= this.min;
+  }
+
   private step(delta: -1 | 1, event: Event): void {
     // Stopped here as well as in dispatchWtChange: a press that changes nothing emits nothing, and
     // its click must not reach a click handler outside either.
     event.stopPropagation();
     const current = this.current();
-    if (current === null && delta === -1) return;
-    if (this.clearable && delta === -1 && current !== null && current <= this.min) {
+    if (delta === -1 && this.clears()) {
       this.value = "";
       dispatchWtChange(this, event, { value: this.value });
       return;
     }
+    if (current === null && delta === -1) return;
     const max = this.max ?? Number.POSITIVE_INFINITY;
     const next =
       current === null
@@ -178,7 +183,7 @@ export class WtNumberStepper extends LitElement {
     const hasHint = this.hint !== "";
     const describedBy = [...(hasHint ? [this.hintId] : []), ...(hasError ? [this.errorId] : [])];
     const inputId = this.name || this.generatedInputId;
-    const atMin = current === null || (!this.clearable && current <= this.min);
+    const atMin = !this.clears() && (current === null || current <= this.min);
     const atMax = this.max !== null && current !== null && current >= this.max;
     const showLabel = this.label !== "" && !this.hideLabel;
     const invalid = this.invalid || hasError;

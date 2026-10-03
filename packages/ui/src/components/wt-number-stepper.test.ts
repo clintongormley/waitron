@@ -157,7 +157,7 @@ test("a clearable stepper steps down to its lowest number before it clears", asy
   expect(seen).toEqual(["2", "1", ""]);
 });
 
-test("a clearable stepper's − is disabled only while the box is blank", async () => {
+test("a clearable stepper's − is disabled on a blank box and enabled once + fills it", async () => {
   const blank = await mount(
     '<wt-number-stepper label="Max" min="1" clearable></wt-number-stepper>',
   );
@@ -168,6 +168,55 @@ test("a clearable stepper's − is disabled only while the box is blank", async 
   await (blank as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(parts(blank).minus.disabled).toBe(false);
 });
+
+test("a clearable stepper's − clears any number at or below its lowest, a fraction included", async () => {
+  for (const value of ["0.5", "-2.5", "0"]) {
+    const el = await mount(
+      `<wt-number-stepper label="Max" value="${value}" min="1" clearable></wt-number-stepper>`,
+    );
+    const seen = changes(el);
+    expect(parts(el).minus.disabled, value).toBe(false);
+    parts(el).minus.click();
+    await (el as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    expect(seen, value).toEqual([""]);
+    expect(parts(el).input.value, value).toBe("");
+    cleanup();
+  }
+});
+
+test("a clearable stepper's − does nothing on a fraction above its lowest or on text that is not a finite number", async () => {
+  for (const value of ["2.5", "abc", "Infinity", "-Infinity"]) {
+    const el = await mount(
+      `<wt-number-stepper label="Max" value="${value}" min="1" clearable></wt-number-stepper>`,
+    );
+    const seen = changes(el);
+    expect(parts(el).minus.disabled, value).toBe(true);
+    // A disabled button fires no click, so re-enable it for the click to reach the handler.
+    parts(el).minus.disabled = false;
+    parts(el).minus.click();
+    expect(seen, value).toEqual([]);
+    cleanup();
+  }
+});
+
+test("without clearable, − does nothing on a fraction, at or below min or above it", async () => {
+  for (const [value, min] of [
+    ["0.5", "1"],
+    ["0.5", "0"],
+    ["2.5", "1"],
+  ] as const) {
+    const el = await mount(
+      `<wt-number-stepper label="Max" value="${value}" min="${min}"></wt-number-stepper>`,
+    );
+    const seen = changes(el);
+    expect(parts(el).minus.disabled, `${value} from ${min}`).toBe(true);
+    parts(el).minus.disabled = false;
+    parts(el).minus.click();
+    expect(seen, `${value} from ${min}`).toEqual([]);
+    cleanup();
+  }
+});
+
 test("typing emits the raw text, unclamped, so the form's own validation sees it", async () => {
   const el = await mount('<wt-number-stepper label="Q" value="1" min="1"></wt-number-stepper>');
   const seen = changes(el);
