@@ -279,7 +279,12 @@ export const en = {
   "extras.all_products_listed": "Every product is already on the list.",
   "extras.unknown_product": "Product not found",
   "extras.reorder": "Drag to reorder",
-  "extras.price": "Price",
+  "extras.price": "Price per portion",
+  "extras.portion": "Portion",
+  "extras.portion_required": "Enter the amount supplied by one pick.",
+  "extras.portion_invalid": "Enter a positive amount that fits this product's unit.",
+  "extras.portion_saved_warning":
+    "Saved portion {amount} exceeds this unit's current precision. You can keep it or enter a new valid amount.",
   "extras.max_quantity": "Maximum quantity",
   "extras.preselected": "Preselected",
   "extras.name_required": "Enter a name.",
@@ -2375,7 +2380,13 @@ export const es: Record<StringKey, string> = {
   "extras.all_products_listed": "Todos los productos ya están en la lista.",
   "extras.unknown_product": "Producto no encontrado",
   "extras.reorder": "Arrastrar para reordenar",
-  "extras.price": "Precio",
+  "extras.price": "Precio por porción",
+  "extras.portion": "Porción",
+  "extras.portion_required": "Introduce la cantidad que aporta una selección.",
+  "extras.portion_invalid":
+    "Introduce una cantidad positiva que se ajuste a la unidad del producto.",
+  "extras.portion_saved_warning":
+    "La porción guardada {amount} supera la precisión actual de esta unidad. Puedes conservarla o introducir una cantidad válida.",
   "extras.max_quantity": "Cantidad máxima",
   "extras.preselected": "Preseleccionado",
   "extras.name_required": "Introduce un nombre.",

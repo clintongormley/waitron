@@ -1130,6 +1130,74 @@ const KG = {
   precision: 3,
   abbreviation: { en: "kg", es: "kilo" },
 };
+
+it("requires a weighed extra portion and hints the price for that portion", async () => {
+  const { el, host } = await mount({
+    products: [product({ unitId: KG.id, unit: KG, unitPrice: "100.00" })],
+  });
+  const submitted = record(host);
+  await type(el, "name", "Extras");
+  await addItem(el, "Bacon");
+
+  const portion = field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-portion");
+  expect(portion).not.toBeNull();
+  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price").placeholder).toBe("");
+  await click(el, "save");
+  expect(submitted).toHaveLength(0);
+  expect(portion.error).toBe(t("extras.portion_required"));
+
+  await type(el, "item-0-portion", "0.050");
+  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price").placeholder).toBe(
+    "5.00",
+  );
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]!.items[0]!.portion).toBe("0.050");
+});
+
+it("keeps an unchanged saved portion after its unit loses precision", async () => {
+  const { el, host } = await mount({
+    value: {
+      ...addons,
+      items: [{ ...addons.items[0]!, portion: "0.055" }],
+    },
+    products: [product({ unitId: KG.id, unit: { ...KG, precision: 2 } })],
+  });
+  const submitted = record(host);
+
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-portion").value).toBe("0.055");
+  expect(text(el, "item-0-portion-warning")).toContain("0.055");
+  await type(el, "name", "Updated extras");
+  await click(el, "save");
+  expect(submitted[0]!.items[0]!.portion).toBe("0.055");
+
+  await type(el, "item-0-portion", "0.056");
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-portion").error).toBe(
+    t("extras.portion_invalid"),
+  );
+
+  await type(el, "item-0-portion", "0.06");
+  await click(el, "save");
+  expect(submitted[1]!.items[0]!.portion).toBe("0.06");
+});
+
+it("marks malformed portion input beside its field without crashing the form", async () => {
+  const { el, host } = await mount({
+    products: [product({ unitId: KG.id, unit: KG, unitPrice: "100.00" })],
+  });
+  const submitted = record(host);
+  await type(el, "name", "Extras");
+  await addItem(el, "Bacon");
+  await type(el, "item-0-portion", "nope");
+  await click(el, "save");
+  expect(submitted).toHaveLength(0);
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-portion").error).toBe(
+    t("extras.portion_invalid"),
+  );
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+});
 const PORTION = {
   id: "unit-portion",
   name: { en: "Portion", es: "Ración" },

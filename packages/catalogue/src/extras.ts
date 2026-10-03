@@ -6,7 +6,6 @@ import {
   centsToDecimal,
   decimal,
   decimalToThousandths,
-  multiplyDecimal,
   stringToCents,
   thousandthsToDecimal,
   toScale,
@@ -24,15 +23,14 @@ import { parentsWithActiveVariants } from "./variants.js";
 import { productUnits, units } from "./schema/units.js";
 import { parentJoin, parentProducts, unitOwnerJoin } from "./variant-fallback.js";
 import { assertQuantityPrecision } from "./unit-validation.js";
+import { priceForExtraPortion } from "./extra-contract.js";
 import "./errors.js";
 
 export function resolveExtraPrice(
   item: ExtraListItem,
   product: { unitPrice: string } | undefined,
 ): string | undefined {
-  if (item.price !== null) return item.price;
-  if (product === undefined) return undefined;
-  return toScale(multiplyDecimal(decimal(product.unitPrice), decimal(item.portion ?? "1")), 2);
+  return priceForExtraPortion(item, product?.unitPrice);
 }
 
 // A list's `sort` is never written from a body (`parseExtraListInput` accepts no such key), so every

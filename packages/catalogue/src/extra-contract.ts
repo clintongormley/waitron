@@ -1,4 +1,11 @@
-import { AppError, contentLanguageCode, decimal, isUuid, toScale } from "@waitron/shared";
+import {
+  AppError,
+  contentLanguageCode,
+  decimal,
+  isUuid,
+  multiplyDecimal,
+  toScale,
+} from "@waitron/shared";
 import type { ExtraSelection } from "@waitron/shared";
 import type { ExtraList, ExtraListItemInput, ExtraListInput } from "./modifier-list-types.js";
 import { MAX_MODIFIER_INTEGER, isProductPrice } from "./modifier-limits.js";
@@ -86,6 +93,15 @@ export function extraPrice(value: unknown, field: string): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "string" || !isProductPrice(value)) invalid(field);
   return toScale(decimal(value), 2);
+}
+
+export function priceForExtraPortion(
+  item: { price: string | null; portion?: string },
+  unitPrice: string | undefined,
+): string | undefined {
+  if (item.price !== null) return item.price;
+  if (unitPrice === undefined) return undefined;
+  return toScale(multiplyDecimal(decimal(unitPrice), decimal(item.portion ?? "1")), 2);
 }
 
 function extraPortion(value: unknown, field: string): string {
