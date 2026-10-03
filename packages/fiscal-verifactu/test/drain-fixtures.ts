@@ -8,6 +8,7 @@ import { registrosFacturacion } from "../src/schema/registros.js";
 import { registroSif } from "../src/schema/sif.js";
 import { currentSif, registerSif } from "../src/registro-sif.js";
 import type { Entorno } from "../src/registro-row.js";
+import { TEST_SISTEMA, nifWithControlLetter } from "../src/testing/seed.js";
 import { seedTenantWithSif } from "./fixtures.js";
 import { steadyClock } from "./write-path-fixtures.js";
 
@@ -32,8 +33,8 @@ export interface SeededDrainOptions {
   count: number;
   /** Reuse an operational venue's fiscal identity instead of creating another venue. */
   identity?: { tillId: string; nodeId: string; nif: string };
-  /** Stamps `FUTURE_FECHA`, after the fake AEAT's `serverNow`, which the fake answers with error
-   * 2004 (AceptadoConErrores). */
+  /** Stamps a generation time after the fake AEAT's `serverNow`, which the fake answers with
+   * warning 2004 (AceptadoConErrores). A future invoice date is refused outright (1112) instead. */
   futureDated?: boolean;
   /**
    * The `entorno` every seeded row carries, which `drain` compares against
@@ -59,8 +60,9 @@ export interface SeededDrain {
 
 // Fixed either side of the `serverNow` (2026-07-21T00:00:00Z) every suite's fake AEAT uses.
 const PAST_FECHA = "2026-07-20";
-const FUTURE_FECHA = "2026-07-22";
+const FUTURE_GENERATED_AT = "2026-07-22T00:00:00+01:00";
 let reusedIdentitySequence = 10_000;
+let independentNifSequence = 0;
 
 /** AEAT's `sf:fecha` ("DD-MM-YYYY") from this file's own ISO ("YYYY-MM-DD") literals. */
 function toAeatDate(isoDate: string): string {
@@ -70,7 +72,7 @@ function toAeatDate(isoDate: string): string {
 
 /**
  * A pending alta, modelled on `seedSoldRegistro` (./fixtures.ts) but with a configurable
- * `fecha_expedicion_factura`, which `SeededDrainOptions.futureDated` needs.
+ * `fecha_expedicion_factura` and generation time.
  */
 export async function insertPendingAlta(
   db: Database,
@@ -82,6 +84,8 @@ export async function insertPendingAlta(
     secuencia: number;
     huella: string;
     fecha: string;
+    /** Defaults to `ISSUED_AT`. */
+    generadoEn?: string;
     /** Required here: the default is applied once, at `seedPendingEnvios`. */
     entorno: Entorno | null;
   },
@@ -115,9 +119,31 @@ export async function insertPendingAlta(
       BaseImponibleOimporteNoSujeto: "10.00",
       TipoImpositivo: "21.00",
       CuotaRepercutida: "2.10",
+      ClaveRegimen: "01",
       CalificacionOperacion: "S1",
     },
   ];
+  // Chained as `appendToChain` chains a real record: the first on a node is the chain start, every
+  // later one names its predecessor. The fake AEAT answers a repeated first record for the same
+  // issuer and software identity with warning 2007, as AEAT itself was observed to.
+  const head = await db.execute<{
+    id_emisor_factura: string;
+    num_serie_factura: string;
+    fecha_expedicion_factura: string;
+    huella: string;
+  }>(sql`
+    select r.id_emisor_factura, r.num_serie_factura, r.fecha_expedicion_factura, r.huella
+    from cadenas c join registros_facturacion r on r.id = c.ultimo_registro_id
+    where c.node_id = ${params.nodeId}
+  `);
+  const previous = head.rows[0];
+  const sif = await db.execute<{ numero_instalacion: number }>(sql`
+    select numero_instalacion from registro_sif where id = ${params.sifId}
+  `);
+  const sistemaInformatico = {
+    ...TEST_SISTEMA,
+    NumeroInstalacion: String(sif.rows[0]!.numero_instalacion),
+  };
   const [registro] = await db
     .insert(registrosFacturacion)
     .values({
@@ -136,9 +162,13 @@ export async function insertPendingAlta(
       desglose,
       cuotaTotal: "2.10",
       importeTotal: "12.10",
-      primerRegistro: true,
-      sistemaInformatico: {},
-      fechaHoraHusoGenRegistro: new Date(ISSUED_AT),
+      primerRegistro: previous === undefined,
+      anteriorIdEmisorFactura: previous?.id_emisor_factura,
+      anteriorNumSerieFactura: previous?.num_serie_factura,
+      anteriorFechaExpedicionFactura: previous?.fecha_expedicion_factura,
+      anteriorHuella: previous?.huella,
+      sistemaInformatico,
+      fechaHoraHusoGenRegistro: new Date(params.generadoEn ?? ISSUED_AT),
       offsetMinutos: 60,
       tipoHuella: "01",
       huella: params.huella,
@@ -189,7 +219,8 @@ export async function seedPendingEnvios(
   `);
   const legalName = tenantRow.rows[0]?.legal_name ?? "Waitron SL";
 
-  const fecha = opts.futureDated === true ? FUTURE_FECHA : PAST_FECHA;
+  const fecha = PAST_FECHA;
+  const generadoEn = opts.futureDated === true ? FUTURE_GENERATED_AT : undefined;
   // An EXPLICIT `null` must survive, so not `??`.
   const entorno = opts.entorno === undefined ? DEFAULT_ENTORNO : opts.entorno;
   const registroIds: string[] = [];
@@ -207,6 +238,7 @@ export async function seedPendingEnvios(
       secuencia: sequence,
       huella,
       fecha,
+      generadoEn,
       entorno,
     });
     registroIds.push(registroId);
@@ -312,7 +344,6 @@ export async function seedSecondChain(
  */
 export async function seedIndependentChain(
   db: Database,
-  seeded: SeededDrain,
   params: { sifId: string; secuencia: number; entorno?: Entorno | null },
 ): Promise<{ registroId: string; facturaKey: string }> {
   const [location] = await db
@@ -334,8 +365,9 @@ export async function seedIndependentChain(
     .returning({ id: nodes.id });
   const nodeId = brandNodeId(node!.id);
   await db.insert(invoiceSeries).values({ nodeId, code: "Z" });
-  // A fresh nif, so this fixed installation number cannot collide with `seeded`'s chain.
-  const nif = `ZZ${String(seeded.nodeId).replace(/-/g, "").slice(0, 7)}`;
+  // A fresh nif, so this fixed installation number cannot collide with another chain's.
+  independentNifSequence += 1;
+  const nif = nifWithControlLetter(30_000_000 + independentNifSequence);
   await db.insert(registroSif).values({
     id: params.sifId,
     nodeId,

@@ -19,6 +19,7 @@ import { registrosFacturacion } from "../src/schema/registros.js";
 import { registroSif } from "../src/schema/sif.js";
 import { registerSif } from "../src/registro-sif.js";
 import type { Entorno } from "../src/registro-row.js";
+import { nifWithControlLetter } from "../src/testing/seed.js";
 
 /**
  * Every row here is written through its TABLE DEFINITION rather than as raw SQL, so each column's
@@ -238,7 +239,7 @@ let nifSequence = 0;
 
 function freshNif(): string {
   nifSequence += 1;
-  return `${String(20_000_000 + nifSequence).padStart(8, "0")}K`;
+  return nifWithControlLetter(20_000_000 + nifSequence);
 }
 
 async function insertLocationTillSeries(
@@ -284,7 +285,7 @@ async function insertLocationTillSeries(
  * huella literal would otherwise break whenever a test is added or removed ABOVE it. Measured: the
  * same basket filed 16th in `write-path.e2e.test.ts` hashed to `38CCE164…` under NIF `20000016K`
  * and to `A1AF497F…` standalone under `20000001K`; pinning the NIF made both positions agree. Pass
- * a value no other test in the same file will mint — the counter starts at `20000001K` and climbs.
+ * a value no other test in the same file will mint — the counter starts at `20000001Y` and climbs.
  *
  * WHAT THE OVERRIDE DOES NOT REACH. The `tenants` insert below does nothing when the row already
  * exists, so after an earlier seed the override reaches `registerSif` alone and the `tenants` row

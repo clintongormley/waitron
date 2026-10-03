@@ -260,6 +260,88 @@ describe("drain — flow control (envio_flujo)", () => {
 });
 
 /**
+ * `@waitron/verifactu` reports no `TiempoEsperaEnvio` when AEAT's reply carries no usable wait. The
+ * reply is still saved, nothing more is sent this pass, and the next gate is set from the last wait
+ * AEAT did give, never from the missing one.
+ */
+describe("drain — a reply with no usable TiempoEsperaEnvio", () => {
+  const NOW = new Date("2026-07-21T00:01:00Z");
+  let seeded: SeededDrain;
+  let deps: DrainDeps;
+
+  function withoutWait(client: VerifactuClient): VerifactuClient {
+    return {
+      ...client,
+      submit: async (cabecera, registros) => ({
+        ...(await client.submit(cabecera, registros)),
+        TiempoEsperaEnvio: undefined,
+      }),
+    };
+  }
+
+  beforeEach(async () => {
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    seeded = await seedPendingEnvios(suite.db, { count: 6 });
+    deps = {
+      db: suite.db,
+      resolveClient: staticResolver(withoutWait(aeat.client())),
+      skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+      environment: "production",
+      maxRegistrosPorEnvio: 3,
+    };
+  });
+
+  afterEach(async () => {
+    await suite.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
+    await suite.db.execute(sql`delete from envio_flujo`);
+  });
+
+  async function flujo() {
+    const { rows } = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ proximo_envio_en: string; tiempo_espera_seg: number }>(
+        sql`select proximo_envio_en, tiempo_espera_seg from envio_flujo`,
+      ),
+    );
+    return rows[0];
+  }
+
+  it("saves the reply but sends no second full chunk in the same pass", async () => {
+    const result = await drain(deps, NOW);
+
+    expect(result.batchesSent).toBe(1);
+    expect(result.recordsAccepted).toBe(3);
+    const { rows } = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ estado: string; csv: string | null }>(
+        sql`select estado, csv from envios where ${ownChain(seeded)}`,
+      ),
+    );
+    expect(rows.filter((r) => r.estado === "aceptado" && r.csv !== null)).toHaveLength(3);
+    expect(rows.filter((r) => r.estado === "pendiente")).toHaveLength(3);
+  });
+
+  it("gates the next send on the last wait AEAT gave", async () => {
+    await suite.db.execute(sql`
+      insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+      values (1, ${new Date("2026-07-21T00:00:00Z").toISOString()}, 120)
+    `);
+
+    const result = await drain(deps, NOW);
+
+    const gate = new Date(NOW.getTime() + 120_000);
+    expect(await flujo()).toEqual({ proximo_envio_en: gate.toISOString(), tiempo_espera_seg: 120 });
+    expect(result.nextDueAt).toEqual(gate);
+  });
+
+  it("gates the next send on the initial 60 seconds when AEAT has never given a wait", async () => {
+    const result = await drain(deps, NOW);
+
+    const gate = new Date(NOW.getTime() + 60_000);
+    expect(await flujo()).toEqual({ proximo_envio_en: gate.toISOString(), tiempo_espera_seg: 60 });
+    expect(result.nextDueAt).toEqual(gate);
+  });
+});
+
+/**
  * A row left `enviando` past `RECUPERACION_ENVIANDO_MS` is a claim abandoned while this process
  * stays up. A restart's claims are requeued by `resetInFlightClaims` instead.
  */
@@ -749,7 +831,15 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
       NombreRazonEmisor: seeded.legalName,
       TipoFactura: "F2",
       DescripcionOperacion: "Venta en establecimiento (registro distinto, misma identidad)",
-      Desglose: [],
+      Desglose: [
+        {
+          ClaveRegimen: "01",
+          CalificacionOperacion: "S1",
+          BaseImponibleOimporteNoSujeto: "10.00",
+          TipoImpositivo: "21.00",
+          CuotaRepercutida: "2.10",
+        },
+      ],
       CuotaTotal: "2.10",
       ImporteTotal: "12.10",
       Encadenamiento: { PrimerRegistro: "S" },
@@ -805,7 +895,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     // accepted there even though it is halted locally: the fake, like AEAT, is chain-blind.
     const stored = aeat.stored();
     expect(stored.find((s) => s.key === seeded.facturaKeys[0])?.huella).toBe("D".repeat(64));
-    expect(stored.find((s) => s.key === seeded.facturaKeys[1])?.estado).toBe("Correcta");
+    expect(stored.find((s) => s.key === seeded.facturaKeys[1])?.estado).toBe("Correcto");
   });
 });
 
@@ -1009,7 +1099,7 @@ describe("drain — the deployment-environment guard", () => {
     try {
       const seeded = await seedPendingEnvios(suite.db, { count: 3, entorno: null });
       cleanupNodeId = seeded.nodeId;
-      const healthy = await seedIndependentChain(suite.db, seeded, {
+      const healthy = await seedIndependentChain(suite.db, {
         sifId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
         secuencia: 1,
         entorno: "production",

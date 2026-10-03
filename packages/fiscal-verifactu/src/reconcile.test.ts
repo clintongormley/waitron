@@ -36,7 +36,7 @@ const reconcileDeps = (
   clock: ReconcileDeps["clock"],
 ): ReconcileDeps => ({ db: suite.db, resolveClient, clock });
 
-/** Drives AEAT to hold every seeded record as `Correcta` (keyed by `RefExterna` = registro id) and
+/** Drives AEAT to hold every seeded record as `Correcto` (keyed by `RefExterna` = registro id) and
  * marks our own `envios` `aceptado` — the drainer's happy path, the starting point every
  * divergence below is then produced from with the fake's Task-1 consulta hooks. */
 async function storeAllAtAeat(resolveClient: DrainDeps["resolveClient"]): Promise<void> {
@@ -132,11 +132,11 @@ describe("reconcile — the three audit cases", () => {
     expect(await incidentsFor()).toHaveLength(0);
   });
 
-  it("lostAck: we believe pendiente, AEAT holds it (Correcta) → lostAck", async () => {
+  it("lostAck: we believe pendiente, AEAT holds it (Correcto) → lostAck", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(suite.db, { count: 3 });
     const resolveClient = staticResolver(aeat.client());
-    await storeAllAtAeat(resolveClient); // AEAT now holds all three as Correcta
+    await storeAllAtAeat(resolveClient); // AEAT now holds all three as Correcto
 
     // Our acknowledgement was lost.
     await withTransaction(suite.db, (tx) =>
@@ -150,7 +150,7 @@ describe("reconcile — the three audit cases", () => {
       [...seeded.registroIds].sort(),
     );
     expect(
-      result.lostAck.every((m) => m.localState === "pendiente" && m.reportedState === "Correcta"),
+      result.lostAck.every((m) => m.localState === "pendiente" && m.reportedState === "Correcto"),
     ).toBe(true);
     expect(result.noTrace).toEqual([]);
     expect(result.drift).toEqual([]);
@@ -266,7 +266,7 @@ describe("reconcile — the three audit cases", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
-    await storeAllAtAeat(resolveClient); // aceptado at us, AEAT holds it Correcta
+    await storeAllAtAeat(resolveClient); // aceptado at us, AEAT holds it Correcto
 
     // Simulate a marker left over from an earlier noTrace remediation that has since self-healed.
     await withTransaction(suite.db, (tx) =>
@@ -286,12 +286,12 @@ describe("reconcile — the three audit cases", () => {
     expect(marker).toBeNull();
   });
 
-  it("drift: we believe aceptado, AEAT holds AceptadaConErrores → drift + warning incident", async () => {
+  it("drift: we believe aceptado, AEAT holds AceptadoConErrores → drift + warning incident", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
     await storeAllAtAeat(resolveClient);
-    aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadaConErrores");
+    aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadoConErrores");
 
     const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
@@ -300,7 +300,7 @@ describe("reconcile — the three audit cases", () => {
     expect(result.drift[0]).toEqual({
       recordId: seeded.registroIds[0],
       localState: "aceptado",
-      reportedState: "AceptadaConErrores",
+      reportedState: "AceptadoConErrores",
     });
     expect(result.noTrace).toEqual([]);
     expect(result.lostAck).toEqual([]);
@@ -315,13 +315,13 @@ describe("reconcile — the three audit cases", () => {
     expect(estados.get(seeded.registroIds[0]!)).toBe("aceptado_con_errores");
   });
 
-  it("drift: we believe aceptado, AEAT holds Anulada → drift + error incident", async () => {
-    // No sibling anulación, so this is the anomalous Anulada path.
+  it("drift: we believe aceptado, AEAT holds Anulado → drift + error incident", async () => {
+    // No sibling anulación, so this is the anomalous Anulado path.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
     await storeAllAtAeat(resolveClient);
-    aeat.setConsultaState(seeded.facturaKeys[0]!, "Anulada");
+    aeat.setConsultaState(seeded.facturaKeys[0]!, "Anulado");
 
     const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
@@ -330,7 +330,7 @@ describe("reconcile — the three audit cases", () => {
     expect(result.drift[0]).toEqual({
       recordId: seeded.registroIds[0],
       localState: "aceptado",
-      reportedState: "Anulada",
+      reportedState: "Anulado",
     });
     expect(result.noTrace).toEqual([]);
     expect(result.lostAck).toEqual([]);
@@ -341,13 +341,13 @@ describe("reconcile — the three audit cases", () => {
     expect(inc[0]?.code).toBe("fiscal.reconcile_drift_anulada");
     expect(inc[0]?.severity).toBe("error");
 
-    // Anulada has no local estado to correct toward.
+    // Anulado has no local estado to correct toward.
     const estados = await estadosFor();
     expect(estados.get(seeded.registroIds[0]!)).toBe("aceptado");
   });
 
-  it("drift-Anulada with a local anulacion is clean — no drift entry, no incident", async () => {
-    // AEAT marks the alta Anulada once it accepts the anulación we submitted for the same sale,
+  it("drift-Anulado with a local anulacion is clean — no drift entry, no incident", async () => {
+    // AEAT marks the alta Anulado once it accepts the anulación we submitted for the same sale,
     // while the alta's own envío stays `aceptado`.
     //
     // The sale comes from the real `recordSale`, not `seedPendingEnvios`: that fixture's `huella`
@@ -382,7 +382,7 @@ describe("reconcile — the three audit cases", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(sql`update envios set proximo_intento_en = ${DRAIN_AT.toISOString()}`);
     });
-    await drain(drainDeps(resolveClient), DRAIN_AT); // alta: local aceptado, AEAT Correcta
+    await drain(drainDeps(resolveClient), DRAIN_AT); // alta: local aceptado, AEAT Correcto
 
     const alta = await altaIdentityFor(sale.saleId);
     await withTransaction(suite.db, async (tx) => {
@@ -391,8 +391,8 @@ describe("reconcile — the three audit cases", () => {
     // The void's own anulación envío is never submitted here, so it stays in flight.
     expect(await hasAnulacion(alta.id)).toBe(true);
 
-    // AEAT now reports the alta itself Anulada — the expected authority state post-void.
-    aeat.setConsultaState(alta.facturaKey, "Anulada");
+    // AEAT now reports the alta itself Anulado — the expected authority state post-void.
+    aeat.setConsultaState(alta.facturaKey, "Anulado");
 
     const result = await reconcile(reconcileDeps(resolveClient, steadyClock), period);
 
@@ -408,13 +408,13 @@ describe("reconcile — the three audit cases", () => {
     expect(estados.get(alta.id)).toBe("aceptado");
   });
 
-  it("drift-Anulada with NO local anulacion is idempotent across sweeps — one incident, not two", async () => {
-    // Anulada is never corrected, so it re-detects as drift on every sweep.
+  it("drift-Anulado with NO local anulacion is idempotent across sweeps — one incident, not two", async () => {
+    // Anulado is never corrected, so it re-detects as drift on every sweep.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
     await storeAllAtAeat(resolveClient);
-    aeat.setConsultaState(seeded.facturaKeys[0]!, "Anulada"); // no local anulación at all
+    aeat.setConsultaState(seeded.facturaKeys[0]!, "Anulado"); // no local anulación at all
 
     const first = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
     expect(first.drift).toHaveLength(1);
@@ -431,12 +431,12 @@ describe("reconcile — the three audit cases", () => {
     expect(incidents[0]?.code).toBe("fiscal.reconcile_drift_anulada");
   });
 
-  it("drift-AceptadaConErrores CONVERGES: a second sweep does not re-raise the incident", async () => {
+  it("drift-AceptadoConErrores CONVERGES: a second sweep does not re-raise the incident", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
-    await storeAllAtAeat(resolveClient); // local aceptado, AEAT Correcta
-    aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadaConErrores"); // AEAT now disagrees
+    await storeAllAtAeat(resolveClient); // local aceptado, AEAT Correcto
+    aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadoConErrores"); // AEAT now disagrees
 
     // Sweep 1: drift, a warning incident, and a correction.
     const first = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
@@ -444,7 +444,7 @@ describe("reconcile — the three audit cases", () => {
     expect(first.drift[0]).toEqual({
       recordId: seeded.registroIds[0],
       localState: "aceptado",
-      reportedState: "AceptadaConErrores",
+      reportedState: "AceptadoConErrores",
     });
     expect(first.incidentsRaised).toBe(1);
     expect(await incidentsFor()).toHaveLength(1);
@@ -471,11 +471,11 @@ describe("reconcile — the three audit cases", () => {
     expect(ackStates.get(seeded.registroIds[0]!)).toBe("accepted_with_errors");
   });
 
-  it("clean match: a drainer-set aceptado_con_errores agrees with AEAT's AceptadaConErrores — not drift", async () => {
+  it("clean match: a drainer-set aceptado_con_errores agrees with AEAT's AceptadoConErrores — not drift", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(suite.db, { count: 1, futureDated: true }); // 2004 → AceptadoConErrores
     const resolveClient = staticResolver(aeat.client());
-    await drain(drainDeps(resolveClient), DRAIN_AT); // local aceptado_con_errores, AEAT AceptadaConErrores
+    await drain(drainDeps(resolveClient), DRAIN_AT); // local aceptado_con_errores, AEAT AceptadoConErrores
 
     // Isolate reconcile's own incidents from the drainer's `fiscal.aceptado_con_errores` warning.
     await suite.db.execute(sql`delete from incidents`);
@@ -510,7 +510,7 @@ describe("reconcile — paging", () => {
       },
     };
     const resolveClient = staticResolver(counting);
-    await drain(drainDeps(resolveClient), DRAIN_AT); // all 5 stored at AEAT as Correcta, ours aceptado
+    await drain(drainDeps(resolveClient), DRAIN_AT); // all 5 stored at AEAT as Correcto, ours aceptado
     consultarCalls = 0;
 
     const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
@@ -567,7 +567,7 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
-    await storeAllAtAeat(resolveClient); // our one record: aceptado + Correcta
+    await storeAllAtAeat(resolveClient); // our one record: aceptado + Correcto
 
     // A record AEAT holds for the SAME obligado that WE did not submit — no RefExterna keys it to
     // any of our registros (the multi-OT case: another software system filing for this NIF).
@@ -614,7 +614,7 @@ describe("reconcile — period normalization", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(suite.db, { count: 3 });
     const resolveClient = staticResolver(aeat.client());
-    await storeAllAtAeat(resolveClient); // all three: local aceptado, AEAT Correcta — a clean match
+    await storeAllAtAeat(resolveClient); // all three: local aceptado, AEAT Correcto — a clean match
 
     const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), {
       year: "2026",
@@ -691,7 +691,15 @@ function foreignAlta(nif: string, legalName: string): RegistroAlta {
     NombreRazonEmisor: legalName,
     TipoFactura: "F2",
     DescripcionOperacion: "Registro de otro sistema informático",
-    Desglose: [],
+    Desglose: [
+      {
+        ClaveRegimen: "01",
+        CalificacionOperacion: "S1",
+        BaseImponibleOimporteNoSujeto: "0.00",
+        TipoImpositivo: "21.00",
+        CuotaRepercutida: "0.00",
+      },
+    ],
     CuotaTotal: "0.00",
     ImporteTotal: "0.00",
     Encadenamiento: { PrimerRegistro: "S" },

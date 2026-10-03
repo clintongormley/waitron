@@ -122,6 +122,23 @@ type OriginalAltaForCorrection = Pick<
 >;
 
 /**
+ * One filed VAT line. "S1" is sujeta y no exenta, sin inversión del sujeto pasivo, the ordinary
+ * domestic sale; a rectificativa por diferencias files the same shape with negative figures. No
+ * exempt, reverse-charge or recargo de equivalencia line is filed today. `Impuesto` is omitted,
+ * which AEAT reads as IVA, and IVA requires a regime: "01" is the general regime (AEAT
+ * validation §3.1.3.15.6, enforced by `@waitron/verifactu` from 0.2.0). Not a huella input.
+ */
+function toDetalleDesglose(line: VatBreakdownLine): DetalleDesgloseInput {
+  return {
+    ClaveRegimen: "01",
+    CalificacionOperacion: "S1",
+    BaseImponibleOimporteNoSujeto: line.base,
+    TipoImpositivo: line.rate,
+    CuotaRepercutida: line.tax,
+  };
+}
+
+/**
  * The real Veri*Factu `FiscalBackend`. Every record method builds its registro through
  * `appendToChain`, which computes the huella and advances the chain head, then inserts a
  * `pendiente` `envios` row — all on the caller's transaction. Nothing here contacts AEAT.
@@ -177,14 +194,7 @@ export class VerifactuBackend implements FiscalBackend {
     const sif = await currentSif(tx, sale.nodeId);
     const tenant = await this.taxpayer(tx);
 
-    const desglose: DetalleDesgloseInput[] = sale.vatBreakdown.map((line) => ({
-      BaseImponibleOimporteNoSujeto: line.base,
-      TipoImpositivo: line.rate,
-      CuotaRepercutida: line.tax,
-      // "S1" — sujeta y no exenta, sin inversión del sujeto pasivo: the ordinary domestic retail
-      // sale. No exempt, reverse-charge or recargo de equivalencia line is filed today.
-      CalificacionOperacion: "S1",
-    }));
+    const desglose = sale.vatBreakdown.map(toDetalleDesglose);
     const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
 
     // An F1 must name its recipient and an F2 must NOT carry one. `buildDestinatarios` is the one
@@ -390,14 +400,7 @@ export class VerifactuBackend implements FiscalBackend {
     const sif = await currentSif(tx, sale.nodeId);
     const tenant = await this.taxpayer(tx);
 
-    const desglose: DetalleDesgloseInput[] = sale.vatBreakdown.map((line) => ({
-      BaseImponibleOimporteNoSujeto: line.base,
-      TipoImpositivo: line.rate,
-      CuotaRepercutida: line.tax,
-      // Same S1 (sujeta y no exenta) qualification `recordSale` applies — a rectificativa por
-      // diferencias carries the identical breakdown shape, its figures merely negative.
-      CalificacionOperacion: "S1",
-    }));
+    const desglose = sale.vatBreakdown.map(toDetalleDesglose);
     const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
 
     const input: Omit<AltaInput, "Encadenamiento"> = {
@@ -529,12 +532,7 @@ export class VerifactuBackend implements FiscalBackend {
     const sif = await currentSif(tx, sale.nodeId);
     const tenant = await this.taxpayer(tx);
 
-    const desglose: DetalleDesgloseInput[] = sale.vatBreakdown.map((line) => ({
-      BaseImponibleOimporteNoSujeto: line.base,
-      TipoImpositivo: line.rate,
-      CuotaRepercutida: line.tax,
-      CalificacionOperacion: "S1",
-    }));
+    const desglose = sale.vatBreakdown.map(toDetalleDesglose);
     const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
 
     const input: Omit<AltaInput, "Encadenamiento"> = {

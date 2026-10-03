@@ -127,7 +127,7 @@ declare module "@waitron/shared" {
     };
 
     /**
-     * `./reconcile.ts`: a record we believe accepted that AEAT reports as `AceptadaConErrores`. A
+     * `./reconcile.ts`: a record we believe accepted that AEAT reports as `AceptadoConErrores`. A
      * WARNING, and a separate code from `fiscal.reconcile_drift_anulada` rather than one code with
      * the state as a param, because the two need different severities and operator responses.
      */
@@ -139,7 +139,7 @@ declare module "@waitron/shared" {
     };
 
     /**
-     * `./reconcile.ts`: a record we believe accepted that AEAT reports as `Anulada` — the authority
+     * `./reconcile.ts`: a record we believe accepted that AEAT reports as `Anulado` — the authority
      * holds as annulled a record our books count live. An error an operator must resolve.
      */
     "fiscal.reconcile_drift_anulada": {

@@ -32,7 +32,7 @@ let rectifySessionId: string;
 
 beforeEach(async () => {
   // A pinned NIF: it is a huella input, and the control below pins a huella literal.
-  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db, { nif: "20009999K" }));
+  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db, { nif: "20009999E" }));
   const [series] = await suite.db
     .insert(invoiceSeries)
     .values({ nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })

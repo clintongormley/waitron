@@ -218,6 +218,10 @@ async function drainDue(
         await persistResponse(tx, client, batch, respuesta, now, result);
         return countDue(tx, now);
       });
+      // `@waitron/verifactu` leaves the wait undefined when AEAT's reply has no usable one. The
+      // reply above is saved either way; nothing more is sent this pass, and the gate keeps the
+      // last wait AEAT did give.
+      if (respuesta.TiempoEsperaEnvio === undefined) break;
       t = respuesta.TiempoEsperaEnvio;
       if (dueCount < maxPorEnvio) break;
     } catch {

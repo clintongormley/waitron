@@ -30,7 +30,7 @@ let seriesId: SeriesId;
 
 beforeEach(async () => {
   // A pinned NIF: it is a huella input, and the controls below pin huella literals.
-  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db, { nif: "20009999K" }));
+  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db, { nif: "20009999E" }));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -88,7 +88,7 @@ async function substitute(total: string, lineTotals: string[], vatRate = "21.00"
       nodeId,
       seriesId,
       substitutedSaleIds: [ticket],
-      counterparty: { taxId: "B12345678", legalName: "Acme Corp SL", countryCode: "ES" },
+      counterparty: { taxId: "B12345674", legalName: "Acme Corp SL", countryCode: "ES" },
       total,
       lines: lines(lineTotals, vatRate),
       locale: "es-ES",

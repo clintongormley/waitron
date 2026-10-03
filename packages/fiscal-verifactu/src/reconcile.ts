@@ -61,26 +61,26 @@ const REPORTED_DRIFT: Partial<
     }
   >
 > = {
-  AceptadaConErrores: { severity: "warning", code: "fiscal.reconcile_drift_errores" },
-  Anulada: { severity: "error", code: "fiscal.reconcile_drift_anulada" },
+  AceptadoConErrores: { severity: "warning", code: "fiscal.reconcile_drift_errores" },
+  Anulado: { severity: "error", code: "fiscal.reconcile_drift_anulada" },
 };
 
 /**
- * Called only when `reported` is `AceptadaConErrores` or `Anulada`. `AceptadaConErrores` agrees
+ * Called only when `reported` is `AceptadoConErrores` or `Anulado`. `AceptadoConErrores` agrees
  * with a local `aceptado_con_errores`: without that, the row this sweep corrects would be
  * re-classified as drift on every later sweep.
  */
 function isDrift(localEstado: string, reported: EstadoRegistroConsulta): boolean {
-  return reported !== "AceptadaConErrores" || localEstado === "aceptado";
+  return reported !== "AceptadoConErrores" || localEstado === "aceptado";
 }
 
 /**
- * The local `envios.estado` a mismatch is corrected to, keyed only by what AEAT reports. `Anulada`
+ * The local `envios.estado` a mismatch is corrected to, keyed only by what AEAT reports. `Anulado`
  * is deliberately absent: there is no local estado for it, so it is never corrected.
  */
 const CORRECTION: Partial<Record<EstadoRegistroConsulta, "aceptado" | "aceptado_con_errores">> = {
-  Correcta: "aceptado",
-  AceptadaConErrores: "aceptado_con_errores",
+  Correcto: "aceptado",
+  AceptadoConErrores: "aceptado_con_errores",
 };
 
 /**
@@ -102,7 +102,7 @@ const CORRECTION: Partial<Record<EstadoRegistroConsulta, "aceptado" | "aceptado_
  *   - an accepted record whose AEAT state disagrees with ours is `drift` (see `isDrift`).
  *
  * Deliberately does NOT reuse the drainer's `resolveEstadoEfectivo` (design §5): a consulta can
- * report `Anulada` and never reports a rejected record, and a submission response is the mirror
+ * report `Anulado` and never reports a rejected record, and a submission response is the mirror
  * image.
  */
 export async function reconcile(
@@ -175,22 +175,22 @@ export async function reconcile(
 
       const drift = REPORTED_DRIFT[reported];
       if (drift !== undefined && isDrift(row.estado, reported)) {
-        if (reported === "Anulada" && (await hasSiblingAnulacion(tx, row))) {
-          // The expected state of a voided sale: AEAT marks the alta Anulada once it accepts the
+        if (reported === "Anulado" && (await hasSiblingAnulacion(tx, row))) {
+          // The expected state of a voided sale: AEAT marks the alta Anulado once it accepts the
           // anulación we submitted, while the alta's own envío stays `aceptado`. We hold the local
           // anulación, so this is agreement, not drift — no entry, no incident, no correction.
           continue;
         }
         result.drift.push(mismatchOf(row, reported));
-        if (reported === "Anulada") {
-          // No local anulación. Idempotent, since a persistent Anulada is re-detected every sweep.
+        if (reported === "Anulado") {
+          // No local anulación. Idempotent, since a persistent Anulado is re-detected every sweep.
           if (
             await raiseOnce(tx, row, drift.severity, "fiscal.reconcile_drift_anulada", detectedAt)
           ) {
             result.incidentsRaised += 1;
           }
         } else {
-          // drift-AceptadaConErrores: converges (isDrift makes it agree after correction), so it is
+          // drift-AceptadoConErrores: converges (isDrift makes it agree after correction), so it is
           // raised at most once per genuine clean→errors transition — the unconditional `raise`.
           await raise(tx, row, drift.severity, drift.code, detectedAt);
           result.incidentsRaised += 1;
@@ -198,8 +198,8 @@ export async function reconcile(
         }
       }
       // Clean agreement, nothing to do (the drainer already acked it — never re-ack a record that
-      // was not a mismatch): `reported === "Correcta"` on a local `aceptado` row, OR
-      // `reported === "AceptadaConErrores"` on a local `aceptado_con_errores` row (see `isDrift`).
+      // was not a mismatch): `reported === "Correcto"` on a local `aceptado` row, OR
+      // `reported === "AceptadoConErrores"` on a local `aceptado_con_errores` row (see `isDrift`).
     }
   });
 
@@ -296,7 +296,7 @@ async function correct(
   now: Date,
 ): Promise<void> {
   const target = CORRECTION[reported];
-  if (target === undefined) return; // Anulada / no clean local estado — incident-only.
+  if (target === undefined) return; // Anulado / no clean local estado — incident-only.
   await tx.execute(sql`
     update envios set estado = ${target}, confirmado_en = ${now.toISOString()}
     where registro_id = ${row.id}

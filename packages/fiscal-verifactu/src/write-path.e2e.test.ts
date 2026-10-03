@@ -628,14 +628,14 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
   // `./backend.ts`), an explicit field of `saleInput` rather than anything derived from the lines,
   // so the third literal is pinned against the CALLER's total and not against the basket.
   const GOLDEN = {
-    huella: "C43623FCC6F00D21DD31D4BABBDBA1A1FD05D466B84677C2F46594C31ED8536A",
+    huella: "41CC8A6277A13E2D9A4023620B238DC4D5DCBB96451F6579DBFFB458799456DC",
     importe_total: "14.41",
     cuota_total: "2.31",
   };
 
   /** Above anything `freshNif` mints (it starts at `20000001K` and climbs one per seeded test), so
    *  this test's hashed `IDEmisorFactura` cannot collide with another test's in this file. */
-  const PINNED_NIF = "29999999K";
+  const PINNED_NIF = "29999999H";
 
   /** One frozen options answer. All six names carry DIFFERENT text, so a projection that stored the
    *  wrong one could not satisfy the assertion below. */

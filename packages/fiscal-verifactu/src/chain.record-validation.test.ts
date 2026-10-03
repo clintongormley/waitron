@@ -210,7 +210,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
         descriptionOfOperation: "Venta en establecimiento",
         total: decimal("12.10"),
         vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
-        counterparty: { taxId: "B12345678", legalName, countryCode: "ES" },
+        counterparty: { taxId: "B12345674", legalName, countryCode: "ES" },
       });
     });
   }
@@ -250,7 +250,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
 
     const [registro] = await suite.db.select().from(registrosFacturacion);
     expect(registro?.destinatarios).toEqual({
-      IDDestinatario: [{ NombreRazon: "Cliente SL", NIF: "B12345678" }],
+      IDDestinatario: [{ NombreRazon: "Cliente SL", NIF: "B12345674" }],
     });
   });
 });

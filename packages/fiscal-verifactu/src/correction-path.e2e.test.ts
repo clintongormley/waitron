@@ -199,6 +199,14 @@ describe("recordCorrection against the real Veri*Factu backend", () => {
     expect(row?.primerRegistro).toBe(false);
   });
 
+  it("files every corrective line under the general regime, ClaveRegimen 01", async () => {
+    const originalId = await recordOriginal();
+    const correctiveId = await correct(originalId);
+    const row = await rawRegistro(correctiveId);
+
+    expect(row.desglose?.map((line) => line.ClaveRegimen)).toEqual(["01"]);
+  });
+
   it("stores a huella that recomputes from its own columns, hashing the negative ImporteTotal", async () => {
     // The strongest single assertion. `CuotaTotal`/`ImporteTotal` ARE huella inputs, so a
     // recompute that agrees with the stored huella proves the negative totals were the exact
