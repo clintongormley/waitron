@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { FetchLike } from "@waitron/dashboard-kit";
 import { DashboardApi } from "./client.js";
 import type { ReceiptConfig } from "./client.js";
 
@@ -3068,4 +3069,56 @@ it("renews the pairing window without reporting dashboard session activity", asy
     credentials: "include",
   });
   expect(activity).not.toHaveBeenCalled();
+});
+
+describe("the card readers' outside-provider reads", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  /** A fetch that answers `body` after `ms`, and rejects as a real fetch does if it is aborted first. */
+  function answersAfter(ms: number, body: unknown): FetchLike {
+    return vi.fn<FetchLike>(
+      (_url, init) =>
+        new Promise<Response>((resolve, reject) => {
+          const timer = setTimeout(() => resolve(jsonResponse(body)), ms);
+          init.signal?.addEventListener("abort", () => {
+            clearTimeout(timer);
+            reject(new DOMException("The operation was aborted.", "AbortError"));
+          });
+        }),
+    );
+  }
+
+  /** Settles `promise` into an inspectable record without letting a rejection go unhandled. */
+  function track<T>(promise: Promise<T>): { settled?: { value?: T; error?: unknown } } {
+    const record: { settled?: { value?: T; error?: unknown } } = {};
+    promise.then(
+      (value) => (record.settled = { value }),
+      (error: unknown) => (record.settled = { error }),
+    );
+    return record;
+  }
+
+  it.each([
+    ["a reader's status", (api: DashboardApi): Promise<unknown> => api.readerStatus("r-1")],
+    [
+      "the provider's available readers",
+      (api: DashboardApi): Promise<unknown> => api.availableReaders("acme"),
+    ],
+  ])("waits for %s past a minute, up to four minutes", async (_what, read) => {
+    const fetchImpl = answersAfter(240_000, { ok: 1 });
+    const out = track(read(new DashboardApi("", fetchImpl)));
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(out.settled).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(out.settled).toEqual({ value: { ok: 1 } });
+  });
+
+  it("still gives up on another read at 30 seconds", async () => {
+    const out = track(new DashboardApi("", answersAfter(240_000, [])).listReaders());
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(out.settled).toEqual({ error: { code: "connection.timed_out" } });
+  });
 });
