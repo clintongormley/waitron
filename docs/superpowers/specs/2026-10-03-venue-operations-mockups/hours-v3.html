@@ -1,0 +1,87 @@
+<style>
+  .hrs { border-collapse: collapse; width: 100%; font-size: 13px; margin: 6px 0 10px; }
+  .hrs th, .hrs td { border: 1px solid rgba(128,128,128,.35); padding: 6px 8px; text-align: left; vertical-align: top; }
+  .hrs th { font-weight: 600; background: rgba(128,128,128,.08); }
+  .hrs td.day { font-weight: 600; white-space: nowrap; }
+  .hint { opacity: .45; }
+  .closed { font-weight: 600; }
+  .sep { border-left: 3px solid rgba(128,128,128,.5) !important; }
+  .note { font-size: 12px; opacity: .75; }
+  .sw { display:inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; border: 1px solid rgba(0,0,0,.2); }
+  .c-std { background: rgba(48,164,108,.18); } .c-shut { background: #3a3b42; } .c-red { background: #e5484d; } .c-amber { background: #f5a623; } .c-grey { background: #8b8d98; } .c-blue { background: #3e63dd; } .c-green { background: #30a46c; } .c-purple { background: #8e4ec6; }
+  .tabs { display:flex; gap: 0; margin: 4px 0 10px; border-bottom: 1px solid rgba(128,128,128,.35); }
+  .tab { padding: 6px 14px; font-size: 13px; }
+  .tab.on { border-bottom: 2px solid #3e63dd; font-weight: 600; }
+  .menu { font-size: 12px; opacity: .8; white-space: nowrap; }
+  .palette { display:flex; gap: 6px; align-items:center; font-size: 12px; margin: 4px 0 8px; }
+  .palette .sw { width: 18px; height: 18px; margin: 0; }
+  .palette .pick { outline: 2px solid currentColor; outline-offset: 2px; }
+  .cal-wrap { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; }
+  .cal { border-collapse: collapse; width: 100%; font-size: 12px; table-layout: fixed; }
+  .cal th { font-weight: 600; padding: 4px; opacity: .7; text-align: left; }
+  .cal td { border: 1px solid rgba(128,128,128,.3); height: 58px; vertical-align: top; padding: 4px; }
+  .cal td.std { background: rgba(48,164,108,.12); }
+  .cal td.shut { background: #3a3b42; color: #fff; }
+  .legend { display:flex; gap: 14px; font-size: 12px; margin: 6px 0; flex-wrap: wrap; }
+  .cal td.out { opacity: .3; }
+  .cal .n { font-weight: 600; }
+  .cal .lbl { display:block; margin-top: 3px; font-size: 11px; line-height: 1.2; color: #fff; border-radius: 3px; padding: 2px 4px; }
+  .cal td.sel { outline: 2px solid #3e63dd; outline-offset: -2px; }
+  .today { text-decoration: underline; }
+  .panel { border: 1px solid rgba(128,128,128,.35); border-radius: 6px; padding: 10px; font-size: 13px; }
+  .panel h4 { margin: 0 0 6px; }
+  .kv { width: 100%; border-collapse: collapse; margin: 6px 0; }
+  .kv td { padding: 3px 0; border-bottom: 1px solid rgba(128,128,128,.2); }
+</style>
+
+<h2>Hours v3: special dates as rows, shown on a calendar</h2>
+<p class="subtitle">The standard week grid is unchanged. A special date is still a row (option A), now with a name and a colour, a Duplicate action, and a month calendar view of the same rows. There is no day-type setup step: the colour belongs to the row.</p>
+
+<div class="mockup">
+  <div class="mockup-header">Venue operations › Hours › Special dates: List view</div>
+  <div class="mockup-body">
+    <div class="tabs"><span class="tab">Standard week</span><span class="tab on">Special dates: List</span><span class="tab">Special dates: Calendar</span></div>
+    <div style="display:flex; gap:8px; margin-bottom:8px"><button class="mock-button">Add a date</button><button class="mock-button">Close the whole venue on a date</button></div>
+    <table class="hrs">
+      <tr><th>Date</th><th>Name</th><th>Restaurant and bar</th><th>Deli</th><th class="sep">Kitchen</th><th>Bar</th><th></th></tr>
+      <tr><td class="day"><span class="sw c-red"></span>Mon 12 Oct</td><td>Fiesta Nacional</td><td>12:00–23:00</td><td class="closed">Closed</td><td class="sep">12:00–21:00</td><td><span class="hint">12:00–01:00</span></td><td class="menu">⋮ Duplicate · Edit · Delete</td></tr>
+      <tr><td class="day"><span class="sw c-shut"></span>Tue 13 Oct</td><td>Staff day off</td><td class="closed">Closed</td><td class="closed">Closed</td><td class="sep closed">Closed</td><td class="closed">Closed</td><td class="menu">⋮</td></tr>
+      <tr><td class="day"><span class="sw c-amber"></span>Wed 14 Oct</td><td>Half day</td><td>12:00–16:00</td><td>09:00–13:00</td><td class="sep">09:00–15:00</td><td>12:00–16:00</td><td class="menu">⋮</td></tr>
+      <tr><td class="day"><span class="sw c-red"></span>Sun 1 Nov</td><td>Todos los Santos</td><td>12:00–23:00</td><td class="closed">Closed</td><td class="sep">12:00–21:00</td><td><span class="hint">12:00–01:00</span></td><td class="menu">⋮</td></tr>
+    </table>
+    <p class="note"><b>Duplicate</b> asks only for the new date (or several dates), and copies the name, the colour and every cell. Above, Todos los Santos was duplicated from Fiesta Nacional and renamed. Editing a row is the same form as adding one:</p>
+    <div class="palette">Colour: <span class="sw c-red pick"></span><span class="sw c-amber"></span><span class="sw c-grey"></span><span class="sw c-blue"></span><span class="sw c-green"></span><span class="sw c-purple"></span><span class="note">: a fixed set of the theme's colours, so each reads in light and dark mode. The two fixed colours (standard and closed) are not in the set, so a special date never looks like either. "Close the whole venue on a date" makes a row in the Closed colour; any date where every department is shut shows as Closed.</span></div>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">Venue operations › Hours › Special dates: Calendar view (Mon 12 Oct clicked)</div>
+  <div class="mockup-body">
+    <div class="tabs"><span class="tab">Standard week</span><span class="tab">Special dates: List</span><span class="tab on">Special dates: Calendar</span></div>
+    <div class="cal-wrap">
+      <div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px"><b>‹ October 2026 ›</b><span class="note">Click a day for its hours</span></div>
+        <div class="legend"><span><span class="sw c-std"></span>Standard day (fixed)</span><span><span class="sw c-shut"></span>Closed: every department shut (fixed)</span><span><span class="sw c-red"></span><span class="sw c-amber"></span>Special dates: the row's own colour</span></div>
+        <table class="cal">
+          <tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr>
+          <tr><td class="out"><span class="n">28</span></td><td class="out"><span class="n">29</span></td><td class="out"><span class="n">30</span></td><td class="std"><span class="n">1</span></td><td class="std"><span class="n">2</span></td><td class="std"><span class="n today">3</span></td><td class="std"><span class="n">4</span></td></tr>
+          <tr><td class="std"><span class="n">5</span></td><td class="std"><span class="n">6</span></td><td class="std"><span class="n">7</span></td><td class="std"><span class="n">8</span></td><td class="std"><span class="n">9</span></td><td class="std"><span class="n">10</span></td><td class="std"><span class="n">11</span></td></tr>
+          <tr><td class="sel"><span class="n">12</span><span class="lbl c-red">Fiesta Nacional</span></td><td class="shut"><span class="n">13</span><span class="lbl c-shut" style="padding-left:0">Staff day off · Closed</span></td><td><span class="n">14</span><span class="lbl c-amber">Half day</span></td><td class="std"><span class="n">15</span></td><td class="std"><span class="n">16</span></td><td class="std"><span class="n">17</span></td><td class="std"><span class="n">18</span></td></tr>
+          <tr><td class="std"><span class="n">19</span></td><td class="std"><span class="n">20</span></td><td class="std"><span class="n">21</span></td><td class="std"><span class="n">22</span></td><td class="std"><span class="n">23</span></td><td class="std"><span class="n">24</span></td><td class="std"><span class="n">25</span></td></tr>
+          <tr><td class="std"><span class="n">26</span></td><td class="std"><span class="n">27</span></td><td class="std"><span class="n">28</span></td><td class="std"><span class="n">29</span></td><td class="std"><span class="n">30</span></td><td class="std"><span class="n">31</span></td><td class="out"><span class="n">1</span><span class="lbl c-red">Todos los Santos</span></td></tr>
+        </table>
+      </div>
+      <div class="panel">
+        <h4><span class="sw c-red"></span>Mon 12 Oct · Fiesta Nacional</h4>
+        <table class="kv">
+          <tr><td>Restaurant and bar</td><td>12:00–23:00</td></tr>
+          <tr><td>Deli</td><td class="closed">Closed</td></tr>
+          <tr><td>Kitchen</td><td>12:00–21:00</td></tr>
+          <tr><td>Bar</td><td><span class="hint">12:00–01:00 (standard Monday)</span></td></tr>
+        </table>
+        <div style="display:flex; gap:6px"><button class="mock-button">Edit</button><button class="mock-button">Duplicate</button><button class="mock-button">Delete</button></div>
+        <p class="note" style="margin-top:8px">Clicking a standard day, e.g. Thu 15, shows that day's standard hours, all greyed out, with one button: <b>Make this a special date</b>.</p>
+      </div>
+    </div>
+  </div>
+</div>

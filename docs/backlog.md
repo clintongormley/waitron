@@ -4118,7 +4118,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   counts yet; this is where one belongs.
 
 - **Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03).** Piece 3 of
-  A238. Owner decisions so far: a float belongs to the WAITER, not the handheld; a waiter with an
+  A238. Its screen belongs with clocking in and out, under Team (owner, 2026-10-03, A261 §10). Owner decisions so far: a float belongs to the WAITER, not the handheld; a waiter with an
   open float may take cash on any handheld, and it adds to their float; the waiter settles the float
   at a till before leaving, entering what they hold, the difference is recorded against them and the
   cash goes into that till's drawer as an A239 entry; the daily close lists any float still open.
@@ -4138,10 +4138,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   customer pays on the reader. Add a pretend reader with its own page, linked from the Demo bar
   (A246), where the amount appears and the payment is approved or declined.
 
-- **The rest of the Printing rules screen (A242) — OPEN (owner, 2026-10-03).** A238 removes its
-  per-till section; device printers move to the device profile's printer lists. What remains is
-  kitchen routing, the receipt print mode and the drawer policy. The owner wants kitchen routing to
-  move elsewhere; the rest is to be decided. Left as it is until then.
+- **The rest of the Printing rules screen (A242) — SETTLED by A261 (owner, 2026-10-03).** The page
+  is deleted: kitchen ticket printers move to Prep stations, the receipt print mode to Departments
+  and zones, and the cash drawer policy is deleted (opening the drawer by hand always needs
+  `cash.drawer`). Build step 8 of A261, after A238 lands.
 
 - **Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29).** A page saying
   what the section is for and what is in it, opened by the section's header. It was the answer to
@@ -4804,6 +4804,14 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   come from venue-wide day types plus a calendar; a per-department switch prints the trading name.
   [Spec](superpowers/specs/2026-10-03-departments-service-styles-hours-design.md); §6 lists what is
   open, including advisor questions Q21, Q14, Q27 and Q22.
+  Its §4 day types and §5 placement are revised by A261.
+- **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — DRAFT
+  SPEC, not planned.** The sidebar's Venue operations group; Venue settings with one tab per group
+  (Receipts moves there); Departments and zones as one table edited in place; Prep stations as one
+  tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
+  special dates, a calendar and public holidays; Printing rules and the cash drawer policy deleted.
+  Eight build steps, each its own queue item.
+  [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Counter/walk-up kitchen fire** — the #193 follow-up, the next piece of menu work.
 - **Menu draft/published state** and time-of-day / seasonal scheduling.
 - **KDS corrections deferred from #191** (owner, 2026-09-01): a moved dish must keep its kitchen

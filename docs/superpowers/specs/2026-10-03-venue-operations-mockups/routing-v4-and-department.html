@@ -1,0 +1,97 @@
+<style>
+  .t { border-collapse: collapse; width: 100%; font-size: 13px; margin: 6px 0 10px; }
+  .t th, .t td { border-bottom: 1px solid rgba(128,128,128,.3); padding: 6px 8px; text-align: left; vertical-align: top; }
+  .t th { font-weight: 600; background: rgba(128,128,128,.08); font-size: 12px; }
+  .t .gl { border-left: 2px solid rgba(128,128,128,.35); }
+  .name { display:flex; align-items:flex-start; }
+  .name .ico { width: 18px; flex: none; opacity: .55; cursor: pointer; }
+  .c1 { padding-left: 26px !important; } .c2 { padding-left: 44px !important; }
+  .grpr td { font-weight: 600; background: rgba(128,128,128,.05); }
+  .top td { background: rgba(62,99,221,.06); }
+  .prod td:first-child { font-style: italic; }
+  .hint { opacity: .45; font-weight: 400; }
+  .more { font-size: 12px; opacity: .6; font-weight: 400; margin-left: 6px; }
+  .badge { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: rgba(128,128,128,.18); font-weight: 400; margin-left: 4px; }
+  .note { font-size: 12px; opacity: .75; }
+  .tabs { display:flex; align-items:flex-end; margin: 0 0 10px; border-bottom: 1px solid rgba(128,128,128,.35); }
+  .tab { padding: 6px 14px; font-size: 13px; }
+  .tab.on { border-bottom: 2px solid #3e63dd; font-weight: 600; }
+  .tester { border: 1px solid rgba(128,128,128,.35); border-radius: 6px; padding: 8px 10px; font-size: 13px; display:flex; gap: 8px; align-items:center; flex-wrap: wrap; margin-bottom: 10px; }
+  .dd { border: 1px solid rgba(128,128,128,.45); border-radius: 4px; padding: 2px 6px; display:inline-flex; justify-content: space-between; gap: 8px; min-width: 90px; }
+  .res { background: rgba(62,99,221,.12); border-radius: 4px; padding: 3px 8px; }
+  .wrap { display:grid; grid-template-columns: 1.6fr 1fr; gap: 14px; }
+  .dep td { font-weight: 600; background: rgba(128,128,128,.05); }
+  .panel { border: 1px solid rgba(128,128,128,.35); border-radius: 6px; padding: 12px; font-size: 13px; }
+  .panel h4 { margin: 0 0 10px; }
+  .panel h5 { margin: 14px 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
+  .f { margin-bottom: 10px; }
+  .f label { display:block; font-size: 12px; font-weight: 600; margin-bottom: 3px; }
+  .sel { border: 1px solid rgba(128,128,128,.5); border-radius: 4px; padding: 5px 8px; display:flex; justify-content: space-between; }
+  .sw { display:inline-block; width: 26px; height: 15px; border-radius: 8px; background: #3e63dd; vertical-align: -3px; margin-right: 6px; }
+  .pend { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: rgba(245,166,35,.2); font-weight: 400; }
+  .rcpt { font-family: ui-monospace, monospace; font-size: 11px; border: 1px dashed rgba(128,128,128,.6); padding: 8px; text-align: center; line-height: 1.5; margin-top: 4px; }
+  .rcpt .big { font-size: 14px; font-weight: 700; }
+  .rcpt .newl { background: rgba(62,99,221,.15); }
+</style>
+
+<h2>Routing v4, and the department editor</h2>
+<p class="subtitle">Routing: no "+ A product made somewhere else" link. Every product is a row inside its category; ▾/▸ expands and collapses a category, and a collapsed one still shows the rows that have their own setting.</p>
+
+<div class="mockup">
+  <div class="mockup-header">Prep stations › Routing (Food collapsed, Drinks expanded)</div>
+  <div class="mockup-body">
+    <div class="tabs"><span class="tab">Stations</span><span class="tab on">Routing</span><span class="tab">Tickets</span><span class="tab">Watchers</span><span class="tab">Settings</span></div>
+    <div class="tester"><b>Where is this made?</b><span class="dd"><span>Mojito</span><span>▾</span></span><span class="dd"><span>Terrace</span><span>▾</span></span><span class="dd"><span>Now</span><span>▾</span></span>→ <span class="res">Terrace bar: Drinks, on the Terrace</span></div>
+    <div style="font-size:12px; margin-bottom:4px"><a href="#">Expand all</a> · <a href="#">Collapse all</a></div>
+    <table class="t">
+      <tr><th>Category or product</th><th class="gl">Every zone</th><th class="gl">Dining room</th><th>Terrace</th><th>Downstairs bar</th></tr>
+      <tr class="top"><td><b>All categories</b></td><td class="gl">Kitchen <span class="badge">Default</span></td><td class="gl"><span class="hint">Kitchen</span></td><td><span class="hint">Kitchen</span></td><td><span class="hint">Kitchen</span></td></tr>
+
+      <tr class="grpr"><td><div class="name"><span class="ico">▸</span>Food<span class="more">24 more products, 2 more categories</span></div></td><td class="gl"><span class="hint">Kitchen</span></td><td class="gl"><span class="hint">Kitchen</span></td><td><span class="hint">Kitchen</span></td><td><span class="hint">Kitchen</span></td></tr>
+      <tr><td class="c1"><div class="name"><span class="ico">▸</span>Desserts<span class="more">6 more products</span></div></td><td class="gl">Pastry</td><td class="gl"><span class="hint">Pastry</span></td><td><span class="hint">Pastry</span></td><td><span class="hint">Pastry</span></td></tr>
+      <tr class="prod"><td class="c2">Ice cream</td><td class="gl"><span class="hint">Pastry</span></td><td class="gl"><span class="hint">Pastry</span></td><td><span class="hint">Pastry</span></td><td>Bar</td></tr>
+
+      <tr class="grpr"><td><div class="name"><span class="ico">▾</span>Drinks</div></td><td class="gl">Bar</td><td class="gl"><span class="hint">Bar</span></td><td>Terrace bar</td><td><span class="hint">Bar</span></td></tr>
+      <tr><td class="c1"><div class="name"><span class="ico">▾</span>Cocktails</div></td><td class="gl"><span class="hint">Bar</span></td><td class="gl"><span class="hint">Bar</span></td><td><span class="hint">Terrace bar</span></td><td><span class="hint">Bar</span></td></tr>
+      <tr class="prod"><td class="c2">Mojito</td><td class="gl"><span class="hint">Bar</span></td><td class="gl"><span class="hint">Bar</span></td><td><span class="hint">Terrace bar</span></td><td><span class="hint">Bar</span></td></tr>
+      <tr class="prod"><td class="c2">Espresso martini</td><td class="gl">Kitchen</td><td class="gl"><span class="hint">Kitchen</span></td><td><span class="hint">Kitchen</span></td><td><span class="hint">Kitchen</span></td></tr>
+      <tr class="prod"><td class="c2">Negroni</td><td class="gl"><span class="hint">Bar</span></td><td class="gl"><span class="hint">Bar</span></td><td><span class="hint">Terrace bar</span></td><td><span class="hint">Bar</span></td></tr>
+      <tr><td class="c1"><div class="name"><span class="ico">▸</span>Coffee<span class="more">5 products</span></div></td><td class="gl">Kitchen</td><td class="gl"><span class="hint">Kitchen</span></td><td><span class="hint">Kitchen</span></td><td><span class="hint">Kitchen</span></td></tr>
+      <tr><td class="c1"><div class="name"><span class="ico">▸</span>Bottled water<span class="more">3 products</span></div></td><td class="gl">No preparation</td><td class="gl"><span class="hint">No preparation</span></td><td><span class="hint">No preparation</span></td><td><span class="hint">No preparation</span></td></tr>
+    </table>
+    <p class="note">Collapsed Food still shows Desserts (it has its own setting) and, inside it, Ice cream (made at the Bar for the Downstairs bar). "24 more products, 2 more categories" counts what the collapse hides. A product's cells are edited in place like any other. Categories start collapsed, so a long menu opens as a short list of top categories plus the exceptions.</p>
+  </div>
+</div>
+
+<h3 style="margin-top:18px">The department editor</h3>
+<p class="subtitle">The zone editor from <i>Departments and zones</i>, plus the trading name. A department's values are the defaults its zones inherit, so its dropdowns have no blank entry.</p>
+<div class="mockup">
+  <div class="mockup-header">Venue operations › Departments and zones (Deli selected)</div>
+  <div class="mockup-body">
+    <div class="wrap">
+      <table class="t">
+        <tr><th>Name</th><th class="gl">Paid</th><th>Order number</th><th class="gl">Bill</th><th class="gl">Receipt</th></tr>
+        <tr class="dep"><td>▾ Restaurant and bar</td><td class="gl">On collection</td><td>None</td><td class="gl">Pre-bill first</td><td class="gl">On request</td></tr>
+        <tr><td class="c1">Dining room</td><td class="gl"><span class="hint">On collection</span></td><td><span class="hint">None</span></td><td class="gl"><span class="hint">Pre-bill first</span></td><td class="gl"><span class="hint">On request</span></td></tr>
+        <tr class="dep" style="outline: 2px solid #3e63dd; outline-offset:-2px"><td>▾ Deli</td><td class="gl">Before preparation</td><td>Numbered</td><td class="gl">Pre-bill first</td><td class="gl">Always</td></tr>
+        <tr><td class="c1">Deli counter</td><td class="gl"><span class="hint">Before preparation</span></td><td><span class="hint">Numbered</span></td><td class="gl"><span class="hint">Pre-bill first</span></td><td class="gl"><span class="hint">Always</span></td></tr>
+      </table>
+      <div class="panel">
+        <h4>Deli</h4>
+        <div class="f"><label>Name *</label><div class="sel"><span>Deli</span></div><p class="note">What staff see on the dashboard and tills.</p></div>
+        <div class="f"><label>Trading name</label><div class="sel"><span>La Charcutería de Ana</span></div><p class="note">The name customers know.</p></div>
+        <div class="f"><span class="sw"></span>Print the trading name on receipts</div>
+        <div class="rcpt"><div class="big newl">La Charcutería de Ana</div><div>Restaurantes Gormley S.L.</div><div>NIF B12345678</div><div>C/ Mayor 1, Valencia</div></div>
+        <p class="note">The trading name is an extra line at the top; the legal name and NIF always print, as the regulations require.</p>
+        <h5>Defaults for its zones</h5>
+        <div class="f"><label>Paid (quick sales)</label><div class="sel"><span>Before preparation</span><span>▾</span></div></div>
+        <div class="f"><label>Order number (quick sales)</label><div class="sel"><span>Numbered</span><span>▾</span></div></div>
+        <div class="f"><label>Bill (tabs) <span class="pend">waiting on the advisor</span></label><div class="sel"><span>Pre-bill first</span><span>▾</span></div></div>
+        <div class="f"><label>Receipt</label><div class="sel"><span>Always</span><span>▾</span></div></div>
+        <p class="note">Hours: <a href="#">Venue operations › Hours</a>.</p>
+        <div style="display:flex; gap:6px"><button class="mock-button">Save</button><button class="mock-button">Cancel</button></div>
+      </div>
+    </div>
+    <p class="note"><b>A venue with one department:</b> there is no department row, and the "Defaults for every zone" button opens this same panel, titled with the department's name (which starts as the venue's name).</p>
+  </div>
+</div>

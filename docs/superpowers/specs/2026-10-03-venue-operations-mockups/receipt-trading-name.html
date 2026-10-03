@@ -1,0 +1,29 @@
+<style>
+  .rcpt { font-family: ui-monospace, monospace; font-size: 12px; border: 1px dashed rgba(128,128,128,.6); padding: 10px; text-align: center; line-height: 1.6; width: 250px; margin: 6px auto; }
+  .newl { background: rgba(62,99,221,.18); }
+  .muted { opacity: .5; }
+  .note { font-size: 12px; opacity: .75; }
+</style>
+
+<h2>Where does the trading name print?</h2>
+<p class="subtitle">Today's receipt header, top to bottom: the legal name, then the line you can write yourself under it (optional, the same for the whole venue), then the NIF. The trading name is a new line (highlighted). The printer prints every line in the same size, so position is the only difference.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>First, above the legal name</h3>
+      <div class="rcpt"><div class="newl">La Charcutería de Ana</div><div>Restaurantes Gormley S.L.</div><div class="muted">Charcutería · Quesos · Vinos</div><div>NIF: B12345678</div><div>— — — — — — — — — —</div><div>Order 42 · Invoice D-000123</div></div>
+      <p class="note">The name customers know is what they see first; the legal name and NIF follow as the small print. Most shop receipts read this way.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Second, under the legal name</h3>
+      <div class="rcpt"><div>Restaurantes Gormley S.L.</div><div class="newl">La Charcutería de Ana</div><div class="muted">Charcutería · Quesos · Vinos</div><div>NIF: B12345678</div><div>— — — — — — — — — —</div><div>Order 42 · Invoice D-000123</div></div>
+      <p class="note">Keeps today's first line, so the issuer stays on top, and the trading name reads as a subtitle above your own line.</p>
+    </div>
+  </div>
+</div>
+<p class="note">Grey line: your own optional header line, as today. Either way the legal name and NIF still print, as the receipt rules require.</p>

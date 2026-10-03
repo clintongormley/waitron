@@ -1,0 +1,85 @@
+<style>
+  .t { border-collapse: collapse; width: 100%; font-size: 13px; margin: 6px 0 10px; }
+  .t th, .t td { border-bottom: 1px solid rgba(128,128,128,.3); padding: 6px 8px; text-align: left; vertical-align: top; }
+  .t th { font-weight: 600; background: rgba(128,128,128,.08); font-size: 12px; }
+  .t th.grp { text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .t .gl { border-left: 2px solid rgba(128,128,128,.35); }
+  .z1 { padding-left: 26px !important; }
+  .dep td { font-weight: 600; background: rgba(128,128,128,.05); }
+  .hint { opacity: .45; font-weight: 400; }
+  .note { font-size: 12px; opacity: .75; }
+  .sw { display:inline-block; width: 26px; height: 15px; border-radius: 8px; background: #3e63dd; vertical-align: -3px; margin-right: 6px; }
+  .sw.off { background: rgba(128,128,128,.4); }
+  .lk { font-size: 12px; font-weight: 400; }
+  .hl { outline: 2px solid #3e63dd; outline-offset: -2px; }
+  .tabs { display:flex; margin: 0 0 12px; border-bottom: 1px solid rgba(128,128,128,.35); flex-wrap: wrap; }
+  .tab { padding: 6px 12px; font-size: 13px; }
+  .tab.on { border-bottom: 2px solid #3e63dd; font-weight: 600; }
+  .new { font-size: 10px; padding: 0 5px; border-radius: 8px; background: rgba(48,164,108,.2); font-weight: 400; }
+  .mv { font-size: 10px; padding: 0 5px; border-radius: 8px; background: rgba(62,99,221,.18); font-weight: 400; }
+  .two { display:grid; grid-template-columns: 1.2fr 1fr; gap: 16px; }
+  .f { margin-bottom: 12px; font-size: 13px; }
+  .f label { display:block; font-size: 12px; font-weight: 600; margin-bottom: 3px; }
+  .in { border: 1px solid rgba(128,128,128,.5); border-radius: 4px; padding: 5px 8px; display:flex; justify-content: space-between; }
+  .ph { opacity: .45; }
+  .chip { display:inline-block; font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid rgba(128,128,128,.4); margin-right: 4px; }
+  .rcpt { font-family: ui-monospace, monospace; font-size: 12px; border: 1px dashed rgba(128,128,128,.6); padding: 10px; text-align: center; line-height: 1.6; }
+  .newl { background: rgba(62,99,221,.18); }
+  .side { font-size: 13px; }
+  .side .g { font-weight: 600; margin-top: 6px; }
+  .side .i { padding-left: 12px; }
+  .side .on { font-weight: 600; color: #3e63dd; }
+  .lay { display:grid; grid-template-columns: 180px 1fr; gap: 14px; }
+</style>
+
+<h2>Receipts moves under the venue, and the table links to its preview</h2>
+<p class="subtitle">Receipts becomes a tab of Venue settings, next to Venue details. Its receipt languages are the same setting the Venue details tab was going to hold, so they live here only. The Departments and zones table keeps the trading name and its switch, with a Preview link that opens this tab showing that department's receipt.</p>
+
+<div class="mockup">
+  <div class="mockup-header">Venue operations › Departments and zones</div>
+  <div class="mockup-body">
+    <table class="t">
+      <tr><th></th><th class="grp gl" colspan="2">On the receipt</th><th class="grp gl" colspan="2">Quick sales</th><th class="grp gl">Tabs</th><th class="grp gl">Every sale</th></tr>
+      <tr><th>Name</th><th class="gl">Trading name</th><th>Print it</th><th class="gl">Paid</th><th>Order number</th><th class="gl">Bill</th><th class="gl">Receipt</th></tr>
+      <tr class="dep"><td>▾ Restaurant and bar</td><td class="gl">Casa Gormley</td><td><span class="sw"></span><a class="lk" href="#">Preview</a></td><td class="gl">On collection</td><td>None</td><td class="gl">Pre-bill first</td><td class="gl">On request</td></tr>
+      <tr><td class="z1">Dining room</td><td class="gl"></td><td></td><td class="gl"><span class="hint">On collection</span></td><td><span class="hint">None</span></td><td class="gl"><span class="hint">Pre-bill first</span></td><td class="gl"><span class="hint">On request</span></td></tr>
+      <tr class="dep"><td>▾ Deli</td><td class="gl">La Charcutería de Ana</td><td class="hl"><span class="sw"></span><a class="lk" href="#">Preview</a></td><td class="gl">Before preparation</td><td>Numbered</td><td class="gl">Pre-bill first</td><td class="gl">Always</td></tr>
+      <tr><td class="z1">Deli counter</td><td class="gl"></td><td></td><td class="gl"><span class="hint">Before preparation</span></td><td><span class="hint">Numbered</span></td><td class="gl"><span class="hint">Pre-bill first</span></td><td class="gl"><span class="hint">Always</span></td></tr>
+    </table>
+  </div>
+</div>
+
+<p style="text-align:center; font-size: 20px; opacity:.5; margin: 4px 0">↓ Deli's "Preview" opens</p>
+
+<div class="mockup">
+  <div class="mockup-header">Venue operations › Venue settings › Receipts</div>
+  <div class="mockup-body">
+    <div class="lay">
+      <div class="side">
+        <div class="g">Overview</div>
+        <div class="g">Venue operations</div>
+        <div class="i">Departments and zones</div><div class="i">Hours</div><div class="i">Floor plan</div><div class="i">Prep stations</div><div class="i on">Venue settings</div>
+        <div class="g">Settings</div>
+        <div class="i hint">Devices, Printers, Payments, Backups … <br>(Receipts no longer here)</div>
+      </div>
+      <div>
+        <div class="tabs"><span class="tab">Venue details</span><span class="tab on">Receipts <span class="mv">moved</span></span><span class="tab">Table statuses</span><span class="tab">Adjustment reasons</span><span class="tab">Kitchen</span><span class="tab">Floor</span></div>
+        <div class="two">
+          <div>
+            <div class="f"><label>Receipt languages *</label><div class="in"><span><span class="chip">Spanish</span><span class="chip">English</span></span><span>▾</span></div><p class="note">Receipts print in the first; product names are also kept in the second. Moved here from Venue details.</p></div>
+            <div class="f"><label>Header line</label><div class="in"><span>Charcutería · Quesos · Vinos</span></div><p class="note">Printed under the legal name, e.g. a tagline or address line.</p></div>
+            <div class="f"><label>Footer message</label><div class="in"><span>¡Gracias por su visita!</span></div><p class="note">Printed at the bottom, e.g. a thank-you or opening hours.</p></div>
+            <div class="f"><label>Description sent with each sale</label><div class="in"><span>Venta de alimentos y bebidas</span></div><p class="note">Sent to the tax agency with every sale; not printed on the receipt.</p></div>
+            <div class="f"><label>Trading names</label><p class="note" style="margin-top:0">Set per department on <a href="#">Departments and zones</a>.</p></div>
+            <button class="mock-button">Save</button>
+          </div>
+          <div>
+            <div class="f"><label>Preview for</label><div class="in"><span>Deli</span><span>▾</span></div></div>
+            <div class="rcpt"><div class="newl">La Charcutería de Ana</div><div>Restaurantes Gormley S.L.</div><div>Charcutería · Quesos · Vinos</div><div>NIF: B12345678</div><div>— — — — — — — — — —</div><div>Order 42 · Invoice D-000123</div><div>2 × Jamón ibérico 100 g · 18,00</div><div>…</div><div>¡Gracias por su visita!</div></div>
+            <p class="note">The preview is drawn by the server exactly as it will print, as today. "Preview for" appears only when there is more than one department; the Preview link arrives with it already set.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

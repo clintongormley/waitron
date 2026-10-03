@@ -1,0 +1,73 @@
+<style>
+  .shell { display:grid; grid-template-columns: 230px 1fr; gap: 0; border: 1px solid rgba(128,128,128,.35); border-radius: 6px; overflow: hidden; font-size: 13px; }
+  .side { background: rgba(128,128,128,.07); padding: 10px 0; }
+  .side .g { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; opacity: .65; padding: 10px 14px 4px; display:flex; justify-content: space-between; }
+  .side .i { padding: 4px 14px 4px 22px; }
+  .side .i.top { padding-left: 14px; font-weight: 600; }
+  .side .i.on { background: rgba(62,99,221,.15); border-left: 3px solid #3e63dd; padding-left: 19px; font-weight: 600; }
+  .side .new { font-size: 10px; padding: 0 5px; border-radius: 6px; background: rgba(48,164,108,.2); margin-left: 4px; }
+  .side .mv { font-size: 10px; padding: 0 5px; border-radius: 6px; background: rgba(245,166,35,.22); margin-left: 4px; }
+  .main { padding: 14px 18px; }
+  .main h3 { margin: 0 0 4px; }
+  .sub { display:flex; gap: 16px; border-bottom: 1px solid rgba(128,128,128,.35); margin: 8px 0 12px; font-size: 13px; flex-wrap: wrap; }
+  .sub span { padding: 5px 0; }
+  .sub .on { border-bottom: 2px solid #3e63dd; font-weight: 600; }
+  .sec { border: 1px solid rgba(128,128,128,.3); border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; }
+  .sec h4 { margin: 0 0 6px; }
+  .row { display:grid; grid-template-columns: 1.3fr 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px solid rgba(128,128,128,.15); }
+  .row:last-child { border-bottom: 0; }
+  .v { border: 1px solid rgba(128,128,128,.5); border-radius: 4px; padding: 3px 8px; }
+  .note { font-size: 12px; opacity: .75; }
+  .legend { font-size: 12px; margin: 8px 0 12px; display:flex; gap: 14px; }
+</style>
+
+<h2>The sidebar, and Venue operations › Venue settings</h2>
+<p class="subtitle">Left: the whole sidebar after the change. Right: the Venue settings page, the set-once values and lists. Departments and zones, Hours, Floor plan and Prep stations are the pages you come back to.</p>
+<div class="legend"><span><span class="new" style="margin:0">new</span> new page</span><span><span class="mv" style="margin:0">moved</span> moved from another group or page</span></div>
+
+<div class="shell">
+  <div class="side">
+    <div class="i top">Overview</div>
+    <div class="g">Reporting <span>▾</span></div>
+    <div class="i">Sales &amp; takings</div><div class="i">VAT return</div><div class="i">Orders</div><div class="i">Adjustment report</div>
+    <div class="g">Service <span>▾</span></div>
+    <div class="i">Live floor <span class="new">new</span></div>
+    <div class="i">Bookings</div>
+    <div class="g">Products and menus <span>▾</span></div>
+    <div class="i">Products</div><div class="i">Menus</div><div class="i">Modifiers</div><div class="i">Units</div><div class="i">Images</div>
+    <div class="g">Venue operations <span>▾</span></div>
+    <div class="i">Departments and zones <span class="mv">moved</span></div>
+    <div class="i">Hours <span class="mv">moved</span></div>
+    <div class="i">Floor plan <span class="mv">moved</span></div>
+    <div class="i">Prep stations <span class="mv">moved</span></div>
+    <div class="i on">Venue settings <span class="new">new</span></div>
+    <div class="g">Team <span>▸</span></div>
+    <div class="g">Purchasing <span>▸</span></div>
+    <div class="g">Settings <span>▸</span></div>
+    <div class="i" style="opacity:.6">(devices, printers, receipts, payments, backups …: the group today's sidebar already calls "Settings")</div>
+  </div>
+  <div class="main">
+    <h3>Venue settings</h3>
+    <p class="note">Things you set once. Each group is a tab.</p>
+    <div class="sub"><span class="on">Venue details</span><span>Table statuses</span><span>Adjustment reasons</span><span>Kitchen</span><span>Floor</span></div>
+
+    <div class="sec">
+      <h4>Venue details <span class="new">new</span></h4>
+      <div class="row"><span>Venue name *</span><span class="v">Casa Delgado</span></div>
+      <div class="row"><span>Address *</span><span class="v">Calle Mayor 12, 28013 Madrid</span></div>
+      <div class="row"><span>Time zone *</span><span class="v">Europe/Madrid</span></div>
+      <div class="row"><span>Business day starts at *</span><span class="v">06:00</span></div>
+      <div class="row"><span>Receipt languages *</span><span class="v">Spanish, English</span></div>
+      <p class="note">Today these are set only during setup. The legal name and tax ID are the taxpayer's, not the venue's, and are not edited here.</p>
+    </div>
+
+    <div class="sec">
+      <h4>What the other tabs hold</h4>
+      <div class="row"><span><b>Table statuses</b> <span class="mv">moved</span></span><span class="note">The labels a table can show ("Waiting for mains"). Today's Statuses page.</span></div>
+      <div class="row"><span><b>Adjustment reasons</b> <span class="mv">moved</span></span><span class="note">Discount and void reasons, and the largest discount on one bill.</span></div>
+      <div class="row"><span><b>Kitchen</b> <span class="mv">moved</span></span><span class="note">Courses · bump mode · late-flag minutes (warm, overdue, forgotten) as defaults a station can override · reminder for held courses · identical dishes on a ticket · print held courses · allow changes after sending.</span></div>
+      <div class="row"><span><b>Floor</b> <span class="mv">moved</span></span><span class="note">Tables need clearing after Finish table.</span></div>
+    </div>
+    <p class="note">Gone: the Kitchen page (its stations join Prep stations, its courses and bump mode move to Venue settings › Kitchen), the Statuses page, the Status tab (problems now show on the row they're about) and the "Changes after sending" tab (split across Kitchen and Floor).</p>
+  </div>
+</div>

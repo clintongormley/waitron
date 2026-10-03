@@ -1,0 +1,114 @@
+<style>
+  .t { border-collapse: collapse; width: 100%; font-size: 13px; margin: 6px 0 10px; }
+  .t th, .t td { border-bottom: 1px solid rgba(128,128,128,.3); padding: 6px 8px; text-align: left; vertical-align: top; }
+  .t th { font-weight: 600; background: rgba(128,128,128,.08); font-size: 12px; }
+  .t th.grp { text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .t .gl { border-left: 2px solid rgba(128,128,128,.35); }
+  .t td.num, .t th.num { text-align: right; }
+  .name { display:flex; align-items:flex-start; }
+  .name .ico { width: 18px; flex: none; opacity: .45; }
+  .c1 { padding-left: 26px !important; } .c2 { padding-left: 44px !important; }
+  .grpr td { font-weight: 600; background: rgba(128,128,128,.05); }
+  .top td { background: rgba(62,99,221,.06); }
+  .prod td:first-child { font-style: italic; }
+  .hint { opacity: .45; font-weight: 400; }
+  .warn { color: #e5484d; font-size: 12px; display:block; margin-top: 2px; font-weight: 400; }
+  .warn a { color: inherit; }
+  .badge { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: rgba(128,128,128,.18); font-weight: 400; margin-left: 4px; }
+  .closedb { background: rgba(229,72,77,.18); }
+  .off td { opacity: .5; }
+  .menu { opacity: .7; }
+  .note { font-size: 12px; opacity: .75; }
+  .tabs { display:flex; align-items:flex-end; margin: 0 0 10px; border-bottom: 1px solid rgba(128,128,128,.35); }
+  .tab { padding: 6px 14px; font-size: 13px; }
+  .tabs .act { margin-left:auto; padding-bottom:4px; }
+  .tab.on { border-bottom: 2px solid #3e63dd; font-weight: 600; }
+  .warm { color: #f5a623; font-weight: 600; } .over { color: #e5484d; font-weight: 600; } .forg { background: #e5484d; color: #fff; border-radius: 3px; padding: 0 5px; font-weight: 600; }
+  .ok { color: #30a46c; }
+  .cellsel { outline: 2px solid #3e63dd; outline-offset: -2px; position: relative; }
+  .pop { position: absolute; left: 4px; top: 100%; z-index: 2; background: var(--bg-primary, #fff); border: 1px solid rgba(128,128,128,.5); border-radius: 4px; font-size: 12px; min-width: 170px; box-shadow: 0 4px 12px rgba(0,0,0,.18); font-weight: 400; font-style: normal; }
+  .pop div { padding: 4px 8px; }
+  .pop .blank { opacity: .45; }
+  .pop .on { background: rgba(62,99,221,.15); }
+  .pop .dis { opacity: .4; }
+  .pop .sep { border-top: 1px solid rgba(128,128,128,.3); }
+  .pop input { margin: 0 6px 0 0; vertical-align: -2px; }
+  .tester { border: 1px solid rgba(128,128,128,.35); border-radius: 6px; padding: 8px 10px; font-size: 13px; display:flex; gap: 8px; align-items:center; flex-wrap: wrap; margin-bottom: 10px; }
+  .dd { border: 1px solid rgba(128,128,128,.45); border-radius: 4px; padding: 2px 6px; display:inline-flex; justify-content: space-between; gap: 8px; min-width: 90px; }
+  .res { background: rgba(62,99,221,.12); border-radius: 4px; padding: 3px 8px; }
+  .chip { display:inline-block; font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid rgba(128,128,128,.4); margin: 0 4px 2px 0; }
+  .new { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: rgba(245,166,35,.2); font-weight: 400; }
+</style>
+
+<h2>Prep stations v3</h2>
+<p class="subtitle">Changes from v2: "New station" and "New watcher" sit at the right of the tab bar; the dropdown's first entry is plain blank; screens stay read-only (linked to Devices); a station with no screen says "No screen" and counts lateness from printing until the dish is served.</p>
+
+<div class="mockup">
+  <div class="mockup-header">Prep stations › Stations: the live health page (20:14 on a Friday)</div>
+  <div class="mockup-body">
+    <div class="tabs"><span class="tab on">Stations</span><span class="tab">Routing</span><span class="tab">Tickets</span><span class="tab">Watchers</span><span class="tab">Settings</span><span class="act"><button class="mock-button">New station</button></span></div>
+    <table class="t">
+      <tr><th></th><th></th><th class="grp gl" colspan="3">Dishes now</th><th class="grp gl" colspan="2">Running late</th><th class="gl"></th><th></th></tr>
+      <tr><th>Name</th><th>Today</th><th class="gl num">Waiting</th><th class="num">Being made</th><th class="num">Ready</th><th class="gl">Late</th><th>Oldest</th><th class="gl"></th><th></th></tr>
+      <tr><td><div class="name"><span class="ico">⠿</span><span>Kitchen<span class="badge">Default</span></span></div></td><td>Always open</td><td class="gl num">9</td><td class="num">6</td><td class="num">2</td><td class="gl"><span class="warm">3 warm</span> · <span class="over">2 overdue</span></td><td><span class="over">12 min</span></td><td class="gl"></td><td class="menu">⋮</td></tr>
+      <tr><td><div class="name"><span class="ico">⠿</span><span>Bar<span class="warn">Printer Bar stopped at 19:42. <a href="#">Tickets</a></span></span></div></td><td>Open until 01:00</td><td class="gl num">5</td><td class="hint" colspan="2">No screen</td><td class="gl"><span class="forg">1 forgotten</span></td><td><span class="forg">17 min</span></td><td class="gl"><button class="mock-button">Close for today</button></td><td class="menu">⋮</td></tr>
+      <tr><td><div class="name"><span class="ico">⠿</span><span>Terrace bar</span></div></td><td>Open until 23:00</td><td class="gl num">1</td><td class="num">0</td><td class="num">0</td><td class="gl"><span class="ok">On time</span></td><td>2 min</td><td class="gl"><button class="mock-button">Close for today</button></td><td class="menu">⋮</td></tr>
+      <tr><td><div class="name"><span class="ico">⠿</span><span>Pastry</span></div></td><td><span class="badge closedb">Closed for today</span> work goes to Kitchen</td><td class="gl num hint">0</td><td class="num hint">0</td><td class="num hint">0</td><td class="gl"></td><td></td><td class="gl"><button class="mock-button">Back to the schedule</button></td><td class="menu">⋮</td></tr>
+      <tr class="off"><td><div class="name"><span class="ico">⠿</span><span>Pizza oven<span class="badge">Switched off</span></span></div></td><td></td><td class="gl"></td><td></td><td></td><td class="gl"></td><td></td><td class="gl"></td><td class="menu">⋮</td></tr>
+    </table>
+    <p class="note">The numbers update on their own. <b>Waiting</b>, <b>Being made</b> and <b>Ready</b> follow the cook's taps on the kitchen screen. A station with no screen has nobody tapping, so it shows "No screen" there; its dishes count as waiting, and lateness runs from when the ticket printed until the dish is served. <b>Late</b> counts dishes past the station's late flags (Settings tab); <b>Oldest</b> is the longest a dish there has waited. Click a number to see those dishes.</p>
+    <p class="note"><b>Create, rename and remove all happen here:</b> "New station"; ⋮ → Rename · Make default · Switch off. A station is never deleted, only switched off (greyed at the bottom, ⋮ → Switch on), because past orders and tickets still name it.</p>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">Prep stations › Routing (editing Drinks on the Terrace)</div>
+  <div class="mockup-body">
+    <div class="tabs"><span class="tab">Stations</span><span class="tab on">Routing</span><span class="tab">Tickets</span><span class="tab">Watchers</span><span class="tab">Settings</span></div>
+    <div class="tester"><b>Where is this made?</b><span class="dd"><span>Mojito</span><span>▾</span></span><span class="dd"><span>Terrace</span><span>▾</span></span><span class="dd"><span>Now</span><span>▾</span></span>→ <span class="res">Terrace bar: Drinks, on the Terrace</span></div>
+    <table class="t">
+      <tr><th>Category</th><th class="gl">Every zone</th><th class="gl">Dining room</th><th>Terrace</th><th>Downstairs bar</th></tr>
+      <tr class="top"><td><b>All categories</b></td><td class="gl">Kitchen <span class="badge">Default</span></td><td class="gl"><span class="hint">Kitchen</span></td><td><span class="hint">Kitchen</span></td><td><span class="hint">Kitchen</span></td></tr>
+      <tr class="grpr"><td><div class="name"><span class="ico">▾</span>Food</div></td><td class="gl"><span class="hint">Kitchen</span></td><td class="gl"><span class="hint">Kitchen</span></td><td><span class="hint">Kitchen</span></td><td><span class="hint">Kitchen</span></td></tr>
+      <tr><td class="c1">Desserts</td><td class="gl">Pastry</td><td class="gl"><span class="hint">Pastry</span></td><td><span class="hint">Pastry</span></td><td><span class="hint">Pastry</span></td></tr>
+      <tr class="grpr"><td><div class="name"><span class="ico">▾</span>Drinks</div></td><td class="gl">Bar</td><td class="gl"><span class="hint">Bar</span></td><td class="cellsel">Terrace bar
+        <div class="pop"><div class="blank">&nbsp;</div><div class="sep">Kitchen</div><div>Bar</div><div class="on">Terrace bar</div><div>Pastry</div><div class="sep">No preparation</div></div></td><td><span class="hint">Bar</span></td></tr>
+      <tr><td class="c1">Cocktails</td><td class="gl"><span class="hint">Bar</span></td><td class="gl"><span class="hint">Bar</span></td><td><span class="hint">Terrace bar</span></td><td><span class="hint">Bar</span></td></tr>
+      <tr class="prod"><td class="c2">Espresso martini</td><td class="gl">Kitchen</td><td class="gl"><span class="hint">Kitchen</span></td><td><span class="hint">Kitchen</span></td><td><span class="hint">Kitchen</span></td></tr>
+      <tr><td class="c2 note"><a href="#">+ A product made somewhere else</a></td><td class="gl"></td><td class="gl"></td><td></td><td></td></tr>
+      <tr><td class="c1">Coffee</td><td class="gl">Kitchen</td><td class="gl"><span class="hint">Kitchen</span></td><td><span class="hint">Kitchen</span></td><td><span class="hint">Kitchen</span></td></tr>
+      <tr><td class="c1">Bottled water</td><td class="gl">No preparation</td><td class="gl"><span class="hint">No preparation</span></td><td><span class="hint">No preparation</span></td><td><span class="hint">No preparation</span></td></tr>
+    </table>
+    <p class="note">Yes, every cell is edited in place. The dropdown's blank first entry clears the cell, which then shows what it inherits in grey. Every cell always shows its result, set (normal text) or inherited (grey), so you never have to work the rule out. <b>The rule:</b> an empty cell looks along its own row first (to "Every zone"), then up to the parent category's row, ending at "All categories". The "All categories / Every zone" cell is the default station; changing it is "Make default". Switched-off stations are not offered.</p>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">Prep stations › Tickets (editing Kitchen's printers)</div>
+  <div class="mockup-body">
+    <div class="tabs"><span class="tab">Stations</span><span class="tab">Routing</span><span class="tab on">Tickets</span><span class="tab">Watchers</span><span class="tab">Settings</span></div>
+    <table class="t">
+      <tr><th>Station</th><th>Printed on</th><th>Shown on screens</th><th>Also seen by</th></tr>
+      <tr><td>Kitchen</td><td class="cellsel">Kitchen 1, Kitchen 2
+        <div class="pop"><div><input type="checkbox" checked>Kitchen 1</div><div><input type="checkbox" checked>Kitchen 2</div><div><input type="checkbox">Bar</div><div><input type="checkbox">Terrace</div><div class="dis"><input type="checkbox" disabled>Expo printer: prints the Expo watcher's copies</div></div></td><td>Hot pass</td><td>Pass, Expo</td></tr>
+      <tr><td>Bar<span class="warn">Printer Bar stopped at 19:42</span></td><td>Bar</td><td><span class="hint">None</span></td><td>Pass</td></tr>
+      <tr><td>Terrace bar</td><td>Terrace</td><td><span class="hint">None</span></td><td><span class="hint">None</span></td></tr>
+      <tr><td>Pastry</td><td><span class="hint">None</span></td><td>Pastry screen</td><td>Pass, Expo</td></tr>
+    </table>
+    <p class="note"><b>Printed on:</b> one printer can print for several stations. A printer that prints a watcher's copies can't also print a station's tickets, so it shows greyed with the reason. <b>Shown on screens:</b> read-only, linked to <a href="#">Devices</a>; a screen picks its station when it joins. <b>Also seen by</b> is read-only here: which stations a watcher follows is edited on the Watchers tab.</p>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">Prep stations › Watchers (editing what Expo follows)</div>
+  <div class="mockup-body">
+    <div class="tabs"><span class="tab">Stations</span><span class="tab">Routing</span><span class="tab">Tickets</span><span class="tab on">Watchers</span><span class="tab">Settings</span><span class="act"><button class="mock-button">New watcher</button></span></div>
+    <table class="t">
+      <tr><th>Watcher</th><th>Follows</th><th>For service zones</th><th>Runs the pass</th><th>Screens</th><th>Printers</th><th></th></tr>
+      <tr><td>Pass</td><td>Every station</td><td>Dining room, Terrace</td><td>Yes</td><td>Pass screen</td><td><span class="hint">None</span></td><td class="menu">⋮</td></tr>
+      <tr><td>Expo</td><td class="cellsel">Kitchen, Pastry
+        <div class="pop"><div><input type="checkbox">Every station</div><div class="sep"><input type="checkbox" checked>Kitchen</div><div><input type="checkbox">Bar</div><div><input type="checkbox">Terrace bar</div><div><input type="checkbox" checked>Pastry</div></div></td><td>Every service zone</td><td><span class="hint">No</span></td><td><span class="hint">None</span></td><td>Expo printer</td><td class="menu">⋮</td></tr>
+    </table>
+    <p class="note">The same in-place editing. A watcher's printers are chosen here; its screens are read-only, as on Tickets. ⋮ → Rename · Remove.</p>
+  </div>
+</div>

@@ -1,0 +1,64 @@
+<style>
+  .t { border-collapse: collapse; width: 100%; font-size: 13px; margin: 6px 0 10px; }
+  .t th, .t td { border-bottom: 1px solid rgba(128,128,128,.3); padding: 6px 8px; text-align: left; vertical-align: top; }
+  .t th { font-weight: 600; background: rgba(128,128,128,.08); font-size: 12px; }
+  .t th.grp { text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .t .gl { border-left: 2px solid rgba(128,128,128,.35); }
+  .name { display:flex; align-items:flex-start; }
+  .name .ico { width: 18px; flex: none; opacity: .45; }
+  .z1 { padding-left: 26px !important; }
+  .dep td { font-weight: 600; background: rgba(128,128,128,.05); }
+  .top td { background: rgba(62,99,221,.06); font-weight: 600; }
+  .hint { opacity: .45; font-weight: 400; }
+  .warn { color: #e5484d; font-size: 12px; display:block; margin-top: 2px; font-weight: 400; }
+  .warn a { color: inherit; }
+  .menu { opacity: .7; }
+  .note { font-size: 12px; opacity: .75; }
+  .sw { display:inline-block; width: 26px; height: 15px; border-radius: 8px; background: #3e63dd; vertical-align: -3px; }
+  .sw.off { background: rgba(128,128,128,.4); }
+  .pend { font-size: 10px; padding: 0 5px; border-radius: 8px; background: rgba(245,166,35,.2); font-weight: 400; text-transform: none; letter-spacing: 0; }
+  .cellsel { outline: 2px solid #3e63dd; outline-offset: -2px; position: relative; }
+  .pop { position: absolute; left: 4px; top: 100%; z-index: 2; background: var(--bg-primary, #fff); border: 1px solid rgba(128,128,128,.5); border-radius: 4px; font-size: 12px; min-width: 150px; box-shadow: 0 4px 12px rgba(0,0,0,.18); font-weight: 400; }
+  .pop div { padding: 4px 8px; }
+  .pop .on { background: rgba(62,99,221,.15); }
+  .tabsr { display:flex; justify-content:flex-end; gap: 8px; margin-bottom: 8px; }
+</style>
+
+<h2>Departments and zones as one table, edited in place</h2>
+<p class="subtitle">No side editor at all, the same as the Prep stations tabs: click a cell to change it. Department rows add two columns, the trading name and its receipt switch; on a zone row those cells are empty because a zone has neither. A zone changes department by being dragged onto another one.</p>
+
+<div class="mockup">
+  <div class="mockup-header">Venue operations › Departments and zones (two departments; editing the Terrace's Paid)</div>
+  <div class="mockup-body">
+    <div class="tabsr"><button class="mock-button">New department</button><button class="mock-button">New zone</button></div>
+    <table class="t">
+      <tr><th></th><th class="grp gl" colspan="2">On the receipt</th><th class="grp gl" colspan="2">Quick sales</th><th class="grp gl">Tabs</th><th class="grp gl">Every sale</th><th></th></tr>
+      <tr><th>Name</th><th class="gl">Trading name</th><th>Print it</th><th class="gl">Paid</th><th>Order number</th><th class="gl">Bill <span class="pend">advisor</span></th><th class="gl">Receipt</th><th></th></tr>
+      <tr class="dep"><td><div class="name"><span class="ico">▾</span><span>Restaurant and bar</span></div></td><td class="gl">Casa Gormley</td><td><span class="sw"></span></td><td class="gl">On collection</td><td>None</td><td class="gl">Pre-bill first</td><td class="gl">On request</td><td class="menu">⋮</td></tr>
+      <tr><td class="z1"><div class="name"><span class="ico">⠿</span><span>Dining room</span></div></td><td class="gl"></td><td></td><td class="gl"><span class="hint">On collection</span></td><td><span class="hint">None</span></td><td class="gl"><span class="hint">Pre-bill first</span></td><td class="gl"><span class="hint">On request</span></td><td class="menu">⋮</td></tr>
+      <tr><td class="z1"><div class="name"><span class="ico">⠿</span><span>Terrace</span></div></td><td class="gl"></td><td></td><td class="gl cellsel"><span class="hint">On collection</span>
+        <div class="pop"><div class="on">&nbsp;</div><div>Before preparation</div><div>On collection</div></div></td><td><span class="hint">None</span></td><td class="gl"><span class="hint">Pre-bill first</span></td><td class="gl"><span class="hint">On request</span></td><td class="menu">⋮</td></tr>
+      <tr><td class="z1"><div class="name"><span class="ico">⠿</span><span>Downstairs bar</span></div></td><td class="gl"></td><td></td><td class="gl">Before preparation</td><td><span class="hint">None</span></td><td class="gl"><span class="hint">Pre-bill first</span></td><td class="gl"><span class="hint">On request</span></td><td class="menu">⋮</td></tr>
+      <tr><td class="z1"><div class="name"><span class="ico">⠿</span><span>Rooftop<span class="warn">No menu is offered here. <a href="#">Set one up in Menus</a></span></span></div></td><td class="gl"></td><td></td><td class="gl"><span class="hint">On collection</span></td><td><span class="hint">None</span></td><td class="gl"><span class="hint">Pre-bill first</span></td><td class="gl"><span class="hint">On request</span></td><td class="menu">⋮</td></tr>
+      <tr class="dep"><td><div class="name"><span class="ico">▾</span><span>Deli</span></div></td><td class="gl">La Charcutería de Ana</td><td><span class="sw"></span></td><td class="gl">Before preparation</td><td>Numbered</td><td class="gl">Pre-bill first</td><td class="gl">Always</td><td class="menu">⋮</td></tr>
+      <tr><td class="z1"><div class="name"><span class="ico">⠿</span><span>Deli counter</span></div></td><td class="gl"></td><td></td><td class="gl"><span class="hint">Before preparation</span></td><td><span class="hint">Numbered</span></td><td class="gl"><span class="hint">Pre-bill first</span></td><td class="gl"><span class="hint">Always</span></td><td class="menu">⋮</td></tr>
+    </table>
+    <p class="note">The name is edited in place too (click it). ⋮ on a row: Rename · Remove (a zone) or Hours (a department, opening the Hours page). Department cells' dropdowns have no blank entry; zone cells' do, as in the open dropdown above. The receipt preview opens from a small icon beside the switch.</p>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">The same page in a venue with one department</div>
+  <div class="mockup-body">
+    <div class="tabsr"><button class="mock-button">New zone</button><button class="mock-button">Add a department</button></div>
+    <table class="t">
+      <tr><th></th><th class="grp gl" colspan="2">On the receipt</th><th class="grp gl" colspan="2">Quick sales</th><th class="grp gl">Tabs</th><th class="grp gl">Every sale</th><th></th></tr>
+      <tr><th>Name</th><th class="gl">Trading name</th><th>Print it</th><th class="gl">Paid</th><th>Order number</th><th class="gl">Bill <span class="pend">advisor</span></th><th class="gl">Receipt</th><th></th></tr>
+      <tr class="top"><td>Every zone</td><td class="gl">Casa Gormley</td><td><span class="sw off"></span></td><td class="gl">On collection</td><td>None</td><td class="gl">Pre-bill first</td><td class="gl">On request</td><td></td></tr>
+      <tr><td><div class="name"><span class="ico">⠿</span><span>Dining room</span></div></td><td class="gl"></td><td></td><td class="gl"><span class="hint">On collection</span></td><td><span class="hint">None</span></td><td class="gl"><span class="hint">Pre-bill first</span></td><td class="gl"><span class="hint">On request</span></td><td class="menu">⋮</td></tr>
+      <tr><td><div class="name"><span class="ico">⠿</span><span>Terrace</span></div></td><td class="gl"></td><td></td><td class="gl"><span class="hint">On collection</span></td><td><span class="hint">None</span></td><td class="gl"><span class="hint">Pre-bill first</span></td><td class="gl"><span class="hint">On request</span></td><td class="menu">⋮</td></tr>
+      <tr><td><div class="name"><span class="ico">⠿</span><span>Bar</span></div></td><td class="gl"></td><td></td><td class="gl">Before preparation</td><td><span class="hint">None</span></td><td class="gl"><span class="hint">Pre-bill first</span></td><td class="gl"><span class="hint">On request</span></td><td class="menu">⋮</td></tr>
+    </table>
+    <p class="note">The hidden department shows as an "Every zone" row at the top, the same idea as Routing's "All categories" row. That replaces the "Defaults for every zone" button. Its trading name starts as the venue's name.</p>
+  </div>
+</div>

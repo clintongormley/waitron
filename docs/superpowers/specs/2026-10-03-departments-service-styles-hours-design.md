@@ -4,6 +4,11 @@
 marked **Owner, 2026-10-03**. Everything else is a proposal the owner has not yet confirmed. No plan
 has been written. Backlog entry: A254.
 
+**2026-10-03, later the same day:** the venue operations design
+([2026-10-03-venue-operations-design.md](2026-10-03-venue-operations-design.md), A261) builds on this
+spec. It replaces §4's day types with special dates, and places §5's trading-name switch in the
+Departments and zones table, printing the trading name first on the receipt.
+
 The conversation started from one question: how do departments, service zones and prep stations fit
 together? The answer showed three problems:
 
