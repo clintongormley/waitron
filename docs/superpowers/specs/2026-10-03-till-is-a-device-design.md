@@ -31,18 +31,25 @@ The owner expected a Prepare or Live venue to start with no devices and add each
    drawer, counted separately.
 2. Every stamped record carries a **source**: usually the device, otherwise a named non-device
    source (the dashboard, a background job and so on), as a hint of where it came from.
-3. Every device has two switches: **Takes cash** (on by default for the `till` form factor, off for
-   every other) and **Opens the cash drawer** (available on any device whose receipt printer has a
-   drawer, handhelds included). Even without a float a waiter can take cash, just without giving
-   change.
-4. A waiter's cash float belongs to the waiter, not the handheld. A float decides whether that
-   waiter may take cash on a handheld, and is settled at a till before the waiter leaves. That is
-   piece 3, not this spec.
-5. Recorded cash in and out of a drawer is piece 2, not this spec.
-6. The Printing rules screen is the one place a device's receipt printer and drawer switch are set,
-   for now; the screen needs revisiting later (backlog).
-7. Demo venues start with no devices too. Sample sales are recorded with source `demo_seed`.
-8. This ships with a **venue reset**: existing venues, the owner's box included, are wiped and set up
+3. **A device's profile decides what it may do; the device holds only its current hardware
+   choices.** The profile carries the tick-boxes **Takes cash** (new) and **Opens the cash drawer**
+   (the existing `open-cash-drawer` capability), and a list of **receipt printers** and a list of
+   **payment slip printers** its devices may print to. Nothing about cash or the drawer is set per
+   device. Even without a float a waiter can take cash, just without giving change.
+4. A device picks its current receipt printer and its current payment slip printer from its
+   profile's lists, and staff can switch either **on the device, mid-service**: for example to a
+   portable printer taken to the table for card slips.
+5. A waiter's cash float belongs to the waiter, not the handheld. Cash a waiter with an open float
+   takes on a handheld adds to their float, which is settled at a till before the waiter leaves.
+   That is piece 3, not this spec.
+6. Recorded cash in and out of a drawer is piece 2, not this spec.
+7. The Printing rules screen loses its per-till section, replaced by the profile's printer lists.
+   Its other sections (kitchen routing, receipt print mode, drawer policy) stay as they are for now;
+   kitchen routing is to move elsewhere later (backlog A242). The per-till "Opens the cash drawer"
+   switch added on 2026-10-02 (B29) goes: a till that must not open a shared drawer gets its own
+   profile. (Designer's proposal, put to the owner and not yet answered.)
+8. Demo venues start with no devices too. Sample sales are recorded with source `demo_seed`.
+9. This ships with a **venue reset**: existing venues, the owner's box included, are wiped and set up
    again. No code carries existing data across.
 
 ## 3. The source
@@ -84,7 +91,8 @@ held tighter:
 | Table                   | Today                                | After                                                     |
 | ----------------------- | ------------------------------------ | --------------------------------------------------------- |
 | `tills`                 | the till record                      | **dropped**                                               |
-| `devices`               | `till_id` (nullable)                 | `till_id` dropped; gains `takes_cash`, `opens_drawer` (§4) |
+| `devices`               | `till_id` (nullable), `receipt_printer_id` (unused) | `till_id` dropped; `receipt_printer_id` and a new `payment_slip_printer_id` hold the current choice (§4) |
+| `device_profile_printers` | —                                  | **new**: profile, printer, role (`receipt` or `payment_slip`); the profile's lists (§4) |
 | `working_orders`        | `till_id`, finds its location by it  | `source`, `device_id` (who opened it) and `location_id`   |
 | `sales`                 | `till_id`                            | `source`, `device_id`                                     |
 | `registros_facturacion` | `till_id` (informational)            | `source`, `device_id` (informational, not hashed)         |
@@ -125,25 +133,56 @@ owner decision; strike it in review if unwanted.
 Because the order history and working-time hashes change, history recorded on an existing venue no
 longer verifies. That is why this ships with a reset (§9).
 
-## 4. Device settings
+## 4. Profiles and printers
 
-- **Receipt printer**: the device's existing `receipt_printer_id`, now the one every print path
-  reads (`receipt-print.ts`, `receipt-preview-api.ts`, `payment-slip-print.ts`). The receipt,
-  payment-slip and reprint routes resolve it from the requesting device.
-- **Opens the cash drawer** (`opens_drawer`, moved from `tills`): on by default for the `till` form
-  factor, off otherwise. Settable on any device whose receipt printer has a drawer. Automatic
-  openings and the manual Open drawer button read it. `assertNotHandheld`'s drawer refusal goes;
-  the manual open is refused when the switch is off, as today (`drawer.till_switched_off`, renamed
-  `drawer.device_switched_off`). A kitchen display never opens a drawer.
-- **Takes cash** (`takes_cash`, new): on by default for the `till` form factor, off otherwise. A cash
-  sale, a cash collection or a cash bill payment from a device with it off is refused with
-  `device.cash_switched_off`. The till app does not offer cash on such a device and says to take
-  cash at a till. Card payments are unaffected.
+### What the profile allows
+
+- **Takes cash**: a new capability flag, `take-cash`, in `CAPABILITY_FLAGS`
+  (`packages/layouts/src/canvas.ts`). The Till profile has it by default
+  (`DEFAULT_PROFILE_CAPABILITIES`, `packages/layouts/src/device-profile.ts`); the phone and tablet
+  profiles do not. A cash sale, a cash collection or a cash bill payment from a device whose profile
+  lacks it is refused with `device.cash_not_allowed`. The till app offers no cash option there and
+  says to take cash at a till. Card payments are unaffected.
+- **Opens the cash drawer**: the existing `open-cash-drawer` capability, which today gates only the
+  manual Open drawer button. It now decides automatic openings too, replacing the form-factor check
+  in `deviceTillCfg` (`apps/server/src/device-session.ts`) and `tills.opens_drawer`.
+  `assertNotHandheld`'s drawer refusal goes. A drawer opens only when the profile ticks this and the
+  device's current receipt printer has a drawer. The manual open from a profile without it is
+  refused as today, `device.forbidden_action` from `assertDeviceCapability`;
+  `drawer.till_switched_off` is deleted.
+- **Receipt printers** and **payment slip printers**: two lists per profile, kept in
+  `device_profile_printers` (classified `state`). Either list may be empty, which leaves that kind of
+  printing off for the profile's devices. The same printer may be on both lists.
+
+The `cash.drawer` permission is unchanged: it is about people, and decides who may open the drawer by
+hand when the venue's drawer policy is `gated`.
+
+### What the device holds
+
+- `receipt_printer_id`: the device's current receipt printer, now the one every receipt and drawer
+  path reads (`receipt-print.ts`, `receipt-preview-api.ts`). The receipt, reprint and drawer routes
+  resolve it from the requesting device.
+- `payment_slip_printer_id`: new, the device's current payment slip printer, read by
+  `payment-slip-print.ts` instead of the receipt printer.
+
+Defaults (the designer's, offered to the owner on 2026-10-03 without objection; strike any in
+review):
+
+- A newly paired device starts on the first printer in each of its profile's lists, or none.
+- When a printer leaves a profile's list, or a device moves to another profile, each affected device
+  moves to the first printer still listed, or to none, in the same transaction.
+- Any signed-in staff member may switch a device's printers. No permission, no audit row.
+- The server refuses a choice not on the device's profile list, with the existing
+  `device.binding_invalid` naming the field (`receiptPrinterId` or `paymentSlipPrinterId`).
+
+### Switching on the device
+
+A till-app route sets the requesting device's current receipt or payment slip printer. The till app
+shows the current printers and, where a list holds more than one, lets staff switch, from the same
+place on every form factor.
 
 At the close, cash is counted against the device that took it (`packages/reporting/src/cash-up.ts`
 groups by device).
-
-The `cash.drawer` permission and the profile's drawer capability still apply as they do today.
 
 ## 5. Where each source comes from
 
@@ -191,17 +230,22 @@ explicitly; nothing falls back to a default.
 
 ## 8. Screens
 
-- **Printing rules** (`printing-rules-screen.ts`): lists every device that can print, with its
-  receipt printer and, where the printer has a drawer, the drawer switch. It also shows the Takes
-  cash switch for every device that can sell. Routes in `print-api.ts` move from tills to devices.
-- **Devices screen**: the receipt printer picker in the hardware editor goes.
+- **Profile editor**: gains the Takes cash tick-box beside the existing capabilities, and the two
+  printer lists.
+- **Printing rules** (`printing-rules-screen.ts`): the per-till section (receipt printer and drawer
+  switch) goes, with its routes in `print-api.ts` and client calls. The rest of the screen stays.
+- **Devices screen**: the receipt printer picker in the hardware editor goes; the list shows each
+  device's current printers.
+- **Printer detail page**: lists the profiles that offer the printer, in place of the tills that use
+  it.
 - **Sales, payments and the printer detail page** show the device's name, or the source's name
   (in English and Spanish) when there is no device. The Sales screen's per-till table stops showing a
   raw id as its row heading.
 - **Live updates**: `apps/dashboard/src/api/live-queries.ts` stops naming `tills`, and the server's
   matching subscription sources change with it (`scripts/live-subscriptions.test.ts`).
-- **Till app**: no cash option where Takes cash is off, with a line saying to take cash at a till;
-  the Open drawer button shows where Opens the cash drawer is on.
+- **Till app**: no cash option where the profile does not allow cash, with a line saying to take
+  cash at a till; the Open drawer button shows where the profile allows the drawer; the current
+  printers, switchable where a list holds more than one.
 
 ## 9. Migrations and the reset
 
@@ -218,11 +262,15 @@ The PR's first line says it needs a venue reset. The dev venue is rebuilt with
 
 Failing test first for each behaviour. The cases that must tell the old behaviour from the new:
 
-- Receipt, payment-slip and reprint printing from a device whose printer differs from every other
-  device's printer.
-- A cash sale, cash collection and cash bill payment refused with `device.cash_switched_off` when
-  Takes cash is off, and accepted when it is on, on a handheld as well as a till.
-- Automatic and manual drawer openings on a handheld with the switch on, and none with it off.
+- Receipt, payment-slip and reprint printing from a device whose printers differ from every other
+  device's, with a payment slip printer different from its receipt printer.
+- Switching a device's printer mid-service, and the next slip going to the new one; a choice not on
+  the profile's list refused.
+- A printer removed from a profile's list moving its devices to the next one listed.
+- A cash sale, cash collection and cash bill payment refused with `device.cash_not_allowed` when the
+  profile lacks Takes cash, and accepted when it has it, on a handheld profile as well as a till.
+- Automatic and manual drawer openings on a handheld whose profile allows the drawer, and none on
+  a till whose profile does not.
 - The database refusing a row whose source and device do not pair, a sale with source `dashboard`,
   and an unknown source.
 - The order history and working-time hashes differing when only the source or only the device
@@ -240,9 +288,11 @@ a shared helper that pairs a device.
 
 ## 11. Docs and rules to update in the same change
 
-- CLAUDE.md §5's drawer rule: a handheld may open a drawer when its switch is on; the rule names
-  `opens_drawer` on the device and `takes_cash`.
+- CLAUDE.md §5's drawer rule: a device opens a drawer when its profile has `open-cash-drawer` and
+  its current receipt printer has one, handhelds included; the per-till `tills.opens_drawer` and the
+  Printing rules switch it names are gone; and `take-cash` gates cash.
 - `docs/developers/conventions-ui.md`'s drawer section, which states the handheld rule.
+- `docs/developers/design-system.md` or wherever the Printing rules screen is described.
 - Every prose claim about tills, the setup till or `WAITRON_TILL_TILL_ID`, across the whole tree
   (CLAUDE.md §1, "a behaviour change retires every receipt about the old behaviour").
 - `docs/backlog.md`: A238 closed; its findings retired.
@@ -252,4 +302,4 @@ a shared helper that pairs a device.
 - Piece 2, recorded cash in and out of a drawer (backlog).
 - Piece 3, waiter floats (backlog).
 - A mock printer in Demo mode (backlog).
-- Revisiting the Printing rules screen (backlog).
+- The rest of the Printing rules screen, including moving kitchen routing elsewhere (backlog A242).

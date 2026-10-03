@@ -3759,8 +3759,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 
 - **A till is a device (A238) — DESIGNED, spec awaiting owner review (2026-10-03).** The `tills`
   table goes; every record names its source (usually the device; otherwise the dashboard or a named
-  background job); each device gets Takes cash and Opens the cash drawer switches; setup creates no
-  till; the receipt, payment-slip and reprint routes print on the device's own printer. Ships with a
+  background job); a device's profile decides whether it takes cash and opens the drawer, and lists the receipt and payment slip printers its devices may switch between mid-service; setup creates no
+  till; the receipt, payment-slip and reprint routes print on the device's current printers. Ships with a
   venue reset. Spec: `docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`. Next: the
   owner reviews the spec, then a plan, then it is queued for a campaign lane. Pieces 2 and 3 follow
   it (A239, A240).
@@ -3777,17 +3777,18 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   open float may take cash on any handheld, and it adds to their float; the waiter settles the float
   at a till before leaving, entering what they hold, the difference is recorded against them and the
   cash goes into that till's drawer as an A239 entry; the daily close lists any float still open.
-  Cash taken on a handheld with Takes cash on and no float is counted against the handheld until
-  then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs
+  Cash taken on a handheld whose profile allows cash, with no float, is counted against the
+  handheld until then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs
   A238 and A239.
 
 - **A pretend printer in Demo mode (A241) — OPEN (owner, 2026-10-03).** Demo mode has no real
   printer, so receipts and kitchen tickets go nowhere visible. Add a pretend printer and a link in the
   dashboard header to see what it printed, like the development email viewer.
 
-- **Revisit the Printing rules screen (A242) — OPEN (owner, 2026-10-03).** After A238 it is the one
-  place a device's receipt printer, drawer switch and Takes cash switch are set, which the owner
-  accepted for now; the section needs a proper look later.
+- **The rest of the Printing rules screen (A242) — OPEN (owner, 2026-10-03).** A238 removes its
+  per-till section; device printers move to the device profile's printer lists. What remains is
+  kitchen routing, the receipt print mode and the drawer policy. The owner wants kitchen routing to
+  move elsewhere; the rest is to be decided. Left as it is until then.
 
 - **Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29).** A page saying
   what the section is for and what is in it, opened by the section's header. It was the answer to
