@@ -257,6 +257,13 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     await flush(el);
     await chooseOption(el.shadowRoot!.querySelector("[data-test=join-profile]")!, "dp3");
     await el.updateComplete;
+    const binding = el.shadowRoot!.querySelector("[data-test=join-binding]")!;
+    await userEvent.click(binding.shadowRoot!.querySelector(".trigger")!);
+    expect(
+      Array.from(binding.shadowRoot!.querySelectorAll(".group-heading")).map((group) =>
+        group.textContent?.trim(),
+      ),
+    ).toEqual(["Estaciones", "Puntos de seguimiento"]);
     await expectNoA11yViolations(host);
   });
 });

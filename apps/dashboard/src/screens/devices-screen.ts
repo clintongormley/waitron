@@ -919,7 +919,7 @@ export class DevicesScreen extends LitElement {
 
       ${this.#renderAcceptDialog()}
       ${
-        this.errorKey
+        this.errorKey && this.openRequestId === null
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
           : nothing
       }

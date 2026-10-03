@@ -742,6 +742,7 @@ describe("devices-screen", () => {
     const alert = dialog.querySelector("[role=alert]");
     expect(alert?.textContent).toContain(codeMessage("watcher.not_found", "es-ES"));
     expect(alert?.nextElementSibling?.getAttribute("slot")).toBe("footer");
+    expect(el.shadowRoot!.querySelectorAll('[role="alert"]')).toHaveLength(1);
   });
 
   // A till profile binds NEITHER picker — the server creates the register the device rings against.
