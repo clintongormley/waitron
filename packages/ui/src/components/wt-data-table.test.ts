@@ -1,6 +1,6 @@
 import { html } from "lit";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
-import { commands, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { chooseOption, cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 // For its `parkPointer` command type only.
 import type {} from "../a11y-helpers.js";
@@ -3274,6 +3274,52 @@ test.each([
     expect(el.shadowRoot!.querySelector("th")!.getBoundingClientRect().width).toBeGreaterThan(
       heading.getBoundingClientRect().width * 2,
     );
+  },
+);
+
+test.each([
+  { label: "Open", width: 1000, theme: "light" },
+  { label: "Abrir", width: 1000, theme: "dark" },
+  { label: "Open", width: 390, theme: "dark" },
+  { label: "Abrir", width: 390, theme: "light" },
+])(
+  "a pinned $label link keeps its content width at $width px in $theme theme",
+  async ({ label, width, theme }) => {
+    await page.viewport(width === 1000 ? 1280 : 390, 900);
+    const el = await table({
+      rows: [rows[0]!],
+      columns: [
+        { key: "name", label: "Name", cell: (row) => row.name },
+        {
+          key: "open",
+          label,
+          pinned: "end",
+          cell: () => html`<a href="#open">${label}</a>`,
+        },
+      ],
+    });
+    host.setAttribute("data-theme", theme);
+    el.style.width = `${width}px`;
+    await el.updateComplete;
+
+    const heading = el.shadowRoot!.querySelector<HTMLTableCellElement>("th[data-pinned=end]")!;
+    const cell = el.shadowRoot!.querySelector<HTMLTableCellElement>("td[data-pinned=end]")!;
+    const link = cell.querySelector("a")!;
+    const style = getComputedStyle(heading);
+    const neededWidth =
+      link.getBoundingClientRect().width +
+      parseFloat(style.paddingInlineStart) +
+      parseFloat(style.paddingInlineEnd);
+
+    expect(heading.getBoundingClientRect().width).toBeLessThanOrEqual(neededWidth + 2);
+    expect(cell.getBoundingClientRect().width).toBeCloseTo(
+      heading.getBoundingClientRect().width,
+      0,
+    );
+    expect(el.shadowRoot!.querySelector("th")!.getBoundingClientRect().width).toBeGreaterThan(
+      heading.getBoundingClientRect().width * 2,
+    );
+    await page.viewport(1280, 900);
   },
 );
 

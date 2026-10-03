@@ -1082,17 +1082,19 @@ was intended for every filter; this uses one stable width per filter. A filter w
 exceeds the available phone width fills its row, and that choice is cut short in the closed control.
 
 **A table's pinned Actions column keeps one narrow width (A195, owner 2026-10-02) — DONE.**
-`wt-data-table` gives its `actions` column only the space its heading or cell content needs; other
-columns take the spare width. The one-row Chromium test measures the column with both “Actions” and
+`wt-data-table` gives a pinned last column only the space its heading or cell content needs, including
+the `actions` column; other columns take the spare width. The one-row Chromium test measures the column with both “Actions” and
 “Acciones”, and the table and accessibility suites passed. Rendered one-row tables were inspected
 at 1280px and 390px, in English and Spanish labels and both themes. A198's options list form uses
 its own table (`apps/dashboard/src/widgets/option-list-form.ts:580`), so it cannot reuse the shared
 component's column rule.
 
-**Pinned Open column on Content languages — OPEN.** That screen declares `key: "open"` with
-`pinned: "end"` (`apps/dashboard/src/screens/content-languages-screen.ts:457`), so A195's rule for
-`actions` does not size it. Decide whether all pinned last columns should take their content width
-before changing this separate column.
+**Every pinned last column keeps a content width (A235, owner 2026-10-03) — DONE.**
+The Content languages screen's `open` column uses `pinned: "end"`
+(`apps/dashboard/src/screens/content-languages-screen.ts:457`). The shared table now sizes it by its
+heading or link, as it does for `actions`. The one-row Chromium test measures the rendered Open link
+and its column at 1000px and 390px, with English and Spanish labels in both themes. The Content
+languages screen was also opened with a translation gap at desktop and phone widths in both themes.
 
 **A collapsible section's chevron sits just after its heading (A196, owner 2026-10-02) — DONE.**
 The owner, on the "Edit options list" form: _"the chevron (currently far right) should be just to
