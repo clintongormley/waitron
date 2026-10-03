@@ -1112,6 +1112,10 @@ customer-facing name in the venue's default content language, show the record's 
 placeholder (on a variant, the variant's Name); a blank customer-facing name in any other language
 shows the default language's customer-facing name, or Name while that is blank too. Each follows the
 field it copies as it is typed (`optionalTextFields`, `apps/dashboard/src/widgets/form-fields.ts`).
+The menu section form, which is also a menu's Create and Rename form
+(`apps/dashboard/src/widgets/section-details-form.ts`), hints its blank customer-facing names the
+same way, with its first field (Internal name on a section, Name on a menu) in place of Name; it has
+no kitchen name.
 
 ### Fold a long form into collapsible sections with summaries
 
