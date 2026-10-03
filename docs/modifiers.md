@@ -22,10 +22,10 @@ the product's price for that portion: 1.50 means 1.50 per pick. Leave the price 
 multiplies the portion by the product's unit price, then rounds once to a cent for each pick; the
 field shows that calculated price while it is blank. The product's unit is shown with the price
 (under it on a phone), or reads Each when the product has no unit. The list itself sets, under a
-**Number of choices** heading, **Minimum choices** — 0 makes the list optional, 1 or more makes
-it required — and **Maximum choices**, left blank for no limit. Each of these numbers has − and +
-buttons, and you can also type it. Pressing − when Maximum choices is 1 empties it, which means no
-limit.
+**Number of choices** heading, **Minimum choices** — left empty the list is optional, 1 or more
+makes it required — and **Maximum choices**, at least 1, or left empty for no limit. Each of these
+numbers has − and + buttons, and you can also type it. Pressing − on 1 empties the box, which then
+shows "None".
 
 Use **Options** when the diner picks exactly one option, such as a cup or a glass. An option carries
 names and nothing else: no price, no tax treatment and no allergens. Each option has its own
