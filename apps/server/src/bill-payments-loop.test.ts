@@ -5,6 +5,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { billPaymentRefunds, billPayments, incidents, type SingletonRole } from "@waitron/db";
 import { insertCapturedPayment, insertFailedPayment, payments } from "@waitron/payments";
+import { createPrinter } from "@waitron/printing";
 import {
   centsToDecimal,
   decimal,
@@ -44,6 +45,15 @@ useVenueDb({
   },
 });
 
+function receiptPrinter(name: string) {
+  return {
+    name,
+    transport: "cloud_poll" as const,
+    pollId: `poll-${randomUUID()}`,
+    hasCashDrawer: false,
+  };
+}
+
 const settle = () =>
   settlePendingBillPayments({
     db: venue.db,
@@ -69,7 +79,12 @@ function balance(billId: string) {
 }
 
 /** What a crash straight after P1 leaves: a pending card payment no provider was asked about. */
-async function strandedPending(billId: string, applied: number, tip = 0): Promise<string> {
+async function strandedPending(
+  billId: string,
+  applied: number,
+  tip = 0,
+  device = { deviceId: venue.device2Id, tillId: venue.device2TillId },
+): Promise<string> {
   const [row] = await inTx(venue, (tx) =>
     tx
       .insert(billPayments)
@@ -83,9 +98,9 @@ async function strandedPending(billId: string, applied: number, tip = 0): Promis
         tip,
         state: "pending",
         requestedBy: venue.operatorId,
-        tillId: venue.device2TillId,
+        tillId: device.tillId,
         source: "device",
-        deviceId: venue.device2Id,
+        deviceId: device.deviceId,
       })
       .returning({ id: billPayments.id }),
   );
@@ -112,8 +127,12 @@ async function stateOf(billPaymentId: string): Promise<string> {
 }
 
 /** A pending card payment of `applied` cents whose provider row captured that amount. */
-async function capturedPending(billId: string, applied: number): Promise<string> {
-  const id = await strandedPending(billId, applied);
+async function capturedPending(
+  billId: string,
+  applied: number,
+  device?: { deviceId: string; tillId: string },
+): Promise<string> {
+  const id = await strandedPending(billId, applied, 0, device);
   await inTx(venue, (tx) =>
     insertCapturedPayment(tx, {
       origin: venue.cfg.origin,
@@ -384,6 +403,49 @@ describe("the loop's own edges", () => {
     ]);
     expect(await stateOf(free)).toBe("failed");
     await settle();
+  });
+});
+
+describe("the invoice a finished card payment issues", () => {
+  it("prints its receipt on the receipt printer of the device that started the payment", async () => {
+    const [r1, r2] = await inTx(venue, async (tx) => [
+      await createPrinter(tx, { locationId: venue.cfg.locationId }, receiptPrinter("R1")),
+      await createPrinter(tx, { locationId: venue.cfg.locationId }, receiptPrinter("R2")),
+    ]);
+    const a = { deviceId: venue.deviceId, tillId: venue.deviceTillId };
+    const b = { deviceId: venue.device2Id, tillId: venue.device2TillId };
+    const held = venue.db.all<{ id: string; receipt_printer_id: string | null }>(
+      sql`select id, receipt_printer_id from devices where id in (${a.deviceId}, ${b.deviceId})`,
+    );
+    venue.db.run(sql`update devices set receipt_printer_id = ${r1!.id} where id = ${a.deviceId}`);
+    venue.db.run(sql`update devices set receipt_printer_id = ${r2!.id} where id = ${b.deviceId}`);
+    try {
+      const onA = await tabWith(venue, "Paella");
+      const onB = await tabWith(venue, "Paella");
+      await capturedPending(onA, 3500, a);
+      await capturedPending(onB, 3500, b);
+
+      expect(await settle()).toMatchObject({ received: 2 });
+
+      const printed = venue.db.all<{ printer_id: string; kind: string; bill_id: string }>(
+        sql`select print_jobs.printer_id, print_jobs.kind, sales.working_order_id as bill_id
+            from print_jobs join sales on sales.id = print_jobs.sale_id
+            where sales.working_order_id in (${onA}, ${onB})`,
+      );
+      expect(printed).toEqual(
+        expect.arrayContaining([
+          { printer_id: r1!.id, kind: "document", bill_id: onA },
+          { printer_id: r2!.id, kind: "document", bill_id: onB },
+        ]),
+      );
+      expect(printed).toHaveLength(2);
+    } finally {
+      for (const row of held) {
+        venue.db.run(
+          sql`update devices set receipt_printer_id = ${row.receipt_printer_id} where id = ${row.id}`,
+        );
+      }
+    }
   });
 });
 

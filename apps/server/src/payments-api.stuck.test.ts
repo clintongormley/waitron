@@ -4,7 +4,14 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPaymentRefunds, billPayments, withTransaction, workingOrders } from "@waitron/db";
+import {
+  billPaymentRefunds,
+  billPayments,
+  devices,
+  withTransaction,
+  workingOrders,
+} from "@waitron/db";
+import { createPrinter } from "@waitron/printing";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -1428,6 +1435,33 @@ describe("POST /management-api/payments/bill-payments/:id/attest", () => {
       sql`select t.bill_payment_id, t.method from tenders t join sales s on s.id = t.sale_id where s.working_order_id = ${orderId}`,
     );
     expect(tender).toEqual({ bill_payment_id: id, method: "card" });
+  });
+
+  it("prints the invoice's receipt on the receipt printer of the device that started the payment", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "failed" });
+    const printerId = await withTransaction(suite.db, async (tx) => {
+      const printer = await createPrinter(
+        tx,
+        { locationId: v.cfg.locationId },
+        { name: "Recibos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+      );
+      await tx
+        .update(devices)
+        .set({ receiptPrinterId: printer.id })
+        .where(eq(devices.id, v.cfg.origin.deviceId));
+      return printer.id;
+    });
+
+    const res = await post(v, attestPath(id), { outcome: "received", note: NOTE, pin: "1234" });
+
+    expect(res.status).toBe(200);
+    expect(
+      suite.db.all<{ printer_id: string; kind: string }>(
+        sql`select printer_id, kind from print_jobs`,
+      ),
+    ).toEqual([{ printer_id: printerId, kind: "document" }]);
   });
 
   it("records a confirmed receipt that leaves the bill owing, answering no invoice", async () => {

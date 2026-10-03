@@ -6,8 +6,8 @@ import { AppError, centsToDecimal, subtractDecimal } from "@waitron/shared";
 import { enqueuePrintJob } from "@waitron/printing";
 import { formatPaymentSlip } from "./payment-slip.js";
 import { readReceiptOrder } from "./receipt-order.js";
-import { resolveReceiptPrinter } from "./receipt-print.js";
-import type { TillConfig } from "./till-config.js";
+import { resolvePaymentSlipPrinter } from "./receipt-print.js";
+import type { OriginConfig } from "./till-config.js";
 
 /**
  * Reconstruct the payment document of each card payment of the sale, one slip per payment in the
@@ -15,7 +15,7 @@ import type { TillConfig } from "./till-config.js";
  */
 export async function printSalePaymentSlip(
   db: Database,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   workingOrderId: string,
 ): Promise<void> {
   await withTransaction(db, async (tx) => {
@@ -60,7 +60,7 @@ export async function printSalePaymentSlip(
       // rows were written in.
       .orderBy(payments.settledAt, sql`${payments}.rowid`);
     if (cards.length === 0) return;
-    const printer = await resolveReceiptPrinter(tx, cfg);
+    const printer = await resolvePaymentSlipPrinter(tx, cfg.origin);
     if (printer === undefined) return;
     const taxpayer = await readTenant(tx);
     /* v8 ignore start -- the taxpayer row is the database's one row; presentation still degrades */

@@ -2023,14 +2023,13 @@ export class TillApi {
 
   /**
    * Open the cash drawer with no sale → `POST /api/drawer/open`. Authorized and audited server-side; the
-   * till's printer is resolved there, so it takes no id.
+   * device's receipt printer is resolved there, so it takes no id.
    *
    * Under a `gated` policy an operator whose role lacks `cash.drawer` is refused
    * `authorization.not_permitted` (403); the caller then fetches {@link listDrawerAuthorizers} and
    * retries with `override: { personId, pin }` for the authorizing supervisor. The override travels
    * ONLY in this request's body, never a URL, and only when supplied. A wrong PIN rejects `pin.invalid`
-   * (401); a till with no receipt printer `drawer.no_printer` (400); a till not set to open its
-   * printer's drawer `drawer.till_switched_off` (400).
+   * (401); a device with no receipt printer `drawer.no_printer` (400).
    */
   async openDrawer(override?: { personId: string; pin: string }): Promise<void> {
     await this.#request<void>("/api/drawer/open", "POST", override ? { override } : {});

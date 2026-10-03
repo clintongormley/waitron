@@ -17,7 +17,6 @@ import type {
   Printer,
   ReceiptPrintMode,
   Station,
-  Till,
   Watcher,
 } from "../api/client.js";
 
@@ -90,7 +89,6 @@ export class PrintingRulesScreen extends LitElement {
   @state() private watchers: Watcher[] = [];
   @state() private printerErrors: Record<string, string> = {};
   @state() private printerStations: Record<string, string[]> = {};
-  @state() private tills: Till[] = [];
   @state() private locations: LocationSummary[] = [];
   // Location settings have no read route, so only successful writes establish a known value.
   @state() private printModes: Record<string, ReceiptPrintMode> = {};
@@ -117,8 +115,8 @@ export class PrintingRulesScreen extends LitElement {
     });
   }
   async #load(): Promise<void> {
-    // Stations gate on venue.configure, locations on schedule.manage, and printers, each printer's
-    // stations and tills on printer.manage. Today manager and admin hold all three
+    // Stations gate on venue.configure, locations on schedule.manage, and printers and each
+    // printer's stations on printer.manage. Today manager and admin hold all three
     // (packages/identity/src/permissions.ts); revisit this fan-out if one is ever granted on its own.
     await Promise.all([
       this.#queries.watch("listPrinters", [], async (printers) => {
@@ -141,9 +139,6 @@ export class PrintingRulesScreen extends LitElement {
       }),
       this.#queries.watch("listWatchers", [], (value) => {
         this.watchers = value;
-      }),
-      this.#queries.watch("listTills", [], (value) => {
-        this.tills = value;
       }),
       this.#queries.watch("getLocations", [], (value) => {
         this.locations = value;
@@ -174,9 +169,6 @@ export class PrintingRulesScreen extends LitElement {
     } finally {
       this.saving = false;
     }
-  }
-  async #setTillPrinter(tillId: string, value: string): Promise<void> {
-    await this.#mutate(() => this.api.setTillReceiptPrinter(tillId, value === "" ? null : value));
   }
   async #setPrintMode(locationId: string, mode: ReceiptPrintMode): Promise<void> {
     await this.#mutate(async () => {
@@ -255,56 +247,6 @@ export class PrintingRulesScreen extends LitElement {
       </wt-card>
     </li>`;
   }
-  #renderTillPicker(till: Till): TemplateResult {
-    const options = this.printers.filter((p) => p.active);
-    const receiptPrinter = options.find((p) => p.id === till.receiptPrinterId);
-    return html`<li data-test="till-row-${till.id}">
-      <wt-card>
-        <div class="row">
-          <div class="details">
-            <span class="label" data-test="till-label-${till.id}">${till.label}</span>
-          </div>
-          <wt-combobox
-            name="receiptPrinterId"
-            label=${t("printers.receipt_printer")}
-            search="auto"
-            placeholder=${t("printers.receipt_no_printer")}
-            searchPlaceholder=${t("categories.combobox_search")}
-            noResultsLabel=${t("categories.combobox_no_results")}
-            .options=${[
-              { value: "", label: t("printers.receipt_no_printer") },
-              ...options.map((p) => ({ value: p.id, label: p.name })),
-            ]}
-            .value=${live(till.receiptPrinterId ?? "")}
-            .disabled=${this.saving}
-            data-test="till-receipt-printer-${till.id}"
-            @wt-change=${(e: CustomEvent<{ value: string }>) => {
-              e.stopPropagation();
-              void this.#setTillPrinter(till.id, e.detail.value);
-            }}
-          ></wt-combobox>
-        </div>
-        ${
-          receiptPrinter?.hasCashDrawer
-            ? html`<div class="row">
-                <wt-switch
-                  label=${t("printers.opens_drawer")}
-                  name="opensDrawer"
-                  data-test="till-opens-drawer-${till.id}"
-                  .checked=${live(till.opensDrawer)}
-                  .disabled=${this.saving}
-                  @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                    const checked = event.detail.checked;
-                    void this.#mutate(() => this.api.setTillOpensDrawer(till.id, checked));
-                  }}
-                ></wt-switch>
-              </div>`
-            : nothing
-        }
-      </wt-card>
-    </li>`;
-  }
-
   #printModeOption(locationId: string, mode: ReceiptPrintMode): TemplateResult {
     return html`<wt-button
       variant=${this.printModes[locationId] === mode ? "primary" : "secondary"}
@@ -371,15 +313,6 @@ export class PrintingRulesScreen extends LitElement {
     return html`
       <section>
         <h2 class="panel-title">${t("printers.receipt_title")}</h2>
-
-        <h3 class="panel-title">${t("printers.receipt_printer_title")}</h3>
-        ${
-          this.tills.length === 0
-            ? html`<p class="empty" data-test="no-tills">${t("printers.no_tills")}</p>`
-            : html`<ol>
-                ${this.tills.map((till) => this.#renderTillPicker(till))}
-              </ol>`
-        }
 
         <h3 class="panel-title">${t("printers.print_mode_title")}</h3>
         ${

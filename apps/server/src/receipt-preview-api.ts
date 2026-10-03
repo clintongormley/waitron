@@ -2,10 +2,10 @@ import "./errors.js";
 import type { Hono } from "hono";
 import { and, asc, eq } from "drizzle-orm";
 import {
+  devices,
   printPaperWidth,
   printers,
   readTenant,
-  tills,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -52,7 +52,7 @@ export interface ReceiptPreviewResponse {
   preview: PrintJobPreview;
   /** The width drawn at. */
   paperWidth: PaperWidth;
-  /** The widths of the location's tills' active receipt printers, narrowest first. */
+  /** The widths of the location's active devices' active receipt printers, narrowest first. */
   paperWidths: PaperWidth[];
   /** The blocks each trim field adds; `null` for a field left out or blank. */
   marks: { headerSubtitle: BlockRange | null; footerMessage: BlockRange | null };
@@ -103,19 +103,19 @@ function optionalLanguage(
 
 /**
  * The setting to draw at: the asked-for width when a receipt printer has it, else the width most
- * tills print on, a tie going to the till first by name. A width's resolution is that of the till
- * first by name with it. `settings` holds one entry per till, ordered by name.
+ * devices print on, a tie going to the device first by name. A width's resolution is that of the
+ * device first by name with it. `settings` holds one entry per device, ordered by name.
  */
 function chooseSetting(settings: EscSetting[], asked: PaperWidth | undefined): EscSetting {
-  const tillsUsing = new Map<PaperWidth, number>();
+  const devicesUsing = new Map<PaperWidth, number>();
   for (const { paperWidth } of settings)
-    tillsUsing.set(paperWidth, (tillsUsing.get(paperWidth) ?? 0) + 1);
+    devicesUsing.set(paperWidth, (devicesUsing.get(paperWidth) ?? 0) + 1);
   let width = asked;
-  if (width === undefined || !tillsUsing.has(width)) {
+  if (width === undefined || !devicesUsing.has(width)) {
     width = undefined;
-    // A map iterates in insertion order, the order of the first till with each width.
-    for (const [each, count] of tillsUsing)
-      if (width === undefined || count > tillsUsing.get(width)!) width = each;
+    // A map iterates in insertion order, the order of the first device with each width.
+    for (const [each, count] of devicesUsing)
+      if (width === undefined || count > devicesUsing.get(width)!) width = each;
   }
   return settings.find((setting) => setting.paperWidth === width) ?? DEFAULT_PRINTER;
 }
@@ -147,13 +147,13 @@ export function mountReceiptPreviewApi(
         const taxpayer = (await readTenant(tx))!;
         const settings = await tx
           .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
-          .from(tills)
+          .from(devices)
           .innerJoin(
             printers,
-            and(eq(printers.id, tills.receiptPrinterId), eq(printers.active, true)),
+            and(eq(printers.id, devices.receiptPrinterId), eq(printers.active, true)),
           )
-          .where(eq(tills.locationId, deps.cfg.locationId))
-          .orderBy(asc(tills.name), asc(tills.id));
+          .where(and(eq(devices.locationId, deps.cfg.locationId), eq(devices.active, true)))
+          .orderBy(asc(devices.label), asc(devices.id));
         return {
           issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
           settings,

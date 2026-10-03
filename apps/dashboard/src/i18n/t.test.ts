@@ -43,8 +43,6 @@ it("uses the cash-register wording for the register-meaning strings", () => {
   expect(en["devices.till"]).toBe("Cash register");
   expect(en["sales.till"]).toBe("Cash register");
   expect(en["sales.tender_title"]).toBe("Tender by cash register");
-  expect(en["printers.no_tills"]).toBe("No cash registers yet");
-  expect(en["printers.receipt_printer_title"]).toBe("Receipt printer per cash register");
   expect(en["device_profiles.form_factor.till"]).toBe("Cash register");
 });
 

@@ -5,11 +5,11 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  devices,
   drawerOpens,
   printJobs,
   printers,
   products,
-  tills,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -465,20 +465,22 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
     expect(gherkins).toBeDefined();
   });
 
-  it("never opens a cash drawer, even when the till's receipt printer has one", async () => {
+  it("never opens a cash drawer, even when the device's receipt printer has one", async () => {
     const billId = await billOf("hamburger", "fire");
-    const [till] = await inTx(venue, (tx) =>
+    const deviceId = venue.cfg.origin.deviceId;
+    const [device] = await inTx(venue, (tx) =>
       tx
-        .select({ receiptPrinterId: tills.receiptPrinterId })
-        .from(tills)
-        .where(eq(tills.id, venue.cfg.tillId)),
+        .select({ receiptPrinterId: devices.receiptPrinterId })
+        .from(devices)
+        .where(eq(devices.id, deviceId)),
     );
-    // The kitchen's printer is also the till's receipt printer, with a drawer attached.
+    // The kitchen's printer is also the device's receipt printer, with a drawer attached, and the
+    // device's profile allows the drawer.
     await inTx(venue, async (tx) => {
       await tx
-        .update(tills)
+        .update(devices)
         .set({ receiptPrinterId: venue.printerId })
-        .where(eq(tills.id, venue.cfg.tillId));
+        .where(eq(devices.id, deviceId));
       await tx
         .update(printers)
         .set({ hasCashDrawer: true })
@@ -488,7 +490,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
       const drawerOpensBefore = (await inTx(venue, (tx) => tx.select().from(drawerOpens))).length;
       const before = (await jobs()).length;
 
-      await cancelGherkins(billId, { ...english(), allowCashDrawer: true });
+      await cancelGherkins(billId, english());
 
       const enqueued = (await jobs()).slice(before);
       expect(enqueued.map((job) => job.kind)).toEqual(["document"]);
@@ -499,9 +501,9 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
     } finally {
       await inTx(venue, async (tx) => {
         await tx
-          .update(tills)
-          .set({ receiptPrinterId: till!.receiptPrinterId })
-          .where(eq(tills.id, venue.cfg.tillId));
+          .update(devices)
+          .set({ receiptPrinterId: device!.receiptPrinterId })
+          .where(eq(devices.id, deviceId));
         await tx
           .update(printers)
           .set({ hasCashDrawer: false })

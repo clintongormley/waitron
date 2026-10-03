@@ -231,7 +231,9 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     name: "Caja efectivo",
     profileId: seeded.cashOnlyProfileId,
   });
-  db.run(sql`update tills set receipt_printer_id = ${seeded.printerId}`);
+  db.run(
+    sql`update devices set receipt_printer_id = ${seeded.printerId}, payment_slip_printer_id = ${seeded.printerId}`,
+  );
 
   const card = new FakePaymentProvider(db);
   const pool: CardProviderPool = {

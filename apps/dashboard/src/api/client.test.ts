@@ -2756,49 +2756,6 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     });
   });
 
-  it("setTillReceiptPrinter PATCHes the till's receipt-printer route with { printerId } (set + clear)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.setTillReceiptPrinter("t1", "p1")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenLastCalledWith("/management-api/tills/t1/receipt-printer", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ printerId: "p1" }),
-    });
-    await expect(api.setTillReceiptPrinter("t1", null)).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenLastCalledWith("/management-api/tills/t1/receipt-printer", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ printerId: null }),
-    });
-  });
-
-  it("setTillOpensDrawer PATCHes the till's opens-drawer route with { opensDrawer }", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    for (const opensDrawer of [false, true]) {
-      await expect(api.setTillOpensDrawer("t1", opensDrawer)).resolves.toBeUndefined();
-      expect(fetchImpl).toHaveBeenLastCalledWith("/management-api/tills/t1/opens-drawer", {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ opensDrawer }),
-      });
-    }
-  });
-
-  it("setTillReceiptPrinter rejects with { code } on a non-2xx (printer not in the till's location)", async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "printer.not_found" } }, false, 404));
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.setTillReceiptPrinter("t1", "p-foreign")).rejects.toMatchObject({
-      code: "printer.not_found",
-    });
-  });
-
   it("setReceiptPrintMode PATCHes the location's print-mode route with { mode }", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);

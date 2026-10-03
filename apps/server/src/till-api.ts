@@ -165,7 +165,6 @@ import {
 } from "./till-session.js";
 import {
   assertDeviceCapability,
-  assertNotHandheld,
   assertTakesCash,
   deviceTillCfg,
   requireDevice,
@@ -437,7 +436,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "status.inactive": 409,
   "drawer.no_printer": 400,
   "drawer.not_attached": 400,
-  "drawer.till_switched_off": 400,
   "adjustment_reason.not_found": 404,
   // 403, as `authorization.not_permitted` answers: the request is sound, the person may not alone.
   "adjustment.approval_required": 403,
@@ -1757,7 +1755,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId, sessionId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const device = session.device;
-      assertNotHandheld(device, "drawer_open");
       await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open", device);
       const drawerCfg = deviceTillCfg(cfg, device);
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
@@ -1787,15 +1784,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                   attempts,
                 );
 
-          const printer = await resolveReceiptPrinter(tx, drawerCfg);
+          const printer = await resolveReceiptPrinter(tx, cfg.origin);
           if (printer === undefined) {
-            throw new AppError("drawer.no_printer", { tillId: drawerCfg.tillId });
+            throw new AppError("drawer.no_printer", { deviceId: session.deviceId });
           }
           if (!printer.hasCashDrawer) {
             throw new AppError("drawer.not_attached", { printerId: printer.id });
-          }
-          if (!printer.tillOpensDrawer) {
-            throw new AppError("drawer.till_switched_off", { tillId: drawerCfg.tillId });
           }
           await enqueueManualDrawerOpen(
             tx,

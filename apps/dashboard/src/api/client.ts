@@ -2708,18 +2708,6 @@ export class DashboardApi {
     return this.#request<Till[]>("/management-api/tills", "GET");
   }
 
-  setTillReceiptPrinter(tillId: string, printerId: string | null): Promise<void> {
-    return this.#request<void>(`/management-api/tills/${tillId}/receipt-printer`, "PATCH", {
-      printerId,
-    });
-  }
-
-  setTillOpensDrawer(tillId: string, opensDrawer: boolean): Promise<void> {
-    return this.#request<void>(`/management-api/tills/${tillId}/opens-drawer`, "PATCH", {
-      opensDrawer,
-    });
-  }
-
   setReceiptPrintMode(locationId: string, mode: ReceiptPrintMode): Promise<void> {
     return this.#request<void>(
       `/management-api/locations/${locationId}/receipt-print-mode`,

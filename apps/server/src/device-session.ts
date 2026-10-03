@@ -6,7 +6,6 @@ import { AppError, isUuid, tillId } from "@waitron/shared";
 import type { TillId } from "@waitron/shared";
 import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { kindOfFormFactor } from "@waitron/layouts";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import { verifySecretAsync } from "@waitron/identity";
 // Side-effect only: keeps `device.unauthorized` (errors.ts) reachable from the file that throws it.
@@ -310,26 +309,10 @@ export function requireSaleTillId(device: DeviceBinding): TillId {
   return tillId(device.tillId);
 }
 
-/**
- * The configuration `device`'s request runs under: the device's own till, and a cash drawer only
- * for a till form factor. Refuses as {@link requireSaleTillId} does.
- */
+/** The configuration `device`'s request runs under: the device's own till. Refuses as
+ * {@link requireSaleTillId} does. */
 export function deviceTillCfg<C extends TillConfig>(cfg: C, device: DeviceBinding): C {
-  return {
-    ...cfg,
-    tillId: requireSaleTillId(device),
-    allowCashDrawer: kindOfFormFactor(device.formFactor) === "till",
-  };
-}
-
-/**
- * The handheld firewall: a handheld device may not reach a route that runs this guard. Enforced on
- * the server so the fence holds even if the client is bypassed.
- */
-export function assertNotHandheld(device: DeviceBinding, action: string): void {
-  if (kindOfFormFactor(device.formFactor) === "handheld") {
-    throw new AppError("device.forbidden_action", { action });
-  }
+  return { ...cfg, tillId: requireSaleTillId(device) };
 }
 
 /**

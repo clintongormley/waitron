@@ -1,6 +1,5 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -11,7 +10,6 @@ import type {
   Station,
   StationPrinter,
   Watcher,
-  Till,
 } from "../api/client.js";
 import { PrintingRulesScreen } from "./printing-rules-screen.js";
 afterEach(cleanupWidgets);
@@ -104,10 +102,6 @@ const watchers: Watcher[] = [
   },
 ];
 
-const tills: Till[] = [
-  { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1", opensDrawer: true },
-  { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: null, opensDrawer: true },
-];
 const locations: LocationSummary[] = [{ id: "loc-1", name: "Barra" }];
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
@@ -120,10 +114,8 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listPrinterStations: vi.fn().mockResolvedValue([] as StationPrinter[]),
     attachPrinterToStation: vi.fn().mockResolvedValue(undefined),
     detachPrinterFromStation: vi.fn().mockResolvedValue(undefined),
-    listTills: vi.fn().mockResolvedValue(tills),
+    listTills: vi.fn().mockResolvedValue([]),
     getLocations: vi.fn().mockResolvedValue(locations),
-    setTillReceiptPrinter: vi.fn().mockResolvedValue(undefined),
-    setTillOpensDrawer: vi.fn().mockResolvedValue(undefined),
     setReceiptPrintMode: vi.fn().mockResolvedValue(undefined),
     setDrawerOpenPolicy: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -135,12 +127,6 @@ async function flush(el: PrintingRulesScreen): Promise<void> {
 }
 
 const q = (el: PrintingRulesScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
-type Dropdown = HTMLElement & {
-  options: { value: string; label: string }[];
-  value: string;
-  name: string;
-  disabled: boolean;
-};
 const text = (el: PrintingRulesScreen, sel: string) => q(el, sel)?.textContent?.trim();
 
 /** Exercise the native switch change event after the browser toggles its checked property. */
@@ -148,10 +134,6 @@ function toggleSwitch(el: PrintingRulesScreen, sel: string, checked: boolean): v
   const input = q(el, sel)!.shadowRoot!.querySelector("input")!;
   input.checked = checked;
   input.dispatchEvent(new Event("change", { bubbles: true }));
-}
-
-function pickSelect(el: PrintingRulesScreen, sel: string, value: string): void {
-  void chooseOption(q(el, sel)!, value);
 }
 
 const switchChecked = (el: PrintingRulesScreen, sel: string): boolean =>
@@ -263,119 +245,25 @@ describe("printing rules", () => {
     expect(q(el, "[data-test=station-toggle-p1-s1]")).toBeNull();
   });
 
-  // ── Receipt printer picker + print-mode toggle ─────────────────────────────────────────────────────
-
-  it("renders a receipt-printer picker per till, offering the ACTIVE printers + a 'no printer' option", async () => {
+  it("shows no per-till section and never asks for the tills", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
       api,
     });
     await flush(el);
 
-    const select = q(el, "[data-test=till-receipt-printer-t1]") as Dropdown;
-    expect(select).not.toBeNull();
-    const values = [...select.options].map((o) => o.value);
-    // The clear option ("") first, then only the ACTIVE printer p1 — the inactive p2 is not offered.
-    expect(values).toEqual(["", "p1"]);
-    expect(select.options[0]!.label).toContain(t("printers.receipt_no_printer", "es-ES"));
-  });
-
-  it("reflects each till's PERSISTED receipt printer in its dropdown (set → the id, unset → the clear option)", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-    expect((q(el, "[data-test=till-receipt-printer-t1]") as Dropdown).value).toBe("p1");
-    expect((q(el, "[data-test=till-receipt-printer-t2]") as Dropdown).value).toBe("");
-  });
-
-  it("picks a till's receipt printer from a labelled dropdown showing the stored one, prompting no printer while it has none", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-    type Combobox = HTMLElement & {
-      options: { value: string; label: string }[];
-      value: string;
-      label: string;
-      placeholder: string;
-      name: string;
-    };
-    const t1 = q(el, "wt-combobox[data-test=till-receipt-printer-t1]") as Combobox;
-    const t2 = q(el, "wt-combobox[data-test=till-receipt-printer-t2]") as Combobox;
-    expect(t1.name).toBe("receiptPrinterId");
-    expect(t1.label).toBe(t("printers.receipt_printer"));
-    expect(t1.placeholder).toBe(t("printers.receipt_no_printer"));
-    expect(t1.options).toEqual([
-      { value: "", label: t("printers.receipt_no_printer") },
-      { value: "p1", label: "Cocina" },
-    ]);
-    expect(t1.value).toBe("p1");
-    expect(t2.value).toBe("");
-    await chooseOption(t2, "p1");
-    await flush(el);
-    expect(api.setTillReceiptPrinter).toHaveBeenCalledWith("t2", "p1");
-  });
-
-  it("shows the till's stored receipt printer again after a refused change", async () => {
-    const api = stubApi({
-      setTillReceiptPrinter: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
-    });
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-    const t1 = q(el, "wt-combobox[data-test=till-receipt-printer-t1]") as HTMLElement & {
-      value: string;
-    };
-    await chooseOption(t1, "");
-    await flush(el);
-    expect(q(el, "[role=alert]")).not.toBeNull();
-    expect(t1.value).toBe("p1");
-  });
-
-  it("picking a printer calls setTillReceiptPrinter with the till + chosen printer id, then reloads", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-    (api.listTills as ReturnType<typeof vi.fn>).mockClear();
-
-    pickSelect(el, "[data-test=till-receipt-printer-t2]", "p1");
-    await flush(el);
-    expect(api.setTillReceiptPrinter).toHaveBeenCalledWith("t2", "p1");
-    expect(api.listTills).toHaveBeenCalledTimes(1);
-  });
-
-  it("clearing the picker ('no printer') calls setTillReceiptPrinter with null", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-
-    pickSelect(el, "[data-test=till-receipt-printer-t1]", "");
-    await flush(el);
-    expect(api.setTillReceiptPrinter).toHaveBeenCalledWith("t1", null);
-  });
-
-  it("shows an error banner when setting a till's printer is rejected (printer.not_found)", async () => {
-    const api = stubApi({
-      setTillReceiptPrinter: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
-    });
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-
-    pickSelect(el, "[data-test=till-receipt-printer-t2]", "p1");
-    await flush(el);
-    const banner = q(el, "[role=alert]")?.textContent;
-    expect(banner).toContain(codeMessage("printer.not_found", "es-ES"));
-    expect(banner).not.toContain("printer.not_found");
+    for (const selector of [
+      "[data-test^=till-row-]",
+      "[data-test^=till-receipt-printer-]",
+      "[data-test^=till-opens-drawer-]",
+      "[data-test=no-tills]",
+    ]) {
+      expect(q(el, selector)).toBeNull();
+    }
+    expect(api.listTills).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=station-toggle-p1-s1]")).not.toBeNull();
+    expect(q(el, "[data-test=print-mode-loc-1-auto]")).not.toBeNull();
+    expect(q(el, "[data-test=drawer-policy-loc-1-gated]")).not.toBeNull();
   });
 
   it("renders a print-mode toggle per location and calls setReceiptPrintMode with the chosen mode", async () => {
@@ -384,7 +272,7 @@ describe("printing rules", () => {
       api,
     });
     await flush(el);
-    (api.listTills as ReturnType<typeof vi.fn>).mockClear();
+    (api.getLocations as ReturnType<typeof vi.fn>).mockClear();
 
     expect(q(el, "[data-test=print-mode-loc-1-auto]")).not.toBeNull();
     expect(q(el, "[data-test=print-mode-loc-1-never]")).not.toBeNull();
@@ -392,7 +280,7 @@ describe("printing rules", () => {
     await flush(el);
 
     expect(api.setReceiptPrintMode).toHaveBeenCalledWith("loc-1", "on_request");
-    expect(api.listTills).toHaveBeenCalledTimes(1);
+    expect(api.getLocations).toHaveBeenCalledTimes(1);
   });
 
   it("reflects the picked print mode in the segmented control (primary variant), surviving the reload", async () => {
@@ -443,7 +331,7 @@ describe("printing rules", () => {
       api,
     });
     await flush(el);
-    (api.listTills as ReturnType<typeof vi.fn>).mockClear();
+    (api.getLocations as ReturnType<typeof vi.fn>).mockClear();
 
     expect(q(el, "[data-test=drawer-policy-loc-1-gated]")).not.toBeNull();
     expect(q(el, "[data-test=drawer-policy-loc-1-open]")).not.toBeNull();
@@ -451,7 +339,7 @@ describe("printing rules", () => {
     await flush(el);
 
     expect(api.setDrawerOpenPolicy).toHaveBeenCalledWith("loc-1", "open");
-    expect(api.listTills).toHaveBeenCalledTimes(1);
+    expect(api.getLocations).toHaveBeenCalledTimes(1);
   });
 
   it("reflects the picked drawer policy in the segmented control (primary variant), surviving the reload", async () => {
@@ -500,9 +388,8 @@ describe("printing rules", () => {
     expect(banner).not.toContain("management.request_invalid");
   });
 
-  it("shows the no-tills / no-locations placeholders when the venue has neither", async () => {
+  it("shows the no-locations placeholder when the venue has none", async () => {
     const api = stubApi({
-      listTills: vi.fn().mockResolvedValue([]),
       getLocations: vi.fn().mockResolvedValue([]),
     });
     const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
@@ -510,7 +397,6 @@ describe("printing rules", () => {
     });
     await flush(el);
 
-    expect(text(el, "[data-test=no-tills]")).toBe(t("printers.no_tills", "es-ES"));
     expect(text(el, "[data-test=no-locations]")).toBe(t("printers.no_locations", "es-ES"));
   });
 
@@ -656,7 +542,6 @@ describe.each(["light", "dark"] as const)("printing rules accessibility (%s)", (
           ? vi.fn().mockRejectedValue({ code: "server.internal" })
           : vi.fn().mockResolvedValue([]),
       listStations: vi.fn().mockResolvedValue([]),
-      listTills: vi.fn().mockResolvedValue([]),
       getLocations: vi.fn().mockResolvedValue([]),
     });
     const { el, host } = await mountWidget<PrintingRulesScreen>(
@@ -675,30 +560,8 @@ describe.each(["light", "dark"] as const)("printing rules accessibility (%s)", (
       theme,
     );
     await flush(el);
-    expect((q(el, "[data-test=till-receipt-printer-t1]") as Dropdown).name).toBe(
-      "receiptPrinterId",
-    );
     await expectNoA11yViolations(host);
   });
-
-  it.each([true, false])(
-    "renders a till's drawer switch accessibly, switched %s",
-    async (opensDrawer) => {
-      const { el, host } = await mountWidget<PrintingRulesScreen>(
-        "dashboard-printing-rules-screen",
-        {
-          api: stubApi({
-            listPrinters: vi.fn().mockResolvedValue([{ ...printers[0]!, hasCashDrawer: true }]),
-            listTills: vi.fn().mockResolvedValue([{ ...tills[0]!, opensDrawer }]),
-          }),
-        },
-        theme,
-      );
-      await flush(el);
-      expect(q(el, "[data-test=till-opens-drawer-t1]")).not.toBeNull();
-      await expectNoA11yViolations(host);
-    },
-  );
 });
 
 it("uses a named shared watcher picker and switches for station routing", async () => {
@@ -734,143 +597,23 @@ it("ignores a second change while a save is still in flight", async () => {
   const pending = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const api = stubApi({ setTillReceiptPrinter: vi.fn().mockReturnValueOnce(pending) });
+  const api = stubApi({ setReceiptPrintMode: vi.fn().mockReturnValueOnce(pending) });
   const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", { api });
-  await vi.waitFor(() => expect(q(el, "[data-test=till-receipt-printer-t2]")).not.toBeNull());
+  await vi.waitFor(() => expect(q(el, "[data-test=print-mode-loc-1-never]")).not.toBeNull());
 
-  pickSelect(el, "[data-test=till-receipt-printer-t2]", "p1");
-  pickSelect(el, "[data-test=till-receipt-printer-t1]", "");
+  q(el, "[data-test=print-mode-loc-1-never]")!.click();
+  q(el, "[data-test=print-mode-loc-1-auto]")!.click();
 
-  expect(api.setTillReceiptPrinter).toHaveBeenCalledTimes(1);
-  expect(api.setTillReceiptPrinter).toHaveBeenCalledWith("t2", "p1");
+  expect(api.setReceiptPrintMode).toHaveBeenCalledTimes(1);
+  expect(api.setReceiptPrintMode).toHaveBeenCalledWith("loc-1", "never");
   release();
   await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
   await vi.waitFor(() =>
-    expect((q(el, "[data-test=till-receipt-printer-t1]") as Dropdown).disabled).toBe(false),
+    expect(
+      (q(el, "[data-test=print-mode-loc-1-auto]") as HTMLElement & { disabled: boolean }).disabled,
+    ).toBe(false),
   );
-  expect(api.setTillReceiptPrinter).toHaveBeenCalledTimes(1);
-});
-
-describe("a till's switch for opening its receipt printer's cash drawer", () => {
-  /** p1 with a drawer attached; t1 prints there with its switch as given, t2 prints nowhere. */
-  function drawerApi(opensDrawer: boolean, overrides: Partial<DashboardApi> = {}): DashboardApi {
-    return stubApi({
-      listPrinters: vi
-        .fn()
-        .mockResolvedValue([{ ...printers[0]!, hasCashDrawer: true }, printers[1]!]),
-      listTills: vi.fn().mockResolvedValue([{ ...tills[0]!, opensDrawer }, tills[1]!]),
-      ...overrides,
-    });
-  }
-  const opensDrawer = "[data-test=till-opens-drawer-t1]";
-
-  it("shows a named switch, reflecting the stored setting, only for a till whose receipt printer has a drawer", async () => {
-    for (const stored of [true, false]) {
-      const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-        api: drawerApi(stored),
-      });
-      await flush(el);
-
-      const control = q(el, opensDrawer)!;
-      expect(control.tagName).toBe("WT-SWITCH");
-      expect(control.getAttribute("label")).toBe(t("printers.opens_drawer"));
-      expect(control.shadowRoot!.querySelector("input")!.name).toBe("opensDrawer");
-      expect(switchChecked(el, opensDrawer)).toBe(stored);
-      expect(q(el, "[data-test=till-opens-drawer-t2]")).toBeNull();
-      cleanupWidgets();
-    }
-  });
-
-  it("shows no switch when the till's receipt printer has no drawer", async () => {
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api: stubApi(),
-    });
-    await flush(el);
-
-    expect(q(el, "[data-test=till-row-t1]")).not.toBeNull();
-    expect(q(el, opensDrawer)).toBeNull();
-  });
-
-  it("shows no switch when the till's receipt printer is switched off", async () => {
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api: stubApi({
-        listPrinters: vi
-          .fn()
-          .mockResolvedValue([{ ...printers[0]!, hasCashDrawer: true, active: false }]),
-      }),
-    });
-    await flush(el);
-
-    expect(q(el, opensDrawer)).toBeNull();
-  });
-
-  it("switching it off saves false for that till, then reloads", async () => {
-    const api = drawerApi(true);
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-
-    toggleSwitch(el, opensDrawer, false);
-    await flush(el);
-
-    expect(api.setTillOpensDrawer).toHaveBeenCalledWith("t1", false);
-    expect(api.listTills).toHaveBeenCalledTimes(2);
-  });
-
-  it("switching it on saves true", async () => {
-    const api = drawerApi(false);
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-
-    toggleSwitch(el, opensDrawer, true);
-    await flush(el);
-
-    expect(api.setTillOpensDrawer).toHaveBeenCalledWith("t1", true);
-  });
-
-  it("is disabled while the change is saving", async () => {
-    let release!: () => void;
-    const pending = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const api = drawerApi(true, { setTillOpensDrawer: vi.fn().mockReturnValueOnce(pending) });
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-
-    toggleSwitch(el, opensDrawer, false);
-    await el.updateComplete;
-    expect((q(el, opensDrawer) as HTMLElement & { disabled: boolean }).disabled).toBe(true);
-    release();
-    await vi.waitFor(() =>
-      expect((q(el, opensDrawer) as HTMLElement & { disabled: boolean }).disabled).toBe(false),
-    );
-  });
-
-  it("goes back to the stored setting and shows the refusal when the change is refused", async () => {
-    const api = drawerApi(true, {
-      setTillOpensDrawer: vi.fn().mockRejectedValue({
-        code: "management.request_invalid",
-        params: { field: "tillId" },
-      }),
-    });
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-
-    toggleSwitch(el, opensDrawer, false);
-    await flush(el);
-
-    expect(q(el, "[role=alert]")?.textContent).toContain(
-      codeMessage("management.request_invalid", "es-ES"),
-    );
-    expect(switchChecked(el, opensDrawer)).toBe(true);
-  });
+  expect(api.setReceiptPrintMode).toHaveBeenCalledTimes(1);
 });
 
 it("keeps a save's connection failure when the reads that failed beside it recover", async () => {
@@ -882,9 +625,9 @@ it("keeps a save's connection failure when the reads that failed beside it recov
   const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
     api,
   });
-  await vi.waitFor(() => expect(q(el, "[data-test=till-row-t1]")).not.toBeNull());
+  await vi.waitFor(() => expect(q(el, "[data-test=station-toggle-p1-s1]")).not.toBeNull());
 
-  vi.mocked(api.listTills).mockRejectedValue({ code: "connection.failed" });
+  vi.mocked(api.listStations).mockRejectedValue({ code: "connection.failed" });
   liveData.refresh();
   await vi.waitFor(() =>
     expect(text(el, "[role=alert]")).toBe(codeMessage("connection.failed", "es-ES")),
@@ -892,19 +635,16 @@ it("keeps a save's connection failure when the reads that failed beside it recov
   q(el, "[data-test=print-mode-loc-1-never]")!.click();
   await vi.waitFor(() => expect(api.setReceiptPrintMode).toHaveBeenCalledTimes(1));
   await flush(el);
-  const readsBefore = vi.mocked(api.listTills).mock.calls.length;
+  const readsBefore = vi.mocked(api.listStations).mock.calls.length;
   liveData.refresh();
   await vi.waitFor(() =>
-    expect(vi.mocked(api.listTills).mock.calls.length).toBeGreaterThan(readsBefore),
+    expect(vi.mocked(api.listStations).mock.calls.length).toBeGreaterThan(readsBefore),
   );
   await flush(el);
 
-  vi.mocked(api.listTills).mockResolvedValue([
-    ...tills,
-    { id: "t3", label: "Caja 3", locationId: "loc-1", receiptPrinterId: null, opensDrawer: true },
-  ]);
+  vi.mocked(api.listStations).mockResolvedValue([...stations, { ...stations[1]!, id: "s3" }]);
   liveData.refresh();
-  await vi.waitFor(() => expect(q(el, "[data-test=till-row-t3]")).not.toBeNull());
+  await vi.waitFor(() => expect(q(el, "[data-test=station-toggle-p1-s3]")).not.toBeNull());
   await flush(el);
   expect(text(el, "[role=alert]")).toBe(codeMessage("connection.failed", "es-ES"));
 });

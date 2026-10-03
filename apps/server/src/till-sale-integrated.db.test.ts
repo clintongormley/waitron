@@ -291,8 +291,9 @@ async function preparationTicketCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-/** Create a receipt printer (cloud_poll) and point the till at it. `receipt_print_mode` defaults to
- *  `auto`, so a filed sale auto-enqueues its receipt via the print-on-sale hook. */
+/** Create a receipt printer (cloud_poll) and point the request's device at it.
+ *  `receipt_print_mode` defaults to `auto`, so a filed sale auto-enqueues its receipt via the
+ *  print-on-sale hook. */
 async function makeReceiptPrinter(cfg: DeviceRequestConfig): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const { id } = await createPrinter(
@@ -305,7 +306,7 @@ async function makeReceiptPrinter(cfg: DeviceRequestConfig): Promise<string> {
         hasCashDrawer: true,
       },
     );
-    tx.run(sql`update tills set receipt_printer_id = ${id} where id = ${cfg.tillId}`);
+    tx.run(sql`update devices set receipt_printer_id = ${id} where id = ${cfg.origin.deviceId}`);
     return id;
   });
 }

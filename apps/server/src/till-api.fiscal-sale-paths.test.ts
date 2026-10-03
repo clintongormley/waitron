@@ -1809,23 +1809,6 @@ describe("handheld sales and device capability gates", () => {
     },
   );
 
-  it("refuses a handheld drawer open even when its profile declares the capability", async () => {
-    const { cfg, operatorId } = await setupVenue();
-    const app = new Hono();
-    mountTillApi(app, apiDeps(cfg), noopLog);
-    const deviceCookie = await enrolHandheldCookie(cfg, ["open-cash-drawer"]);
-    const sessionPair = await loginOperator(app, cfg, operatorId, deviceCookie);
-    const res = await app.request("/api/drawer/open", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
-      body: JSON.stringify({}),
-    });
-    expect(res.status).toBe(403);
-    expect(await res.json()).toMatchObject({
-      error: { code: "device.forbidden_action", params: { action: "drawer_open" } },
-    });
-  });
-
   it("allows a handheld CASH sale (200) and files exactly one chained registro under the node/SIF — parity with a counter cash sale", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
@@ -2374,7 +2357,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
       transport: "cloud_poll",
       pollId: `modifiers-${randomUUID()}`,
     });
-    await tx.execute(sql`update tills set receipt_printer_id=${printer.id} `);
+    await tx.execute(sql`update devices set receipt_printer_id=${printer.id} `);
     await tx.execute(
       sql`update locations set receipt_print_mode='never' where id=${cfg.locationId}`,
     );
@@ -2742,11 +2725,12 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
 });
 
 // Owner decision 2026-10-01 (B30): card slips are kept in the cash drawer.
-describe("a hand-keyed card payment opens the drawer of the till that took it, for the slip", () => {
-  /** A receipt printer for `tillId`, with or without a drawer, printing receipts automatically. */
-  async function receiptPrinterFor(
+describe("a hand-keyed card payment opens the drawer of the device that took it, for the slip", () => {
+  /** A new receipt printer, with or without a drawer, set on the `target` row, printing receipts
+   *  automatically. */
+  async function receiptPrinter(
     cfg: TillConfig,
-    tillId: string,
+    target: { table: "tills" | "devices"; id: string },
     hasCashDrawer: boolean,
   ): Promise<string> {
     return withTransaction(suite.db, async (tx) => {
@@ -2757,13 +2741,29 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
         hasCashDrawer,
       });
       await tx.execute(
-        sql`update tills set receipt_printer_id = ${printer.id} where id = ${tillId}`,
+        target.table === "tills"
+          ? sql`update tills set receipt_printer_id = ${printer.id} where id = ${target.id}`
+          : sql`update devices set receipt_printer_id = ${printer.id} where id = ${target.id}`,
       );
       await tx.execute(
         sql`update locations set receipt_print_mode = 'auto' where id = ${cfg.locationId}`,
       );
       return printer.id;
     });
+  }
+
+  /** The device's own receipt printer, the one its receipts and drawer use. */
+  const deviceReceiptPrinter = (cfg: TillConfig, deviceCookie: string, hasCashDrawer: boolean) =>
+    receiptPrinter(cfg, { table: "devices", id: deviceIdOf(deviceCookie) }, hasCashDrawer);
+
+  /** A till's receipt printer, which no receipt or drawer reads: the contrast a test sets beside a
+   *  device's own. */
+  const tillReceiptPrinter = (cfg: TillConfig, tillId: string, hasCashDrawer: boolean) =>
+    receiptPrinter(cfg, { table: "tills", id: tillId }, hasCashDrawer);
+
+  /** A till device whose profile allows the drawer. */
+  async function enrolDrawerTill(cfg: TillConfig): Promise<string> {
+    return enrolTillCookie(cfg, await seedProfileFF("till", ["open-cash-drawer", "take-cash"]));
   }
 
   /** The till an enrolled device rings on. */
@@ -2840,11 +2840,11 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
     });
   }
 
-  it("a card sale at the till with the drawer opens it once, audited as a card slip naming the sale, and a replay opens nothing more", async () => {
+  it("a card sale at the device with the drawer opens it once, audited as a card slip naming the sale, and a replay opens nothing more", async () => {
     const { cfg, each, app, on, operatorId } = await venueWithTill();
-    const deviceCookie = await enrolTillCookie(cfg);
+    const deviceCookie = await enrolDrawerTill(cfg);
     const tillId = await tillOf(deviceCookie);
-    const printerId = await receiptPrinterFor(cfg, tillId, true);
+    const printerId = await deviceReceiptPrinter(cfg, deviceCookie, true);
     const workingOrderId = randomUUID();
 
     const first = await cardSale(app, await on(deviceCookie), {
@@ -2872,24 +2872,22 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
     expect((await jobs()).drawer).toHaveLength(1);
   });
 
-  it("a card sale on a handheld opens no drawer, although the till it rings on has one", async () => {
+  it("a card sale on a handheld whose profile does not allow the drawer opens none, although its receipt printer and its till's have one", async () => {
     const { cfg, each, app, on } = await venueWithTill();
-    await receiptPrinterFor(cfg, cfg.tillId, true);
+    await tillReceiptPrinter(cfg, cfg.tillId, true);
     const profileId = await seedProfileFF("phone-portrait");
     const handheld = await enrolDeviceForTest(suite.db, cfg, {
       name: "Waiter phone",
       profileId,
       registerId: cfg.tillId,
     });
+    const handheldCookie = `${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`;
+    await deviceReceiptPrinter(cfg, handheldCookie, true);
 
-    const res = await cardSale(
-      app,
-      await on(`${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`),
-      {
-        workingOrderId: randomUUID(),
-        menuItemId: each.menuItemId,
-      },
-    );
+    const res = await cardSale(app, await on(handheldCookie), {
+      workingOrderId: randomUUID(),
+      menuItemId: each.menuItemId,
+    });
 
     expect(res.status).toBe(200);
     expect(await drawerOpenRows()).toEqual([]);
@@ -2897,10 +2895,9 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
   });
 
   it.each(["cash", "card"] as const)(
-    "a handheld on a till that opens the drawer prints a %s sale's receipt there and opens nothing, though its operator and profile may open a drawer",
+    "a handheld whose profile allows the drawer prints a %s sale's receipt on its own printer and opens the drawer, for the sale and by hand",
     async (method) => {
       const { cfg, each, app } = await venueWithTill();
-      await receiptPrinterFor(cfg, cfg.tillId, true);
       const [supervisor] = await suite.db
         .insert(persons)
         .values({ displayName: "Responsable", pinHash: hashPin("5555"), role: "supervisor" })
@@ -2917,6 +2914,7 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
         registerId: cfg.tillId,
       });
       const handheldCookie = `${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`;
+      const printerId = await deviceReceiptPrinter(cfg, handheldCookie, true);
       const session = (await loginSession(app, cfg, supervisor!.id, handheldCookie)).split(";")[0]!;
       const cookie = `${session}; ${handheldCookie}`;
 
@@ -2932,21 +2930,26 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
       const manual = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
 
       expect(res.status).toBe(200);
-      expect(manual.status).toBe(403);
-      expect(await manual.json()).toMatchObject({ error: { code: "device.forbidden_action" } });
-      expect(await drawerOpenRows()).toEqual([]);
+      expect(manual.status).toBe(200);
+      expect((await drawerOpenRows()).map((row) => [row.reason, row.printerId])).toEqual([
+        [method === "cash" ? "cash_sale" : "card_slip", printerId],
+        ["manual", printerId],
+      ]);
       const printed = await jobs();
-      expect(printed.drawer).toEqual([]);
+      expect(printed.drawer.map((payload) => [...payload])).toEqual([
+        [...DRAWER_KICK],
+        [...DRAWER_KICK],
+      ]);
       expect(printed.documents).toHaveLength(1);
       expect(decodeTicket(new Uint8Array(printed.documents[0]!))).toContain("VERI*FACTU");
     },
   );
 
-  it("a card sale at a till whose receipt printer has no drawer opens nothing, while the other till's printer has one", async () => {
+  it("a card sale at a device whose receipt printer has no drawer opens nothing, while its till's printer has one", async () => {
     const { cfg, each, app, on } = await venueWithTill();
-    await receiptPrinterFor(cfg, cfg.tillId, true);
-    const deviceCookie = await enrolTillCookie(cfg);
-    await receiptPrinterFor(cfg, await tillOf(deviceCookie), false);
+    const deviceCookie = await enrolDrawerTill(cfg);
+    await tillReceiptPrinter(cfg, await tillOf(deviceCookie), true);
+    await deviceReceiptPrinter(cfg, deviceCookie, false);
 
     const res = await cardSale(app, await on(deviceCookie), {
       workingOrderId: randomUUID(),
@@ -2961,12 +2964,12 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
   });
 
   it.each(["ticket_then_pay", "invoice_first"] as const)(
-    "collecting a placed %s order by hand-keyed card opens the till's drawer once for the slip, and a replay opens nothing more",
+    "collecting a placed %s order by hand-keyed card opens the device's drawer once for the slip, and a replay opens nothing more",
     async (orderFlow) => {
       const { cfg, each, app, cookie, on, operatorId } = await venueWithTill(orderFlow);
-      const deviceCookie = await enrolTillCookie(cfg);
+      const deviceCookie = await enrolDrawerTill(cfg);
       const tillId = await tillOf(deviceCookie);
-      const printerId = await receiptPrinterFor(cfg, tillId, true);
+      const printerId = await deviceReceiptPrinter(cfg, deviceCookie, true);
       const both = await on(deviceCookie);
 
       const workingOrderId = randomUUID();
@@ -3023,17 +3026,19 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
     ["invoice_first", "cash"],
     ["invoice_first", "card"],
   ] as const)(
-    "a handheld collecting a placed %s order by %s opens no drawer, although the till it rings on has one",
+    "a handheld whose profile does not allow the drawer collecting a placed %s order by %s opens none, although its receipt printer and its till's have one",
     async (orderFlow, method) => {
       const { cfg, each, app, cookie, on } = await venueWithTill(orderFlow);
-      await receiptPrinterFor(cfg, cfg.tillId, true);
+      await tillReceiptPrinter(cfg, cfg.tillId, true);
       const profileId = await seedProfileFF("phone-portrait", ["take-cash"]);
       const handheld = await enrolDeviceForTest(suite.db, cfg, {
         name: "Waiter phone",
         profileId,
         registerId: cfg.tillId,
       });
-      const both = await on(`${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`);
+      const handheldCookie = `${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`;
+      await deviceReceiptPrinter(cfg, handheldCookie, true);
+      const both = await on(handheldCookie);
 
       const workingOrderId = randomUUID();
       const park = await app.request("/api/working-orders", {
@@ -3064,10 +3069,10 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
     },
   );
 
-  it("a cash sale at the till with the drawer still opens it as a cash sale", async () => {
+  it("a cash sale at the device with the drawer still opens it as a cash sale", async () => {
     const { cfg, each, app, on } = await venueWithTill();
-    const deviceCookie = await enrolTillCookie(cfg);
-    await receiptPrinterFor(cfg, await tillOf(deviceCookie), true);
+    const deviceCookie = await enrolDrawerTill(cfg);
+    await deviceReceiptPrinter(cfg, deviceCookie, true);
     const workingOrderId = randomUUID();
 
     const res = await app.request("/api/sales", {

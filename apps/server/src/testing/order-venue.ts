@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
-import { invoiceSeries, sales, tills } from "@waitron/db";
+import { devices, invoiceSeries, sales } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recordCorrection, recordSale, recordVoid } from "@waitron/core";
 import { hashPin, loginWithPin, persons, startManagementSession } from "@waitron/identity";
@@ -42,9 +42,9 @@ const quiet: Logger = () => {};
 export async function provisionOrderVenue(db: Database): Promise<OrderVenue> {
   const venue = await provisionBillVenue(db);
   const [assigned] = await db
-    .select({ id: tills.receiptPrinterId })
-    .from(tills)
-    .where(eq(tills.id, venue.cfg.tillId));
+    .select({ id: devices.receiptPrinterId })
+    .from(devices)
+    .where(eq(devices.id, venue.deviceId));
   const invoiceFirstZone = (
     await inTx(venue, (tx) =>
       offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),

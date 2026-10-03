@@ -185,7 +185,9 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       { locationId: cfg.locationId },
       { name: "Recibos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
     );
-    await tx.run(sql`update tills set receipt_printer_id = ${printer.id}`);
+    await tx.run(
+      sql`update devices set receipt_printer_id = ${printer.id}, payment_slip_printer_id = ${printer.id}`,
+    );
     return { cfg, offers: await offerProducts(tx, cfg, { zone: "tables" }), productIds };
   });
 }

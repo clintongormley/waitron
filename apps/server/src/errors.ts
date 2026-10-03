@@ -687,9 +687,9 @@ declare module "@waitron/shared" {
      */
     "device.forbidden_station": { stationId: string };
     /**
-     * A device tried an action it may not perform: a handheld (`assertNotHandheld`) or a device whose
-     * profile lacks the capability (`assertDeviceCapability`), both in `device-session.ts` and both
-     * enforced on the server. `action` names the refused operation, a symbol the route passes.
+     * A device whose profile lacks the capability tried an action that needs it
+     * (`assertDeviceCapability`, `device-session.ts`), enforced on the server. `action` names the
+     * refused operation, a symbol the route passes.
      */
     "device.forbidden_action": { action: string };
     /** A cash payment from a device whose profile does not take cash (`assertTakesCash`). */
@@ -811,16 +811,11 @@ declare module "@waitron/shared" {
      */
     "setup.not_ready": Record<string, never>;
     /**
-     * A manual open-drawer request found no receipt printer set for the requesting till, so there is
-     * nothing to send the kick through. `tillId` names the misconfigured till.
+     * A manual open-drawer request found no active receipt printer on the requesting device, so
+     * there is nothing to send the kick through. `deviceId` names the device.
      */
-    "drawer.no_printer": { tillId: string };
+    "drawer.no_printer": { deviceId: string };
     "drawer.not_attached": { printerId: string };
-    /**
-     * A manual open-drawer request came from a till whose "opens the drawer" setting is off;
-     * `tillId` names it.
-     */
-    "drawer.till_switched_off": { tillId: string };
     /**
      * A promote was requested without the operator attesting that the OLD node is physically
      * neutralised. Software cannot verify a partitioned peer, and two submitters under one NIF is

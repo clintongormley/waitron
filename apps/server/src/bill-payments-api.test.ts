@@ -267,7 +267,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   const [deviceRow] = db.all<{ till_id: string }>(
     sql`select till_id from devices where id = ${device.deviceId}`,
   );
-  // On the till device's own till, which opens the drawer, so only the handheld rule keeps it shut.
+  // Its profile does not allow the drawer, though its receipt printer has one.
   const handheld = await enrolDeviceForTest(db, cfg, {
     name: "Terraza",
     profileId: seeded.handheldProfileId,
@@ -279,8 +279,10 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     registerId: deviceRow!.till_id,
   });
   const [admin] = db.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
-  // Every till, so the device's own till prints and opens its drawer whichever one it is.
-  db.run(sql`update tills set receipt_printer_id = ${seeded.printerId}`);
+  // Every device prints receipts and slips here; its profile decides whether it opens the drawer.
+  db.run(
+    sql`update devices set receipt_printer_id = ${seeded.printerId}, payment_slip_printer_id = ${seeded.printerId}`,
+  );
   const app = new Hono();
   mountTillApi(
     app,
@@ -3140,7 +3142,7 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
     const otherTill = await withTransaction(suite.db, async (tx) => {
       const [profile] = await tx
         .insert(deviceProfiles)
-        .values({ name: "Second till", formFactor: "till" })
+        .values({ name: "Second till", formFactor: "till", capabilities: ["open-cash-drawer"] })
         .returning({ id: deviceProfiles.id });
       const printer = await createPrinter(
         tx,
@@ -3158,8 +3160,9 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
       name: "Terraza till",
       profileId: otherTill.profileId,
     });
-    suite.db.run(sql`update tills set receipt_printer_id = ${otherTill.printerId}
-      where id = (select till_id from devices where id = ${device.deviceId})`);
+    suite.db.run(
+      sql`update devices set receipt_printer_id = ${otherTill.printerId} where id = ${device.deviceId}`,
+    );
     const session = await inTx((tx) =>
       loginWithPin(tx, { deviceId: device.deviceId, personId: venue.staffId, pin: "5555" }),
     );
@@ -3180,12 +3183,17 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
   });
 });
 
-describe("a till switched off from opening the drawer it prints to", () => {
+describe("a till whose profile does not allow the drawer it prints to", () => {
+  const setTillCapabilities = (capabilities: string[]) =>
+    suite.db.run(
+      sql`update device_profiles set capabilities = ${JSON.stringify(capabilities)}
+        where id = (select device_profile_id from devices where id = ${venue.deviceId})`,
+    );
   beforeEach(() => {
-    suite.db.run(sql`update tills set opens_drawer = false where id = ${venue.deviceTillId}`);
+    setTillCapabilities(["integrated-card-payment", "take-cash"]);
   });
   afterEach(() => {
-    suite.db.run(sql`update tills set opens_drawer = true where id = ${venue.deviceTillId}`);
+    setTillCapabilities(["integrated-card-payment", "open-cash-drawer", "take-cash"]);
   });
 
   async function opensFor(paymentId: string) {

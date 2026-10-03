@@ -602,13 +602,6 @@ async function seedTill(tenant: Tenant, name: string): Promise<string> {
   return row!.id;
 }
 
-async function tillReceiptPrinterId(tillId: string): Promise<string | null> {
-  const row = await suite.db.execute<{ receipt_printer_id: string | null }>(
-    sql`select receipt_printer_id from tills where id = ${tillId}`,
-  );
-  return row.rows[0]!.receipt_printer_id;
-}
-
 async function locationPrintMode(locationId: string): Promise<string> {
   const row = await suite.db.execute<{ receipt_print_mode: string }>(
     sql`select receipt_print_mode from locations where id = ${locationId}`,
@@ -624,68 +617,16 @@ async function locationDrawerPolicy(locationId: string): Promise<string> {
 }
 
 describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
-  it("sets, then clears, a till's receipt printer as a manager (persists both ways)", async () => {
-    const app = mountApp(tenantA);
-    const agent = await joinAndAccept(app, "Recibos agent");
-    const printerId = await createPrinter(app, agent.agentId, "Recibos");
-    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
-
-    const set = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
-      cookie: managerCookie,
-      body: { printerId },
-    });
-    expect(set.status).toBe(204);
-    expect(await tillReceiptPrinterId(tillId)).toBe(printerId);
-
-    const cleared = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
-      cookie: managerCookie,
-      body: { printerId: null },
-    });
-    expect(cleared.status).toBe(204);
-    expect(await tillReceiptPrinterId(tillId)).toBeNull();
-  });
-
-  it("404s a printer that is not one of the till's location's printers (printer.not_found, not the foreign-key 500)", async () => {
+  it("has no per-till receipt printer or drawer route", async () => {
     const app = mountApp(tenantA);
     const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
-    const res = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
-      cookie: managerCookie,
-      body: { printerId: randomUUID() },
-    });
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "printer.not_found" } });
-    expect(await tillReceiptPrinterId(tillId)).toBeNull();
-  });
-
-  it("400s an unknown till and a malformed printerId body", async () => {
-    const app = mountApp(tenantA);
-    // There is no `till.*` code.
-    const unknown = await send(
-      app,
-      "PATCH",
-      `/management-api/tills/${randomUUID()}/receipt-printer`,
-      {
-        cookie: managerCookie,
-        body: { printerId: null },
-      },
-    );
-    expect(unknown.status).toBe(400);
-    expect(await unknown.json()).toMatchObject({ error: { code: "management.request_invalid" } });
-
-    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
-    const noField = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
-      cookie: managerCookie,
-      body: {},
-    });
-    expect(noField.status).toBe(400);
-    expect(await noField.json()).toMatchObject({ error: { code: "management.request_invalid" } });
-
-    const badUuid = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
-      cookie: managerCookie,
-      body: { printerId: "not-a-uuid" },
-    });
-    expect(badUuid.status).toBe(400);
-    expect(await badUuid.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+    for (const [route, body] of [
+      [`/management-api/tills/${tillId}/receipt-printer`, { printerId: null }],
+      [`/management-api/tills/${tillId}/opens-drawer`, { opensDrawer: false }],
+    ] as const) {
+      const res = await send(app, "PATCH", route, { cookie: managerCookie, body });
+      expect(res.status).toBe(404);
+    }
   });
 
   it("sets a location's receipt print mode as a manager (persists)", async () => {
@@ -766,12 +707,7 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
     const withoutPrinterName = `Caja ${randomUUID()}`;
     const tillWith = await seedTill(tenantA, withPrinterName);
     const tillWithout = await seedTill(tenantA, withoutPrinterName);
-
-    const set = await send(app, "PATCH", `/management-api/tills/${tillWith}/receipt-printer`, {
-      cookie: managerCookie,
-      body: { printerId },
-    });
-    expect(set.status).toBe(204);
+    await suite.db.update(tills).set({ receiptPrinterId: printerId }).where(eq(tills.id, tillWith));
 
     const res = await send(app, "GET", "/management-api/tills", { cookie: managerCookie });
     expect(res.status).toBe(200);
@@ -864,27 +800,17 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
 
   it("require printer.manage on ALL config routes — 401 unauth, 403 staff, 2xx manager (gate proven by deletion via the shared `gated`)", async () => {
     const app = mountApp(tenantA);
-    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
-    const tillRoute = `/management-api/tills/${tillId}/receipt-printer`;
     const modeRoute = `/management-api/locations/${tenantA.locationId}/receipt-print-mode`;
     const policyRoute = `/management-api/locations/${tenantA.locationId}/drawer-open-policy`;
 
-    for (const route of [tillRoute, modeRoute, policyRoute]) {
+    for (const route of [modeRoute, policyRoute]) {
       const unauth = await send(app, "PATCH", route, {
-        body: { printerId: null, mode: "auto", policy: "gated" },
+        body: { mode: "auto", policy: "gated" },
       });
       expect(unauth.status).toBe(401);
       expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
     }
 
-    const staffTill = await send(app, "PATCH", tillRoute, {
-      cookie: staffCookie,
-      body: { printerId: null },
-    });
-    expect(staffTill.status).toBe(403);
-    expect(await staffTill.json()).toMatchObject({
-      error: { code: "authorization.not_permitted" },
-    });
     const staffMode = await send(app, "PATCH", modeRoute, {
       cookie: staffCookie,
       body: { mode: "never" },
@@ -903,10 +829,6 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
     });
 
     expect(
-      (await send(app, "PATCH", tillRoute, { cookie: managerCookie, body: { printerId: null } }))
-        .status,
-    ).toBe(204);
-    expect(
       (await send(app, "PATCH", modeRoute, { cookie: managerCookie, body: { mode: "auto" } }))
         .status,
     ).toBe(204);
@@ -918,82 +840,6 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
         })
       ).status,
     ).toBe(204);
-  });
-
-  it("switches a till's drawer off and on again as a manager, and the till list shows it", async () => {
-    const app = mountApp(tenantA);
-    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
-    const listed = async () => {
-      const res = await send(app, "GET", "/management-api/tills", { cookie: managerCookie });
-      const rows = (await res.json()) as Array<{ id: string; opensDrawer: boolean }>;
-      return rows.find((r) => r.id === tillId)!.opensDrawer;
-    };
-    const route = `/management-api/tills/${tillId}/opens-drawer`;
-    expect(await listed()).toBe(true);
-
-    const off = await send(app, "PATCH", route, {
-      cookie: managerCookie,
-      body: { opensDrawer: false },
-    });
-    expect(off.status).toBe(204);
-    expect(await listed()).toBe(false);
-
-    const on = await send(app, "PATCH", route, {
-      cookie: managerCookie,
-      body: { opensDrawer: true },
-    });
-    expect(on.status).toBe(204);
-    expect(await listed()).toBe(true);
-  });
-
-  it("refuses a drawer switch that is not a boolean, and an unknown till, changing nothing", async () => {
-    const app = mountApp(tenantA);
-    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
-    const route = `/management-api/tills/${tillId}/opens-drawer`;
-
-    for (const body of [{}, { opensDrawer: null }, { opensDrawer: "false" }, { opensDrawer: 0 }]) {
-      const res = await send(app, "PATCH", route, { cookie: managerCookie, body });
-      expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({
-        error: { code: "management.request_invalid", params: { field: "opensDrawer" } },
-      });
-    }
-    const unknown = await send(app, "PATCH", `/management-api/tills/${randomUUID()}/opens-drawer`, {
-      cookie: managerCookie,
-      body: { opensDrawer: false },
-    });
-    expect(unknown.status).toBe(400);
-    expect(await unknown.json()).toEqual({
-      error: { code: "management.request_invalid", params: { field: "tillId" } },
-    });
-
-    const [row] = await suite.db
-      .select({ opensDrawer: tills.opensDrawer })
-      .from(tills)
-      .where(eq(tills.id, tillId));
-    expect(row).toEqual({ opensDrawer: true });
-  });
-
-  it("requires printer.manage to switch a till's drawer — 401 unauth, 403 staff", async () => {
-    const app = mountApp(tenantA);
-    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
-    const route = `/management-api/tills/${tillId}/opens-drawer`;
-
-    const unauth = await send(app, "PATCH", route, { body: { opensDrawer: false } });
-    expect(unauth.status).toBe(401);
-    expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
-    const staff = await send(app, "PATCH", route, {
-      cookie: staffCookie,
-      body: { opensDrawer: false },
-    });
-    expect(staff.status).toBe(403);
-    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-
-    const [row] = await suite.db
-      .select({ opensDrawer: tills.opensDrawer })
-      .from(tills)
-      .where(eq(tills.id, tillId));
-    expect(row).toEqual({ opensDrawer: true });
   });
 });
 

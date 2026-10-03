@@ -102,12 +102,18 @@ useVenueDb({
     // Every station prints to the receipt printer, so a fire is seen as kitchen print jobs.
     db.run(sql`
       insert into station_printers (station_id, printer_id)
-      select distinct k.id, t.receipt_printer_id from kitchen_stations k, tills t
-      where t.receipt_printer_id is not null
+      select distinct k.id, d.receipt_printer_id from kitchen_stations k, devices d
+      where d.receipt_printer_id is not null
     `);
     const [, ...device] = venue.cookie.split("; ");
     supervisorCookie = [`${SESSION_COOKIE}=${session.token}`, ...device].join("; ");
     const staffDeviceId = await seedSessionDevice(db, venue.cfg);
+    // On the printer the venue's other devices print their receipts on.
+    db.run(sql`
+      update devices set receipt_printer_id =
+        (select receipt_printer_id from devices where id = ${venue.deviceId})
+      where id = ${staffDeviceId}
+    `);
     const staff = await inTx(venue, (tx) =>
       loginWithPin(tx, { deviceId: staffDeviceId, personId: venue.operatorId, pin: "5555" }),
     );

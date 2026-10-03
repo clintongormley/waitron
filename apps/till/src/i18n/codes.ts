@@ -347,7 +347,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   // only "try again", which the generic sentence says, and naming either would tell an unapproved
   // device something about the venue's state.
   // `device.forbidden_action` is deliberately UNMAPPED: the server refuses other actions with it too
-  // (`assertDeviceCapability` and `assertNotHandheld`, `apps/server/src/device-session.ts`), so the two
+  // (`assertDeviceCapability`, `apps/server/src/device-session.ts`), so the two
   // card reader paths (the counter's card collect and the bill pay dialog) show
   // `card_reader.not_set_up` themselves.
   "device.pairing_closed": {

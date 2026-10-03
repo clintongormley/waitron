@@ -68,7 +68,7 @@ import { readIssuedSales } from "./sale-due.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
-import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
 import { readVenueReceiptLanguageRules } from "./venue-locale.js";
 import {
   enqueueSaleDrawer,
@@ -652,7 +652,7 @@ export async function readSettledTicket(
 /** The action determines original versus duplicate; both only enqueue paper for an existing sale. */
 export async function printSaleReceipt(
   deps: { db: Database; backend: FiscalBackend },
-  cfg: TillConfig,
+  cfg: OriginConfig,
   workingOrderId: string,
   duplicate: boolean,
   language?: string,
@@ -1826,7 +1826,7 @@ export async function recordTillSale(
 
 export async function reprintSale(
   deps: { db: Database; backend: FiscalBackend },
-  cfg: TillConfig,
+  cfg: OriginConfig,
   workingOrderId: string,
   language?: string,
 ): Promise<void> {

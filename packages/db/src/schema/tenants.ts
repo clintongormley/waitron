@@ -39,7 +39,7 @@ export const fireControlMode = enumType(["waiter", "kitchen", "expo"]);
 
 /**
  * The per-venue RECEIPT PRINT MODE. `auto` (default): after a sale is filed, the server
- * auto-enqueues the customer receipt to the calling till's `receipt_printer_id`. `on_request` and
+ * auto-enqueues the customer receipt to the calling device's current receipt printer. `on_request` and
  * `never`: no auto-print. Governs ONLY the post-filing auto-enqueue; it touches no fiscal record,
  * and a manual reprint works in every mode.
  */
@@ -156,13 +156,9 @@ export const tills = table(
       .references(() => locations.id),
     /* v8 ignore stop */
     name: label("name").notNull(),
-    // Also the cash-drawer kick: the drawer is a printer capability, not a separate device. A till
-    // with no printer just doesn't print.
     /* v8 ignore start */
     receiptPrinterId: id("receipt_printer_id").references(() => printers.id),
     /* v8 ignore stop */
-    // On by default, so a till opens its receipt printer's drawer until a manager switches it
-    // off — several tills sharing one printer may all open it.
     opensDrawer: flag("opens_drawer").notNull().default(true),
     createdAt: ts("created_at").notNull().$defaultFn(now),
   },

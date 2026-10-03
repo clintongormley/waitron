@@ -4,11 +4,11 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
+  devices,
   locations,
   printJobs,
   printers,
   sales,
-  tills,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -167,7 +167,11 @@ async function venueWith(
       .where(eq(locations.id, cfg.locationId));
     const [profile] = await tx
       .insert(deviceProfiles)
-      .values({ name: "Barra", formFactor: "till", capabilities: ["take-cash"] })
+      .values({
+        name: "Barra",
+        formFactor: "till",
+        capabilities: ["open-cash-drawer", "take-cash"],
+      })
       .returning({ id: deviceProfiles.id });
     return {
       menuItemId: offers.offerFor(product.id),
@@ -191,8 +195,6 @@ async function venueWith(
   );
   const device = await enrolDeviceForTest(db, cfg, { name: "Barra", profileId });
   const deviceCookie = `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
-  // Enrolling made the device a till of its own; every till prints its receipts on the one printer.
-  await withTransaction(db, (tx) => tx.update(tills).set({ receiptPrinterId: printerId }));
   const login = await app.request("/api/session", {
     method: "POST",
     headers: { "content-type": "application/json", cookie: deviceCookie },
@@ -203,6 +205,8 @@ async function venueWith(
   const session = await withTransaction(db, (tx) =>
     loginWithPin(tx, { deviceId: sessionDeviceId, personId: staffId, pin: "5555" }),
   );
+  // Every device prints its receipts on the one printer.
+  await withTransaction(db, (tx) => tx.update(devices).set({ receiptPrinterId: printerId }));
   return {
     app,
     cfg,

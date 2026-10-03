@@ -39,7 +39,6 @@ import {
   DEV_DEVICE_HEADER,
   DEVICE_COOKIE,
   assertDeviceCapability,
-  assertNotHandheld,
   assertTakesCash,
   clearDeviceCookie,
   cookieDomainFor,
@@ -659,7 +658,7 @@ async function enrolDevDevices(): Promise<{
   };
 }
 
-describe("assertTakesCash, assertNotHandheld and requireSaleTillId on a resolved device", () => {
+describe("assertTakesCash and requireSaleTillId on a resolved device", () => {
   const binding = (
     capabilities: CapabilityFlag[],
     formFactor: FormFactor = "phone-portrait",
@@ -676,17 +675,6 @@ describe("assertTakesCash, assertNotHandheld and requireSaleTillId on a resolved
     receiptPrinterId: null,
     paymentSlipPrinterId: null,
     capabilities,
-  });
-
-  it("assertNotHandheld refuses a handheld and passes a till and a kitchen display", () => {
-    expect(() => assertNotHandheld(binding([]), "drawer_open")).toThrow(
-      expect.objectContaining({
-        code: "device.forbidden_action",
-        params: { action: "drawer_open" },
-      }),
-    );
-    expect(() => assertNotHandheld(binding([], "till"), "drawer_open")).not.toThrow();
-    expect(() => assertNotHandheld(binding([], "kds"), "drawer_open")).not.toThrow();
   });
 
   it("requireSaleTillId answers the device's till, and refuses a device with none", () => {
