@@ -5,6 +5,7 @@ import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { CloudConnectionStatus, DashboardApi } from "../api/client.js";
+import { DashboardQueries } from "../api/query-controller.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 @customElement("dashboard-cloud-services-screen")
@@ -61,11 +62,28 @@ export class CloudServicesScreen extends LitElement {
   @state() private confirmingStop = false;
   #generation = 0;
   #clock: ReturnType<typeof setTimeout> | undefined;
+  /** The status read's own failure, kept apart from `error` so its recovery never clears an action's. */
+  @state() private readError: string | undefined;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.readError = codeOf(error);
+    },
+  );
   override connectedCallback() {
     super.connectedCallback();
     this.busy = false;
     this.confirmingStop = false;
-    void this.#run(() => this.api.getCloudStatus());
+    const generation = this.#generation;
+    void this.#queries
+      .watch("getCloudStatus", [], (status) => {
+        this.readError = undefined;
+        if (this.busy) return;
+        this.status = status;
+      })
+      // Only the opening read takes focus: a background read fails again on every retry.
+      .catch(() => this.#focusError(generation));
   }
   override disconnectedCallback() {
     clearTimeout(this.#clock);
@@ -81,6 +99,7 @@ export class CloudServicesScreen extends LitElement {
     if (this.busy) return;
     this.busy = true;
     this.error = undefined;
+    this.readError = undefined;
     const generation = this.#generation;
     try {
       const result = await request();
@@ -97,11 +116,14 @@ export class CloudServicesScreen extends LitElement {
     } finally {
       if (generation === this.#generation) {
         this.busy = false;
-        await this.updateComplete;
-        if (this.error)
-          this.shadowRoot?.querySelector<HTMLElement>("[data-test=cloud-error]")?.focus();
+        if (this.error) await this.#focusError(generation);
       }
     }
+  }
+  async #focusError(generation: number) {
+    await this.updateComplete;
+    if (generation === this.#generation)
+      this.shadowRoot?.querySelector<HTMLElement>("[data-test=cloud-error]")?.focus();
   }
   #complete() {
     const s = this.status;
@@ -210,7 +232,7 @@ export class CloudServicesScreen extends LitElement {
         }}
         >${label}</wt-button
       >`;
-    const error = this.error || s?.replacementError;
+    const error = this.error || this.readError || s?.replacementError;
     return html`<h1>${t("nav.cloud")}</h1>
       <wt-card>
         ${

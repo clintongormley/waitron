@@ -264,6 +264,8 @@ export const QUERY_DEPENDENCIES = {
   listServers: ["node_membership", "nodes"],
   getBackupStatus: ["backup_status"],
   getStreamSettings: ["backup_status"],
+  // The answer is built from the box's own files and the process's role, not from any table.
+  getCloudStatus: [],
   listAlerts: ["incidents"],
   listHandledAlerts: ["incidents", "persons"],
 } as const;
