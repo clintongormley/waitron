@@ -291,6 +291,11 @@ describe("recovery after a crash (design §8 test 13)", () => {
   });
 
   it("keeps one open alert for two captures of another amount on two bills (no sale behind either)", async () => {
+    // Earlier cases leave their own pending payments and open alerts in this shared venue.
+    venue.db.run(
+      sql`update bill_payments set state = 'failed', failed_at = ${new Date().toISOString()}
+          where state = 'pending'`,
+    );
     await inTx(venue, (tx) =>
       tx
         .update(incidents)
@@ -305,12 +310,10 @@ describe("recovery after a crash (design §8 test 13)", () => {
 
     const pass = await settle();
 
-    // The pass meets an earlier test's mismatch first, so that one holds the open alert.
-    expect(pass.mismatched).toBeGreaterThanOrEqual(2);
+    expect(pass.mismatched).toBe(2);
     expect([await stateOf(first), await stateOf(second)]).toEqual(["pending", "pending"]);
     const open = await openMismatchIncidents();
-    expect(open).toHaveLength(1);
-    expect([first, second]).not.toContain(open[0]!.params.billPaymentId);
+    expect(open.map((row) => row.params.billPaymentId)).toEqual([first]);
   });
 });
 

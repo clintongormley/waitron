@@ -352,6 +352,31 @@ describe("reconcilePayments", () => {
     });
   });
 
+  it("raises an incident for a missingLocal whose hint names a working order that does not exist", async () => {
+    const result = await reconcilePayments(
+      deps(
+        new FakeSettlementReport([
+          settlement({
+            references: ["ext-ghost"],
+            hint: { workingOrderId: randomUUID(), paymentRef: "p-lost" },
+          }),
+        ]),
+      ),
+      PERIOD,
+      NOW,
+    );
+    expect(result.missingLocal).toHaveLength(1);
+    expect(result.incidentsRaised).toBe(1);
+    const { rows } = await suite.db.execute<{
+      code: string;
+      source: string;
+      device_id: string | null;
+    }>(sql`select code, source, device_id from incidents`);
+    expect(rows).toEqual([
+      { code: "payment.reconcile_missing_local", source: "payment_check", device_id: null },
+    ]);
+  });
+
   it("resolves each missingLocal candidate independently — one settlement's existing row must not clear another's", async () => {
     // The existence check is one batched query: a non-empty answer must not clear every candidate.
     const seeded = await seedWorkingOrder(suite.db, freshNif());

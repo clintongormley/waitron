@@ -196,7 +196,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
     expect(raised[0]!.error.params).toEqual({ paymentRef: "r", status: "REFUNDED" });
   });
 
-  it("raises the unactionable incidents of two devices' orders under one source, so they share one open alert", async () => {
+  it("hands the sink the unactionable incidents of two devices' orders under the payment check's origin", async () => {
     const { provider, attempting, state, raised } = await setup();
     await attempting("first", { status: "REFUNDED" });
     // A second order on another till and device.
@@ -212,7 +212,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
     );
     await provider.resolvePending(new Date(Date.now() + NOT_FOUND_GRACE_MS + 1000));
     expect((await state("second")).state).toBe("failed");
-    // Same source, same code and no sale: the open-alert index keeps the first and drops the rest.
+    // Neither call names a device: both carry the payment check's origin, this code and no sale.
     expect(raised.map((input) => [input.origin, input.error.code, input.saleId])).toEqual([
       [jobOrigin("payment_check"), "payment.pending_outcome_unactionable", undefined],
       [jobOrigin("payment_check"), "payment.pending_outcome_unactionable", undefined],

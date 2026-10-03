@@ -415,7 +415,8 @@ function incidentFor(
 }
 
 /** One aggregate incident for the settlements the processor attributed to us with a hint. One
- * with no hint is reported in the result and raises no incident: nothing says it is ours. */
+ * with no hint is reported in the result and raises no incident: it carries no link to a
+ * Waitron order. */
 async function raiseMissingLocal(
   tx: Transaction,
   deps: ReconcileDeps,

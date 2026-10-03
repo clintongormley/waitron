@@ -287,9 +287,7 @@ describe("the write path against the real Veri*Factu backend", () => {
         .from(registrosFacturacion)
         .where(eq(registrosFacturacion.saleId, saleId)),
     ).toHaveLength(1);
-    expect(await pg.db.select().from(incidents).where(eq(incidents.saleId, saleId))).toHaveLength(
-      0,
-    );
+    expect(await pg.db.select().from(incidents)).toHaveLength(0);
   });
 });
 

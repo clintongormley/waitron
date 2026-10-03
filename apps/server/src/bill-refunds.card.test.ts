@@ -1431,8 +1431,6 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
   });
 
   it("raises the alert for a refund pending over an hour, and not for one under it", async () => {
-    // On the second till, which no other case here refunds on: an open alert is raised once per
-    // till, so another case's pending refund would otherwise hold the till's one alert.
     const billId = await bill("Pulpo", "Croquetas");
     const card = await pay(billId, "card", "20.00", venue.cookie2);
     venue.card.scriptNextRefund({ made: false, answer: LOST });
