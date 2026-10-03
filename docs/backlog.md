@@ -2787,7 +2787,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     (B33, below), and an enrolled device, whose till the credit
     note is filed on, and refuses a bill holding a payment or with one in flight. Any placed order,
     invoiced or not, is now refused `order.payment_in_flight` while a card payment of it is running
-    at the reader in this process. The till's table screen calls it (B32, below). The owner
+    at the reader in this process. The till's table screen (B32, below) and the counter's waiting
+    list (B34, below) call it. The owner
     dropped the dashboard Orders screen's "Invoice not credited" mark (2026-10-02 ~12:05): such a bill is to show as Cancelled
     with its credit note. B27a landed first (#1027) with the mark — `invoiceNotCredited` in
     `apps/server/src/orders-list.ts` and its cases in `apps/server/src/orders-list.test.ts`; C126,
@@ -2839,15 +2840,87 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       shared "Cancel" beside "Cancel and credit" (owner, 2026-10-02). The owner also kept the
       cancel's answer empty, so the till goes on reading the credit note's number from the bills.
       Open:
-      - **Counter orders are not offered it.** A counter order placed and invoiced but unpaid (the
-        `invoice_first` mode) has no "Cancel and credit"; the counter's waiting list carries no
-        invoice field. Queued as lane B's B34 (owner, 2026-10-02).
+      - **Done by B34 (below): counter orders are offered it too.** A counter order placed and
+        invoiced but unpaid (the `invoice_first` mode) now shows "Cancel and credit" on the
+        counter's waiting list.
       - **The approver list is fetched with no time limit.** After a refusal for lack of
         permission the till asks `GET /api/cancel-credit-authorizers` who can approve, and until
         the answer arrives the dialog stays busy with its buttons disabled (`apps/till/src/till-app.ts`,
         the approvers fetch). The unpaid-departure and refund dialogs fetch theirs the same way and
         predate B32; a time limit belongs on all three together. Raised by B32's review by reading
         only; nobody reproduced a stalled answer.
+      - **The table's cancel keeps the dialog busy until the party's bills are read again.** After
+        a cancel or a refusal on the table path the dialog waits for that read before showing a
+        result (`#onCancelCredited` and `#onCancelCreditRefused` in `apps/till/src/till-app.ts`),
+        and the read (`getPartyBills`, `apps/till/src/api/client.ts`) has no time limit, so a read
+        that never answers leaves the dialog busy with no result shown though the cancel has
+        finished. Found by reading while reviewing B34, which changed the counter path to show its
+        result first; not reproduced on the table path.
+    - **Done by B34 (owner, 2026-10-02): a counter order invoiced when it was placed and still
+      unpaid can be cancelled with a credit note at the till.** It is the same action as B32's on a
+      table's bill. On the counter's waiting list (`apps/till/src/widgets/counter-waiting.ts`), an
+      order that is placed and whose invoice was issued shows "Cancel and credit" after Pay and
+      Hand over; an order not yet invoiced, and a paid one, do not. The waiting list "is drawn only
+      inside the held-orders card" (above), so a till layout without that card offers no Cancel and
+      credit for counter orders either. The waiting list (`GET /api/orders/counter-waiting`,
+      `listCounterWaiting` in `apps/server/src/working-order.ts`) now carries `invoiceNumber` on a
+      placed order whose invoice is issued, and on no other. The button opens B32's dialog, with
+      the same dismiss "Keep the bill", and sends the same cancel
+      (`POST /api/working-orders/:id/cancel`) with the same PIN path: without `sale.rectify` the
+      till asks for the PIN of someone who has it, as B33 built. The cancel itself needed no
+      change: `cancelPlacedOrder` reads the order's status, never its party, and C126's own cases
+      already cancel counter orders. After the cancel the dialog shows the result, then the till
+      reads the kitchen queue and, unless the operator has signed out meanwhile, the waiting list
+      again, and the order leaves the list when that read answers. The dialog does not wait for
+      those reads, so an operator can close it and press Cancel and credit on the same row again
+      before the list is read; that second cancel is refused with `working_order.not_placed`, the
+      refusal is shown and the list is read again. A press of the button does nothing while a
+      payment, a park or a place is in flight (`#counterOrderInFlight` in
+      `apps/till/src/till-app.ts`), as a press of the waiting list's Pay does. Cases:
+      `apps/server/src/counter-handover.test.ts`, `apps/server/src/cancel-invoiced-order.test.ts`
+      ("cancelling an invoiced counter order from the counter's waiting list") and
+      `apps/till/src/till-app-counter-cancel-credit.test.ts`. How it differs from the table's
+      path, and what is left open:
+      - **The result does not name the credit note.** The table's dialog reads the credit note's
+        number from the party's bills; the waiting list drops a cancelled order, and the cancel's
+        answer is empty, so the dialog says "A credit note was issued and the bill is cancelled"
+        without a number. Naming it would need the number from somewhere new; not decided.
+      - **A cancel that gets no answer is never shown as done.** On the table, the till reads the
+        bills again and shows a bill now cancelled as done. On the counter, an order missing from
+        the list may have been cancelled, or may have left it another way (paid and handed over,
+        say), so the dialog says the cancel may have been made and to check the waiting orders (a
+        new sentence, `cancel_credit.unconfirmed_counter`). The dialog shows this first, and then the
+        till reads the waiting list again.
+      - **A counter order open in the basket stays there after it is cancelled.** If the order is
+        in the basket's collect stage (after Place order, or after the waiting list's Pay) when it
+        is cancelled, the basket keeps showing it: after a counter cancel the till reads the
+        kitchen queue and the waiting list and does not touch the basket (`#onCancelCredited`,
+        `apps/till/src/till-app.ts`). By reading the code, not by running it, a later cash Pay
+        there is refused with `working_order.not_placed` (`collectOrder`,
+        `apps/server/src/till-sale.ts`) and a card Pay with `working_order.not_open`
+        (`payWorkingOrderIntegrated`, same file). Not fixed on this branch.
+      - **Two defects in other counter paths, found by reading the code, not reproduced; out of
+        B34's scope and not fixed here.** Both are in `apps/till/src/till-app.ts`. First, after a
+        sale, place, collect or hand-over at the counter, the till reads one to three lists one
+        after another (held orders, kitchen queue, waiting list) without checking, after the write
+        answers or between the reads, whether the operator has logged out and another signed in,
+        so a read that fails can show the next operator a notice about the previous operator's
+        action: `#onConfirmPayment`, the card path `#collectCard`, `#onPlaceOrder`,
+        `#onCollectOrder`, `#onFindBillPay`, `#onMarkCollected`, and `#onHandOverOrder`, which
+        checks the session before its kitchen-queue read but not between that read and the
+        waiting-list read. The B34 cancel path got that check on this branch, after a review
+        reproduced the problem there in real Chromium. Second, `#onConfirmPayment`,
+        `#collectCard`, `#onPlaceOrder`, `#onCollectOrder` and `#onFindBillPay` wait for their list
+        reads before clearing the flag that marks the basket busy (`submitting` or `placing`), and
+        the reads have no time limit, so a read that never answers would leave the basket blocked:
+        no next sale, no Pay, no Cancel and credit. The B34 cancel path was changed on this branch
+        to show its result before reading the lists.
+      Unlike the table's button, the counter's does not check for a payment on the order. Two ways
+      of giving a placed counter order a bill payment were tried while building B34 and both were
+      refused: taking the payment on the placed order (`working_order.not_open`), and placing an
+      order already holding one (`bill.payments_received`). Other ways were not looked for. If an
+      order does hold one, the cancel refuses it with `bill.payments_received` and the dialog says
+      so.
     - **`GET /api/cancel-credit-authorizers` (B33) lists the active holders of `sale.rectify`.**
       Every role holding `sale.rectify` today also holds `sale.refund`, `sale.void` and
       `cash.drawer`, so its cases cannot tell which of those it reads.

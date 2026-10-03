@@ -15,7 +15,8 @@ export interface PayWaitingOrderDetail {
 /**
  * The counter orders still waiting on the counter: sent and not paid, or paid and not handed over
  * (spec §5, "Counter service"). A pure view that renders nothing when no order waits; the app turns
- * its `hand-over-order` and `pay-waiting-order` events into API calls.
+ * its `hand-over-order` and `pay-waiting-order` events into API calls, and its
+ * `cancel-credit-waiting-order` event into the cancel and credit dialog.
  */
 @customElement("till-counter-waiting")
 export class TillCounterWaiting extends LitElement {
@@ -117,6 +118,17 @@ export class TillCounterWaiting extends LitElement {
                   aria-label=${`${t("waiting.hand_over")} ${scope}`}
                   @click=${() => this.#emit("hand-over-order", { id: order.id })}
                   >${t("waiting.hand_over")}</wt-button
+                >`
+              : nothing
+          }
+          ${
+            pay && order.invoiceNumber !== undefined
+              ? html`<wt-button
+                  data-waiting-cancel-credit
+                  variant="secondary"
+                  aria-label=${`${t("cancel_credit.action")} ${scope}`}
+                  @click=${() => this.#emit("cancel-credit-waiting-order", { id: order.id })}
+                  >${t("cancel_credit.action")}</wt-button
                 >`
               : nothing
           }
