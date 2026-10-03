@@ -1232,7 +1232,7 @@ Left as it was (#1142's run-it review, which found the same on `main`): on Devic
 failed one-off reload's message can stay after fresh data arrives.
 
 **A dashboard read that waits on an outside service can be cut off at 30 seconds and reported as a
-broken connection (A255, from lane A's W18a, #1135, 2026-10-03) — DONE (lane A's W18c).** Two
+broken connection (A255, from lane A's W18a, #1135, 2026-10-03) — DONE (#1145, lane A's W18c).** Two
 dashboard reads wait on a card provider, and each now passes its own limit to `createRequest`
 (`packages/dashboard-kit/src/request.ts`, the `timeLimitMs` option). A reader's status
 (`GET /management-api/payments/readers/:id/status`) and the provider's available readers
@@ -1310,7 +1310,7 @@ unpairs the row when a poll is rejected"; `apps/dashboard/src/screens/payments-s
 code and show `codeMessage(code)`, and decide separately whether a timed-out poll should unpair.
 
 **Several card readers' status reads at once can use up the browser's connections to the box
-(A260, found by W18c's review, 2026-10-03) — DONE (lane A's W18c, owner's option (b)).** At most
+(A260, found by W18c's review, 2026-10-03) — DONE (#1145, lane A's W18c, owner's option (b)).** At most
 two of the readers table's status reads are in flight at once, shared by every Payments screen in
 one browser tab, including one closed while its reads still wait (`takeStatusSlot`,
 `apps/dashboard/src/screens/payments-screen.ts`). A load a refresh has replaced, and a closed
