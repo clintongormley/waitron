@@ -627,6 +627,84 @@ rounding is pinned by the `rounds a fourth decimal place half away from zero` ca
 `packages/shared/src/scales.test.ts`. The precision guard's own subject is its two assertions:
 `stringToThousandths("1.2345")` is `1235`, and `assertQuantityPrecision` throws `quantity.invalid`.
 
+## A time stored as text and compared or sorted as text needs one spelling across its writers
+
+`ts`, `tsString`, `timeOfDay` and `day` (`packages/db/src/schema/columns.ts`) all emit `text`, and
+the engine orders text by its characters. JavaScript's own string comparison, run on 2026-10-03
+(Node v26.7.0):
+
+```
+node -e 'console.log("10:00:00Z"<"10:00:00.500Z", "2026-10-03T09:00:00+02:00"<"2026-10-03T07:30:00Z", "07:00">="6:00")'
+```
+
+It prints `false false false`, and each of the three is wrong as time: a whole second written
+without milliseconds sorts after the same second with them (`Z` follows `.`), an offset spelling
+sorts by its local digits, and an unpadded hour sorts after a padded one.
+
+The database's own comparison, measured on 2026-10-03 on `node:sqlite` (Node v26.7.0):
+
+```
+node -e 'const{DatabaseSync}=require("node:sqlite");console.log(Object.values(new DatabaseSync(":memory:").prepare("select ? < ? a, ? < ? b, ? >= ? c, ? <> ? d").get("10:00:00Z","10:00:00.500Z","2026-10-03T09:00:00+02:00","2026-10-03T07:30:00Z","07:00","6:00","12:00","12:00:00")).join(" "))'
+```
+
+It prints `0 0 0 1`: the database answers the first three the same wrong way as JavaScript, and the
+fourth says `12:00` and `12:00:00` are different values. The control: the same `select ? < ?` with
+the first pair reversed (`"10:00:00.500Z","10:00:00Z"`) prints `1`.
+
+**The instance (W22, #1134).** `addShift` and the shift update stored `starts_at` and `ends_at` as
+the caller sent them. `shifts_interval_ck` (`packages/workforce/src/schema/shifts.ts`) and the
+roster's ordering compare that text, so two valid times spelled differently were refused with a raw
+CHECK error instead of `shift.invalid`, or listed in the wrong order. The fix stores both ends as
+the UTC whole second through `shiftInterval` (`packages/workforce/src/clocking.ts`), and its review
+found the next problem before it landed: a shift written at `+02:00` would have read back at its
+UTC hour, because the roster and the shift dialog read the hour straight off the text. They now work it out from the
+stored offset (`wallClock` and `instantAt`, `apps/dashboard/src/date-utils.ts`).
+
+**The siblings, swept 2026-10-03 at `575aff691`.** Every `ts`, `tsString` and `timeOfDay` column
+was listed with `grep -rn --include='*.ts' -E '\b(ts|tsString|timeOfDay)\("' packages apps`, then
+each column's name was searched across `packages/` and `apps/` for a text comparison (drizzle's
+`lt`/`gt`/`lte`/`gte`/`asc`/`desc`/`min`/`max`, raw SQL, a CHECK in a migration, and JavaScript `<`,
+`>`, `localeCompare` and `.sort`) and for its writers. That was a reading sweep, not a run, and
+`day` columns were not part of it.
+
+- **One spelling on every product writer.** Apart from `shifts`, whose `shiftInterval`
+  (`packages/workforce/src/clocking.ts`) stores the UTC whole second without milliseconds, every
+  other instant column found compared or sorted as text is written through `nowIso()`, a `Date`'s
+  `toISOString()` or the `ts` mapping, which is also `toISOString()` — one spelling per column
+  either way. `time_entries` and `order_amendments` pin it in the database as well:
+  `time_entries_event_at_second_ck` and
+  `time_entries_recorded_at_second_ck` (`packages/workforce/drizzle/0000_baseline.sql`) and
+  `order_amendments_event_at_second_ck` (`packages/db/drizzle/0000_baseline.sql`), each a `glob`
+  for the whole-second `.000Z` spelling. The paging cursors that are compared with `created_at` or
+  `issued_at` are checked against the millisecond spelling before use (the `CURSOR` pattern in
+  `apps/server/src/orders-api.ts` and in `packages/adjustments/src/routes.ts`).
+- **Times of day normalised by a helper.** `bookings.booking_time`, `station_hours` and
+  `department_hours` go through a `storedTime` helper (`packages/bookings/src/bookings.ts`,
+  `packages/venue-service/src/operations.ts`) that pads `HH:MM` to `HH:MM:SS`, behind a route
+  pattern that allows `HH:MM` (and, for a booking, `HH:MM:SS`).
+- **`locations.day_cutover`** is written through `normalizeDayCutover`
+  (`packages/provisioning/src/venue-plan.ts`), which pads `HH:MM` and stores any other string
+  unchanged. Its one text comparison (`packages/venue-service/src/routing-store.ts`, `todayEnds`)
+  reads only the stored value's first five characters, which `readLocationClock`
+  (`packages/reporting/src/business-day.ts`) keeps. It runs only when those five pass the `HH:MM`
+  check there, so a value whose first five characters are not a time switches it off, while
+  anything after them is dropped unread (`06:00garbage` reads as `06:00`) — traced by reading.
+- **Writers that skip the helpers.** The configuration import
+  (`importConfigurationTables`, `apps/server/src/configuration-transfer.ts`) copies the time values
+  in a bundle's rows as written, without the normalising helpers; `station_hours` and
+  `department_hours` travel in a bundle (`packages/venue-service/src/configuration-transfer.ts`),
+  as do several `created_at` columns that are ordered. A bundle a Waitron venue exported carries
+  that venue's spellings, so it takes a hand-edited bundle to store another.
+  `station_hours_distinct_ck` (`packages/venue-service/src/schema/station-times.ts`,
+  `opens_at <> closes_at`) compares text, so an imported station row opening at `12:00` and
+  closing at `12:00:00` passes it. The demo seed (`apps/server/scripts/demo-seed/seed-floor.ts`)
+  writes `department_hours` as `HH:MM` beside the route's `HH:MM:SS`; the only text comparison
+  there is an `order by`, which two-digit hours still sort correctly, but its unique index sees
+  `12:00` and `12:00:00` as different values.
+
+Nothing guards the one-spelling rule across these columns. A new text time column, or a new writer
+of an old one, is seen by nothing unless its table carries a CHECK like the ones above.
+
 ## A new table is classified `ledger`, `state` or `local` (swap design §2.1) in its module's `<MODULE>_CLASSIFICATION` list via `classify()` (`@waitron/sync-enrolment`), and a table that must never be corrected is declared with `appendOnly()` instead
 
 The enforcement is no longer written into each migration by hand: `installAppendOnlyTriggers`
