@@ -63,7 +63,6 @@ describe("one composed pass against a migrated database", () => {
 
     const reconciler = new StripeReconciler({
       db: probe,
-      nodeId: "11111111-1111-4111-8111-111111111111", // origin not asserted here
       resolveAccount: stripeAccountResolver({
         db: probe,
         ring,

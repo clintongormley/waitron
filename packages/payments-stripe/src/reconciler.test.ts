@@ -28,7 +28,6 @@ function reconciler(
 ): StripeReconciler {
   return new StripeReconciler({
     db: suite.db,
-    nodeId: "11111111-1111-4111-8111-111111111111",
     resolveAccount: () => Promise.resolve({ report: client, refund: refunder }),
   });
 }
@@ -127,7 +126,6 @@ describe("StripeReconciler", () => {
     const client = new FakeStripeReport();
     const r = new StripeReconciler({
       db: suite.db,
-      nodeId: "11111111-1111-4111-8111-111111111111",
       resolveAccount: () => Promise.resolve({ report: client, refund: new FakeStripe() }),
       settlementLagMs: LAG_MS,
     });
@@ -148,7 +146,6 @@ describe("StripeReconciler", () => {
     const client = new FakeStripeReport();
     const r = new StripeReconciler({
       db: suite.db,
-      nodeId: "11111111-1111-4111-8111-111111111111",
       resolveAccount: () => {
         resolved += 1;
         return Promise.resolve({ report: client, refund: new FakeStripe() });

@@ -62,7 +62,6 @@ function deps(report: FakeSettlementReport, reverse = recordingReverse().fn): Re
     reverse,
     incidents: recordIncidentOnce,
     settlementLagMs: DEFAULT_SETTLEMENT_LAG_MS,
-    nodeId: "11111111-1111-4111-8111-111111111111",
   };
 }
 

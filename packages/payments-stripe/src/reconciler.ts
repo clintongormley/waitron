@@ -26,8 +26,6 @@ export interface StripeReconcilerOptions {
   /** Called per sweep, so a credential rotated while the host runs is picked up without a restart. */
   resolveAccount: () => Promise<StripeReconcileAccount>;
   settlementLagMs?: number;
-  /** Forwarded to `reconcilePayments` and `reverseViaStripe`, neither of which reads it. */
-  nodeId: string;
 }
 
 /** ONE reconciler audits every row written with `provider = "stripe"`, whichever adapter wrote it. */
@@ -47,7 +45,6 @@ export class StripeReconciler implements PaymentReconciler {
         reverse: (paymentRef) => this.reverse(account, paymentRef),
         incidents: recordIncidentOnce,
         settlementLagMs,
-        nodeId: this.opts.nodeId,
       },
       period,
       now,
@@ -65,7 +62,6 @@ export class StripeReconciler implements PaymentReconciler {
       "refund",
       undefined,
       {
-        nodeId: this.opts.nodeId,
         resolveProcessorRef: (externalRef) =>
           this.processorRef(account.report, externalRef, paymentRef),
       },

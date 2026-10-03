@@ -99,7 +99,6 @@ export interface ReaderStatus {
 export interface CardProviderBuildDeps {
   db: Database;
   ring: KeyRing;
-  nodeId: string;
   environment: "preproduction" | "production";
   /** Where a provider raises `payment.pending_outcome_unactionable`. */
   incidents: IncidentSink;

@@ -267,7 +267,7 @@ const RING = loadKeyRing({
  * (`CollectParams.readerRef`). The caching is what lets the two-readers-one-provider case prove
  * the ref is not baked in.
  */
-function fakePool(cfg: TillConfig, client: FakeStripe): CardProviderPool {
+function fakePool(_cfg: TillConfig, client: FakeStripe): CardProviderPool {
   const cache = new Map<string, StripeTerminalProvider>();
   return {
     get: (providerId) => {
@@ -276,7 +276,6 @@ function fakePool(cfg: TillConfig, client: FakeStripe): CardProviderPool {
         provider = new StripeTerminalProvider({
           client,
           db: suite.db,
-          nodeId: cfg.nodeId,
           // No real waiting: FakeStripe resolves synchronously, so a poll never actually stalls.
           poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
         });

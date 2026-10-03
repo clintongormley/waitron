@@ -94,8 +94,6 @@ interface Settle {
 export interface StripeTerminalProviderOptions {
   client: StripeClient;
   db: Database;
-  /** Passed to `reverseViaStripe`, which does not read it. */
-  nodeId: string;
   poll?: { maxAttempts?: number; intervalMs?: number; sleep?: (ms: number) => Promise<void> };
 }
 
@@ -443,9 +441,7 @@ export class StripeTerminalProvider implements PaymentProvider {
   }
 
   private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
-    return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, kind, amount, {
-      nodeId: this.opts.nodeId,
-    });
+    return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, kind, amount);
   }
 
   void(ref: string): Promise<PaymentResult> {

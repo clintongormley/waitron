@@ -4171,14 +4171,11 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   (`docs/compliance/asesor-questions.md:465`, `docs/compliance/verifactu-findings.md:678`); their tip
   claim is TRUE and the legal track is kept separate. **Next action:** whoever next works the
   compliance track widens those two sentences.
-- **Every test file under `apps/server/scripts/demo-seed/` carries its own copy of the demo seed's
-  venue-provisioning fixture**: every `*.test.ts` in that directory declares its own
-  `provisionVenue` and `nextNif`, and the `nextNif` bodies are identical apart from the eight-digit
-  base each one counts up from. The repo has already paid for this extraction once elsewhere
-  (`apps/server/src/testing/venue-fixtures.ts`), and it is free here because
-  `apps/server/vitest.config.ts` excludes `scripts/**` from coverage. **Next action:** extract
-  `apps/server/scripts/demo-seed/testing/provision-venue.ts` taking the NIF base as an argument —
-  each file genuinely needs its own range — and convert the siblings as they are next touched.
+- **Repeated demo-seed venue fixtures — DONE (W8).** The eight suites with a repeated
+  `provisionVenue`/`nextNif` pair now use
+  `apps/server/scripts/demo-seed/testing/provision-venue.ts`. Their original NIF ranges, check
+  letter styles, invoice locales, PINs and admin emails are passed explicitly. The dated-sales
+  suite has its own one-off venue setup and was outside this repeated group.
 - **`wt-combobox`** (#351): a searchable dropdown in `packages/ui` — pick one option or several
   (`multiple`), and optionally offer to add what was typed when nothing matches. Left out on
   purpose, per its design: searching on the server, disabling single options, taking part in a
@@ -4862,11 +4859,9 @@ characters. Left open:
   one: it skips a secret already on the current key (`rotateCredentials`,
   `packages/credentials/src/store.ts`), so an out-of-date one stops a key rotation only when it is
   on an older key, until it is re-entered.
-- **`CardProviderBuildDeps.nodeId` is dead weight — nothing reads it** (2026-09-16, traced through
-  both adapters). `packages/payments-sumup/src/provider.ts` declares the field and never touches it,
-  and `reverseViaStripe` (`packages/payments-stripe/src/reverse.ts`) requires it on its options
-  object but destructures only `resolveProcessorRef`. **Next action:** delete the field and the
-  values every caller passes, or, if a record path is meant to use it, wire it up and say where.
+- **Unused payment adapter `nodeId` arguments — DONE (W8).** The card-provider build path,
+  the SumUp adapter, and Stripe's terminal, device, reversal and reconciliation paths no longer
+  carry the value they did not read.
 - **A box that mints its certificate before NTP sync persists a wrong validity window**, with no
   renewal path yet. Ties to a time-health check and certificate renewal.
 - **Shutdown closes the database even when stopping background work fails (C71, #870)**
@@ -5468,10 +5463,7 @@ characters. Left open:
     refused as a raw CHECK error instead of `shift.invalid`, and `order by starts_at` can sort
     them wrongly. Normalising the spelling on write, as `appendToChain` does for `event_at`, is
     the unmade fix; the gap is stated at `assertShiftInterval`.
-  - A `nodeId` option nothing reads: `ReconcileDeps.nodeId` in `packages/payments/src/reconcile.ts`
-    is declared and never read, `packages/payments-stripe/src/reconciler.ts` passes one in, and the
-    SumUp provider's options declare one it never reads (`payments-sumup/src/provider.ts:47`,
-    passed in at `card-provider.ts:188`). Dropping the option is a code change.
+  - The unused payment reconciliation and SumUp provider `nodeId` options were removed in W8.
   - Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
     the SumUp provider's `resolvePending`) do not both succeed: #558's review measured
     `["fulfilled","payment.not_found"]`, so the second pass throws partway instead of skipping the
@@ -6018,19 +6010,20 @@ behaviour — the drain deliberately collects the rows an orphaned writer left �
 decision, not a cleanup. **Next action:** decide whether a read-only body should take the lock at
 all.
 
-**Six hand-rolled "does this table exist?" probes, three copies of one SQL identifier validator, and
-two cause-chain walkers — OPEN (found 2026-09-23, task F1's review wave).** The table probe is
-spelled out in `packages/db`'s `deployment.ts`, `node-membership.ts` and `mirror-config.ts`, in
-`packages/migrations`' `schema-version.ts` and `journal-hashes.ts`, and generically (but privately)
-in `packages/catalogue/src/categories.ts` as `tablePresent`. The identifier validator is in
+**Three copies of one SQL identifier validator and two cause-chain walkers — OPEN (found
+2026-09-23, task F1's review wave).** W8 replaced the probes in
+`packages/db/src/deployment.ts`, `packages/db/src/node-membership.ts`,
+`packages/db/src/mirror-config.ts`, `packages/migrations/src/schema-version.ts`,
+`packages/migrations/src/journal-hashes.ts` and `packages/catalogue/src/categories.ts` with
+`@waitron/db`'s `tableExists`. `apps/server/src/restore-stream.ts` still has a one-table probe;
+`apps/server/scripts/dev-setup.ts` checks two table names in one query. The identifier validator is in
 `packages/db/src/testing/identifiers.ts`, `packages/db/src/change-feed.ts` and
 `packages/store/src/append-only.ts` — the first two are in the SAME package. The cause-chain walk is
 in `packages/shared/src/engine-failure.ts` and again in `packages/db/src/constraint-target.ts`, and
 that one is a regression: `unique-violation.ts` used to import the shared walker and now uses the
 local copy, leaving `firstCodeInCauseChain` with no product caller at all. **Next action:** export
-one `tableExists` from `@waitron/db` and one validator from `@waitron/shared`; `packages/store`
-depends on nothing today, and `@waitron/shared` depends on nothing either, so that edge closes no
-loop.
+one validator from `@waitron/shared`; `packages/store` depends on nothing today, and
+`@waitron/shared` depends on nothing either, so that edge closes no loop.
 
 **`resolveEnvironment` and `deploymentEnvironment` are two hand-maintained copies of one four-branch
 table — OPEN (found 2026-09-23, task F1's review wave).** `packages/provisioning/src/environment.ts`

@@ -186,7 +186,6 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
     return new SumUpCloudProvider({
       client: deferredClient({ db: deps.db, ring: deps.ring }),
       db: deps.db,
-      nodeId: deps.nodeId,
       incidents: deps.incidents,
     });
   },

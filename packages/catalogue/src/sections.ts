@@ -1,8 +1,8 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { type Transaction } from "@waitron/db";
+import { tableExists, type Transaction } from "@waitron/db";
 import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
 import { batches } from "./batches.js";
-import { allTopLevelProducts, tablePresent } from "./categories.js";
+import { allTopLevelProducts } from "./categories.js";
 import { findContentTranslationGap } from "./content-languages.js";
 import { sectionMembers, sections } from "./schema/sections.js";
 import {
@@ -75,7 +75,7 @@ function isHexColor(value: unknown): value is string {
 
 /** Does the media library hold this file? Never, where the media module is not installed. */
 async function mediaImageExists(tx: Transaction, filename: string): Promise<boolean> {
-  if (!(await tablePresent(tx, "media_images"))) return false;
+  if (!(await tableExists(tx, "media_images"))) return false;
   // The media module owns the reference. The row cannot be deleted between this read and the
   // write that depends on it: one write transaction runs on the venue file at a time, so there is
   // no concurrent deleter to hold the reference against.

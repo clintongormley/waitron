@@ -86,7 +86,6 @@ describe("createCardProviderPool", () => {
       providers: [fakeContribution("sumup", build)],
       db: suite.db,
       ring,
-      nodeId: "node-1",
       environment: "preproduction",
       incidents,
     });
@@ -104,7 +103,6 @@ describe("createCardProviderPool", () => {
       providers: [fakeContribution("sumup", build)],
       db: suite.db,
       ring,
-      nodeId: "node-1",
       environment: "preproduction",
       incidents,
     });
@@ -127,7 +125,6 @@ describe("createCardProviderPool", () => {
       providers: [fakeContribution("sumup", () => fakeProvider("sumup"))],
       db: suite.db,
       ring,
-      nodeId: "node-1",
       environment: "preproduction",
       incidents,
     });
@@ -147,7 +144,6 @@ describe("createCardProviderPool", () => {
       providers: [fakeContribution("sumup", build)],
       db: suite.db,
       ring,
-      nodeId: "node-1",
       environment: "preproduction",
       incidents,
     });
@@ -164,7 +160,6 @@ describe("createCardProviderPool", () => {
       providers: [SUMUP_CARD_PROVIDER],
       db: suite.db,
       ring,
-      nodeId: "node-1",
       environment: "preproduction",
       incidents,
     });
@@ -181,7 +176,6 @@ describe("createCardProviderPool", () => {
       providers: [],
       db: suite.db,
       ring,
-      nodeId: "node-1",
       environment: "preproduction",
       incidents,
     });

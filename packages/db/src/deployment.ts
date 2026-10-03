@@ -4,6 +4,7 @@ import type { Database, Transaction } from "./client.js";
 import { now } from "./schema/columns.js";
 import { deployment } from "./schema/deployment.js";
 import { nodeRoles } from "./schema/node-roles.js";
+import { tableExists } from "./table-exists.js";
 import "./errors.js";
 
 /**
@@ -30,10 +31,7 @@ export type DeploymentEnvironment = "production" | "preproduction";
  * thing.
  */
 export async function deploymentTableExists(db: Database): Promise<boolean> {
-  const present = await db.execute<{ name: string }>(
-    sql`select name from sqlite_master where type = 'table' and name = ${"deployment"}`,
-  );
-  return present.rows.length > 0;
+  return tableExists(db, "deployment");
 }
 
 /**
@@ -84,15 +82,6 @@ export type DeploymentMode = "primary" | "mirror";
  * `primary` — or sells only. */
 export type SingletonRole = "primary" | "secondary";
 
-/** Whether `node_roles` exists behind this handle — read off the catalogue for the reason given on
- * {@link deploymentTableExists}. */
-async function nodeRolesTableExists(db: Database): Promise<boolean> {
-  const present = await db.execute<{ name: string }>(
-    sql`select name from sqlite_master where type = 'table' and name = ${"node_roles"}`,
-  );
-  return present.rows.length > 0;
-}
-
 /**
  * Both of one node's axes, `mode` and `singleton_role`, from ONE read of that node's row, so the
  * pair is never torn — never the `(mirror, primary)` pair `node_roles_role_valid_ck` forbids. A
@@ -103,7 +92,7 @@ export async function readDeploymentAxes(
   db: Database,
   nodeId: string,
 ): Promise<{ mode: DeploymentMode; singletonRole: SingletonRole }> {
-  if (!(await nodeRolesTableExists(db))) return { mode: "primary", singletonRole: "primary" };
+  if (!(await tableExists(db, "node_roles"))) return { mode: "primary", singletonRole: "primary" };
   const [row] = await db
     .select({ mode: nodeRoles.mode, singletonRole: nodeRoles.singletonRole })
     .from(nodeRoles)

@@ -11,8 +11,6 @@ import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { FakeSumUp } from "./testing/fake-sumup.js";
 import { SumUpCloudProvider } from "./provider.js";
 
-const NODE = "11111111-1111-4111-8111-111111111111";
-
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 describe("the sumup cloud adapter's reader requirement", () => {
@@ -23,7 +21,6 @@ describe("the sumup cloud adapter's reader requirement", () => {
     const provider = new SumUpCloudProvider({
       client: new FakeSumUp(),
       db: suite.db,
-      nodeId: NODE,
       incidents: () => Promise.resolve(true),
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });

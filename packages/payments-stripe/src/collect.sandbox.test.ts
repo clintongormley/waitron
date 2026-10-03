@@ -71,7 +71,6 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     const provider = new StripeTerminalProvider({
       client: stripeClient(stripe),
       db: suite.db,
-      nodeId: "11111111-1111-4111-8111-111111111111",
       poll: { maxAttempts: 40, intervalMs: 500 },
     });
     // The reader needs the PaymentIntent handed to `processPaymentIntent` before
@@ -98,7 +97,6 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     const provider = new StripeTerminalProvider({
       client,
       db: suite.db,
-      nodeId: "11111111-1111-4111-8111-111111111111",
       poll: { maxAttempts: 40, intervalMs: 500 },
     });
     const collecting = provider.collect({
@@ -133,7 +131,6 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     const provider = new StripeTerminalProvider({
       client,
       db: suite.db,
-      nodeId: "11111111-1111-4111-8111-111111111111",
     });
     const intent = await client.createPaymentIntent({
       amount: decimal("12.10"),

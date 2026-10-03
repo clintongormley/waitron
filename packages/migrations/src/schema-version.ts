@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
-import type { Database } from "@waitron/db";
+import { tableExists, type Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { type MigrationSetSource, resolveExistingMigrationsFolder } from "./manifest.js";
 import "./errors.js";
@@ -55,11 +55,8 @@ export async function appliedSchemaVersion(
   if (!DRIZZLE_MIGRATIONS_TABLE.test(set.table)) {
     throw new AppError("migrations.invalid_table", { table: set.table });
   }
-  // The table name is a VALUE here, so it binds; it is the `from "<table>"` below that cannot.
-  const present = await db.execute<{ n: number }>(
-    sql`select cast(count(*) as int) as n from sqlite_master where type = 'table' and name = ${set.table}`,
-  );
-  if (present.rows[0]!.n === 0) return 0;
+  if (!(await tableExists(db, set.table))) return 0;
+  // SQL cannot bind an identifier; the guard above confines this one to [a-z_].
   const result = await db.execute<{ n: number }>(
     sql.raw(`select cast(count(*) as int) as n from "${set.table}"`),
   );

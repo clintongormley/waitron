@@ -78,8 +78,6 @@ function refundOutcomeOf(status: string): RefundOutcome {
 export interface SumUpCloudProviderOptions {
   client: SumUpClient;
   db: Database;
-  /** Nothing reads it. */
-  nodeId: string;
   /** Where `resolvePending` raises `payment.pending_outcome_unactionable`. */
   incidents: IncidentSink;
   poll?: { maxAttempts?: number; intervalMs?: number; sleep?: (ms: number) => Promise<void> };

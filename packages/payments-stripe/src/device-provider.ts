@@ -40,8 +40,6 @@ const FORWARD_RETRY_MS = 5 * 60 * 1000;
 export interface StripeOnDeviceProviderOptions {
   client: StripeDeviceClient;
   db: Database;
-  /** Passed to `reverseViaStripe`, which does not read it. */
-  nodeId: string;
 }
 
 /** The on-device (Tap-to-Pay) Stripe `PaymentProvider`. `collect` writes its row AFTER the money
@@ -215,9 +213,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
   }
 
   private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
-    return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, kind, amount, {
-      nodeId: this.opts.nodeId,
-    });
+    return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, kind, amount);
   }
 
   void(ref: string): Promise<PaymentResult> {

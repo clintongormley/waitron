@@ -22,8 +22,6 @@ export interface StripeRefunder {
 }
 
 export interface ReverseViaStripeOptions {
-  /** Not read by `reverseViaStripe`. */
-  nodeId: string;
   /** Maps the stored `external_ref` to the identifier `stripe.refunds` addresses. Defaults to
    * identity, which suits the terminal and on-device rows (they store a PaymentIntent id); a hosted
    * row stores a Checkout Session id, which the refund API cannot address. */
@@ -42,7 +40,9 @@ export async function reverseViaStripe(
   ref: string,
   kind: "void" | "refund",
   amount: Decimal | undefined,
-  { resolveProcessorRef = (externalRef) => Promise.resolve(externalRef) }: ReverseViaStripeOptions,
+  {
+    resolveProcessorRef = (externalRef) => Promise.resolve(externalRef),
+  }: ReverseViaStripeOptions = {},
 ): Promise<PaymentResult> {
   // Network calls — the refund and `resolveProcessorRef` — stay outside every transaction.
   const inTransaction = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>

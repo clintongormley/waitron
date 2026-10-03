@@ -10,12 +10,10 @@ import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { applyVenue, planVenue } from "@waitron/provisioning";
-import { ALL_MODULES } from "../../src/modules.js";
-import { hashPassword, hashPin } from "@waitron/identity";
 import { seedFloor } from "./seed-floor.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 
 const LOCALE: SeedLocale = "en";
 
@@ -24,49 +22,10 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// One NIF per provisioned venue.
-let nifCounter = 0;
-function nextNif(): string {
-  nifCounter += 1;
-  return `${String(60_000_000 + nifCounter).padStart(8, "0")}K`;
-}
-
-async function provisionVenue(): Promise<{ locationId: string }> {
-  const venue = await applyVenue(
-    planVenue(
-      {
-        country: "ES",
-        taxId: nextNif(),
-        legalName: "Casa Delgado SL",
-        location: {
-          name: "Sala principal",
-          fiscalTerritory: "ES-common",
-          invoiceLocales: [SEED_INVOICE_LOCALE[LOCALE]],
-          operationDescription: "Venta en establecimiento",
-          addressLine1: "Calle Mayor 1",
-          addressLine2: null,
-          postalCode: "28013",
-          city: "Madrid",
-          province: "Madrid",
-          timeZone: "Europe/Madrid",
-          dayCutover: "05:00",
-        },
-        tillName: "Caja 1",
-        seriesCode: "A",
-        rectificativeSeriesCode: "R",
-        admin: {
-          displayName: "Administradora",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
-          email: "owner@example.test",
-        },
-      },
-      ALL_MODULES,
-    ),
-    { db: suite.db, modules: ALL_MODULES },
-  );
-  return { locationId: venue.locationId };
-}
+const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
+  nifBase: 60_000_000,
+  invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
+});
 
 describe("seedFloor", () => {
   it("creates restaurant and deli service zones, the placed restaurant floor, and statuses", async () => {

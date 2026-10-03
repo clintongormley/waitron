@@ -59,7 +59,6 @@ describe("concurrent reconcile sweeps", () => {
       },
       incidents: recordIncidentOnce,
       settlementLagMs: DEFAULT_SETTLEMENT_LAG_MS,
-      nodeId: "11111111-1111-4111-8111-111111111111",
     });
 
     // Both sweeps take the one handle a host can build; the queue, not this test, orders them.

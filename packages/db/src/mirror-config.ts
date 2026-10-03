@@ -1,7 +1,8 @@
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Database } from "./client.js";
 import { now } from "./schema/columns.js";
 import { mirrorConfig } from "./schema/mirror-config.js";
+import { tableExists } from "./table-exists.js";
 
 /**
  * A cloud mirror's non-secret connection config: where the mirror dials to reach its box and how it
@@ -27,10 +28,7 @@ export async function readMirrorConfig(
   db: Database,
   nodeId: string,
 ): Promise<MirrorConnection | null> {
-  const present = await db.execute<{ name: string }>(
-    sql`select name from sqlite_master where type = 'table' and name = ${"mirror_config"}`,
-  );
-  if (present.rows.length === 0) return null;
+  if (!(await tableExists(db, "mirror_config"))) return null;
   const [row] = await db
     .select({
       relayUrl: mirrorConfig.relayUrl,

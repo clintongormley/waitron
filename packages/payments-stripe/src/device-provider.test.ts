@@ -28,13 +28,11 @@ import {
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 const AT = new Date("2026-07-24T10:00:00Z");
-const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 function providerFor(client: FakeStripeDevice): StripeOnDeviceProvider {
   return new StripeOnDeviceProvider({
     client,
     db: suite.db,
-    nodeId: TEST_NODE_ID,
   });
 }
 
@@ -267,7 +265,7 @@ describe("StripeOnDeviceProvider.forward", () => {
         return typeof value === "function" ? (value as () => unknown).bind(target) : value;
       },
     }) as Database;
-    const counting = new StripeOnDeviceProvider({ client, db: counted, nodeId: TEST_NODE_ID });
+    const counting = new StripeOnDeviceProvider({ client, db: counted });
 
     client.queueResult({ settled: [], declined: [] });
     const result = await counting.forward(AT);

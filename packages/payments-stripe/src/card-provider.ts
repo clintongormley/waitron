@@ -177,7 +177,6 @@ export function createStripeCardProvider(
           makeStripe,
         }),
         db: deps.db,
-        nodeId: deps.nodeId,
       });
     },
 
