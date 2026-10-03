@@ -43,6 +43,21 @@ export {
   deleteDeviceProfile,
 } from "./device-profile-store.js";
 export type { DeviceProfileRow } from "./device-profile-store.js";
+export {
+  readProfilePrinterLists,
+  setProfilePrinterLists,
+  resettleDevicesOnProfile,
+  firstUsablePrinters,
+  printerChoices,
+  chooseDevicePrinter,
+} from "./device-printers.js";
+export type {
+  PrinterRole,
+  ProfilePrinterLists,
+  PrinterChoice,
+  DevicePrinterField,
+  ChooseDevicePrinterResult,
+} from "./device-printers.js";
 export { getTenantTheme, putTenantTheme } from "./theme-store.js";
 export { getReceipt, putReceipt } from "./receipt-store.js";
 

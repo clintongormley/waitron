@@ -91,6 +91,7 @@ export interface DeviceBinding {
   tillId: string | null;
   deviceProfileId: string | null;
   receiptPrinterId: string | null;
+  paymentSlipPrinterId: string | null;
   capabilities: CapabilityFlag[];
 }
 
@@ -104,6 +105,7 @@ const deviceBindingColumns = {
   tillId: devices.tillId,
   deviceProfileId: devices.deviceProfileId,
   receiptPrinterId: devices.receiptPrinterId,
+  paymentSlipPrinterId: devices.paymentSlipPrinterId,
   capabilities: deviceProfiles.capabilities,
 };
 
@@ -154,6 +156,7 @@ function toDeviceBinding(
     tillId: row.tillId,
     deviceProfileId: row.deviceProfileId,
     receiptPrinterId: row.receiptPrinterId,
+    paymentSlipPrinterId: row.paymentSlipPrinterId,
     capabilities: row.capabilities as CapabilityFlag[],
   };
 }

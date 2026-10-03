@@ -151,6 +151,7 @@ const NO_BINDINGS = {
   tillId: null,
   watcherId: null,
   receiptPrinterId: null,
+  paymentSlipPrinterId: null,
   // `enrolDeviceFixture`'s kds profile declares no capabilities, so the binding carries `[]`.
   capabilities: [],
 } as const;
@@ -510,6 +511,7 @@ describe("requireDevice (venue database)", () => {
         tillId,
         deviceProfileId,
         receiptPrinterId: null,
+        paymentSlipPrinterId: null,
         // The `till` profile declares both fenced flags — carried on the binding by the profile join.
         capabilities: ["integrated-card-payment", "open-cash-drawer"],
       },
@@ -717,6 +719,7 @@ describe("assertTakesCash", () => {
     tillId: null,
     deviceProfileId: randomUUID(),
     receiptPrinterId: null,
+    paymentSlipPrinterId: null,
     capabilities,
   });
 

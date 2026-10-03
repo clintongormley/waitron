@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import { hashSecret, verifySecretAsync } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
-import type { FormFactor } from "@waitron/layouts";
+import { firstUsablePrinters, type FormFactor } from "@waitron/layouts";
 import { resolveDeviceBinding } from "./device.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -357,6 +357,7 @@ export async function acceptDeviceJoinRequest(
     registerId: input.registerId,
   });
 
+  const printers = await firstUsablePrinters(tx, input.profileId, row.locationId);
   await tx.insert(devices).values({
     id: row.id,
     locationId: row.locationId,
@@ -364,6 +365,8 @@ export async function acceptDeviceJoinRequest(
     watcherId: binding.watcherId,
     tillId: binding.tillId,
     deviceProfileId: input.profileId,
+    receiptPrinterId: printers.receiptPrinterId,
+    paymentSlipPrinterId: printers.paymentSlipPrinterId,
     label: row.label,
     tokenHash: row.tokenHash,
     active: true,

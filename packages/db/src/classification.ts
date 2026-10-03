@@ -79,6 +79,7 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("devices", "state", STATE),
   classify("device_made_here_stations", "state", STATE),
   classify("device_profiles", "state", STATE),
+  classify("device_profile_printers", "state", STATE),
   classify("invoice_series", "state", STATE),
   classify("catalogues", "state", STATE),
   classify("location_catalogues", "state", STATE),

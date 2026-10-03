@@ -40,6 +40,10 @@ export const devices = table("devices", {
     onDelete: "restrict",
   }),
   /* v8 ignore stop */
+  /* v8 ignore start */
+  // Added by `ALTER TABLE`, which writes no delete rule, so it is declared with none.
+  paymentSlipPrinterId: id("payment_slip_printer_id").references(() => printers.id),
+  /* v8 ignore stop */
   label: label("label").notNull(),
   // `hashSecret` of the device token, never the plaintext.
   tokenHash: label("token_hash").notNull(),

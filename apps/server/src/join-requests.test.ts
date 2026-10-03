@@ -24,11 +24,13 @@ import {
   devices,
   joinRequests,
   printAgents,
+  printers,
   withTransaction,
   type Database,
   type Transaction,
 } from "@waitron/db";
 import { verifySecretAsync } from "@waitron/identity";
+import { setProfilePrinterLists } from "@waitron/layouts";
 import { authenticateAgent } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -598,6 +600,42 @@ describe("acceptDeviceJoinRequest", () => {
     const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token);
     expect(accepted).toMatchObject({ ok: true, deviceId: made.joinId, formFactor: "till" });
     expect(status).toBe("approved");
+  });
+
+  it("starts the device on the first printer of each of its profile's lists", async () => {
+    const venue = await setupVenue(suite.db);
+    const profileId = await seedProfile("till");
+    const [p1, p2, p3] = await suite.db
+      .insert(printers)
+      .values(
+        ["Bar", "Counter", "Portable"].map((name) => ({
+          locationId: venue.cfg.locationId,
+          name,
+          transport: "network_tcp" as const,
+          host: "10.0.0.5",
+        })),
+      )
+      .returning({ id: printers.id });
+    const accepted = await withTransaction(suite.db, async (tx) => {
+      await setProfilePrinterLists(tx, profileId, {
+        receiptPrinterIds: [p2!.id, p1!.id],
+        paymentSlipPrinterIds: [p3!.id],
+      });
+      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
+      return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
+        choice: made.verificationNumber,
+        profileId,
+      });
+    });
+    if (!accepted.ok) throw new Error("expected accept to succeed");
+    const [row] = await suite.db
+      .select({
+        receiptPrinterId: devices.receiptPrinterId,
+        paymentSlipPrinterId: devices.paymentSlipPrinterId,
+      })
+      .from(devices)
+      .where(eq(devices.id, accepted.deviceId));
+    expect(row).toEqual({ receiptPrinterId: p2!.id, paymentSlipPrinterId: p3!.id });
   });
 
   it("auto-creates the register for a till form factor, in the SAME transaction as the device", async () => {

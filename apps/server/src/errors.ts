@@ -726,13 +726,13 @@ declare module "@waitron/shared" {
     /** A receipt-language change refused because `count` open orders at the location hold a line. */
     "receipt.language_orders_open": { field: "receiptLanguage"; count: number };
     /**
-     * A request named a device binding id that matches no row. Checked by a read before the write in
-     * `device.ts`, because this engine's foreign-key refusal does not say which key failed.
-     * `device.ts` states that reasoning where the read is taken. `field` carries the FIELD NAME
-     * only, never the id value.
+     * A request named a device binding id that matches no row, or a printer the device may not use
+     * (`chooseDevicePrinter`, `@waitron/layouts`). Checked by a read before the write, because this
+     * engine's foreign-key refusal does not say which key failed; `device.ts` states that reasoning
+     * where the read is taken. `field` carries the FIELD NAME only, never the id value.
      */
     "device.binding_invalid": {
-      field: "tillId" | "receiptPrinterId" | "deviceProfileId";
+      field: "tillId" | "receiptPrinterId" | "paymentSlipPrinterId" | "deviceProfileId";
     };
     /**
      * A knock arrived at `POST /api/device/join` while pairing mode is shut — the ordinary state, not

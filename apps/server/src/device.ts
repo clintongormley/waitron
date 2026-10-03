@@ -2,7 +2,7 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { constraintTarget, isUniqueViolation, printers, sameTarget, tills } from "@waitron/db";
+import { constraintTarget, isUniqueViolation, sameTarget, tills } from "@waitron/db";
 import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { getDeviceProfile, kindOfFormFactor } from "@waitron/layouts";
 import type { DeviceKind, FormFactor } from "@waitron/layouts";
@@ -14,44 +14,26 @@ import type { TillConfig } from "./till-config.js";
 export type { DeviceKind };
 
 /**
- * Refuse a device binding whose target names no row, as `device.binding_invalid` naming the input
- * FIELD — a reassign to an unknown profile (`deviceProfileId`, the assign-device-profile route) or
- * a hardware PATCH naming an unknown printer (`receiptPrinterId`).
+ * Refuse a reassign to a profile that names no row as `device.binding_invalid` naming the input
+ * FIELD (`deviceProfileId`, the assign-device-profile route).
  *
  * Asked BEFORE the write rather than read off the refusal afterwards. The engine's foreign-key
  * refusal is the whole message `FOREIGN KEY constraint failed` — no table, no column, no
- * constraint name (`packages/db/src/constraint-target.ts` states this), and `devices` carries a
- * station FK, a till FK and a location FK beside the two binding ones, so a refusal cannot be
- * attributed to any of the five.
+ * constraint name (`packages/db/src/constraint-target.ts` states this), and `devices` carries
+ * several other foreign keys, so a refusal cannot be attributed to any one of them.
  *
- * `devices_device_profile_fk` and `devices_receipt_printer_fk` are what makes a dangling binding
- * impossible; this check only decides what the operator is TOLD.
- *
- * A `null` target CLEARS the binding and names no row, so it is accepted without a read. Both
- * lookups run on the CALLER's transaction, which is also the write's, and
- * `packages/store/src/write-queue.ts` admits one write transaction at a time — so a row cannot be
- * deleted between the check and the statement. A second process on the same file is outside that
- * and would get the raw refusal.
+ * The lookup runs on the CALLER's transaction, which is also the write's, and
+ * `packages/store/src/write-queue.ts` admits one write transaction at a time — so the profile cannot
+ * be deleted between the check and the statement. A second process on the same file is outside
+ * that and would get the raw refusal.
  */
 export async function requireDeviceBinding(
   tx: Transaction,
-  binding: { deviceProfileId: string } | { receiptPrinterId: string | null },
+  binding: { deviceProfileId: string },
 ): Promise<void> {
-  if ("deviceProfileId" in binding) {
-    const profile = await getDeviceProfile(tx, binding.deviceProfileId);
-    if (profile === undefined) {
-      throw new AppError("device.binding_invalid", { field: "deviceProfileId" });
-    }
-    return;
-  }
-  if (binding.receiptPrinterId === null) return;
-  const [printer] = await tx
-    .select({ id: printers.id })
-    .from(printers)
-    .where(eq(printers.id, binding.receiptPrinterId))
-    .limit(1);
-  if (printer === undefined) {
-    throw new AppError("device.binding_invalid", { field: "receiptPrinterId" });
+  const profile = await getDeviceProfile(tx, binding.deviceProfileId);
+  if (profile === undefined) {
+    throw new AppError("device.binding_invalid", { field: "deviceProfileId" });
   }
 }
 

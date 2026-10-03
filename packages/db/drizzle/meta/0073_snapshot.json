@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f08c4bad-814d-4956-991d-4147d8593843",
+  "id": "4dc3d55f-850e-4602-80fa-b45d21fb5302",
   "prevId": "44949884-a111-4cd9-8b86-22fcb5611e2a",
   "tables": {
     "locations": {
@@ -606,14 +606,6 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
-        },
-        "price_quantity": {
-          "name": "price_quantity",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1000
         },
         "unit_price_gross": {
           "name": "unit_price_gross",
@@ -2815,6 +2807,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "payment_slip_printer_id": {
+          "name": "payment_slip_printer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "label": {
           "name": "label",
           "type": "text",
@@ -2937,6 +2936,19 @@
             "id"
           ],
           "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "devices_payment_slip_printer_id_printers_id_fk": {
+          "name": "devices_payment_slip_printer_id_printers_id_fk",
+          "tableFrom": "devices",
+          "tableTo": "printers",
+          "columnsFrom": [
+            "payment_slip_printer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -5354,6 +5366,93 @@
         }
       }
     },
+    "device_profile_printers": {
+      "name": "device_profile_printers",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "device_profile_id": {
+          "name": "device_profile_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "printer_id": {
+          "name": "printer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "device_profile_printers_profile_role_printer_key": {
+          "name": "device_profile_printers_profile_role_printer_key",
+          "columns": [
+            "device_profile_id",
+            "role",
+            "printer_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "device_profile_printers_device_profile_id_device_profiles_id_fk": {
+          "name": "device_profile_printers_device_profile_id_device_profiles_id_fk",
+          "tableFrom": "device_profile_printers",
+          "tableTo": "device_profiles",
+          "columnsFrom": [
+            "device_profile_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "device_profile_printers_printer_id_printers_id_fk": {
+          "name": "device_profile_printers_printer_id_printers_id_fk",
+          "tableFrom": "device_profile_printers",
+          "tableTo": "printers",
+          "columnsFrom": [
+            "printer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "device_profile_printers_role_ck": {
+          "name": "device_profile_printers_role_ck",
+          "value": "\"device_profile_printers\".\"role\" in ('receipt', 'payment_slip')"
+        }
+      }
+    },
     "tenant_themes": {
       "name": "tenant_themes",
       "columns": {
@@ -6122,14 +6221,6 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
-        },
-        "price_quantity": {
-          "name": "price_quantity",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1000
         },
         "unit_price": {
           "name": "unit_price",

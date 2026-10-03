@@ -7,7 +7,14 @@ import { AppError } from "@waitron/shared";
 import { deviceProfiles, devices, ticketItems, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
-import { kindOfFormFactor, listDeviceProfiles } from "@waitron/layouts";
+import {
+  chooseDevicePrinter,
+  firstUsablePrinters,
+  kindOfFormFactor,
+  listDeviceProfiles,
+  printerChoices,
+  type PrinterRole,
+} from "@waitron/layouts";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
@@ -18,7 +25,7 @@ import type { PairingMode } from "./pairing-mode.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { requireBodyUuid, requireNullableBodyUuid, requireString } from "@waitron/server-kit";
 import { advanceTicketItem, listStationQueue, type TicketState } from "./working-order.js";
-import { isUuid } from "./till-session.js";
+import { isUuid, requireSession } from "./till-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
 import type { TillConfig } from "./till-config.js";
@@ -66,6 +73,7 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "device.unauthorized": 401,
+  "session.required": 401,
   "device.forbidden_station": 403,
   // The knock's own three refusals. `pairing_closed` is a 403 rather than a 401: the door is shut, not
   // the caller unknown, and the device's next step is a person, not a credential.
@@ -186,6 +194,11 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   app.get("/api/device/me", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const [located] = await deps.db
+        .select({ locationId: devices.locationId, profileId: devices.deviceProfileId })
+        .from(devices)
+        .where(ownDeviceById(device.deviceId));
+      const choices = await printerChoices(deps.db, located!.profileId, located!.locationId);
       // Non-secret config only: the reader's credentials never ride this response.
       return c.json({
         deviceId: device.deviceId,
@@ -196,7 +209,48 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         watcherId: device.watcherId,
         tillId: device.tillId,
         receiptPrinterId: device.receiptPrinterId,
+        paymentSlipPrinterId: device.paymentSlipPrinterId,
+        printerChoices: choices,
       });
+    }),
+  );
+
+  // ── Switch this device's current printers (DEVICE-GUARDED, open session) ──────────────────────
+  // Any signed-in staff member may switch; a named field is written, an absent one left alone.
+  app.put("/api/device/printers", (c) =>
+    run(c, log, async () => {
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      await requireSession({ db: deps.db }, c);
+      const body = await readJsonBody<{
+        receiptPrinterId?: unknown;
+        paymentSlipPrinterId?: unknown;
+      }>(c);
+      const choices: [PrinterRole, string | null][] = [];
+      if (body.receiptPrinterId !== undefined)
+        choices.push([
+          "receipt",
+          requireNullableBodyUuid(body.receiptPrinterId, "receiptPrinterId"),
+        ]);
+      if (body.paymentSlipPrinterId !== undefined)
+        choices.push([
+          "payment_slip",
+          requireNullableBodyUuid(body.paymentSlipPrinterId, "paymentSlipPrinterId"),
+        ]);
+      const stored = await withTransaction(deps.db, async (tx) => {
+        for (const [role, printerId] of choices) {
+          const chosen = await chooseDevicePrinter(tx, device.deviceId, role, printerId);
+          if (!chosen.ok) throw new AppError("device.binding_invalid", { field: chosen.field });
+        }
+        const [row] = await tx
+          .select({
+            receiptPrinterId: devices.receiptPrinterId,
+            paymentSlipPrinterId: devices.paymentSlipPrinterId,
+          })
+          .from(devices)
+          .where(ownDeviceById(device.deviceId));
+        return row!;
+      });
+      return c.json(stored, 200);
     }),
   );
 
@@ -369,49 +423,20 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // act on (see the helper).
       const updated = await gated(sessionId, async (tx) => {
         await requireDeviceBinding(tx, { deviceProfileId });
+        const [device] = await tx
+          .select({ locationId: devices.locationId })
+          .from(devices)
+          .where(ownDeviceById(id));
+        if (device === undefined) return [];
+        const printers = await firstUsablePrinters(tx, deviceProfileId, device.locationId);
         return tx
           .update(devices)
-          .set({ deviceProfileId })
+          .set({ deviceProfileId, ...printers })
           .where(ownDeviceById(id))
           .returning({ id: devices.id });
       });
       if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
       return c.body(null, 204);
-    }),
-  );
-
-  // ── Set a device's static hardware bindings (device.manage) ──────────────────────────────────────
-  // A PATCH: only a NAMED field is written.
-  app.patch("/management-api/devices/:id/hardware", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
-      const body = await readJsonBody<{
-        receiptPrinterId?: unknown;
-      }>(c);
-      const set: {
-        receiptPrinterId?: string | null;
-      } = {};
-      if ("receiptPrinterId" in body) {
-        set.receiptPrinterId = requireNullableBodyUuid(body.receiptPrinterId, "receiptPrinterId");
-      }
-      // A PATCH that names no hardware field is a request-shape fault rather than an empty
-      // `UPDATE … SET`.
-      if (Object.keys(set).length === 0) {
-        throw new AppError("management.request_invalid", { field: "hardware" });
-      }
-      const updated = await gated(sessionId, async (tx) => {
-        if (set.receiptPrinterId !== undefined) {
-          await requireDeviceBinding(tx, { receiptPrinterId: set.receiptPrinterId });
-        }
-        return tx.update(devices).set(set).where(ownDeviceById(id)).returning({
-          id: devices.id,
-          receiptPrinterId: devices.receiptPrinterId,
-        });
-      });
-      if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
-      return c.json(updated[0], 200);
     }),
   );
 

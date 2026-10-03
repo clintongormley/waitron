@@ -1,6 +1,5 @@
 /**
- * Device join-and-accept binding, plus direct cases over `resolveDeviceBinding` and
- * `requireDeviceBinding`.
+ * Device join-and-accept binding, plus direct cases over `resolveDeviceBinding`.
  *
  * What the join-and-accept cases pin is the binding rule: a kitchen screen has one station or
  * watcher, while a till or handheld binds a register.
@@ -22,7 +21,7 @@ import {
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { requireDeviceBinding, resolveDeviceBinding } from "./device.js";
+import { resolveDeviceBinding } from "./device.js";
 import { createWatcher, removeWatcher } from "./watchers.js";
 import "./errors.js";
 
@@ -276,7 +275,7 @@ describe("device join-and-accept binds the device by its profile's form factor",
   });
 });
 
-describe("resolveDeviceBinding and requireDeviceBinding, called directly", () => {
+describe("resolveDeviceBinding, called directly", () => {
   it("refuses a profile id that names no profile as device_profile.not_found", async () => {
     const { cfg } = await setupVenue();
     await expect(
@@ -320,12 +319,5 @@ describe("resolveDeviceBinding and requireDeviceBinding, called directly", () =>
     } finally {
       await suite.db.execute(sql`drop index tills_one_per_location`);
     }
-  });
-
-  it("accepts clearing a receipt-printer binding without looking for a printer", async () => {
-    await setupVenue();
-    await expect(
-      withTransaction(suite.db, (tx) => requireDeviceBinding(tx, { receiptPrinterId: null })),
-    ).resolves.toBeUndefined();
   });
 });

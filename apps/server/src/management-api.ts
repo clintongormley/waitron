@@ -7,8 +7,10 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, isAppError } from "@waitron/shared";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import { ownPasswordChanges } from "./own-password-ahead.js";
+import { inArray } from "drizzle-orm";
 import {
   fireControlMode,
+  printers,
   readNodeMembership,
   withTransaction,
   type Database,
@@ -64,8 +66,10 @@ import {
   listDeviceProfiles,
   putReceipt,
   putTenantTheme,
+  readProfilePrinterLists,
   updateCanvas,
   updateDeviceProfile,
+  type ProfilePrinterLists,
 } from "@waitron/layouts";
 import {
   clearPlacement,
@@ -273,6 +277,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device_profile.name_taken": 409,
   "device_profile.in_use": 409,
   "device_profile.invalid": 400,
+  "printer.not_found": 404,
   "catalogue.not_found": 404,
   "menu.layout_not_found": 404,
 };
@@ -487,6 +492,47 @@ function parseInactivityTimeoutSeconds(value: unknown): number | null {
   )
     throw new AppError("management.request_invalid", { field: "inactivityTimeoutSeconds" });
   return value;
+}
+
+/** Absent stays absent; a present list must hold printer ids, each at most once. */
+function parsePrinterLists(body: {
+  receiptPrinterIds?: unknown;
+  paymentSlipPrinterIds?: unknown;
+}): Partial<ProfilePrinterLists> {
+  const lists: Partial<ProfilePrinterLists> = {};
+  for (const field of ["receiptPrinterIds", "paymentSlipPrinterIds"] as const) {
+    const value = body[field];
+    if (value === undefined) continue;
+    if (!Array.isArray(value)) throw new AppError("management.request_invalid", { field });
+    const ids = value.map((id) => requireBodyUuid(id, field));
+    if (new Set(ids).size !== ids.length)
+      throw new AppError("management.request_invalid", { field });
+    lists[field] = ids;
+  }
+  return lists;
+}
+
+/**
+ * Refuses a listed printer that does not exist, after the manager gate so a session without
+ * `layout.configure` learns nothing about printer ids. The store's own writes authorize again.
+ */
+async function requireListedPrinters(
+  tx: Transaction,
+  sessionId: string,
+  lists: Partial<ProfilePrinterLists>,
+): Promise<void> {
+  const ids = [
+    ...new Set([...(lists.receiptPrinterIds ?? []), ...(lists.paymentSlipPrinterIds ?? [])]),
+  ];
+  if (ids.length === 0) return;
+  await authorizeManager(tx, { managementSessionId: sessionId, permission: "layout.configure" });
+  const found = await tx
+    .select({ id: printers.id })
+    .from(printers)
+    .where(inArray(printers.id, ids));
+  const known = new Set(found.map((row) => row.id));
+  const missing = ids.find((id) => !known.has(id));
+  if (missing !== undefined) throw new AppError("printer.not_found", { id: missing });
 }
 
 /** A malformed challenge handle would just miss in the `text` id column, so it is refused here. */
@@ -1247,6 +1293,8 @@ export function mountManagementApi(
         canvasId?: unknown;
         capabilities?: unknown;
         inactivityTimeoutSeconds?: unknown;
+        receiptPrinterIds?: unknown;
+        paymentSlipPrinterIds?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -1264,7 +1312,9 @@ export function mountManagementApi(
           : requireBodyUuid(body.canvasId, "canvasId");
       const inactivityTimeoutSeconds = parseInactivityTimeoutSeconds(body.inactivityTimeoutSeconds);
       const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
+      const lists = parsePrinterLists(body);
       const result = await withTransaction(deps.db, async (tx) => {
+        await requireListedPrinters(tx, sessionId, lists);
         return createDeviceProfile(tx, {
           managementSessionId: sessionId,
           name,
@@ -1272,13 +1322,18 @@ export function mountManagementApi(
           canvasId,
           capabilities,
           inactivityTimeoutSeconds,
+          printerLists: {
+            receiptPrinterIds: lists.receiptPrinterIds ?? [],
+            paymentSlipPrinterIds: lists.paymentSlipPrinterIds ?? [],
+          },
         });
       });
       return c.json(result, 201);
     }),
   );
 
-  // Full replacement: an omitted `canvasId` or `inactivityTimeoutSeconds` stores null.
+  // Full replacement: an omitted `canvasId` or `inactivityTimeoutSeconds` stores null. An omitted
+  // printer list is the exception: it stays as it was.
   app.put("/management-api/device-profiles/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1289,6 +1344,8 @@ export function mountManagementApi(
         canvasId?: unknown;
         capabilities?: unknown;
         inactivityTimeoutSeconds?: unknown;
+        receiptPrinterIds?: unknown;
+        paymentSlipPrinterIds?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -1306,7 +1363,13 @@ export function mountManagementApi(
           : requireBodyUuid(body.canvasId, "canvasId");
       const inactivityTimeoutSeconds = parseInactivityTimeoutSeconds(body.inactivityTimeoutSeconds);
       const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
+      const lists = parsePrinterLists(body);
       const result = await withTransaction(deps.db, async (tx) => {
+        await requireListedPrinters(tx, sessionId, lists);
+        const printerLists =
+          Object.keys(lists).length === 0
+            ? undefined
+            : { ...(await readProfilePrinterLists(tx, id)), ...lists };
         return updateDeviceProfile(tx, {
           managementSessionId: sessionId,
           id,
@@ -1315,6 +1378,7 @@ export function mountManagementApi(
           canvasId,
           capabilities,
           inactivityTimeoutSeconds,
+          printerLists,
         });
       });
       return c.json(result);

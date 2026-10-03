@@ -516,15 +516,8 @@
     {
       "idx": 73,
       "version": "6",
-      "when": 1791009537850,
-      "tag": "0073_extra_price_quantity",
-      "breakpoints": true
-    },
-    {
-      "idx": 74,
-      "version": "6",
-      "when": 1791009698077,
-      "tag": "0074_extra_price_quantity_freeze",
+      "when": 1791041562151,
+      "tag": "0073_profile_printer_lists",
       "breakpoints": true
     }
   ]
