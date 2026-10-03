@@ -3270,11 +3270,26 @@ test.each([
       heading.getBoundingClientRect().width,
       0,
     );
+    expect(cell.scrollWidth).toBeLessThanOrEqual(cell.clientWidth);
     expect(el.shadowRoot!.querySelector("th")!.getBoundingClientRect().width).toBeGreaterThan(
       heading.getBoundingClientRect().width * 2,
     );
   },
 );
+
+test("a multi-word Actions heading wraps instead of taking half a phone-width table", async () => {
+  const el = await table({
+    rows: [rows[0]!],
+    columns: [
+      { key: "name", label: "Name", cell: (row) => row.name },
+      { key: "actions", label: "Actions for this row", pinned: "end", cell: () => "⋮" },
+    ],
+  });
+  el.style.width = "390px";
+  await el.updateComplete;
+  const heading = el.shadowRoot!.querySelector("th[data-pinned=end]")!;
+  expect(heading.getBoundingClientRect().width).toBeLessThan(el.getBoundingClientRect().width / 3);
+});
 
 async function narrowTable(pinned?: "end", props: Partial<WtDataTable<Row>> = {}) {
   const el = await table({ columns: pinnedColumns(pinned), ...props });

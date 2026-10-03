@@ -1045,6 +1045,11 @@ at 1280px and 390px, in English and Spanish labels and both themes. A198's optio
 its own table (`apps/dashboard/src/widgets/option-list-form.ts:580`), so it cannot reuse the shared
 component's column rule.
 
+**Pinned Open column on Content languages — OPEN.** That screen declares `key: "open"` with
+`pinned: "end"` (`apps/dashboard/src/screens/content-languages-screen.ts:457`), so A195's rule for
+`actions` does not size it. Decide whether all pinned last columns should take their content width
+before changing this separate column.
+
 **A collapsible section's chevron sits just after its heading (A196, owner 2026-10-02) — DONE.**
 The owner, on the "Edit options list" form: _"the chevron (currently far right) should be just to
 the right of the header, at the moment you don't see it"_. The shared `wt-disclosure` now puts it

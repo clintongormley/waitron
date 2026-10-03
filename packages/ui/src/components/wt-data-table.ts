@@ -107,7 +107,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
       [data-actions][data-pinned="end"] {
         width: 0;
-        text-wrap: nowrap;
       }
 
       /* A collapsed border is drawn where the cell sits unscrolled, so the edge that must travel with
