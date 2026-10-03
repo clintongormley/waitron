@@ -706,7 +706,7 @@ describe("till-app: a refused adjustment", () => {
   // An approver's PIN check answers only `pin.invalid` or `pin.throttled`; the apply route's own
   // `person.not_found` names the operator (`apps/server/src/adjustments-apply.ts`), not the approver.
   it.each(["person.not_found", "person.suspended"])(
-    "does not show %s as the approver's PIN error",
+    "closes the approver prompt on %s and shows the generic refusal above the action",
     async (code) => {
       const { el } = await mountApp({
         previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
@@ -717,7 +717,7 @@ describe("till-app: a refused adjustment", () => {
       await press(el, inDialog(el, "[data-adjust-confirm]"));
       await pinPad(el, "7777");
       expect(approval(el)).toBeNull();
-      expect(bottomMessage(el)).toBe(codeMessage(code));
+      expect(bottomMessage(el)).toBe(codeMessage("server.internal"));
     },
   );
 });

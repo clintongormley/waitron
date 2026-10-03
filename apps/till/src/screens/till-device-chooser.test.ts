@@ -36,7 +36,7 @@ describe("till-device-chooser", () => {
     expect(customElements.get("till-device-chooser")).toBe(TillDeviceChooser);
   });
 
-  it("announces the loading line as a status while the devices are read", async () => {
+  it("marks the loading line as a status while the devices are read", async () => {
     const { el } = await mountWidget<TillDeviceChooser>("till-device-chooser", {
       api: stubApi({ getDevDevices: vi.fn(() => new Promise<DevDeviceList>(() => {})) }),
     });

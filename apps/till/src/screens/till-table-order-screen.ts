@@ -4528,7 +4528,7 @@ export class TillTableOrderScreen extends LitElement {
     const selected = this.transferLineNos.has(line.lineNo);
     return html`<button
       type="button"
-      class="option transfer-line ${selected ? "selected" : ""}"
+      class="option transfer-line"
       data-transfer-line=${line.lineNo}
       aria-pressed=${selected}
       @click=${() => this.#toggleTransferLine(line)}
@@ -4572,7 +4572,7 @@ export class TillTableOrderScreen extends LitElement {
     return html`<div class="split-line-row">
       <button
         type="button"
-        class="option transfer-line ${selected ? "selected" : ""}"
+        class="option transfer-line"
         data-split-line=${line.lineNo}
         aria-pressed=${selected}
         @click=${() => this.#toggleSplitLine(line)}
