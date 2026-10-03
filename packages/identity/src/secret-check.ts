@@ -16,26 +16,18 @@ export interface SecretCheck {
   readonly matches: boolean;
 }
 
-interface IssuedCheck extends SecretCheck {
+interface CheckedAgainst {
   readonly secret: string;
   readonly derivedAgainst: DerivedAgainst;
 }
 
-const issued = new WeakSet<SecretCheck>();
+// Only an object held here is trusted, and the secret is kept here rather than on the check.
+const issued = new WeakMap<SecretCheck, CheckedAgainst>();
 
-export function issueCheck(check: IssuedCheck): SecretCheck {
-  // Not enumerable, so `JSON.stringify` of a check leaves the secret out.
-  const frozen = Object.freeze(
-    Object.defineProperties(
-      { personId: check.personId, matches: check.matches },
-      {
-        secret: { value: check.secret, enumerable: false },
-        derivedAgainst: { value: check.derivedAgainst, enumerable: false },
-      },
-    ),
-  );
-  issued.add(frozen);
-  return frozen;
+export function issueCheck(check: SecretCheck & CheckedAgainst): SecretCheck {
+  const verdict = Object.freeze({ personId: check.personId, matches: check.matches });
+  issued.set(verdict, { secret: check.secret, derivedAgainst: check.derivedAgainst });
+  return verdict;
 }
 
 /** The check's verdict when it may stand in for deriving the key, else undefined. */
@@ -45,15 +37,15 @@ export function trustedVerdict(
   secret: string,
   derivedAgainst: DerivedAgainst,
 ): boolean | undefined {
-  if (checked === undefined || !issued.has(checked)) return undefined;
-  const {
-    personId: checkedPerson,
-    secret: checkedSecret,
-    derivedAgainst: checkedAgainst,
-    matches,
-  } = checked as IssuedCheck;
-  if (checkedPerson !== personId || checkedSecret !== secret || checkedAgainst !== derivedAgainst) {
+  if (checked === undefined) return undefined;
+  const against = issued.get(checked);
+  if (
+    against === undefined ||
+    checked.personId !== personId ||
+    against.secret !== secret ||
+    against.derivedAgainst !== derivedAgainst
+  ) {
     return undefined;
   }
-  return matches;
+  return checked.matches;
 }

@@ -78,7 +78,7 @@ async function setPassword(personId: string, password: string | null): Promise<v
   );
 }
 
-/** A copy of an issued check, its hidden fields included, with its verdict flipped to a match. */
+/** A copy of an issued check with its verdict flipped to a match. */
 function forge(check: SecretCheck): SecretCheck {
   return Object.defineProperties(
     {},
