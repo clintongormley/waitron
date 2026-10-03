@@ -19,9 +19,11 @@ const close: DailyCloseDto = {
     grossTotal: "121.00",
   },
   cash: {
-    byTill: [
+    byOrigin: [
       {
-        tillId: "till-1",
+        source: "device",
+        deviceId: "device-1",
+        deviceName: "Barra 1",
         byMethod: [
           { method: "cash", amount: "50.00", tip: "5.00" },
           { method: "card", amount: "71.00", tip: "0.00" },

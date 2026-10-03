@@ -195,9 +195,9 @@ function billPayment(id, state) {
   const receivedAt = state === "received" ? `'${STAMP}'` : "null";
   return (
     `insert into bill_payments (id, working_order_id, submission_id, fingerprint, kind, method, ` +
-    ` applied, tip, state, requested_by, till_id, source, device_id, created_at, received_at) ` +
+    ` applied, tip, state, requested_by, source, device_id, created_at, received_at) ` +
     `values ('${id}', 'wo-open', '${id}', 'fp', 'contribution', 'card', 1000, 0, '${state}', ` +
-    ` 'person', 'till', 'device', 'dev-active', '${STAMP}', ${receivedAt})`
+    ` 'person', 'device', 'dev-active', '${STAMP}', ${receivedAt})`
   );
 }
 
@@ -205,10 +205,10 @@ function billPayment(id, state) {
 function billRefund(id, paymentId) {
   return (
     `insert into bill_payment_refunds (id, bill_payment_id, submission_id, fingerprint, ` +
-    ` applied_amount, tip_amount, reason, authorized_by, requested_by, till_id, source, device_id, ` +
+    ` applied_amount, tip_amount, reason, authorized_by, requested_by, source, device_id, ` +
     ` state, send_count, created_at) ` +
     `values ('${id}', '${paymentId}', '${id}', 'fp', 500, 0, 'wrong item', 'person', 'person', ` +
-    ` 'till', 'device', 'dev-active', 'pending', 0, '${STAMP}')`
+    ` 'device', 'dev-active', 'pending', 0, '${STAMP}')`
   );
 }
 
@@ -242,10 +242,10 @@ function sale(id, total, correctsSaleId = null) {
   const corrects = correctsSaleId === null ? "null" : `'${correctsSaleId}'`;
   nextInvoiceNumber += 1;
   return (
-    `insert into sales (id, till_id, source, device_id, series_id, node_id, invoice_number, ` +
+    `insert into sales (id, source, device_id, series_id, node_id, invoice_number, ` +
     ` issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, ` +
     ` fiscal_backend, fiscal_state, corrects_sale_id) ` +
-    `values ('${id}', 'till', 'device', 'dev-active', 'series', 'node', ${nextInvoiceNumber}, '${STAMP}', 0, ${total}, '[]', 'es', ` +
+    `values ('${id}', 'device', 'dev-active', 'series', 'node', ${nextInvoiceNumber}, '${STAMP}', 0, ${total}, '[]', 'es', ` +
     ` '["es"]', 'verifactu', 'recorded', ${corrects})`
   );
 }
@@ -1967,6 +1967,24 @@ describe("bill_payments_guard_update", () => {
     ).toBe(BILL_PAYMENT_CHANGE_REFUSAL);
   });
 
+  it("refuses a change to the device a bill payment was taken on", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update bill_payments set device_id = 'dev-off' where id = 'bp-pending'`,
+      ),
+    ).toBe(BILL_PAYMENT_CHANGE_REFUSAL);
+  });
+
+  it("refuses a change to a bill payment's source", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update bill_payments set source = 'demo_seed', device_id = null where id = 'bp-pending'`,
+      ),
+    ).toBe(BILL_PAYMENT_CHANGE_REFUSAL);
+  });
+
   it("accepts pending to received", () => {
     expect(
       refusalFor(
@@ -2000,6 +2018,24 @@ describe("bill_payment_refunds_guard_update", () => {
       refusalFor(
         connection,
         `update bill_payment_refunds set sent_at = '${STAMP}', send_count = 2 where id = 'bpr-pending'`,
+      ),
+    ).toBe(BILL_REFUND_CHANGE_REFUSAL);
+  });
+
+  it("refuses a change to the device a refund was asked for on", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update bill_payment_refunds set device_id = 'dev-off' where id = 'bpr-pending'`,
+      ),
+    ).toBe(BILL_REFUND_CHANGE_REFUSAL);
+  });
+
+  it("refuses a change to a refund's source", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update bill_payment_refunds set source = 'demo_seed', device_id = null where id = 'bpr-pending'`,
       ),
     ).toBe(BILL_REFUND_CHANGE_REFUSAL);
   });

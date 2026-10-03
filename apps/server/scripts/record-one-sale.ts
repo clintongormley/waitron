@@ -28,7 +28,6 @@ import {
   percentOf,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   jobOrigin,
 } from "@waitron/shared";
 
@@ -85,7 +84,6 @@ export async function recordOneSale(
   args: RecordOneSaleArgs,
   env: NodeJS.ProcessEnv,
 ): Promise<RecordOneSaleResult> {
-  const till = brandTillId(args.tillId);
   const node = brandNodeId(args.nodeId);
   const series = brandSeriesId(args.seriesId);
 
@@ -117,7 +115,6 @@ export async function recordOneSale(
     });
 
     const input: RecordSaleInput = {
-      tillId: till,
       origin: jobOrigin("demo_seed"),
       nodeId: node,
       seriesId: series,

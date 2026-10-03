@@ -44,7 +44,7 @@ async function seedRegistro(db: Database, id: Identity, genTime: Date): Promise<
     returning id
   `);
   const sale = await db.execute<{ id: string }>(sql`
-    insert into sales (id, till_id, source, device_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${newId()}, ${id.tillId}, 'device', (select id from devices where till_id = ${id.tillId}), ${id.nodeId}, ${series.rows[0]!.id}, ${s},
+    insert into sales (id, source, device_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${newId()}, 'device', (select id from devices where till_id = ${id.tillId}), ${id.nodeId}, ${series.rows[0]!.id}, ${s},
       '2026-07-20T19:20:30+01:00', 60, 0, '[]',
       'es', '["es"]', 'verifactu', 'recorded'
     ) returning id
@@ -52,11 +52,11 @@ async function seedRegistro(db: Database, id: Identity, genTime: Date): Promise<
   const huella = String(s).padStart(64, "0");
   const registro = await db.execute<{ id: string }>(sql`
     insert into registros_facturacion (
-      id, till_id, source, device_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+      id, source, device_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, creado_en
-    ) values (${newId()}, ${id.tillId}, 'device', (select id from devices where till_id = ${id.tillId}), ${id.nodeId}, ${id.sifId}, ${sale.rows[0]!.id}, ${s}, 'alta',
+    ) values (${newId()}, 'device', (select id from devices where till_id = ${id.tillId}), ${id.nodeId}, ${id.sifId}, ${sale.rows[0]!.id}, ${s}, 'alta',
       ${id.nif}, ${"W" + String(s) + "/1"}, '2026-07-20', 'Waitron SL',
       true, '{}',
       ${genTime.toISOString()}, 60, '01', ${huella}, ${genTime.toISOString()}

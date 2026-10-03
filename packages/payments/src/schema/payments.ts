@@ -11,6 +11,8 @@ import {
   newId,
   nodes,
   nowIso,
+  originChecks,
+  saleSourceColumn,
   sales,
   table,
   tsString,
@@ -46,12 +48,9 @@ export const payments = table(
     id: id("id").primaryKey().$defaultFn(newId),
     workingOrderId: id("working_order_id").notNull(),
     // The device that started the payment; a stuck payment's sale is filed under it.
-    // Plain text until the table is rebuilt with the source's CHECKs: a declared vocabulary with no
-    // CHECK in the database fails the schema conformance suite.
-    source: label("source"),
+    source: saleSourceColumn("source").notNull(),
     /* v8 ignore start */
-    // Added by `ALTER TABLE`, which writes no delete rule, so it is declared with none.
-    deviceId: id("device_id").references(() => devices.id),
+    deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
     // Null until the sale is written: the money moves first (`associatePaymentWithSale`).
     saleId: id("sale_id"),
@@ -135,5 +134,6 @@ export const payments = table(
       sql`${t.cardEntryMode} is null or ${t.cardEntryMode} in ('contactless','chip','swipe','unknown')`,
     ),
     check("payments_state_ck", enumCheck(t.state)),
+    ...originChecks("payments", t.source, t.deviceId),
   ],
 );

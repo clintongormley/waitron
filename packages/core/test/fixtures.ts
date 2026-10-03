@@ -90,7 +90,7 @@ export async function seedRectificativeSeries(
  */
 export async function seedBareSale(
   db: Database,
-  seed: { tillId: TillId; deviceId: DeviceId; nodeId: NodeId; seriesId: SeriesId },
+  seed: { deviceId: DeviceId; nodeId: NodeId; seriesId: SeriesId },
   overrides: {
     total?: string;
     invoiceNumber?: number;
@@ -101,7 +101,6 @@ export async function seedBareSale(
   const [row] = await db
     .insert(sales)
     .values({
-      tillId: seed.tillId,
       source: "device",
       deviceId: seed.deviceId,
       nodeId: seed.nodeId,

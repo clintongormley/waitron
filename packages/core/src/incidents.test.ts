@@ -73,7 +73,6 @@ const degradedClock: TrustedClock = fixedClock(() => ({
 
 function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    tillId,
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,
@@ -234,7 +233,7 @@ describe("incidents — chain verification failure", () => {
     ).rejects.toThrow("simulated crash");
 
     expect(await incidentsForDevice(deviceId)).toHaveLength(0);
-    expect(await suite.db.select().from(sales).where(eq(sales.tillId, tillId))).toHaveLength(0);
+    expect(await suite.db.select().from(sales).where(eq(sales.deviceId, deviceId))).toHaveLength(0);
   });
 });
 
@@ -246,7 +245,7 @@ describe("incidents — clock degradation", () => {
     const [row] = await incidentsForDevice(deviceId);
     expect(row?.code).toBe("clock.degraded");
     expect(row?.severity).toBe("warning");
-    expect(await suite.db.select().from(sales).where(eq(sales.tillId, tillId))).toHaveLength(1);
+    expect(await suite.db.select().from(sales).where(eq(sales.deviceId, deviceId))).toHaveLength(1);
   });
 
   it("records both incidents when the chain fails and the clock is degraded", async () => {

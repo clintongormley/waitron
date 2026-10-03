@@ -98,7 +98,6 @@ async function seedSale(db: Database, issuedAt: string, lines: SeedLine[]): Prom
   const [sale] = await db
     .insert(sales)
     .values({
-      tillId,
       source: "device",
       deviceId,
       nodeId,

@@ -1520,13 +1520,13 @@ describe("the invoice at full payment (design §8 test 8)", () => {
 });
 
 describe("a line write that leaves the bill exactly paid (design §7)", () => {
-  /** Issued in the write's own transaction, once, and filed on the till of the device that wrote. */
+  /** Issued in the write's own transaction, once, and filed under the device that wrote. */
   async function expectInvoicedOnDeviceTill(billId: string, totalCents: number): Promise<void> {
     expect(await statusOf(billId)).toBe("settled");
     expect(registroCount(billId)).toBe(1);
     const [sale] = await saleOf(billId);
     expect(sale!.total).toBe(totalCents);
-    expect(sale!.tillId).toBe(venue.deviceTillId);
+    expect(sale).toMatchObject({ source: "device", deviceId: venue.deviceId });
   }
 
   async function revisionOf(billId: string): Promise<number> {
@@ -1541,10 +1541,6 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     });
     expect(raised.status).toBe(200);
   }
-
-  it("files on the device's own till, which is not the box's configured one", () => {
-    expect(venue.deviceTillId).not.toBe(venue.cfg.tillId);
-  });
 
   it("issues the invoice when a void leaves the bill exactly paid", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
@@ -1786,7 +1782,6 @@ describe("retries and reused ids (plan D8, design §5.1)", () => {
         reason: "error",
         authorizedBy: randomUUID(),
         requestedBy: randomUUID(),
-        tillId: venue.deviceTillId,
         source: "device",
         deviceId: venue.deviceId,
         state: "completed",
@@ -1948,7 +1943,6 @@ async function insertBillPayment(
         state: "received",
         receivedAt: new Date().toISOString(),
         requestedBy: venue.staffId,
-        tillId: venue.deviceTillId,
         source: "device",
         deviceId: venue.deviceId,
         ...row,
@@ -2076,7 +2070,8 @@ describe("a cash refund before the invoice (design §6)", () => {
         state: "completed",
         requestedBy: venue.staffId,
         authorizedBy: venue.adminId,
-        tillId: venue.deviceTillId,
+        source: "device",
+        deviceId: venue.deviceId,
       },
     ]);
     expect(await refundDrawerOpens(paymentId)).toMatchObject([
@@ -2111,7 +2106,7 @@ describe("a cash refund before the invoice (design §6)", () => {
 
     expect(refunded.status).toBe(200);
     expect(await refundRows(paymentId)).toMatchObject([
-      { state: "completed", tillId: venue.deviceTillId },
+      { state: "completed", source: "device", deviceId: venue.handheldDeviceId },
     ]);
     expect(await refundDrawerOpens(paymentId)).toEqual([]);
     expect(drawerJobCount()).toBe(before);
@@ -2357,7 +2352,8 @@ describe("a cash refund before the invoice (design §6)", () => {
         appliedAmount: 1000,
         requestedBy: venue.staffId,
         authorizedBy: venue.adminId,
-        tillId: venue.deviceTillId,
+        source: "device",
+        deviceId: venue.deviceId,
       },
     ]);
     const [manual] = await inTx((tx) =>
@@ -2934,7 +2930,6 @@ describe("the ticket after a refund", () => {
         reason: "error",
         authorizedBy: venue.adminId,
         requestedBy: venue.adminId,
-        tillId: venue.deviceTillId,
         source: "device",
         deviceId: venue.deviceId,
         state: "failed",
@@ -2979,7 +2974,6 @@ describe("a payment no card provider stands behind", () => {
           state: "received",
           receivedAt: new Date().toISOString(),
           requestedBy: venue.staffId,
-          tillId: venue.deviceTillId,
           source: "device",
           deviceId: venue.deviceId,
         })

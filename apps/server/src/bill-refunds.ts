@@ -616,7 +616,6 @@ export async function refundBillPayment(
           reason: req.reason,
           authorizedBy: authorization.authorizedBy,
           requestedBy: operator.personId,
-          tillId: cfg.tillId,
           source: cfg.origin.source,
           deviceId: cfg.origin.deviceId,
           createdAt,

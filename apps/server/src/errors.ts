@@ -704,10 +704,9 @@ declare module "@waitron/shared" {
      */
     "device.station_required": Record<string, never>;
     /**
-     * A device whose binding carries no `till_id` reached a path that requires one
-     * (`requireSaleTillId` in `device-session.ts`, and the roster-login guard in `till-api.ts`). In
-     * practice a `kds_station`: the `device_binding_rule_insert`/`_update` triggers refuse a null
-     * `till_id` for every other form factor.
+     * A device whose binding carries no `till_id` tried to sign in (the roster-login guard in
+     * `till-api.ts`). In practice a `kds_station`: the `device_binding_rule_insert`/`_update`
+     * triggers refuse a null `till_id` for every other form factor.
      */
     "device.till_required": Record<string, never>;
     /**

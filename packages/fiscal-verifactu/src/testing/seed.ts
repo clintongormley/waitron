@@ -220,7 +220,6 @@ export async function seedSale(
   const [row] = await db
     .insert(sales)
     .values({
-      tillId: till.tillId,
       source: "device",
       deviceId: till.deviceId,
       nodeId: till.nodeId,
@@ -242,12 +241,12 @@ export async function seedSale(
 
 /**
  * A minimal alta ready for appendToChain — Encadenamiento is chain-owned, not this fixture's.
- * The till and the device's origin ride beside `input`, never inside it: neither is an AEAT field
- * and neither may be hashed. The return type is the NARROWED branch so a caller's `.input` is not
+ * The device's origin rides beside `input`, never inside it: it is not an AEAT field and may not
+ * be hashed. The return type is the NARROWED branch so a caller's `.input` is not
  * the union of both shapes.
  */
 export function altaFor(
-  till: Pick<SeededTill, "tillId" | "deviceId">,
+  till: Pick<SeededTill, "deviceId">,
   saleId: SaleId,
   invoiceNumber: number,
   seconds: number,
@@ -278,7 +277,6 @@ export function altaFor(
   return {
     tipo: "alta",
     saleId,
-    tillId: till.tillId,
     origin: deviceOrigin(till.deviceId),
     entorno,
     input,
@@ -287,7 +285,7 @@ export function altaFor(
 
 /** A minimal anulación against an already-issued invoice; see `altaFor`. */
 export function anulacionFor(
-  till: Pick<SeededTill, "tillId" | "deviceId">,
+  till: Pick<SeededTill, "deviceId">,
   saleId: SaleId,
   invoiceNumber: number,
   seconds: number,
@@ -304,7 +302,6 @@ export function anulacionFor(
   return {
     tipo: "anulacion",
     saleId,
-    tillId: till.tillId,
     origin: deviceOrigin(till.deviceId),
     entorno,
     input,

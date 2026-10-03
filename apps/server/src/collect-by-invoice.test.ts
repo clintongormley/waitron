@@ -62,7 +62,7 @@ async function placedTarta(zoneId: string): Promise<string> {
     zoneId,
     operatorId: venue.operatorId,
   });
-  await placeOrder(deps, venue.cfg, id, venue.operatorId, venue.cfg.tillId);
+  await placeOrder(deps, venue.cfg, id, venue.operatorId);
   return id;
 }
 
@@ -157,7 +157,6 @@ describe("collecting an invoice that carries a corrective invoice", () => {
       });
       await recordCorrection(tx, venue.backend, {
         origin: venue.cfg.origin,
-        tillId: venue.cfg.tillId,
         nodeId: venue.cfg.nodeId,
         seriesId: brandSeriesId(series!.id),
         correctsSaleId: brandSaleId(issued!.id),
@@ -344,7 +343,6 @@ describe("collecting an invoice that carries a corrective invoice", () => {
       const now = venue.clock.now();
       // No fiscal record is written for this row: it bypasses recordCorrection on purpose.
       await tx.insert(sales).values({
-        tillId: venue.cfg.tillId,
         source: venue.cfg.origin.source,
         deviceId: venue.cfg.origin.deviceId,
         nodeId: venue.cfg.nodeId,

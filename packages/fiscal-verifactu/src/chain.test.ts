@@ -189,7 +189,6 @@ describe("appendToChain", () => {
     // that never went through it.
     const error = await captureError(() =>
       suite.db.insert(registrosFacturacion).values({
-        tillId: till.tillId,
         source: "device",
         deviceId: till.deviceId,
         nodeId: till.nodeId,
@@ -229,7 +228,6 @@ describe("appendToChain", () => {
     // in this file holds the savepoint.
     const occupied = await seedSale(suite.db, till, 1);
     await suite.db.insert(registrosFacturacion).values({
-      tillId: till.tillId,
       source: "device",
       deviceId: till.deviceId,
       nodeId: till.nodeId,
@@ -312,7 +310,6 @@ describe("appendToChain", () => {
           return tx
             .transaction(async (nested) => {
               await nested.insert(registrosFacturacion).values({
-                tillId: till.tillId,
                 source: "device",
                 deviceId: till.deviceId,
                 nodeId: till.nodeId,

@@ -1128,7 +1128,6 @@ describe("a card refund pending on a bill", () => {
         state: "received",
         receivedAt: new Date().toISOString(),
         requestedBy: ALEX,
-        tillId: v.cfg.tillId,
         source: v.cfg.origin.source,
         deviceId: v.cfg.origin.deviceId,
       })
@@ -1141,7 +1140,6 @@ describe("a card refund pending on a bill", () => {
       reason: "r",
       authorizedBy: ALEX,
       requestedBy: ALEX,
-      tillId: v.cfg.tillId,
       source: v.cfg.origin.source,
       deviceId: v.cfg.origin.deviceId,
       state: "pending",

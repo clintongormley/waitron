@@ -93,7 +93,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     getDailyClose: vi.fn().mockResolvedValue({
       businessDay: "2026-08-30",
       vat: { byRate: [], baseTotal: "0.00", taxTotal: "0.00", grossTotal: "0.00" },
-      cash: { byTill: [], tenderTotal: "0.00", tipTotal: "0.00" },
+      cash: { byOrigin: [], tenderTotal: "0.00", tipTotal: "0.00" },
       counts: { sales: 0, corrections: 0, voids: 0 },
       topSellers: [],
     }),

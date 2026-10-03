@@ -1,7 +1,9 @@
 import { Hono } from "hono";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
+  devices,
   invoiceSeries,
   locations,
   nodes,
@@ -106,7 +108,6 @@ async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise
   const [sale] = await db
     .insert(sales)
     .values({
-      tillId,
       source: "device",
       deviceId,
       nodeId,
@@ -148,7 +149,6 @@ async function seedVariantDay(db: Database, invoiceNumber: number): Promise<void
   const [sale] = await db
     .insert(sales)
     .values({
-      tillId,
       source: "device",
       deviceId,
       nodeId,
@@ -217,7 +217,7 @@ const suite = useVenueDb({
       .values({ locationId, name: "Caja 1" })
       .returning({ id: tills.id });
     tillId = till!.id;
-    ({ deviceId } = await seedDevice(db, { tillId }));
+    ({ deviceId } = await seedDevice(db, { tillId, label: "Barra 1" }));
     const [node] = await db
       .insert(nodes)
       .values({ locationId, name: "Nodo 1" })
@@ -294,7 +294,11 @@ interface TopSellerBody {
 interface DailyCloseBody {
   businessDay: string;
   vat: VatSummaryBody;
-  cash: { byTill: { tillId: string }[]; tenderTotal: string; tipTotal: string };
+  cash: {
+    byOrigin: { source: string; deviceId: string | null; deviceName: string | null }[];
+    tenderTotal: string;
+    tipTotal: string;
+  };
   counts: { sales: number; corrections: number; voids: number };
   topSellers: TopSellerBody[];
 }
@@ -306,7 +310,7 @@ interface PeriodBody {
 }
 
 describe("mountReportApi — /reports/daily-close", () => {
-  it("200 returns the close (vat.byRate, cash.byTill, counts, topSellers) for the seeded day", async () => {
+  it("200 returns the close (vat.byRate, cash.byOrigin, counts, topSellers) for the seeded day", async () => {
     const res = await get(mountApp(), `/management-api/reports/daily-close?businessDay=${DAY1}`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as DailyCloseBody;
@@ -315,9 +319,13 @@ describe("mountReportApi — /reports/daily-close", () => {
     // Only DAY1's 21% sale — DAY2 (10%) must not leak in.
     expect(body.vat.byRate).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00" }]);
     expect(body.vat.grossTotal).toBe("121.00");
-    // One cash till, with the day's tender + tip totals (money as decimal STRINGS).
-    expect(body.cash.byTill).toHaveLength(1);
-    expect(body.cash.byTill[0]!.tillId).toBe(tillId);
+    // One cash device, named, with the day's tender + tip totals (money as decimal STRINGS).
+    expect(body.cash.byOrigin).toHaveLength(1);
+    expect(body.cash.byOrigin[0]).toMatchObject({
+      source: "device",
+      deviceId,
+      deviceName: "Barra 1",
+    });
     expect(body.cash.tenderTotal).toBe("121.00");
     expect(body.cash.tipTotal).toBe("3.00");
     // One ordinary sale on the day.
@@ -326,6 +334,17 @@ describe("mountReportApi — /reports/daily-close", () => {
     expect(body.topSellers).toEqual([
       { name: SEED.day1.line.name, quantity: "2.000", total: "10.00", variants: [] },
     ]);
+  });
+
+  it("still names a device that was revoked after it sold", async () => {
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
+    try {
+      const res = await get(mountApp(), `/management-api/reports/daily-close?businessDay=${DAY1}`);
+      const body = (await res.json()) as DailyCloseBody;
+      expect(body.cash.byOrigin.map((row) => row.deviceName)).toEqual(["Barra 1"]);
+    } finally {
+      await suite.db.update(devices).set({ active: true }).where(eq(devices.id, deviceId));
+    }
   });
 
   it("400 management.request_invalid on a missing businessDay", async () => {

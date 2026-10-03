@@ -425,7 +425,12 @@ describe("a card refund, sent once (design §6b R1–R3)", () => {
       idempotencyKey: `bpr_${row.id}`,
       refundId: row.id,
     });
-    expect(row).toMatchObject({ state: "completed", sendCount: 1, tillId: venue.deviceTillId });
+    expect(row).toMatchObject({
+      state: "completed",
+      sendCount: 1,
+      source: "device",
+      deviceId: venue.deviceId,
+    });
     expect(row.sentAt).not.toBeNull();
     expect(row.providerRefundRef).toMatch(/^fake-re-/);
     expect(await providerRefundsOf(card.id)).toEqual([
@@ -1001,7 +1006,6 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
           reason: "stranded",
           authorizedBy: venue.adminId,
           requestedBy: venue.operatorId,
-          tillId: venue.deviceTillId,
           source: "device",
           deviceId: venue.deviceId,
           state: "pending",
@@ -1037,7 +1041,6 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
           reason: "stranded",
           authorizedBy: venue.adminId,
           requestedBy: venue.operatorId,
-          tillId: venue.deviceTillId,
           source: "device",
           deviceId: venue.deviceId,
           state: "pending",
@@ -1147,7 +1150,6 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
           reason: REASON,
           authorizedBy: venue.adminId,
           requestedBy: venue.operatorId,
-          tillId: venue.deviceTillId,
           source: "device",
           deviceId: venue.deviceId,
           state: "pending",
@@ -1259,6 +1261,34 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
       `/management-api/payments/bill-refunds/${refundId}/attest`,
       body,
     );
+
+  it("keeps the device a refund was asked on through the manager's resolve and attestation", async () => {
+    const resolvedRefund = await pendingRefund();
+    const attestedRefund = await pendingRefund();
+
+    const resolved = await send(
+      managerApp(clockPlus(HOUR)),
+      managerCookie,
+      "POST",
+      `/management-api/payments/bill-refunds/${resolvedRefund.refundId}/resolve`,
+    );
+    const attested = await attest(attestedRefund.refundId, {
+      outcome: "completed",
+      note: NOTE,
+      pin: "1234",
+    });
+
+    expect(resolved.json).toEqual({ outcome: "completed" });
+    expect(attested.json).toEqual({ outcome: "completed" });
+    const stored = venue.db.all(
+      sql`select source, device_id from bill_payment_refunds
+          where id in (${resolvedRefund.refundId}, ${attestedRefund.refundId})`,
+    );
+    expect(stored).toEqual([
+      { source: "device", device_id: venue.deviceId },
+      { source: "device", device_id: venue.deviceId },
+    ]);
+  });
 
   it("refuses to record failed from an empty lookup, and records a confirmed failure with the note and PIN", async () => {
     const { billId, paymentId, refundId } = await pendingRefund();
@@ -1397,7 +1427,6 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
           reason: "stranded",
           authorizedBy: venue.adminId,
           requestedBy: venue.operatorId,
-          tillId: venue.deviceTillId,
           source: "device",
           deviceId: venue.deviceId,
           state: "pending",
@@ -1730,7 +1759,6 @@ describe("a refund the provider here cannot answer for", () => {
           reason: "stranded",
           authorizedBy: venue.adminId,
           requestedBy: venue.operatorId,
-          tillId: venue.deviceTillId,
           source: "device",
           deviceId: venue.deviceId,
           state: "pending",

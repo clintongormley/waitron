@@ -212,7 +212,6 @@ async function credit(billId: string, base: string, total: string): Promise<void
     });
     await recordCorrection(tx, venue.backend, {
       origin: venue.cfg.origin,
-      tillId: venue.cfg.tillId,
       nodeId: venue.cfg.nodeId,
       seriesId: brandSeriesId(series!.id),
       correctsSaleId: brandSaleId(issued!.id),
@@ -264,7 +263,6 @@ describe("recording that a table left without paying", () => {
         reason: REASON,
         recordedBy: supervisorId,
         authorizedBy: supervisorId,
-        tillId: venue.deviceTillId,
         source: "device",
         deviceId: venue.deviceId,
         recordedAt: expect.any(String),
@@ -425,7 +423,7 @@ describe("who may record it", () => {
     expect((await partyState(party.partyId)).closedBy).toBe(venue.operatorId);
   });
 
-  it("records it from a handheld for a person holding the permission, filing on the handheld's till", async () => {
+  it("records it from a handheld for a person holding the permission, filing under the handheld", async () => {
     const [profile] = await inTx(venue, (tx) =>
       tx
         .insert(deviceProfiles)
@@ -437,9 +435,6 @@ describe("who may record it", () => {
       profileId: profile!.id,
       registerId: venue.cfg.tillId,
     });
-    const [enrolled] = venue.db.all<{ tillId: string }>(
-      sql`select till_id as tillId from devices where id = ${handheld.deviceId}`,
-    );
     const party = await seatedWith(venue, "Botella tinto");
     const onHandheld = await inTx(venue, (tx) =>
       loginWithPin(tx, {
@@ -462,7 +457,8 @@ describe("who may record it", () => {
         amount: 3000,
         recordedBy: supervisorId,
         authorizedBy: supervisorId,
-        tillId: enrolled!.tillId,
+        source: "device",
+        deviceId: handheld.deviceId,
       }),
     ]);
     expect((await partyState(party.partyId)).state).toBe("closed");

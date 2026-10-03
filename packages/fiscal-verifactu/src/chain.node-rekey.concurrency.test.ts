@@ -92,14 +92,14 @@ describe("appendToChain from many callers started together, keyed by node", () =
       );
     }
 
-    const { rows } = await suite.db.execute<{ secuencia: number; till_id: string }>(sql`
-      select secuencia, till_id from registros_facturacion
+    const { rows } = await suite.db.execute<{ secuencia: number; device_id: string }>(sql`
+      select secuencia, device_id from registros_facturacion
       where node_id = ${node.nodeId} order by secuencia
     `);
     // One continuous per-node sequence spanning both tills...
     expect(rows.map((r) => r.secuencia)).toEqual([1, 2, 3, 4, 5, 6]);
-    // ...and both tills' snapshots are present (the chain is the node's, not either till's).
-    expect(new Set(rows.map((r) => r.till_id))).toEqual(new Set([node.tillId, tillB.tillId]));
+    // ...and both devices' snapshots are present (the chain is the node's, not either device's).
+    expect(new Set(rows.map((r) => r.device_id))).toEqual(new Set([node.deviceId, tillB.deviceId]));
   });
 });
 
@@ -190,7 +190,6 @@ describe("the series↔node guard (record-sale)", () => {
           tx,
           backend,
           saleInput({
-            tillId: node.tillId,
             nodeId: other.nodeId,
             seriesId: brandSeriesId(node.seriesId),
           }),
@@ -207,7 +206,6 @@ describe("the series↔node guard (record-sale)", () => {
         tx,
         backend,
         saleInput({
-          tillId: node.tillId,
           nodeId: node.nodeId,
           seriesId: brandSeriesId(node.seriesId),
         }),

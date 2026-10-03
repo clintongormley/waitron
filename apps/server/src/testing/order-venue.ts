@@ -101,7 +101,7 @@ export async function placedInvoiceFirst(venue: OrderVenue, ...names: string[]):
     zoneId: venue.invoiceFirstZone,
     operatorId: venue.operatorId,
   });
-  await placeOrder(deps, venue.cfg, id, venue.operatorId, venue.cfg.tillId);
+  await placeOrder(deps, venue.cfg, id, venue.operatorId);
   return id;
 }
 
@@ -178,7 +178,6 @@ export async function credit(
     const session = await adminSession(venue, tx);
     await recordCorrection(tx, venue.backend, {
       origin: venue.cfg.origin,
-      tillId: venue.cfg.tillId,
       nodeId: venue.cfg.nodeId,
       seriesId: brandSeriesId(series!.id),
       correctsSaleId: brandSaleId(saleId),
@@ -205,14 +204,9 @@ export async function voidInvoice(venue: OrderVenue, billId: string): Promise<vo
   const saleId = await invoiceOf(venue, billId);
   await inTx(venue, async (tx) => {
     const session = await adminSession(venue, tx);
-    await recordVoid(
-      tx,
-      venue.backend,
-      brandSaleId(saleId),
-      "Error de cobro",
-      { sessionId: session.id },
-      venue.cfg.origin,
-    );
+    await recordVoid(tx, venue.backend, brandSaleId(saleId), "Error de cobro", {
+      sessionId: session.id,
+    });
   });
 }
 
@@ -242,7 +236,6 @@ export async function billlessSale(venue: OrderVenue): Promise<string> {
   const { saleId } = await inTx(venue, (tx) =>
     recordSale(tx, venue.backend, {
       origin: venue.cfg.origin,
-      tillId: venue.cfg.tillId,
       nodeId: venue.cfg.nodeId,
       seriesId: venue.cfg.seriesId,
       locale: venue.cfg.locale,

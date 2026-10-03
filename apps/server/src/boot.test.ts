@@ -2869,7 +2869,6 @@ describe("startServer, against a migrated venue directory", () => {
         applied: 500,
         state: "pending",
         requestedBy: randomUUID(),
-        tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
       })
       .returning({ id: billPayments.id });
 

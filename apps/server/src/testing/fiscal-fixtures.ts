@@ -75,8 +75,9 @@ export interface SeedParentsOptions {
 export async function insertFiscalSale(db: Database, ids: FiscalIds): Promise<void> {
   await db.insert(sales).values({
     id: ids.saleId,
-    tillId: ids.tillId,
-    source: "device",
+    // A provisioned venue's till reused here carries no device: its sale is a Demo seed one.
+    source: sql`case when exists (select 1 from devices where till_id = ${ids.tillId})
+      then 'device' else 'demo_seed' end`,
     deviceId: sql`(select id from devices where till_id = ${ids.tillId})`,
     nodeId: ids.nodeId,
     seriesId: ids.seriesId,
@@ -182,9 +183,8 @@ export async function insertFiscalRegistro(
     .insert(registrosFacturacion)
     .values({
       id: registroId,
-      tillId: ids.tillId,
-      source: "device",
-      deviceId: sql`(select id from devices where till_id = ${ids.tillId})`,
+      source: sql`(select source from sales where id = ${ids.saleId})`,
+      deviceId: sql`(select device_id from sales where id = ${ids.saleId})`,
       nodeId: ids.nodeId,
       sifId: ids.sifId,
       saleId: ids.saleId,

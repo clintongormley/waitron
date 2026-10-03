@@ -3493,7 +3493,6 @@ describe("a counter order (B11c)", () => {
       venue.cfg,
       orderId,
       venue.staffId,
-      venue.cfg.tillId,
     );
     const before = await counterStateOf(orderId);
     expect(before.order).toMatchObject({ status: "placed", partyId: null });

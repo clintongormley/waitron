@@ -12,7 +12,7 @@ import {
   seriesId as brandSeriesId,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import type { SaleId, TillId } from "@waitron/shared";
+import type { SaleId } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./till-config.js";
 
 /** The invoice a working order issued, as {@link creditWholeInvoice} credits it. */
@@ -35,7 +35,7 @@ export async function readOrderInvoice(
 
 /**
  * Credit the whole of an issued invoice with a corrective invoice in the node's live rectificative
- * series, filed on `saleTillId`, its lines the invoice's with their signs reversed and its VAT
+ * series, filed under the request's device, its lines the invoice's with their signs reversed and its VAT
  * breakdown the invoice's own negated (`wholeInvoice`), then settle the invoice owing nothing.
  * `recordCorrection` checks `sale.rectify` against `authz` and counts nothing, so an override in
  * `authz` must already have been checked under a wrong-PIN limit.
@@ -46,7 +46,6 @@ export async function creditWholeInvoice(
   cfg: DeviceRequestConfig,
   invoice: IssuedInvoice,
   authz: AuthzInput,
-  saleTillId: TillId,
 ): Promise<void> {
   const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "rectificative"));
   const total = centsToDecimal(-invoice.total);
@@ -58,7 +57,6 @@ export async function creditWholeInvoice(
       .orderBy(saleLines.lineNo),
   );
   await recordCorrection(tx, deps.backend, {
-    tillId: saleTillId,
     origin: cfg.origin,
     nodeId: cfg.nodeId,
     seriesId,
@@ -69,7 +67,7 @@ export async function creditWholeInvoice(
     authz,
     clock: deps.clock,
   });
-  await settleSale(tx, { saleId: invoice.id, tenders: [], origin: cfg.origin });
+  await settleSale(tx, { saleId: invoice.id, tenders: [] });
 }
 
 function reversedLines(rows: (typeof saleLines.$inferSelect)[]): RecordSaleLine[] {

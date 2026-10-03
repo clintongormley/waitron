@@ -95,7 +95,6 @@ const steadyClock: TrustedClock = fixedClock(() => ({
 
 function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    tillId,
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,
@@ -150,7 +149,7 @@ async function voidSale(
   authz: AuthzInput = { sessionId: managerSessionId },
 ) {
   return withTransaction(suite.db, async (tx) => {
-    return recordVoid(tx, backend, saleId, reason, authz, deviceOrigin(deviceId));
+    return recordVoid(tx, backend, saleId, reason, authz);
   });
 }
 
@@ -258,7 +257,6 @@ describe("recordVoid — numbering", () => {
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
         await tx.insert(sales).values({
-          tillId,
           source: "device",
           deviceId,
           nodeId,
@@ -407,14 +405,9 @@ describe("recordVoid — error propagation", () => {
     };
 
     const error = await captureError(() =>
-      recordVoid(
-        fakeTx,
-        backend,
-        "00000000-0000-4000-8000-000000000000" as SaleId,
-        "reason",
-        { sessionId: "operator-session" },
-        deviceOrigin(deviceId),
-      ),
+      recordVoid(fakeTx, backend, "00000000-0000-4000-8000-000000000000" as SaleId, "reason", {
+        sessionId: "operator-session",
+      }),
     );
     expect(error).not.toBeInstanceOf(AppError);
     expect(driverErrorCode(error)).toBe("53100");

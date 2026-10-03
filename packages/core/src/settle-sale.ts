@@ -17,10 +17,11 @@ import {
   compareDecimal,
   decimal,
   rawCentsToDecimal,
+  readOrigin,
   stringToCents,
   sumDecimals,
 } from "@waitron/shared";
-import type { Origin, SaleId } from "@waitron/shared";
+import type { SaleId } from "@waitron/shared";
 import type { RecordSaleTender } from "./record-sale.js";
 
 /** A tender as settlement writes it: `billPaymentId` names the bill payment it was taken as, when
@@ -30,8 +31,6 @@ export type SettleSaleTender = RecordSaleTender & { billPaymentId?: string | nul
 export interface SettleSaleInput {
   saleId: SaleId;
   tenders: SettleSaleTender[];
-  /** Who is settling: a refusal names its device. */
-  origin: Origin;
 }
 
 /**
@@ -45,6 +44,9 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   // `rawCentsToDecimal` (see its doc comment); `sales.total` is a typed column and needs no cast.
   const [sale] = await tx
     .select({
+      // A refusal names the device the sale was rung on, not the one settling it.
+      source: sales.source,
+      deviceId: sales.deviceId,
       total: sales.total,
       corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0) as text)`,
     })
@@ -77,7 +79,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   const unsettled = input.tenders.filter((t) => t.settledAt === null);
   if (unsettled.length > 0) {
     throw new AppError("sale.tender_unsettled", {
-      deviceId: input.origin.deviceId,
+      deviceId: readOrigin(sale.source, sale.deviceId).deviceId,
       saleId: input.saleId,
       unsettledCount: unsettled.length,
     });
@@ -92,7 +94,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   const charged = sumDecimals(input.tenders.map((t) => decimal(t.amount)));
   if (compareDecimal(charged, due) !== 0) {
     throw new AppError("sale.tender_shortfall", {
-      deviceId: input.origin.deviceId,
+      deviceId: readOrigin(sale.source, sale.deviceId).deviceId,
       saleId: input.saleId,
       due,
       charged,

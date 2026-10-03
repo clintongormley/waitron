@@ -56,7 +56,6 @@ import {
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
-  type TillId,
   type TimingBand,
   toScale,
   workingOrderId as brandWorkingOrderId,
@@ -4066,7 +4065,7 @@ export interface UpdateHeldOrderRequest {
 /** What {@link updateHeldOrder} needs to issue the bill's invoice when the save leaves it fully paid. */
 interface IssueOnSave {
   fiscal: TillSaleDeps;
-  saleCfg: DeviceRequestConfig | null;
+  saleCfg: DeviceRequestConfig;
 }
 
 /** What `PUT /api/working-orders/:id/lines/:lineNo` changes on one line; an absent field is kept. */
@@ -5388,8 +5387,7 @@ export interface PlaceOrderResult {
 
 /**
  * Place an open order, append its genesis amendment and fire kitchen items in one transaction.
- * invoice_first also files a deferred invoice from the stored prices. `saleTillId` is the
- * authenticated device's register on the fiscal record.
+ * invoice_first also files a deferred invoice from the stored prices, under the request's device.
  *
  * A second placement cannot file a second invoice: `withTransaction` IS the venue file's write lock,
  * so it reads `placed` and is refused before it reaches the file.
@@ -5399,7 +5397,6 @@ export async function placeOrder(
   cfg: DeviceRequestConfig,
   id: string,
   operatorId: string,
-  saleTillId: TillId,
 ): Promise<PlaceOrderResult> {
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
@@ -5434,14 +5431,7 @@ export async function placeOrder(
     let placeResult: PlaceOrderResult = { id, status: "placed" };
     if (orderFlow === "invoice_first") {
       const invoice = await priceForIssuance(tx, deps.clock, cfg, id);
-      const issued = await issueUnpaidInvoice(
-        tx,
-        deps.backend,
-        cfg,
-        invoice,
-        operatorId,
-        saleTillId,
-      );
+      const issued = await issueUnpaidInvoice(tx, deps.backend, cfg, invoice, operatorId);
       const { saleId } = issued;
       const ticket = await unpaidReceipt(tx, deps.backend, invoice, issued);
       placeResult = {
@@ -5454,7 +5444,7 @@ export async function placeOrder(
         ...(ticket.qrText === undefined ? {} : { qrText: ticket.qrText }),
         vatBreakdown: ticket.vatBreakdown,
       };
-      await enqueueOriginalReceipt(tx, { ...cfg, tillId: saleTillId }, ticket, saleId);
+      await enqueueOriginalReceipt(tx, cfg, ticket, saleId);
     }
 
     await markOrderPlaced(tx, deps.clock, cfg, id, operatorId);
@@ -5501,7 +5491,7 @@ export interface IssuedInvoice {
  * File the priced invoice with no tender and no settlement until `collectOrder` settles it, and,
  * on an order still open, save the label it was issued under. A placed order's label can change
  * only in the update that moves it to settled or abandoned (`working_orders_enforce_transition`).
- * Prints nothing. `saleTillId` is the device's register on the fiscal record.
+ * Prints nothing.
  */
 export async function issueUnpaidInvoice(
   tx: Transaction,
@@ -5509,12 +5499,10 @@ export async function issueUnpaidInvoice(
   cfg: DeviceRequestConfig,
   invoice: PricedInvoice,
   operatorId: string,
-  saleTillId: TillId,
 ): Promise<IssuedInvoice> {
   const { id, priced, clock } = invoice;
   const language = await readReceiptLanguage(tx, cfg.locationId);
   const { saleId, fiscal } = await recordSale(tx, backend, {
-    tillId: saleTillId,
     origin: cfg.origin,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
@@ -5587,11 +5575,11 @@ export async function markOrderPlaced(
  * Cancel a placed order and append its reasoned amendment in one transaction. A second cancel reads
  * `abandoned` and is refused `working_order.not_placed`.
  *
- * An order whose invoice was issued has the whole invoice credited, on the till `saleTillId`
- * resolves, and settled owing nothing in the same transaction ({@link creditWholeInvoice}). It is
- * refused, writing nothing, while its bill holds a payment, or while a card payment of the invoice
- * is unresolved or captured and not yet filed. `saleTillId` is called only for such an order. Any
- * placed order is refused while an integrated card collection of it runs in this process.
+ * An order whose invoice was issued has the whole invoice credited, under the request's device, and
+ * settled owing nothing in the same transaction ({@link creditWholeInvoice}). It is refused,
+ * writing nothing, while its bill holds a payment, or while a card payment of the invoice is
+ * unresolved or captured and not yet filed. Any placed order is refused while an integrated card
+ * collection of it runs in this process.
  *
  * The credit needs `sale.rectify` from the operator or from `override`. Only when the operator lacks
  * it is the override's PIN checked, under `operator.attempts`, before the credit.
@@ -5602,7 +5590,6 @@ export async function cancelPlacedOrder(
   id: string,
   reason: string,
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
-  saleTillId: () => Promise<TillId>,
   override?: Override,
 ): Promise<void> {
   // The reason is the amendment's accountable content. Checked before the status, so a missing reason
@@ -5620,7 +5607,7 @@ export async function cancelPlacedOrder(
         );
 
   return withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) =>
-    cancelPlaced(deps, cfg, id, reason, operator, saleTillId, withCheck(override, checked)),
+    cancelPlaced(deps, cfg, id, reason, operator, withCheck(override, checked)),
   );
 }
 
@@ -5630,7 +5617,6 @@ async function cancelPlaced(
   id: string,
   reason: string,
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
-  saleTillId: () => Promise<TillId>,
   override: Override | undefined,
 ): Promise<void> {
   const authz = { sessionId: operator.sessionId, override };
@@ -5656,7 +5642,7 @@ async function cancelPlaced(
     }
     if (invoice !== undefined) {
       await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
-      await creditWholeInvoice(tx, deps, cfg, invoice, authz, await saleTillId());
+      await creditWholeInvoice(tx, deps, cfg, invoice, authz);
     }
 
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));

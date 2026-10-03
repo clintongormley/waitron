@@ -50,14 +50,14 @@ export const QUERY_DEPENDENCIES = {
   listReaders: ["card_readers", "device_card_readers"],
   // The route reads `tenant_credentials`, which no module declares as a live resource.
   listPaymentProviders: [],
-  listStuckPayments: ["payments", "working_orders", "tills"],
-  listStuckBillPayments: ["bill_payments", "payments", "working_orders", "tills"],
+  listStuckPayments: ["payments", "working_orders", "devices"],
+  listStuckBillPayments: ["bill_payments", "payments", "working_orders", "devices"],
   listStuckBillRefunds: [
     "bill_payment_refunds",
     "bill_payments",
     "payments",
     "working_orders",
-    "tills",
+    "devices",
   ],
   pairingMode: ["pairing"],
   joinRequests: ["join_requests"],

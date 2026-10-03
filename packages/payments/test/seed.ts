@@ -89,7 +89,6 @@ export async function seedSale(db: Database, seeded: Seeded): Promise<string> {
     const [sale] = await tx
       .insert(sales)
       .values({
-        tillId: seeded.tillId,
         source: "device",
         deviceId: seeded.deviceId,
         nodeId: seeded.nodeId,
@@ -158,7 +157,6 @@ export async function seedBillPayment(db: Database, seeded: Seeded): Promise<str
       applied: 1000,
       state: "pending",
       requestedBy: "11111111-1111-1111-1111-111111111111",
-      tillId: seeded.tillId,
       source: "device",
       deviceId: seeded.deviceId,
     })

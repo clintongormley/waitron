@@ -547,6 +547,27 @@
       "when": 1791058064316,
       "tag": "0077_incident_origin_dedup",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "6",
+      "when": 1791061178300,
+      "tag": "0078_money_records_drop_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "6",
+      "when": 1791061197450,
+      "tag": "0079_money_records_lose_till",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "6",
+      "when": 1791061208380,
+      "tag": "0080_money_records_recreate_triggers",
+      "breakpoints": true
     }
   ]
 }

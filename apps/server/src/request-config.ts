@@ -1,4 +1,4 @@
-import { AppError, deviceOrigin } from "@waitron/shared";
+import { AppError, deviceOrigin, readOrigin } from "@waitron/shared";
 import type { DeviceId, DeviceOrigin, Origin } from "@waitron/shared";
 import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
 
@@ -8,15 +8,15 @@ export function requestCfg(cfg: TillConfig, session: { deviceId: DeviceId }): De
 }
 
 /**
- * The device a stored payment row was started on. Only a device starts a payment, so any other
- * stored pair is refused `origin.invalid`; a source not yet written is reported as empty.
+ * The device a stored payment row was started on. Only a device starts a payment, so a stored job
+ * source is refused `origin.invalid`, as `readOrigin` refuses an unpaired one.
  */
-export function storedDeviceOrigin(row: {
-  source: string | null;
-  deviceId: string | null;
-}): DeviceOrigin {
-  if (row.source === "device" && row.deviceId !== null) return deviceOrigin(row.deviceId);
-  throw new AppError("origin.invalid", { source: row.source ?? "", deviceId: row.deviceId });
+export function storedDeviceOrigin(row: { source: string; deviceId: string | null }): DeviceOrigin {
+  const origin = readOrigin(row.source, row.deviceId);
+  if (origin.source !== "device") {
+    throw new AppError("origin.invalid", { source: row.source, deviceId: row.deviceId });
+  }
+  return origin;
 }
 
 /**
@@ -27,7 +27,7 @@ export type AlertOrigin = Origin | "stored";
 
 export function alertOrigin(
   raisedBy: AlertOrigin,
-  row: { source: string | null; deviceId: string | null },
+  row: { source: string; deviceId: string | null },
 ): Origin {
   return raisedBy === "stored" ? storedDeviceOrigin(row) : raisedBy;
 }

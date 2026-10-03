@@ -1292,7 +1292,6 @@ describe("the link from a provider payment to its bill payment", () => {
         applied: 1000,
         state: "pending",
         requestedBy: "11111111-1111-1111-1111-111111111111",
-        tillId: seeded.tillId,
       })
       .returning({ id: billPayments.id });
     return row!.id;
@@ -1607,7 +1606,6 @@ describe("rows written within one millisecond", () => {
         applied: 10_000,
         state: "pending",
         requestedBy: "11111111-1111-1111-1111-111111111111",
-        tillId: seeded.tillId,
       })
       .returning({ id: billPayments.id });
     const [payment] = await suite.db

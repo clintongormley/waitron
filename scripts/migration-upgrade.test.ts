@@ -300,6 +300,18 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "core/0077_incident_origin_dedup": {
     refused: ["UNIQUE constraint failed: index 'incidents_open_dedup'"],
   },
+  // Rebuilds the money records without `till_id`, with `source` required; a carried row has none.
+  "core/0079_money_records_lose_till": {
+    refused: ["NOT NULL constraint failed: __new_bill_payment_refunds.source"],
+  },
+  // Rebuilds `registros_facturacion` the same way.
+  "fiscal-verifactu/0002_registro_lose_till": {
+    refused: ["NOT NULL constraint failed: __new_registros_facturacion.source"],
+  },
+  // Rebuilds `payments` with `source` required; a carried row has none.
+  "payments/0004_payment_origin_required": {
+    refused: ["NOT NULL constraint failed: __new_payments.source"],
+  },
 };
 
 /** What a step's failure lacks against its RESETS entry, or `undefined` when it matches. */

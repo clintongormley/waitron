@@ -20,13 +20,9 @@ import {
 } from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
-import { madeHereSinkFor, replayPrepayMadeHere } from "./made-here.js";
-import {
-  asObject,
-  optionalMoney,
-  submissionIdOf,
-  withSaleTillWhenIssuing,
-} from "./bill-payments-api.js";
+import { deviceTillCfg } from "./device-session.js";
+import { madeHereSinkFor, replayPrepayMadeHere, sendingCfg } from "./made-here.js";
+import { asObject, optionalMoney, submissionIdOf } from "./bill-payments-api.js";
 import type { Logger } from "./logger.js";
 import { withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { partyRevisionOfOrder } from "./parties.js";
@@ -144,20 +140,19 @@ export function mountAdjustmentsApi(
       const toCheck = await approverToCheck(deps.db, ask, parsedApprover, deps.venueLocale);
       const answer = await withPinCheckAhead(deps.db, toCheck, attempts, (checked) => {
         const approver = withCheck(parsedApprover, checked);
-        return withSaleTillWhenIssuing(c, cfg, session.device, (saleCfg) =>
-          withTransaction(deps.db, async (tx) => {
-            const applied = await applyAdjustment(
-              tx,
-              cfg,
-              { ...ask, submissionId, ...(approver === undefined ? {} : { approver }) },
-              deps.venueLocale,
-              attempts,
-            );
-            await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
-            await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);
-            return { ...applied, party: await partyRevisionOfOrder(tx, id) };
-          }),
-        );
+        const saleCfg = sendingCfg(deviceTillCfg(cfg, session.device), c, session.device);
+        return withTransaction(deps.db, async (tx) => {
+          const applied = await applyAdjustment(
+            tx,
+            cfg,
+            { ...ask, submissionId, ...(approver === undefined ? {} : { approver }) },
+            deps.venueLocale,
+            attempts,
+          );
+          await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
+          await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);
+          return { ...applied, party: await partyRevisionOfOrder(tx, id) };
+        });
       });
       return c.json(answer);
     }),

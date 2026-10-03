@@ -53,13 +53,13 @@ async function insertRegistro(exec: Database, fields: RegistroFields = {}): Prom
   const secuencia = nextSecuencia();
   await exec.execute(sql`
     insert into registros_facturacion (
-      id, till_id, source, device_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+      id, source, device_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       tipo_factura, tipo_rectificativa, facturas_rectificadas, facturas_sustituidas,
       importe_rectificacion, descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, creado_en
-    ) values (${newId()}, ${TENANT_A.tillId}, 'device', (select id from devices where till_id = ${TENANT_A.tillId}), ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
+    ) values (${newId()}, 'device', (select id from devices where till_id = ${TENANT_A.tillId}), ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
       ${secuencia}, 'alta',
       '89890001K', ${"R/" + String(secuencia)}, '2026-07-20', 'Waitron SL',
       ${fields.tipoFactura === undefined ? "R5" : fields.tipoFactura},

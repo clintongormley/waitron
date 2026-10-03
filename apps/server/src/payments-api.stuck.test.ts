@@ -269,8 +269,8 @@ async function setup(
     noopLog,
   );
   const devices = [
-    await seedDevice(suite.db, { tillId: venue.tillId }),
-    await seedDevice(suite.db, { tillId: venue.tillId }),
+    await seedDevice(suite.db, { tillId: venue.tillId, label: "Barra 1" }),
+    await seedDevice(suite.db, { tillId: venue.tillId, label: "Barra 2" }),
   ];
   return {
     cfg,
@@ -436,14 +436,34 @@ describe("GET /management-api/payments/stuck", () => {
     expect(body[0]).toMatchObject({
       paymentId,
       workingOrderId: stuckOrder,
-      tillId: v.cfg.tillId,
-      tillName: "Caja 1",
+      source: "device",
+      deviceId: v.deviceId,
+      deviceName: "Barra 1",
       provider: "stripe",
       amount: "1.50",
       label: null,
     });
     expect(typeof body[0]!.orderNumber).toBe("number");
     expect(typeof body[0]!.startedAt).toBe("string");
+  });
+
+  it("names the device that started the payment, even after it was revoked", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    await strandPayment(
+      v,
+      orderId,
+      { status: "requires_payment_method" },
+      { deviceId: v.otherDeviceId },
+    );
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, v.otherDeviceId));
+
+    const res = await send(v, "GET", "/management-api/payments/stuck");
+
+    const body = (await res.json()) as Record<string, unknown>[];
+    expect(body.map((row) => [row.deviceId, row.deviceName])).toEqual([
+      [v.otherDeviceId, "Barra 2"],
+    ]);
   });
 
   it("is refused to a staff session and to no session", async () => {
@@ -996,6 +1016,7 @@ async function strandBillPayment(
   orderId: string,
   provided: Provided,
   amount = "1.50",
+  startedOn: string = v.cfg.origin.deviceId,
 ): Promise<string> {
   const [bill] = await suite.db
     .insert(billPayments)
@@ -1008,9 +1029,8 @@ async function strandBillPayment(
       applied: Math.round(Number(amount) * 100),
       state: "pending",
       requestedBy: v.managerId,
-      tillId: v.cfg.tillId,
-      source: v.cfg.origin.source,
-      deviceId: v.cfg.origin.deviceId,
+      source: "device",
+      deviceId: startedOn,
     })
     .returning({ id: billPayments.id });
   const billPaymentId = bill!.id;
@@ -1106,8 +1126,9 @@ describe("GET /management-api/payments/bill-payments", () => {
       expect.objectContaining({
         billPaymentId: pending,
         workingOrderId: orderId,
-        tillId: v.cfg.tillId,
-        tillName: "Caja 1",
+        source: "device",
+        deviceId: v.cfg.origin.deviceId,
+        deviceName: expect.any(String),
         method: "card",
         applied: "1.50",
         tip: "0.00",
@@ -1334,6 +1355,23 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     expect((await billPaymentOf(id)).state).toBe("received");
   });
 
+  it("keeps the payment's device, and files the invoice it completes under that device", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "captured" }, "1.50", v.otherDeviceId);
+
+    const res = await send(v, "POST", billResolvePath(id));
+
+    expect(res.status).toBe(200);
+    const expected = [{ source: "device", device_id: v.otherDeviceId }];
+    expect(suite.db.all(sql`select source, device_id from bill_payments where id = ${id}`)).toEqual(
+      expected,
+    );
+    expect(
+      suite.db.all(sql`select source, device_id from sales where working_order_id = ${orderId}`),
+    ).toEqual(expected);
+  });
+
   it("completes a payment that leaves the bill owing, answering no invoice", async () => {
     const v = await setup();
     const orderId = await openOrder(v);
@@ -1476,6 +1514,23 @@ describe("POST /management-api/payments/bill-payments/:id/attest", () => {
         sql`select printer_id, kind from print_jobs`,
       ),
     ).toEqual([{ printer_id: printerId, kind: "document" }]);
+  });
+
+  it("keeps the payment's device, and files the invoice it completes under that device", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "failed" }, "1.50", v.otherDeviceId);
+
+    const res = await post(v, attestPath(id), { outcome: "received", note: NOTE, pin: "1234" });
+
+    expect(res.status).toBe(200);
+    const expected = [{ source: "device", device_id: v.otherDeviceId }];
+    expect(suite.db.all(sql`select source, device_id from bill_payments where id = ${id}`)).toEqual(
+      expected,
+    );
+    expect(
+      suite.db.all(sql`select source, device_id from sales where working_order_id = ${orderId}`),
+    ).toEqual(expected);
   });
 
   it("records a confirmed receipt that leaves the bill owing, answering no invoice", async () => {
@@ -1845,7 +1900,6 @@ describe("the manager's lists, of rows written within one millisecond", () => {
           applied: 150,
           state: "pending",
           requestedBy: v.managerId,
-          tillId: v.cfg.tillId,
           source: v.cfg.origin.source,
           deviceId: v.cfg.origin.deviceId,
           createdAt: AT,
@@ -1942,7 +1996,6 @@ describe("the manager's lists, of rows written within one millisecond", () => {
           reason: "error",
           authorizedBy: v.managerId,
           requestedBy: v.managerId,
-          tillId: v.cfg.tillId,
           source: v.cfg.origin.source,
           deviceId: v.cfg.origin.deviceId,
           state: "pending",

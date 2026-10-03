@@ -68,7 +68,6 @@ async function seedTodaySale(db: Database): Promise<void> {
   const [sale] = await db
     .insert(sales)
     .values({
-      tillId,
       source: "device",
       deviceId,
       nodeId,

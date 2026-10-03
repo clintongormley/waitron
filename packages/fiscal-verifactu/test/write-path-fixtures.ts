@@ -1,7 +1,7 @@
 import type { RecordSaleInput } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
 import { jobOrigin } from "@waitron/shared";
-import type { NodeId, SeriesId, TillId } from "@waitron/shared";
+import type { NodeId, SeriesId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { VerifactuClient } from "@waitron/verifactu";
 
@@ -46,14 +46,12 @@ export const steadyClock: TrustedClock = {
  */
 export function saleInput(
   params: {
-    tillId: TillId;
     nodeId: NodeId;
     seriesId: SeriesId;
   } & Partial<RecordSaleInput>,
 ): RecordSaleInput {
-  const { tillId, nodeId, seriesId, ...overrides } = params;
+  const { nodeId, seriesId, ...overrides } = params;
   return {
-    tillId,
     origin: jobOrigin("readiness_test"),
     nodeId,
     seriesId,

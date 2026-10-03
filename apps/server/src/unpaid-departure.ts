@@ -4,7 +4,7 @@ import type { TrustedClock, FiscalBackend } from "@waitron/fiscal";
 import { authorize } from "@waitron/identity";
 import type { Override, PinAttempts } from "@waitron/identity";
 import { AppError, decimalToCents } from "@waitron/shared";
-import type { Decimal, DeviceId, SaleId, TillId } from "@waitron/shared";
+import type { Decimal, DeviceId, SaleId } from "@waitron/shared";
 import { billOwes, checkAndBumpParty, closeParty, readBillsOfParties } from "./parties.js";
 import { readIssuedSales } from "./sale-due.js";
 import type { Logger } from "./logger.js";
@@ -60,7 +60,6 @@ export async function recordUnpaidDeparture(
   tx: Transaction,
   deps: { backend: FiscalBackend; clock: TrustedClock; log?: Logger },
   cfg: DeviceRequestConfig,
-  saleTillId: TillId,
   partyId: string,
   req: UnpaidDepartureRequest,
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
@@ -114,14 +113,7 @@ export async function recordUnpaidDeparture(
 
   const saleOf = new Map<string, SaleId>([...invoiced].map(([id, sale]) => [id, sale.saleId]));
   for (const invoice of invoices) {
-    const { saleId } = await issueUnpaidInvoice(
-      tx,
-      deps.backend,
-      cfg,
-      invoice,
-      operator.personId,
-      saleTillId,
-    );
+    const { saleId } = await issueUnpaidInvoice(tx, deps.backend, cfg, invoice, operator.personId);
     saleOf.set(invoice.id, saleId);
     if (openIds.has(invoice.id)) {
       await markOrderPlaced(tx, deps.clock, cfg, invoice.id, operator.personId);
@@ -129,7 +121,7 @@ export async function recordUnpaidDeparture(
   }
   for (const id of owingIds) {
     if (decimalToCents(due.get(id)!) === 0) {
-      await settleIssuedOwingNothing(tx, deps, cfg.origin, id, saleOf.get(id)!);
+      await settleIssuedOwingNothing(tx, deps, id, saleOf.get(id)!);
     }
   }
 
@@ -141,7 +133,6 @@ export async function recordUnpaidDeparture(
           reason: req.reason,
           recordedBy: operator.personId,
           authorizedBy,
-          tillId: saleTillId,
           source: cfg.origin.source,
           deviceId: cfg.origin.deviceId,
         });
@@ -164,7 +155,6 @@ async function insertDepartures(
     reason: string;
     recordedBy: string;
     authorizedBy: string;
-    tillId: TillId;
     source: "device";
     deviceId: DeviceId;
   },

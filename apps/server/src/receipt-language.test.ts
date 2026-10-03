@@ -435,7 +435,7 @@ describe("a bill paid in parts and an invoice issued at placing file the locatio
       operatorId: venue.operatorId,
     });
     await takePrinted(suite.db);
-    await placeOrder(deps, venue.cfg, id, venue.operatorId, venue.cfg.tillId);
+    await placeOrder(deps, venue.cfg, id, venue.operatorId);
     expect(await saleRow(suite.db, id)).toEqual({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
     const receipt = await takeReceipt(suite.db);
     expect(startsWith(receipt, "Data"), "Data").toBe(true);

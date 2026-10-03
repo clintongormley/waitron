@@ -1,21 +1,20 @@
 import { saleLineRows } from "./sale-line-rows.js";
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
+import { operationDescriptionFor } from "./sale-location.js";
 import { eq, inArray } from "drizzle-orm";
 import {
   allocateInvoiceNumber,
   invoiceSeries,
   isUniqueViolation,
-  locations,
   saleLines,
   saleSubstitutions,
   saleVoids,
   sales,
-  tills,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, centsToDecimal, stringToCents } from "@waitron/shared";
-import type { NodeId, SaleId, SaleOrigin, SeriesId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SaleOrigin, SeriesId } from "@waitron/shared";
 import type { Counterparty, FiscalBackend, FiscalRecordRef, TrustedClock } from "@waitron/fiscal";
 import { checkedCounterparty } from "./counterparty.js";
 import { recordIncident } from "./incidents.js";
@@ -24,8 +23,6 @@ import { deriveVatBreakdown } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
 
 export interface RecordSubstitutionInput {
-  /** Where the F3 rings; not checked against the series (`nodeId` is). */
-  tillId: TillId;
   /** Where the sale came from, written to `sales.source` and `sales.device_id`. */
   origin: SaleOrigin;
   /**
@@ -193,7 +190,6 @@ export async function recordSubstitution(
   const [inserted] = await tx
     .insert(sales)
     .values({
-      tillId: input.tillId,
       source: input.origin.source,
       deviceId: input.origin.deviceId,
       nodeId: input.nodeId,
@@ -250,23 +246,11 @@ export async function recordSubstitution(
     }
   }
 
-  const [location] = await tx
-    .select({ operationDescription: locations.operationDescription })
-    .from(tills)
-    .innerJoin(locations, eq(locations.id, tills.locationId))
-    .where(eq(tills.id, input.tillId));
-
-  /* v8 ignore start */
-  if (location === undefined) {
-    // `tills.location_id` is a not-null foreign key, so this means the till does not exist.
-    throw new Error(`recordSubstitution: no location found for till ${input.tillId}`);
-  }
-  /* v8 ignore stop */
+  const descriptionOfOperation = await operationDescriptionFor(tx, input.origin, input.nodeId);
 
   const fiscal = await backend.recordSubstitution(
     tx,
     {
-      tillId: input.tillId,
       origin: input.origin,
       nodeId: input.nodeId,
       saleId,
@@ -275,7 +259,7 @@ export async function recordSubstitution(
       invoiceNumber,
       issuedAt: now.instant,
       offsetMinutes: now.offsetMinutes,
-      descriptionOfOperation: location.operationDescription,
+      descriptionOfOperation,
       total: centsToDecimal(totalCents),
       vatBreakdown,
       counterparty,

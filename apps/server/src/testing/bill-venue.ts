@@ -380,7 +380,7 @@ export async function tendersOfBill(venue: BillVenue, billId: string) {
         amount: tenders.amount,
         tip: tenders.tipAmount,
         billPaymentId: tenders.billPaymentId,
-        saleTillId: sales.tillId,
+        saleDeviceId: sales.deviceId,
       })
       .from(tenders)
       .innerJoin(sales, eq(sales.id, tenders.saleId))
@@ -440,7 +440,7 @@ export async function placedCounterBillMovedTo(
     zoneId,
     operatorId: venue.operatorId,
   });
-  await placeOrder(deps, venue.cfg, id, venue.operatorId, venue.cfg.tillId);
+  await placeOrder(deps, venue.cfg, id, venue.operatorId);
   const [row] = venue.db.all<{ revision: number }>(
     sql`select revision from parties where id = ${party.partyId}`,
   );

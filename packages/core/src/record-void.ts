@@ -3,8 +3,8 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import { isUniqueViolation, saleVoids, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
-import type { NodeId, Origin, SaleId } from "@waitron/shared";
+import { AppError, readOrigin } from "@waitron/shared";
+import type { NodeId, SaleId } from "@waitron/shared";
 import type { FiscalBackend, FiscalRecordRef } from "@waitron/fiscal";
 import { authorize, type AuthzInput } from "@waitron/identity";
 import { recordIncident } from "./incidents.js";
@@ -18,7 +18,7 @@ import { recordIncident } from "./incidents.js";
  * only moment it can be recorded. It runs after the sale lookup, so a missing sale is
  * `sale.not_found` rather than an authorization error, and before any fiscal work.
  *
- * `origin` is who asks for the void; a failed chain check's incident names it.
+ * A failed chain check's incident names the device the sale was rung on.
  */
 export async function recordVoid(
   tx: Transaction,
@@ -26,9 +26,11 @@ export async function recordVoid(
   saleId: SaleId,
   reason: string,
   authz: AuthzInput,
-  origin: Origin,
 ): Promise<{ fiscal: FiscalRecordRef }> {
-  const [sale] = await tx.select({ nodeId: sales.nodeId }).from(sales).where(eq(sales.id, saleId));
+  const [sale] = await tx
+    .select({ nodeId: sales.nodeId, source: sales.source, deviceId: sales.deviceId })
+    .from(sales)
+    .where(eq(sales.id, saleId));
 
   if (sale === undefined) {
     throw new AppError("sale.not_found", { saleId });
@@ -51,7 +53,7 @@ export async function recordVoid(
       ? [
           {
             error: new AppError("chain.verification_failed", {
-              deviceId: origin.deviceId,
+              deviceId: sale.deviceId,
               issues: verification.issues.map((issue) => ({
                 issueCode: issue.code,
                 recordId: issue.recordId ?? null,
@@ -71,7 +73,7 @@ export async function recordVoid(
 
   for (const incident of pending) {
     await recordIncident(tx, {
-      origin,
+      origin: readOrigin(sale.source, sale.deviceId),
       saleId,
       detectedAt: now,
       ...incident,

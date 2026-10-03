@@ -92,7 +92,6 @@ async function seedSale(db: Database, s: SeededSale | typeof Q1_SALE): Promise<v
   // `sales.total` stores a count of whole cents; `vat_breakdown` is a JSON column, not a money
   // column, and keeps the decimal literals the aggregate reads.
   await db.insert(sales).values({
-    tillId,
     source: "device",
     deviceId,
     nodeId,

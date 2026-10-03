@@ -2,7 +2,7 @@
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError, addDecimal, compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
-import type { Decimal, NodeId, TillId } from "@waitron/shared";
+import type { Decimal, DeviceId, NodeId } from "@waitron/shared";
 import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { UNIQUE_VIOLATION, dailyCloseChain, dailyCloses, refusalOn } from "@waitron/db";
 import { computeDailyClose } from "./daily-close.js";
@@ -11,14 +11,14 @@ import type {
   CashCountInput,
   DailyCloseRecord,
   DailyCloseSnapshot,
+  DeviceReconciliation,
   RecordDailyCloseInput,
-  TillReconciliation,
 } from "./close-types.js";
 import type { DailyClose } from "./types.js";
 
 /**
  * Records one frozen daily close (cierre Z) inside the caller's transaction: reads the node's chain
- * head, computes the close, reconciles the physical cash counts against it per till, and appends one
+ * head, computes the close, reconciles the physical cash counts against it per device, and appends one
  * hash-chained `daily_closes` row, advancing the head in the same transaction.
  *
  * Two closers cannot read the same head, because one write transaction runs on the venue file at a
@@ -110,7 +110,7 @@ function truncateToWholeSecond(when: Date): Date {
 
 /** One supplied count, its money already parsed and proven non-negative. */
 interface ParsedCount {
-  tillId: TillId;
+  deviceId: DeviceId;
   openingFloat: Decimal;
   payouts: Decimal;
   countedCash: Decimal;
@@ -119,78 +119,86 @@ interface ParsedCount {
 /** Parses a supplied money figure and rejects a negative or non-numeric one: an operator's cash
  * count arrives as untrusted text. `reason` is a stable English discriminator, never a user
  * sentence. */
-function requireNonNegativeMoney(tillId: TillId, field: string, raw: string): Decimal {
+function requireNonNegativeMoney(deviceId: DeviceId, field: string, raw: string): Decimal {
   let value: Decimal;
   try {
     value = decimal(raw);
   } catch {
-    throw new AppError("close.invalid_cash_input", { tillId, reason: `${field}_not_a_number` });
+    throw new AppError("close.invalid_cash_input", { deviceId, reason: `${field}_not_a_number` });
   }
   if (compareDecimal(value, ZERO) < 0) {
-    throw new AppError("close.invalid_cash_input", { tillId, reason: `${field}_negative` });
+    throw new AppError("close.invalid_cash_input", { deviceId, reason: `${field}_negative` });
   }
   return value;
 }
 
-/** Validates the supplied counts in isolation (before any DB work): each till counted once, every
+/** Validates the supplied counts in isolation (before any DB work): each device counted once, every
  * figure a non-negative money literal. The cross-checks that need the computed close — that every
- * cash-taking till is counted and no count names an unknown till — happen in {@link reconcile}. */
+ * cash-taking device is counted and no count names an unknown device — happen in {@link reconcile}. */
 function validateCashCounts(cashCounts: readonly CashCountInput[]): ParsedCount[] {
   const seen = new Set<string>();
   const parsed: ParsedCount[] = [];
   for (const c of cashCounts) {
-    if (seen.has(c.tillId)) {
+    if (seen.has(c.deviceId)) {
       throw new AppError("close.invalid_cash_input", {
-        tillId: c.tillId,
-        reason: "duplicate_till",
+        deviceId: c.deviceId,
+        reason: "duplicate_device",
       });
     }
-    seen.add(c.tillId);
+    seen.add(c.deviceId);
     parsed.push({
-      tillId: c.tillId,
-      openingFloat: requireNonNegativeMoney(c.tillId, "opening_float", c.openingFloat),
-      payouts: requireNonNegativeMoney(c.tillId, "payouts", c.payouts),
-      countedCash: requireNonNegativeMoney(c.tillId, "counted_cash", c.countedCash),
+      deviceId: c.deviceId,
+      openingFloat: requireNonNegativeMoney(c.deviceId, "opening_float", c.openingFloat),
+      payouts: requireNonNegativeMoney(c.deviceId, "payouts", c.payouts),
+      countedCash: requireNonNegativeMoney(c.deviceId, "counted_cash", c.countedCash),
     });
   }
   return parsed;
 }
 
 /**
- * Reconciles the physical counts against the close's per-till cash takings and assembles the frozen
- * snapshot. `cashVariance = countedCash − (openingFloat + cashTakings − payouts)`: positive is an
- * overage, negative a shortage. `cashTakings` is copied from `close.cash.byTill[].cashTakings`,
- * never re-derived. Two faults are caught here because they need the computed close:
- * a till whose drawer moved cash (a cash line in the cash-up) that was left uncounted, and a count
- * for a till with no money movement in the close at all.
+ * Reconciles the physical counts against the close's per-device cash takings and assembles the
+ * frozen snapshot. `cashVariance = countedCash − (openingFloat + cashTakings − payouts)`: positive
+ * is an overage, negative a shortage. `cashTakings` is copied from
+ * `close.cash.byOrigin[].cashTakings`, never re-derived. Only device rows have a drawer to count: a
+ * job source's row, such as the Demo seed's, is in the close's totals and forces no count. Two
+ * faults are caught here because they need the computed close: a device whose drawer moved cash (a
+ * cash line in the cash-up) that was left uncounted, and a count for a device with no money
+ * movement in the close at all.
  */
 function reconcile(close: DailyClose, counts: readonly ParsedCount[]): DailyCloseSnapshot {
-  const takingsByTill = new Map<string, Decimal>(
-    close.cash.byTill.map((t) => [t.tillId, t.cashTakings]),
+  const deviceRows = close.cash.byOrigin.flatMap((row) =>
+    row.deviceId === null ? [] : [{ ...row, deviceId: row.deviceId }],
   );
-  const countedTills = new Set<string>(counts.map((c) => c.tillId));
+  const takingsByDevice = new Map<string, Decimal>(
+    deviceRows.map((row) => [row.deviceId, row.cashTakings]),
+  );
+  const countedDevices = new Set<string>(counts.map((c) => c.deviceId));
 
-  // Every till whose drawer moved cash must be counted, whatever the net: a till that only gave
-  // cash back, or gave back what it took, still handled real money. A card-only till has no cash
+  // Every device whose drawer moved cash must be counted, whatever the net: a device that only gave
+  // cash back, or gave back what it took, still handled real money. A card-only device has no cash
   // line and is not forced.
-  for (const t of close.cash.byTill) {
-    if (t.byMethod.some((m) => m.method === "cash") && !countedTills.has(t.tillId)) {
+  for (const row of deviceRows) {
+    if (row.byMethod.some((m) => m.method === "cash") && !countedDevices.has(row.deviceId)) {
       throw new AppError("close.invalid_cash_input", {
-        tillId: t.tillId,
-        reason: "uncounted_cash_till",
+        deviceId: row.deviceId,
+        reason: "uncounted_cash_device",
       });
     }
   }
 
-  const byTill: TillReconciliation[] = counts.map((c) => {
-    const cashTakings = takingsByTill.get(c.tillId);
+  const byDevice: DeviceReconciliation[] = counts.map((c) => {
+    const cashTakings = takingsByDevice.get(c.deviceId);
     if (cashTakings === undefined) {
-      // A count for a till the close never saw — nothing to reconcile it against.
-      throw new AppError("close.invalid_cash_input", { tillId: c.tillId, reason: "unknown_till" });
+      // A count for a device the close never saw — nothing to reconcile it against.
+      throw new AppError("close.invalid_cash_input", {
+        deviceId: c.deviceId,
+        reason: "unknown_device",
+      });
     }
     const expected = subtractDecimal(addDecimal(c.openingFloat, cashTakings), c.payouts);
     return {
-      tillId: c.tillId,
+      deviceId: c.deviceId,
       openingFloat: c.openingFloat,
       payouts: c.payouts,
       countedCash: c.countedCash,
@@ -201,10 +209,10 @@ function reconcile(close: DailyClose, counts: readonly ParsedCount[]): DailyClos
 
   // Code-unit order, as the hash sorts it, so the frozen document reads the same however the counts
   // were enumerated.
-  byTill.sort((a, b) => Number(a.tillId > b.tillId) - Number(a.tillId < b.tillId));
+  byDevice.sort((a, b) => Number(a.deviceId > b.deviceId) - Number(a.deviceId < b.deviceId));
 
-  const nodeVariance = byTill.reduce<Decimal>((sum, r) => addDecimal(sum, r.cashVariance), ZERO);
-  return { close, cashReconciliation: { byTill, nodeVariance } };
+  const nodeVariance = byDevice.reduce<Decimal>((sum, r) => addDecimal(sum, r.cashVariance), ZERO);
+  return { close, cashReconciliation: { byDevice, nodeVariance } };
 }
 
 interface ChainHead {

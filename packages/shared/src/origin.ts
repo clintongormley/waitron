@@ -55,3 +55,10 @@ export function readOrigin(source: string, deviceId: string | null): Origin {
 export function isSaleOrigin(origin: Origin): origin is SaleOrigin {
   return (SALE_SOURCES as readonly string[]).includes(origin.source);
 }
+
+/** A sale table's stored pair: a device, the Demo seed or the readiness test. */
+export function readSaleOrigin(source: string, deviceId: string | null): SaleOrigin {
+  const origin = readOrigin(source, deviceId);
+  if (isSaleOrigin(origin)) return origin;
+  throw new AppError("origin.invalid", { source, deviceId });
+}

@@ -1,15 +1,9 @@
 import { saleLineRows } from "./sale-line-rows.js";
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
+import { operationDescriptionFor } from "./sale-location.js";
 import { eq } from "drizzle-orm";
-import {
-  allocateInvoiceNumber,
-  invoiceSeries,
-  locations,
-  saleLines,
-  sales,
-  tills,
-} from "@waitron/db";
+import { allocateInvoiceNumber, invoiceSeries, saleLines, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   AppError,
@@ -27,7 +21,6 @@ import type {
   SaleId,
   SaleOrigin,
   SeriesId,
-  TillId,
   WorkingOrderId,
 } from "@waitron/shared";
 import type {
@@ -57,8 +50,6 @@ export interface RecordSaleTender {
 }
 
 export interface RecordSaleInput {
-  /** Where the sale rings. */
-  tillId: TillId;
   /** Where the sale came from, written to `sales.source` and `sales.device_id`; its incidents name
    * it too. */
   origin: SaleOrigin;
@@ -266,7 +257,6 @@ export async function recordSale(
   const [inserted] = await tx
     .insert(sales)
     .values({
-      tillId: input.tillId,
       source: input.origin.source,
       deviceId: input.origin.deviceId,
       nodeId: input.nodeId,
@@ -309,30 +299,14 @@ export async function recordSale(
   if (input.settlement.kind === "immediate") {
     // Before `backend.recordSale`: a shortfall or an unsettled tender throws here and the whole
     // transaction, the allocated number included, rolls back with nothing chained.
-    await settleSale(tx, {
-      saleId,
-      tenders: input.settlement.tenders,
-      origin: input.origin,
-    });
+    await settleSale(tx, { saleId, tenders: input.settlement.tenders });
   }
 
-  const [location] = await tx
-    .select({ operationDescription: locations.operationDescription })
-    .from(tills)
-    .innerJoin(locations, eq(locations.id, tills.locationId))
-    .where(eq(tills.id, input.tillId));
-
-  /* v8 ignore start */
-  if (location === undefined) {
-    // `tills.location_id` is a not-null foreign key, so this means `input.tillId` does not exist.
-    throw new Error(`recordSale: no location found for till ${input.tillId}`);
-  }
-  /* v8 ignore stop */
+  const descriptionOfOperation = await operationDescriptionFor(tx, input.origin, input.nodeId);
 
   // The module builds the fiscal record behind this one call; this package never touches a
   // module's tables.
   const fiscal = await backend.recordSale(tx, {
-    tillId: input.tillId,
     origin: input.origin,
     nodeId: input.nodeId,
     saleId,
@@ -341,7 +315,7 @@ export async function recordSale(
     invoiceNumber,
     issuedAt: now.instant,
     offsetMinutes: now.offsetMinutes,
-    descriptionOfOperation: location.operationDescription,
+    descriptionOfOperation,
     total,
     vatBreakdown,
     // A simplified invoice: no recipient.

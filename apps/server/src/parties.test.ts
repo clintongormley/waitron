@@ -1342,16 +1342,16 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
         .where(eq(sales.workingOrderId, billId)),
     );
     expect(settled).toEqual([{ id: filed[0]!.id, settledAt: expect.any(String) }]);
-    // The device's till is not the box's configured one, so the two cannot be confused below.
-    expect(venue.deviceTillId).not.toBe(venue.cfg.tillId);
-    // Stored in whole cents; the sale keeps the till it was invoiced on.
+    // The collecting device is not the one that placed the bill, so the two cannot be confused below.
+    expect(venue.deviceId).not.toBe(venue.cfg.origin.deviceId);
+    // Stored in whole cents; the sale keeps the device it was invoiced on.
     expect(await tendersOfBill(venue, billId)).toEqual([
       {
         method: "cash",
         amount: 1800,
         tip: 0,
         billPaymentId: null,
-        saleTillId: venue.cfg.tillId,
+        saleDeviceId: venue.cfg.origin.deviceId,
       },
     ]);
     const outstanding = await inTx(suite, listOutstandingSales);
@@ -1680,7 +1680,6 @@ describe("money received against a bill before its invoice", () => {
         reason: "error",
         authorizedBy: OPERATOR,
         requestedBy: OPERATOR,
-        tillId: cfg.tillId,
         source: cfg.origin.source,
         deviceId: cfg.origin.deviceId,
         state: "completed",
@@ -1723,7 +1722,6 @@ describe("money received against a bill before its invoice", () => {
           state,
           ...(state === "failed" ? { failedAt: new Date().toISOString() } : {}),
           requestedBy: OPERATOR,
-          tillId: venue.cfg.tillId,
           source: venue.cfg.origin.source,
           deviceId: venue.cfg.origin.deviceId,
         }),

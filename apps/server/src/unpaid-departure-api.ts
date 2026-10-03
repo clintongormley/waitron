@@ -3,7 +3,6 @@ import { withTransaction } from "@waitron/db";
 import { listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
 import { readRawJsonBody } from "@waitron/server-kit";
 import { asObject } from "./bill-payments-api.js";
-import { requireSaleTillId } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import {
@@ -33,8 +32,8 @@ function parseDeparture(body: Record<string, unknown>): UnpaidDepartureRequest {
 
 /**
  * Record unpaid departure (spec §8), behind the till session: the departure itself, who may
- * authorise one, and the departures still owed. The invoices a departure issues are filed on the
- * device's own till, as a bill payment's are.
+ * authorise one, and the departures still owed. The invoices a departure issues are filed under the
+ * requesting device, as a bill payment's are.
  */
 export function mountUnpaidDepartureApi(
   app: Hono,
@@ -50,7 +49,6 @@ export function mountUnpaidDepartureApi(
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
       const request = parseDeparture(asObject(await readRawJsonBody<unknown>(c)));
-      const saleTillId = requireSaleTillId(session.device);
       const attempts = overridePinAttempts(pinThrottle, session.deviceId);
       const toCheck = await overrideToCheck(
         deps.db,
@@ -60,7 +58,7 @@ export function mountUnpaidDepartureApi(
       const result = await withPinCheckAhead(deps.db, toCheck, attempts, (checked) => {
         const checkedRequest = { ...request, override: withCheck(request.override, checked) };
         return withTransaction(deps.db, (tx) =>
-          recordUnpaidDeparture(tx, { ...deps, log }, cfg, saleTillId, partyId, checkedRequest, {
+          recordUnpaidDeparture(tx, { ...deps, log }, cfg, partyId, checkedRequest, {
             personId,
             sessionId,
             attempts,

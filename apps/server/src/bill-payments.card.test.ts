@@ -276,7 +276,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
     expect(await paymentRows(venue, billId)).toEqual([]);
   });
 
-  it("issues the invoice from the capture that pays the bill, on the device's till", async () => {
+  it("issues the invoice from the capture that pays the bill, under the device", async () => {
     const billId = await tabWithDishes("Paella", "Tarta");
     await cashContribution(billId, "23.00");
 
@@ -291,7 +291,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
     expect(filed.find((tender) => tender.method === "card")).toMatchObject({
       amount: 3000,
       billPaymentId: cardPayment.id,
-      saleTillId: venue.deviceTillId,
+      saleDeviceId: venue.deviceId,
     });
     expect((await providerRowOf(cardPayment.id))?.saleId).not.toBeNull();
   });

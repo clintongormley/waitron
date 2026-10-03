@@ -116,7 +116,6 @@ export async function settleInvoiceFirst(
     });
 
     const saleInput: RecordSaleInput = {
-      tillId: till,
       origin: jobOrigin("demo_seed"),
       nodeId: node,
       seriesId: stdSeries,
@@ -164,7 +163,6 @@ export async function settleInvoiceFirst(
     });
 
     const corrInput: RecordCorrectionInput = {
-      tillId: till,
       origin: jobOrigin("demo_seed"),
       nodeId: node,
       seriesId: rectSeries,
@@ -195,7 +193,6 @@ export async function settleInvoiceFirst(
     await withTransaction(db, (tx) =>
       settleSale(tx, {
         saleId: sale.saleId,
-        origin: jobOrigin("demo_seed"),
         tenders: [
           { method: "cash", amount: net, tipAmount: "0.00", settledAt: clock.now().instant },
         ],

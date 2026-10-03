@@ -188,7 +188,6 @@ async function seedSale(
   const priced = rateLines(gross, "2026-09-27");
   const { saleId } = await recordSale(tx, backend, {
     origin: cfg.origin,
-    tillId: cfg.tillId,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
     workingOrderId: brandWorkingOrderId(workingOrderId),
@@ -345,7 +344,6 @@ describe("readTenderBlock", () => {
       const priced = rateLines(gross, "2026-09-27");
       const { saleId } = await recordSale(tx, backend, {
         origin: cfg.origin,
-        tillId: cfg.tillId,
         nodeId: cfg.nodeId,
         seriesId: cfg.seriesId,
         workingOrderId: brandWorkingOrderId(workingOrderId),
@@ -363,7 +361,6 @@ describe("readTenderBlock", () => {
       try {
         await settleSale(tx, {
           saleId,
-          origin: cfg.origin,
           tenders: [
             { method: "cash", amount: "0.40", tipAmount: "0.00", cashTendered: "1.00", settledAt },
             { method: "card", amount: "0.60", tipAmount: "0.00", settledAt },

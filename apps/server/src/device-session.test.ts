@@ -44,7 +44,7 @@ import {
   cookieDomainFor,
   readDeviceCookie,
   requireDevice,
-  requireSaleTillId,
+  deviceTillCfg,
   setDeviceCookie,
   tryReadDevice,
   VERIFIED_TOKENS_LIMIT,
@@ -658,7 +658,7 @@ async function enrolDevDevices(): Promise<{
   };
 }
 
-describe("assertTakesCash and requireSaleTillId on a resolved device", () => {
+describe("assertTakesCash and deviceTillCfg on a resolved device", () => {
   const binding = (
     capabilities: CapabilityFlag[],
     formFactor: FormFactor = "phone-portrait",
@@ -677,12 +677,11 @@ describe("assertTakesCash and requireSaleTillId on a resolved device", () => {
     capabilities,
   });
 
-  it("requireSaleTillId answers the device's till, and refuses a device with none", () => {
+  it("deviceTillCfg runs on the device's till, and keeps the configured till for one with none", () => {
     const till = randomUUID();
-    expect(requireSaleTillId(binding([], "till", till))).toBe(till);
-    expect(() => requireSaleTillId(binding([], "kds"))).toThrow(
-      expect.objectContaining({ code: "device.till_required" }),
-    );
+    const configured = { tillId: brandTillId(randomUUID()) } as TillConfig;
+    expect(deviceTillCfg(configured, binding([], "till", till)).tillId).toBe(till);
+    expect(deviceTillCfg(configured, binding([], "kds")).tillId).toBe(configured.tillId);
   });
 
   it("refuses a device whose profile lacks take-cash, and passes one that has it and no device", () => {

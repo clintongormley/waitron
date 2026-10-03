@@ -66,7 +66,6 @@ function f3CanjeRecord(): RegistroAlta {
 async function storeF3(record: RegistroAlta): Promise<string> {
   const saleId = await seedSale(suite.db, till, 1);
   const row = toRegistroRow(record, {
-    tillId: till.tillId,
     origin: deviceOrigin(till.deviceId),
     nodeId: till.nodeId,
     sifId: till.sifId,

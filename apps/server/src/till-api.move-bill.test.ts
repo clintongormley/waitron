@@ -473,7 +473,7 @@ describe("money on a moved bill", () => {
       zoneId: invoiceFirstZone,
       operatorId: venue.operatorId,
     });
-    await placeOrder(deps, venue.cfg, id, venue.operatorId, venue.cfg.tillId);
+    await placeOrder(deps, venue.cfg, id, venue.operatorId);
     const issued = venue.db.all<{ id: string }>(
       sql`select id from sales where working_order_id = ${id}`,
     );
@@ -600,7 +600,7 @@ describe("paying a moved bill, by its state", () => {
       zoneId: invoiceFirstZone,
       operatorId: venue.operatorId,
     });
-    await placeOrder(deps, venue.cfg, id, venue.operatorId, venue.cfg.tillId);
+    await placeOrder(deps, venue.cfg, id, venue.operatorId);
     const issued = venue.db.all<{ id: string }>(
       sql`select id from sales where working_order_id = ${id}`,
     );

@@ -112,7 +112,7 @@ async function presentedTarta(): Promise<string> {
     zoneId: counter.zoneId,
     operatorId: venue.operatorId,
   });
-  await placeOrder(deps, venue.cfg, id, venue.operatorId, venue.cfg.tillId);
+  await placeOrder(deps, venue.cfg, id, venue.operatorId);
   expect(await statusOf(venue, id)).toBe("placed");
   expect(registroCount(venue, id)).toBe(0);
   return id;

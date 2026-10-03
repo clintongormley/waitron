@@ -62,14 +62,12 @@ let invoiceCounter = 0;
 async function insertSale(
   db: Database,
   opts: {
-    tillId?: string;
     nodeId?: string;
     seriesId?: string;
     invoiceLocales?: string[];
     counterparty?: { taxId: string; legalName: string; countryCode: string } | null;
   } = {},
 ): Promise<string> {
-  const tillId = opts.tillId ?? TILL_A1;
   const nodeId = opts.nodeId ?? nodeA;
   const seriesId = opts.seriesId ?? seriesA;
   const locales = opts.invoiceLocales ?? ["es", "ca"];
@@ -80,7 +78,7 @@ async function insertSale(
     db,
     // `id` is named explicitly because `sales.id` is `$defaultFn(newId)` — a JavaScript generator
     // rather than a SQL DEFAULT, which a raw insert never reaches.
-    sql`insert into sales (id, till_id, source, device_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, counterparty_tax_id, counterparty_legal_name, counterparty_country_code) values (${randomUUID()}, ${tillId}, 'device', ${deviceA}, ${nodeId}, ${seriesId}, ${invoiceCounter}, ${AT}, 120,
+    sql`insert into sales (id, source, device_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, counterparty_tax_id, counterparty_legal_name, counterparty_country_code) values (${randomUUID()}, 'device', ${deviceA}, ${nodeId}, ${seriesId}, ${invoiceCounter}, ${AT}, 120,
            100, '[]', ${locales[0]}, ${localesJson}, 'verifactu', 'recorded',
            ${cp?.taxId ?? null}, ${cp?.legalName ?? null}, ${cp?.countryCode ?? null}
          ) returning id`,

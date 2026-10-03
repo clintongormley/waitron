@@ -72,7 +72,6 @@ const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
 
 function venueFor(v: VenueResult): SeedSalesVenue {
   return {
-    tillId: v.tillId,
     nodeId: v.nodeId,
     // planVenue emits the standard series first, then the rectificative one.
     seriesId: v.seriesIds[0]!,
@@ -154,7 +153,7 @@ describe("seedSales", () => {
 
     expect(read.close.vat.byRate.length).toBeGreaterThan(0);
     expect(compareDecimal(read.close.vat.taxTotal, decimal("0.00"))).toBeGreaterThan(0);
-    expect(read.close.cash.byTill.length).toBeGreaterThan(0);
+    expect(read.close.cash.byOrigin.length).toBeGreaterThan(0);
     expect(compareDecimal(read.close.cash.tenderTotal, decimal("0.00"))).toBeGreaterThan(0);
   });
 

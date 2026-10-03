@@ -87,7 +87,6 @@ const RECIPIENT = { taxId: "B12345674", legalName: "Acme Corp SL", countryCode: 
  * vacuous. */
 function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    tillId,
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,
@@ -130,7 +129,6 @@ function substitutionInput(
   overrides: Partial<RecordSubstitutionInput> = {},
 ): RecordSubstitutionInput {
   return {
-    tillId,
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,
@@ -268,14 +266,7 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
     await withTransaction(suite.db, async (tx) => {
-      await recordVoid(
-        tx,
-        backend,
-        saleId,
-        "Wrong table",
-        { sessionId: voidSessionId },
-        deviceOrigin(deviceId),
-      );
+      await recordVoid(tx, backend, saleId, "Wrong table", { sessionId: voidSessionId });
     });
     await expect(substitute(backend, [saleId])).rejects.toMatchObject({
       code: "sale.voided",
@@ -584,7 +575,7 @@ describe("recordSubstitution — a mixed batch fails atomically", () => {
     const { saleId: recorded } = await sellTicket(backend); // number 1, has a fiscal record
     const unrecorded = await seedBareSale(
       suite.db,
-      { tillId, deviceId, nodeId, seriesId },
+      { deviceId, nodeId, seriesId },
       { invoiceNumber: 99 }, // distinct number: avoids the series-unique collision with the ticket
     );
 

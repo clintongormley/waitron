@@ -1414,7 +1414,7 @@ describe("made-here route wiring", () => {
     await check();
   });
 
-  it("deviceSaleCfgOf sends a pay-first bill when its cash payment completes it", async () => {
+  it("a bill payment route sends a pay-first bill when its cash payment completes it", async () => {
     const id = randomUUID();
     const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
       id,
@@ -1614,7 +1614,6 @@ describe("made-here route wiring", () => {
           tip: 0,
           state: "pending",
           requestedBy: venue.operatorId,
-          tillId: venue.deviceTillId,
           source: "device",
           deviceId: venue.deviceId,
         })

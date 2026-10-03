@@ -182,7 +182,6 @@ async function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 async function ringSale(venue: GbVenue): Promise<{ saleId: SaleId; backendId: string }> {
   return asApp(async (tx) => {
     const { saleId, fiscal } = await recordSale(tx, backend, {
-      tillId: venue.tillId,
       origin: deviceOrigin(venue.deviceId),
       nodeId: venue.nodeId,
       seriesId: venue.standardSeriesId,
@@ -250,20 +249,12 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
 
     // 3. Void the first sale — authorized by the admin session, no fiscal chain work.
     await asApp((tx) =>
-      recordVoid(
-        tx,
-        backend,
-        sale.saleId,
-        "rung in error",
-        { sessionId: venue.adminSessionId },
-        deviceOrigin(venue.deviceId),
-      ),
+      recordVoid(tx, backend, sale.saleId, "rung in error", { sessionId: venue.adminSessionId }),
     );
 
     // 4. A rectificativa correcting the second sale, drawn from the rectificative series.
     await asApp((tx) =>
       recordCorrection(tx, backend, {
-        tillId: venue.tillId,
         origin: deviceOrigin(venue.deviceId),
         nodeId: venue.nodeId,
         seriesId: venue.rectificativeSeriesId,
@@ -288,7 +279,6 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
     // 5. A factura de canje (F3) substituting the third sale, drawn from the standard series.
     await asApp((tx) =>
       recordSubstitution(tx, backend, {
-        tillId: venue.tillId,
         origin: deviceOrigin(venue.deviceId),
         nodeId: venue.nodeId,
         seriesId: venue.standardSeriesId,

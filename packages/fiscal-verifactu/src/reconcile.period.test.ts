@@ -52,7 +52,6 @@ async function seedAltaOn(db: Database, fecha: string): Promise<string> {
   const [sale] = await db
     .insert(sales)
     .values({
-      tillId: venue.tillId,
       source: "device",
       deviceId: venue.deviceId,
       nodeId: venue.nodeId,
@@ -71,7 +70,6 @@ async function seedAltaOn(db: Database, fecha: string): Promise<string> {
   const [registro] = await db
     .insert(registrosFacturacion)
     .values({
-      tillId: venue.tillId,
       source: "device",
       deviceId: venue.deviceId,
       nodeId: venue.nodeId,

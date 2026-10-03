@@ -115,7 +115,6 @@ async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string
     await deviceRequestCfg(suite.db, venue.cfg),
     orderId,
     OPERATOR,
-    venue.cfg.tillId,
   );
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     select ti.id from ticket_items ti

@@ -10,6 +10,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { metricStyles, renderMetric } from "../widgets/metric-row.js";
+import { sourceLabel } from "../widgets/alert-format.js";
 import {
   renderTopSellers,
   topSellersStyles,
@@ -658,11 +659,13 @@ export class SalesScreen extends LitElement {
           </tr>
         </thead>
         <tbody>
-          ${cash.byTill.map((till) =>
-            till.byMethod.map(
+          ${cash.byOrigin.map((origin) =>
+            origin.byMethod.map(
               (line) =>
-                html`<tr data-test=${`tender-row-${till.tillId}-${line.method}`}>
-                  <th scope="row">${till.tillId}</th>
+                html`<tr
+                  data-test=${`tender-row-${origin.deviceId ?? origin.source}-${line.method}`}
+                >
+                  <th scope="row">${sourceLabel(origin)}</th>
                   <td>${line.method}</td>
                   <td class="num">${money(line.amount)}</td>
                   <td class="num">${money(line.tip)}</td>

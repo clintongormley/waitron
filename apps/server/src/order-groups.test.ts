@@ -2925,7 +2925,7 @@ describe("credit (D5)", () => {
   // save that may issue the bill's invoice types without naming who saves. Vitest does not typecheck.
   it("will not type a save that may issue the invoice without naming who saves", () => {
     const cfg = {} as TillConfig;
-    const issue = { fiscal: {} as TillSaleDeps, saleCfg: null };
+    const issue = { fiscal: {} as TillSaleDeps, saleCfg: {} as DeviceRequestConfig };
     const unnamed = { lines: [], revision: 0 };
     expectTypeOf(updateHeldOrder).toBeCallableWith({ db }, cfg, "order", unnamed);
     expectTypeOf(updateHeldOrder).toBeCallableWith(

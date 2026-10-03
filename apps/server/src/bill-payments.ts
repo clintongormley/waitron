@@ -22,7 +22,6 @@ import {
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
-  tillId as brandTillId,
   toScale,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -617,23 +616,13 @@ export async function readBillBalance(
 }
 
 /**
- * Thrown by {@link issueIfFullyPaid} given no till when the bill is due its invoice: the caller
- * reads the requesting device's till and runs its write again.
- */
-export class SaleTillRequired extends Error {
-  constructor() {
-    super("a bill's invoice is due and no till was given to file it on");
-  }
-}
-
-/**
  * {@link issueIfFullyPaid}, answering also the bill's total when it priced the bill. `total` is the
  * bill's total when the caller has priced its current lines in this transaction already.
  */
 async function issueWhenFullyPaid(
   tx: Transaction,
   deps: TillSaleDeps,
-  cfg: DeviceRequestConfig | null,
+  cfg: DeviceRequestConfig,
   workingOrderId: string,
   operatorId: string | undefined,
   options: { moneyMoved?: boolean; total?: Decimal },
@@ -655,8 +644,6 @@ async function issueWhenFullyPaid(
   if (compareDecimal(fundsOf(workingOrderId, total, held).received, total) !== 0) {
     return { invoice: null, total };
   }
-  if (cfg === null) throw new SaleTillRequired();
-
   // A card already captured cannot be undone by refusing its invoice, so a line whose product has
   // since gone off sale is filed as it stands, as a whole-order card recovery files it.
   const stored = await priceStoredOrderForIssuance(tx, workingOrderId, {
@@ -683,7 +670,6 @@ async function issueWhenFullyPaid(
   // an immediate sale files, and settlement is what writes each tender's bill payment.
   const language = await readReceiptLanguage(tx, cfg.locationId);
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-    tillId: cfg.tillId,
     origin: cfg.origin,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
@@ -696,7 +682,7 @@ async function issueWhenFullyPaid(
     operatorId,
     settlement: { kind: "deferred" },
   });
-  await settleSale(tx, { saleId, tenders: tendersOfBill, origin: cfg.origin });
+  await settleSale(tx, { saleId, tenders: tendersOfBill });
 
   const provided = await findPaymentsByBillPayments(
     tx,
@@ -765,7 +751,7 @@ async function issueWhenFullyPaid(
 export async function issueIfFullyPaid(
   tx: Transaction,
   deps: TillSaleDeps,
-  cfg: DeviceRequestConfig | null,
+  cfg: DeviceRequestConfig,
   workingOrderId: string,
   operatorId?: string,
   options: { moneyMoved: boolean } = { moneyMoved: false },
@@ -1045,7 +1031,6 @@ async function beginBillPayment(
       tendered: req.method === "cash" ? decimalToCents(decimal(req.tendered!)) : null,
       state,
       requestedBy: operatorId,
-      tillId: cfg.tillId,
       source: cfg.origin.source,
       deviceId: cfg.origin.deviceId,
       receivedAt: state === "received" ? now.toISOString() : null,
@@ -1159,7 +1144,8 @@ export async function completeBillPayment(
   const issued = await issueWhenFullyPaid(
     tx,
     deps,
-    { ...cfg, tillId: brandTillId(payment!.tillId), origin: storedDeviceOrigin(payment!) },
+    // The invoice is filed under the device that took the payment, whoever completes it.
+    { ...cfg, origin: storedDeviceOrigin(payment!) },
     payment!.workingOrderId,
     payment!.requestedBy,
     { moneyMoved: true },

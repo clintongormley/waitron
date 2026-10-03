@@ -113,7 +113,6 @@ async function waitingItem(
     await deviceRequestCfg(suite.db, venue.cfg),
     orderId,
     randomUUID(),
-    venue.cfg.tillId,
   );
   await suite.db.execute(
     sql`update ticket_items set station_id = ${stationId}, fired_at = ${firedAt} where working_order_id = ${orderId}`,

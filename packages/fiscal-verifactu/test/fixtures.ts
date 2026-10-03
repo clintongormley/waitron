@@ -90,7 +90,6 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
   const { deviceId } = await seedDevice(db, { tillId: TENANT_A.tillId });
   await db.insert(sales).values({
     id: TENANT_A.saleId,
-    tillId: TENANT_A.tillId,
     source: "device",
     deviceId,
     nodeId: TENANT_A.nodeId,
@@ -187,7 +186,6 @@ export async function seedSoldRegistro(
   const [sale] = await db
     .insert(sales)
     .values({
-      tillId: params.tillId,
       source: "device",
       deviceId,
       nodeId: params.nodeId,
@@ -206,7 +204,6 @@ export async function seedSoldRegistro(
   const [registro] = await db
     .insert(registrosFacturacion)
     .values({
-      tillId: params.tillId,
       source: "device",
       deviceId,
       nodeId: params.nodeId,

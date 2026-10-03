@@ -56,7 +56,6 @@ beforeEach(async () => {
 /** The corrective's OWN data — a rectificativa por diferencias with negative lines and total. */
 function correctiveSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRecord {
   return {
-    tillId: till.tillId,
     origin: deviceOrigin(till.deviceId),
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
@@ -79,7 +78,6 @@ function correctiveSaleFor(saleId: string, invoiceNumber: number): SaleForFiscal
  * NumSerieFactura "A/1". */
 function originalSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRecord {
   return {
-    tillId: till.tillId,
     origin: deviceOrigin(till.deviceId),
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
@@ -116,7 +114,6 @@ async function seedCorrectiveRow(
   const [row] = await suite.db
     .insert(sales)
     .values({
-      tillId: till.tillId,
       source: "device",
       deviceId: till.deviceId,
       nodeId: till.nodeId,

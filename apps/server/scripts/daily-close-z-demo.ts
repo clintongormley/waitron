@@ -1,13 +1,13 @@
 // Exercises the frozen daily close (cierre Z): `recordDailyClose` snapshots a day rung up through the
-// real write path, reconciles the per-till cash counts and appends a hash-chained `daily_closes` row;
+// real write path, reconciles the per-device cash counts and appends a hash-chained `daily_closes` row;
 // `verifyDailyCloseChain` re-walks the chain. Runs in a throwaway venue directory against the fake
 // `FiscalBackend`. Two closers at once: `packages/reporting/src/record-daily-close.concurrency.test.ts`.
 //
-// The day it rings up — business day 2026-08-04, Europe/Madrid, across TWO tills at one node:
+// The day it rings up — business day 2026-08-04, Europe/Madrid, across TWO till devices at one node:
 //   Caja 1: base 100.00 @ 21% → 121.00 CASH  ;  base 40.00 @ 10% → 44.00 CARD
 //   Caja 2: base  50.00 @ 10% →  55.00 CASH  ;  base 20.00 @ 21% → 24.20 CARD
 // so the VAT summary reads 21%: base 120.00 tax 25.20 ; 10%: base 90.00 tax 9.00 (gross 244.20), and
-// the cash-up carries per-till cash takings 121.00 (Caja 1) and 55.00 (Caja 2). The supplied cash
+// the cash-up carries per-device cash takings 121.00 (Caja 1) and 55.00 (Caja 2). The supplied cash
 // counts are crafted so the descuadre is visibly non-zero and of both signs:
 //   Caja 1 counted 172.50 vs expected 50.00 + 121.00 − 0.00 = 171.00  →  +1.50 (over)
 //   Caja 2 counted  83.00 vs expected 30.00 +  55.00 − 0.00 =  85.00  →  −2.00 (short)
@@ -27,6 +27,8 @@ import type { CashCountInput, DailyCloseRecord } from "@waitron/reporting";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
+  deviceProfiles,
+  devices,
   invoiceSeries,
   locations,
   nodes,
@@ -37,13 +39,13 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hasCode, isAppError, jobOrigin } from "@waitron/shared";
+import { deviceOrigin, hasCode, isAppError } from "@waitron/shared";
 import {
+  deviceId as brandDeviceId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
-import type { NodeId, SeriesId, TillId } from "@waitron/shared";
+import type { DeviceId, NodeId, SeriesId } from "@waitron/shared";
 
 const SETS = ["core"];
 
@@ -79,10 +81,10 @@ function fixedClock(instant: Date): TrustedClock {
 interface Venue {
   nodeId: NodeId;
   seriesId: SeriesId;
-  caja1: TillId;
-  caja2: TillId;
-  /** tillId → display name, for the print only. */
-  tillNames: Map<string, string>;
+  caja1: DeviceId;
+  caja2: DeviceId;
+  /** deviceId → display name, for the print only. */
+  deviceNames: Map<string, string>;
 }
 
 /**
@@ -102,16 +104,27 @@ async function seedVenue(db: Database): Promise<Venue> {
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
-  const [till1] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
-  const caja1 = brandTillId(till1!.id);
-  const [till2] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 2" })
-    .returning({ id: tills.id });
-  const caja2 = brandTillId(till2!.id);
+  const [profile] = await db
+    .insert(deviceProfiles)
+    .values({ name: "Till", formFactor: "till", capabilities: ["take-cash"] })
+    .returning({ id: deviceProfiles.id });
+  // A till device still names a till until the tills table goes (`device_binding_rule_insert`).
+  const tillDevice = async (name: string): Promise<DeviceId> => {
+    const [till] = await db.insert(tills).values({ locationId, name }).returning({ id: tills.id });
+    const [device] = await db
+      .insert(devices)
+      .values({
+        locationId,
+        deviceProfileId: profile!.id,
+        tillId: till!.id,
+        label: name,
+        tokenHash: "demo",
+      })
+      .returning({ id: devices.id });
+    return brandDeviceId(device!.id);
+  };
+  const caja1 = await tillDevice("Caja 1");
+  const caja2 = await tillDevice("Caja 2");
   const [node] = await db
     .insert(nodes)
     .values({ locationId, name: "Nodo 1" })
@@ -122,15 +135,15 @@ async function seedVenue(db: Database): Promise<Venue> {
     .values({ nodeId, code: "A" })
     .returning({ id: invoiceSeries.id });
   const seriesId = brandSeriesId(series!.id);
-  const tillNames = new Map<string, string>([
+  const deviceNames = new Map<string, string>([
     [caja1, "Caja 1"],
     [caja2, "Caja 2"],
   ]);
-  return { nodeId, seriesId, caja1, caja2, tillNames };
+  return { nodeId, seriesId, caja1, caja2, deviceNames };
 }
 
 interface SaleSpec {
-  till: TillId;
+  device: DeviceId;
   base: string;
   vatRate: string;
   total: string;
@@ -146,8 +159,7 @@ async function ringSale(
   spec: SaleSpec,
 ): Promise<void> {
   const input: RecordSaleInput = {
-    tillId: spec.till,
-    origin: jobOrigin("demo_seed"),
+    origin: deviceOrigin(spec.device),
     nodeId: venue.nodeId,
     seriesId: venue.seriesId,
     locale: LOCALE,
@@ -229,17 +241,17 @@ function printRecord(venue: Venue, rec: DailyCloseRecord): void {
     `  counts: sales ${close.counts.sales}, corrections ${close.counts.corrections}, voids ${close.counts.voids}`,
   );
 
-  console.log("  Cash-up (per till):");
-  for (const t of close.cash.byTill) {
-    const name = venue.tillNames.get(t.tillId) ?? t.tillId;
+  console.log("  Cash-up (per device):");
+  for (const t of close.cash.byOrigin) {
+    const name = (t.deviceId === null ? undefined : venue.deviceNames.get(t.deviceId)) ?? t.source;
     const methods = t.byMethod.map((m) => `${m.method} ${m.amount}`).join("  ");
     console.log(`    ${name}: ${methods}  | cashTakings ${t.cashTakings}`);
   }
   console.log(`    tenderTotal ${close.cash.tenderTotal}  tipTotal ${close.cash.tipTotal}`);
 
   console.log("  Cash reconciliation (descuadre):");
-  for (const r of rec.snapshot.cashReconciliation.byTill) {
-    const name = venue.tillNames.get(r.tillId) ?? r.tillId;
+  for (const r of rec.snapshot.cashReconciliation.byDevice) {
+    const name = venue.deviceNames.get(r.deviceId) ?? r.deviceId;
     const parts = `opening ${r.openingFloat}  takings ${r.cashTakings}  payouts ${r.payouts}`;
     const counted = `counted ${r.countedCash}`;
     console.log(
@@ -269,7 +281,7 @@ async function main(): Promise<void> {
     const c2 = venue.caja2;
     const day1: SaleSpec[] = [
       {
-        till: c1,
+        device: c1,
         base: "100.00",
         vatRate: "21.00",
         total: "121.00",
@@ -278,7 +290,7 @@ async function main(): Promise<void> {
         at: DAY_ONE_AT,
       },
       {
-        till: c1,
+        device: c1,
         base: "40.00",
         vatRate: "10.00",
         total: "44.00",
@@ -287,7 +299,7 @@ async function main(): Promise<void> {
         at: DAY_ONE_AT,
       },
       {
-        till: c2,
+        device: c2,
         base: "50.00",
         vatRate: "10.00",
         total: "55.00",
@@ -296,7 +308,7 @@ async function main(): Promise<void> {
         at: DAY_ONE_AT,
       },
       {
-        till: c2,
+        device: c2,
         base: "20.00",
         vatRate: "21.00",
         total: "24.20",
@@ -310,8 +322,8 @@ async function main(): Promise<void> {
     console.log("=== Frozen daily close (cierre Z) demo ===\n");
 
     const rec1 = await closeDay(db, venue, DAY_ONE, [
-      { tillId: venue.caja1, openingFloat: "50.00", payouts: "0.00", countedCash: "172.50" }, // 50+121−0=171 → +1.50
-      { tillId: venue.caja2, openingFloat: "30.00", payouts: "0.00", countedCash: "83.00" }, //  30+55−0=85  → −2.00
+      { deviceId: venue.caja1, openingFloat: "50.00", payouts: "0.00", countedCash: "172.50" }, // 50+121−0=171 → +1.50
+      { deviceId: venue.caja2, openingFloat: "30.00", payouts: "0.00", countedCash: "83.00" }, //  30+55−0=85  → −2.00
     ]);
     printRecord(venue, rec1);
 
@@ -322,8 +334,8 @@ async function main(): Promise<void> {
     console.log("\nAttempting a second close of the same day…");
     try {
       await closeDay(db, venue, DAY_ONE, [
-        { tillId: venue.caja1, openingFloat: "50.00", payouts: "0.00", countedCash: "172.50" },
-        { tillId: venue.caja2, openingFloat: "30.00", payouts: "0.00", countedCash: "83.00" },
+        { deviceId: venue.caja1, openingFloat: "50.00", payouts: "0.00", countedCash: "172.50" },
+        { deviceId: venue.caja2, openingFloat: "30.00", payouts: "0.00", countedCash: "83.00" },
       ]);
       throw new Error("demo invariant: the second close should have been rejected");
     } catch (error) {
@@ -335,7 +347,7 @@ async function main(): Promise<void> {
     }
 
     await ringSale(db, venue, backend, {
-      till: venue.caja1,
+      device: venue.caja1,
       base: "80.00",
       vatRate: "21.00",
       total: "96.80",
@@ -345,7 +357,7 @@ async function main(): Promise<void> {
     });
     console.log("");
     const rec2 = await closeDay(db, venue, DAY_TWO, [
-      { tillId: venue.caja1, openingFloat: "100.00", payouts: "0.00", countedCash: "196.80" }, // 100+96.80 → 0.00 exact
+      { deviceId: venue.caja1, openingFloat: "100.00", payouts: "0.00", countedCash: "196.80" }, // 100+96.80 → 0.00 exact
     ]);
     printRecord(venue, rec2);
 

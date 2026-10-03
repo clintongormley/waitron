@@ -104,7 +104,6 @@ const steadyClock: TrustedClock = fixedClock(() => ({
 /** The ordinary sale, settled immediately, so "the corrective is unsettled" is not vacuous. */
 function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    tillId,
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,
@@ -147,7 +146,6 @@ function correctionInput(
   overrides: Partial<RecordCorrectionInput> = {},
 ): RecordCorrectionInput {
   return {
-    tillId,
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId: rectSeriesId,
@@ -355,7 +353,7 @@ describe("recordCorrection — the sale being corrected", () => {
     // The original exists in `sales` but has no fiscal record, so the fake backend refuses with
     // `fiscal.sale_not_recorded`.
     const backend = new FakeFiscalBackend(suite.db);
-    const bareOriginal = await seedBareSale(suite.db, { tillId, deviceId, nodeId, seriesId });
+    const bareOriginal = await seedBareSale(suite.db, { deviceId, nodeId, seriesId });
     await expect(correct(backend, bareOriginal)).rejects.toMatchObject({
       code: "fiscal.sale_not_recorded",
       params: { saleId: bareOriginal },
@@ -366,14 +364,7 @@ describe("recordCorrection — the sale being corrected", () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     await withTransaction(suite.db, async (tx) => {
-      await recordVoid(
-        tx,
-        backend,
-        saleId,
-        "Wrong table",
-        { sessionId: managerSessionId },
-        deviceOrigin(deviceId),
-      );
+      await recordVoid(tx, backend, saleId, "Wrong table", { sessionId: managerSessionId });
     });
     await expect(correct(backend, saleId)).rejects.toMatchObject({
       code: "sale.voided",
@@ -808,7 +799,7 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
     const backend = new FakeFiscalBackend(suite.db);
     const originalId = await seedBareSale(
       suite.db,
-      { tillId, deviceId, nodeId, seriesId },
+      { deviceId, nodeId, seriesId },
       { total: "0.55", vatBreakdown: [{ rate: "21.00", base: "0.45", tax: "0.09" }] },
     );
 

@@ -592,7 +592,7 @@ describe("the snapshot is taken when the line is added, on every till filing pat
       });
     await park(before);
     await park(parkedBefore);
-    await placeOrder(deps(), v.cfg, before, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, before, OPERATOR);
     await moveCocktailsToSpirits(v);
     await park(parkedAfter);
 
@@ -601,8 +601,8 @@ describe("the snapshot is taken when the line is added, on every till filing pat
       lines: [],
       tender: { method: "cash", amount: "9.00" },
     });
-    await placeOrder(deps(), v.cfg, parkedBefore, OPERATOR, v.cfg.tillId);
-    await placeOrder(deps(), v.cfg, parkedAfter, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, parkedBefore, OPERATOR);
+    await placeOrder(deps(), v.cfg, parkedAfter, OPERATOR);
 
     expect(await reportingOf(before)).toEqual([underAlcoholic(v)]);
     expect(await reportingOf(parkedBefore)).toEqual([underAlcoholic(v)]);
@@ -617,7 +617,7 @@ describe("the snapshot is taken when the line is added, on every till filing pat
       zoneId: v.counter.zoneId,
       lines: [{ menuItemId: v.counter.offerFor(v.products.negroni), quantity: "1" }],
     });
-    await placeOrder(deps(), v.cfg, id, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, id, OPERATOR);
     await moveCocktailsToSpirits(v);
 
     await collectOrder(deps(), v.cfg, {

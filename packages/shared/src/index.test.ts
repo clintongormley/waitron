@@ -40,6 +40,7 @@ import {
   normaliseDraftLines,
   normaliseUuid,
   readOrigin,
+  readSaleOrigin,
   resolveActiveLocale,
   QUANTITY_SCALE,
   RATE_SCALE,
@@ -95,6 +96,7 @@ describe("package public surface (./index.js)", () => {
     expect(deviceOrigin(uuid)).toEqual({ source: "device", deviceId: uuid });
     expect(readOrigin("kitchen_timer", null)).toEqual(jobOrigin("kitchen_timer"));
     expect(isSaleOrigin(jobOrigin("demo_seed"))).toBe(true);
+    expect(readSaleOrigin("demo_seed", null)).toEqual(jobOrigin("demo_seed"));
   });
 
   it("re-exports every decimal function and constant", () => {

@@ -1,21 +1,19 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { tablesCreatedBy } from "@waitron/sync-enrolment";
 import { FISCAL_CLASSIFICATION } from "./classification.js";
 
 const DRIZZLE = join(import.meta.dirname, "..", "drizzle");
 
-// drizzle-kit's sqlite dialect quotes table names with backticks; both quote characters are
-// accepted so the extraction does not go silently empty if the emitted spelling changes.
-function tablesInDrizzle(): string[] {
-  const names: string[] = [];
-  for (const file of readdirSync(DRIZZLE).filter((f) => f.endsWith(".sql"))) {
-    const sql = readFileSync(join(DRIZZLE, file), "utf8");
-    for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?[`"]?([a-z0-9_]+)[`"]?/gi)) {
-      names.push(m[1]!);
-    }
-  }
-  return names;
+/** The tables the migrations LEAVE IN EXISTENCE — CREATEs minus later DROPs, a RENAME counting as a
+ * drop of the old name and a create of the new, in filename order (`readdirSync` does not sort). */
+function tablesInDrizzle(): Set<string> {
+  const files = readdirSync(DRIZZLE)
+    .filter((f) => f.endsWith(".sql"))
+    .sort()
+    .map((f) => readFileSync(join(DRIZZLE, f), "utf8"));
+  return tablesCreatedBy(files);
 }
 
 describe("FISCAL_CLASSIFICATION", () => {
@@ -31,7 +29,7 @@ describe("FISCAL_CLASSIFICATION", () => {
   });
   it("classifies exactly the tables this module's migrations create", () => {
     const classified = new Set(FISCAL_CLASSIFICATION.map((c) => c.table));
-    const created = new Set(tablesInDrizzle());
+    const created = tablesInDrizzle();
     // An extraction that reads no table names at all satisfies the first comparison below while
     // proving nothing, so it is named here rather than left to the second one to catch.
     expect([...created].sort()).not.toEqual([]);

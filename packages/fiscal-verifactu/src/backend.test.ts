@@ -6,7 +6,7 @@ import { captureError, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
 import { AppError, deviceOrigin, jobOrigin } from "@waitron/shared";
-import type { DeviceId, NodeId, SeriesId, TillId } from "@waitron/shared";
+import type { DeviceId, NodeId, SeriesId } from "@waitron/shared";
 import {
   MONEY_SCALE,
   decimal,
@@ -22,7 +22,6 @@ import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 let backend: VerifactuBackend;
-let tillId: TillId;
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -30,7 +29,7 @@ let seriesId: SeriesId;
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ tillId, deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -41,7 +40,7 @@ beforeEach(async () => {
 
 async function sell(overrides: Partial<Parameters<typeof saleInput>[0]> = {}) {
   return withTransaction(suite.db, async (tx) => {
-    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId, ...overrides }));
+    return recordSale(tx, backend, saleInput({ nodeId, seriesId, ...overrides }));
   });
 }
 
@@ -77,7 +76,6 @@ describe("zero-rate sales", () => {
         tx,
         backend,
         saleInput({
-          tillId,
           origin: deviceOrigin(deviceId),
           nodeId,
           seriesId,
@@ -164,7 +162,7 @@ describe("the taxpayer every record is filed as", () => {
     await suite.db.execute(sql`delete from tenants`);
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
-        return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
+        return recordSale(tx, backend, saleInput({ nodeId, seriesId }));
       }),
     );
     expect(error).not.toBeInstanceOf(AppError);
@@ -313,7 +311,6 @@ describe("recordCorrection — refusals", () => {
    * the call type-correct. */
   function correctiveSale(): SaleForFiscalRecord {
     return {
-      tillId,
       origin: deviceOrigin(deviceId),
       nodeId,
       saleId: brandSaleId("33333333-3333-4333-8333-333333333333"),
@@ -347,7 +344,6 @@ describe("recordCorrection — refusals", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(sales).values({
         id: original,
-        tillId,
         source: "device",
         deviceId,
         nodeId,
@@ -364,7 +360,6 @@ describe("recordCorrection — refusals", () => {
         fiscalState: "recorded",
       });
       await backend.recordSale(tx, {
-        tillId,
         origin: deviceOrigin(deviceId),
         nodeId,
         saleId: original,
@@ -401,7 +396,6 @@ describe("recordSubstitution — refusals", () => {
    * full invoice must always name its recipient. */
   function substitutionSale(overrides: Partial<SaleForFiscalRecord> = {}): SaleForFiscalRecord {
     return {
-      tillId,
       origin: deviceOrigin(deviceId),
       nodeId,
       saleId: brandSaleId("55555555-5555-4555-8555-555555555555"),
@@ -439,7 +433,6 @@ describe("recordSubstitution — refusals", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(sales).values({
         id: original,
-        tillId,
         source: "device",
         deviceId,
         nodeId,
@@ -456,7 +449,6 @@ describe("recordSubstitution — refusals", () => {
         fiscalState: "recorded",
       });
       await backend.recordSale(tx, {
-        tillId,
         origin: deviceOrigin(deviceId),
         nodeId,
         saleId: original,
@@ -527,7 +519,6 @@ describe("recordSale — invoice type selection", () => {
       // The sales row's own total is irrelevant here: only the registro's is asserted.
       await tx.insert(sales).values({
         id: freshSaleId,
-        tillId,
         source: "device",
         deviceId,
         nodeId,
@@ -544,7 +535,6 @@ describe("recordSale — invoice type selection", () => {
         fiscalState: "recorded",
       });
       await backend.recordSale(tx, {
-        tillId,
         origin: deviceOrigin(deviceId),
         nodeId,
         saleId: freshSaleId,
@@ -576,7 +566,6 @@ describe("recordSale — invoice type selection", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(sales).values({
         id: saleId,
-        tillId,
         source: "device",
         deviceId,
         nodeId,
@@ -592,7 +581,6 @@ describe("recordSale — invoice type selection", () => {
         fiscalState: "recorded",
       });
       await backend.recordSale(tx, {
-        tillId,
         origin: deviceOrigin(deviceId),
         nodeId,
         saleId: brandSaleId(saleId),
@@ -725,7 +713,6 @@ describe("filedReceiptFor", () => {
     const ref = await withTransaction(suite.db, async (tx) => {
       await tx.insert(sales).values({
         id: freshSaleId,
-        tillId,
         source: "device",
         deviceId,
         nodeId,
@@ -742,7 +729,6 @@ describe("filedReceiptFor", () => {
         fiscalState: "recorded",
       });
       return backend.recordSale(tx, {
-        tillId,
         origin: deviceOrigin(deviceId),
         nodeId,
         saleId: freshSaleId,

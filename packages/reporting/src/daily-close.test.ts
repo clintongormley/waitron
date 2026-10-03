@@ -51,11 +51,11 @@ describe("computeDailyClose", () => {
 
     const day4 = await run(input({ businessDay: "2026-08-04" }));
     expect(day4.vat.byRate).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00" }]);
-    expect(day4.cash.byTill).toEqual([]); // not settled on the 4th
+    expect(day4.cash.byOrigin).toEqual([]); // not settled on the 4th
 
     const day5 = await run(input({ businessDay: "2026-08-05" }));
     expect(day5.vat.byRate).toEqual([]); // not issued on the 5th
-    expect(day5.cash.byTill).toHaveLength(1);
+    expect(day5.cash.byOrigin).toHaveLength(1);
     expect(day5.cash.tenderTotal).toBe("121.00");
   });
 
@@ -83,13 +83,13 @@ describe("computeDailyClose", () => {
       input({ businessDay: "2026-08-04", dayCutover: "05:00", timeZone: "Europe/Madrid" }),
     );
     expect(day4.vat.byRate).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00" }]); // VAT on the placing day
-    expect(day4.cash.byTill).toEqual([]); // no cash yet — not settled until D2
+    expect(day4.cash.byOrigin).toEqual([]); // no cash yet — not settled until D2
 
     const day5 = await run(
       input({ businessDay: "2026-08-05", dayCutover: "05:00", timeZone: "Europe/Madrid" }),
     );
     expect(day5.vat.byRate).toEqual([]); // no VAT on the settlement day — it was already booked on D1
-    expect(day5.cash.byTill).toHaveLength(1); // the cash lands here
+    expect(day5.cash.byOrigin).toHaveLength(1); // the cash lands here
     expect(day5.cash.tenderTotal).toBe("121.00");
   });
 
@@ -114,7 +114,7 @@ describe("computeDailyClose", () => {
       counts: { sales: 1, corrections: 0, voids: 0 },
     });
     expect(close.vat.grossTotal).toBe("121.00");
-    expect(close.cash.byTill[0]!.cashTakings).toBe("121.00");
+    expect(close.cash.byOrigin[0]!.cashTakings).toBe("121.00");
   });
 
   it("handles the spring-forward DST day without shifting the bucket", async () => {

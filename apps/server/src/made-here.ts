@@ -33,6 +33,15 @@ export interface MadeHereItem {
   note: string | null;
 }
 
+/** A request's configuration as the device sending its work to the kitchen. */
+export function sendingCfg<C extends TillConfig>(
+  cfg: C,
+  c: Context,
+  device: { deviceId: string },
+): C {
+  return { ...cfg, sendingDeviceId: device.deviceId, madeHereSink: madeHereSinkFor(c) };
+}
+
 /** A request owns one sink through all of its sending paths. */
 export function madeHereSinkFor(c: Context): Set<string> {
   const existing = c.get("madeHereSink");

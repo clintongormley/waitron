@@ -1255,13 +1255,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       zoneId: v.counter.zoneId,
       lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
     });
-    await placeOrder(
-      { db: suite.db, backend: v.backend, clock: v.clock },
-      v.cfg,
-      id,
-      OPERATOR,
-      v.cfg.tillId,
-    );
+    await placeOrder({ db: suite.db, backend: v.backend, clock: v.clock }, v.cfg, id, OPERATOR);
     const response = await app.request("/api/dead-ends/order", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: session },
@@ -1280,13 +1274,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       zoneId: v.counter.zoneId,
       lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
     });
-    await placeOrder(
-      { db: suite.db, backend: v.backend, clock: v.clock },
-      v.cfg,
-      id,
-      OPERATOR,
-      v.cfg.tillId,
-    );
+    await placeOrder({ db: suite.db, backend: v.backend, clock: v.clock }, v.cfg, id, OPERATOR);
     const [line] = await inTx(v, (tx) =>
       tx
         .select({ id: workingOrderLines.id })

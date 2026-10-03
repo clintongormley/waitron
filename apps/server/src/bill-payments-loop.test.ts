@@ -98,7 +98,6 @@ async function strandedPending(
         tip,
         state: "pending",
         requestedBy: venue.operatorId,
-        tillId: device.tillId,
         source: "device",
         deviceId: device.deviceId,
       })
@@ -233,7 +232,7 @@ describe("recovery after a crash (design §8 test 13)", () => {
     expect(await statusOf(venue, billId)).toBe("settled");
     expect(registroCount(venue, billId)).toBe(1);
     expect(await tendersOfBill(venue, billId)).toMatchObject([
-      { method: "card", amount: 3500, billPaymentId: payment!.id, saleTillId: venue.deviceTillId },
+      { method: "card", amount: 3500, billPaymentId: payment!.id, saleDeviceId: venue.deviceId },
     ]);
     const [provided] = await inTx(venue, (tx) =>
       tx
@@ -242,6 +241,18 @@ describe("recovery after a crash (design §8 test 13)", () => {
         .where(eq(payments.billPaymentId, payment!.id)),
     );
     expect(provided!.saleId).not.toBeNull();
+  });
+
+  it("files the invoice under the device that took the payment, not the loop's", async () => {
+    const billId = await tabWith(venue, "Paella");
+    await capturedPending(billId, 3500);
+    expect(venue.device2Id).not.toBe(venue.cfg.origin.deviceId);
+
+    await settle();
+
+    expect(
+      venue.db.all(sql`select source, device_id from sales where working_order_id = ${billId}`),
+    ).toEqual([{ source: "device", device_id: venue.device2Id }]);
   });
 
   it("leaves a card whose provider row is still attempting pending, holding the bill", async () => {
@@ -586,7 +597,6 @@ describe("rows written within one millisecond", () => {
             state,
             receivedAt: state === "received" ? at : null,
             requestedBy: venue.operatorId,
-            tillId: venue.device2TillId,
             source: "device",
             deviceId: venue.device2Id,
             createdAt: at,
@@ -637,7 +647,6 @@ describe("rows written within one millisecond", () => {
             reason: "error",
             authorizedBy: venue.operatorId,
             requestedBy: venue.operatorId,
-            tillId: venue.device2TillId,
             source: "device",
             deviceId: venue.device2Id,
             state: "pending",

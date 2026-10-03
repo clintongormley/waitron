@@ -577,7 +577,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
       lines: ["Burger", "Vino"].map((name) => ({ menuItemId: v.item(name), quantity: "1" })),
       operatorId: OPERATOR,
     });
-    await placeOrder(deps, v.cfg, id, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps, v.cfg, id, OPERATOR);
     const before = await lineRows(id);
     expect(before.every((l) => l.sentAt !== null && l.groupId === null)).toBe(true);
 

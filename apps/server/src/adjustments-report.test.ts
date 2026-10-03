@@ -276,14 +276,9 @@ describe("a kitchen cancellation is not a voided invoice (spec §7)", () => {
       loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.managerId, pin: PINS.manager }),
     );
     await inTx(venue, (tx) =>
-      recordVoid(
-        tx,
-        venue.backend,
-        brandSaleId(invoice.id),
-        "rung in error",
-        { sessionId: manager.id },
-        venue.cfg.origin,
-      ),
+      recordVoid(tx, venue.backend, brandSaleId(invoice.id), "rung in error", {
+        sessionId: manager.id,
+      }),
     );
 
     expect(await voidCount()).toBe(voidsBefore + 1);

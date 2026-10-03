@@ -1,4 +1,4 @@
-import type { Context, Hono } from "hono";
+import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
 import { listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
@@ -7,7 +7,6 @@ import { invalid } from "./bill-allocation.js";
 import {
   getBillBalance,
   previewBillPayment,
-  SaleTillRequired,
   takeBillPayment,
   takeReaderBillPayment,
 } from "./bill-payments.js";
@@ -15,7 +14,6 @@ import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
 import { refundBillPayment, refundProvidersOf } from "./bill-refunds.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
 import { assertDeviceCapability, assertTakesCash, deviceTillCfg } from "./device-session.js";
-import type { DeviceBinding } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import {
   overridePinAttempts,
@@ -24,8 +22,7 @@ import {
   resolveCardCollector,
 } from "./till-api.js";
 import type { Run, TillApiDeps } from "./till-api.js";
-import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
-import { madeHereSinkFor } from "./made-here.js";
+import { sendingCfg } from "./made-here.js";
 import { requestCfg } from "./request-config.js";
 import { isUuid, requireSession } from "./till-session.js";
 import "./errors.js";
@@ -179,40 +176,9 @@ function requireBillParam(id: string): string {
   return id;
 }
 
-/** A sale made during a device's request files on that device's own till ({@link deviceTillCfg}). */
-function deviceSaleCfg<C extends TillConfig>(cfg: C, c: Context, device: DeviceBinding): C {
-  return {
-    ...deviceTillCfg(cfg, device),
-    sendingDeviceId: device.deviceId,
-    madeHereSink: madeHereSinkFor(c),
-  };
-}
-
-/**
- * Runs a line write that can leave a bill exactly paid, so that the invoice it issues is filed on
- * the requesting device's till. `write` runs first with no till, and again with the device's only
- * when an invoice is due.
- */
-export async function withSaleTillWhenIssuing<T>(
-  c: Context,
-  cfg: DeviceRequestConfig,
-  device: DeviceBinding,
-  write: (saleCfg: DeviceRequestConfig | null) => Promise<T>,
-): Promise<T> {
-  const sink = madeHereSinkFor(c);
-  const before = new Set(sink);
-  try {
-    return await write(null);
-  } catch (error) {
-    if (!(error instanceof SaleTillRequired)) throw error;
-    for (const id of sink) if (!before.has(id)) sink.delete(id);
-  }
-  return write(deviceSaleCfg(cfg, c, device));
-}
-
 /**
  * The bill payment routes (bill payments design §3.6, §5.1, §6, §7), behind the till session. A
- * payment is taken on the device's own till, which is the till its cash drawer and its invoice use.
+ * payment, and the invoice it completes, names the requesting device.
  */
 export function mountBillPaymentsApi(
   app: Hono,
@@ -250,7 +216,7 @@ export function mountBillPaymentsApi(
       const body = asObject(await readRawJsonBody<unknown>(c));
       const request = parseRequest(body);
       if (request.entry !== "reader") {
-        const saleCfg = deviceSaleCfg(cfg, c, session.device);
+        const saleCfg = sendingCfg(deviceTillCfg(cfg, session.device), c, session.device);
         if (request.method === "cash") assertTakesCash(session.device);
         return c.json(await takeBillPayment(fiscal, saleCfg, id, request, personId));
       }
@@ -262,7 +228,7 @@ export function mountBillPaymentsApi(
       if (request.simulationOutcome !== undefined && deps.cardProvider?.provider !== "simulator") {
         throw invalid("simulationOutcome");
       }
-      const saleCfg = deviceSaleCfg(cfg, c, device);
+      const saleCfg = sendingCfg(deviceTillCfg(cfg, device), c, device);
       const { provider, reader } = await resolveCardCollector(deps, device.deviceId, readerId);
       return c.json(
         await takeReaderBillPayment(
@@ -290,7 +256,7 @@ export function mountBillPaymentsApi(
     }),
   );
 
-  // The refund is recorded on the device's own till. Cash opens a drawer only where
+  // The refund names the requesting device. Cash opens a drawer only where
   // `enqueueBillRefundDrawer` finds one this till may open; a connected card goes through its
   // provider, while a separately charged card needs staff confirmation and a manager PIN.
   app.post("/api/working-orders/:id/payments/:paymentId/refunds", (c) =>
@@ -301,7 +267,7 @@ export function mountBillPaymentsApi(
       const id = requireBillParam(c.req.param("id"));
       const paymentId = c.req.param("paymentId");
       const refund = parseRefund(asObject(await readRawJsonBody<unknown>(c)));
-      const saleCfg = deviceSaleCfg(cfg, c, session.device);
+      const saleCfg = sendingCfg(deviceTillCfg(cfg, session.device), c, session.device);
       return c.json(
         await refundBillPayment(
           {

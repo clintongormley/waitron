@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   AppError,
+  locationId as brandLocationId,
   seriesId as brandSeriesId,
   workingOrderId as brandWorkingOrderId,
   decimal,
@@ -23,6 +24,8 @@ import {
   constraintTarget,
   isUniqueViolation,
   invoiceSeries,
+  locations,
+  nodes,
   saleLines,
   saleSettlements,
   sales,
@@ -32,6 +35,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
 import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
@@ -81,7 +85,6 @@ const DEFAULT_TENDERS: RecordSaleTender[] = [
 
 function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    tillId,
     origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,
@@ -207,7 +210,48 @@ describe("recordSale — the sale's origin", () => {
     await run(backend, { origin: jobOrigin("readiness_test") });
     expect(seen.map((sale) => sale.origin)).toEqual([jobOrigin("readiness_test")]);
   });
+
+  it("describes the operation from the location of the device the sale was rung on", async () => {
+    const [terrace] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Terraza",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Terrace service",
+      })
+      .returning({ id: locations.id });
+    const terraceDevice = await seedDevice(suite.db, { locationId: brandLocationId(terrace!.id) });
+    const seen = await descriptionsFiled({ origin: deviceOrigin(terraceDevice.deviceId) });
+    expect(seen).toEqual(["Terrace service"]);
+  });
+
+  it("describes a sale with no device from its node's location", async () => {
+    const [node] = await suite.db
+      .select({ locationId: nodes.locationId })
+      .from(nodes)
+      .where(eq(nodes.id, nodeId));
+    await suite.db
+      .update(locations)
+      .set({ operationDescription: "Counter service" })
+      .where(eq(locations.id, node!.locationId));
+    const seen = await descriptionsFiled({ origin: jobOrigin("readiness_test") });
+    expect(seen).toEqual(["Counter service"]);
+  });
 });
+
+/** The `descriptionOfOperation` each filed sale handed the fiscal backend. */
+async function descriptionsFiled(overrides: Partial<RecordSaleInput>): Promise<string[]> {
+  const fake = new FakeFiscalBackend(suite.db);
+  const seen: string[] = [];
+  const backend = wrapBackend(fake, {
+    recordSale: (tx, sale) => {
+      seen.push(sale.descriptionOfOperation);
+      return fake.recordSale(tx, sale);
+    },
+  });
+  await run(backend, overrides);
+  return seen;
+}
 
 describe("recordSale — the happy path", () => {
   it("allocates the next number from the series and stamps it on the sale", async () => {
@@ -661,7 +705,6 @@ describe("recordSale — settlement modes", () => {
         tx,
         backend,
         input({
-          tillId: other.tillId,
           nodeId: other.nodeId,
           seriesId: other.seriesId,
           settlement: { kind: "deferred" },
@@ -672,7 +715,6 @@ describe("recordSale — settlement modes", () => {
       await settleSale(tx, {
         saleId: b.saleId,
         tenders: tendersInput,
-        origin: deviceOrigin(other.deviceId),
       });
     });
 
@@ -767,7 +809,6 @@ describe("recordSale — numbering", () => {
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
         await tx.insert(sales).values({
-          tillId,
           source: "device",
           deviceId,
           nodeId,

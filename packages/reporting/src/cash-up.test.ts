@@ -7,7 +7,7 @@ import {
   seedOpenOrder,
   seedSale,
   seedTender,
-  seedTill,
+  seedVenueDevice,
   seedVenue,
 } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -60,21 +60,21 @@ describe("computeCashUp", () => {
       { method: "card", amount: "70.00", tipAmount: "0.00", settledAt: settledNoon },
     ]);
     const cash = await run();
-    expect(cash.byTill).toHaveLength(1);
-    expect(cash.byTill[0]!.cashTakings).toBe("50.00");
-    expect(cash.byTill[0]!.byMethod).toEqual([
+    expect(cash.byOrigin).toHaveLength(1);
+    expect(cash.byOrigin[0]!.cashTakings).toBe("50.00");
+    expect(cash.byOrigin[0]!.byMethod).toEqual([
       { method: "card", amount: "70.00", tip: "0.00" },
       { method: "cash", amount: "50.00", tip: "5.00" },
     ]);
     expect(cash).toMatchObject({ tenderTotal: "120.00", tipTotal: "5.00" });
   });
 
-  it("breaks down by till", async () => {
-    const till2 = await seedTill(suite.db, venue.locationId);
+  it("breaks down by device", async () => {
+    const device2 = await seedVenueDevice(suite.db, venue.locationId);
     await saleWithTenders(1, [{ method: "cash", amount: "30.00", settledAt: settledNoon }]);
     const s2 = await seedSale(
       suite.db,
-      { ...venue, tillId: till2 },
+      { ...venue, deviceId: device2 },
       {
         invoiceNumber: 2,
         issuedAt: settledNoon,
@@ -88,8 +88,89 @@ describe("computeCashUp", () => {
       { method: "card", amount: "40.00", settledAt: settledNoon },
     );
     const cash = await run();
-    expect(cash.byTill.map((t) => t.tillId).sort()).toEqual([venue.tillId, till2].sort());
+    expect(cash.byOrigin.map((t) => t.deviceId).sort()).toEqual([venue.deviceId, device2].sort());
     expect(cash).toMatchObject({ tenderTotal: "70.00", tipTotal: "0.00" });
+  });
+
+  it("counts cash per device: sales on two devices and a bill payment on the first", async () => {
+    const deviceB = await seedVenueDevice(suite.db, venue.locationId);
+    await saleWithTenders(1, [{ method: "cash", amount: "30.00", settledAt: settledNoon }]);
+    const onB = await seedSale(
+      suite.db,
+      { ...venue, deviceId: deviceB },
+      {
+        invoiceNumber: 2,
+        issuedAt: settledNoon,
+        total: "40.00",
+        lines: [{ vatRate: "10.00", lineTotal: "36.36" }],
+      },
+    );
+    await seedTender(
+      suite.db,
+      { saleId: onB },
+      { method: "cash", amount: "40.00", settledAt: settledNoon },
+    );
+    const { orderId } = await seedOpenOrder(suite.db, venue, 1);
+    await seedBillPayment(
+      suite.db,
+      { workingOrderId: orderId, deviceId: venue.deviceId },
+      { method: "cash", applied: "12.00", state: "received", at: settledNoon },
+    );
+
+    const cash = await run();
+
+    expect(cash).toEqual({
+      byOrigin: [
+        {
+          source: "device",
+          deviceId: venue.deviceId,
+          byMethod: [{ method: "cash", amount: "42.00", tip: "0.00" }],
+          cashTakings: "42.00",
+        },
+        {
+          source: "device",
+          deviceId: deviceB,
+          byMethod: [{ method: "cash", amount: "40.00", tip: "0.00" }],
+          cashTakings: "40.00",
+        },
+      ].sort((a, b) => Number(a.deviceId > b.deviceId) - Number(a.deviceId < b.deviceId)),
+      tenderTotal: "82.00",
+      tipTotal: "0.00",
+    });
+  });
+
+  it("gives a Demo seed sale a row of its own with no device, counted in the totals", async () => {
+    await saleWithTenders(1, [{ method: "cash", amount: "30.00", settledAt: settledNoon }]);
+    const sample = await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: settledNoon,
+      total: "15.00",
+      lines: [{ vatRate: "10.00", lineTotal: "13.64" }],
+      source: "demo_seed",
+    });
+    await seedTender(
+      suite.db,
+      { saleId: sample },
+      { method: "cash", amount: "15.00", settledAt: settledNoon },
+    );
+
+    const cash = await run();
+
+    expect(cash.byOrigin).toEqual([
+      {
+        source: "demo_seed",
+        deviceId: null,
+        byMethod: [{ method: "cash", amount: "15.00", tip: "0.00" }],
+        cashTakings: "15.00",
+      },
+      {
+        source: "device",
+        deviceId: venue.deviceId,
+        byMethod: [{ method: "cash", amount: "30.00", tip: "0.00" }],
+        cashTakings: "30.00",
+      },
+    ]);
+    expect(cash).toMatchObject({ tenderTotal: "45.00", tipTotal: "0.00" });
   });
 
   it("buckets by settlement day + cutover: a 01:30-local tender belongs to the prior day", async () => {
@@ -100,12 +181,12 @@ describe("computeCashUp", () => {
         settledAt: new Date("2026-08-03T23:30:00Z").toISOString(),
       },
     ]);
-    expect((await run({ businessDay: "2026-08-04" })).byTill).toEqual([]);
-    expect((await run({ businessDay: "2026-08-03" })).byTill).toHaveLength(1);
+    expect((await run({ businessDay: "2026-08-04" })).byOrigin).toEqual([]);
+    expect((await run({ businessDay: "2026-08-03" })).byOrigin).toHaveLength(1);
   });
 
   it("returns zeros for an empty day", async () => {
-    expect(await run()).toEqual({ byTill: [], tenderTotal: "0.00", tipTotal: "0.00" });
+    expect(await run()).toEqual({ byOrigin: [], tenderTotal: "0.00", tipTotal: "0.00" });
   });
 
   it("reads the money columns as counts of whole cents, summed then converted once", async () => {
@@ -124,8 +205,8 @@ describe("computeCashUp", () => {
       { saleId, method: "cash", amount: 5, tipAmount: 0, settledAt: settledNoon },
     ]);
     const cash = await run();
-    expect(cash.byTill[0]!.byMethod).toEqual([{ method: "cash", amount: "123.50", tip: "2.50" }]);
-    expect(cash.byTill[0]!.cashTakings).toBe("123.50");
+    expect(cash.byOrigin[0]!.byMethod).toEqual([{ method: "cash", amount: "123.50", tip: "2.50" }]);
+    expect(cash.byOrigin[0]!.cashTakings).toBe("123.50");
     expect(cash).toMatchObject({ tenderTotal: "123.50", tipTotal: "2.50" });
   });
 
@@ -142,12 +223,12 @@ describe("computeCashUp", () => {
       { saleId: s },
       { method: "cash", amount: "10.00", settledAt: settledNoon },
     );
-    expect((await run()).byTill).toEqual([]);
+    expect((await run()).byOrigin).toEqual([]);
   });
 });
 
 // Money taken against a bill before its invoice (bill payments design §9a): counted on the day and
-// till it moved, never again when the invoice's tenders are written.
+// device it moved, never again when the invoice's tenders are written.
 describe("computeCashUp — bill payments and their refunds", () => {
   const day1Noon = "2026-08-04T10:00:00.000Z";
   const day2Noon = "2026-08-05T10:00:00.000Z";
@@ -158,13 +239,13 @@ describe("computeCashUp — bill payments and their refunds", () => {
     return (await seedOpenOrder(suite.db, on, orderNo)).orderId;
   }
 
-  it("counts a received payment on its own till and day as applied plus tip, never the change", async () => {
-    const tillB = await seedTill(suite.db, venue.locationId);
+  it("counts a received payment on its own device and day as applied plus tip, never the change", async () => {
+    const deviceB = await seedVenueDevice(suite.db, venue.locationId);
     const bill = await openBill();
     // €60.00 handed over for €50.00 applied and a €5.00 tip: €5.00 change went back to the payer.
     await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: venue.tillId },
+      { workingOrderId: bill, deviceId: venue.deviceId },
       {
         method: "cash",
         applied: "50.00",
@@ -176,49 +257,51 @@ describe("computeCashUp — bill payments and their refunds", () => {
     );
     await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: tillB },
+      { workingOrderId: bill, deviceId: deviceB },
       { method: "card", applied: "30.00", state: "received", at: day1Noon },
     );
 
     const cash = await run();
 
     expect(cash).toEqual({
-      byTill: [
+      byOrigin: [
         {
-          tillId: venue.tillId,
+          source: "device",
+          deviceId: venue.deviceId,
           byMethod: [{ method: "cash", amount: "55.00", tip: "5.00" }],
           cashTakings: "55.00",
         },
         {
-          tillId: tillB,
+          source: "device",
+          deviceId: deviceB,
           byMethod: [{ method: "card", amount: "30.00", tip: "0.00" }],
           cashTakings: "0.00",
         },
-      ].sort((a, b) => Number(a.tillId > b.tillId) - Number(a.tillId < b.tillId)),
+      ].sort((a, b) => Number(a.deviceId > b.deviceId) - Number(a.deviceId < b.deviceId)),
       tenderTotal: "85.00",
       tipTotal: "5.00",
     });
   });
 
   it("counts the invoice's tenders from bill payments on no day, and a walk-up sale's tender once", async () => {
-    // Design §8 tests 24 and 26: €50.00 cash on till A on day 1 and €70.00 card on till B on day 2
-    // against one €120.00 bill; the invoice is issued on day 2 at till B, with one tender per
-    // payment settled when its money moved. A walk-up cash sale on till B on day 2 sits beside it.
-    const tillB = await seedTill(suite.db, venue.locationId);
+    // Design §8 tests 24 and 26: €50.00 cash on device A on day 1 and €70.00 card on device B on day 2
+    // against one €120.00 bill; the invoice is issued on day 2 on device B, with one tender per
+    // payment settled when its money moved. A walk-up cash sale on device B on day 2 sits beside it.
+    const deviceB = await seedVenueDevice(suite.db, venue.locationId);
     const bill = await openBill();
     const cashPayment = await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: venue.tillId },
+      { workingOrderId: bill, deviceId: venue.deviceId },
       { method: "cash", applied: "50.00", state: "received", at: day1Noon },
     );
     const cardPayment = await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: tillB },
+      { workingOrderId: bill, deviceId: deviceB },
       { method: "card", applied: "70.00", state: "received", at: day2Noon },
     );
     const invoice = await seedSale(
       suite.db,
-      { ...venue, tillId: tillB },
+      { ...venue, deviceId: deviceB },
       {
         invoiceNumber: 1,
         issuedAt: day2Noon,
@@ -238,7 +321,7 @@ describe("computeCashUp — bill payments and their refunds", () => {
     );
     const walkUp = await seedSale(
       suite.db,
-      { ...venue, tillId: tillB },
+      { ...venue, deviceId: deviceB },
       {
         invoiceNumber: 2,
         issuedAt: day2Noon,
@@ -252,11 +335,12 @@ describe("computeCashUp — bill payments and their refunds", () => {
       { method: "cash", amount: "8.00", settledAt: day2Noon },
     );
 
-    // A double count would put day 1's €50.00 on the SALE's till, B, so the whole day is asserted.
+    // A double count would put day 1's €50.00 on the SALE's device, B, so the whole day is asserted.
     expect(await run({ businessDay: "2026-08-04" })).toEqual({
-      byTill: [
+      byOrigin: [
         {
-          tillId: venue.tillId,
+          source: "device",
+          deviceId: venue.deviceId,
           byMethod: [{ method: "cash", amount: "50.00", tip: "0.00" }],
           cashTakings: "50.00",
         },
@@ -265,9 +349,10 @@ describe("computeCashUp — bill payments and their refunds", () => {
       tipTotal: "0.00",
     });
     expect(await run({ businessDay: "2026-08-05" })).toEqual({
-      byTill: [
+      byOrigin: [
         {
-          tillId: tillB,
+          source: "device",
+          deviceId: deviceB,
           byMethod: [
             { method: "card", amount: "70.00", tip: "0.00" },
             { method: "cash", amount: "8.00", tip: "0.00" },
@@ -280,35 +365,36 @@ describe("computeCashUp — bill payments and their refunds", () => {
     });
   });
 
-  it("subtracts a completed refund on its own till and day, under its payment's method", async () => {
+  it("subtracts a completed refund on its own device and day, under its payment's method", async () => {
     // Design §8 test 25, and a whole card payment given back with its tip.
-    const tillB = await seedTill(suite.db, venue.locationId);
+    const deviceB = await seedVenueDevice(suite.db, venue.locationId);
     const bill = await openBill();
     const cashPayment = await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: venue.tillId },
+      { workingOrderId: bill, deviceId: venue.deviceId },
       { method: "cash", applied: "50.00", state: "received", at: day1Noon },
     );
     const cardPayment = await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: venue.tillId },
+      { workingOrderId: bill, deviceId: venue.deviceId },
       { method: "card", applied: "30.00", tip: "3.00", state: "received", at: day1Noon },
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: cashPayment, tillId: tillB },
+      { billPaymentId: cashPayment, deviceId: deviceB },
       { applied: "20.00", state: "completed", at: day2Noon },
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: cardPayment, tillId: tillB },
+      { billPaymentId: cardPayment, deviceId: deviceB },
       { applied: "30.00", tip: "3.00", state: "completed", at: day2Noon },
     );
 
     expect(await run({ businessDay: "2026-08-04" })).toEqual({
-      byTill: [
+      byOrigin: [
         {
-          tillId: venue.tillId,
+          source: "device",
+          deviceId: venue.deviceId,
           byMethod: [
             { method: "card", amount: "33.00", tip: "3.00" },
             { method: "cash", amount: "50.00", tip: "0.00" },
@@ -320,9 +406,10 @@ describe("computeCashUp — bill payments and their refunds", () => {
       tipTotal: "3.00",
     });
     expect(await run({ businessDay: "2026-08-05" })).toEqual({
-      byTill: [
+      byOrigin: [
         {
-          tillId: tillB,
+          source: "device",
+          deviceId: deviceB,
           byMethod: [
             { method: "card", amount: "-33.00", tip: "-3.00" },
             { method: "cash", amount: "-20.00", tip: "0.00" },
@@ -335,24 +422,25 @@ describe("computeCashUp — bill payments and their refunds", () => {
     });
   });
 
-  it("keeps a till's cash line when what it took and gave back nets to zero", async () => {
+  it("keeps a device's cash line when what it took and gave back nets to zero", async () => {
     // Design §8 test 27: the line is how the close knows the drawer moved.
     const bill = await openBill();
     const payment = await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: venue.tillId },
+      { workingOrderId: bill, deviceId: venue.deviceId },
       { method: "cash", applied: "50.00", state: "received", at: day1Noon },
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: payment, tillId: venue.tillId },
+      { billPaymentId: payment, deviceId: venue.deviceId },
       { applied: "50.00", state: "completed", at: day1Noon },
     );
 
     expect(await run()).toEqual({
-      byTill: [
+      byOrigin: [
         {
-          tillId: venue.tillId,
+          source: "device",
+          deviceId: venue.deviceId,
           byMethod: [{ method: "cash", amount: "0.00", tip: "0.00" }],
           cashTakings: "0.00",
         },
@@ -366,39 +454,40 @@ describe("computeCashUp — bill payments and their refunds", () => {
     const bill = await openBill();
     await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: venue.tillId },
+      { workingOrderId: bill, deviceId: venue.deviceId },
       { method: "card", applied: "10.00", state: "pending" },
     );
     await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: venue.tillId },
+      { workingOrderId: bill, deviceId: venue.deviceId },
       { method: "card", applied: "11.00", state: "failed", at: day1Noon },
     );
     // Accepted, then declined by the card network: it keeps its `received_at`, but no money came.
     await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: venue.tillId },
+      { workingOrderId: bill, deviceId: venue.deviceId },
       { method: "card", applied: "12.00", state: "declined", at: day1Noon },
     );
     const received = await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: venue.tillId },
+      { workingOrderId: bill, deviceId: venue.deviceId },
       { method: "card", applied: "40.00", state: "received", at: day1Noon },
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: received, tillId: venue.tillId },
+      { billPaymentId: received, deviceId: venue.deviceId },
       { applied: "5.00", state: "pending" },
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: received, tillId: venue.tillId },
+      { billPaymentId: received, deviceId: venue.deviceId },
       { applied: "6.00", state: "failed", at: day1Noon },
     );
 
-    expect((await run()).byTill).toEqual([
+    expect((await run()).byOrigin).toEqual([
       {
-        tillId: venue.tillId,
+        source: "device",
+        deviceId: venue.deviceId,
         byMethod: [{ method: "card", amount: "40.00", tip: "0.00" }],
         cashTakings: "0.00",
       },
@@ -410,20 +499,21 @@ describe("computeCashUp — bill payments and their refunds", () => {
     const bill = await openBill(other);
     const payment = await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: other.tillId },
+      { workingOrderId: bill, deviceId: other.deviceId },
       { method: "cash", applied: "25.00", state: "received", at: day1Noon },
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: payment, tillId: other.tillId },
+      { billPaymentId: payment, deviceId: other.deviceId },
       { applied: "5.00", state: "completed", at: day1Noon },
     );
 
-    expect((await run()).byTill).toEqual([]);
+    expect((await run()).byOrigin).toEqual([]);
     expect((await run({ nodeId: other.nodeId })).tenderTotal).toBe("20.00");
-    expect((await run({ nodeId: undefined })).byTill).toEqual([
+    expect((await run({ nodeId: undefined })).byOrigin).toEqual([
       {
-        tillId: other.tillId,
+        source: "device",
+        deviceId: other.deviceId,
         byMethod: [{ method: "cash", amount: "20.00", tip: "0.00" }],
         cashTakings: "20.00",
       },

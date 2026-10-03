@@ -12,6 +12,7 @@ describeSchemaConformance({
   prerequisites: [CORE_MIGRATIONS],
   subject: FISCAL_MIGRATIONS,
   declarations: barrel,
-  // No column here uses `enumText`/`enumCheck`; closed lists are plain `check(...)` constraints.
-  declaresClosedVocabularies: false,
+  // `registros_facturacion.source` is the one closed vocabulary; every other closed list here is a
+  // plain `check(...)` constraint.
+  declaresClosedVocabularies: true,
 });

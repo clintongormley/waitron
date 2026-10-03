@@ -1,16 +1,9 @@
 import { saleLineRows } from "./sale-line-rows.js";
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
+import { operationDescriptionFor } from "./sale-location.js";
 import { eq, sql } from "drizzle-orm";
-import {
-  allocateInvoiceNumber,
-  invoiceSeries,
-  locations,
-  saleLines,
-  saleVoids,
-  sales,
-  tills,
-} from "@waitron/db";
+import { allocateInvoiceNumber, invoiceSeries, saleLines, saleVoids, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   AppError,
@@ -22,7 +15,7 @@ import {
   stringToCents,
   sumDecimals,
 } from "@waitron/shared";
-import type { Decimal, NodeId, SaleId, SaleOrigin, SeriesId, TillId } from "@waitron/shared";
+import type { Decimal, NodeId, SaleId, SaleOrigin, SeriesId } from "@waitron/shared";
 import type {
   FiscalBackend,
   FiscalRecordRef,
@@ -38,8 +31,6 @@ import type { RecordSaleLine } from "./record-sale.js";
 const ZERO = decimal("0");
 
 export interface RecordCorrectionInput {
-  /** Where the corrective invoice rings; not checked against the series (`nodeId` is). */
-  tillId: TillId;
   /** Where the sale came from, written to `sales.source` and `sales.device_id`. */
   origin: SaleOrigin;
   /**
@@ -267,7 +258,6 @@ export async function recordCorrection(
   const [inserted] = await tx
     .insert(sales)
     .values({
-      tillId: input.tillId,
       source: input.origin.source,
       deviceId: input.origin.deviceId,
       nodeId: input.nodeId,
@@ -313,23 +303,11 @@ export async function recordCorrection(
         saleLineRows(saleId, input.lines, { corrective: true }),
     );
 
-  const [location] = await tx
-    .select({ operationDescription: locations.operationDescription })
-    .from(tills)
-    .innerJoin(locations, eq(locations.id, tills.locationId))
-    .where(eq(tills.id, input.tillId));
-
-  /* v8 ignore start */
-  if (location === undefined) {
-    // `tills.location_id` is a not-null foreign key, so this means the till does not exist.
-    throw new Error(`recordCorrection: no location found for till ${input.tillId}`);
-  }
-  /* v8 ignore stop */
+  const descriptionOfOperation = await operationDescriptionFor(tx, input.origin, input.nodeId);
 
   const fiscal = await backend.recordCorrection(
     tx,
     {
-      tillId: input.tillId,
       origin: input.origin,
       nodeId: input.nodeId,
       saleId,
@@ -338,7 +316,7 @@ export async function recordCorrection(
       invoiceNumber,
       issuedAt: now.instant,
       offsetMinutes: now.offsetMinutes,
-      descriptionOfOperation: location.operationDescription,
+      descriptionOfOperation,
       total: correction,
       vatBreakdown,
       counterparty: null,

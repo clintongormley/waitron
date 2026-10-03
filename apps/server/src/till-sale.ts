@@ -29,7 +29,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import type { Decimal, Origin, SaleId } from "@waitron/shared";
+import type { Decimal, SaleId } from "@waitron/shared";
 import { readReceiptLanguage } from "@waitron/catalogue";
 import type { GrossLines } from "@waitron/catalogue";
 import {
@@ -70,6 +70,7 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
 import { readVenueReceiptLanguageRules } from "./venue-locale.js";
+import { storedDeviceOrigin } from "./request-config.js";
 import {
   enqueueSaleDrawer,
   enqueueOriginalReceipt,
@@ -722,7 +723,6 @@ async function fileImmediateSale(
 
   const language = await readReceiptLanguage(tx, cfg.locationId);
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-    tillId: cfg.tillId,
     origin: cfg.origin,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
@@ -1242,7 +1242,6 @@ async function finalizeCapture(
       const { priced, clock } = issueMoment(deps.clock, grossInP1);
       const language = await readReceiptLanguage(tx, cfg.locationId);
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-        tillId: cfg.tillId,
         origin: cfg.origin,
         nodeId: cfg.nodeId,
         seriesId: cfg.seriesId,
@@ -1382,10 +1381,15 @@ async function finalizeRecovery(
     /* v8 ignore stop */
     const settledAt = new Date(captured.settledAt);
 
+    // Filed under the device that took the card, as the stuck resolve and a bill payment are.
+    const [startedOn] = await tx
+      .select({ source: payments.source, deviceId: payments.deviceId })
+      .from(payments)
+      .where(eq(payments.id, captured.id));
+    const origin = storedDeviceOrigin(startedOn!);
     const language = await readReceiptLanguage(tx, cfg.locationId);
     const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-      tillId: cfg.tillId,
-      origin: cfg.origin,
+      origin,
       nodeId: cfg.nodeId,
       seriesId: cfg.seriesId,
       workingOrderId: brandWorkingOrderId(req.id),
@@ -1530,7 +1534,6 @@ async function finalizeSettle(
     return await withTransaction(deps.db, async (tx) => {
       await settleSale(tx, {
         saleId: outstanding.saleId,
-        origin: cfg.origin,
         tenders: [
           {
             method: "card",
@@ -1623,7 +1626,6 @@ async function finalizeSettleRecovery(
 
     await settleSale(tx, {
       saleId: outstanding.saleId,
-      origin: cfg.origin,
       tenders: [{ method: "card", amount: capturedAmount, tipAmount: tip, settledAt }],
     });
 
@@ -1720,7 +1722,6 @@ export async function collectOrder(
 
       await settleSale(tx, {
         saleId: outstanding.saleId,
-        origin: cfg.origin,
         tenders: [
           {
             method: req.tender.method,
@@ -1776,7 +1777,7 @@ async function settleOwingNothing(
   workingOrderId: string,
   saleId: SaleId,
 ): Promise<TillSaleResult> {
-  await settleIssuedOwingNothing(tx, deps, cfg.origin, workingOrderId, saleId);
+  await settleIssuedOwingNothing(tx, deps, workingOrderId, saleId);
   return readSettledTicket(deps.backend, tx, cfg, workingOrderId);
 }
 
@@ -1784,12 +1785,11 @@ async function settleOwingNothing(
 export async function settleIssuedOwingNothing(
   tx: Transaction,
   deps: Pick<TillSaleDeps, "clock" | "log">,
-  origin: Origin,
   workingOrderId: string,
   saleId: SaleId,
 ): Promise<void> {
   const settledAt = deps.clock.now().instant.toISOString();
-  await settleSale(tx, { saleId, tenders: [], origin });
+  await settleSale(tx, { saleId, tenders: [] });
   await tx
     .update(workingOrders)
     .set({ status: "settled", settledAt })

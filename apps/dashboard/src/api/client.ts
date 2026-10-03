@@ -968,14 +968,18 @@ export interface TenderMethodRow {
   tip: string;
 }
 
-export interface TillCashUpRow {
-  tillId: string;
+/** The money one device took, or one job source such as the Demo seed with no device. */
+export interface OriginCashUpRow {
+  source: string;
+  deviceId: string | null;
+  /** The device's name, kept after the device is revoked; null for a job source. */
+  deviceName: string | null;
   byMethod: TenderMethodRow[];
   cashTakings: string;
 }
 
 export interface CashUpDto {
-  byTill: TillCashUpRow[];
+  byOrigin: OriginCashUpRow[];
   tenderTotal: string;
   tipTotal: string;
 }
@@ -1309,8 +1313,10 @@ export interface StuckPaymentRow {
   workingOrderId: string;
   orderNumber: number;
   label: string | null;
-  tillId: string;
-  tillName: string;
+  /** The device that started it, or the job source that did; the name outlives a revocation. */
+  source: string;
+  deviceId: string | null;
+  deviceName: string | null;
   provider: string;
   amount: string;
   startedAt: string;
@@ -1324,8 +1330,10 @@ export interface StuckBillPaymentRow {
   workingOrderId: string;
   orderNumber: number;
   label: string | null;
-  tillId: string;
-  tillName: string;
+  /** The device that started it, or the job source that did; the name outlives a revocation. */
+  source: string;
+  deviceId: string | null;
+  deviceName: string | null;
   method: "card";
   applied: string;
   tip: string;
@@ -1340,8 +1348,10 @@ export interface StuckBillRefundRow {
   workingOrderId: string;
   orderNumber: number;
   label: string | null;
-  tillId: string;
-  tillName: string;
+  /** The device that started it, or the job source that did; the name outlives a revocation. */
+  source: string;
+  deviceId: string | null;
+  deviceName: string | null;
   appliedAmount: string;
   tipAmount: string;
   reason: string;

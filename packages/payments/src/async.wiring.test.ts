@@ -6,7 +6,6 @@ import {
   decimal,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
   deviceOrigin,
 } from "@waitron/shared";
@@ -53,7 +52,6 @@ const steadyClock: TrustedClock = {
 function buildInput(s: SeededForSale, settledAt: Date | null): RecordSaleInput {
   return {
     origin: deviceOrigin(s.deviceId),
-    tillId: brandTillId(s.tillId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),

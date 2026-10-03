@@ -95,7 +95,6 @@ export async function seedDemoRestaurant(
 
   await seedSales(db, {
     venue: {
-      tillId: venue.tillId,
       nodeId: venue.nodeId,
       seriesId: venue.seriesId,
     },

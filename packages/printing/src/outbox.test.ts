@@ -8,7 +8,6 @@ import {
   locations,
   printJobs,
   sales,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -228,10 +227,6 @@ describe("resendPrintJob", () => {
       locationId: brandLocationId(cfg.locationId),
     });
     await withTransaction(suite.db, async (tx) => {
-      const [till] = await tx
-        .insert(tills)
-        .values({ locationId: cfg.locationId, name: "Till" })
-        .returning({ id: tills.id });
       const [series] = await tx
         .insert(invoiceSeries)
         .values({ nodeId, code: "A" })
@@ -239,7 +234,6 @@ describe("resendPrintJob", () => {
       const [sale] = await tx
         .insert(sales)
         .values({
-          tillId: till!.id,
           source: "device",
           deviceId,
           nodeId,

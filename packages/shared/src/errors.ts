@@ -28,7 +28,7 @@ export interface ErrorParams {
   /** A content language is not a recognised language identifier. */
   "content.language_invalid": Record<string, never>;
   "shared.invalid_id": { kind: string; value: string };
-  /** A stored source and device that do not make an origin; the database's CHECKs refuse such a row. */
+  /** A stored source and device that do not make an origin, or not one the table accepts. */
   "origin.invalid": { source: string; deviceId: string | null };
   "shared.invalid_decimal": { value: string };
   "shared.decimal_overflow": { value: string; maxIntegerDigits: number };

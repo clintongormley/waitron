@@ -61,9 +61,8 @@ async function seed(db: Database): Promise<void> {
 
 function saleValues(overrides: Record<string, unknown> = {}) {
   return {
-    tillId: TILL_A1,
-    source: "device",
-    deviceId: deviceA,
+    source: "device" as const,
+    deviceId: deviceA as string | null,
     nodeId: nodeA,
     seriesId: seriesA,
     invoiceNumber: 1,
@@ -262,10 +261,10 @@ describe("sales — the commercial record", () => {
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) =>
         tx.run(
-          sql`insert into sales (id, till_id, source, device_id, series_id, invoice_number, issued_at,
+          sql`insert into sales (id, source, device_id, series_id, invoice_number, issued_at,
                  issued_offset_minutes, total, vat_breakdown, locale, invoice_locales,
                  fiscal_backend, fiscal_state)
-               values ('sale-no-node', ${TILL_A1}, 'device', ${deviceA}, ${seriesA}, 2, ${AT}, 120,
+               values ('sale-no-node', 'device', ${deviceA}, ${seriesA}, 2, ${AT}, 120,
                  100, '[]', 'es', '["es","ca"]', 'verifactu', 'recorded')`,
         ),
       ),
@@ -293,6 +292,54 @@ describe("sales — the commercial record", () => {
         .values(saleValues({ invoiceNumber: 2, deviceId: "99999999-9999-4999-8999-999999999999" })),
     );
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it("has no till column", () => {
+    expect(columnsOf(suite.db, "sales").map((c) => c.name)).not.toContain("till_id");
+  });
+
+  it("refuses a sale from the dashboard", async () => {
+    const error = await captureError(() =>
+      suite.db
+        .insert(sales)
+        .values(saleValues({ invoiceNumber: 2, source: "dashboard", deviceId: null })),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("CHECK constraint failed: sales_source_ck");
+  });
+
+  it("refuses a device source with no device", async () => {
+    const error = await captureError(() =>
+      suite.db.insert(sales).values(saleValues({ invoiceNumber: 2, deviceId: null })),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("CHECK constraint failed: sales_source_device_ck");
+  });
+
+  it("refuses a sale with no source", async () => {
+    const error = await captureError(() =>
+      suite.db.insert(sales).values(saleValues({ invoiceNumber: 2, source: null, deviceId: null })),
+    );
+    expect(isRefusal(error, NOT_NULL_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("NOT NULL constraint failed: sales.source");
+  });
+
+  it("accepts a device sale and a demo seed sale with no device", async () => {
+    const demoId = await recordCompleteSale(suite.db, {
+      invoiceNumber: 2,
+      source: "demo_seed",
+      deviceId: null,
+    });
+    const deviceSaleId = await recordCompleteSale(suite.db, { invoiceNumber: 3 });
+    const rows = await suite.db
+      .select({ id: sales.id, source: sales.source, deviceId: sales.deviceId })
+      .from(sales);
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { id: demoId, source: "demo_seed", deviceId: null },
+        { id: deviceSaleId, source: "device", deviceId: deviceA },
+      ]),
+    );
   });
 });
 
@@ -535,10 +582,10 @@ describe("sales — fiscal_state", () => {
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) =>
         tx.run(
-          sql`insert into sales (id, till_id, source, device_id, node_id, series_id, invoice_number, issued_at,
+          sql`insert into sales (id, source, device_id, node_id, series_id, invoice_number, issued_at,
                  issued_offset_minutes, total, vat_breakdown, locale, invoice_locales,
                  fiscal_backend, fiscal_state)
-               values ('sale-third-state', ${TILL_A1}, 'device', ${deviceA}, ${nodeA}, ${seriesA}, 3, ${AT}, 120,
+               values ('sale-third-state', 'device', ${deviceA}, ${nodeA}, ${seriesA}, 3, ${AT}, 120,
                  100, '[]', 'es', '["es","ca"]', 'verifactu', 'submitted')`,
         ),
       ),
@@ -567,12 +614,10 @@ describe("sales — corrective link and negative total", () => {
     total: number;
     correctsSaleId: string | null;
     invoiceNumber: number;
-    tillId?: string;
     nodeId?: string;
     seriesId?: string;
     invoiceLocales?: string[];
   }): Promise<{ id: string }[]> {
-    const tillId = opts.tillId ?? TILL_A1;
     const nodeId = opts.nodeId ?? nodeA;
     const seriesId = opts.seriesId ?? seriesA;
     const locales = JSON.stringify(opts.invoiceLocales ?? ["es", "ca"]);
@@ -580,10 +625,10 @@ describe("sales — corrective link and negative total", () => {
     return withTransaction(suite.db, (tx) =>
       Promise.resolve(
         tx.all<{ id: string }>(
-          sql`insert into sales (id, till_id, source, device_id, node_id, series_id, invoice_number, issued_at,
+          sql`insert into sales (id, source, device_id, node_id, series_id, invoice_number, issued_at,
                  issued_offset_minutes, total, vat_breakdown, locale, invoice_locales,
                  fiscal_backend, fiscal_state, corrects_sale_id)
-               values (${`raw-sale-${rawSeq}`}, ${tillId}, 'device', ${deviceA}, ${nodeId}, ${seriesId},
+               values (${`raw-sale-${rawSeq}`}, 'device', ${deviceA}, ${nodeId}, ${seriesId},
                  ${opts.invoiceNumber}, ${AT}, 120, ${opts.total}, '[]', 'es', ${locales},
                  'verifactu', 'recorded', ${opts.correctsSaleId})
                returning id`,

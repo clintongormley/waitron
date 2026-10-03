@@ -1721,7 +1721,7 @@ export const en = {
   "payments.stuck.intro":
     "Nothing is finishing these card payments any more, usually because the server restarted while they were in progress. Each order stays locked until you check with the card provider what happened.",
   "payments.stuck.order": "Order {number}",
-  "payments.stuck.till": "Till",
+  "payments.stuck.device": "Device",
   "payments.stuck.provider": "Provider",
   "payments.stuck.amount": "Amount",
   "payments.stuck.started": "Started",
@@ -3863,7 +3863,7 @@ export const es: Record<StringKey, string> = {
   "payments.stuck.intro":
     "Ya nada está completando estos cobros con tarjeta, normalmente porque el servidor se reinició mientras estaban en curso. Cada pedido sigue bloqueado hasta que consultes con el proveedor de pagos qué pasó.",
   "payments.stuck.order": "Pedido {number}",
-  "payments.stuck.till": "Caja",
+  "payments.stuck.device": "Dispositivo",
   "payments.stuck.provider": "Proveedor",
   "payments.stuck.amount": "Importe",
   "payments.stuck.started": "Iniciado",

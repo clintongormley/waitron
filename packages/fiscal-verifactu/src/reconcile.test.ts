@@ -4,7 +4,6 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { recordSale, recordVoid } from "@waitron/core";
-import { jobOrigin } from "@waitron/shared";
 import { newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
@@ -144,7 +143,7 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
   });
 
   const sale = await withTransaction(suite.db, async (tx) => {
-    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
+    return recordSale(tx, backend, saleInput({ nodeId, seriesId }));
   });
   // An envío takes `proximo_intento_en` from the wall clock; pin it so the drain is deterministic.
   const pinDue = () =>
@@ -156,14 +155,7 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
 
   const alta = await altaIdentityFor(sale.saleId);
   await withTransaction(suite.db, async (tx) => {
-    await recordVoid(
-      tx,
-      backend,
-      sale.saleId,
-      "staff error",
-      { sessionId: voidSession.id },
-      jobOrigin("readiness_test"),
-    );
+    await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
   });
   expect(await hasAnulacion(alta.id)).toBe(true);
   const { rows: anul } = await suite.db.execute<{ id: string }>(

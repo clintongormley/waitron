@@ -68,7 +68,6 @@ function substitutionSaleFor(
   overrides: Partial<SaleForFiscalRecord> = {},
 ): SaleForFiscalRecord {
   return {
-    tillId: till.tillId,
     origin: deviceOrigin(till.deviceId),
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
@@ -91,7 +90,6 @@ function substitutionSaleFor(
  * positive totals. `seriesCode` "A" → NumSerieFactura "A/<n>". */
 function ticketSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRecord {
   return {
-    tillId: till.tillId,
     origin: deviceOrigin(till.deviceId),
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
@@ -124,7 +122,6 @@ async function seedSubstitutionRow(invoiceNumber: number): Promise<string> {
   const [row] = await suite.db
     .insert(sales)
     .values({
-      tillId: till.tillId,
       source: "device",
       deviceId: till.deviceId,
       nodeId: till.nodeId,

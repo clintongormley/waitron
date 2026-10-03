@@ -7,6 +7,7 @@ import {
   isSaleOrigin,
   jobOrigin,
   readOrigin,
+  readSaleOrigin,
 } from "./origin.js";
 
 const DEVICE = "0f0e0d0c-0b0a-4908-8706-050403020100";
@@ -66,5 +67,19 @@ describe("origins", () => {
     expect(isSaleOrigin(jobOrigin("readiness_test"))).toBe(true);
     expect(isSaleOrigin(jobOrigin("dashboard"))).toBe(false);
     expect(isSaleOrigin(jobOrigin("payment_check"))).toBe(false);
+  });
+
+  it("reads a stored sale pair back", () => {
+    expect(readSaleOrigin("device", DEVICE)).toEqual({ source: "device", deviceId: DEVICE });
+    expect(readSaleOrigin("readiness_test", null)).toEqual(jobOrigin("readiness_test"));
+  });
+
+  it.each([
+    ["dashboard", null],
+    ["device", null],
+  ])("refuses (%s, %s) as a sale's stored pair", (source, device) => {
+    expect(() => readSaleOrigin(source, device)).toThrow(
+      expect.objectContaining({ code: "origin.invalid", params: { source, deviceId: device } }),
+    );
   });
 });

@@ -29,6 +29,13 @@
       "when": 1791050480522,
       "tag": "0003_payment_origin",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1791061241029,
+      "tag": "0004_payment_origin_required",
+      "breakpoints": true
     }
   ]
 }

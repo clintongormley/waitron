@@ -20,14 +20,8 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
-import {
-  AppError,
-  deviceOrigin,
-  jobOrigin,
-  saleId as brandSaleId,
-  stringToCents,
-} from "@waitron/shared";
-import type { DeviceId, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import { AppError, saleId as brandSaleId, stringToCents } from "@waitron/shared";
+import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { seedTenant } from "../test/fixtures.js";
 import { settleSale } from "./settle-sale.js";
 import type { SettleSaleInput } from "./settle-sale.js";
@@ -42,13 +36,12 @@ const SETTLED_AT = new Date("2026-08-01T12:00:00Z");
  */
 async function seedSale(
   db: Database,
-  seed: { tillId: TillId; deviceId: DeviceId; nodeId: NodeId; seriesId: SeriesId },
+  seed: { deviceId: DeviceId; nodeId: NodeId; seriesId: SeriesId },
   overrides: { total?: string; invoiceNumber?: number; correctsSaleId?: SaleId } = {},
 ): Promise<SaleId> {
   const [row] = await db
     .insert(sales)
     .values({
-      tillId: seed.tillId,
       source: "device",
       deviceId: seed.deviceId,
       nodeId: seed.nodeId,
@@ -72,12 +65,9 @@ async function seedSale(
 /**
  * Runs `settleSale` inside one transaction, the shape a request takes.
  */
-function settle(
-  db: Database,
-  input: Omit<SettleSaleInput, "origin"> & { origin?: SettleSaleInput["origin"] },
-): Promise<void> {
+function settle(db: Database, input: SettleSaleInput): Promise<void> {
   return withTransaction(db, async (tx) => {
-    await settleSale(tx, { origin: jobOrigin("readiness_test"), ...input });
+    await settleSale(tx, input);
   });
 }
 
@@ -224,7 +214,6 @@ describe("settleSale — a bill paid in parts", () => {
         tendered: 5000,
         state: "received",
         requestedBy: "cccccccc-0000-4000-8000-000000000001",
-        tillId: seed.tillId,
         source: "device",
         deviceId: seed.deviceId,
         receivedAt: SETTLED_AT.toISOString(),
@@ -281,13 +270,12 @@ describe("settleSale — guards", () => {
     expect(settled).toHaveLength(0);
   });
 
-  it("names the settling device in a refusal", async () => {
+  it("names the device the sale was rung on in a refusal", async () => {
     const seed = await seedTenant(suite.db);
     const saleId = await seedSale(suite.db, seed, { total: "65.00" });
     await expect(
       settle(suite.db, {
         saleId,
-        origin: deviceOrigin(seed.deviceId),
         tenders: [{ method: "cash", amount: "60.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
       }),
     ).rejects.toMatchObject({
@@ -347,7 +335,6 @@ describe("settleSale — guards", () => {
     const input: SettleSaleInput = {
       saleId,
       tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
-      origin: deviceOrigin(seed.deviceId),
     };
 
     await settle(suite.db, input);
@@ -376,7 +363,6 @@ describe("settleSale — two settlements started together", () => {
     const input: SettleSaleInput = {
       saleId,
       tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
-      origin: deviceOrigin(seed.deviceId),
     };
 
     // Started together and NOT awaited in turn.
@@ -415,7 +401,7 @@ describe("settleSale — error propagation", () => {
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: 0, corrections: "0" }])
+              ? Promise.resolve([{ source: "device", deviceId: "d", total: 0, corrections: "0" }])
               : Promise.resolve([]);
           },
         }),
@@ -427,7 +413,6 @@ describe("settleSale — error propagation", () => {
 
     const error = await captureError(() =>
       settleSale(fakeTx, {
-        origin: jobOrigin("readiness_test"),
         saleId: brandSaleId("11111111-1111-4111-8111-111111111111"),
         tenders: [],
       }),
@@ -449,7 +434,9 @@ describe("settleSale — error propagation", () => {
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: 6500, corrections: "0" }])
+              ? Promise.resolve([
+                  { source: "device", deviceId: "d", total: 6500, corrections: "0" },
+                ])
               : Promise.resolve([]);
           },
         }),
@@ -466,7 +453,6 @@ describe("settleSale — error propagation", () => {
 
     const error = await captureError(() =>
       settleSale(fakeTx, {
-        origin: jobOrigin("readiness_test"),
         saleId: brandSaleId("11111111-1111-4111-8111-111111111111"),
         tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
       }),
@@ -490,7 +476,9 @@ describe("settleSale — error propagation", () => {
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: 6500, corrections: "0" }])
+              ? Promise.resolve([
+                  { source: "device", deviceId: "d", total: 6500, corrections: "0" },
+                ])
               : Promise.resolve([]);
           },
         }),
@@ -502,7 +490,6 @@ describe("settleSale — error propagation", () => {
 
     const error = await captureError(() =>
       settleSale(fakeTx, {
-        origin: jobOrigin("readiness_test"),
         saleId: brandSaleId("11111111-1111-4111-8111-111111111111"),
         tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
       }),

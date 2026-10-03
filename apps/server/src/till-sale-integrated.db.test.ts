@@ -479,7 +479,6 @@ async function correctToZero(cfg: DeviceRequestConfig, saleId: string): Promise<
     });
     await recordCorrection(tx, backend, {
       origin: cfg.origin,
-      tillId: cfg.tillId,
       nodeId: cfg.nodeId,
       seriesId: brandSeriesId(rectificativeSeries(cfg)),
       correctsSaleId: brandSaleId(saleId),
@@ -796,7 +795,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     });
     // Placing files no fiscal document under ticket_then_pay, and fires the order to the default
     // station.
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
     expect(await saleCount(id)).toBe(0);
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
     expect(await stationQueueOrderIds(station)).toEqual([id]);
@@ -867,7 +866,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       zoneId: cafe.zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
 
     // Mid-`collect` (after P1 committed, before P3) a concurrent cash collect settles this id. P3's
     // `recordSale` is refused by `sales_working_order_id_key` and replays the winner's ticket.
@@ -1013,6 +1012,21 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(payments[0]!.linkedToSale).toBe(true);
   });
 
+  it("files a recovered capture under the device that took the card, not the one retrying", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const { deps } = integratedDeps(cfg, suite.db);
+    const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
+    const retrying = await deviceRequestCfg(suite.db, cfg);
+    expect(retrying.origin.deviceId).not.toBe(cfg.origin.deviceId);
+
+    const out = await payWorkingOrderIntegrated(deps, retrying, { id, lines: [] });
+
+    expect(out.outcome).toBe("captured");
+    expect(
+      suite.db.all(sql`select source, device_id from sales where working_order_id = ${id}`),
+    ).toEqual([{ source: "device", device_id: cfg.origin.deviceId }]);
+  });
+
   it("recovers a lost capture on an open ticket_then_pay counter order: sends its dish once", async () => {
     const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const { deps, client } = integratedDeps(cfg, suite.db);
@@ -1069,7 +1083,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       zoneId: cafe.zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
     await withTransaction(suite.db, async (tx) => {
       await insertCapturedPayment(tx, {
         origin: cfg.origin,
@@ -1145,7 +1159,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Mesa 7",
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
 
     // Two orchestrations, each with its own reader, pay the SAME placed order, interleaved by
     // `Promise.allSettled`. P1 commits before `collect`, so both capture; P3's duplicate backstop
@@ -1221,7 +1235,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       zoneId: cafe.zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
     return { id, saleId: await saleIdFor(id) };
   }
 
@@ -1437,7 +1451,6 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
         const seriesId = rectificativeSeries(cfg);
         const now = clock.now();
         await tx.insert(sales).values({
-          tillId: cfg.tillId,
           source: cfg.origin.source,
           deviceId: cfg.origin.deviceId,
           nodeId: cfg.nodeId,
@@ -2086,7 +2099,7 @@ describe("an order being paid by card cannot be changed from another device (pla
       zoneId: cafe.zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
     const provider = new PausedSimulator(suite.db);
     const paying = payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, cfg, {
       id,
@@ -2140,7 +2153,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
 
   /** The tab placed, which in an `invoice_first` zone issues its invoice and leaves it outstanding. */
   async function placed(cfg: DeviceRequestConfig, tabId: string): Promise<void> {
-    await placeOrder({ db: suite.db, backend, clock }, cfg, tabId, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, tabId, OPERATOR);
     expect(await outstandingSalesFor()).toHaveLength(1);
   }
 

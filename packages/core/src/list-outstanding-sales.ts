@@ -1,12 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import {
-  addDecimal,
-  rawCentsToDecimal,
-  saleId as brandSaleId,
-  tillId as brandTillId,
-} from "@waitron/shared";
-import type { Decimal, SaleId, TillId } from "@waitron/shared";
+import { addDecimal, rawCentsToDecimal, readOrigin, saleId as brandSaleId } from "@waitron/shared";
+import type { Decimal, Origin, SaleId } from "@waitron/shared";
 
 /**
  * A sale issued (invoice printed, chained, filed) but not yet paid. `amountDue` is the printed
@@ -16,7 +11,8 @@ export interface OutstandingSale {
   saleId: SaleId;
   invoiceNumber: number;
   issuedAt: string;
-  tillId: TillId;
+  /** The device the sale was rung on, or the job source that recorded it. */
+  origin: Origin;
   /** The printed invoice total. */
   total: Decimal;
   /** Signed sum of correctives; "0.00" when none. */
@@ -36,7 +32,8 @@ export async function listOutstandingSales(tx: Transaction): Promise<Outstanding
     sale_id: string;
     invoice_number: number;
     issued_at: string;
-    till_id: string;
+    source: string;
+    device_id: string | null;
     total: string;
     correction_total: string;
   }>(sql`
@@ -44,7 +41,8 @@ export async function listOutstandingSales(tx: Transaction): Promise<Outstanding
       s.id             as sale_id,
       s.invoice_number as invoice_number,
       s.issued_at      as issued_at,
-      s.till_id        as till_id,
+      s.source         as source,
+      s.device_id      as device_id,
       cast(s.total as text) as total,
       cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id), 0) as text)
         as correction_total
@@ -63,7 +61,7 @@ export async function listOutstandingSales(tx: Transaction): Promise<Outstanding
       saleId: brandSaleId(r.sale_id),
       invoiceNumber: r.invoice_number,
       issuedAt: r.issued_at,
-      tillId: brandTillId(r.till_id),
+      origin: readOrigin(r.source, r.device_id),
       total,
       correctionTotal,
       amountDue: addDecimal(total, correctionTotal),

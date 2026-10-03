@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { AppError, decimal, jobOrigin, nodeId, saleId, seriesId, tillId } from "@waitron/shared";
+import { AppError, decimal, jobOrigin, nodeId, saleId, seriesId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleForFiscalRecord } from "../backend.js";
 import { FakeFiscalBackend } from "./fake-backend.js";
@@ -7,13 +7,11 @@ import { FakeFiscalBackend } from "./fake-backend.js";
 // The fake keys its records on node and ignores the till.
 const NODE_A = nodeId("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
 const NODE_B = nodeId("6ba7b810-9dad-11d1-80b4-00c04fd430c9");
-const SNAPSHOT_TILL = tillId("7ba7b810-9dad-11d1-80b4-00c04fd430c0");
 
 let backend: FakeFiscalBackend;
 
 function saleOn(node: typeof NODE_A, invoiceNumber: number): SaleForFiscalRecord {
   return {
-    tillId: SNAPSHOT_TILL,
     origin: jobOrigin("readiness_test"),
     nodeId: node,
     saleId: saleId(`11111111-2222-3333-4444-${String(invoiceNumber).padStart(12, "0")}`),

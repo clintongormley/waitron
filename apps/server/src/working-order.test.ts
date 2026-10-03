@@ -3634,7 +3634,7 @@ describe("an order whose card payment is in flight (plan D22)", () => {
     const { cfg, id, before } = await payingHeldOrder("ticket_then_pay");
 
     await expect(
-      placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR, cfg.tillId),
+      placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR),
     ).rejects.toMatchObject({ code: "order.payment_in_flight", params: { workingOrderId: id } });
     await unchanged(id, before);
   });
@@ -3651,7 +3651,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
 
     const id = randomUUID();
     await parkProducts(cfg, { id, lines: [line(cafe)] });
-    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR);
 
     const items = await withTransaction(db, async (tx) => {
       return ticketItemsFor(tx, id);
@@ -3685,7 +3685,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
       ).map((row) => row.sentAt !== null);
     expect(await sentAt()).toEqual([false, false]);
 
-    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR);
 
     expect(await sentAt()).toEqual([true, true]);
     // The dessert's course is held: it has a ticket that has not fired.
@@ -3722,7 +3722,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
           .orderBy(workingOrderLines.lineNo)
       ).map((item) => item.firedAt !== null);
 
-    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR);
     expect(await fired()).toEqual([true, false]);
     await withTransaction(db, (tx) => fireCourse(tx, cfg, id, desserts.id, OPERATOR));
 
@@ -3750,7 +3750,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     });
     const id = randomUUID();
     await parkProducts(cfg, { id, lines: [line(cafe), line(postre)] });
-    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR);
     await db.execute(sql`update products set available = 0 where id = ${postre}`);
     const revision = async () =>
       (
@@ -3784,7 +3784,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     await db.execute(sql`update products set available = 0 where id = ${cafe}`);
 
     await expect(
-      placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR, cfg.tillId),
+      placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR),
     ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: cafe } });
     const [order] = await db
       .select({ status: workingOrders.status })

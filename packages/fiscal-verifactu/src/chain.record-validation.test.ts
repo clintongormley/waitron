@@ -5,7 +5,7 @@ import { recordSale } from "@waitron/core";
 import { sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, saleId as brandSaleId, deviceOrigin } from "@waitron/shared";
-import type { DeviceId, NodeId, SeriesId, TillId } from "@waitron/shared";
+import type { DeviceId, NodeId, SeriesId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { VerifactuBackend } from "./backend.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -17,7 +17,6 @@ import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/writ
 // refusal, or a warning incident raised beside a record that is written anyway. Nothing here
 // depends on two writers racing.
 let backend: VerifactuBackend;
-let tillId: TillId;
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -25,7 +24,7 @@ let seriesId: SeriesId;
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ tillId, deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -42,7 +41,7 @@ async function useSeriesCode(code: string): Promise<void> {
 
 function sell() {
   return withTransaction(suite.db, async (tx) => {
-    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
+    return recordSale(tx, backend, saleInput({ nodeId, seriesId }));
   });
 }
 
@@ -90,7 +89,7 @@ describe("a record AEAT could not accept never enters the chain", () => {
   // (backend.ts), which this guard already checked. So the record is appended directly.
   it("refuses an anulación whose voided invoice number is illegal", async () => {
     const bad = anulacionFor(
-      { tillId, deviceId },
+      { deviceId },
       brandSaleId("00000000-0000-4000-8000-000000000001"),
       1,
       1,
@@ -130,7 +129,7 @@ describe("a record whose totals disagree with themselves is written, filed and f
    * the same way (`deriveVatBreakdown`). */
   function mismatchedSale() {
     return {
-      ...saleInput({ tillId, nodeId, seriesId }),
+      ...saleInput({ nodeId, seriesId }),
       total: decimal("9999.00"),
       settlement: { kind: "deferred" } as const,
     };
@@ -225,7 +224,6 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
     return withTransaction(suite.db, async (tx) => {
       await tx.insert(sales).values({
         id: saleId,
-        tillId,
         source: "device",
         deviceId,
         nodeId,
@@ -241,7 +239,6 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
         fiscalState: "recorded",
       });
       await backend.recordSale(tx, {
-        tillId,
         origin: deviceOrigin(deviceId),
         nodeId,
         saleId: brandSaleId(saleId),

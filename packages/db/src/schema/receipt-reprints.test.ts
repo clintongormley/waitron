@@ -50,7 +50,6 @@ describe("receipt reprint record", () => {
     const [sale] = await db
       .insert(sales)
       .values({
-        tillId: TILL,
         source: "device",
         deviceId: deviceA,
         nodeId,

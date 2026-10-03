@@ -11,9 +11,10 @@ import {
   newId,
   nodes,
   now,
+  originChecks,
   sales,
+  saleSourceColumn,
   table,
-  tills,
   ts,
 } from "@waitron/db";
 import { registroSif } from "./sif.js";
@@ -26,19 +27,10 @@ export const registrosFacturacion = table(
   "registros_facturacion",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    // The till the sale rang at: informational only. The chain key is `node_id`.
-    tillId: id("till_id")
-      .notNull()
-      /* v8 ignore start */
-      .references(() => tills.id),
-    /* v8 ignore stop */
-    // Where the sale came from: informational only, like `till_id`, and never hashed.
-    // Plain text until the table is rebuilt with the source's CHECKs: a declared vocabulary with no
-    // CHECK in the database fails the schema conformance suite.
-    source: label("source"),
+    // Where the sale came from: informational only and never hashed. The chain key is `node_id`.
+    source: saleSourceColumn("source").notNull(),
     /* v8 ignore start */
-    // Added by `ALTER TABLE`, which writes no delete rule, so it is declared with none.
-    deviceId: id("device_id").references(() => devices.id),
+    deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
     // The node that owns this record's chain: the chain key.
     nodeId: id("node_id")
@@ -132,6 +124,7 @@ export const registrosFacturacion = table(
     ),
     index("registros_sale_idx").on(t.saleId),
     index("registros_node_secuencia_idx").on(t.nodeId, t.secuencia),
+    ...originChecks("registros_facturacion", t.source, t.deviceId),
     check("registros_tipo_registro_ck", sql`${t.tipoRegistro} in ('alta', 'anulacion')`),
     check("registros_tipo_huella_ck", sql`${t.tipoHuella} = '01'`),
     // Uppercase SHA-256 hex; `glob` is the case-SENSITIVE matcher. Does NOT refuse a value holding

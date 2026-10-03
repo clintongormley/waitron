@@ -518,7 +518,8 @@ async function addTill(cfg: DeviceRequestConfig, name: string): Promise<DeviceRe
     // passed explicitly here because the caller needs the value back.
     await tx.insert(tills).values({ id, locationId: cfg.locationId, name });
   });
-  return { ...cfg, tillId: brandTillId(id) };
+  // A register of its own is a device of its own.
+  return deviceRequestCfg(suite.db, { ...cfg, tillId: brandTillId(id) });
 }
 
 /**
@@ -559,14 +560,14 @@ async function draftAggregate(id: string): Promise<{ itemCount: number; total: s
  * The till the SALE was filed under vs the till the working order was PARKED under — the
  * cross-till witness (parked on A, sold on B).
  */
-async function saleAndOrderTill(
+async function saleDeviceAndOrderTill(
   workingOrderId: string,
-): Promise<{ saleTillId: string; orderTillId: string }> {
-  const sale = await suite.db.execute<{ till_id: string }>(sql`
-    select till_id from sales where working_order_id = ${workingOrderId}`);
+): Promise<{ saleDeviceId: string | null; orderTillId: string }> {
+  const sale = await suite.db.execute<{ device_id: string | null }>(sql`
+    select device_id from sales where working_order_id = ${workingOrderId}`);
   const order = await suite.db.execute<{ till_id: string }>(sql`
     select till_id from working_orders where id = ${workingOrderId}`);
-  return { saleTillId: sale.rows[0]!.till_id, orderTillId: order.rows[0]!.till_id };
+  return { saleDeviceId: sale.rows[0]!.device_id, orderTillId: order.rows[0]!.till_id };
 }
 
 beforeAll(() => {
@@ -1163,13 +1164,14 @@ describe("cross-till end-to-end", () => {
     expect(paid.qr).not.toBe(""); // a FRESH file (not a replay) carries its verification URL
 
     // Settled exactly once, and the cross-till witness at the row level: the SALE is filed under till
-    // B while the working order stays stamped with the till it was PARKED on (A).
+    // B's device while the working order stays stamped with the till it was PARKED on (A).
     expect(await orderState(orderId)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(orderId)).toBe(1);
     expect(await registroCount(orderId)).toBe(1);
-    expect(await saleAndOrderTill(orderId)).toEqual({
+    expect(tillB.origin.deviceId).not.toBe(tillA.origin.deviceId);
+    expect(await saleDeviceAndOrderTill(orderId)).toEqual({
       orderTillId: tillA.tillId,
-      saleTillId: tillB.tillId,
+      saleDeviceId: tillB.origin.deviceId,
     });
 
     // Once paid it leaves EVERY register's held list — till B no longer shows it.
@@ -1245,7 +1247,6 @@ const UNUSED_SESSION_OPERATOR = {
   sessionId: "unused",
   attempts: overridePinAttempts(createPinThrottle(), "unused"),
 };
-const noSaleTill = () => Promise.reject(new Error("a cancel with no invoice resolves no till"));
 
 // Placing (open → placed) opens the art. 29.2.j amendment log with its `order_placed` genesis and
 // freezes composition (for free — a placed order's lines are already frozen by require_open_parent;
@@ -1264,7 +1265,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
 
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
 
@@ -1304,13 +1305,13 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
 
     // Placing is NOT idempotent: a second place of the now-`placed` order is refused with
     // `working_order.not_open` (wrong status), before any transition or amendment — so the log still
     // holds exactly its one genesis entry.
     await expect(
-      placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId),
+      placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR),
     ).rejects.toMatchObject({ code: "working_order.not_open", params: { workingOrderId: id } });
     expect(await readAmendments(id)).toHaveLength(1);
 
@@ -1318,7 +1319,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     // branch), and opens no log.
     const missing = randomUUID();
     await expect(
-      placeOrder({ db: suite.db, backend, clock }, cfg, missing, OPERATOR, cfg.tillId),
+      placeOrder({ db: suite.db, backend, clock }, cfg, missing, OPERATOR),
     ).rejects.toMatchObject({
       code: "working_order.not_open",
       params: { workingOrderId: missing },
@@ -1334,7 +1335,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
 
     await cancelPlacedOrder(
       { db: suite.db, backend, clock },
@@ -1342,7 +1343,6 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       id,
       "customer left",
       UNUSED_SESSION_OPERATOR,
-      noSaleTill,
     );
 
     expect(await orderState(id)).toEqual({ status: "abandoned", settledAtSet: false });
@@ -1368,7 +1368,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
 
     // `order_amendments` carries NO DB CHECK forcing a reason on `order_cancelled` (the column is
     // nullable — null is the genesis's own legitimate value), so the APP contract is the only thing
@@ -1383,7 +1383,6 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
           id,
           reason,
           UNUSED_SESSION_OPERATOR,
-          noSaleTill,
         ),
       ).rejects.toMatchObject({
         code: "working_order.reason_required",
@@ -1416,7 +1415,6 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
         openId,
         "changed mind",
         UNUSED_SESSION_OPERATOR,
-        noSaleTill,
       ),
     ).rejects.toMatchObject({
       code: "working_order.not_placed",
@@ -1439,7 +1437,6 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
         settledId,
         "changed mind",
         UNUSED_SESSION_OPERATOR,
-        noSaleTill,
       ),
     ).rejects.toMatchObject({
       code: "working_order.not_placed",
@@ -1455,7 +1452,6 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
         missing,
         "changed mind",
         UNUSED_SESSION_OPERATOR,
-        noSaleTill,
       ),
     ).rejects.toMatchObject({
       code: "working_order.not_placed",
@@ -1558,13 +1554,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     });
 
     // PLACE → the deferred invoice issues HERE (A/1); the order freezes at `placed`, unsettled.
-    const placed = await placeOrder(
-      { db: suite.db, backend, clock },
-      cfg,
-      id,
-      OPERATOR,
-      cfg.tillId,
-    );
+    const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
     expect(placed.status).toBe("placed");
     expect(placed.invoiceNumber).toBe("A/1"); // the deferred invoice, issued at placing
     expect(placed.total).toBe("3.50"); // 1.50 café + 2.00 agua
@@ -1624,13 +1614,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
-    const placed = await placeOrder(
-      { db: suite.db, backend, clock },
-      cfg,
-      id,
-      OPERATOR,
-      cfg.tillId,
-    );
+    const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
     expect(placed.qr).not.toBe("");
     expect(placed.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
   });
@@ -1643,7 +1627,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
 
     // 5.00 cash against the 1.50 invoice: the SALE settles at the invoice total (1.50) and 3.50 is
     // drawer change — settling at the tendered cash would over-report the fiscal total (§5).
@@ -1669,7 +1653,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, cardId, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, cardId, OPERATOR);
     const collected = await collectOrder({ db: suite.db, backend, clock }, cfg, {
       id: cardId,
       lines: [],
@@ -1698,7 +1682,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, cashId, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, cashId, OPERATOR);
     await collectOrder({ db: suite.db, backend, clock }, cfg, {
       id: cashId,
       lines: [],
@@ -1721,8 +1705,8 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     // re-reads `placed` and is refused `working_order.not_open` BEFORE it files. That refusal is the
     // branch this case exists to pin.
     const results = await Promise.allSettled([
-      placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId),
-      placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId),
+      placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR),
+      placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR),
     ]);
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     const rejected = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
@@ -1743,7 +1727,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
 
     const req = { id, lines: [], tender: { method: "cash" as const, amount: "1.50" } };
     // Two overlapping collects of the placed order. The write queue admits the second only once the
@@ -1773,13 +1757,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     });
 
     // PLACE → NO fiscal document (design §3). The order freezes at `placed` with nothing filed.
-    const placed = await placeOrder(
-      { db: suite.db, backend, clock },
-      cfg,
-      id,
-      OPERATOR,
-      cfg.tillId,
-    );
+    const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
     expect(placed.status).toBe("placed");
     expect(placed.invoiceNumber).toBeUndefined(); // no invoice issued at placing
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
@@ -1820,7 +1798,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
 
     const req = { id, lines: [], tender: { method: "cash" as const, amount: "1.50" } };
     // Two overlapping collects, both of which would FILE. The write queue admits the second only once
@@ -1858,7 +1836,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     });
     // PLACE fires one ticket item to the default station; the order shows on that station's queue and
     // its handover marker is unset.
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
     expect(
       (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
     ).toEqual([id]);
@@ -1897,7 +1875,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     // PLACE issues the deferred invoice AND fires the ticket item to the default station.
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
     expect(
       (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
     ).toEqual([id]);
@@ -1965,7 +1943,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, placedId, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, placedId, OPERATOR);
     await expect(
       collectOrder({ db: suite.db, backend, clock }, cfg, {
         id: placedId,
@@ -2045,7 +2023,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
         { menuItemId: agua.menuItemId, quantity: "1" },
       ],
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId); // fires two items → default station
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR); // fires two items → default station
     const station = await defaultStationId(cfg);
     const items = await ticketItemIdsFor(id);
     expect(items).toHaveLength(2);
@@ -2077,7 +2055,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Mesa 7",
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id1, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id1, OPERATOR);
 
     const id2 = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
@@ -2086,7 +2064,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Mesa 3",
     });
-    await placeOrder({ db: suite.db, backend, clock }, cfg, id2, OPERATOR, cfg.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id2, OPERATOR);
 
     // Both orders show, oldest first, each one line, at `queued`, carrying the order's label + queued_at.
     const queue = await asTenant(cfg, (tx) => listStationQueue(tx, station));
@@ -2126,7 +2104,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       id2,
       "customer left",
       UNUSED_SESSION_OPERATOR,
-      noSaleTill,
     );
     expect(await ticketStateOf(id2)).toBe("queued"); // the ticket item itself is untouched by cancel
     expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
@@ -2147,7 +2124,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Node A order",
     });
-    await placeOrder({ db: suite.db, backend, clock }, nodeA, idA, OPERATOR, nodeA.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, nodeA, idA, OPERATOR);
 
     const idB = randomUUID();
     await parkOrder({ db: suite.db }, nodeB, {
@@ -2156,7 +2133,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Node B order",
     });
-    await placeOrder({ db: suite.db, backend, clock }, nodeB, idB, OPERATOR, nodeB.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, nodeB, idB, OPERATOR);
 
     const queueA = await asTenant(nodeA, (tx) => listStationQueue(tx, station));
     const queueB = await asTenant(nodeB, (tx) => listStationQueue(tx, station));
@@ -2249,7 +2226,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", ()
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Node A order",
     });
-    await placeOrder({ db: suite.db, backend, clock }, nodeA, idA, OPERATOR, nodeA.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, nodeA, idA, OPERATOR);
 
     const idB = randomUUID();
     await parkOrder({ db: suite.db }, nodeB, {
@@ -2258,7 +2235,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", ()
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Node B order",
     });
-    await placeOrder({ db: suite.db, backend, clock }, nodeB, idB, OPERATOR, nodeB.tillId);
+    await placeOrder({ db: suite.db, backend, clock }, nodeB, idB, OPERATOR);
 
     const expoA = await asTenant(nodeA, (tx) => listExpoQueue(tx, nodeA));
     const expoB = await asTenant(nodeB, (tx) => listExpoQueue(tx, nodeB));

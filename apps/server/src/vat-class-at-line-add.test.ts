@@ -521,7 +521,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     const v = await setupVenue("invoice_first");
     const before = await park(v, one(v, v.products.cana));
     const after = await park(v, one(v, v.products.cana));
-    await placeOrder(deps(), v.cfg, before, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, before, OPERATOR);
     const placed = await filed(before);
     const storedAtPlacing = await stored(before);
     await setVat(v.products.cana, "general");
@@ -538,7 +538,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     } finally {
       spy.restore();
     }
-    await placeOrder(deps(), v.cfg, after, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, after, OPERATOR);
 
     expect(placed).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
     expect(await filed(before)).toEqual(placed);
@@ -553,7 +553,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
   it("ticket-then-pay: an order placed at 10% and changed before collect files 10% at collect, and a replay rebuilds the same receipt", async () => {
     const v = await setupVenue("ticket_then_pay");
     const id = await park(v, one(v, v.products.cana));
-    await placeOrder(deps(), v.cfg, id, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, id, OPERATOR);
     await setVat(v.products.cana, "general");
 
     const ticket = await collectOrder(deps(), v.cfg, {
@@ -577,7 +577,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
   it("ticket-then-pay by card: a placed order collected on the reader after the change files 10%", async () => {
     const v = await setupVenue("ticket_then_pay");
     const id = await park(v, one(v, v.products.cana));
-    await placeOrder(deps(), v.cfg, id, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, id, OPERATOR);
     await setVat(v.products.cana, "general");
 
     const out = await payWorkingOrderIntegrated(

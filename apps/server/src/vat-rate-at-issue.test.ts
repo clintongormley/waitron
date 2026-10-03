@@ -420,7 +420,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     at(EVE);
     const before = await park(v, one(v, v.products.cana));
     const after = await park(v, one(v, v.products.cana));
-    await placeOrder(deps(), v.cfg, before, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, before, OPERATOR);
 
     at(NEW_YEAR);
     await collectOrder(deps(), v.cfg, {
@@ -428,7 +428,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
       lines: [],
       tender: { method: "cash", amount: "2.50" },
     });
-    await placeOrder(deps(), v.cfg, after, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, after, OPERATOR);
 
     expect(await filed(before)).toMatchObject({ issuedAt: EVE, vatBreakdown: CANA_AT_10 });
     expect(await filed(after)).toMatchObject({ issuedAt: NEW_YEAR, vatBreakdown: CANA_AT_4 });
@@ -438,7 +438,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     const v = await setupVenue("ticket_then_pay");
     at(EVE);
     const id = await park(v, one(v, v.products.cana));
-    await placeOrder(deps(), v.cfg, id, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, id, OPERATOR);
 
     at(NEW_YEAR);
     await collectOrder(deps(), v.cfg, {

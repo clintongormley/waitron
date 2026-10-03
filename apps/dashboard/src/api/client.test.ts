@@ -2810,9 +2810,11 @@ describe("DashboardApi — reporting (sales & takings)", () => {
         grossTotal: "121.00",
       },
       cash: {
-        byTill: [
+        byOrigin: [
           {
-            tillId: "till-1",
+            source: "device",
+            deviceId: "device-1",
+            deviceName: "Barra 1",
             byMethod: [
               { method: "cash", amount: "80.00", tip: "5.00" },
               { method: "card", amount: "41.00", tip: "0.00" },

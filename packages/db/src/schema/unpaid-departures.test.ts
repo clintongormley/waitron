@@ -80,7 +80,6 @@ describe("unpaid_departures", () => {
       const [sale] = await tx
         .insert(sales)
         .values({
-          tillId: TILL,
           source: "device",
           deviceId,
           nodeId,
@@ -113,7 +112,6 @@ describe("unpaid_departures", () => {
       reason: "Se marcharon sin pagar",
       recordedBy: STAFF,
       authorizedBy: SUPERVISOR,
-      tillId: TILL,
       source: "device",
       deviceId,
       ...overrides,
@@ -142,7 +140,6 @@ describe("unpaid_departures", () => {
       reason: "Se marcharon sin pagar",
       recordedBy: STAFF,
       authorizedBy: SUPERVISOR,
-      tillId: TILL,
       source: "device",
       deviceId,
       recordedAt: expect.any(String),
@@ -167,7 +164,6 @@ describe("unpaid_departures", () => {
     ["party", { partyId: MISSING }],
     ["bill", { workingOrderId: MISSING }],
     ["sale", { saleId: MISSING }],
-    ["till", { tillId: MISSING }],
     ["device", { deviceId: MISSING }],
   ] as const)("refuses a departure naming no %s", async (_, overrides) => {
     const bill = await invoicedBill();

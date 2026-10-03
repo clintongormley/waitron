@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   addDecimal,
   locationId as brandLocationId,
@@ -12,7 +12,14 @@ import {
   stringToCents,
   stringToThousandths,
 } from "@waitron/shared";
-import type { NodeId, SaleId, SaleLineClassification, SeriesId, TillId } from "@waitron/shared";
+import type {
+  DeviceId,
+  NodeId,
+  SaleId,
+  SaleLineClassification,
+  SeriesId,
+  TillId,
+} from "@waitron/shared";
 import {
   billPaymentRefunds,
   billPayments,
@@ -47,6 +54,8 @@ import type { TenderMethod } from "../src/types.js";
 export interface SeededVenue {
   locationId: string;
   tillId: TillId;
+  /** The device paired with `tillId`: the origin of every money row the fixtures write. */
+  deviceId: DeviceId;
   nodeId: NodeId;
   seriesId: SeriesId;
 }
@@ -63,13 +72,13 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
     .values({ locationId, name: "Till 1" })
     .returning({ id: tills.id });
   const tillId = brandTillId(till!.id);
-  await seedDevice(db, { tillId });
+  const { deviceId } = await seedDevice(db, { tillId });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId, code: "A" })
     .returning({ id: invoiceSeries.id });
-  return { locationId, tillId, nodeId, seriesId: brandSeriesId(series!.id) };
+  return { locationId, tillId, deviceId, nodeId, seriesId: brandSeriesId(series!.id) };
 }
 
 /**
@@ -89,22 +98,9 @@ export async function seedNodeAndSeries(
   return { nodeId, seriesId: brandSeriesId(series!.id) };
 }
 
-/** The device `seedVenue` or `seedTill` paired with `tillId`: the origin of every row rung there. */
-function deviceOfTill(tillId: string) {
-  return sql`(select id from devices where till_id = ${tillId})`;
-}
-
-// Till names are unique per location; seedVenue owns "Till 1".
-let tillSeq = 1;
-
-export async function seedTill(
-  db: Database,
-  locationId: string,
-  name = `Till ${++tillSeq}`,
-): Promise<TillId> {
-  const [till] = await db.insert(tills).values({ locationId, name }).returning({ id: tills.id });
-  await seedDevice(db, { tillId: till!.id });
-  return brandTillId(till!.id);
+/** Another device at `locationId`, for a test that needs money taken on two. */
+export async function seedVenueDevice(db: Database, locationId: string): Promise<DeviceId> {
+  return (await seedDevice(db, { locationId: brandLocationId(locationId) })).deviceId;
 }
 
 /**
@@ -132,9 +128,11 @@ function breakdownFromLines(
 
 export async function seedSale(
   db: Database,
-  seed: { tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
+  seed: { deviceId: DeviceId; nodeId: NodeId; seriesId: SeriesId },
   opts: {
     invoiceNumber: number;
+    /** A sample sale the Demo seed recorded, with no device; otherwise `seed.deviceId` rang it. */
+    source?: "demo_seed";
     issuedAt: string;
     total: string;
     lines: Array<{
@@ -183,9 +181,8 @@ export async function seedSale(
   const [row] = await db
     .insert(sales)
     .values({
-      tillId: seed.tillId,
-      source: "device",
-      deviceId: deviceOfTill(seed.tillId),
+      source: opts.source ?? "device",
+      deviceId: opts.source === undefined ? seed.deviceId : null,
       nodeId: seed.nodeId,
       seriesId: seed.seriesId,
       invoiceNumber: opts.invoiceNumber,
@@ -258,7 +255,7 @@ const PERSON = "dddddddd-0000-4000-8000-000000000001";
  */
 export async function seedBillPayment(
   db: Database,
-  ref: { workingOrderId: string; tillId: TillId },
+  ref: { workingOrderId: string; deviceId: DeviceId },
   opts: {
     method: "cash" | "card";
     applied: string;
@@ -285,9 +282,8 @@ export async function seedBillPayment(
       tendered: opts.method === "cash" ? stringToCents(opts.tendered ?? owed) : null,
       state: opts.state,
       requestedBy: PERSON,
-      tillId: ref.tillId,
       source: "device",
-      deviceId: deviceOfTill(ref.tillId),
+      deviceId: ref.deviceId,
       receivedAt: moved ? opts.at! : null,
       failedAt: opts.state === "failed" ? opts.at! : null,
     })
@@ -295,10 +291,10 @@ export async function seedBillPayment(
   return row!.id;
 }
 
-/** Money given back from one bill payment, on `tillId`. `at` is `completed_at` or `failed_at`. */
+/** Money given back from one bill payment, on `deviceId`. `at` is `completed_at` or `failed_at`. */
 export async function seedBillRefund(
   db: Database,
-  ref: { billPaymentId: string; tillId: TillId },
+  ref: { billPaymentId: string; deviceId: DeviceId },
   opts: {
     applied: string;
     tip?: string;
@@ -315,9 +311,8 @@ export async function seedBillRefund(
     reason: "fixture",
     authorizedBy: PERSON,
     requestedBy: PERSON,
-    tillId: ref.tillId,
     source: "device",
-    deviceId: deviceOfTill(ref.tillId),
+    deviceId: ref.deviceId,
     state: opts.state,
     completedAt: opts.state === "completed" ? opts.at! : null,
     failedAt: opts.state === "failed" ? opts.at! : null,

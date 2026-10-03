@@ -32,7 +32,7 @@ function insertSaleSql(opts: {
 }): ReturnType<typeof sql> {
   // `id` is named explicitly because `sales.id` is `$defaultFn(newId)` — a JavaScript generator
   // rather than a SQL DEFAULT, which a raw insert never reaches.
-  return sql`insert into sales (id, till_id, source, device_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, working_order_id) values (${randomUUID()}, ${TILL_A1}, 'device', ${deviceA}, ${nodeA}, ${seriesA}, ${opts.invoiceNumber}, ${AT}, 120,
+  return sql`insert into sales (id, source, device_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, working_order_id) values (${randomUUID()}, 'device', ${deviceA}, ${nodeA}, ${seriesA}, ${opts.invoiceNumber}, ${AT}, 120,
       100, '[]', 'es', '["es","ca"]', 'verifactu', 'recorded', ${opts.workingOrderId}
     )`;
 }

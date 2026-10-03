@@ -692,14 +692,13 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     expect(registros).toHaveLength(0);
   });
 
-  it("refuses POST /api/sales from a device with no till (a kds_station) — 400 device.till_required", async () => {
+  it("refuses a cash sale from a kitchen display, whose profile does not take cash — 403 device.cash_not_allowed", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
 
-    // A `kds_station` device binds a station and no till, so `requireSaleTillId` refuses it.
-    // Provisioning already seeds "Cocina".
+    // A `kds_station` device's profile carries no `take-cash`. Provisioning already seeds "Cocina".
     const station = await withTransaction(suite.db, async (tx) => {
       return createStation(tx, cfg, { name: "Pase", isDefault: false });
     });
@@ -724,8 +723,8 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
         tender: { method: "cash", amount: "5.00" },
       }),
     });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ error: { code: "device.till_required" } });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: { code: "device.cash_not_allowed" } });
     const registros = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(registrosFacturacion);
     });
@@ -2005,23 +2004,15 @@ describe("handheld sales and device capability gates", () => {
     return id;
   }
 
-  /** The till the sale filed for `workingOrderId` names. */
-  async function saleTillOf(workingOrderId: string): Promise<string> {
+  /** The device the sale filed for `workingOrderId` names. */
+  async function saleDeviceOf(workingOrderId: string): Promise<string | null> {
     const [sale] = await withTransaction(suite.db, (tx) =>
       tx
-        .select({ tillId: sales.tillId })
+        .select({ deviceId: sales.deviceId })
         .from(sales)
         .where(eq(sales.workingOrderId, workingOrderId)),
     );
-    return sale!.tillId;
-  }
-
-  /** The till an enrolled device rings on. */
-  async function deviceTillOf(deviceCookie: string): Promise<string> {
-    const rows = await suite.db.execute<{ till_id: string }>(
-      sql`select till_id from devices where id = ${deviceIdOf(deviceCookie)}`,
-    );
-    return rows.rows[0]!.till_id;
+    return sale!.deviceId;
   }
 
   async function amendmentsOf(workingOrderId: string) {
@@ -2048,7 +2039,7 @@ describe("handheld sales and device capability gates", () => {
     return order!.status;
   }
 
-  it("a handheld places a Mode-I order for an operator holding only the payment permission, filing one deferred invoice on its register, as a till does", async () => {
+  it("a handheld places a Mode-I order for an operator holding only the payment permission, filing one deferred invoice under itself, as a till does", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     await suite.db.execute(
       sql`update locations set order_flow = 'invoice_first' where id = ${cfg.locationId}`,
@@ -2097,11 +2088,11 @@ describe("handheld sales and device capability gates", () => {
       [cfg.nodeId, 1],
       [cfg.nodeId, 2],
     ]);
-    expect(await saleTillOf(byHandheld)).toBe(cfg.tillId);
-    expect(await saleTillOf(byTill)).toBe(await deviceTillOf(tillDeviceCookie));
+    expect(await saleDeviceOf(byHandheld)).toBe(deviceIdOf(handheldCookie));
+    expect(await saleDeviceOf(byTill)).toBe(deviceIdOf(tillDeviceCookie));
   });
 
-  it("a handheld collects a placed Mode-T order in cash for an operator holding only the payment permission, settling it and filing one record on its register, as a till does", async () => {
+  it("a handheld collects a placed Mode-T order in cash for an operator holding only the payment permission, settling it and filing one record under itself, as a till does", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     await suite.db.execute(
       sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
@@ -2145,8 +2136,8 @@ describe("handheld sales and device capability gates", () => {
       [cfg.nodeId, 1],
       [cfg.nodeId, 2],
     ]);
-    expect(await saleTillOf(byHandheld)).toBe(cfg.tillId);
-    expect(await saleTillOf(byTill)).toBe(await deviceTillOf(tillDeviceCookie));
+    expect(await saleDeviceOf(byHandheld)).toBe(deviceIdOf(handheldCookie));
+    expect(await saleDeviceOf(byTill)).toBe(deviceIdOf(tillDeviceCookie));
   });
 
   describe("a device takes cash only when its profile says so", () => {

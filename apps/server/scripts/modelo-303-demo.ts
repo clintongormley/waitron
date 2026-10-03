@@ -477,7 +477,6 @@ async function main(): Promise<void> {
       const { instant, offsetMinutes } = issuanceAt(s.day);
       const total = addDecimal(decimal(s.base), decimal(s.tax));
       const input: RecordSaleInput = {
-        tillId: venue.tillId,
         origin: jobOrigin("demo_seed"),
         nodeId: node.nodeId,
         seriesId: node.seriesId,
@@ -518,7 +517,6 @@ async function main(): Promise<void> {
     const node0 = venue.nodes[0]!;
     const rect = issuanceAt(RECTIFICATIVA.day);
     const correctionInput: RecordCorrectionInput = {
-      tillId: venue.tillId,
       origin: jobOrigin("demo_seed"),
       nodeId: node0.nodeId,
       seriesId: node0.rectificativeSeriesId,

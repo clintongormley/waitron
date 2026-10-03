@@ -80,7 +80,7 @@ async function parked(mode: ServiceMode, ...names: string[]): Promise<string> {
 /** A counter order sent to the kitchen without payment. */
 async function placed(mode: ServiceMode, ...names: string[]): Promise<string> {
   const id = await parked(mode, ...names);
-  await placeOrder(deps(), venue.cfg, id, venue.operatorId, venue.cfg.tillId);
+  await placeOrder(deps(), venue.cfg, id, venue.operatorId);
   return id;
 }
 
@@ -163,7 +163,7 @@ describe("handing over a counter order sent without payment", () => {
     );
     const context = await inTx(venue, (tx) => VENUE_SERVICE.findOrderContext(tx, venue.cfg, id));
     expect(context?.serviceMode).toBe("ticket_then_pay");
-    await placeOrder(deps(), venue.cfg, id, venue.operatorId, venue.cfg.tillId);
+    await placeOrder(deps(), venue.cfg, id, venue.operatorId);
     const before = await orderRow(id);
     expect(before.status).toBe("placed");
     expect(before.partyId).not.toBeNull();
@@ -249,7 +249,6 @@ async function creditWholeInvoice(billId: string): Promise<void> {
     });
     await recordCorrection(tx, venue.backend, {
       origin: venue.cfg.origin,
-      tillId: venue.cfg.tillId,
       nodeId: venue.cfg.nodeId,
       seriesId: brandSeriesId(series!.id),
       correctsSaleId: brandSaleId(issued!.id),
@@ -751,7 +750,7 @@ describe("GET /api/orders/counter-waiting", () => {
     await markCollected({ db: venue.db }, venue.cfg, collected);
     const open = await parked("ticket_then_pay", "Tarta");
     const tableBill = await tabWith(venue, "Paella");
-    await placeOrder(deps(), venue.cfg, tableBill, venue.operatorId, venue.cfg.tillId);
+    await placeOrder(deps(), venue.cfg, tableBill, venue.operatorId);
     const abandoned = await parked("ticket_then_pay", "Tarta");
     venue.db.run(sql`update working_orders set status = 'abandoned' where id = ${abandoned}`);
     const paidUnfired = randomUUID();
@@ -868,7 +867,7 @@ describe("GET /api/working-orders/:id/placed", () => {
     const id = await parked("ticket_then_pay", "Tarta", "Caña");
     const open = await send(venue.app, venue.cookie, "GET", `/api/working-orders/${id}`);
     expect(open.status).toBe(200);
-    await placeOrder(deps(), venue.cfg, id, venue.operatorId, venue.cfg.tillId);
+    await placeOrder(deps(), venue.cfg, id, venue.operatorId);
 
     const answer = await read(id);
 
@@ -888,7 +887,7 @@ describe("GET /api/working-orders/:id/placed", () => {
     const paid = await placed("ticket_then_pay", "Tarta");
     await collectCash(paid);
     const tableBill = await tabWith(venue, "Paella");
-    await placeOrder(deps(), venue.cfg, tableBill, venue.operatorId, venue.cfg.tillId);
+    await placeOrder(deps(), venue.cfg, tableBill, venue.operatorId);
 
     for (const id of [open, paid, tableBill, randomUUID(), "not-a-uuid"]) {
       const answer = await read(id);

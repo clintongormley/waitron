@@ -1,0 +1,113 @@
+-- The five triggers `0078_money_records_drop_triggers.sql` dropped. The four bill payment triggers
+-- are `0024_bill_payment_triggers.sql`'s, with each guard holding `source` and `device_id` fixed
+-- where it held `till_id`; `sale_settlements_check_coverage` is `0001_behavioural_triggers.sql`'s,
+-- unchanged.
+-- A bill payment moves only pending → received, pending → failed, and received → declined while no
+-- tender names it; an update that changes nothing is let through. `received_at` and `failed_at`
+-- follow the state by the table's own checks, so only a move of one already set is refused here.
+-- A manager's attestation may arrive only with the move out of `pending`, and never changes after;
+-- its shape (both columns or neither, a non-blank note, never on a pending row) is the table's
+-- `bill_payments_attestation_ck`.
+CREATE TRIGGER bill_payments_guard_update
+BEFORE UPDATE ON bill_payments
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'bill payment cannot make that change')
+  WHERE NOT (
+    new.id IS old.id
+    AND new.working_order_id IS old.working_order_id
+    AND new.submission_id IS old.submission_id
+    AND new.fingerprint IS old.fingerprint
+    AND new.kind IS old.kind
+    AND new.share_of IS old.share_of
+    AND new.method IS old.method
+    AND new.applied IS old.applied
+    AND new.tip IS old.tip
+    AND new.tendered IS old.tendered
+    AND new.requested_by IS old.requested_by
+    AND new.source IS old.source
+    AND new.device_id IS old.device_id
+    AND new.created_at IS old.created_at
+    AND (
+      (new.state IS old.state
+        AND new.received_at IS old.received_at
+        AND new.failed_at IS old.failed_at
+        AND new.attested_by IS old.attested_by
+        AND new.attestation_note IS old.attestation_note)
+      OR (old.state = 'pending' AND new.state IN ('received', 'failed'))
+      OR (old.state = 'received' AND new.state = 'declined'
+        AND new.received_at IS old.received_at
+        AND new.attested_by IS old.attested_by
+        AND new.attestation_note IS old.attestation_note
+        AND NOT exists (SELECT 1 FROM tenders WHERE bill_payment_id = old.id))
+    )
+  );
+END;
+--> statement-breakpoint
+CREATE TRIGGER bill_payments_no_delete
+BEFORE DELETE ON bill_payments
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'a bill payment is never deleted');
+END;
+--> statement-breakpoint
+-- While a refund is pending: `sent_at` may be set once, `refs_before_send` written only while
+-- `sent_at` is unset (with the first send's stamp), `send_count` raised by one per send, the
+-- provider's refund id set once, and the state moved to `completed` or `failed`, with the
+-- attestation the table's check allows only alongside an outcome. After the outcome, an update that
+-- changes nothing is the only one let through.
+CREATE TRIGGER bill_payment_refunds_guard_update
+BEFORE UPDATE ON bill_payment_refunds
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'bill payment refund cannot make that change')
+  WHERE NOT (
+    new.id IS old.id
+    AND new.bill_payment_id IS old.bill_payment_id
+    AND new.submission_id IS old.submission_id
+    AND new.fingerprint IS old.fingerprint
+    AND new.applied_amount IS old.applied_amount
+    AND new.tip_amount IS old.tip_amount
+    AND new.reason IS old.reason
+    AND new.authorized_by IS old.authorized_by
+    AND new.requested_by IS old.requested_by
+    AND new.source IS old.source
+    AND new.device_id IS old.device_id
+    AND new.created_at IS old.created_at
+    AND (
+      (new.state IS old.state
+        AND new.sent_at IS old.sent_at
+        AND new.send_count IS old.send_count
+        AND new.provider_refund_ref IS old.provider_refund_ref
+        AND new.refs_before_send IS old.refs_before_send
+        AND new.attested_by IS old.attested_by
+        AND new.attestation_note IS old.attestation_note
+        AND new.completed_at IS old.completed_at
+        AND new.failed_at IS old.failed_at)
+      OR (old.state = 'pending'
+        AND (old.sent_at IS NULL OR new.sent_at IS old.sent_at)
+        AND (old.sent_at IS NULL OR new.refs_before_send IS old.refs_before_send)
+        AND new.send_count IN (old.send_count, old.send_count + 1)
+        AND (old.provider_refund_ref IS NULL OR new.provider_refund_ref IS old.provider_refund_ref))
+    )
+  );
+END;
+--> statement-breakpoint
+CREATE TRIGGER bill_payment_refunds_no_delete
+BEFORE DELETE ON bill_payment_refunds
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'a bill payment refund is never deleted');
+END;
+--> statement-breakpoint
+CREATE TRIGGER sale_settlements_check_coverage
+BEFORE INSERT ON sale_settlements
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'tenders do not cover the sale')
+  WHERE exists (SELECT 1 FROM sales WHERE id = new.sale_id)
+    AND (SELECT coalesce(sum(amount), 0) FROM tenders WHERE sale_id = new.sale_id)
+        <> (SELECT total FROM sales WHERE id = new.sale_id)
+           + (SELECT coalesce(sum(total), 0) FROM sales WHERE corrects_sale_id = new.sale_id)
+           + (SELECT coalesce(sum(tip_amount), 0) FROM tenders WHERE sale_id = new.sale_id);
+END;

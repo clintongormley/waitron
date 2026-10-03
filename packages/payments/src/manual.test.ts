@@ -146,7 +146,6 @@ describe("recordManualCardPayment for a bill payment", () => {
         state: "received",
         receivedAt: SETTLED.toISOString(),
         requestedBy: "11111111-1111-1111-1111-111111111111",
-        tillId: seeded.tillId,
       })
       .returning({ id: billPayments.id });
     const result = await suite.db.transaction((tx) =>

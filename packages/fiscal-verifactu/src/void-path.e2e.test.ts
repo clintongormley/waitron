@@ -2,7 +2,6 @@ import { asc, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
-import { jobOrigin } from "@waitron/shared";
 import { computeHuella } from "@waitron/verifactu";
 import { newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -65,20 +64,13 @@ beforeEach(async () => {
 
 async function sell() {
   return withTransaction(suite.db, async (tx) => {
-    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
+    return recordSale(tx, backend, saleInput({ nodeId, seriesId }));
   });
 }
 
 async function voidSale(saleId: SaleId, reason = "staff error") {
   return withTransaction(suite.db, async (tx) => {
-    return recordVoid(
-      tx,
-      backend,
-      saleId,
-      reason,
-      { sessionId: voidSessionId },
-      jobOrigin("readiness_test"),
-    );
+    return recordVoid(tx, backend, saleId, reason, { sessionId: voidSessionId });
   });
 }
 

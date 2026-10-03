@@ -2,7 +2,6 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
-import { jobOrigin } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { newId, nowIso, withTransaction } from "@waitron/db";
@@ -129,17 +128,10 @@ describe("drain — happy path, an anulación row", () => {
     });
 
     const sale = await withTransaction(suite.db, async (tx) => {
-      return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
+      return recordSale(tx, backend, saleInput({ nodeId, seriesId }));
     });
     await withTransaction(suite.db, async (tx) => {
-      await recordVoid(
-        tx,
-        backend,
-        sale.saleId,
-        "staff error",
-        { sessionId: voidSession.id },
-        jobOrigin("readiness_test"),
-      );
+      await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
     });
 
     // Both envíos default to the wall-clock insert time, so a minute past it has them due.
@@ -1159,14 +1151,7 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
 
   const voidSale = (saleId: Awaited<ReturnType<typeof sell>>["saleId"]) =>
     withTransaction(suite.db, (tx) =>
-      recordVoid(
-        tx,
-        backend,
-        saleId,
-        "staff error",
-        { sessionId: voidSessionId },
-        jobOrigin("readiness_test"),
-      ),
+      recordVoid(tx, backend, saleId, "staff error", { sessionId: voidSessionId }),
     );
 
   /** The chain's rows in order: tipo, estado and incidencia per secuencia. */

@@ -3,7 +3,6 @@ import { and, eq, isNull, lt, or } from "drizzle-orm";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { AppError, isUuid, tillId } from "@waitron/shared";
-import type { TillId } from "@waitron/shared";
 import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
@@ -300,19 +299,11 @@ export async function requireDevice(
 }
 
 /**
- * The `till_id` a SALE files under, taken from `device`. A {@link DeviceBinding} carries no node or
- * series: the chain is keyed by the node, not the device. The refusal is a setup precondition — a
- * sellable device is till-bound — not a per-sale block (CLAUDE.md §5).
+ * The configuration `device`'s request runs under: the device's own till, for the records that still
+ * name one. A sale names the request's device, not a till.
  */
-export function requireSaleTillId(device: DeviceBinding): TillId {
-  if (device.tillId === null) throw new AppError("device.till_required", {});
-  return tillId(device.tillId);
-}
-
-/** The configuration `device`'s request runs under: the device's own till. Refuses as
- * {@link requireSaleTillId} does. */
 export function deviceTillCfg<C extends TillConfig>(cfg: C, device: DeviceBinding): C {
-  return { ...cfg, tillId: requireSaleTillId(device) };
+  return device.tillId === null ? cfg : { ...cfg, tillId: tillId(device.tillId) };
 }
 
 /**

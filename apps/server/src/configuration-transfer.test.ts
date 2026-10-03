@@ -66,7 +66,7 @@ import {
   saveAdjustmentSettings,
 } from "@waitron/adjustments";
 import { payments } from "@waitron/payments";
-import { decimal, nodeId, seriesId, tillId, deviceOrigin } from "@waitron/shared";
+import { decimal, nodeId, seriesId, deviceOrigin } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { systemClock } from "./till-backend.js";
@@ -347,6 +347,7 @@ describe("configuration transfer database path", () => {
       await tx.insert(payments).values({
         id: "cccccccc-bbbb-bbbb-bbbb-cccccccccccc",
         workingOrderId: "aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa",
+        source: "demo_seed",
         nodeId: source.nodeId,
         provider: "simulated",
         paymentRef: "practice-payment",
@@ -382,7 +383,7 @@ describe("configuration transfer database path", () => {
         resolution: "203dpi",
       });
       await tx.insert(sales).values({
-        tillId: source.tillId,
+        source: "demo_seed",
         seriesId: source.seriesIds[0]!,
         nodeId: source.nodeId,
         invoiceNumber: 99,
@@ -537,7 +538,6 @@ describe("configuration transfer database path", () => {
         tx,
         fiscal.makeBackend({ db: targetSuite.db, clock: systemClock(), environment: "production" }),
         {
-          tillId: tillId(target.tillId),
           origin,
           nodeId: nodeId(target.nodeId),
           seriesId: seriesId(target.seriesIds[0]!),

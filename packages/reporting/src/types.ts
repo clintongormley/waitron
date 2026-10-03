@@ -1,4 +1,4 @@
-import type { Decimal, NodeId, TillId, TimingBand } from "@waitron/shared";
+import type { Decimal, DeviceId, NodeId, Source, TimingBand } from "@waitron/shared";
 import type { LiquidationPeriod } from "./period.js";
 
 /** A tender method, mirroring `tenderMethod` in packages/db/src/schema/sales.ts. */
@@ -138,14 +138,17 @@ export interface TenderMethodLine {
   /** The tip portion of {@link TenderMethodLine.amount}, net of tips given back. */
   tip: Decimal;
 }
-export interface TillCashUp {
-  tillId: TillId;
+/** The money one device took, or one job source such as the Demo seed with no device. */
+export interface OriginCashUp {
+  source: Source;
+  deviceId: DeviceId | null;
   byMethod: TenderMethodLine[];
   /** The cash line's amount (net cash, tips included, possibly negative); 0.00 with no cash line. */
   cashTakings: Decimal;
 }
 export interface CashUp {
-  byTill: TillCashUp[];
+  /** One row per device, plus one per job source with takings; the totals sum every row. */
+  byOrigin: OriginCashUp[];
   tenderTotal: Decimal;
   tipTotal: Decimal;
 }

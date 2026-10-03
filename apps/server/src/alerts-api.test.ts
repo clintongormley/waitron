@@ -1,8 +1,15 @@
 // Route authorization over one transaction per request.
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { locations, printJobs, printers, withTransaction, type Database } from "@waitron/db";
+import {
+  devices,
+  locations,
+  printJobs,
+  printers,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
@@ -198,6 +205,16 @@ describe("alert routes", () => {
       deviceId: null,
       deviceName: null,
     });
+  });
+
+  it("still names a device that was revoked after the alert", async () => {
+    const v = await seedVenue();
+    await raise(v, "payment.offline_forward_declined");
+    await db.update(devices).set({ active: false }).where(eq(devices.id, v.deviceId));
+    const body = (await (await get(appFor(), "/management-api/alerts", v.manager)).json()) as {
+      alerts: { deviceName?: string }[];
+    };
+    expect(body.alerts.map((a) => a.deviceName)).toEqual(["Caja 1"]);
   });
 
   it("answers not visible and empty to a session holding no alert permission", async () => {

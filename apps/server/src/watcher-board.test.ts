@@ -462,7 +462,6 @@ describe("watcher board", () => {
         sessionId: "unused",
         attempts: overridePinAttempts(createPinThrottle(), "unused"),
       },
-      () => Promise.reject(new Error("a bill without an invoice needs no sale till")),
     );
     expect((await read()).orders).toEqual([]);
     const [heldItem] = await inTx(v, (tx) =>

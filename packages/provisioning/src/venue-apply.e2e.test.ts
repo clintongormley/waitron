@@ -9,12 +9,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { hashPassword, loginManager, loginManagerById, type TotpKeyRing } from "@waitron/identity";
 import type { TrustedClock } from "@waitron/fiscal";
-import {
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  tillId as brandTillId,
-  deviceOrigin,
-} from "@waitron/shared";
+import { nodeId as brandNodeId, seriesId as brandSeriesId, deviceOrigin } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
 import { applyVenue } from "./venue-apply.js";
@@ -82,7 +77,6 @@ function saleInput(ids: {
   seriesId: string;
 }): RecordSaleInput {
   return {
-    tillId: brandTillId(ids.tillId),
     origin: deviceOrigin(ids.deviceId),
     nodeId: brandNodeId(ids.nodeId),
     seriesId: brandSeriesId(ids.seriesId),

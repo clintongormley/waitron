@@ -100,7 +100,6 @@ export async function insertPendingAlta(
   const [sale] = await db
     .insert(sales)
     .values({
-      tillId: params.tillId,
       source: "device",
       deviceId,
       nodeId: params.nodeId,
@@ -153,7 +152,6 @@ export async function insertPendingAlta(
   const [registro] = await db
     .insert(registrosFacturacion)
     .values({
-      tillId: params.tillId,
       source: "device",
       deviceId,
       nodeId: params.nodeId,

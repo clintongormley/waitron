@@ -7,7 +7,7 @@ import { computeHuella } from "@waitron/verifactu";
 import { saleLines, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { centsToDecimal, decimal, deviceOrigin } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TillId, DeviceId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, DeviceId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
@@ -24,14 +24,13 @@ import type { RegistroRow } from "./registro-row.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let backend: VerifactuBackend;
-let tillId: TillId;
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
 beforeEach(async () => {
   // A pinned NIF: it is a huella input, and the controls below pin huella literals.
-  ({ tillId, deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db, {
+  ({ deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db, {
     nif: "20009999E",
   }));
   backend = new VerifactuBackend({
@@ -67,7 +66,6 @@ async function sell(
       tx,
       backend,
       saleInput({
-        tillId,
         origin: deviceOrigin(deviceId),
         nodeId,
         seriesId,
@@ -84,11 +82,10 @@ async function sell(
 /** A full invoice replacing one €14.41 simplified ticket. */
 async function substitute(total: string, lineTotals: string[], vatRate = "21.00") {
   const { saleId: ticket } = await withTransaction(suite.db, (tx) =>
-    recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId })),
+    recordSale(tx, backend, saleInput({ nodeId, seriesId })),
   );
   const { saleId } = await withTransaction(suite.db, (tx) =>
     recordSubstitution(tx, backend, {
-      tillId,
       origin: deviceOrigin(deviceId),
       nodeId,
       seriesId,

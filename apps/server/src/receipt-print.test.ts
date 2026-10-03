@@ -450,7 +450,7 @@ describe("receipt grouping after table changes", () => {
           OPERATOR,
         );
       } else {
-        await placeOrder(deps(), cfg, orderId, OPERATOR, cfg.tillId);
+        await placeOrder(deps(), cfg, orderId, OPERATOR);
         if (orderFlow === "ticket_then_pay") {
           await collectOrder(
             deps(),
@@ -955,7 +955,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
         zoneId: base.zoneId,
         lines: [{ menuItemId: base.each.menuItemId, quantity: "1" }],
       });
-      await placeOrder(deps(), cfg, id, OPERATOR, deviceTillId);
+      await placeOrder(deps(), cfg, id, OPERATOR);
       const jobs = await printJobsFor(cfg);
       expect(jobs).toHaveLength(1);
       expect(jobs[0]!.printerId).toBe(printerId);
@@ -984,7 +984,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
         zoneId: base.zoneId,
         lines: [{ menuItemId: base.each.menuItemId, quantity: "1" }],
       });
-      await placeOrder(deps(), cfg, id, OPERATOR, cfg.tillId);
+      await placeOrder(deps(), cfg, id, OPERATOR);
       const issuedJobs = await printJobsFor(cfg);
       expect(issuedJobs).toHaveLength(1);
       const original = new Uint8Array(issuedJobs[0]!.payload);
@@ -1155,7 +1155,7 @@ describe("every device whose profile allows the drawer opens its receipt printer
           zoneId,
           lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         });
-        await placeOrder(deps(), till, id, OPERATOR, till.tillId);
+        await placeOrder(deps(), till, id, OPERATOR);
         await collectOrder(
           deps(),
           till,

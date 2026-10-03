@@ -39,6 +39,7 @@ export {
   isSaleOrigin,
   jobOrigin,
   readOrigin,
+  readSaleOrigin,
   SALE_SOURCES,
   SOURCES,
 } from "./origin.js";

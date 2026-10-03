@@ -1,5 +1,5 @@
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
-import type { Context, Hono } from "hono";
+import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, inArray } from "drizzle-orm";
 import {
@@ -56,7 +56,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { moveDishesToStation } from "./station-move.js";
-import { madeHereAnswer, madeHereSinkFor } from "./made-here.js";
+import { madeHereAnswer, sendingCfg } from "./made-here.js";
 import { requestCfg } from "./request-config.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import {
@@ -148,12 +148,7 @@ import type { SubmitDraftInput } from "./order-drafts.js";
 import { invalid } from "./bill-allocation.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
-import {
-  asObject,
-  mountBillPaymentsApi,
-  submissionIdOf,
-  withSaleTillWhenIssuing,
-} from "./bill-payments-api.js";
+import { asObject, mountBillPaymentsApi, submissionIdOf } from "./bill-payments-api.js";
 import { listPrintProblems, reprintOrderTickets } from "./kitchen-print.js";
 import {
   canonicaliseUuid,
@@ -168,10 +163,8 @@ import {
   assertTakesCash,
   deviceTillCfg,
   requireDevice,
-  requireSaleTillId,
   tryReadDevice,
 } from "./device-session.js";
-import type { DeviceBinding } from "./device-session.js";
 import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
@@ -881,11 +874,6 @@ function mountCourseVerb(
   );
 }
 
-/** The configuration a route that sends work to the kitchen runs under: `device` is the sender. */
-function sendingCfg<C extends TillConfig>(cfg: C, c: Context, device: DeviceBinding): C {
-  return { ...cfg, sendingDeviceId: device.deviceId, madeHereSink: madeHereSinkFor(c) };
-}
-
 /** Mount the till routes with the shared error boundary. */
 export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.use("/api/*", madeHereAnswer(deps.db, deps.cfg.locale));
@@ -1369,7 +1357,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         requireUuidParam(body.readerId, "CardReaderId");
       }
       // Resolved after the capability firewall so its refusal keeps its status.
-      const saleCfg = sendingCfg({ ...cfg, tillId: requireSaleTillId(device) }, c, device);
+      const saleCfg = sendingCfg(deviceTillCfg(cfg, device), c, device);
 
       const { provider, reader } = await resolveCardCollector(deps, device.deviceId, body.readerId);
       const outcome = await payWorkingOrderIntegrated(
@@ -1468,19 +1456,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         revision?: unknown;
       }>(c);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const revision = await withSaleTillWhenIssuing(c, cfg, session.device, (saleCfg) =>
-        updateHeldOrder(
-          { db: deps.db },
-          sendCfg,
-          id,
-          {
-            lines: body.lines,
-            label: body.label,
-            revision: requireRevision(body.revision),
-            operatorId: personId,
-          },
-          { fiscal, saleCfg },
-        ),
+      const saleCfg = sendingCfg(deviceTillCfg(cfg, session.device), c, session.device);
+      const revision = await updateHeldOrder(
+        { db: deps.db },
+        sendCfg,
+        id,
+        {
+          lines: body.lines,
+          label: body.label,
+          revision: requireRevision(body.revision),
+          operatorId: personId,
+        },
+        { fiscal, saleCfg },
       );
       return c.json({ revision });
     }),
@@ -1502,15 +1489,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
-      // The device's till reaches the fiscal record only; the `order_placed` amendment keeps the
-      // box's configured `cfg.tillId`, matching `cancelPlacedOrder`.
-      const saleTillId = requireSaleTillId(session.device);
+      // The `order_placed` amendment keeps the box's configured `cfg.tillId`, matching
+      // `cancelPlacedOrder`.
       const result = await placeOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         sendingCfg(cfg, c, session.device),
         id,
         personId,
-        saleTillId,
       );
       return c.json(result);
     }),
@@ -1845,15 +1830,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await readJsonBody<{ reason: string; override?: unknown }>(c);
       const override = parseOverrideField(body.override);
-      // The device's till reaches the credit note only, as placing's reaches its invoice; the
-      // `order_cancelled` amendment keeps `cfg.tillId`.
+      // The `order_cancelled` amendment keeps `cfg.tillId`.
       await cancelPlacedOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         cfg,
         id,
         body.reason,
         { personId, sessionId, attempts: overridePinAttempts(pinThrottle, session.deviceId) },
-        () => Promise.resolve(requireSaleTillId(session.device)),
         override,
       );
       return c.body(null, 200);
@@ -2519,13 +2502,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { revision, ...patch } = await readJsonBody<OrderLinePatch & { revision?: unknown }>(c);
       const copy = requireRevision(revision);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const saved = await withSaleTillWhenIssuing(c, cfg, session.device, (saleCfg) =>
-        withTransaction(deps.db, async (tx) => {
-          const revision = await updateOrderLine(tx, sendCfg, id, lineNo, patch, copy, personId);
-          await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
-          return { revision, party: await partyRevisionOfOrder(tx, id) };
-        }),
-      );
+      const saleCfg = sendingCfg(deviceTillCfg(cfg, session.device), c, session.device);
+      const saved = await withTransaction(deps.db, async (tx) => {
+        const revision = await updateOrderLine(tx, sendCfg, id, lineNo, patch, copy, personId);
+        await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
+        return { revision, party: await partyRevisionOfOrder(tx, id) };
+      });
       return c.json(saved);
     }),
   );
@@ -2658,13 +2640,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = asObject(await readRawJsonBody<unknown>(c));
       const transfers = requireTransfers(body.transfers);
       const command = billCommand(personId, body);
-      const result = await withSaleTillWhenIssuing(c, cfg, session.device, (saleCfg) =>
-        withTransaction(deps.db, async (tx) => {
-          const split = await splitBill(tx, cfg, billId, transfers, command);
-          await issueIfFullyPaid(tx, fiscal, saleCfg, billId, personId);
-          return split;
-        }),
-      );
+      const saleCfg = sendingCfg(deviceTillCfg(cfg, session.device), c, session.device);
+      const result = await withTransaction(deps.db, async (tx) => {
+        const split = await splitBill(tx, cfg, billId, transfers, command);
+        await issueIfFullyPaid(tx, fiscal, saleCfg, billId, personId);
+        return split;
+      });
       return c.json(result);
     }),
   );

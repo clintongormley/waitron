@@ -38,7 +38,6 @@ async function storeAndReadBack(record: RegistroAlta): Promise<RegistroRow> {
   invoiceSequence += 1;
   const saleId = await seedSale(suite.db, till, invoiceSequence);
   const row = toRegistroRow(record, {
-    tillId: till.tillId,
     origin: deviceOrigin(till.deviceId),
     nodeId: till.nodeId,
     sifId: till.sifId,

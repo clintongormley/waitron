@@ -9,7 +9,6 @@ import { buildQrPayload, computeHuella } from "@waitron/verifactu";
 import type { RegistroAlta } from "@waitron/verifactu";
 import {
   incidents,
-  newId,
   products,
   saleLines,
   sales,
@@ -29,8 +28,9 @@ import {
   type MenuOffer,
 } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimal, tillId as brandTillId } from "@waitron/shared";
-import type { NodeId, SeriesId, TillId } from "@waitron/shared";
+import { seedDevice } from "@waitron/db/testing/seed.js";
+import { decimal, deviceOrigin, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import type { DeviceId, NodeId, SaleOrigin, SeriesId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
@@ -41,7 +41,7 @@ import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 let backend: VerifactuBackend;
-let tillId: TillId;
+let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
@@ -62,7 +62,7 @@ let seriesId: SeriesId;
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
+  ({ deviceId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
   // **Deviation from the brief.** The brief constructed `new VerifactuBackend({ clock:
   // steadyClock })`. The real constructor also requires `db`: `pendingCount(nodeId)` is the one
   // `FiscalBackend` method with no `tx` parameter at all, so it cannot participate in a caller's
@@ -78,7 +78,7 @@ beforeEach(async () => {
 
 async function sell(overrides: Record<string, unknown> = {}) {
   return withTransaction(pg.db, async (tx) => {
-    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId, ...overrides }));
+    return recordSale(tx, backend, saleInput({ nodeId, seriesId, ...overrides }));
   });
 }
 
@@ -231,7 +231,7 @@ describe("the write path against the real Veri*Factu backend", () => {
     // would leave all three behind.
     await expect(
       withTransaction(pg.db, async (tx) => {
-        await recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
+        await recordSale(tx, backend, saleInput({ nodeId, seriesId }));
         throw new Error("simulated crash after the fiscal write");
       }),
     ).rejects.toThrow("simulated crash");
@@ -296,7 +296,7 @@ describe("parent_line_id is not part of the huella", () => {
   // §5 invariant "never put our own metadata into a hash", applied to Task 5's self-link. A filed
   // MODIFIER child line carries `sale_lines.parent_line_id`, presentation/reporting metadata that
   // is NEVER hashed: `backend.recordSale` receives no per-line structure at all — the call at
-  // `record-sale.ts:389-408` passes the same twelve fields the note guard below names, `tillId`
+  // `record-sale.ts:314-328` passes the same twelve fields the note guard below names, `origin`
   // through `counterparty`, and never the individual `sale_lines` — so `parent_line_id` cannot reach
   // `computeHuella`'s input. Unlike that guard, this one is READ and not measured: no probe has been
   // run for this block.
@@ -320,7 +320,6 @@ describe("parent_line_id is not part of the huella", () => {
         tx,
         backend,
         saleInput({
-          tillId,
           nodeId,
           seriesId,
           // Identical two-line basket in both variants — the SAME total (14.41) and the SAME
@@ -393,7 +392,7 @@ describe("a line's note is not part of the huella", () => {
   // snapshotted at fire — `ticket_items`, and never on the fiscal projection. `RecordSaleLine`
   // (packages/core/src/record-sale.ts) carries no such field and `sale_lines` has no such column.
   // The boundary itself is that `backend.recordSale` is handed NO PER-LINE STRUCTURE AT ALL: the call
-  // at `record-sale.ts:389-408` passes exactly twelve fields — `tillId`, `nodeId`, `saleId`,
+  // at `record-sale.ts:314-328` passes exactly twelve fields — `origin`, `nodeId`, `saleId`,
   // `seriesId`, `seriesCode`, `invoiceNumber`, `issuedAt`, `offsetMinutes`,
   // `descriptionOfOperation`, `total`, `vatBreakdown`, `counterparty` — and not one of them is a
   // line. So a line's note has no channel into `computeHuella`'s input. They are named rather than
@@ -468,7 +467,7 @@ describe("a line's note is not part of the huella", () => {
       const { saleId } = await recordSale(
         tx,
         backend,
-        saleInput({ tillId, nodeId, seriesId, lines: linesWith(note) }),
+        saleInput({ nodeId, seriesId, lines: linesWith(note) }),
       );
       const { rows } = await tx.execute<{ huella: string }>(
         sql`select huella from registros_facturacion where sale_id = ${saleId}`,
@@ -509,11 +508,10 @@ describe("a line's note is not part of the huella", () => {
   });
 });
 
-describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () => {
-  // Changing only till_id must preserve the hash and chain position. Roll back each sale
-  // so the next sale uses the same invoice number and empty chain. Both tills share a location.
-  // What is checked here is that determinism; apps/server/src/sale-till-source.receipt.test.ts
-  // exercises device resolution and the sale route.
+describe("the source and device are inert to the huella and the chain (SP-A.2 §16.4(b))", () => {
+  // Changing only the source or the device must preserve the hash and chain position. Roll back
+  // each sale so the next sale uses the same invoice number and empty chain. Both devices share a
+  // location, so the filed description of operation is the same too.
   const ROLLBACK = new Error("rollback: record captured");
 
   // A `type` alias, not an `interface`: `tx.execute<T>` constrains `T extends Record<string, unknown>`,
@@ -525,28 +523,24 @@ describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () =
     secuencia: number;
     entorno: string | null;
     node_id: string;
-    till_id: string;
+    source: string;
+    device_id: string | null;
   };
 
-  /** Record one first-of-chain sale ringing `till`, read its whole chain-relevant record back inside
+  /** Record one first-of-chain sale from `origin`, read its whole chain-relevant record back inside
    *  the transaction, then roll back so the next call re-allocates `A/1` against the same empty chain. */
-  async function recordFor(till: TillId): Promise<RecordSnapshot> {
+  async function recordFor(origin: SaleOrigin): Promise<RecordSnapshot> {
     let snapshot: RecordSnapshot | undefined;
     await withTransaction(pg.db, async (tx) => {
-      const { saleId } = await recordSale(
-        tx,
-        backend,
-        saleInput({ tillId: till, nodeId, seriesId }),
-      );
+      const { saleId } = await recordSale(tx, backend, saleInput({ origin, nodeId, seriesId }));
       const { rows } = await tx.execute<RecordSnapshot>(
-        sql`select huella, anterior_huella, secuencia, entorno, node_id, till_id
+        sql`select huella, anterior_huella, secuencia, entorno, node_id, source, device_id
             from registros_facturacion where sale_id = ${saleId}`,
       );
       snapshot = rows[0]!;
-      // Self-contained guard, mirroring the parent_line_id block's own: prove the till_id ACTUALLY
-      // reached the record as this run's till, so the identity assertion below is not passing because
-      // both runs somehow filed the SAME till_id (which would make the whole comparison vacuous).
-      expect(snapshot.till_id).toBe(till);
+      // Self-contained guard: prove the origin ACTUALLY reached the record as this run's, so the
+      // identity assertions below are not passing because every run filed the SAME origin.
+      expect({ source: snapshot.source, deviceId: snapshot.device_id }).toEqual(origin);
       throw ROLLBACK;
     }).catch((error) => {
       if (error !== ROLLBACK) throw error;
@@ -554,37 +548,26 @@ describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () =
     return snapshot!;
   }
 
-  it("files the same huella and chain position for two tills that differ only by id", async () => {
-    // A SECOND till Y in the SAME location as the seeded till X — the two register ids a
-    // re-homed device would ring against. Inserted on `pg.db` directly (this is fixture setup, not
-    // the code under test) so it persists across both rolled-back sales.
-    const { rows: locRows } = await pg.db.execute<{ location_id: string }>(
-      sql`select location_id from tills where id = ${tillId}`,
+  it("files the same huella and chain position from two devices, and from no device", async () => {
+    const { rows } = await pg.db.execute<{ location_id: string }>(
+      sql`select location_id from devices where id = ${deviceId}`,
     );
-    // `id` and `created_at` are stated rather than omitted: both are `$defaultFn` columns only the
-    // insert BUILDER fills, so the raw statement this replaces was refused `NOT NULL constraint
-    // failed: tills.id`.
-    const { rows: tillYRows } = await pg.db.execute<{ id: string }>(
-      sql`insert into tills (id, location_id, name, created_at)
-           values (${newId()}, ${locRows[0]!.location_id}, 'Caja 2', ${new Date().toISOString()})
-           returning id`,
-    );
-    const tillX = tillId;
-    const tillY = brandTillId(tillYRows[0]!.id);
-    expect(tillY).not.toBe(tillX);
+    const second = await seedDevice(pg.db, { locationId: brandLocationId(rows[0]!.location_id) });
 
-    const x = await recordFor(tillX);
-    const y = await recordFor(tillY);
+    const x = await recordFor(deviceOrigin(deviceId));
+    const y = await recordFor(deviceOrigin(second.deviceId));
+    const z = await recordFor(jobOrigin("readiness_test"));
 
-    // Only the till_id snapshot moved. The hash, the (empty) predecessor pointer, the sequence, the
-    // environment stamp and the SIF/chain anchor (node_id) are all byte-identical.
-    expect(x.till_id).not.toBe(y.till_id);
-    expect(y.huella).toBe(x.huella);
-    expect(y.anterior_huella).toBe(x.anterior_huella);
-    expect(y.secuencia).toBe(x.secuencia);
-    expect(y.entorno).toBe(x.entorno);
-    expect(y.node_id).toBe(x.node_id);
-    // Both were genuinely the first record of a fresh chain (empty predecessor, secuencia 1) — the
+    expect(y.device_id).not.toBe(x.device_id);
+    expect(z.source).not.toBe(x.source);
+    for (const other of [y, z]) {
+      expect(other.huella).toBe(x.huella);
+      expect(other.anterior_huella).toBe(x.anterior_huella);
+      expect(other.secuencia).toBe(x.secuencia);
+      expect(other.entorno).toBe(x.entorno);
+      expect(other.node_id).toBe(x.node_id);
+    }
+    // Each was genuinely the first record of a fresh chain (empty predecessor, secuencia 1) — the
     // precondition that makes the byte-identity meaningful rather than an accident of a shared chain.
     expect(x.anterior_huella).toBeNull();
     expect(x.secuencia).toBe(1);
@@ -656,7 +639,7 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
         tx,
         backend,
         saleInput({
-          tillId: seeded.tillId,
+          origin: deviceOrigin(seeded.deviceId),
           nodeId: seeded.nodeId,
           seriesId: seeded.seriesId,
           // The `saleInput` default money, restructured into a dish carrying an options answer plus
@@ -781,7 +764,6 @@ describe("a variant line is filed at its own effective VAT rate", () => {
         tx,
         backend,
         saleInput({
-          tillId,
           nodeId,
           seriesId,
           total: priced.total,
@@ -830,7 +812,6 @@ describe("a variant's names are not part of the huella", () => {
         tx,
         backend,
         saleInput({
-          tillId: seeded.tillId,
           nodeId: seeded.nodeId,
           seriesId: seeded.seriesId,
           total: "4.50",

@@ -63,7 +63,6 @@ async function recordSale(
     const [sale] = await tx
       .insert(sales)
       .values({
-        tillId: TILL_A1,
         source: "device",
         deviceId: deviceA,
         nodeId: nodeA,

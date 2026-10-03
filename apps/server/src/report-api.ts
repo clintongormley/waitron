@@ -2,7 +2,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   AppError,
   nodeId as brandNodeId,
@@ -10,6 +10,7 @@ import {
   type SupportedLocale,
 } from "@waitron/shared";
 import {
+  devices,
   printers,
   readTenant,
   withTransaction,
@@ -28,6 +29,7 @@ import {
   mapModelo303,
   parsePeriodToken,
   toDr303Record,
+  type CashUp,
   type CategoryReport,
   type CategoryReportMode,
   type LiquidationPeriod,
@@ -325,7 +327,8 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           dayCutover: clock.dayCutover,
           limit: 10,
         });
-        return { businessDay, vat: close.vat, cash: close.cash, counts: close.counts, topSellers };
+        const cash = await namedCashUp(tx, close.cash);
+        return { businessDay, vat: close.vat, cash, counts: close.counts, topSellers };
       });
       return c.json(result);
     }),
@@ -431,4 +434,27 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       return c.json({ orders });
     }),
   );
+}
+
+/**
+ * The cash-up with each device row's name. Read with no `active` filter, so a device revoked after
+ * it took money is still named on the day it took it.
+ */
+async function namedCashUp(tx: Transaction, cash: CashUp) {
+  const ids = cash.byOrigin.flatMap((row) => (row.deviceId === null ? [] : [row.deviceId]));
+  const named =
+    ids.length === 0
+      ? []
+      : await tx
+          .select({ id: devices.id, label: devices.label })
+          .from(devices)
+          .where(inArray(devices.id, ids));
+  const names = new Map(named.map((row) => [row.id, row.label]));
+  return {
+    ...cash,
+    byOrigin: cash.byOrigin.map((row) => ({
+      ...row,
+      deviceName: row.deviceId === null ? null : (names.get(row.deviceId) ?? null),
+    })),
+  };
 }

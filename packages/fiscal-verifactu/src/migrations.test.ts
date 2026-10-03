@@ -151,13 +151,12 @@ describe("registros_facturacion.entorno migration", () => {
     const db = suite.db;
     const error = await captureError(async () =>
       db.execute(sql`
-        insert into registros_facturacion (id, till_id, source, device_id, node_id, sif_id, sale_id,
+        insert into registros_facturacion (id, source, device_id, node_id, sif_id, sale_id,
           secuencia, tipo_registro,
           id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
           primer_registro, sistema_informatico,
           fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno, creado_en)
-        values (${newId()}, ${"00000000-0000-4000-8000-000000000000"},
-          'device', ${"00000000-0000-4000-8000-000000000000"},
+        values (${newId()}, 'device', ${"00000000-0000-4000-8000-000000000000"},
           ${"00000000-0000-4000-8000-000000000000"}, ${"00000000-0000-4000-8000-000000000000"},
           ${"00000000-0000-4000-8000-000000000000"}, 1,
           'alta', '89890001K', 'A/1', '2026-07-20', 'Waitron SL', true, '{}',

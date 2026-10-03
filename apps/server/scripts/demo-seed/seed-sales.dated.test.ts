@@ -82,7 +82,7 @@ describe("seedSales across a rate change", () => {
     );
 
     await seedSales(suite.db, {
-      venue: { tillId: venue.tillId, nodeId: venue.nodeId, seriesId: venue.seriesIds[0]! },
+      venue: { nodeId: venue.nodeId, seriesId: venue.seriesIds[0]! },
       locale: "es",
       days: 3,
       products: [
