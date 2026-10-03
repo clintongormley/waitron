@@ -90,6 +90,11 @@ into a third). All bills split from the visit remain attached to it. You can see
 outstanding amounts, the table's total outstanding balance, and settled bills when you need their
 receipts. **Paying does not free the table** (§8).
 
+_2026-10-03 pointer: a bill already invoiced and awaiting payment now MOVES to the surviving
+visit too — decision P13 of `docs/superpowers/plans/2026-09-28-table-actions.md`, made possible by
+that plan's Task 7 trigger change; only paid and abandoned bills stay on the absorbed visit. Pinned
+by the W4 case in `apps/server/src/parties.test.ts`._
+
 Staff-to-table assignments are deferred. The dashboard must be usable without them.
 
 ## 2. Take an order without submitting it accidentally
