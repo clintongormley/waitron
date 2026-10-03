@@ -929,17 +929,16 @@ body `{ watcherId: string | null }`; a missing key or a non-string, non-null val
 `printers.ticket_scope` stays in the schema, unread (W20). Leave the column and its check in
 `packages/db/src/schema/printers.ts` (the migrations must still match the schema,
 `scripts/migrations-match-schema.test.ts`) and replace the doc line above `printTicketScope`
-(`:12-13`) with: "Unused since slice 3d, which replaced the whole-order printer with watchers;
-dropped at the next reset (`docs/backlog.md`). A rebuild of `printers` is refused on a venue that has
-printed." `packages/db/src/schema/printing.test.ts:166-175` keeps pinning the column's default: it is
-still true.
+(`:12-13`) to say that existing printer rows retain the unused column until the planned venue reset.
+`packages/db/src/schema/printing.test.ts:166-175` keeps pinning the column's default: it is still
+true.
 
 **The screen** (`#renderRouting`):
-- The "One ticket per order" switch goes. In its place, a `<select name="watcherId">` labelled
+- The "One ticket per order" switch goes. In its place, a shared `<wt-combobox name="watcherId">` labelled
   "Prints a watcher's copies" / "Imprime las copias de un punto de seguimiento": first option, empty
   value, "No: prints the tickets of the stations below" / "No: imprime las comandas de las estaciones
   de abajo"; then each switched-on watcher by name (`listWatchers`, Task 3, watched as a live query
-  beside the screen's others, `:113-140`). The chosen option is marked with `.selected` (CLAUDE.md §3).
+  beside the screen's others, `:113-140`). The chosen value comes from `printer.watcherId`.
   Changing it calls `setPrinterWatcher` through the screen's `#mutate` (`:143-155`).
 - While a printer has a watcher, its station switches are `disabled` and one line under them says:
   "A printer that prints a watcher's copies prints no station tickets." / "Una impresora que imprime
