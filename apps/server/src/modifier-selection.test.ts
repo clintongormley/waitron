@@ -523,6 +523,39 @@ describe("editLineExtras", () => {
     });
   });
 
+  it("adds a weighted pick with its physical amount, priced portion and unit", () => {
+    const weighted = {
+      ...drinks,
+      items: [
+        {
+          ...drinks.items[0]!,
+          portion: "0.050",
+          price: "0.01",
+          unit: { id: "unit-kg", abbreviation: { en: "kg", es: "kg" }, precision: 3 },
+        },
+      ],
+    };
+
+    const result = editLineExtras(
+      [weighted],
+      products,
+      [{ listId: weighted.id, picks: [{ productId: "product-wine", quantity: 3 }] }],
+      { children: [], dishQuantity: "2" },
+    );
+
+    expect(result.added).toMatchObject([
+      {
+        productId: "product-wine",
+        quantity: 3,
+        physicalQuantity: "0.150",
+        priceQuantity: "0.050",
+        unitName: { en: "kg", es: "kg" },
+        unitPrecision: 3,
+        price: "0.01",
+      },
+    ]);
+  });
+
   it("adds a pick of a product no stored child holds, priced from its list now, and removes the child", () => {
     expect(
       edit(

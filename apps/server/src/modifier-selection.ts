@@ -269,6 +269,17 @@ export function editLineExtras<
         listId: list.id,
         vatClass: product.vatClass,
         quantity: pick.quantity,
+        ...(item.portion === undefined
+          ? {}
+          : {
+              physicalQuantity: multiplyDecimal(
+                decimal(item.portion),
+                decimal(String(pick.quantity)),
+              ),
+              priceQuantity: item.portion,
+              unitName: item.unit?.abbreviation,
+              unitPrecision: item.unit?.precision,
+            }),
       });
     }
   }
