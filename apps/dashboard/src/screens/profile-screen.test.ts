@@ -1083,14 +1083,25 @@ describe("your profile — validation, refusals and the remaining actions", () =
     expect(api.changePin).not.toHaveBeenCalled();
   });
 
-  it("requires the emailed code before confirming a new address", async () => {
-    const { el, api } = await mount({
-      getProfile: vi.fn().mockResolvedValue(await baseProfile({ pendingEmail: "new@example.com" })),
-    });
-    await click(el, "confirm-email");
-    await click(el, "save");
-    expect(api.confirmProfileEmail).not.toHaveBeenCalled();
-    expect(field(el, "setupCode").error).toBe(t("profile.code_required"));
+  it.each([
+    ["en-GB", "Enter the code from your email"],
+    ["es-ES", "Introduce el código de tu correo"],
+  ])("requires the emailed code before confirming a new address (%s)", async (locale, text) => {
+    const before = currentLocale();
+    setLocale(locale);
+    try {
+      const { el, api } = await mount({
+        getProfile: vi
+          .fn()
+          .mockResolvedValue(await baseProfile({ pendingEmail: "new@example.com" })),
+      });
+      await click(el, "confirm-email");
+      await click(el, "save");
+      expect(api.confirmProfileEmail).not.toHaveBeenCalled();
+      expect(field(el, "setupCode").error).toBe(text);
+    } finally {
+      setLocale(before);
+    }
   });
 
   it("requires the authenticator's code before finishing its setup", async () => {
