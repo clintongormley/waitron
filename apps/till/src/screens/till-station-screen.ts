@@ -346,7 +346,6 @@ export class TillStationScreen extends LitElement {
   }
 
   async #selectStation(id: string, replace = false): Promise<void> {
-    if (this.deviceMode) return;
     // No queue read happens before the first pick (`#reload` returns while no station is picked),
     // so there is nothing to reset and the clock keeps the creation time.
     if (this.activeStationId !== undefined && this.activeStationId !== id) {

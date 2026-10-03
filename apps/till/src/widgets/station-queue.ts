@@ -608,9 +608,11 @@ export class TillStationQueue extends LitElement {
    *  between the container's own refreshes. */
   readonly #clock = new TickingClock(this);
 
-  #bump(group: StationQueueGroup, item: StationQueueItem): void {
-    const to = NEXT[item.state];
-    if (to === undefined) return;
+  #bump(
+    group: StationQueueGroup,
+    item: StationQueueItem,
+    to: Exclude<TicketState, "queued">,
+  ): void {
     if (this.bumpMode === "ticket") {
       if (this.stationId === undefined) return;
       this.dispatchEvent(
@@ -1027,7 +1029,8 @@ export class TillStationQueue extends LitElement {
     const allergens = this.#allergens(item);
     const diet = dietBadges(item.asServedDiet, `line-diet-${item.id}`);
     const held = item.firedAt === null;
-    if (held || NEXT[item.state] === undefined) {
+    const next = NEXT[item.state];
+    if (held || next === undefined) {
       const stateModifier = held ? "held" : "terminal";
       return html`<span class="line state-${item.state} ${stateModifier}" data-item=${item.id}
         >${main}${customisation}${modifiers}${crossRefs}${allergens}${diet}</span
@@ -1037,7 +1040,7 @@ export class TillStationQueue extends LitElement {
       class="line state-${item.state}"
       data-item=${item.id}
       aria-label=${this.#bumpLabel(group)}
-      @click=${() => this.#bump(group, item)}
+      @click=${() => this.#bump(group, item, next)}
     >
       ${main}${customisation}${modifiers}${crossRefs}${allergens}${diet}
     </button>`;
