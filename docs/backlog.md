@@ -6557,7 +6557,7 @@ now takes its `migrations.lock` through `@waitron/store`'s `openLock(path, waitM
 busy timeout before trying the lock. `apply.concurrency.test.ts` checks the two-process migration
 order and `packages/store/src/migration-lock.test.ts` checks refusal and release. The earlier claim
 that this was the only non-test raw engine import outside `packages/store` was too broad: a 2026-10-03
-search also found `apps/server/src/recovery-lock.ts` and
+search of non-test files under `apps/` and `packages/` also found `apps/server/src/recovery-lock.ts` and
 `apps/server/scripts/cloud-backup-fixture.ts`. Their uses are outside W45's scope. **Next action:**
 review each remaining raw connection separately before deciding whether a shared store API fits.
 
