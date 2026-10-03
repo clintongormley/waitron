@@ -2,7 +2,7 @@ import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
 import { fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
-import { baseStyles } from "../base-styles.js";
+import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
 
@@ -24,6 +24,16 @@ export interface ComboboxOption {
   description?: string;
   /** Shown, matched by the search and reachable by the arrows, but never chosen or run. */
   disabled?: boolean;
+  /** How many levels the row is indented in the open list while nothing is searched for. */
+  depth?: number;
+  /** The closed trigger's text when this option is chosen, and the row's text and what it is
+   * matched on while something is searched for; `label` otherwise. */
+  valueLabel?: string;
+}
+
+/** What the closed trigger shows for an option, and what a search matches. */
+function closedText(option: ComboboxOption): string {
+  return option.valueLabel ?? option.label;
 }
 
 /** With `search="auto"`, the search box shows only when there are more options than this. */
@@ -40,6 +50,14 @@ export const DROPDOWN_ICONS: Record<string, string> = {
 };
 
 const TYPE_AHEAD_RESET_MS = 500;
+
+interface TriggerParts {
+  id: string;
+  invalid: boolean;
+  describedBy: string[];
+  selectedText: string;
+  shownText: string;
+}
 
 const NAVIGATION_KEYS = ["ArrowDown", "ArrowUp", "Home", "End"] as const;
 type NavigationKey = (typeof NAVIGATION_KEYS)[number];
@@ -80,7 +98,7 @@ export class WtCombobox extends LitElement {
         cursor: pointer;
       }
 
-      :host([stable-width]) .trigger {
+      :host([stable-width]:not([appearance="link"])) .trigger {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
       }
@@ -182,6 +200,7 @@ export class WtCombobox extends LitElement {
         gap: var(--wt-space-2);
         min-height: var(--wt-dropdown-row-height);
         padding: var(--wt-space-2) var(--wt-space-3);
+        padding-inline-start: calc(var(--wt-space-3) + var(--option-depth, 0) * var(--wt-space-4));
         border-radius: var(--wt-radius-md);
         cursor: pointer;
       }
@@ -273,6 +292,48 @@ export class WtCombobox extends LitElement {
       .add {
         font-weight: var(--wt-font-weight-bold);
       }
+
+      /* As wide as its words, so the list it opens starts under the value's first letter. */
+      .trigger.link {
+        width: fit-content;
+        min-width: var(--wt-tap-min);
+        max-width: 100%;
+        min-height: var(--wt-tap-min);
+        padding: 0;
+        border: 0;
+        background: none;
+        color: var(--wt-color-text-muted);
+        font: inherit;
+        font-size: var(--wt-font-size-sm);
+      }
+
+      /* Inline inside .link-text, so a long value wraps and the action word follows its last line. */
+      .trigger.link .value {
+        text-wrap: wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .link-text {
+        min-width: 0;
+      }
+
+      .action {
+        margin-inline-start: var(--wt-space-2);
+        color: var(--wt-color-primary-text);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .trigger.link:disabled {
+        cursor: not-allowed;
+      }
+
+      .trigger.link:disabled .action {
+        color: var(--wt-color-text-muted);
+      }
+
+      .link-name {
+        ${visuallyHiddenStyles}
+      }
     `,
   ];
 
@@ -311,6 +372,11 @@ export class WtCombobox extends LitElement {
   @property() hint = "";
   /** Names the trigger by `label` without drawing it, and makes the field compact. */
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
+  /** `"link"` draws the trigger as inline text, the chosen value followed by `actionLabel`, with no
+   * field box, drawn label or chevron; `label` still names it, as hidden text before the value. */
+  @property({ reflect: true }) appearance: "field" | "link" = "field";
+  /** The action word a link trigger shows after its value, such as "Change". */
+  @property({ attribute: "action-label" }) actionLabel = "";
 
   @state() private expanded = false;
   @state() private searchText = "";
@@ -341,7 +407,7 @@ export class WtCombobox extends LitElement {
   private filter(options: ComboboxOption[]): ComboboxOption[] {
     const query = this.searchText.trim().toLowerCase();
     if (!query) return options;
-    return options.filter((option) => option.label.toLowerCase().includes(query));
+    return options.filter((option) => closedText(option).toLowerCase().includes(query));
   }
 
   private get trimmedSearch(): string {
@@ -352,7 +418,7 @@ export class WtCombobox extends LitElement {
   private get showAddRow(): boolean {
     if (!this.allowAdd || !this.trimmedSearch) return false;
     const query = this.trimmedSearch.toLowerCase();
-    return !this.options.some((option) => option.label.toLowerCase() === query);
+    return !this.options.some((option) => closedText(option).toLowerCase() === query);
   }
 
   /** Keyboard navigation counts the add row as the last row, after the filtered options. */
@@ -378,12 +444,14 @@ export class WtCombobox extends LitElement {
     if (this.multiple) {
       if (this.values.length === 0) return "";
       if (this.values.length === 1) {
-        return this.options.find((o) => !o.action && o.value === this.values[0])?.label ?? "";
+        const chosen = this.options.find((o) => !o.action && o.value === this.values[0]);
+        return chosen ? closedText(chosen) : "";
       }
       return this.countLabel(this.values.length);
     }
     if (this.value === "" && !this.showEmptyOption) return "";
-    return this.options.find((o) => !o.action && o.value === this.value)?.label ?? "";
+    const chosen = this.options.find((o) => !o.action && o.value === this.value);
+    return chosen ? closedText(chosen) : "";
   }
 
   // Refused while disabled because closing the panel on disable is not enough: a keystroke pressed
@@ -735,11 +803,12 @@ export class WtCombobox extends LitElement {
   /** A described option is named by its label alone, so the description is read once, as the
    * description, rather than run into the name. */
   private renderOptionText(option: ComboboxOption, rowId: string) {
+    const text = this.trimmedSearch ? closedText(option) : option.label;
     if (!option.description) {
-      return html`<span class="option-label">${option.label}</span>`;
+      return html`<span class="option-label">${text}</span>`;
     }
     return html`<span class="option-text"
-      ><span class="option-label" id=${`${rowId}-label`}>${option.label}</span
+      ><span class="option-label" id=${`${rowId}-label`}>${text}</span
       ><span class="option-description" id=${`${rowId}-description`}
         >${option.description}</span
       ></span
@@ -750,9 +819,12 @@ export class WtCombobox extends LitElement {
     const selected = this.isSelected(option);
     const rowId = `${this.listboxId}-${index}`;
     const described = Boolean(option.description);
+    // A search lists matches from every level, each shown by its full closed text, so none is indented.
+    const depth = this.trimmedSearch ? 0 : (option.depth ?? 0);
     return html`
       <li
         id=${rowId}
+        style=${depth > 0 ? `--option-depth: ${depth}` : nothing}
         class=${classMap({ option: true, active: index === this.activeIndex, primary: Boolean(option.primary) })}
         role="option"
         aria-selected=${selected}
@@ -814,78 +886,126 @@ export class WtCombobox extends LitElement {
     return rows;
   }
 
-  override render() {
-    const triggerId = this.name || this.generatedTriggerId;
-    const hasError = this.error !== "";
-    const hasHint = this.hint !== "";
-    const invalid = this.invalid || hasError;
-    const describedBy = [...(hasHint ? [this.hintId] : []), ...(hasError ? [this.errorId] : [])];
+  private renderField({
+    id: triggerId,
+    invalid,
+    describedBy,
+    selectedText,
+    shownText,
+  }: TriggerParts) {
     const showLabel = this.label !== "" && !this.hideLabel;
-    const selectedText = this.selectedText;
-    const shownText = selectedText || this.placeholder || this.hint;
     const triggerName = this.hideLabel && this.label ? this.label : !this.label && this.ariaLabel;
     return html`
-      <div class="row">
-        <div
-          class="field"
-          part="field"
-          data-label=${fieldLabelState({
-            value: selectedText,
-            hint: this.hint,
-            placeholder: this.placeholder,
-          })}
-          ?data-invalid=${invalid}
-          ?data-disabled=${this.disabled}
-          ?data-compact=${!showLabel}
-          ?data-open=${this.expanded}
+      <div
+        class="field"
+        part="field"
+        data-label=${fieldLabelState({
+          value: selectedText,
+          hint: this.hint,
+          placeholder: this.placeholder,
+        })}
+        ?data-invalid=${invalid}
+        ?data-disabled=${this.disabled}
+        ?data-compact=${!showLabel}
+        ?data-open=${this.expanded}
+      >
+        ${
+          showLabel
+            ? html`<label
+                class="field-label"
+                id=${this.labelId}
+                for=${triggerId}
+                @pointerdown=${this.onLabelPointerdown}
+                @mousedown=${this.onLabelMousedown}
+                @click=${this.onLabelClick}
+                ><span class="field-label-text">${this.label}</span>${
+                  this.required
+                    ? html`<span class="required" data-required aria-hidden="true">*</span>`
+                    : nothing
+                }</label
+              >`
+            : nothing
+        }
+        <button
+          type="button"
+          id=${triggerId}
+          name=${this.name || nothing}
+          class="field-control trigger"
+          aria-haspopup="listbox"
+          aria-expanded=${this.expanded}
+          aria-labelledby=${showLabel ? this.labelId : nothing}
+          aria-label=${triggerName || nothing}
+          aria-invalid=${invalid}
+          aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
+          popovertarget="panel"
+          ?disabled=${this.disabled}
+          @click=${this.onTriggerClick}
+          @keydown=${this.onTriggerKeydown}
         >
+          <span class=${selectedText ? "value" : "value placeholder"}>${shownText}</span>
           ${
-            showLabel
-              ? html`<label
-                  class="field-label"
-                  id=${this.labelId}
-                  for=${triggerId}
-                  @pointerdown=${this.onLabelPointerdown}
-                  @mousedown=${this.onLabelMousedown}
-                  @click=${this.onLabelClick}
-                  ><span class="field-label-text">${this.label}</span>${
-                    this.required
-                      ? html`<span class="required" data-required aria-hidden="true">*</span>`
-                      : nothing
-                  }</label
-                >`
+            this.stableWidth
+              ? this.options
+                  .filter((option) => !option.action)
+                  .map(
+                    (option) =>
+                      html`<span class="width-option" aria-hidden="true"
+                        >${closedText(option)}</span
+                      >`,
+                  )
               : nothing
           }
-          <button
-            type="button"
-            id=${triggerId}
-            name=${this.name || nothing}
-            class="field-control trigger"
-            aria-haspopup="listbox"
-            aria-expanded=${this.expanded}
-            aria-labelledby=${showLabel ? this.labelId : nothing}
-            aria-label=${triggerName || nothing}
-            aria-invalid=${invalid}
-            aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
-            popovertarget="panel"
-            ?disabled=${this.disabled}
-            @click=${this.onTriggerClick}
-            @keydown=${this.onTriggerKeydown}
-          >
-            <span class=${selectedText ? "value" : "value placeholder"}>${shownText}</span>
-            ${
-              this.stableWidth
-                ? this.options
-                    .filter((option) => !option.action)
-                    .map(
-                      (option) =>
-                        html`<span class="width-option" aria-hidden="true">${option.label}</span>`,
-                    )
-                : nothing
-            }
-            <wt-icon class="chevron" name="chevron-down"></wt-icon>
-          </button>
-        </div>
+          <wt-icon class="chevron" name="chevron-down"></wt-icon>
+        </button>
+      </div>
+    `;
+  }
+
+  private renderLinkTrigger({
+    id: triggerId,
+    invalid,
+    describedBy,
+    selectedText,
+    shownText,
+  }: TriggerParts) {
+    const name = this.label || this.ariaLabel;
+    return html`<button
+      type="button"
+      id=${triggerId}
+      name=${this.name || nothing}
+      class="trigger link"
+      aria-haspopup="listbox"
+      aria-expanded=${this.expanded}
+      aria-invalid=${invalid}
+      aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
+      popovertarget="panel"
+      ?disabled=${this.disabled}
+      @click=${this.onTriggerClick}
+      @keydown=${this.onTriggerKeydown}
+    >
+      <span class="link-text"
+        >${name ? html`<span class="link-name">${name}: </span>` : nothing}<span
+          class=${selectedText ? "value" : "value placeholder"}
+          >${shownText}</span
+        >${this.actionLabel ? html` <span class="action">${this.actionLabel}</span>` : nothing}</span
+      >
+    </button>`;
+  }
+
+  override render() {
+    const hasError = this.error !== "";
+    const hasHint = this.hint !== "";
+    const selectedText = this.selectedText;
+    const trigger: TriggerParts = {
+      id: this.name || this.generatedTriggerId,
+      invalid: this.invalid || hasError,
+      describedBy: [...(hasHint ? [this.hintId] : []), ...(hasError ? [this.errorId] : [])],
+      selectedText,
+      shownText: selectedText || this.placeholder || this.hint,
+    };
+    return html`
+      <div class="row">
+        ${this.appearance === "link" ? this.renderLinkTrigger(trigger) : this.renderField(trigger)}
         <slot name="help"></slot>
       </div>
       <div

@@ -390,6 +390,80 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
     await expectNoA11yViolations(host);
   });
 
+  const TREE: ComboboxOption[] = [
+    { value: "", label: "Sin categoría" },
+    { value: "bebidas", label: "Bebidas", valueLabel: "Bebidas", depth: 0 },
+    { value: "alcohol", label: "Con alcohol", valueLabel: "Bebidas › Con alcohol", depth: 1 },
+    {
+      value: "cocteles",
+      label: "Cócteles",
+      valueLabel: "Bebidas › Con alcohol › Cócteles",
+      depth: 2,
+    },
+  ];
+
+  test("open, with rows indented by depth", async () => {
+    const el = await openThemed(
+      '<wt-combobox label="Categoría" value="cocteles"></wt-combobox>',
+      theme,
+      TREE,
+    );
+    // Without this the scan could pass on a list that indented nothing.
+    const [, , , deepest] = el.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]');
+    expect(parseFloat(getComputedStyle(deepest!).paddingInlineStart)).toBeGreaterThan(
+      parseFloat(
+        getComputedStyle(el.shadowRoot!.querySelector('[role="option"]')!).paddingInlineStart,
+      ),
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  async function mountLink(attrs: string): Promise<WtCombobox> {
+    const el = (await mountThemed(
+      `<wt-combobox label="Categoría" appearance="link" ${attrs}></wt-combobox>`,
+      theme,
+    )) as WtCombobox;
+    el.options = TREE;
+    el.actionLabel = "Cambiar";
+    await el.updateComplete;
+    // Without this the scan could pass on a field-box trigger.
+    expect(el.shadowRoot!.querySelector(".field")).toBeNull();
+    return el;
+  }
+
+  test("link appearance, closed, with a value chosen", async () => {
+    await mountLink('value="cocteles"');
+    await expectNoA11yViolations(host);
+  });
+
+  test("link appearance, closed, with nothing chosen", async () => {
+    await mountLink('show-empty-option value=""');
+    await expectNoA11yViolations(host);
+  });
+
+  test("link appearance, focused", async () => {
+    const el = await mountLink('value="cocteles"');
+    el.focus();
+    await expectNoA11yViolations(host);
+  });
+
+  test("link appearance, open", async () => {
+    const el = await mountLink('value="cocteles"');
+    await userEvent.click(el.shadowRoot!.querySelector(".trigger")!);
+    expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
+  test("link appearance, with an error", async () => {
+    await mountLink('value="cocteles" error="Elige una categoría"');
+    await expectNoA11yViolations(host);
+  });
+
+  test("link appearance, disabled", async () => {
+    await mountLink('value="cocteles" disabled');
+    await expectNoA11yViolations(host);
+  });
+
   test("opened from the keyboard with a search box and a row active", async () => {
     const el = (await mountThemed(
       '<wt-combobox label="Etiquetas" value="vegan"></wt-combobox>',

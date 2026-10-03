@@ -98,3 +98,18 @@ for (const { tag } of interactiveComponents) {
     ).toBeGreaterThanOrEqual(44);
   });
 }
+
+test('wt-combobox with appearance="link" delegates focus to a trigger that clears the 44×44 tap target', async () => {
+  const el = await mountNarrow("wt-combobox");
+  el.setAttribute("appearance", "link");
+  await el.updateComplete;
+
+  el.focus();
+  const active = el.shadowRoot!.activeElement;
+  expect(active).not.toBeNull();
+  // The link trigger draws no field box, so the field's own min-width cannot be what holds it.
+  expect(el.shadowRoot!.querySelector(".field")).toBeNull();
+  const rect = active!.getBoundingClientRect();
+  expect(rect.width).toBeGreaterThanOrEqual(44);
+  expect(rect.height).toBeGreaterThanOrEqual(44);
+});
