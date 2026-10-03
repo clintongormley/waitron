@@ -1343,10 +1343,11 @@ button)"_, and _"each one doesn't need a box around it, like we've removed them 
 etc"_. Built: `dashboard-allergen-dietary-picker` draws each field as one borderless line, its
 name in bold and then its values or "None specified" (`modifiers.none_specified`, which replaced
 `modifiers.none_selected`). The line is a button named "Allergens: Milk, Eggs, edit"
-(`modifiers.line_edit_name`); a click or Enter swaps it for a labelled multiple `wt-combobox` with
-focus in it, Escape swaps it back with focus on the line (without closing the product's window),
-and focus leaving the combobox swaps it back. The product picker still offers no "may contain", a stored allergen keeps its presence when
-another is added, and a variant's hints of its parent's values are unchanged.
+(`modifiers.edit_named`); a click or Enter swaps it for a labelled multiple `wt-combobox` with
+focus in it, Escape swaps it back with focus on the line (the second Escape, when the first closed
+the open list) without closing the product's window, and focus leaving the combobox swaps it back.
+The product picker still offers no "may contain", a stored allergen keeps its presence when another
+is added, and a variant's hints of its parent's values are unchanged.
 
 **No box around Pricing (A214) — DONE (#1065).** The owner: _"Pricing also doesn't need the box around it"_.
 Built: `renderPrice` draws a borderless `fieldset class="group"` whose legend is the same upper-case

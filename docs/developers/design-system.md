@@ -1048,7 +1048,7 @@ shows a product description today (the reader check in A220, `docs/backlog.md`).
   back": offering both would read as one thing and save as another.
 - **The allergen and dietary pickers**: a muted hint line beside each
   shows the fallback value while the stored value is empty, and goes away once the record sets its
-  own. The allergen and dietary lines name the values in grey italic ("Allergens: Milk"), "None"
+  own. The allergen and dietary hint lines name the values in grey italic ("Allergens: Milk"), "None"
   where the parent has none (`editor.allergens_none`, `editor.diet_none`) and, for allergens the
   parent has not had reviewed, "Not yet reviewed" (`editor.allergens_unreviewed`) — never "None",
   which would claim a reviewed empty set. A variant's price in the variant table, where it has none of
@@ -1133,6 +1133,13 @@ Two notes on the primitives this pattern uses, both in the table above:
   (English and Spanish, with a unit button and a fixed unit). Re-measured 2026-10-01 for A179 in
   headless Chromium (Vitest browser mode, Playwright 1.63.0, macOS) in `--wt-font-family`: "9999.99"
   is 55.5px at 14px, against 59.0px at 15px in the same run; the box figures were not re-measured.
+
+Inside Nutritional info, `dashboard-allergen-dietary-picker` draws each field as one borderless
+line: its name in bold, then its values or "None specified" (`modifiers.none_specified`). The line is
+a native button named "Allergens: Milk, Eggs, edit" (`modifiers.edit_named`). A click or Enter swaps
+it for a multiple `wt-combobox` with focus in it. Escape swaps it back with focus on the line (the
+second Escape, when the first closed the open list), without closing the window around it; moving
+focus out of the combobox swaps it back too.
 
 ### Dashboard banner
 
