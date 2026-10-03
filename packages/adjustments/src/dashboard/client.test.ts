@@ -40,7 +40,7 @@ describe("AdjustmentsApi", () => {
     expect(await api(fetchImpl).listReasons()).toEqual([reason]);
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/adjustments/reasons?includeInactive=true",
-      { method: "GET", credentials: "include" },
+      { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
     );
   });
 
@@ -105,6 +105,7 @@ describe("AdjustmentsApi", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/adjustments/settings", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
     await api(fetchImpl, true).getSettings();
     const init = fetchImpl.mock.calls[1]![1] as RequestInit;
@@ -137,9 +138,12 @@ describe("AdjustmentsApi", () => {
     expect(fetchImpl.mock.calls).toEqual([
       [
         "/management-api/adjustments/report?from=2026-09-01&to=2026-09-02",
-        { method: "GET", credentials: "include" },
+        { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
       ],
-      ["/management-api/adjustments/report", { method: "GET", credentials: "include" }],
+      [
+        "/management-api/adjustments/report",
+        { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
+      ],
     ]);
   });
 

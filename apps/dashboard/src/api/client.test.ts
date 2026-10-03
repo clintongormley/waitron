@@ -78,6 +78,7 @@ describe("DashboardApi", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue-service/routing", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
   it("uses the discovery, adoption and separate reader-management routes", async () => {
@@ -296,6 +297,7 @@ describe("DashboardApi", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -307,6 +309,7 @@ describe("DashboardApi", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff-roster", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -412,10 +415,12 @@ describe("DashboardApi", () => {
     expect(fetchImpl).toHaveBeenNthCalledWith(1, "/management-api/email", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
     expect(fetchImpl).toHaveBeenNthCalledWith(2, "/management-api/email/message/mail%2F1", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
   it("savePerson PUTs the complete administrative edit", async () => {
@@ -502,6 +507,7 @@ describe("DashboardApi", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/passkey/signals", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -537,6 +543,7 @@ describe("DashboardApi", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/catalogues", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -564,6 +571,7 @@ describe("DashboardApi", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/locations/loc1/catalogues", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -609,6 +617,7 @@ describe("DashboardApi", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/categories", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -716,6 +725,7 @@ describe("DashboardApi", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/catalogues/c1/products", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -766,6 +776,7 @@ describe("DashboardApi", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/receipt", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -812,6 +823,7 @@ describe("DashboardApi", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/service-statuses", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -889,6 +901,7 @@ describe("DashboardApi", () => {
     expect(fetchImpl).toHaveBeenCalledWith("https://dash.example/management-api/staff", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -926,6 +939,7 @@ describe("DashboardApi — roster", () => {
       {
         method: "GET",
         credentials: "include",
+        signal: expect.any(AbortSignal),
       },
     );
   });
@@ -1003,6 +1017,7 @@ describe("DashboardApi — roster", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/locations", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 });
@@ -1026,6 +1041,7 @@ describe("DashboardApi — approvals", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/swaps", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1060,6 +1076,7 @@ describe("DashboardApi — approvals", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/absences", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1094,7 +1111,7 @@ describe("DashboardApi — planned vs actual", () => {
     expect(await api.getPlannedVsActual("loc-1", "2026-03-02", "2026-03-09")).toEqual(rows);
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/planned-vs-actual?locationId=loc-1&from=2026-03-02&to=2026-03-09",
-      { method: "GET", credentials: "include" },
+      { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
     );
   });
 });
@@ -1115,6 +1132,7 @@ describe("DashboardApi — whoami + my schedule (staff self-service)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/session/me", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1150,7 +1168,7 @@ describe("DashboardApi — whoami + my schedule (staff self-service)", () => {
     expect(await api.listMyShifts("2026-05-04", "2026-05-11")).toEqual(rows);
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/me/schedule/shifts?from=2026-05-04&to=2026-05-11",
-      { method: "GET", credentials: "include" },
+      { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
     );
   });
 
@@ -1173,6 +1191,7 @@ describe("DashboardApi — whoami + my schedule (staff self-service)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/me/schedule/swaps", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1218,6 +1237,7 @@ describe("DashboardApi — whoami + my schedule (staff self-service)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/me/schedule/absences", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1272,6 +1292,7 @@ describe("DashboardApi — purchase invoices", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/purchase-invoices", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1360,6 +1381,7 @@ describe("DashboardApi — ingredients + product recipe", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/ingredients", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1416,6 +1438,7 @@ describe("DashboardApi — ingredients + product recipe", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/products/p1/recipe", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1455,6 +1478,7 @@ describe("DashboardApi — floor plan (zones + tables)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/zones", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1531,6 +1555,7 @@ describe("DashboardApi — floor plan (zones + tables)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/tables", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1676,6 +1701,7 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/stations", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1781,6 +1807,7 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/courses", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1855,6 +1882,7 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/fire-control", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1912,6 +1940,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1935,6 +1964,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/pairing-mode", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1974,6 +2004,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/join-requests?kind=device", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1984,6 +2015,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/join-requests?kind=print_agent", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -1994,6 +2026,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/join-requests/j1/challenge", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -2193,6 +2226,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/locales", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -2341,6 +2375,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/print-agents", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -2383,6 +2418,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -2481,6 +2517,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/discovered-printers", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -2587,6 +2624,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/print-jobs/j1/preview", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -2597,6 +2635,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/print-jobs", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -2673,6 +2712,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1/stations", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -2718,6 +2758,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/tills", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -2804,6 +2845,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/reports/overview", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -2845,7 +2887,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
     expect(await api.getDailyClose("2026-08-28")).toEqual(close);
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/reports/daily-close?businessDay=2026-08-28",
-      { method: "GET", credentials: "include" },
+      { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
     );
   });
 
@@ -2866,7 +2908,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
     expect(await api.getSalesPeriod("2026-08-01", "2026-08-28")).toEqual(period);
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/reports/period?from=2026-08-01&to=2026-08-28",
-      { method: "GET", credentials: "include" },
+      { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
     );
   });
 
@@ -2895,12 +2937,12 @@ describe("DashboardApi — reporting (sales & takings)", () => {
     expect(await api.getCategorySales("2026-08-01", "2026-08-28", "current", true)).toEqual(report);
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/reports/categories?from=2026-08-01&to=2026-08-28&mode=current&extrasIntoDish=true",
-      { method: "GET", credentials: "include" },
+      { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
     );
     await api.getCategorySales("2026-08-02", "2026-08-02", "at_time_of_sale", false);
     expect(fetchImpl).toHaveBeenLastCalledWith(
       "/management-api/reports/categories?from=2026-08-02&to=2026-08-02&mode=at_time_of_sale&extrasIntoDish=false",
-      { method: "GET", credentials: "include" },
+      { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
     );
   });
 
@@ -2912,6 +2954,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/reports/printers", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -2961,6 +3004,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/reports/overdue-orders", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 });
@@ -2974,6 +3018,7 @@ describe("DashboardApi — recent logs and log verbosity", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/diagnostics/recent?limit=50", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -2984,6 +3029,7 @@ describe("DashboardApi — recent logs and log verbosity", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/diagnostics/recent?limit=200", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -2995,6 +3041,7 @@ describe("DashboardApi — recent logs and log verbosity", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/diagnostics/verbosity", {
       method: "GET",
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 

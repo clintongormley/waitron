@@ -11,6 +11,8 @@ const requestId = "11111111-1111-4111-8111-111111111111",
 async function flush(el: CloudServicesScreen) {
   await new Promise((r) => setTimeout(r, 0));
   await el.updateComplete;
+  await new Promise((r) => setTimeout(r, 0));
+  await el.updateComplete;
 }
 function click(el: CloudServicesScreen, id: string) {
   el.shadowRoot!.querySelector<HTMLElement>(`#${id}`)!.click();
