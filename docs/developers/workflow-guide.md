@@ -169,14 +169,20 @@ logging `mdns.responding`. The guard landed in #380.
 
 **The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or
 `wa-wt onboarding <worktree-name>`** (`~/workspace/tools`),
-never with a bare `pnpm dev*`. **The dev database is shared by every checkout** — that part has not
-changed — but what shares it is a STATE DIRECTORY on the host, not a container. `wa-wt` runs every
-worktree's `pnpm dev` and `pnpm dev:setup` with `WAITRON_STATE_DIR` pointing at the same
-`$HOME/workspace/.waitron-dev/box`, and the venue directory, two SQLite files, is derived from that
-state directory by `defaultDevVenueDir` (`apps/server/scripts/dev-setup.ts`) — so every worktree
-opens the same files by construction rather than by two settings agreeing. `apps/server/.env`
-describes that venue (venue ids, credentials key); it is gitignored and absent from a fresh
-worktree, which is why `wa-wt` copies the newest copy any checkout holds.
+never with a bare `pnpm dev*`. The first port slot uses
+`$HOME/workspace/.waitron-dev/box`. Its venue directory is derived from that state directory by
+`defaultDevVenueDir` (`apps/server/scripts/dev-setup.ts`). The gitignored `apps/server/.env`
+describes that venue (venue ids, credentials key), so `wa-wt` copies its newest copy into another
+worktree that takes the first slot. Starting a second worktree while the first runs gives it ports
+5290, 5291, 5292, 8180 and 9210 for till, dashboard, setup, server and print agent. Its own
+`$HOME/workspace/.waitron-dev/instances/<name>/box/venue` and `.env` are provisioned separately.
+The two venues are directories of SQLite files on the host, not containers.
+
+For side-by-side visual checks, start the first worktree, then start the second without taking the
+first down. `wa-wt ls` shows which name owns each URL. While both run, name the instance in
+`wa-wt logs <name>`, `wa-wt down <name>`, and `wa-wt reset demo <name>`; a bare command refuses to
+guess. Stopping one leaves the other's listeners and venue open. A third start refuses until a port
+slot is free.
 
 **Compose holds nothing but the practice email inbox.** `docker-compose.yml` declares one service,
 `mailpit`, and no container holds any part of a venue, so there is no volume a reset could clear.
@@ -184,18 +190,19 @@ It is started because `pnpm dev:setup` and `pnpm dev:reset` each begin
 `docker compose up -d --wait mailpit`. Compose names its project after the directory, so an
 unqualified `docker compose up` from a worktree starts a SECOND mailpit fighting for the fixed 1025
 and 8025 ports, which is the reason the rule at the top of this paragraph exists — `wa-wt` brings
-the shared one up under `COMPOSE_PROJECT_NAME=waitron`, copies only the current target's `.env`, and
-follows the log.
+the shared one up under `COMPOSE_PROJECT_NAME=waitron`. It copies `.env` between worktrees sharing
+the first slot and keeps the second slot's `.env` with its own venue.
 
-Changing target REMOVES THE VENUE DIRECTORY, keeping the shared development CA. Two steps do it:
-`wa-wt`'s `reset_target` clears everything under `$HOME/workspace/.waitron-dev/box` except `tls`,
-and the `dev:reset` it then runs calls `resetVenueDir` (`apps/server/scripts/dev-setup.ts`), an
-`rm -rf` of the venue directory whole. That comment says why the whole directory rather than
+Changing target REMOVES THAT INSTANCE'S VENUE DIRECTORY, keeping its development CA. Two steps do
+it: `wa-wt`'s `reset_target` clears that instance's box state except `tls`, and the `dev:reset` it
+then runs calls `resetVenueDir` (`apps/server/scripts/dev-setup.ts`), an `rm -rf` of the venue
+directory whole. That comment says why the whole directory rather than
 `venue.db`: the engine keeps write-ahead sidecars beside each file, and a venue file removed while
 its `-wal` stays behind reopens on the OLD tail and answers wrongly without erroring.
-`wa-wt reset demo [name]` and `wa-wt reset onboarding [name]` rebuild the selected target and copy
-its new `.env` to every checkout. Cost: a round trip each on 2026-09-05 and 2026-09-06 while the
-two rules were manual. Detail: `docs/ui-review.md` → _Running the stack from a worktree_.
+`wa-wt reset demo [name]` and `wa-wt reset onboarding [name]` rebuild the selected target. The first
+slot copies its new `.env` to other first-slot checkouts; the second keeps its own. Cost: a round
+trip each on 2026-09-05 and 2026-09-06 while the original copy and reset rules were manual. Detail:
+`docs/ui-review.md` → _Running the stack from a worktree_.
 
 Writing to that database from outside the server — a seeding script, or any other process that
 opens the venue directory — no longer puts your change on an open dashboard at the moment you write
@@ -210,8 +217,8 @@ stream's session re-checks (`apps/server/src/live-api.test.ts`, "delivers a writ
 withTransaction"). A write through `withTransaction` in a DIFFERENT process is the one that is lost:
 it drains the rows into a process with no dashboard attached.
 
-What does NOT remove that directory is the common case: switching between worktrees on the same
-target. A target change removes it, and so does `wa-wt reset` (read the script before assuming that
+What does NOT remove the first slot's directory is switching it between worktrees on the same
+target. A target change removes the selected instance's directory, and so does `wa-wt reset` (read the script before assuming that
 is the whole list — `ensure_env` has a third path). What `dev:setup` leaves behind is seeded, so
 between removals the directory keeps demo rows written weeks and branches ago. A branch's migrations can then be unable to run over them:
 migrations here carry no data-preservation code on purpose (`CLAUDE.md` §3 — no

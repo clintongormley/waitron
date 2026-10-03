@@ -45,6 +45,6 @@ export async function prepareDevEnv(env: NodeJS.ProcessEnv): Promise<NodeJS.Proc
   return {
     ...env,
     WAITRON_STATE_DIR: stateDir,
-    WAITRON_SERVER_URL: `${hasLeaf ? "https" : "http"}://127.0.0.1:8080`,
+    WAITRON_SERVER_URL: `${hasLeaf ? "https" : "http"}://127.0.0.1:${Number(env.WAITRON_HTTP_PORT || 8080)}`,
   };
 }

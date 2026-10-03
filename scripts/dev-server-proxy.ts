@@ -19,7 +19,8 @@ export function devServerProxy(
   const hasLeaf =
     existsSync(join(stateDir, "tls", "server.crt")) &&
     existsSync(join(stateDir, "tls", "server.key"));
+  const port = Number(process.env.WAITRON_HTTP_PORT || 8080);
   return hasLeaf
-    ? { target: "https://127.0.0.1:8080", secure: false }
-    : { target: "http://127.0.0.1:8080" };
+    ? { target: `https://127.0.0.1:${port}`, secure: false }
+    : { target: `http://127.0.0.1:${port}` };
 }

@@ -28,9 +28,10 @@ itself:
 
 ## Running it in dev
 
-The till is a same-origin front end: run the server's till API on `:8080` and the Vite dev server on
-`:5190`. The proxy inspects the shared box state and sends `/api` and `/media` to HTTP for a
-leaf-less demo or HTTPS for a server using its persisted self-signed leaf (`vite.config.ts`).
+The till is a same-origin front end: the default stack runs the server's till API on `:8080` and
+Vite on `:5190`. `wa-wt ls` shows the ports when you run a second worktree beside it. The proxy
+inspects that stack's box state and sends `/api` and `/media` to HTTP for a leaf-less demo or HTTPS
+for a server using its persisted self-signed leaf (`vite.config.ts`).
 
 1. **Provision a venue.** `waitron-provision venue` creates the taxpayer row, location, till, node
    (SIF) and invoice series a sellable venue needs — see

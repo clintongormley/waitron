@@ -31,7 +31,7 @@ export default defineConfig({
   // `exports` map. This line is read as text by `scripts/brand-icons.test.ts`.
   publicDir: fileURLToPath(new URL("../../packages/ui/brand/public", import.meta.url)),
   server: {
-    port: 5190,
+    port: Number(process.env.WAITRON_TILL_VITE_PORT || 5190),
     // A silently bumped port would serve the till where nobody points a browser.
     strictPort: true,
     proxy: {

@@ -10,7 +10,7 @@ export default defineConfig({
   publicDir: fileURLToPath(new URL("../../packages/ui/brand/public", import.meta.url)),
   base: "/manage/",
   server: {
-    port: 5191,
+    port: Number(process.env.WAITRON_DASHBOARD_VITE_PORT || 5191),
     // A surprise port would no longer match the browser's proxy — see apps/till/vite.config.ts.
     strictPort: true,
     proxy: {

@@ -65,6 +65,44 @@ describe("development server proxy", () => {
     });
   });
 
+  it("routes a shifted stack to its own server port and gives each app its assigned listener", async () => {
+    const ports = {
+      WAITRON_TILL_VITE_PORT: "5290",
+      WAITRON_DASHBOARD_VITE_PORT: "5291",
+      WAITRON_SETUP_VITE_PORT: "5292",
+      WAITRON_HTTP_PORT: "8180",
+    };
+    const original = Object.fromEntries(Object.keys(ports).map((key) => [key, process.env[key]]));
+    const priorStateDir = process.env.WAITRON_STATE_DIR;
+    try {
+      Object.assign(process.env, ports);
+      process.env.WAITRON_STATE_DIR = join(stateDir, "absent");
+      for (const [app, port] of [
+        ["till", 5290],
+        ["dashboard", 5291],
+        ["setup", 5292],
+      ] as const) {
+        const configPath = join(REPO_ROOT, "apps", app, "vite.config.ts");
+        const exported = (await import(
+          `${pathToFileURL(configPath).href}?stack=shifted-${app}`
+        )) as { default: UserConfigExport };
+        const config = staticConfig(exported.default);
+        expect(config.server?.port).toBe(port);
+        expect(config.server?.strictPort).toBe(true);
+        for (const proxy of Object.values(config.server?.proxy ?? {})) {
+          expect(proxy).toMatchObject({ target: "http://127.0.0.1:8180" });
+        }
+      }
+    } finally {
+      if (priorStateDir === undefined) delete process.env.WAITRON_STATE_DIR;
+      else process.env.WAITRON_STATE_DIR = priorStateDir;
+      for (const [key, value] of Object.entries(original)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
   it("covers every proxy route in every Vite front-end", async () => {
     const frontEnds = proxyFrontEnds();
     expect(frontEnds.map(({ app }) => app).sort()).toEqual(Object.keys(EXPECTED_ROUTES).sort());
