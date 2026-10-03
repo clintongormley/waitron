@@ -295,7 +295,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   sign-in's refusal, which marks no field (below). A field's hint is its placeholder, not a line
   under it (owner, 2026-09-30); a placeholder set as well wins, leaving the hint to screen readers
   (design-system.md → Forms). A short explanation is a hint, not a "?" button; the "?" is only for
-  one too long for a hint or a field that starts filled in (owner, 2026-10-03). Every input has a semantic `name`, never a generated widget id.
+  one too long for a hint or a field that starts filled in (owner, 2026-10-03); nothing guards it
+  across screens, and other setup screens may still break it (backlog A237). Every input has a
+  semantic `name`, never a generated widget id.
 - **A screen does not draw its own form field**: a `<select>`, a `<textarea>` or a text `<input>`
   comes from a field primitive; where none fits, add to one or add one (owner, 2026-10-01). Cost:
   a native dropdown cannot take the approved look, and hand-drawn fields did not follow the shared

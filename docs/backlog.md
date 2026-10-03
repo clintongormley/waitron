@@ -2278,6 +2278,20 @@ pack marks the Canary tax territory unsupported.) Slice 3b's station opening hou
 when the zone cannot be read, as a last defence
 ([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), S8).
 
+**Remaining "?" buttons that should be hints (A237, owner 2026-10-03) — OPEN.** The rule — a short
+explanation is the field's hint, and the "?" button is only for one too long for a hint or a field
+that starts filled in — was applied to the setup wizard's first four screens only, and nothing
+enforces it. Candidates still showing a "?" for a short explanation: every field on
+`apps/setup/src/screens/connect-screen.ts` (strings `connect.*.help` in
+`apps/setup/src/i18n/strings/start.ts`), and the backup file and the recovery key on the backup
+restore screen (`restore.backup_file_help` and `restore.recovery_key_help` in
+`apps/setup/src/i18n/strings/restore.ts`). The connect screen fills its fields in again from the
+earlier request when the operator comes back to it, which is the rule's "starts filled in"
+exception, so each of its fields needs a judgement rather than a straight swap. Other screens' "?"
+buttons were not reviewed against the rule. Separately, the role screen
+(`apps/setup/src/screens/role-screen.ts`), reached from Join or recover, still shows its choices as
+cards with buttons rather than `wt-choice-row` rows.
+
 The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
@@ -7242,7 +7256,7 @@ that slice 3 has to restore:
   none of the restaurant's data, with no till and no dashboard. But the option is still there and the
   flow still runs, so an operator can still spend a box on it. Removing or disabling it until slice 3
   lands the replacement is a product call, not a wording one. Whoever takes it should decide for
-  `apps/setup/src/screens/mode-screen.ts`'s mirror card and the `role-screen` card together.
+  `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and the `role-screen` card together.
 
 - **Re-admission `sell-only → serving-secondary`** — the primary-minted un-fence that makes a rejoined
   box sell again. Must retire the node's previous chart entry and delete its live `fiscal.aeat` row.
