@@ -233,7 +233,7 @@ Log out) at the trailing edge only when a session exists. Use the tenant name, n
 deployment database has one tenant and that tenant can contain several locations
 (`packages/db/src/schema/tenants.ts`).
 
-## The dashboard matches the browser's `Accept-Language` for anyone with no saved language
+## The dashboard and pre-login till match the browser's `Accept-Language`
 
 The public locale response carries a separate `loginDefault`, and `venueDefault` still describes the
 venue. A signed-in person with no saved language gets `sessionDefault` from

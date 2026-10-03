@@ -8915,13 +8915,21 @@ describe("till-app", () => {
       expect(
         lock(el)!.shadowRoot!.querySelector("wt-language-chooser")!.getAttribute("active"),
       ).toBe("en-GB");
+      const chooser = lock(el)!.shadowRoot!.querySelector("wt-language-chooser")!;
+      chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
+      await vi.waitFor(() =>
+        expect(chooser.shadowRoot!.querySelector('[data-test="lang-es-ES"]')).not.toBeNull(),
+      );
     });
 
     it("shows the browser language on the unenrolled device setup screen", async () => {
       const { el } = await mountApp({
         getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
         getLocales: vi.fn().mockResolvedValue({
-          locales: [],
+          locales: [
+            { code: "es-ES", label: "Español" },
+            { code: "en-GB", label: "English" },
+          ],
           venueDefault: "es-ES",
           loginDefault: "en-GB",
         }),
@@ -8933,6 +8941,52 @@ describe("till-app", () => {
       expect(enrol.shadowRoot!.querySelector("wt-language-chooser")!.getAttribute("active")).toBe(
         "en-GB",
       );
+      const chooser = enrol.shadowRoot!.querySelector("wt-language-chooser")!;
+      chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
+      await vi.waitFor(() =>
+        expect(chooser.shadowRoot!.querySelector('[data-test="lang-es-ES"]')).not.toBeNull(),
+      );
+    });
+
+    it("keeps an enrol-screen language choice through the enrolment re-boot", async () => {
+      const getDeviceIdentity = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "device.unauthorized" })
+        .mockResolvedValue({ deviceId: "dev-1", formFactor: "till" });
+      const { el } = await mountApp({
+        getDeviceIdentity,
+        getLocales: vi.fn().mockResolvedValue({
+          locales: [
+            { code: "es-ES", label: "Español" },
+            { code: "en-GB", label: "English" },
+          ],
+          venueDefault: "es-ES",
+          loginDefault: "es-ES",
+        }),
+      });
+      await flush(el);
+      emit(enrolScreen(el)!, "wt-locale-selected", { code: "en-GB" });
+      await flush(el);
+      expect(currentLocale()).toBe("en-GB");
+      emit(enrolScreen(el)!, "enrolled", { deviceId: "dev-1" });
+      await flush(el);
+      expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+      expect(lock(el)).not.toBeNull();
+      expect(currentLocale()).toBe("en-GB");
+    });
+
+    it("uses the browser match when the till boot read fails before venue details arrive", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockRejectedValue(new Error("offline")),
+        getLocales: vi.fn().mockResolvedValue({
+          locales: [],
+          venueDefault: "en-GB",
+          loginDefault: "en-GB",
+        }),
+      });
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(currentLocale()).toBe("en-GB");
     });
 
     it("keeps a person's pre-login pick when the browser language reply arrives later", async () => {
