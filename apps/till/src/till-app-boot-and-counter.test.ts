@@ -1357,6 +1357,782 @@ describe("till-app fits the page it is given", () => {
 });
 
 describe("till-app logout while a request is waiting for the server", () => {
+  it("does not start a sale after sign-out overtakes its first await", async () => {
+    const recordSale = vi.fn();
+    const { el } = await mountApp({ recordSale });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    emit(shell(el)!, "logout");
+    await flush(el);
+
+    expect(recordSale).not.toHaveBeenCalled();
+  });
+
+  it("does not place an order after its park answers for a signed-out operator", async () => {
+    let answerPark!: () => void;
+    const placeOrder = vi.fn();
+    const { el } = await mountApp({
+      parkOrder: vi.fn(() => new Promise<void>((resolve) => (answerPark = resolve))),
+      placeOrder,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "place-order");
+    await flush(el);
+    expect(api.parkOrder).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    answerPark();
+    await flush(el);
+
+    expect(placeOrder).not.toHaveBeenCalled();
+  });
+
+  it("does not show the next operator an earlier collection refusal", async () => {
+    let refuse!: (reason: unknown) => void;
+    const { el } = await mountApp({
+      markCollected: vi.fn(() => new Promise<void>((_, reject) => (refuse = reject))),
+    });
+    const c = await toCounter(el);
+    emit(c, "mark-collected", { orderId: "wo-1" });
+    await flush(el);
+    expect(api.markCollected).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
+    await flush(el);
+    refuse({ code: "server.internal" });
+    await flush(el);
+
+    expect(banner(el)).toBeNull();
+  });
+
+  it("does not start the waiting-list read when a hand-over's station read outlives sign-out", async () => {
+    const { el } = await mountApp({ markCollected: vi.fn().mockResolvedValue(undefined) });
+    const c = await toCounter(el);
+    let answerStations!: (rows: []) => void;
+    vi.mocked(api.listStations).mockImplementationOnce(
+      () => new Promise((resolve) => (answerStations = resolve)),
+    );
+    emit(c, "hand-over-order", { id: "wo-1" });
+    await flush(el);
+    expect(answerStations).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    answerStations([]);
+    await flush(el);
+
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+  });
+
+  it("does not load a retrieved order into the next operator's basket", async () => {
+    let answer!: (order: { id: string; orderNumber: number; label: null; lines: [] }) => void;
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+    });
+    const c = await toCounter(el);
+    const basketId = c.store.id;
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(api.retrieveWorkingOrder).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    answer({ id: "wo-1", orderNumber: 1, label: null, lines: [] });
+    await flush(el);
+
+    expect(c.store.id).toBe(basketId);
+  });
+
+  it("does not reload held orders for a cash payment refused after sign-out", async () => {
+    let refuse!: (reason: unknown) => void;
+    const { el } = await mountApp({
+      recordSale: vi.fn(() => new Promise((_, reject) => (refuse = reject))),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(api.recordSale).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+    refuse({ code: "bill.payments_received" });
+    await flush(el);
+
+    expect(api.listWorkingOrders).toHaveBeenCalledTimes(heldReads);
+  });
+
+  it("does not start later list reads when a cash sale's held-list read outlives sign-out", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    let answerHeld!: (rows: []) => void;
+    vi.mocked(api.listWorkingOrders).mockImplementationOnce(
+      () => new Promise((resolve) => (answerHeld = resolve)),
+    );
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(answerHeld).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const stationReads = vi.mocked(api.listStations).mock.calls.length;
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    answerHeld([]);
+    await flush(el);
+
+    expect(api.listStations).toHaveBeenCalledTimes(stationReads);
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+  });
+
+  it("does not read waiting orders when a cash sale's station read outlives sign-out", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+    });
+    const c = await toCounter(el);
+    let answerStations!: (rows: []) => void;
+    vi.mocked(api.listStations).mockImplementationOnce(
+      () => new Promise((resolve) => (answerStations = resolve)),
+    );
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(answerStations).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    answerStations([]);
+    await flush(el);
+
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+  });
+
+  it("does not read waiting orders when a card capture's station read outlives sign-out", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+    });
+    const c = await toCounter(el);
+    let answerStations!: (rows: []) => void;
+    vi.mocked(api.listStations).mockImplementationOnce(
+      () => new Promise((resolve) => (answerStations = resolve)),
+    );
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "collect-card", {});
+    await flush(el);
+    expect(answerStations).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    answerStations([]);
+    await flush(el);
+
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+  });
+
+  it("does not read waiting orders when a place's station read outlives sign-out", async () => {
+    const { el } = await mountApp({
+      parkOrder: vi.fn().mockResolvedValue(undefined),
+      placeOrder: vi.fn().mockResolvedValue(undefined),
+    });
+    const c = await toCounter(el);
+    let answerStations!: (rows: []) => void;
+    vi.mocked(api.listStations).mockImplementationOnce(
+      () => new Promise((resolve) => (answerStations = resolve)),
+    );
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "place-order");
+    await flush(el);
+    expect(answerStations).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    answerStations([]);
+    await flush(el);
+
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+  });
+
+  it("does not read waiting orders when a found-bill payment's station read outlives sign-out", async () => {
+    const { el } = await mountApp({ collectOrder: vi.fn().mockResolvedValue(saleResult) });
+    const c = await toCounter(el);
+    let answerStations!: (rows: []) => void;
+    vi.mocked(api.listStations).mockImplementationOnce(
+      () => new Promise((resolve) => (answerStations = resolve)),
+    );
+    emit(c, "find-bill-pay", {
+      workingOrderId: "wo-1",
+      tender: { method: "cash", amount: "5" },
+      invoiced: true,
+    });
+    await flush(el);
+    expect(answerStations).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    answerStations([]);
+    await flush(el);
+
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+  });
+
+  it("does not read waiting orders when a collection's station read outlives sign-out", async () => {
+    const { el } = await mountApp({ markCollected: vi.fn().mockResolvedValue(undefined) });
+    const c = await toCounter(el);
+    let answerStations!: (rows: []) => void;
+    vi.mocked(api.listStations).mockImplementationOnce(
+      () => new Promise((resolve) => (answerStations = resolve)),
+    );
+    emit(c, "mark-collected", { orderId: "wo-1" });
+    await flush(el);
+    expect(answerStations).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    answerStations([]);
+    await flush(el);
+
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+  });
+
+  it("does not reload stations for a zone choice answered after sign-out", async () => {
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    catalogue.zones = [zone("zone-counter", "prepay"), zone("zone-deli", "prepay")];
+    let answer!: (catalogue: ZoneOfferCatalogue) => void;
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      listZoneOffers: vi.fn(() => new Promise<ZoneOfferCatalogue>((resolve) => (answer = resolve))),
+    });
+    const c = await toCounter(el);
+    emit(c, "counter-zone-selected", { zoneId: "zone-deli" });
+    await flush(el);
+    expect(api.listZoneOffers).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const stationReads = vi.mocked(api.listStations).mock.calls.length;
+    answer(zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-deli"));
+    await flush(el);
+
+    expect(api.listStations).toHaveBeenCalledTimes(stationReads);
+  });
+
+  it("does not choose a menu after a zone's station read outlives sign-out", async () => {
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    catalogue.zones = [zone("zone-counter", "prepay"), zone("zone-deli", "prepay")];
+    const deli = zoneOffers(
+      { menus: [{ id: "cat-deli", name: "Deli", isDefault: true }], products: [cafe] },
+      "zone-deli",
+    );
+    let answerStations!: (rows: []) => void;
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      listZoneOffers: vi.fn().mockResolvedValue(deli),
+    });
+    const c = await toCounter(el);
+    vi.mocked(api.listStations).mockImplementationOnce(
+      () => new Promise((resolve) => (answerStations = resolve)),
+    );
+    emit(c, "counter-zone-selected", { zoneId: "zone-deli" });
+    await flush(el);
+    expect(answerStations).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const selected = privateState<string>(el, "selectedCatalogueId");
+    answerStations([]);
+    await flush(el);
+
+    expect(privateState<string>(el, "selectedCatalogueId")).toBe(selected);
+  });
+
+  it("does not reload held orders for a retrieve refused after sign-out", async () => {
+    let refuse!: (reason: unknown) => void;
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn(() => new Promise((_, reject) => (refuse = reject))),
+    });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(api.retrieveWorkingOrder).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+    refuse({ code: "working_order.not_found" });
+    await flush(el);
+
+    expect(api.listWorkingOrders).toHaveBeenCalledTimes(heldReads);
+  });
+
+  it("does not reload held orders for a discard answered after sign-out", async () => {
+    let answer!: () => void;
+    const { el } = await mountApp({
+      abandonWorkingOrder: vi.fn(() => new Promise<void>((resolve) => (answer = resolve))),
+    });
+    const c = await toCounter(el);
+    emit(c, "discard-order", { id: "wo-1" });
+    await flush(el);
+    expect(api.abandonWorkingOrder).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+    answer();
+    await flush(el);
+
+    expect(api.listWorkingOrders).toHaveBeenCalledTimes(heldReads);
+  });
+
+  it("does not replace a discard refusal after its held-list read outlives sign-out", async () => {
+    const { el } = await mountApp({
+      abandonWorkingOrder: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const c = await toCounter(el);
+    let answerHeld!: (rows: []) => void;
+    vi.mocked(api.listWorkingOrders).mockImplementationOnce(
+      () => new Promise((resolve) => (answerHeld = resolve)),
+    );
+    emit(c, "discard-order", { id: "wo-1" });
+    await flush(el);
+    expect(answerHeld).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
+    await flush(el);
+    const before = banner(el)?.textContent;
+    answerHeld([]);
+    await flush(el);
+
+    expect(banner(el)?.textContent).toBe(before);
+  });
+
+  it("does not reload station and waiting lists for a found bill payment answered after sign-out", async () => {
+    let answer!: (result: TillSaleResult) => void;
+    const { el } = await mountApp({
+      collectOrder: vi.fn(() => new Promise<TillSaleResult>((resolve) => (answer = resolve))),
+    });
+    const c = await toCounter(el);
+    emit(c, "find-bill-pay", {
+      workingOrderId: "wo-1",
+      tender: { method: "cash", amount: "5" },
+      invoiced: true,
+    });
+    await flush(el);
+    expect(api.collectOrder).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const stationReads = vi.mocked(api.listStations).mock.calls.length;
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    answer(saleResult);
+    await flush(el);
+
+    expect(api.listStations).toHaveBeenCalledTimes(stationReads);
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+  });
+
+  it("does not reload counter lists for a card capture answered after sign-out", async () => {
+    let answer!: (result: { outcome: "captured"; ticket: TillSaleResult }) => void;
+    const { el } = await mountApp({
+      pay: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "collect-card", {});
+    await flush(el);
+    expect(api.pay).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    answer({ outcome: "captured", ticket: saleResult });
+    await flush(el);
+
+    expect(api.listWorkingOrders).toHaveBeenCalledTimes(heldReads);
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+  });
+
+  it("does not show a card refusal to the next operator", async () => {
+    let refuse!: (reason: unknown) => void;
+    const { el } = await mountApp({
+      pay: vi.fn(() => new Promise((_, reject) => (refuse = reject))),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "collect-card", {});
+    await flush(el);
+    expect(api.pay).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
+    await flush(el);
+    refuse({ code: "sale.refused" });
+    await flush(el);
+
+    expect(banner(el)).toBeNull();
+  });
+
+  it("does not retry a cash sale after its version refresh outlives sign-out", async () => {
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    let answerOffers!: (offers: ZoneOfferCatalogue) => void;
+    const recordSale = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "menu.version_changed" })
+      .mockResolvedValue(saleResult);
+    const { el } = await mountApp({
+      recordSale,
+      listZoneOffers: vi.fn(() => new Promise((resolve) => (answerOffers = resolve))),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(answerOffers).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    answerOffers(catalogue);
+    await flush(el);
+
+    expect(recordSale).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry a card sale after its version refresh outlives sign-out", async () => {
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    let answerOffers!: (offers: ZoneOfferCatalogue) => void;
+    const pay = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "menu.version_changed" })
+      .mockResolvedValue({ outcome: "captured", ticket: saleResult });
+    const { el } = await mountApp({
+      pay,
+      listZoneOffers: vi.fn(() => new Promise((resolve) => (answerOffers = resolve))),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "collect-card", {});
+    await flush(el);
+    expect(answerOffers).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    answerOffers(catalogue);
+    await flush(el);
+
+    expect(pay).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry a place after its version refresh outlives sign-out", async () => {
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    let answerOffers!: (offers: ZoneOfferCatalogue) => void;
+    const placeOrder = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "menu.version_changed" })
+      .mockResolvedValue(undefined);
+    const { el } = await mountApp({
+      placeOrder,
+      parkOrder: vi.fn().mockResolvedValue(undefined),
+      listZoneOffers: vi.fn(() => new Promise((resolve) => (answerOffers = resolve))),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "place-order");
+    await flush(el);
+    expect(answerOffers).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    answerOffers(catalogue);
+    await flush(el);
+
+    expect(placeOrder).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry a park after its version refresh outlives sign-out", async () => {
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    let answerOffers!: (offers: ZoneOfferCatalogue) => void;
+    const parkOrder = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "menu.version_changed" })
+      .mockResolvedValue(undefined);
+    const { el } = await mountApp({
+      parkOrder,
+      listZoneOffers: vi.fn(() => new Promise((resolve) => (answerOffers = resolve))),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "park-order", { label: "Later" });
+    await flush(el);
+    expect(answerOffers).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    answerOffers(catalogue);
+    await flush(el);
+
+    expect(parkOrder).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry a park after its dead-end recheck outlives sign-out", async () => {
+    let answerDeadEnds!: (result: { sends: false; deadEnds: [] }) => void;
+    const parkOrder = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "station.no_replacement" })
+      .mockResolvedValue(undefined);
+    const { el } = await mountApp({
+      parkOrder,
+      askSaleDeadEnds: vi.fn(() => new Promise((resolve) => (answerDeadEnds = resolve))),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "park-order", { label: "Later" });
+    await flush(el);
+    expect(answerDeadEnds).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    answerDeadEnds({ sends: false, deadEnds: [] });
+    await flush(el);
+
+    expect(parkOrder).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry a cash sale after its save-refusal recheck outlives sign-out", async () => {
+    let answerDeadEnds!: (result: { sends: false; deadEnds: [] }) => void;
+    const recordSale = vi.fn();
+    const { el } = await mountApp({
+      recordSale,
+      updateWorkingOrder: vi.fn().mockRejectedValue({ code: "station.no_replacement" }),
+      askSaleDeadEnds: vi.fn(() => new Promise((resolve) => (answerDeadEnds = resolve))),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    c.store.markPersisted();
+    c.store.setLineQuantity(0, "2");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(answerDeadEnds).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    answerDeadEnds({ sends: false, deadEnds: [] });
+    await flush(el);
+
+    expect(recordSale).not.toHaveBeenCalled();
+    expect(api.updateWorkingOrder).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry a card sale after its save-refusal recheck outlives sign-out", async () => {
+    let answerDeadEnds!: (result: { sends: false; deadEnds: [] }) => void;
+    const pay = vi.fn();
+    const { el } = await mountApp({
+      pay,
+      updateWorkingOrder: vi.fn().mockRejectedValue({ code: "station.no_replacement" }),
+      askSaleDeadEnds: vi.fn(() => new Promise((resolve) => (answerDeadEnds = resolve))),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    c.store.markPersisted();
+    c.store.setLineQuantity(0, "2");
+    emit(c, "collect-card", {});
+    await flush(el);
+    expect(answerDeadEnds).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    answerDeadEnds({ sends: false, deadEnds: [] });
+    await flush(el);
+
+    expect(pay).not.toHaveBeenCalled();
+    expect(api.updateWorkingOrder).toHaveBeenCalledOnce();
+  });
+
+  it("does not show a place refusal to the next operator", async () => {
+    let refuse!: (reason: unknown) => void;
+    const { el } = await mountApp({
+      parkOrder: vi.fn().mockResolvedValue(undefined),
+      placeOrder: vi.fn(() => new Promise((_, reject) => (refuse = reject))),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "place-order");
+    await flush(el);
+    expect(api.placeOrder).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
+    await flush(el);
+    refuse({ code: "sale.refused" });
+    await flush(el);
+
+    expect(banner(el)).toBeNull();
+  });
+
+  it("does not show a found-bill refusal to the next operator", async () => {
+    let refuse!: (reason: unknown) => void;
+    const { el } = await mountApp({
+      collectOrder: vi.fn(() => new Promise((_, reject) => (refuse = reject))),
+    });
+    const c = await toCounter(el);
+    emit(c, "find-bill-pay", {
+      workingOrderId: "wo-1",
+      tender: { method: "cash", amount: "5" },
+      invoiced: true,
+    });
+    await flush(el);
+    expect(api.collectOrder).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
+    await flush(el);
+    refuse({ code: "sale.refused" });
+    await flush(el);
+
+    expect(privateState(el, "findBillError")).toBeUndefined();
+  });
+
+  it("does not reload waiting orders for a collect answered after sign-out", async () => {
+    let answer!: (result: TillSaleResult) => void;
+    const { el } = await mountApp({
+      collectOrder: vi.fn(() => new Promise<TillSaleResult>((resolve) => (answer = resolve))),
+    });
+    const c = await toCounter(el);
+    emit(c, "collect-order", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(api.collectOrder).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    answer(saleResult);
+    await flush(el);
+
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+  });
+
+  it("does not reload station and waiting lists for a place answered after sign-out", async () => {
+    let answer!: () => void;
+    const { el } = await mountApp({
+      parkOrder: vi.fn().mockResolvedValue(undefined),
+      placeOrder: vi.fn(() => new Promise<void>((resolve) => (answer = resolve))),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "place-order");
+    await flush(el);
+    expect(api.placeOrder).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const stationReads = vi.mocked(api.listStations).mock.calls.length;
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    answer();
+    await flush(el);
+
+    expect(api.listStations).toHaveBeenCalledTimes(stationReads);
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+  });
+
+  it("does not reload held orders for a park answered after sign-out", async () => {
+    let answer!: () => void;
+    const { el } = await mountApp({
+      parkOrder: vi.fn(() => new Promise<void>((resolve) => (answer = resolve))),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "park-order", { label: "Later" });
+    await flush(el);
+    expect(api.parkOrder).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+    answer();
+    await flush(el);
+
+    expect(api.listWorkingOrders).toHaveBeenCalledTimes(heldReads);
+  });
+
+  it("does not reload station and waiting lists for a collection answered after sign-out", async () => {
+    let answer!: () => void;
+    const { el } = await mountApp({
+      markCollected: vi.fn(() => new Promise<void>((resolve) => (answer = resolve))),
+    });
+    const c = await toCounter(el);
+    emit(c, "mark-collected", { orderId: "wo-1" });
+    await flush(el);
+    expect(api.markCollected).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const stationReads = vi.mocked(api.listStations).mock.calls.length;
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    answer();
+    await flush(el);
+
+    expect(api.listStations).toHaveBeenCalledTimes(stationReads);
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+  });
+
+  it("does not start the waiting read after a refused collection's station read outlives sign-out", async () => {
+    const { el } = await mountApp({
+      markCollected: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const c = await toCounter(el);
+    let answerStations!: (rows: []) => void;
+    vi.mocked(api.listStations).mockImplementationOnce(
+      () => new Promise((resolve) => (answerStations = resolve)),
+    );
+    emit(c, "mark-collected", { orderId: "wo-1" });
+    await flush(el);
+    expect(answerStations).toBeTypeOf("function");
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    answerStations([]);
+    await flush(el);
+
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+  });
+
+  it("does not reload the station list for a ticket advance answered after sign-out", async () => {
+    let answer!: () => void;
+    const { el } = await mountApp({
+      advanceTicketItem: vi.fn(() => new Promise<void>((resolve) => (answer = resolve))),
+    });
+    const c = await toCounter(el);
+    emit(c, "advance-ticket-item", { itemId: "item-1", to: "ready" });
+    await flush(el);
+    expect(api.advanceTicketItem).toHaveBeenCalledOnce();
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const stationReads = vi.mocked(api.listStations).mock.calls.length;
+    answer();
+    await flush(el);
+
+    expect(api.listStations).toHaveBeenCalledTimes(stationReads);
+  });
+
   it("stays on the lock screen when a cash sale's answer arrives after the operator logged out", async () => {
     let answerSale!: (result: TillSaleResult) => void;
     const { el } = await mountApp({
@@ -1372,6 +2148,8 @@ describe("till-app logout while a request is waiting for the server", () => {
     emit(shell(el)!, "logout");
     await flush(el);
     expect(lock(el)).not.toBeNull();
+    const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
 
     answerSale(saleResult);
     await flush(el);
@@ -1379,5 +2157,28 @@ describe("till-app logout while a request is waiting for the server", () => {
     expect(lock(el)).not.toBeNull();
     expect(shell(el)).toBeNull();
     expect(privateState<string>(el, "operatorName")).toBe("");
+    expect(api.listWorkingOrders).toHaveBeenCalledTimes(heldReads);
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+  });
+
+  it("does not retain the earlier operator's sale result after the next operator signs in", async () => {
+    let answerSale!: (result: TillSaleResult) => void;
+    const { el } = await mountApp({
+      recordSale: vi.fn(() => new Promise<TillSaleResult>((resolve) => (answerSale = resolve))),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
+    await flush(el);
+    expect(privateState<TillSaleResult | undefined>(el, "result")).toBeUndefined();
+    answerSale(saleResult);
+    await flush(el);
+
+    expect(privateState<TillSaleResult | undefined>(el, "result")).toBeUndefined();
   });
 });

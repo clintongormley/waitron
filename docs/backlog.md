@@ -3219,17 +3219,16 @@ The original walkthrough is retained under *Detail → Setup wizard*.
         read for another order stays intact. The Chromium cases in
         `apps/till/src/till-app-counter-cancel-credit.test.ts` cover those outcomes, including a
         kitchen-queue read held open after the cancel.
-      - **Two defects in other counter paths, found by reading the code, not reproduced; out of
-        B34's scope and not fixed here.** Both are in `apps/till/src/till-app.ts`. First, after a
-        sale, place, collect or hand-over at the counter, the till reads one to three lists one
-        after another (held orders, kitchen queue, waiting list) without checking, after the write
-        answers or between the reads, whether the operator has logged out and another signed in,
-        so a read that fails can show the next operator a notice about the previous operator's
-        action: `#onConfirmPayment`, the card path `#collectCard`, `#onPlaceOrder`,
-        `#onCollectOrder`, `#onFindBillPay`, `#onMarkCollected`, and `#onHandOverOrder`, which
-        checks the session before its kitchen-queue read but not between that read and the
-        waiting-list read. The B34 cancel path got that check in #1077, after a review
-        reproduced the problem there in real Chromium. Second, `#onConfirmPayment`,
+      - **Done by A234: the named counter actions check their starting operator session before a later list read.**
+        The sale, card, place, collect, found-bill, ticket-advance, collection, hand-over, park,
+        retrieve, discard, adjusted-order reread, zone-choice and move-to-table paths check before
+        their later reads. The Chromium cases in
+        `apps/till/src/till-app-boot-and-counter.test.ts`,
+        `apps/till/src/till-app-counter-adjustments.test.ts` and `apps/till/src/till-app.test.ts`
+        hold write answers, list reads and refusals across sign-out; each asserts the corresponding
+        later read or retry does not start. B34 had already checked the cancel-and-credit path in
+        #1077.
+      - **The busy-state defect in these counter paths remains open.** `#onConfirmPayment`,
         `#collectCard`, `#onPlaceOrder`, `#onCollectOrder` and `#onFindBillPay` wait for their list
         reads before clearing the flag that marks the basket busy (`submitting` or `placing`), and
         the reads have no time limit, so a read that never answers would leave the basket blocked:
