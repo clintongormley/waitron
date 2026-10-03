@@ -1394,7 +1394,7 @@ together, in one branch.
 LOOK at each on a product AND on a variant's page (the editor shows a variant with its parent's
 values as the blank choices), at 1280 and 390, light and dark.
 
-**No Add category button, and the category shown as a path (A209) — DONE.**
+**No Add category button, and the category shown as a path (A209) — DONE (#1090).**
 The owner: _"we no longer need the add category button. i'm questioning whether we need the
 category dropdown at all now that we can drag products from category to category (although we
 should show the path to the product eg Drinks > Alcoholic drinks > Cocktails) on that page"_. A
