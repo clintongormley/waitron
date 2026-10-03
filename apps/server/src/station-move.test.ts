@@ -11,6 +11,7 @@ import {
   locations,
   orderGroups,
   printJobs,
+  printers,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -1204,14 +1205,49 @@ describe("release", () => {
 });
 
 describe("moveDishesToStation", () => {
+  it("prints RECALLED through the order action for a watcher of the dish", async () => {
+    const printerId = await inTx(venue, async (tx) => {
+      const watcher = await createWatcher(tx, venue.cfg, {
+        name: `Bar recall ${randomUUID()}`,
+        runsPass: false,
+        everyStation: false,
+        stationIds: [bar],
+        everyZone: true,
+        zoneIds: [],
+      });
+      const printer = await createPrinter(
+        tx,
+        { locationId: venue.cfg.locationId },
+        {
+          name: `Bar recall ${randomUUID()}`,
+          transport: "cloud_poll",
+          pollId: randomUUID(),
+        },
+      );
+      await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
+      return printer.id;
+    });
+    const { tabId } = await burger();
+    const before = (await jobs(printerId)).length;
+    await inTx(venue, (tx) => recallLines(tx, venue.cfg, tabId, [1]));
+    const added = (await jobs(printerId)).slice(before);
+    expect(added).toHaveLength(1);
+    expect(decodeTicket(added[0]!.payload)).toContain("RECALLED");
+    expect(decodeTicket(added[0]!.payload)).toContain("BURG");
+  });
   it("releases a rerouted HOLD dish once per watcher with the right correction or heading", async () => {
     await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+    const downstairs = await inTx(venue, (tx) =>
+      createStation(tx, venue.cfg, {
+        name: `Downstairs bar ${randomUUID()}`,
+      }),
+    );
     const printerIds = await inTx(venue, async (tx) => {
       const ids: string[] = [];
       for (const [name, stationIds] of [
-        [`Both release ${randomUUID()}`, [bar, grill]],
+        [`Both release ${randomUUID()}`, [bar, grill, downstairs.id]],
         [`Old release ${randomUUID()}`, [bar]],
-        [`New release ${randomUUID()}`, [grill]],
+        [`New release ${randomUUID()}`, [downstairs.id]],
       ] as const) {
         const watcher = await createWatcher(tx, venue.cfg, {
           name,
@@ -1231,6 +1267,7 @@ describe("moveDishesToStation", () => {
           },
         );
         await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
+        await tx.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, printer.id));
         ids.push(printer.id);
       }
       return ids;
@@ -1285,8 +1322,8 @@ describe("moveDishesToStation", () => {
       await tx
         .update(kitchenStations)
         .set({ isDefault: true })
-        .where(eq(kitchenStations.id, grill));
-      await setStationFallback(tx, venue.cfg, bar, grill);
+        .where(eq(kitchenStations.id, downstairs.id));
+      await setStationFallback(tx, venue.cfg, bar, downstairs.id);
       await setStationToday(tx, venue.cfg, bar, "closed", at);
       const [held] = await tx
         .select({ stationChosenAt: ticketItems.stationChosenAt, stationId: ticketItems.stationId })
@@ -1307,7 +1344,7 @@ describe("moveDishesToStation", () => {
         await tx
           .update(kitchenStations)
           .set({ isDefault: false })
-          .where(eq(kitchenStations.id, grill));
+          .where(eq(kitchenStations.id, downstairs.id));
         await tx
           .update(kitchenStations)
           .set({ isDefault: true })
@@ -1324,23 +1361,11 @@ describe("moveDishesToStation", () => {
     expect(added[1]).toHaveLength(1);
     expect(decodeTicket(added[1]![0]!.payload)).toContain("HOLD CANCELLED");
     expect(decodeTicket(added[1]![0]!.payload)).not.toContain("FIRE");
-    expect(added[2]).toHaveLength(2);
-    expect(
-      added[2]!.some(
-        (job) =>
-          decodeTicket(job.payload).includes("FIRE") &&
-          decodeTicket(job.payload).includes("TINTO") &&
-          !decodeTicket(job.payload).includes("BURG"),
-      ),
-    ).toBe(true);
-    expect(
-      added[2]!.some(
-        (job) =>
-          decodeTicket(job.payload).includes("From Bar") &&
-          !decodeTicket(job.payload).includes("FIRE") &&
-          decodeTicket(job.payload).includes("BURG"),
-      ),
-    ).toBe(true);
+    expect(added[2]).toHaveLength(1);
+    expect(decodeTicket(added[2]![0]!.payload)).toContain("From Bar");
+    expect(decodeTicket(added[2]![0]!.payload)).toContain("BURG");
+    expect(decodeTicket(added[2]![0]!.payload)).not.toContain("FIRE");
+    expect(decodeTicket(added[2]![0]!.payload)).not.toContain("TINTO");
   });
   it("corrects only watchers losing a moved dish and copies only to watchers gaining it", async () => {
     const printerIds = await inTx(venue, async (tx) => {
@@ -1369,6 +1394,7 @@ describe("moveDishesToStation", () => {
           },
         );
         await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
+        await tx.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, printer.id));
         ids.push(printer.id);
       }
       return ids;
@@ -1385,6 +1411,14 @@ describe("moveDishesToStation", () => {
     const added = await Promise.all(
       printerIds.map(async (id, i) => (await jobs(id)).slice(before[i])),
     );
+    const addedIds = new Set(added.flat().map((job) => job.id));
+    const kinds = await inTx(venue, (tx) =>
+      tx.select({ id: printJobs.id, kind: printJobs.kind }).from(printJobs),
+    );
+    expect(kinds.filter((job) => addedIds.has(job.id)).map((job) => job.kind)).toEqual([
+      "document",
+      "document",
+    ]);
     expect(added[0]).toHaveLength(0);
     expect(added[1]).toHaveLength(0);
     expect(added[2]).toHaveLength(1);

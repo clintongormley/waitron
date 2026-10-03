@@ -26,6 +26,7 @@ import {
   enqueueKitchenTickets,
   enqueueStationMoved,
   enqueueWatcherCopies,
+  reprintOrderTickets,
 } from "./kitchen-print.js";
 import type { WatcherCopies } from "./kitchen-print.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -146,18 +147,21 @@ describe("watcher paper", () => {
       });
       await enqueueHoldCorrections(tx, cfg, orderId, [held], { kind: "HOLD CANCELLED" });
       await enqueueExtraCancelled(tx, cfg, orderId, held, "LIME");
+      await reprintOrderTickets(tx, cfg, orderId);
       return { watcherIds, jobs: await tx.select().from(printJobs) };
     });
     const both = result.jobs.filter((job) => job.printerId === result.watcherIds[0]);
     const grill = result.jobs.filter((job) => job.printerId === result.watcherIds[1]);
-    expect(both).toHaveLength(6);
+    expect(both).toHaveLength(7);
     expect(printedLines(both[1]!.payload).join(" ")).toContain("BEER");
     expect(printedLines(both[1]!.payload).join(" ")).toContain("VOID");
     expect(printedLines(both[2]!.payload).join(" ")).toContain("RECALLED");
     expect(printedLines(both[3]!.payload).join(" ")).toContain("HOLD CHANGED");
     expect(printedLines(both[4]!.payload).join(" ")).toContain("HOLD CANCELLED");
     expect(printedLines(both[5]!.payload).join(" ")).toContain("LIME");
-    expect(grill).toHaveLength(2);
+    expect(printedLines(both[6]!.payload).join(" ")).toContain("REPRINT");
+    expect(grill).toHaveLength(3);
+    expect(printedLines(grill[2]!.payload).join(" ")).toContain("REPRINT");
     expect(result.jobs.every((job) => job.kind === "document")).toBe(true);
   });
 
