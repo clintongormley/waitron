@@ -9,6 +9,10 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
+On **2026-10-03** (W41s, the design for a fiscal chain AEAT disagrees with): **Q33 to Q40 added**
+in a new section, *Recovering from conflicts*. They replace the ten questions the design listed in its
+§10. The standalone copy has no section for them.
+
 On **2026-10-01** (lane B item B17): the owner decided **Q28** without the asesor — the full
 simplified invoice is issued when the table leaves, and a later payment is recorded against it —
 and leaving without paying is now built on that decision. Q28 stays open for the asesor to confirm. The standalone copy's section 1.8 (Q28) has not been updated for this.
@@ -1785,6 +1789,303 @@ Sources checked 2026-09-09:
 [AEAT developer FAQ, §11](https://sede.agenciatributaria.gob.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/FAQs-Desarrolladores.pdf#page=22)
 and [external test portal](https://preportal.aeat.es/PRE-Exteriores/Inicio/Inicio.html).
 This records a question; no enquiry has been sent.
+
+## RECOVERING FROM CONFLICTS — when AEAT holds something we did not send (added 2026-10-03)
+
+**Why this section exists.** The design for W41s
+(`../superpowers/specs/2026-10-03-fiscal-chain-divergence-design.md`) covers what the software does
+when AEAT comes to hold, under one of the restaurant's invoice numbers, a record that is not the one
+in the restaurant's database. The questions below are what that design could not settle from AEAT's
+or the BOE's own texts. Each one states what the software does until it is answered. None blocks the
+build.
+
+**How it happens.** Usually an older copy of the restaurant's database is put back into use: a box
+rolled back to a disk snapshot, a copied disk started on a second machine, or a second box set up
+under the same tax ID. The older copy does not know about the last invoices that were sent, so it
+issues the same invoice numbers again. AEAT identifies an invoice by tax ID + number + issue date
+([verifactu-findings.md](verifactu-findings.md) §1, *Record identity and duplicates*), so:
+
+- the same number on the **same** date: AEAT refuses the second record as a duplicate (error 3000);
+- the same number on a **different** date: AEAT accepts both.
+
+**What the software does.** When it detects a collision, it stops adding to that installation's
+chain and switches to an installation number never used before. That is a new SIF in the sense of
+FAQ §4, and its first record carries `PrimerRegistro = S`. It also opens new invoice series whose
+numbers cannot clash with any earlier one. Sales are never interrupted. The old installation's
+chain stays as it is.
+
+**Settled, so not asked here.** Sending late after an incident ([verifactu-findings.md](verifactu-findings.md)
+§2). That a cancellation or correction may come from a different SIF than the original invoice (§13).
+The four ways to correct an issued invoice (§7). Whether anything must be communicated to AEAT when a
+chain ends is Q7's second part.
+
+---
+
+### Q33. Switching to a new installation number when a collision is found (added 2026-10-03)
+
+**Why it matters.** Starting a new chain is the core of the design. AEAT's FAQ (§4) describes a new
+installation number only for a reinstall, and warns against using a SIF «de forma dinámica», meaning
+switching per session, per day or per invoice. Our switch is permanent, but the software makes it
+by itself. Q7 already asks what happens when a chain ends; this asks whether the automatic switch is
+acceptable. **If the answer is no,** the switch becomes a step an administrator confirms (design
+decision D1), and the box keeps colliding until someone does.
+
+> Nuestro sistema identifica cada SIF por NIF + Id.SIF + nº de instalación, usa como nº de
+> instalación una marca de tiempo (FAQ de desarrolladores, §4) y lleva una única cadena por SIF
+> (Orden HAC/1177/2024, art. 7.c).
+>
+> Si detecta que la AEAT tiene, con uno de nuestros números de factura, un registro distinto del
+> nuestro (por ejemplo, porque se ha vuelto a poner en marcha una copia antigua de la base de datos
+> que ha repetido números ya usados), deja de añadir registros a esa cadena y pasa automáticamente a
+> un nº de instalación nuevo, nunca usado, cuyo primer registro lleva `PrimerRegistro` = "S", con
+> series de facturación nuevas que no pueden coincidir con ninguna anterior. La facturación no se
+> interrumpe. La cadena anterior se conserva intacta, junto con las respuestas de la AEAT y un
+> registro interno de cuándo, por qué y con qué factura se produjo el conflicto. No se comunica nada
+> a la AEAT.
+>
+> **(a)** La FAQ §4 contempla un nº de instalación nuevo al reinstalar el software, y advierte que no
+> debe resultar posible una «utilización dinámica del SIF». ¿Es admisible que el propio sistema
+> cambie de nº de instalación al detectar un conflicto, como máximo una vez cada 24 horas, y que un
+> administrador pueda hacerlo también manualmente?
+>
+> **(b)** Si la AEAT pide justificarlo (Orden, art. 16.4), ¿bastan las respuestas de la AEAT y
+> nuestro registro interno, o conviene conservar algo más?
+
+**Default until answered:** yes to both.
+
+This records a question; no enquiry has been sent.
+
+---
+
+### Q34. Sending the old installation's unsent records after the switch (added 2026-10-03)
+
+**Why it matters.** When the switch happens, the old installation usually has records AEAT has not
+received yet: the sales made between the colliding record and AEAT's answer to it. That is normally a
+minute's worth, but hours' worth after an internet outage. Each is final: the customer has the
+ticket and its QR code, and RD 1007/2023 art. 8.2.a forbids changing a record. Some of them link to a
+record of ours that AEAT does not hold, because AEAT holds the other copy's record under that
+number. Whether AEAT checks a link against what it holds is not stated anywhere; we will test it on
+AEAT's test service first. Sending late after an incident is settled (findings §2), so that is not
+asked. **If the answer is no,** the only alternative we can see is regenerating them, which the
+regulation forbids; we would need the asesor's alternative. Design decision D5 rests on this.
+
+> Cuando el sistema cambia de nº de instalación (Q33), la instalación anterior suele tener registros
+> ya generados que la AEAT aún no ha recibido: las ventas hechas entre el registro en conflicto y la
+> respuesta de la AEAT, que tras un corte de Internet pueden ser las de varias horas. Cada uno
+> corresponde a una factura ya entregada, con su QR, y no puede modificarse (RD 1007/2023, art.
+> 8.2.a). Algunos enlazan con un registro nuestro que la AEAT no tiene, porque con ese número la
+> AEAT tiene el registro de la otra copia.
+>
+> Proponemos remitirlos sin cambios (nº de instalación anterior, encadenamiento y huella
+> originales), por orden de generación y con `Incidencia` = "S" (Orden, art. 16.4), a la vez que los
+> registros de la nueva instalación. Si alguno coincide también con un registro que ya tiene la AEAT,
+> se trata como en Q35 o Q36.
+>
+> ¿Es correcto remitirlos así, incluidos los que enlazan con un registro que la AEAT tiene en otra
+> versión? ¿O el cambio de instalación exige otro tratamiento para ellos?
+
+**Default until answered:** send them unchanged, oldest first, never regenerated.
+
+This records a question; no enquiry has been sent.
+
+---
+
+### Q35. Two real invoices with the same number and the same date (added 2026-10-03)
+
+**Why it matters.** This is the collision that leaves a real sale missing at AEAT, and no source
+covers it. Every corrective record names the invoice it corrects by tax ID + number + date, so it
+would act on the *other* invoice AEAT holds under that key: a cancellation would cancel another
+customer's real sale (we confirmed this against our model of AEAT), a credit note would amend it, and
+a correction record (*subsanación*) would overwrite it. The design's first draft proposed a credit
+note naming our invoice; that would have reached the other invoice, so it was withdrawn. Restaurant
+customers are usually anonymous, so the diner holding the affected ticket usually cannot be found.
+Building whichever remedy the asesor picks is a separate piece of work.
+
+> Nuestras ventas son facturas simplificadas (F2), normalmente sin identificar al cliente. Una
+> copia antigua de la base de datos expide, un día dado, la factura FS/120 al cliente B, cuando el
+> sistema original ya había expedido ese mismo día la FS/120 al cliente A. Las dos ventas son reales
+> y los dos clientes tienen su ticket con QR. La AEAT recibió primero la de A y rechaza la de B con el
+> error 3000: nunca tendrá la de B, y el QR del ticket de B remite a la factura de A.
+>
+> Toda rectificativa, anulación o subsanación identifica la factura por NIF + número + fecha de
+> expedición, así que cualquiera de ellas actuaría sobre la factura de A: la anulación anularía la
+> venta de A, la rectificativa la modificaría y la subsanación la sustituiría. No encontramos ningún
+> texto que contemple dos facturas reales con el mismo número; además, la numeración correlativa que
+> exige el art. 7.1.a del RD 1619/2012 haría defectuoso el ticket de B.
+>
+> Vemos dos opciones: **(1)** expedir de nuevo la venta de B con un número nuevo de la serie nueva,
+> con las mismas líneas e importe y sin referencia a la FS/120 ante la AEAT, dejando constancia
+> interna de que sustituye al ticket de B; o **(2)** no remitir nada más, conservar el registro
+> rechazado y la respuesta de la AEAT, y justificarlo si la AEAT lo pide.
+>
+> **(a)** ¿Qué debe expedirse o remitirse para la factura de B: una de estas opciones, u otra?
+>
+> **(b)** ¿Cambia la respuesta si B era un destinatario identificado (factura completa, F1) al que
+> podemos entregar una factura nueva?
+
+**Default until answered:** option 2. The invoice is listed for the adviser with AEAT's reply, and the
+till refuses to void or credit it (design decision D4).
+
+This records a question; no enquiry has been sent.
+
+---
+
+### Q36. The same number reused on a different date (added 2026-10-03)
+
+**Why it matters.** Here AEAT raises nothing, because the two invoices have different keys. Nothing
+is missing at AEAT, but the series is no longer correlative. The software can only find these by
+asking AEAT, and the design has gaps in how it does so (decision D7).
+
+> Como en Q35, pero la copia antigua reutiliza el número otro día: la FS/120 de A es del 9 de marzo
+> y la de B del 10 de marzo. Para la AEAT son facturas distintas y acepta las dos, de modo que tiene
+> dos facturas reales con el número FS/120 en la misma serie. Los QR de los dos tickets son correctos.
+>
+> La AEAT tiene las dos, pero la serie ya no es correlativa (RD 1619/2012, art. 7.1.a). ¿Debe
+> expedirse o remitirse algo para la factura de B? ¿Es la respuesta la misma que en Q35?
+
+**Default until answered:** nothing is filed; the invoice is listed for the adviser. The software
+never reuses a number within a series, whatever the date.
+
+This records a question; no enquiry has been sent.
+
+---
+
+### Q37. Putting right a record AEAT refused (added 2026-10-03)
+
+**Why it matters.** FAQ §17 already says how: a credit note for an error the ROF covers (case 2.a),
+a correction record flagged `Subsanacion = S`, `RechazoPrevio = X` for an error only in internal
+record fields (case 2.b); such a correction came back `Correcto` from AEAT's test service on
+2026-09-27. What is open is which case each refusal we expect falls under. The two most likely,
+a wrong registered name and an issue date in the future, are both printed invoice content (RD
+1619/2012 art. 7.1.b and 7.1.d), so they look like case 2.a. A credit note here does not have Q35's
+problem: AEAT holds nothing under the refused invoice's key. Whether AEAT accepts a credit note
+naming an invoice it never received has not been tested. Building either remedy is a separate piece
+of work.
+
+> La FAQ de desarrolladores, §17, distingue: si el error está previsto en el ROF (caso 2.a), se
+> expide una factura rectificativa y el registro rechazado no se toca; si sólo afecta a campos
+> «internos» del registro (caso 2.b), se genera un alta de subsanación con `Subsanacion` = "S" y
+> `RechazoPrevio` = "X".
+>
+> Los rechazos que esperamos son: **(1)** la razón social del registro no coincide con la que la AEAT
+> tiene para el NIF (por ejemplo, porque se configuró el nombre comercial), lo que hace rechazar
+> todas las ventas hasta que se corrige; **(2)** la fecha de expedición es futura, porque el reloj del
+> equipo iba adelantado un día; **(3)** un error de formato o de codificación en un campo que no
+> figura en el ticket.
+>
+> **(a)** ¿Cada uno de los tres es caso 2.a (rectificativa) o caso 2.b (subsanación)? Entendemos que
+> (1) y (2) son caso 2.a, porque la razón social y la fecha de expedición son contenido obligatorio
+> de la factura simplificada (RD 1619/2012, art. 7.1.d y 7.1.b), y que (3) es caso 2.b.
+>
+> **(b)** En el caso (1), ¿basta una rectificativa por sustitución con la razón social correcta, o
+> hace falta otra cosa?
+
+**Default until answered:** nothing is issued. The refused record stays as it is, an alert names the
+invoice and AEAT's reason, and later records keep being sent (design decision D2).
+
+This records a question; no enquiry has been sent.
+
+---
+
+### Q38. The same sale recorded a second time (added 2026-10-03)
+
+**Why it matters.** One way this happens: a till pays for an order, the box records the sale and
+sends it, but the till never gets the reply; the box is then rolled back to a copy where the order is
+still unpaid, and the till's retry records the sale again. That is a reading of
+`apps/server/src/till-sale.ts`, not a test. There was one sale and one customer, and the customer's
+QR code matches what AEAT holds. AEAT's lookup reply carries the stored record's total, tax and
+generation time (`RespuestaConsultaLR.xsd`), so the software can tell this case from Q35.
+
+> Una copia antigua de la base de datos registra por segunda vez una venta que la AEAT ya tiene:
+> mismo número, fecha, líneas e importe, pero generada en otro momento y con otro encadenamiento, y
+> por tanto con otra huella (y, si el sistema ya cambió de instalación, con otro nº de instalación).
+> La AEAT rechaza el segundo registro con el error 3000. Hubo una sola venta y un solo cliente, y su
+> ticket y su QR coinciden con lo que tiene la AEAT.
+>
+> **(a)** ¿Podemos tratar el registro que ya tiene la AEAT como el registro de esa venta, no remitir
+> nada más y conservar nuestro duplicado rechazado junto con la respuesta de la AEAT? ¿O debemos
+> sustituir el de la AEAT por el nuestro con una subsanación, aunque sólo difieran campos que el
+> cliente no ve?
+>
+> **(b)** ¿Cuenta nuestro duplicado rechazado como un registro «sin remitir» (FAQ §5), si la AEAT
+> tiene la misma venta con la misma factura?
+
+**Default until answered:** leave AEAT's record as it is and note locally that it stands for this
+invoice.
+
+This records a question; no enquiry has been sent.
+
+---
+
+### Q39. AEAT holds a sale that never happened (added 2026-10-03)
+
+**Why it matters.** The software cannot tell a phantom sale from a real sale its database has lost:
+after a rollback, AEAT holds the real sales made after the copy was taken, and the box has no record
+of them. Those must never be cancelled. Only someone at the restaurant can tell which is which, so
+a cancellation is only ever a step a person confirms. That a cancellation may come from a different
+SIF than the one that issued the invoice is settled (findings §13), so it is not asked.
+
+> La AEAT tiene, con uno de nuestros números de factura, un registro que no corresponde a ninguna
+> venta de nuestra base de datos, y tras comprobarlo el restaurante confirma que nunca fue una venta
+> real: por ejemplo, un técnico arrancó una copia del sistema para probarla y sus ventas de prueba se
+> remitieron como reales. No hubo entrega de bienes ni prestación de servicios. (Las ventas reales
+> que una copia restaurada no conserva son otro caso y no se anulan.)
+>
+> La FAQ §17, caso 2.d, admite anular una factura expedida por error por un servicio o una entrega
+> que no existen, cita las facturas de prueba o de formación, e indica que no haberla entregado al
+> cliente favorece que pueda anularse.
+>
+> **(a)** En este caso, ¿es correcto un registro de anulación remitido desde la instalación actual?
+>
+> **(b)** Si se imprimió un ticket pero no hubo cliente (una impresión de prueba que nadie se llevó),
+> ¿cambia la respuesta? ¿Y si no podemos saber si alguien lo recibió?
+>
+> **(c)** Para justificar la anulación si la AEAT lo pide, ¿basta con anotar quién la confirmó y por
+> qué?
+
+**Default until answered:** nothing is filed; the record is listed for the adviser. Cancelling it
+later is a step a person confirms, never automatic.
+
+This records a question; no enquiry has been sent.
+
+---
+
+### Q40. Records the software deliberately keeps back (added 2026-10-03)
+
+**Why it matters.** A void or a refund of an invoice that collided as in Q35 would act on the other
+customer's invoice at AEAT, so the software never sends one. That is in tension with FAQ §5's «no
+pueden quedar RF generados sin remitir a la AEAT». Part (c) is a different case: a void of an
+invoice AEAT refused. Sending it and keeping AEAT's refusal leaves nothing unsent and harms nobody.
+The design's first draft would have held that back too.
+
+> El sistema registra una anulación cuando se anula un ticket y una rectificativa cuando se
+> devuelve; las dos identifican la factura original por NIF + número + fecha, y sólo se remiten
+> cuando la AEAT ha aceptado la original. Si la original resulta ser una de las facturas en conflicto
+> de Q35 (la AEAT tiene otra factura real con ese número y esa fecha), cualquier anulación o
+> rectificativa actuaría sobre esa otra factura. Por eso, una vez detectado el conflicto, el TPV no
+> permite anular ni rectificar esa factura; pero las que se hicieron antes de detectarlo (por
+> ejemplo, una anulación justo después de la venta durante un corte de Internet) se retienen sin
+> remitir y se señalan al asesor.
+>
+> **(a)** La FAQ §5 dice que «no pueden quedar RF generados sin remitir a la AEAT». ¿Es admisible
+> retener estos registros, dado que remitirlos alteraría ante la AEAT la factura de otro cliente?
+> ¿Qué conviene conservar para justificarlo?
+>
+> **(b)** Una vez resuelta la factura original según Q35, ¿qué se hace con la anulación o la
+> rectificativa retenida? Por ejemplo, si la venta se expide de nuevo con otro número (opción 1 de
+> Q35), ¿se aplica a la nueva factura?
+>
+> **(c)** Caso distinto: se anula un ticket cuyo registro original la AEAT rechazó (Q37). La AEAT no
+> tiene nada con esa clave, así que rechazará la anulación (error 3002, el registro no existe).
+> ¿La remitimos igualmente y conservamos el rechazo, la retenemos, o se trata la anulación de otro
+> modo? Por ejemplo, ¿deja entonces de ser necesaria la rectificativa del caso 2.a?
+
+**Default until answered:** a void or refund of a colliding invoice is kept back and listed; a void
+of a refused invoice is sent and AEAT's refusal kept.
+
+This records a question; no enquiry has been sent.
+
+---
 
 ## Notes for the conversation
 

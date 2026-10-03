@@ -398,5 +398,5 @@ pointing at spec §5 P5/P6 when this plan is approved.
 
 ## Asesor questions
 
-Spec §10 lists Q1–Q10 with Waitron's defaults. Tasks 6–8 build to those defaults; an answer that
+The asesor questions (spec §10; `docs/compliance/asesor-questions.md` Q33–Q40) carry Waitron's defaults. Tasks 6–8 build to those defaults; an answer that
 differs re-cuts the affected task before it lands.

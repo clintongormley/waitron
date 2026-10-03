@@ -387,13 +387,13 @@ Nothing holds the old chain's other records (§6), so they keep filing exactly a
   old link and old fingerprint, oldest first, with the `Incidencia` flag in the message header
   (Orden art. 16.4; Real Decreto 1007/2023 art. 8.2.a forbids changing a record). AEAT keys by
   invoice, and by its documents appears not to compare a record's link with what it holds (§9.5,
-  unmeasured — §13's first probe), so these would be accepted. Asesor question Q2.
+  unmeasured — §13's first probe), so these would be accepted. Asesor question Q34.
 - **Records AEAT already holds** come back as duplicates when resent; P2's lookup matches the
   fingerprint and marks them accepted. (Today a same-batch successor AEAT accepted is still halted
   locally, `drain.test.ts:893-897` **[ran]**.)
 - **The divergent record itself** stays `divergente`. The customer holds an invoice AEAT cannot take
   under that key. It goes on the **Needs your adviser** list (§8) with the remedy §9.3 describes;
-  Waitron files nothing more for it until the owner decides (asesor Q3, Q4).
+  Waitron files nothing more for it until the owner decides (asesor Q35, Q36).
 
 ### 7.4 Cancellations and credit notes after the switch
 
@@ -432,7 +432,7 @@ So `haltSuccessors` no longer runs on a refusal: later records file, the refused
 `rechazado`, and the alert names it with AEAT's reason. Whether a later record linked to the refused
 one is accepted is §13's first probe, so this change waits for it. Building the correction record is
 a new record builder — fiscal core — and is **out of this design**, a follow-up the owner gates on
-asesor Q5. A new chain does not help a refusal: one caused by our configuration would recur on it.
+asesor Q37. A new chain does not help a refusal: one caused by our configuration would recur on it.
 
 ### 7.6 A box with no bucket
 
@@ -547,9 +547,9 @@ the asesor to confirm:
 
 | What AEAT holds under our key                                             | Proposed handling                                                                                                                              | Asesor |
 | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| The same sale as ours, differing only in link, timestamps or installation | Leave it; record locally that AEAT's copy stands for that key                                                                                  | Q6     |
-| A sale that never happened (an old copy's phantom)                        | Cancellation record from the new chain, only if no customer received that ticket                                                               | Q7     |
-| A real invoice from the other copy, while we gave a customer ours         | Our refused record stays unchanged; a credit note by substitution in the new chain's credit-note series names ours (built later, on the answer) | Q3, Q4 |
+| The same sale as ours, differing only in link, timestamps or installation | Leave it; record locally that AEAT's copy stands for that key                                                                                  | Q38    |
+| A sale that never happened (an old copy's phantom)                        | Cancellation record from the new chain, confirmed by a person, only if no customer received that ticket                                        | Q39    |
+| A real invoice from the other copy, while we gave a customer ours         | Our refused record stays unchanged; nothing more is filed until the asesor answers (a credit note naming ours would reach the other invoice)    | Q35, Q36 |
 
 ### 9.4 A new chain: what AEAT describes
 
@@ -595,37 +595,22 @@ where our chain and AEAT's last agree (§7.6), but cannot rebuild a history.
 
 ## 10. Questions only the asesor can answer
 
-For the owner to send. Each has the default Waitron takes until answered.
+Moved on 2026-10-03 to `docs/compliance/asesor-questions.md`, section *Recovering from conflicts*,
+as Q33 to Q40, each with its background, a Spanish version to hand over and the default Waitron takes
+until answered. What changed in the move:
 
-1. **Q1 — Starting a new chain after a divergence.** Is abandoning a chain lawful with no closing
-   record and no notice to AEAT, given that only a reinstall is described? _Default: yes, under a
-   never-used installation number; keep the old chain, AEAT's replies and an incident record to
-   justify it on request (Orden 16.4)._
-2. **Q2 — The old chain's unsent records.** May they be sent after the new chain starts, unchanged
-   (old installation number, old links), with `Incidencia`? _Default: yes, oldest first, never
-   regenerated._
-3. **Q3 — A number collision on the same date.** AEAT holds the other copy's real invoice under the
-   same number and date as a real invoice we gave a customer; ours is refused 3000. What must we issue?
-   _Default: a credit note by substitution in the new chain's credit-note series, naming ours; our
-   refused record unchanged; the number never reused._
-4. **Q4 — The same number on a different date.** AEAT accepts both, holding two invoices with one
-   number. Must we correct anything? _Default: as Q3; and Waitron refuses number reuse within a series
-   whatever the date, because AEAT will not._
-5. **Q5 — A record refused for an error the invoicing regulation does not cover.** May the current
-   chain file a correction record (`Subsanacion = S`, `RechazoPrevio = X`) for it? _Default: yes,
-   correcting record data only, never amounts._
-6. **Q6 — AEAT holds our sale from an old copy, differing only in chain fields.** Leave it, or
-   overwrite it with a correction record? _Default: leave it._
-7. **Q7 — AEAT holds a sale that never happened.** Is a cancellation from the new chain right, and
-   does a printed ticket change that? _Default: cancel only where no customer received the ticket;
-   otherwise ask._
-8. **Q8 — After restoring an older backup.** Would continuing the old chain from the last record AEAT
-   holds be preferable to a new installation? _Default: keep the owner's new-chain rule._
-9. **Q9 — Late filing.** Does sending the old chain's tail after the new chain starts count as the
-   prohibited deliberate batch upload? _Default: no — Orden 16.4 covers sending after an incident._
-10. **Q10 — Held records.** A cancellation or credit note of an invoice AEAT does not hold as ours
-    (divergent or refused) is kept back unsent (`retenido`). Is holding it until the adviser decides
-    acceptable, given that no record may be left unsent? _Default: yes, listed and justified._
+| Was | Now | Change |
+| --- | --- | --- |
+| Q1  | Q33 | Asks only whether switching installation number automatically is acceptable; the owner answered that AEAT is not notified |
+| Q2  | Q34 | Unchanged in substance |
+| Q3  | Q35 | The default credit note naming our invoice is withdrawn: AEAT would apply it to the other copy's invoice under that key. The default is now to file nothing more |
+| Q4  | Q36 | Unchanged in substance |
+| Q5  | Q37 | Asks which expected refusals are FAQ case 2.a (credit note) and which 2.b (correction record); FAQ §17 already allows the correction record |
+| Q6  | Q38 | Adds whether a refused duplicate of a sale AEAT holds counts as unsent |
+| Q7  | Q39 | A cancellation is only ever a step a person confirms: Waitron cannot tell a phantom from a real sale it lost |
+| Q8  | —   | Dropped: a restore is the reinstall FAQ §4 describes, and continuing from AEAT's last record would reissue numbers printed but never sent |
+| Q9  | —   | Dropped: sending late after an incident is settled in `docs/compliance/verifactu-findings.md` §2 |
+| Q10 | Q40 | Adds a void of a refused invoice, which the default now sends rather than holds |
 
 ## 11. Decisions for the owner
 
@@ -639,9 +624,9 @@ Each has the recommended default this design is written to.
 3. **D3 — The series is read per sale and `WAITRON_TILL_SERIES_ID` goes** (§7.2). Recommended: yes,
    rather than a restart.
 4. **D4 — Voids, credit notes and substitutions of a divergent invoice are refused at the till, and
-   such records made earlier are held** (§7.4). Recommended: yes, until the asesor answers Q3/Q4.
+   such records made earlier are held** (§7.4). Recommended: yes, until the asesor answers Q35/Q36.
 5. **D5 — The old chain's records keep filing, unchanged, after the switch** (§7.3). Recommended: yes,
-   pending asesor Q2 and §13's first probe.
+   pending asesor Q34 and §13's first probe.
 6. **D6 — Where the Fiscal filing section lives** (§8). Recommended: decided in the plan's screen
    task, shown to the owner before it lands.
 7. **D7 — P5 and P6 wait for the topology work.** Recommended: yes; P1–P4 and P7 do not wait.

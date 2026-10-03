@@ -2357,10 +2357,11 @@ invoice cancels the other copy's record (measured on the fake AEAT; AEAT keys a 
 invoice alone); the design never sends one. It proposes seven preventions, five kinds of answer from AEAT, an automatic new
 chain started in its own transaction right after AEAT's reply is saved, with the series read per
 sale (no restart), what the
-dashboard says, AEAT's procedures quoted from primary sources, and ten asesor questions. The
+dashboard says, AEAT's procedures quoted from primary sources, and eight asesor questions
+(Q33–Q40 in `docs/compliance/asesor-questions.md`, rewritten with their background on 2026-10-03). The
 [plan](superpowers/plans/2026-10-03-fiscal-chain-divergence.md) has fourteen tasks (0–13), starting
 with three probes at AEAT's pre-production service. **Next action:** owner decides D1–D9 (spec §11)
-and sends the asesor questions (spec §10); the build is queued only after approval. Tasks 1, 2, 3, 6,
+and sends the asesor questions (Q33–Q40); the build is queued only after approval. Tasks 1, 2, 3, 6,
 7, 9 and 10 end `needs-owner-review`.
 
 ### A2. The setup wizard
