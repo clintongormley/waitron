@@ -1033,6 +1033,13 @@ export interface PrintCategorySalesInput {
   printerId: string;
 }
 
+/** `period` is the server's own token: `01`..`12` for a month, `1T`..`4T` for a quarter. */
+export interface VatReturnFileInput {
+  year: number;
+  period: string;
+  declarationType: string;
+}
+
 // ── Diagnostics (recent logs + runtime verbosity) types ──────────────────────────────────────────
 
 export type DiagnosticsLine = {
@@ -2955,6 +2962,18 @@ export class DashboardApi {
     );
   }
 
+  /** The DR303 file (modelo 303) for one period; the server answers its ISO-8859-1 bytes. */
+  downloadVatReturnFile(input: VatReturnFileInput): Promise<Blob> {
+    const params = new URLSearchParams({
+      year: String(input.year),
+      period: input.period,
+      declarationType: input.declarationType,
+    });
+    return this.#request<Blob>(`/management-api/reports/modelo-303?${params}`, "GET", undefined, {
+      as: "blob",
+    });
+  }
+
   getOverdueOrders(): Promise<{ orders: OverdueOrder[] }> {
     return this.#request<{ orders: OverdueOrder[] }>(
       "/management-api/reports/overdue-orders",
@@ -3049,8 +3068,7 @@ export class DashboardApi {
     );
   }
 
-  /** The ordinary request helper parses JSON, so this binary response keeps its own small fetch
-   * path. */
+  /** Not yet moved onto the request helper's `as: "blob"` option: docs/backlog.md A236. */
   async exportConfiguration(passphrase: string): Promise<Blob> {
     const fetchImpl = this.#fetch;
     const response = await fetchImpl(`${this.#baseUrl}/management-api/configuration-export`, {

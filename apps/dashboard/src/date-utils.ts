@@ -13,4 +13,12 @@ export function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** The latest calendar quarter that has fully ended, on the browser's own calendar. */
+export function lastEndedQuarter(now: Date): { year: number; quarter: 1 | 2 | 3 | 4 } {
+  const current = Math.floor(now.getMonth() / 3) + 1;
+  return current === 1
+    ? { year: now.getFullYear() - 1, quarter: 4 }
+    : { year: now.getFullYear(), quarter: (current - 1) as 1 | 2 | 3 };
+}
+
 export { formatIsoMinute } from "@waitron/dashboard-kit";

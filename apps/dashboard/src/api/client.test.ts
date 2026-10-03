@@ -6,7 +6,7 @@ function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return { ok, status, json: async () => body, text: async () => JSON.stringify(body) } as Response;
 }
 
-/** The request helper resolves an empty body to `undefined`, whatever the success status. */
+/** Without `as: "blob"`, the request helper resolves an empty body to `undefined`, whatever the success status. */
 function emptyResponse(): Response {
   return { ok: true, status: 204, json: async () => undefined, text: async () => "" } as Response;
 }

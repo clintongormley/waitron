@@ -6,12 +6,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Per-call options. `as: "blob"` resolves a 2xx to its body's bytes, undecoded, for a file download; a
+ * refusal is decoded exactly as without it.
+ */
+export interface RequestOptions {
+  passive?: boolean;
+  as?: "blob";
+}
+
 /** The one request primitive every dashboard API method funnels through — path-first: `(path, method, body?)`. */
 export type DashboardRequest = <T>(
   path: string,
   method: string,
   body?: unknown,
-  options?: { passive?: boolean },
+  options?: RequestOptions,
 ) => Promise<T>;
 
 /**
@@ -22,9 +31,9 @@ export type DashboardRequest = <T>(
  * becomes a rejected `{ code, status }` read from the server's `{ error: { code } }` envelope, falling
  * back to `server.internal` when the body is missing, non-JSON or names no code — so callers branch
  * on a stable domain code, never an HTTP status, while `status` (the answered response's HTTP status)
- * rides along for the rare caller that needs it. A 2xx with an EMPTY body resolves to `undefined`,
- * keyed off the empty body, not the status. This primitive does NOT redirect on 401 — it only decodes
- * and throws the code.
+ * rides along for the rare caller that needs it. Without `as: "blob"`, a 2xx with an EMPTY body
+ * resolves to `undefined`, keyed off the empty body, not the status. This primitive does NOT redirect
+ * on 401 — it only decodes and throws the code.
  */
 export function createRequest(
   opts: {
@@ -41,7 +50,7 @@ export function createRequest(
     path: string,
     method: string,
     body?: unknown,
-    options?: { passive?: boolean },
+    options?: RequestOptions,
   ): Promise<T> => {
     const init: RequestInit =
       body === undefined
@@ -86,8 +95,9 @@ export function createRequest(
         ? { code, status: res.status }
         : { code, params, status: res.status };
     }
-    const text = await res.text();
+    const read: Blob | string = await (options?.as === "blob" ? res.blob() : res.text());
     if (!passive) opts.onSuccess?.(path);
-    return (text === "" ? undefined : JSON.parse(text)) as T;
+    if (typeof read !== "string") return read as T;
+    return (read === "" ? undefined : JSON.parse(read)) as T;
   };
 }
