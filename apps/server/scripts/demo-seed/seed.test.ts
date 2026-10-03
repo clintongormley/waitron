@@ -43,6 +43,32 @@ describe("seedDemoRestaurant", () => {
     vi.unstubAllEnvs();
   });
 
+  it("connects the demo printer to the till and preparation stations", async () => {
+    const venue = await provisionVenue();
+    await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 0 });
+
+    const { rows: printers } = await suite.db.execute<{
+      name: string;
+      transport: string;
+      has_cash_drawer: number;
+      receipt_tills: number;
+      ticket_stations: number;
+    }>(sql`
+      select p.name, p.transport, p.has_cash_drawer,
+        (select cast(count(*) as integer) from tills t where t.receipt_printer_id = p.id) as receipt_tills,
+        (select cast(count(*) as integer) from station_printers sp where sp.printer_id = p.id) as ticket_stations
+      from printers p where p.location_id = ${venue.locationId}`);
+    expect(printers).toEqual([
+      {
+        name: "Demo printer",
+        transport: "usb",
+        has_cash_drawer: 1,
+        receipt_tills: 1,
+        ticket_stations: 4,
+      },
+    ]);
+  });
+
   it("refuses a production environment before writing anything", async () => {
     const venue = await provisionVenue();
     const before = await withTransaction(suite.db, async (tx) => ({

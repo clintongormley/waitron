@@ -1,8 +1,10 @@
 // Sales are seeded after the main transaction commits, because each sale opens its own transaction
 // and reads the committed products.
 
-import { withTransaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { kitchenStations, stationPrinters, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { createPrinter } from "@waitron/printing";
 import {
   buildMenuDocument,
   listAvailableProducts,
@@ -47,6 +49,27 @@ export async function seedDemoRestaurant(
       locationId,
       locale,
     });
+    const demoPrinter = await createPrinter(
+      tx,
+      { locationId },
+      {
+        name: "Demo printer",
+        transport: "usb",
+        localKey: "WAITRON-DEMO-PRINTER",
+        hasCashDrawer: true,
+      },
+    );
+    await tx
+      .update(tills)
+      .set({ receiptPrinterId: demoPrinter.id })
+      .where(eq(tills.locationId, locationId));
+    const stations = await tx
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.locationId, locationId));
+    for (const station of stations) {
+      await tx.insert(stationPrinters).values({ stationId: station.id, printerId: demoPrinter.id });
+    }
     await seedOptionLists(tx, { productsByImage, locale });
     await seedFloor(tx, { locationId, locale, menuIds });
     await seedWatchers(tx, { locationId, locale, stationIds });

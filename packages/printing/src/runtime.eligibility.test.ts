@@ -32,6 +32,43 @@ async function seedAgent(cfg: PrintConfig, name: string): Promise<string> {
 }
 
 describe("claim eligibility — derived from venue + visible keys", () => {
+  it("a printer-specific pull leaves another visible printer's job queued", async () => {
+    const cfg = await setup();
+    const agentId = await seedAgent(cfg, "Demo printer");
+    await withTransaction(suite.db, async (tx: Transaction) => {
+      const selected = await createPrinter(tx, cfg, {
+        name: "Selected",
+        transport: "usb",
+        localKey: "DEMO-SELECTED",
+      });
+      const other = await createPrinter(tx, cfg, {
+        name: "Other",
+        transport: "usb",
+        localKey: "DEMO-OTHER",
+      });
+      const selectedJob = await enqueuePrintJob(
+        tx,
+        cfg,
+        selected.id,
+        esc(SETTING).line("one").bytes(),
+      );
+      const otherJob = await enqueuePrintJob(tx, cfg, other.id, esc(SETTING).line("two").bytes());
+
+      const claimed = await claimPrintJobs(tx, agentId, {
+        locationId: cfg.locationId,
+        visibleKeys: ["DEMO-SELECTED", "DEMO-OTHER"],
+        printerId: selected.id,
+      });
+
+      expect(claimed.map((job) => job.id)).toEqual([selectedJob.jobId]);
+      const [untouched] = await tx
+        .select({ status: printJobs.status })
+        .from(printJobs)
+        .where(eq(printJobs.id, otherJob.jobId));
+      expect(untouched?.status).toBe("queued");
+    });
+  });
+
   it("claims a network_tcp job for any agent in the venue", async () => {
     const cfg = await setup();
     // An agent that registered NOTHING — printers carry no agent binding, so venue membership
