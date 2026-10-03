@@ -585,6 +585,22 @@ describe("settling", () => {
     await el.settled();
     expect(el.unsaved).toBe(true);
   });
+
+  it("does not read the courses again for a save answered after the list left the page", async () => {
+    let answer!: () => void;
+    const updateCourse = vi.fn(() => new Promise<void>((resolve) => (answer = resolve)));
+    const api = stubApi({ updateCourse });
+    const { el } = await mount(api);
+    await openRename(el, "c1");
+    await typeName(el, "Entrées");
+    await press(el, "Enter");
+    await settle(el);
+    el.remove();
+    answer();
+    await el.settled();
+    await settle(el);
+    expect(api.listCourses).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("removing", () => {

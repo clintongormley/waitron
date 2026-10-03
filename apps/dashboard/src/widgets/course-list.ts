@@ -140,6 +140,8 @@ export class CourseList extends LitElement {
   }
 
   async #load(): Promise<void> {
+    // A watch started after the host disconnected is never released.
+    if (!this.isConnected) return;
     // A failed read is reported through the query controller's error callback.
     await this.#queries.watch("listCourses", [], (rows) => this.#show(rows)).catch(() => undefined);
   }
