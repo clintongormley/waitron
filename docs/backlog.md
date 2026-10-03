@@ -1341,7 +1341,8 @@ beside the price and checks nothing about it.
   that a per-gram price cannot hold a fraction of a cent (13.50 €/kg has no exact per-gram price);
 - **a unit change says where the product is offered** (owner: _"we need some sort of notification
   of where it is used"_): changing a product's unit — or a parent's, which its variants without
-  their own inherit — shows the extras lists that offer it, because the stored portion is a number
+  their own inherit (2026-10-03 (A222): a variant now always has its product's unit) — shows
+  the extras lists that offer it, because the stored portion is a number
   in the old unit (50 in g becomes 50 kg). The units screen already lists the products using a
   unit (`ProductUsingUnit`, `packages/catalogue/src/unit-types.ts`); the same applies when a unit's
   own precision changes under portions held to it. Name both the affected extras lists and the
@@ -1615,7 +1616,8 @@ base", the new `editor.base_price`) while a variant is Active; with a unit, "per
 per kg" or "Base price per kg" as before. The same holds on a variant's own page; the variant
 window, which has no unit button, labels it "Price" (`unitShortLabel` and `renderPrice` in
 `apps/dashboard/src/widgets/product-editor.ts`, `editor.price` in
-`apps/dashboard/src/i18n/strings.ts`).
+`apps/dashboard/src/i18n/strings.ts`). _2026-10-03 (A222): on a variant's own page that text is
+fixed, not a button._
 
 **The variants' status filter becomes a "Show inactive" link (A217) — DONE (#1065).** The owner:
 _"the Variant status filter looks a bit messy where it is placed"_. The "Show variants" dropdown
@@ -1752,8 +1754,8 @@ category; it was missing only for a variant saved Inactive and for a product wit
 editor with no prompt, so a variant added and not saved is lost silently — the likeliest cause; ask
 the owner if it recurs.
 
-**A variant always has its product's unit (A222, owner 2026-10-02) — OPEN.** The owner:
-_"currently variants can have different units from their parents. i think that's a bad idea"_.
+**A variant always has its product's unit (A222, owner 2026-10-02) — DONE (PR number to follow).**
+The owner: _"currently variants can have different units from their parents. i think that's a bad idea"_.
 A variant's page offers its own unit today (`renderUnit` in `product-editor.ts`, whose blank
 choice is the parent's unit). **Wanted:** a variant takes its product's unit and cannot set one; the
 field goes from the variant's page and the variant window, the server refuses or ignores a
@@ -1764,6 +1766,25 @@ of a variant's `unitId` first. A203 (extras as a fixed portion) allows for a var
 ("or a parent's, which its variants without their own inherit") and gets simpler. The owner also
 noted the Products list shows no unit in its price column; A208 builds it ("€19.00 each",
 "€48.00 / kg").
+Built: the server reads a variant's unit as its product's (`unitOwnerJoin` and
+`effectiveProductColumns.pricingUnit`, `packages/catalogue/src/variant-fallback.ts`), so a menu's
+next publish, and the sales made from it, use the product's unit. A variant's editor save naming a
+unit is refused with `product.invalid` (field `unitId`) and otherwise deletes one the variant
+stores; the editor's read gives a variant no unit; and the variant's page shows the product's unit
+beside the price as fixed text, with no unit button or dropdown. Unit management ignores a unit row
+a variant still stores, and deleting a unit deletes such rows. The variant window already offered
+no unit.
+**Left open:**
+- No migration clears the unit rows variants already store. This carries the owner's A209 answer
+  for categories (no data-migration code before go-live, CLAUDE.md §3) over to units, and awaits
+  the owner's OK; the alternative is a one-statement clearing migration. The product, menu and unit
+  reads ignore such a row, and the variant's next save, or its unit's deletion, removes it.
+- A menu published before this keeps a variant's own unit, frozen in its published copy, until the
+  menu is next published (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`, serves that
+  copy; read, not run).
+- A configuration import still copies `product_units` rows as they are
+  (`packages/catalogue/src/configuration-transfer.ts`), so an imported variant can arrive with a
+  unit row, which those reads then ignore.
 
 **An extras list's product dropdown greys a product with variants and says why (A223, owner
 2026-10-02) — DONE (#1098).** Before this, the dropdown (`extra-list-form.ts`, `#itemsSection`) offered every
@@ -1873,12 +1894,6 @@ plans to retire the editor.
   menu's own switch for the product (`menu_items.active`), has been switched off** — only its
   parent product and extras. **Next action:** on a quantity raise, check the line's own product for
   Active and Available, its menu, and the menu's switch for the product.
-- **The units screen lists variants too, and offers them a target labelled as Each.**
-  `productsUsingUnit` (`packages/catalogue/src/units.ts`) does not limit itself to top-level
-  products; for a variant, the "Each (no unit)" target (`REASSIGN_EACH`,
-  `apps/dashboard/src/screens/units-screen.ts`) means "follow the parent's unit", which may be kg.
-  **Next action:** decide whether the units screen should list variants, and how to label that
-  target for them.
 - **A menu offer created with no price field at all is refused** (`management.request_invalid`);
   only an explicit `null` means "blank, charge the product's own price" — **decided 2026-09-23 by
   the owner:** _"we don't want to confuse 0.00 with `""`"_.
