@@ -143,6 +143,15 @@ export type MenuChange = {
   | { kind: "price_changed"; productId: string; name: string; from: string; to: string }
   | { kind: "product_changed"; productId: string; name: string; fields: ProductChangeField[] }
   | {
+      kind: "extra_unit_changed";
+      productId: string;
+      name: string;
+      listId: string;
+      listName: string;
+      from: { abbreviation: Record<string, string>; precision: number };
+      to: { abbreviation: Record<string, string>; precision: number };
+    }
+  | {
       kind: "section_added" | "section_removed";
       sectionId: string;
       name: string;

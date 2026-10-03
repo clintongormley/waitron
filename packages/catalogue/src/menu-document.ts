@@ -591,6 +591,7 @@ interface Shape {
   offers: Map<string, FrozenOffer>;
   /** Each extras item's product, at its first appearance. */
   extras: Map<string, FrozenExtraItemFacts>;
+  extraItemsByList: Map<string, { listId: string; listName: string; item: FrozenExtraItemFacts }>;
 }
 
 type FrozenExtraItemFacts = Extract<FrozenOfferedModifier, { kind: "extras" }>["items"][number];
@@ -612,12 +613,22 @@ function shapeOf(document: MenuDocument): Shape {
   walk(document.root.members, []);
   const offers = new Map(documentOffers(document).map((offer) => [offer.productId, offer]));
   const extras = new Map<string, FrozenExtraItemFacts>();
+  const extraItemsByList = new Map<
+    string,
+    { listId: string; listName: string; item: FrozenExtraItemFacts }
+  >();
   for (const offer of offers.values())
     for (const entry of offer.offeredModifiers)
       if (entry.kind === "extras")
-        for (const item of entry.items)
+        for (const item of entry.items) {
           if (!extras.has(item.productId)) extras.set(item.productId, item);
-  return { document, sections, offers, extras };
+          extraItemsByList.set(`${entry.id}:${item.productId}`, {
+            listId: entry.id,
+            listName: entry.name,
+            item,
+          });
+        }
+  return { document, sections, offers, extras, extraItemsByList };
 }
 
 /** Products that disappeared from this menu's extras and were not dishes in its live version. */
@@ -991,6 +1002,31 @@ export function diffEntries(
         fields: PRODUCT_FIELD_ORDER.filter((field) => fields.has(field)),
         source: "shared_product",
       });
+  }
+  for (const [key, { listId, listName, item }] of next.extraItemsByList) {
+    const was = prev.extraItemsByList.get(key)?.item;
+    if (
+      was === undefined ||
+      same(
+        [was.unit?.id, was.unit?.abbreviation, was.unit?.precision],
+        [item.unit?.id, item.unit?.abbreviation, item.unit?.precision],
+      )
+    )
+      continue;
+    const unitFacts = (unit: FrozenExtraItemFacts["unit"]) => ({
+      abbreviation: unit?.abbreviation ?? {},
+      precision: unit?.precision ?? 0,
+    });
+    push({
+      kind: "extra_unit_changed",
+      productId: item.productId,
+      name: item.name,
+      listId,
+      listName,
+      from: unitFacts(was.unit),
+      to: unitFacts(item.unit),
+      source: "shared_product",
+    });
   }
 
   const listKeys = (shape: Shape, list: string | null) =>

@@ -28,6 +28,7 @@ import {
 import { addMember, moveMember, removeMember, updateSection, deleteSection } from "./sections.js";
 import { setMenuVariants, setProductVariants } from "./variants.js";
 import { writeProductModifiers } from "./product-modifiers.js";
+import { createUnit, EACH_UNIT, updateUnit } from "./units.js";
 import { extraListItems } from "./schema/extras.js";
 import { menuDetails } from "./schema/menu.js";
 import { optionLabels, optionLists } from "./schema/options.js";
@@ -931,6 +932,49 @@ describe("diffMenuDocuments", () => {
         source: "shared_product",
       },
     ]);
+  });
+
+  it("names the list and extra when its saved portion takes a new product unit", async () => {
+    const f = await menusFixture(fx.db);
+    const live = await build(f.dinner);
+    await app(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+        "en",
+      );
+      await updateProduct(tx, f.extraLemon, { unitId: unit.id });
+    });
+
+    expect(diffMenuDocuments(live, await build(f.dinner))).toContainEqual({
+      kind: "extra_unit_changed",
+      productId: f.extraLemon,
+      name: "Extra lemon",
+      listId: f.extrasList,
+      listName: "Extras",
+      from: { abbreviation: EACH_UNIT.abbreviation, precision: 0 },
+      to: { abbreviation: { en: "kg" }, precision: 3 },
+      source: "shared_product",
+    });
+  });
+
+  it("does not claim an extra's unit changed when only the unit name changed", async () => {
+    const f = await menusFixture(fx.db);
+    const unitId = await app(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+        "en",
+      );
+      await updateProduct(tx, f.extraLemon, { unitId: unit.id });
+      return unit.id;
+    });
+    const live = await build(f.dinner);
+    await app((tx) => updateUnit(tx, unitId, { name: { en: "Kilo" } }, "en"));
+
+    expect(diffMenuDocuments(live, await build(f.dinner))).not.toContainEqual(
+      expect.objectContaining({ kind: "extra_unit_changed", productId: f.extraLemon }),
+    );
   });
 
   it("names the fields of a product that changed, the menu's variant settings apart", async () => {

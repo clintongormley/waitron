@@ -271,6 +271,33 @@ it("names a deleted extra-only product on its own line in English and Spanish", 
   ]);
 });
 
+it("names an extra's list and old and new units in both languages", async () => {
+  const el = await mount({
+    preview: preview([
+      {
+        kind: "extra_unit_changed",
+        productId: "p-ham",
+        name: "Jamón",
+        listId: "l-extras",
+        listName: "Extras",
+        from: { abbreviation: { en: "g", es: "g" }, precision: 0 },
+        to: { abbreviation: { en: "kg", es: "kg" }, precision: 3 },
+        source: "shared_product",
+      },
+    ]),
+  });
+  expect(items(el, "changes")).toEqual([
+    "Extras: Jamón unit changed from g (0 decimal places) to kg (3 decimal places) — shared product",
+  ]);
+
+  setLocale("es-ES");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(items(el, "changes")).toEqual([
+    "Extras: la unidad de Jamón ha cambiado de g (0 decimales) a kg (3 decimales) — producto compartido",
+  ]);
+});
+
 /** A dish's VAT change, a variant's own (named in the variants too), and an extra's. */
 const VAT_CHANGES: MenuChange[] = [
   {
