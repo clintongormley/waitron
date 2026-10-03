@@ -282,17 +282,39 @@ Each fix names the test that holds it; each guard is proven by deletion when bui
   refuses, with a code the recovery page words. `dev-setup` stays unstamped by design; the refusal
   covers it and any database older than stamping. Test: "boot refuses an unstamped database holding
   pre-production records when `WAITRON_ENV=production`".
-- **P5 — An older copy is caught before its first sale (C2, C4).** The signed pointer carries the
-  node's chain position (`secuencia`) and invoice counters; boot, before trading, compares them with
-  the local database; a database behind the bucket for its own node starts a new chain (§7) before
-  its first sale and raises an alert; the supervisor never moves the pointer away from a generation
-  ahead of it. A box with no bucket gets the first-pass check of §7.6 instead. Tests: "a database
+- **P5 — An older copy is caught before its first sale (C2, C4).** The bucket holds a small signed
+  record of the node's chain position (`secuencia`) and invoice counters, rewritten whenever the
+  bucket is reachable. It cannot ride in the pointer as first proposed: the pointer is written only
+  when a stream generation starts (`packages/stream/src/supervisor.ts`, the claim after
+  `readPointer`), not as sales are filed. Boot, before trading, compares it with the local database;
+  a database behind the bucket for its own node starts a new chain (§7) before its first sale and
+  raises an alert; the supervisor never moves the pointer away from a generation ahead of it. Every
+  box also runs the start-up check of §7.6, bucket or not. Tests: "a database
   behind the bucket's pointer for its own node starts a new chain before its first sale"; "an older
   copy at the same term does not take over the pointer".
 - **P6 — A higher-term pointer fences the box, not just its stream (C8).** A box that meets a
-  pointer at a higher term stops selling and filing and shows the recovery page with an alert. An old
-  box that never comes online stays unfenced; that cannot be closed locally. Test: "a box whose bucket
+  pointer at a higher term stops selling and filing and shows the recovery page with an alert. The
+  fenced posture exists already: a box the membership document fences gives up the primary role (so
+  its drain stops), refuses writes and tells tills it accepts no sales (`apps/server/src/boot.ts`,
+  `isFenced`); only the trigger from the bucket is new — read the pointer before trading, and restart
+  fenced when the running stream meets a newer one (`shouldFenceRestart`,
+  `apps/server/src/membership-fence.ts`, has no caller yet). **It starts with a short design for the
+  owner** on whose signature fences a box: today only a restore checks a pointer's signature
+  (`apps/server/src/restore-stream.ts`, against the recovery kit's key), and a fence obeyed on an
+  unchecked pointer would let anyone able to write to the bucket stop the venue's sales. An old box
+  that never comes online stays unfenced; that cannot be closed locally. Test: "a box whose bucket
   pointer names a higher term boots fenced: no sales, no filing".
+- **P8 — Every selling device is a witness the box cannot roll back (C2, C4; owner, 2026-10-03,
+  D7).** A disk snapshot or copy rolls back everything on the box, not the devices. Each device keeps
+  in `localStorage` (which survives a restart; `sessionStorage` does not) the highest invoice number
+  it has seen per series code, read and written inside `try`, as the till already does for its other
+  remembered values. When it connects, it reports them; a box whose counter for a live series of
+  that code is lower is behind, and starts a new chain (§7, cause "this database is behind a device")
+  before its next sale. A missing or unreadable value is no evidence and refuses nothing; a value
+  for a series the box no longer has live (after a legitimate restore) is ignored. It works with no
+  internet, which the start-up check of §7.6 cannot. Tests: "a box whose counter is behind a device's
+  remembered number starts a new chain before its next sale"; "a device with nothing remembered, or a
+  retired series, changes nothing".
 - **P7 — Warn about what only AEAT knows, before the first sale (C9).** The pre-production readiness
   test already files a record; it also reports a legal-name or tax-id mismatch from AEAT's answer as
   its own outcome. A box clock more than the tolerance away from AEAT's response timestamps raises an
@@ -318,7 +340,10 @@ Each fix names the test that holds it; each guard is proven by deletion when bui
     depends on the pre-production service checking names, which §13's fifth probe settles.
 
 P1 and P2 are the urgent ones: P1 is the only high-likelihood cause, and without P2 every collision in
-C2–C6 is silent. P5 and P6 depend on the topology work and may land later.
+C2–C6 is silent. Nothing here waits for the topology work (D7, owner 2026-10-03). **A new chain is
+never started merely because AEAT cannot be reached:** a box often starts before the internet does
+after a power cut, so it would mint chains routinely, which is the «utilización dinámica del SIF» the
+FAQ warns against (asesor Q33). Evidence starts one — P5, P8 or the check of §7.6.
 
 ## 6. Detect: what each answer means
 
@@ -466,15 +491,17 @@ one is accepted is §13's first probe, so this change waits for it. Building the
 a new record builder — fiscal core — and is **out of this design**, a follow-up the owner gates on
 asesor Q37. A new chain does not help a refusal: one caused by our configuration would recur on it.
 
-### 7.6 A box with no bucket
+### 7.6 The start-up check against AEAT
 
-P5 needs the bucket. Without one, the first filing pass after a start looks up, for each live series,
+Every box runs it, with a bucket or without (D7). The first filing pass after a start looks up, for each live series,
 whether AEAT already holds the next number this node would issue — asking for every month from the
 month of the node's newest record to the current month, narrowed to the node's installation. If it
 does, the node is behind AEAT: it starts a new chain (cause "this database is behind AEAT") before its
 first claim. Sales made before that pass are on the old chain; if they collide they are marked
 `divergente` on a retired installation and listed (§6). A failed lookup starts nothing and is retried
-next pass.
+next pass. When the check finds the node behind, it also looks up each number the node issued on the
+old series since it started, and lists any AEAT holds under another issue date (asesor Q36): AEAT
+accepted those, so nothing else would show them.
 
 ### 7.7 The loop guard, and the manual start
 
@@ -490,9 +517,10 @@ authenticator code where enrolled; `apps/server/src/promote-api.ts`).
 The Alerts screen is the only surface today (`apps/dashboard/src/screens/alerts-screen.ts`); there is
 no fiscal screen, and `fiscal.submission_stopped` has no action and can never clear. This design:
 
-- adds a **Fiscal filing** section (an existing dashboard screen or a new one, decided in the plan
-  and shown to the owner first), listing the current chain (installation number, series, last record
-  accepted), the `chain_restarts`, and the **Needs your adviser** list: each `divergente` and
+- adds a **Fiscal filing** screen (*Envío fiscal*) in the dashboard's Reporting group, straight after
+  the VAT return, shown to whoever holds `report.export` as the VAT return is (D6). It lists the
+  current chain (installation number, series, last record accepted, how many records wait to be
+  sent), the `chain_restarts`, and the **Needs your adviser** list: each `divergente`, `rechazado` and
   `retenido` record with its invoice number, date, amount, and what AEAT holds instead where known;
 - rewords `fiscal.registro_rechazado`, retires `fiscal.huella_divergente` and
   `fiscal.duplicado_anulado`, and adds two; the other fiscal alerts that end "Contact support"
@@ -504,6 +532,7 @@ no fiscal screen, and `fiscal.submission_stopped` has no action and can never cl
 | `fiscal.chain_restarted`, a different record    | The tax agency (AEAT) holds a different record for invoice {invoice}. To keep filing, Waitron started a new invoice series, {series}, at {time}. Sales were not interrupted. Your tax adviser needs to review invoice {invoice}: see Fiscal filing. | La AEAT tiene un registro distinto para la factura {invoice}. Para seguir enviando los registros a la AEAT, Waitron ha abierto una nueva serie de facturas, {series}, a las {time}. Las ventas no se han interrumpido. Tu asesor fiscal debe revisar la factura {invoice}: consulta Envío fiscal. |
 | `fiscal.chain_restarted`, a shared installation | The tax agency (AEAT) reports that another system has filed invoices under this box's installation number. To keep the two apart, Waitron started a new invoice series, {series}, at {time}. Sales were not interrupted.                           | La AEAT indica que otro sistema ha enviado facturas con el número de instalación de este equipo. Para separarlos, Waitron ha abierto una nueva serie de facturas, {series}, a las {time}. Las ventas no se han interrumpido.                                                                    |
 | `fiscal.chain_restarted`, database behind AEAT  | This box's database is older than what the tax agency (AEAT) already holds. To avoid reusing invoice numbers, Waitron started a new invoice series, {series}, at {time}. Sales were not interrupted.                                               | La base de datos de este equipo es más antigua que lo que ya tiene la AEAT. Para no repetir números de factura, Waitron ha abierto una nueva serie de facturas, {series}, a las {time}. Las ventas no se han interrumpido.                                                                     |
+| `fiscal.chain_restarted`, database behind the bucket or a device (P5, P8) | This box's database is older than its own backup or than invoices a till has already shown. To avoid reusing invoice numbers, Waitron started a new invoice series, {series}, at {time}. Sales were not interrupted. | La base de datos de este equipo es más antigua que su propia copia de seguridad o que facturas que ya ha mostrado un TPV. Para no repetir números de factura, Waitron ha abierto una nueva serie de facturas, {series}, a las {time}. Las ventas no se han interrumpido. |
 | `fiscal.registro_rechazado`                     | The tax agency (AEAT) refused the record for invoice {invoice}: {mensaje} (code {codigo}). Later records are still being sent. This invoice needs correcting: see Fiscal filing.                                                                    | La AEAT ha rechazado el registro de la factura {invoice}: {mensaje} (código {codigo}). Los registros posteriores se siguen enviando. Esta factura debe corregirse: consulta Envío fiscal.                                                                                                      |
 | `fiscal.chain_restart_limit`                    | The tax agency (AEAT) again holds records Waitron did not expect, less than a day after Waitron started a new invoice series. Waitron has not started another. Sales continue. Contact support.                                                   | La AEAT vuelve a tener registros que Waitron no esperaba, menos de un día después de abrir una nueva serie de facturas. Waitron no ha abierto otra. Las ventas continúan. Contacta con soporte.                                                                                                |
 
@@ -662,11 +691,18 @@ Each has the recommended default this design is written to.
    until the asesor answers Q35 and Q40. The spec's first choice, refusing them at the till, was
    dropped: it left the order open as owed and pushed staff to work outside the system. A record
    naming a refused invoice is sent (§6).
-5. **D5 — The old chain's records keep filing, unchanged, after the switch** (§7.3). Recommended: yes,
-   pending asesor Q34 and §13's first probe.
-6. **D6 — Where the Fiscal filing section lives** (§8). Recommended: decided in the plan's screen
+5. **D5 — The old chain's records keep filing, unchanged, after the switch** (§7.3). **DECIDED
+   (owner, 2026-10-03): yes,** subject to asesor Q34 and §13's first probe; either answering against
+   it brings D5 back to the owner.
+6. **D6 — Where the Fiscal filing section lives** (§8). **DECIDED (owner, 2026-10-03): its own screen
+   in the Reporting group, straight after the VAT return, under `report.export`.** It is still shown
+   to the owner before it lands. Previously recommended: decided in the plan's screen
    task, shown to the owner before it lands.
-7. **D7 — P5 and P6 wait for the topology work.** Recommended: yes; P1–P4 and P7 do not wait.
+7. **D7 — What waits for the topology work.** **DECIDED (owner, 2026-10-03): nothing.** P5 joins the
+   plan, carried by a signed bucket record of its own; P6 joins it with a short design first, on whose
+   signature fences a box; the start-up check of §7.6 runs on every box and lists numbers reused on
+   another date; P8 (devices as witnesses) is added; and no chain is started merely because AEAT
+   cannot be reached. Previously recommended: P5 and P6 wait.
 8. **D8 — A clock out of tolerance warns, and never refuses a sale** (P7). Recommended: yes.
 9. **D9 — Every series code carries its installation number from the first sale** (P3), so receipts
    read like `FS-213192000/1` instead of `FS/1`. Recommended: yes — it is what stops two

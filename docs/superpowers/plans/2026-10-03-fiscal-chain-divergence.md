@@ -11,25 +11,25 @@ other than what we hold, Waitron starts a new chain by itself, keeps every sale 
 everything it owes, and tells the manager in plain words what happened and what needs their tax
 adviser.
 
-**Architecture:** Task 0 settles three facts at AEAT first. Then the two fixes that stop chains
+**Architecture:** Task 0 settles five facts at AEAT first. Then the two fixes that stop chains
 breaking for reasons of our own (strict order, Task 1) and make collisions visible (fingerprint on
 every duplicate, Task 2). Then the minting and stamping fixes that stop new installations colliding
 (Tasks 3–4). Then the enabler for a live new chain (the series read per sale, Task 5), the two
-filing-rule changes (a refusal stops nothing, Task 6; a divergence starts a new chain, Task 7), the
-till's refusal for a divergent invoice (Task 8), and the dashboard with the manual start (Task 9).
-Tasks 10–11 add the check that needs no bucket and the clock warning; Task 12 is the compliance-notes
-pointers. P5 and P6 (the bucket-pointer checks) wait for the topology work and are listed, not
-planned, in Task 13.
+filing-rule changes (a refusal stops nothing, Task 6; a divergence starts a new chain, Task 7), holding
+a divergent invoice's cancel back (Task 8), and the dashboard with the manual start (Task 9). Tasks
+10–11 add the start-up check against AEAT on every box and the clock warning; Task 12 is the
+compliance-notes pointers. Tasks 13–15 catch an older copy from the bucket (P5), fence an old box
+from the bucket (P6, design first) and use the selling devices as witnesses (P8).
 
 **Order and dependencies:** 0 → 1 → 2 → (3, 4 in either order) → 5 (after A238 lands) → 6 (needs 0,
 1) → 7 (needs 0, 1, 2, 3, 5, and 6 unless the owner declines D2) → 8, 9, 10 (each needs 7) → 11, 12
-any time; 13 later.
+any time; 13 and 15 after 7; 14 after its design is approved.
 
 **Tech stack:** TypeScript 7, drizzle-orm 0.45 + `node:sqlite`, Hono, Lit 3, Vitest 4 (real headless
 Chromium for the front ends), `@waitron/verifactu` 0.2.1 and its fake AEAT.
 
 **Spec:** `docs/superpowers/specs/2026-10-03-fiscal-chain-divergence-design.md` — read it in full
-first. Section numbers (§N), cause numbers (C1–C13), preventions (P1–P7) and decisions (D1–D9) are
+first. Section numbers (§N), cause numbers (C1–C13), preventions (P1–P8) and decisions (D1–D9) are
 the spec's.
 
 ## Global constraints
@@ -341,13 +341,16 @@ Review: FULL (fiscal-adjacent). Lands autonomously: it holds records back and se
 
 Needs Task 7.
 
-Step 0: decide whether an existing screen takes a Fiscal filing section or a new screen is needed;
-put the choice to the owner in `questions.md` before building.
+Where it goes is decided (owner, 2026-10-03, D6): a screen of its own, *Fiscal filing* (*Envío
+fiscal*), in the dashboard's Reporting group straight after the VAT return
+(`apps/dashboard/src/dashboard-app.ts`, `NAV_GROUPS`), under the VAT return's permission,
+`report.export`. No new permission.
 
-- [ ] A read-only management route (permission `fiscal.view`) for the current chain (installation
-  number, series, last accepted record), `chain_restarts` newest first, and the Needs your adviser
-  list (`divergente` and `retenido` records: invoice number, date, amount, AEAT's stored fingerprint
-  and state where known). Route cases for each.
+- [ ] A read-only management route (permission `report.export`) for the current chain (installation
+  number, series, last accepted record, how many records wait to be sent), `chain_restarts` newest
+  first, and the Needs your adviser list (`divergente`, `rechazado` and `retenido` records: invoice
+  number, date, amount, AEAT's stored fingerprint and state where known; a held record shown beside
+  the invoice it names). Route cases for each, including a refusal without `report.export`.
 - [ ] The manual start: a route that starts a new chain through the same function as Task 7, allowed
   to an administrator only after re-authentication as `node.promote` does (password, and the
   authenticator code where enrolled; `apps/server/src/promote-api.ts`), refused while the loop guard
@@ -359,7 +362,7 @@ put the choice to the owner in `questions.md` before building.
 
 Review: FULL (auth, permissions). Ends `needs-owner-review`: the manual start starts a chain.
 
-## Task 10 — A box with no bucket checks AEAT on its first pass (spec §7.6)
+## Task 10 — Every box checks AEAT on its first pass (spec §7.6, D7)
 
 Needs Task 7.
 
@@ -373,6 +376,10 @@ Files: `drain.ts` or a new first-pass step beside `resetBeforeFirstDrain`
   finds it.
 - [ ] **Failing case**: a copy level with AEAT starts nothing; a failed lookup starts nothing and
   retries next pass.
+- [ ] **Failing case**: a box WITH a bucket runs the same check (D7).
+- [ ] **Failing case**: a sale made on the old series before the check succeeded, whose number AEAT
+  holds under another issue date, is listed for the adviser once the check finds the box behind.
+- [ ] **Failing case**: an unreachable AEAT at start starts no chain.
 - [ ] Deletion proof.
 
 Review: FULL. Ends `needs-owner-review` (it can start a chain).
@@ -397,11 +404,55 @@ Review: FULL (fiscal-adjacent). Lands autonomously: nothing filed changes and no
   the 2007 point (cite run 36350894099), and note the FAQ pages' new date. Docs flow: branch,
   `commit -s`, fast-forward `main`, push.
 
-## Task 13 — Listed, not planned: P5 and P6 (D7)
+## Task 13 — The bucket knows how far each node's chain got (P5, D7)
 
-The chain position in the signed bucket pointer, the supervisor refusing an older copy, and a
-higher-term pointer fencing the box, wait for the topology work (slice 3). Add a backlog entry
-pointing at spec §5 P5/P6 when this plan is approved.
+Needs Task 7.
+
+Files: `packages/stream/src` (a signed chain-position record beside `pointer.ts`, its key and
+reader), the supervisor or the pass loop that rewrites it while the bucket is reachable, boot's
+check before trading.
+
+- [ ] **Failing case**: a database behind the bucket's chain-position record for its own node starts a
+  new chain before its first sale, cause "this database is behind the bucket", and raises the alert.
+- [ ] **Failing case**: an older copy at the same term does not take over the pointer.
+- [ ] **Failing case**: a record that fails its signature check is ignored and alerted, never obeyed.
+- [ ] Deletion proof for each.
+
+Review: FULL (concurrency, fiscal). Ends `needs-owner-review`: it can start a chain.
+
+## Task 14 — A newer pointer in the bucket fences the box (P6, D7)
+
+Step 0, before any code: a short design for the owner on whose signature fences a box. Today only a
+restore checks a pointer's signature (`apps/server/src/restore-stream.ts`, against the recovery kit's
+key); find which key a restored box signs new pointers with, and whether the old box can verify it.
+Also the recovery page's wording and the way out (retire or rejoin, which exist). Stop for approval.
+
+- [ ] **Failing case**: a box whose bucket pointer names a higher term, signed by a trusted key, boots
+  fenced: no sales, no filing, the recovery page with an alert.
+- [ ] **Failing case**: the same met by the running stream restarts the box fenced
+  (`shouldFenceRestart`, `apps/server/src/membership-fence.ts`).
+- [ ] **Failing case**: a higher-term pointer that fails the signature check fences nothing and raises
+  an alert.
+- [ ] Deletion proof for each.
+
+Review: FULL (auth, concurrency). Ends `needs-owner-review`: it stops a box selling.
+
+## Task 15 — The selling devices remember the highest number they have seen (P8, D7)
+
+Needs Task 7.
+
+Files: `apps/till/src` (the remembered numbers in `localStorage`, per series code, read and written
+inside `try`), the till's connection to the box, the server's check before the next sale.
+
+- [ ] **Failing case**: a box whose live series counter is behind a device's remembered number for
+  that series code starts a new chain before its next sale, cause "this database is behind a
+  device".
+- [ ] **Failing case**: a device with nothing remembered, unreadable storage, or a number for a series
+  the box no longer has live, changes nothing and refuses nothing.
+- [ ] **Failing case**: with no internet at all, the check still runs.
+- [ ] Deletion proof; the till opened and looked at.
+
+Review: FULL (fiscal). Ends `needs-owner-review`: it can start a chain.
 
 ## Asesor questions
 
