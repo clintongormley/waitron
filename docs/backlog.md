@@ -5344,7 +5344,7 @@ characters. Left open:
     "TS-2 status" in `split-bill.test.ts`.
   - Found by #621 (the rest of `apps/till`), not fixable in a comments-only change.
     **The empty walk-up options test in `apps/till/src/till-app.test.ts` is now a real case — DONE
-    (W25, 2026-10-03):** it fails when the paid line drops its options answer, and when it carries
+    (W25, #1131, 2026-10-03):** it fails when the paid line drops its options answer, and when it carries
     the names the picker copied onto the line for display. The review reported that "resets any
     leftover drill/active tab on login" still passes with login's own clearing line deleted, because
     logout clears the same state first (run in review, not re-run here). A question the prune moved
