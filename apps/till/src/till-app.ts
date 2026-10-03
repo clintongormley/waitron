@@ -2461,12 +2461,17 @@ export class TillApp extends LitElement {
     } finally {
       this.submitting = false;
     }
+    if (session !== this.#operatorSession) return;
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
         this.#onConfirmPayment(event, true),
       );
-    if (recheck && (await this.#askCounterDeadEnds("pay", true, inactiveChoice)))
+    if (
+      recheck &&
+      (await this.#askCounterDeadEnds("pay", true, inactiveChoice)) &&
+      session === this.#operatorSession
+    )
       await this.#onConfirmPayment(event, true);
   }
 
@@ -2566,10 +2571,15 @@ export class TillApp extends LitElement {
     } finally {
       this.submitting = false;
     }
+    if (session !== this.#operatorSession) return;
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () => this.#collectCard(event, true));
-    if (recheck && (await this.#askCounterDeadEnds("pay", true, inactiveChoice)))
+    if (
+      recheck &&
+      (await this.#askCounterDeadEnds("pay", true, inactiveChoice)) &&
+      session === this.#operatorSession
+    )
       await this.#collectCard(event, true);
   }
 
@@ -2813,6 +2823,7 @@ export class TillApp extends LitElement {
     } finally {
       this.placing = false;
     }
+    if (session !== this.#operatorSession) return;
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () => this.#onPlaceOrder(true));
     if (recheck) {
@@ -2932,7 +2943,7 @@ export class TillApp extends LitElement {
     try {
       await this.#refreshStationQueue();
     } finally {
-      await this.#refreshWaiting();
+      if (session === this.#operatorSession) await this.#refreshWaiting();
     }
   }
 
@@ -3114,11 +3125,15 @@ export class TillApp extends LitElement {
     } finally {
       this.parking = false;
     }
+    if (session !== this.#operatorSession) return;
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () => this.#onParkOrder(event, true));
     if (recheck) {
       this.errorKey = "held.park_error";
-      if (await this.#askCounterDeadEnds("place", false, inactiveChoice))
+      if (
+        (await this.#askCounterDeadEnds("place", false, inactiveChoice)) &&
+        session === this.#operatorSession
+      )
         await this.#onParkOrder(event, true);
     }
   }

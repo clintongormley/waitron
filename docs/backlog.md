@@ -3174,14 +3174,15 @@ The original walkthrough is retained under *Detail → Setup wizard*.
         read for another order stays intact. The Chromium cases in
         `apps/till/src/till-app-counter-cancel-credit.test.ts` cover those outcomes, including a
         kitchen-queue read held open after the cancel.
-      - **Done by A234: a counter action does not start a list read after its operator signs out.**
+      - **Done by A234: the named counter actions check their starting operator session before a later list read.**
         The sale, card, place, collect, found-bill, ticket-advance, collection, hand-over, park,
-        retrieve, discard, adjusted-order reread, zone-choice and move-to-table paths check their
-        starting session before a later read. The Chromium cases in
+        retrieve, discard, adjusted-order reread, zone-choice and move-to-table paths check before
+        their later reads. The Chromium cases in
         `apps/till/src/till-app-boot-and-counter.test.ts`,
         `apps/till/src/till-app-counter-adjustments.test.ts` and `apps/till/src/till-app.test.ts`
-        hold a write answer or a list read across sign-out and assert the later read does not
-        start. B34 had already checked the cancel-and-credit path in #1077.
+        hold write answers, list reads and refusals across sign-out; each asserts the corresponding
+        later read or retry does not start. B34 had already checked the cancel-and-credit path in
+        #1077.
       - **The busy-state defect in these counter paths remains open.** `#onConfirmPayment`,
         `#collectCard`, `#onPlaceOrder`, `#onCollectOrder` and `#onFindBillPay` wait for their list
         reads before clearing the flag that marks the basket busy (`submitting` or `placing`), and
