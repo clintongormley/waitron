@@ -5775,7 +5775,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
     });
   });
 
-  it("voids the physical 50 g child amount when one of two fired dishes is cancelled", async () => {
+  it("voids the physical 50 g child amount when a fired dish is cancelled or reduced", async () => {
     const { cfg, cafeId, catalogueId, kgUnitId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -5840,6 +5840,26 @@ describe("a cancel's extras cascade (FIX 2)", () => {
         where working_order_id = ${tabId} and kind = 'void'
         order by quantity`);
       expect(notices.rows.map((row) => row.quantity)).toEqual([50, 1000]);
+
+      const reducedTableId = await makeTable(tx, cfg);
+      const { tabId: reducedTabId } = await openPartyTab(tx, cfg, { tableId: reducedTableId });
+      await addRound(tx, cfg, reducedTabId, [
+        {
+          productId: cafeId,
+          quantity: "2",
+          extras: [{ listId: list.id, picks: [{ productId: extra.id, quantity: 1 }] }],
+        },
+      ]);
+      const [{ revision: reducedRevision }] = await tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, reducedTabId));
+      await updateOrderLine(tx, cfg, reducedTabId, 1, { quantity: "1" }, reducedRevision!);
+      const reducedNotices = await tx.execute<{ quantity: number }>(sql`
+        select quantity from kitchen_notices
+        where working_order_id = ${reducedTabId} and kind = 'void'
+        order by quantity`);
+      expect(reducedNotices.rows.map((row) => row.quantity)).toEqual([50, 1000]);
     });
   });
 

@@ -4790,7 +4790,9 @@ async function applyLineEdits(
           .map(({ child, perDish }) =>
             correctionFor(
               child,
-              decimalToThousandths(extraQuantityFor(perDish, thousandthsToDecimal(removed))),
+              decimalToThousandths(
+                extraQuantityFor(perDish, thousandthsToDecimal(removed), child.priceQuantity),
+              ),
             ),
           ),
       ]),
