@@ -5706,6 +5706,76 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
 });
 
 describe("a cancel's extras cascade (FIX 2)", () => {
+  it("keeps one frozen 50 g extra portion when one of two dishes is cancelled", async () => {
+    const { cfg, cafeId, catalogueId, kgUnitId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      const extra = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Jamón",
+        unitId: kgUnitId,
+        unitPrice: "0.27",
+        vatClass: "general",
+      });
+      const list = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Jamón list",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 3,
+          active: true,
+          items: [
+            {
+              productId: extra.id,
+              portion: "0.050",
+              maxQuantity: 3,
+              preselected: false,
+              price: null,
+            },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
+      const tableId = await makeTable(tx, cfg);
+      const tabId = await openExtrasTab(tx, cfg, tableId, [
+        {
+          productId: cafeId,
+          quantity: "2",
+          extras: [{ listId: list.id, picks: [{ productId: extra.id, quantity: 1 }] }],
+        },
+      ]);
+
+      await cancelLine(tx, cfg, tabId, 1, "1");
+
+      const lines = await tx
+        .select({
+          id: workingOrderLines.id,
+          parentLineId: workingOrderLines.parentLineId,
+          quantity: workingOrderLines.quantity,
+          priceQuantity: workingOrderLines.priceQuantity,
+          lineTotal: workingOrderLines.lineTotal,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(workingOrderLines.lineNo);
+      expect(lines).toHaveLength(2);
+      expect(lines[0]).toMatchObject({
+        parentLineId: null,
+        quantity: 1000,
+        priceQuantity: 1000,
+      });
+      expect(lines[1]).toMatchObject({
+        parentLineId: lines[0]!.id,
+        quantity: 50,
+        priceQuantity: 50,
+        lineTotal: 1,
+      });
+    });
+  });
+
   /** Attach an extras list whose one product may be picked TWICE, returning the ids the wire needs. A
    *  list that ACCEPTS a tally of two AND an item cap of two, so a doubled pick SUMS to a per-dish
    *  quantity of 2 rather than being dropped, and is valid. */

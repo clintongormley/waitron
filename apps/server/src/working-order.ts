@@ -2426,6 +2426,7 @@ export async function removeFromLine(
     .select({
       id: workingOrderLines.id,
       quantity: workingOrderLines.quantity,
+      priceQuantity: workingOrderLines.priceQuantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
     })
     .from(workingOrderLines)
@@ -2489,13 +2490,26 @@ export interface KeptExtra {
 
 /** The stored extras children of a dish of `dishQuantity` thousandths, as a reduction keeps them. */
 export function keptExtrasOf(
-  children: readonly { id: string; quantity: number; unitPriceGross: number }[],
+  children: readonly {
+    id: string;
+    quantity: number;
+    priceQuantity: number;
+    unitPriceGross: number;
+  }[],
   dishQuantity: number,
 ): KeptExtra[] {
   const dish = thousandthsToDecimal(dishQuantity);
   return children.map((child) => ({
-    child: { id: child.id, unitPriceGross: centsToDecimal(child.unitPriceGross) },
-    perDish: perDishOptionQuantity(thousandthsToDecimal(child.quantity), dish),
+    child: {
+      id: child.id,
+      unitPriceGross: centsToDecimal(child.unitPriceGross),
+      priceQuantity: thousandthsToDecimal(child.priceQuantity),
+    },
+    perDish: perDishExtraPicks(
+      thousandthsToDecimal(child.quantity),
+      dish,
+      thousandthsToDecimal(child.priceQuantity),
+    ),
   }));
 }
 
@@ -2573,7 +2587,9 @@ async function reduceLine(
   for (const { child, perDish } of children) {
     await tx
       .update(ticketItems)
-      .set({ quantity: decimalToThousandths(extraQuantityFor(perDish, remaining)) })
+      .set({
+        quantity: decimalToThousandths(extraQuantityFor(perDish, remaining, child.priceQuantity)),
+      })
       .where(eq(ticketItems.workingOrderLineId, child.id));
   }
   await clampServed(tx, [target.id, ...children.map(({ child }) => child.id)]);

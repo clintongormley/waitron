@@ -127,6 +127,7 @@ interface Row {
   name: string;
   variantName: string | null;
   quantity: number;
+  priceQuantity: number;
   unit: number;
   list: number | null;
   unitPrecision: number | null;
@@ -200,6 +201,7 @@ async function readRows(tx: Transaction, orderId: string): Promise<Row[]> {
       name: workingOrderLines.name,
       variantName: workingOrderLines.variantName,
       quantity: workingOrderLines.quantity,
+      priceQuantity: workingOrderLines.priceQuantity,
       unit: workingOrderLines.unitPriceGross,
       list: workingOrderLines.listUnitPriceGross,
       unitPrecision: workingOrderLines.unitPrecision,
@@ -231,14 +233,22 @@ function familyAt(family: readonly Row[], dishQuantity: number): Map<string, num
   const [dish, ...children] = family;
   const quantity = thousandthsToDecimal(dishQuantity);
   const kept = keptExtrasOf(
-    children.map((row) => ({ id: row.id, quantity: row.quantity, unitPriceGross: row.unit })),
+    children.map((row) => ({
+      id: row.id,
+      quantity: row.quantity,
+      priceQuantity: row.priceQuantity,
+      unitPriceGross: row.unit,
+    })),
     dish!.quantity,
   );
   return new Map([
     [dish!.id, dishQuantity],
     ...kept.map(
       ({ child, perDish }) =>
-        [child.id, decimalToThousandths(extraQuantityFor(perDish, quantity))] as const,
+        [
+          child.id,
+          decimalToThousandths(extraQuantityFor(perDish, quantity, child.priceQuantity)),
+        ] as const,
     ),
   ]);
 }
