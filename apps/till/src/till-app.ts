@@ -5950,10 +5950,8 @@ export class TillApp extends LitElement {
     await this.#onCancelCredited(open.id, sent);
   }
 
-  /** The bills are read again, which carry the credit note; a read that fails leaves the bill
-   * cancelled all the same, with no number to name. A counter order's kitchen queue and waiting list
-   * name no credit note, so the result shows first and they are read after it, as reads without a
-   * time limit must not hold the dialog. */
+  /** The credit note number is read from the bills after the result is shown. A read without a
+   * time limit must not hold the dialog busy, and an old read must not replace a later result. */
   async #onCancelCredited(id: number, sent: Sent): Promise<void> {
     const open = this.#cancelCreditingNow(id);
     if (open === null) return;
@@ -5979,10 +5977,13 @@ export class TillApp extends LitElement {
       await this.#refreshAfterWrite("waiting", "refresh.waiting_after_cancel");
       return;
     }
-    const bills = this.#hasLeftParty(open.partyId, sent)
-      ? null
-      : (await this.#loadPartyBills()).bills;
-    this.#showCancelCredited(id, bills);
+    this.#showCancelCredited(id, null);
+    const shown = this.cancelCrediting;
+    if (this.#hasLeftParty(open.partyId, sent)) return;
+    const { bills } = await this.#loadPartyBills();
+    if (this.cancelCrediting === shown && !this.#hasLeftParty(open.partyId, sent)) {
+      this.#showCancelCredited(id, bills);
+    }
   }
 
   #showCancelCredited(id: number, bills: PartyBill[] | null): void {
@@ -6044,16 +6045,15 @@ export class TillApp extends LitElement {
       await this.#refreshWaiting();
       return;
     }
-    const bills = this.#hasLeftParty(open.partyId, sent)
-      ? null
-      : (await this.#loadPartyBills()).bills;
+    this.cancelCrediting = { ...open, refusal, busy: false };
+    const shown = this.cancelCrediting;
+    if (this.#hasLeftParty(open.partyId, sent)) return;
+    const { bills } = await this.#loadPartyBills();
+    if (this.cancelCrediting !== shown || this.#hasLeftParty(open.partyId, sent)) return;
     const bill = bills?.find((row) => row.workingOrderId === open.workingOrderId);
     if (CANCEL_MAY_HAVE_LANDED.has(refusal.code) && bill?.status === "abandoned") {
       this.#showCancelCredited(open.id, bills);
-      return;
     }
-    const now = this.#cancelCreditingNow(open.id);
-    if (now !== null) this.cancelCrediting = { ...now, refusal, busy: false };
   }
 
   /** The cancel dialog and, over it, its approver's PIN prompt, whose events stop here so the

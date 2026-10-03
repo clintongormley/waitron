@@ -6722,6 +6722,34 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     expect(offered(el)).toBeNull();
   });
 
+  it("shows a completed table cancel while the credit-note read has not answered", async () => {
+    const server = billServer();
+    const { el } = await openCancel(server);
+    server.getPartyBills.mockImplementationOnce(() => new Promise<PartyBill[]>(() => undefined));
+    await typeReason(el, "Wrong table");
+
+    await confirmCancel(el);
+
+    expect(server.cancelOrder).toHaveBeenCalledOnce();
+    expect(dialog(el)!.busy).toBe(false);
+    expect(doneText(el)).toBe(t("cancel_credit.done_unnumbered"));
+  });
+
+  it("shows a table cancel refusal while the follow-up bills read has not answered", async () => {
+    const server = billServer(async () => {
+      throw { code: "bill.payments_received", status: 409 };
+    });
+    const { el } = await openCancel(server);
+    server.getPartyBills.mockImplementationOnce(() => new Promise<PartyBill[]>(() => undefined));
+    await typeReason(el, "Wrong table");
+
+    await confirmCancel(el);
+
+    expect(server.cancelOrder).toHaveBeenCalledOnce();
+    expect(dialog(el)!.busy).toBe(false);
+    expect(bottom(el)).toBe(t("cancel_credit.refused_payments"));
+  });
+
   it("an earlier operator's cancel answering after a sign-out leaves the next operator's PIN prompt open", async () => {
     let sends = 0;
     let answerFirst: () => void = () => undefined;
