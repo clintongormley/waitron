@@ -26,6 +26,7 @@ import type {
   ProductVariantInput as ProductEditorVariant,
   ProductEditorBody as ProductEditorInput,
 } from "@waitron/catalogue/src/product-types.js";
+import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
 export type { Product, ProductEditorValue, ProductEditorVariant, ProductEditorInput };
 export interface MadeAt {
   stationId: string | null;
@@ -1952,6 +1953,10 @@ export class DashboardApi {
 
   getProductEditor(id: string): Promise<ProductEditorValue> {
     return this.#request<ProductEditorValue>(`/management-api/products/${id}/editor`, "GET");
+  }
+
+  getProductExtraUsage(id: string): Promise<ExtraOfferUsage[]> {
+    return this.#request<ExtraOfferUsage[]>(`/management-api/products/${id}/extra-usage`, "GET");
   }
 
   createProductEditor(catalogueId: string, input: ProductEditorInput): Promise<ProductEditorValue> {

@@ -39,6 +39,7 @@ import {
 } from "./form-fields.js";
 import type { CategorySummary, DashboardApi } from "../api/client.js";
 import type { ProductModifierRef } from "@waitron/catalogue/src/product-types.js";
+import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
 import type {
   EditorVariant,
   ModifierListChoice,
@@ -334,6 +335,9 @@ export class ProductEditor extends LitElement {
   @state() private dismissed: ReadonlySet<string> = new Set();
   @state() private imageOpen = false;
   @state() private unitPickerOpen = false;
+  @state() private unitUsage: ExtraOfferUsage[] = [];
+  @state() private unitUsageUnavailable = false;
+  #unitUsageGeneration = 0;
   @state() private variantOpen = false;
   /** Which variant the variant window is editing, or null while it is adding a new one. */
   @state() private variantIndex: number | null = null;
@@ -379,6 +383,9 @@ export class ProductEditor extends LitElement {
     if (changed.has("extraLists") || changed.has("optionLists"))
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
     if (changed.has("value") || (changed.has("open") && this.open)) {
+      this.#unitUsageGeneration++;
+      this.unitUsage = [];
+      this.unitUsageUnavailable = false;
       this.draft = this.value
         ? structuredClone(this.value)
         : { ...emptyDraft(), primaryCategoryId: this.newCategoryId };
@@ -610,6 +617,23 @@ export class ProductEditor extends LitElement {
       );
     } else if (errorKey !== undefined) this.dismiss(errorKey);
     this.draft = { ...this.draft, [key]: value };
+    if (key === "unitId") void this.readUnitUsage();
+  }
+
+  private async readUnitUsage(): Promise<void> {
+    const generation = ++this.#unitUsageGeneration;
+    this.unitUsage = [];
+    this.unitUsageUnavailable = false;
+    const id = this.value?.id;
+    if (!id || !this.api || this.draft.unitId === this.value?.unitId) return;
+    try {
+      const usage = await this.api.getProductExtraUsage(id);
+      if (generation === this.#unitUsageGeneration && this.open && this.value?.id === id)
+        this.unitUsage = usage;
+    } catch {
+      if (generation === this.#unitUsageGeneration && this.open && this.value?.id === id)
+        this.unitUsageUnavailable = true;
+    }
   }
   private changeVariant(index: number, next: (variant: EditorVariant) => EditorVariant): void {
     this.change(
@@ -1198,7 +1222,31 @@ export class ProductEditor extends LitElement {
           this.unitPickerOpen = true;
         }}
       ></wt-price-input>
-      ${this.unitOpen ? this.renderUnit() : nothing} ${this.renderTax()}`;
+      ${this.unitOpen ? this.renderUnit() : nothing}
+      ${
+        this.unitUsage.length
+          ? html`<p data-test="unit-usage-warning">
+              ${t("editor.unit_usage_warning")}
+              ${this.unitUsage.map((product) =>
+                product.lists.map(
+                  (list) =>
+                    html`${product.productName}:
+                    ${list.name}${
+                      list.menus.length
+                        ? html` (${list.menus.map((menu) => menu.name).join(", ")})`
+                        : nothing
+                    } `,
+                ),
+              )}
+            </p>`
+          : nothing
+      }
+      ${
+        this.unitUsageUnavailable
+          ? html`<p data-test="unit-usage-unavailable">${t("editor.unit_usage_unavailable")}</p>`
+          : nothing
+      }
+      ${this.renderTax()}`;
     if (!base)
       return html`<fieldset class="group" data-section="price">
         <legend class="group-label">${t("editor.pricing")}</legend>

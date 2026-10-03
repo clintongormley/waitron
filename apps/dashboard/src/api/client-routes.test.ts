@@ -227,6 +227,23 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("reads a product's extra-list and menu usage", async () => {
+    const usage = [
+      {
+        productId: "prod-9",
+        productName: "Jamón",
+        lists: [{ id: "list-1", name: "Toppings", menus: [{ id: "menu-1", name: "Lunch" }] }],
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(usage));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getProductExtraUsage("prod-9")).resolves.toEqual(usage);
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/products/prod-9/extra-usage", "GET", undefined],
+    ]);
+  });
+
   it("reads and saves the location's operation description", async () => {
     const settings = { name: "Bar Pepe", operationDescription: "Restaurant service" };
     const fetchImpl = vi

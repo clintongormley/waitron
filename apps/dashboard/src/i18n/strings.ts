@@ -1271,6 +1271,9 @@ export const en = {
   "editor.edit_courses": "Edit courses…",
   "editor.choose": "Choose…",
   "editor.unit_each": "Each",
+  "editor.unit_usage_warning":
+    "Changing this unit affects portions in these extras lists and menus:",
+  "editor.unit_usage_unavailable": "Could not check which extras lists and menus use this unit.",
   "editor.change_category": "Change",
   "editor.content": "Product details",
   "editor.description": "Description",
@@ -3384,6 +3387,10 @@ export const es: Record<StringKey, string> = {
   "editor.edit_courses": "Editar cursos…",
   "editor.choose": "Elegir…",
   "editor.unit_each": "Unidad",
+  "editor.unit_usage_warning":
+    "Cambiar esta unidad afecta a las porciones de estas listas de extras y cartas:",
+  "editor.unit_usage_unavailable":
+    "No se pudo comprobar qué listas de extras y cartas usan esta unidad.",
   "editor.change_category": "Cambiar",
   "editor.content": "Detalles del producto",
   "editor.description": "Descripción",
