@@ -1,6 +1,6 @@
 # Full invoices by email as a PDF, and on an office printer (A231d)
 
-**Status:** proposal for owner approval, 2026-10-03. Nothing here is built. The build is queued only after the owner approves this design, and it follows the A231 build, which it depends on.
+**Status:** amended proposal for owner approval, 2026-10-03. The owner approved decisions 1–5 of the first version and changed decision 6 (see [Owner decisions](#owner-decisions-2026-10-03)); this version carries those answers. Nothing here is built. The build is queued only after the owner approves this version, and it follows the A231 build, which it depends on.
 
 ## What this adds, and what it builds on
 
@@ -10,10 +10,11 @@ This design covers:
 
 1. Turning a filed F1 into a PDF.
 2. Emailing that PDF to the customer, with the consent the law asks for.
-3. Printing it on an ordinary A4 office printer through the print agent (the small program on the box that sends jobs to printers).
-4. Sending or printing it again later, from the till and from the dashboard.
+3. Setting up a live venue's outgoing mail server without a terminal, because a live venue must have one before it can email an invoice.
+4. Printing it on any ordinary A4 office printer on the venue's network, added through the same add-printer dialog as a receipt printer, through the print agent (the small program on the box that sends jobs to printers).
+5. Sending or printing it again later, from the till and from the dashboard.
 
-It covers full invoices (F1) only. A simplified invoice (F2, the ordinary till receipt) by email is not asked for and is not designed here.
+Email and A4 printing are built together, as one build (owner, 2026-10-03). It covers full invoices (F1) only. A simplified invoice (F2, the ordinary till receipt) by email is not asked for and is not designed here.
 
 Everything below reads the F1 facts the A231 build will store at issue: the customer's tax ID, legal name and address, the taxpayer's domicile, the net line figures and the VAT breakdown. None of it exists until the A231 build lands.
 
@@ -27,7 +28,23 @@ Terms used below:
 - **The asesor** is the venue's tax adviser.
 - **SMTP** is the standard way one computer hands email to a mail server.
 - **IPP** is the standard office printing protocol, spoken on network port 631.
+- **A raster** is a page sent as a grid of dots (a picture of the page) rather than as a PDF the printer lays out itself. **PWG Raster** and **Apple Raster (URF)** are the two raster formats this design sends. **PCLm** is a third, which the HP below lists and this design does not use.
+- **mDNS** is how devices on a local network announce themselves ("I am a printer, at this address") without a central directory.
+- **Sealing** a credential means storing it encrypted with the box's own key, as Waitron already stores a payment provider's keys.
 - **An append-only table** is one whose rows the database refuses to change or delete once written.
+
+## Owner decisions, 2026-10-03
+
+The first version asked six questions. The owner's answers, relayed by the supervising session at about 08:45:
+
+1. **Approved.** One original, chosen at issue; at most one attempt at the original unless it certainly failed; no courtesy PDF beside a paper original in the first build.
+2. **Approved.** The consent statement's content, and a venue contact email in the location settings as the way to withdraw after leaving.
+3. **Approved.** Every delivered PDF is stored in the database, and therefore in the bucket.
+4. **Managers only** may email or download an invoice from the dashboard.
+5. **Approved.** `pdfkit` and a bundled font, subject to the build's first-task checks.
+6. **Changed.** Build A4 printing and email together, not one first. A4 printing must be general — "if the user has an A4 printer available we should try to use it" — with office printers added as invoice printers through the same add-printer dialog as receipt printers. The owner asked whether most modern printers accept PDF directly; [What office printers accept](#what-office-printers-accept) answers from the standards. And "when a restaurant goes live with waitron they need to have an smtp gateway set up. before that (eg in the demo) we can use our test mail gateway": [Set up email for a live venue](#set-up-email-for-a-live-venue) designs that.
+
+This version asks three new questions, in [What the owner decides](#what-the-owner-decides).
 
 ## Primary-source register, checked 2026-10-03
 
@@ -48,6 +65,22 @@ Each excerpt was read from the raw page fetched with `curl -L -sS`, with the HTM
 | Invoices kept electronically are kept in the format they were sent in | RD 1619/2012, art. 21.1, on keeping by electronic means («La conservación por medios electrónicos»): «se asegure su legibilidad en el formato original en el que se hayan recibido o remitido». Art. 21.2 requires the tax agency's online access to what is kept. How long: art. 19 points to Ley 58/2003, whose [art. 66](https://www.boe.es/buscar/act.php?id=BOE-A-2003-23186) sets «Prescribirán a los cuatro años» and art. 70.1 ties formal obligations to that period. Whether a longer commercial-law period applies is not checked here. |
 | When the business regime applies, a PDF alone is not enough | [RD 238/2026, art. 7.1](https://www.boe.es/buscar/act.php?id=BOE-A-2026-7295): «un mensaje informático de carácter estructurado, ajustado al modelo semántico de datos EN16931» — the EU's standard for machine-readable invoices — in one of four data formats (CII, UBL, EDIFACT or Spain's Facturae). Art. 4.1 exempts simplified invoices «a menos que se trate de facturas simplificadas cualificadas». Final provision 4 starts the clock «desde la entrada en vigor de la orden ministerial»: «Doce meses después» for businesses whose turnover exceeded €8m in the previous year, «Veinticuatro meses después, para el resto». The obligation (art. 3.1) falls on the business issuing the invoice, so the turnover is the venue's own. |
 
+## Printing standards, checked 2026-10-03
+
+Fetched with `curl -L -sS`; PDFs turned into text with `pdftotext -layout` (poppler), web pages with their tags stripped; each excerpt found by text search, with lines the layout split joined. AirPrint and Mopria publish no list of required formats, so their rows say what was found instead.
+
+| Claim | Primary source and short exact excerpt |
+| --- | --- |
+| IPP Everywhere 1.0 required PDF of newer printers | [PWG 5100.14-2013 (v1.0)](https://ftp.pwg.org/pub/pwg/candidates/cs-ippeve10-20130128-5100.14.pdf), §6: «Printers MUST support documents conforming to the PWG Raster Format [PWG5102.4] ("image/pwg-raster") and JPEG File Information Format Version 1.02 [JFIF] ("image/jpeg")»; «IPP/2.1 and IPP/2.2 Printers MUST and IPP/2.0 Printers SHOULD support documents conforming to Document management — Portable document format — Part 1: PDF 1.7 [ISO32000] ("application/pdf")». |
+| IPP Everywhere 1.1, the current version, requires PWG Raster and only recommends PDF | [PWG 5100.14-2020 (v1.1)](https://ftp.pwg.org/pub/pwg/candidates/cs-ippeve11-20200515-5100.14.pdf), §6 (lines 969–976): «Printers MUST support documents conforming to the PWG Raster Format [PWG5102.4] ("image/pwg-raster"). Color Printers MUST and monochrome Printers SHOULD support documents conforming to the JPEG File Information Format Version 1.02 [JFIF] ("image/jpeg")»; «Printers SHOULD support documents conforming to Document management — Portable document format — Part 1: PDF 1.7 [ISO32000] ("application/pdf")». The PWG's [summary page](https://www.pwg.org/ipp/everywhere.html): «Required: IPP/2.0, DNS-SD, PWG Raster and JPEG JFIF file formats (JPEG only required for color printers)»; «Recommended: PDF, IPP-USB». |
+| The draft 2.0 keeps PDF recommended for a physical printer | [Working draft, 30 April 2026](https://ftp.pwg.org/pub/pwg/ipp/wd/wd-ippeve20-20260430.pdf), §7 (lines 972–974): «Printers representing Logical Devices MUST and Printers representing Physical Devices SHOULD support documents conforming to Document management — Portable document format — Part 2: PDF 2.0 [ISO32000] ("application/pdf")». A logical device is a print server or service, not a printer. |
+| An IPP Everywhere printer that announces itself announces IPP | v1.1, lines 579–580: «Printers that support DNS-SD MUST also advertise the "_ipp._tcp" (generic IPP) and "_print._sub._ipp._tcp" (IPP Everywhere™) services over mDNS». |
+| AirPrint: no published requirement found; Apple's example printer offers no PDF | Checked: [About AirPrint](https://support.apple.com/en-us/102895), [developer.apple.com/airprint](https://developer.apple.com/airprint/), and Apple's Bonjour Printing Specification 1.2.1, which defines the `pdl` key only as «A comma-delimited list of MIME media types supported by the printer». Apple's WWDC 2016 session 725 slides, "Deploying AirPrint in Enterprise", show an example printer announcing «pdl=image/urf,image/jpeg». |
+| Mopria: the print specification is for members | [mopria.org/specifications](https://mopria.org/specifications): «Only Mopria Alliance members may certify their devices»; the membership page lists «Access to final specifications» as a member benefit. [Mopria blog, 16 September 2025](https://blog.mopria.org/2025/09/16/the-future-is-driverless-why-driverless-printing-is-the-next-leap-forward/), quoting Adobe: «The Mopria print specification supports the use of PDF, PCLm, and pwg-raster». |
+| CUPS prefers PDF when a printer offers it, and writes Apple Raster | Read in source, not run. [CUPS 2.4.x `cups/ppd-cache.c`](https://github.com/OpenPrinting/cups/blob/2.4.x/cups/ppd-cache.c), lines 3603–3610, gives PDF a conversion cost of 10 and URF and PWG Raster 100 each: «application/vnd.cups-pdf application/pdf 10 -», «image/urf image/urf 100 -», «image/pwg-raster image/pwg-raster 100 -». [`cups/raster-stream.c`](https://github.com/OpenPrinting/cups/blob/2.4.x/cups/raster-stream.c), line 564, has a `CUPS_RASTER_WRITE_APPLE` mode beside `CUPS_RASTER_WRITE_PWG`. CUPS is under the Apache 2.0 licence. |
+| Mail submission ports | [RFC 8314](https://www.rfc-editor.org/rfc/rfc8314.txt), §3.3: «(default port 465), a TLS handshake begins immediately»; «The STARTTLS mechanism on port 587 is relatively widely deployed». |
+| How many printers take PDF: not found | The [PWG's certified-printer list](https://www.pwg.org/printers/) has no document-format field in its data file (`printers.json`). |
+
 ## Measured on 2026-10-03
 
 The owner's office printer was asked, read-only, which document types it accepts. The command was `ipptool -t ipp://NPIDE0887.local:631/ipp/print` with one Get-Printer-Attributes request (IPP's "tell me about yourself" question). It reported:
@@ -58,7 +91,19 @@ The owner's office printer was asked, read-only, which document types it accepts
 - `document-format-supported` including `application/pdf`;
 - `media-supported` including `iso_a4_210x297mm`.
 
-The fresh-context review repeated the query and got the same answer. The second office printer the Mac knows (an HP M282nw) did not answer, so this is one printer. The raw reply bytes were not saved.
+The fresh-context review repeated the query and got the same answer. The second office printer the Mac knows (an HP M282nw) did not answer, so this is one printer. The raw reply bytes of that query were not saved. The repository already holds this printer's raw reply to the paper-size question alone (`apps/print-agent/src/__fixtures__/hp-color-laserjet-m181fw-media-supported.ipp`).
+
+A second read-only query at about 09:05, asking for the format attributes by name (`ipptool -t` with a Get-Printer-Attributes request naming `document-format-supported`, `urf-supported`, `pwg-raster-document-resolution-supported` and others), reported the whole list:
+
+- `document-format-supported = image/urf, application/PCLm, application/octet-stream, application/pdf, application/postscript, application/vnd.hp-PCL, application/vnd.hp-PCLXL, image/jpeg`;
+- `document-format-default = application/pdf`;
+- `urf-supported = V1.5, CP99, W8, OB10, PQ3-4-5, ADOBERGB24, DEVRGB24, DEVW8, SRGB24, IS1, MT1-2-3-5-12, RS600` (it takes Apple Raster at 600 dots per inch only — `RS600` — in 8-bit grey among others);
+- `ipp-features-supported = airprint-2.1`;
+- no `pwg-raster-document-resolution-supported` value, and `image/pwg-raster` is not in the format list, although the printer's USB-style device id (`printer-device-id`) lists `PWG_RASTER` among its languages.
+
+So this printer would be sent PDF, and could be sent Apple Raster, but not PWG Raster: a format is chosen from `document-format-supported`, never from the device id. The reply was saved as text on the Mac where it ran (`/tmp/a231d-research/hp-m181fw-gpa.txt`), which is not a lasting receipt; the build captures it as raw bytes into a fixture beside the existing one (plan task 5).
+
+**The image library already in the box can draw a page as dots.** `sharp` (0.35.4, which `packages/media` uses and the box image already ships) turned an A4-sized SVG drawing — a 413-dot black square and a small triangle, standing in for a QR code and a letter's outline — into a 2480 × 3508 one-channel grey image (A4 at 300 dots per inch) in 29 ms, on the owner's Mac (Apple silicon, Node v26.7.0). It counted 173,569 dark dots: the square's 170,569 plus about 3,000 for the triangle, which is what a correct drawing gives. The same drawing at 600 dots per inch (4960 × 7016 dots, the square 827 dots wide) took 107 ms and counted 695,929 dark dots, again exactly the square plus the triangle; the whole Node process, with `sharp` loaded, peaked at 227 MB resident (`/usr/bin/time -l`), against 151 MB for the 300-dot run. A repeat by the review took 27–37 ms and 107–116 ms with the same dot counts. Not measured: the box's processor, a page of real text, or the server's memory with everything else it runs.
 
 ## What the code does today
 
@@ -68,6 +113,10 @@ The fresh-context review repeated the query and got the same answer. The second 
   - A failure is logged as `account_email.send_failed` without the error, because an SMTP address can contain a password ([management-api.ts:191-197](../../../apps/server/src/management-api.ts#L191-L197)).
   - Mail goes through SMTP when the `email.smtp` credential is set. Otherwise, in a demo or a venue preparing to go live, the box captures it in its own inbox, and in a live venue it is not sent at all ([email-delivery.ts:15-33](../../../apps/server/src/email-delivery.ts#L15-L33)).
   - The credential can only be set with the `waitron-credentials set --purpose email.smtp` command ([apps/server/README.md:303](../../../apps/server/README.md#L303)), which needs a terminal on the box.
+  - Practice mode is a demo or a venue preparing to go live ([boot.ts:1341](../../../apps/server/src/boot.ts#L1341)). A development server is treated as practice for email ([boot.ts:1463](../../../apps/server/src/boot.ts#L1463)), so it captures mail in every mode unless an SMTP server is set.
+  - A live venue is never a promoted practice venue: the setup wizard provisions it fresh in "live" mode ([setup-api.ts:440-460](../../../apps/server/src/setup-api.ts#L440-L460); [CLAUDE.md §5](../../../CLAUDE.md), "One database per environment"). The configuration a prepare venue hands to it carries no credentials: the credentials module declares `configurationTransfer: { kind: "none" }` ([modules.ts:207-218](../../../packages/composition/src/modules.ts#L207-L218)). So an SMTP server set up while preparing would not reach the live venue.
+  - The live setup already collects one secret: the AEAT certificate travels in the provision request as `aeatCert` ([setup-api.ts:474-490](../../../apps/server/src/setup-api.ts#L474-L490)).
+  - The dashboard already seals a provider credential: connecting a payment provider stores it with `putCredential` ([payments-api.ts:393-406](../../../apps/server/src/payments-api.ts#L393-L406)).
   - The capture service accepts messages of at most 1 MB (`MP_MAX_MESSAGE_SIZE: 1` in [compose.yml:86](../../../deploy/compose.yml#L86); Mailpit's documentation gives the value in MB).
 - **PDF.**
   - No package makes PDFs.
@@ -78,7 +127,9 @@ The fresh-context review repeated the query and got the same answer. The second 
   - In a demo or a venue preparing to go live, every receipt carries a practice warning ([receipt-ticket.ts:158-162](../../../apps/server/src/receipt-ticket.ts#L158-L162)).
   - Whether a receipt prints by itself after a sale follows the location's receipt setting ([receipt-print.ts:117-129](../../../apps/server/src/receipt-print.ts#L117-L129)).
 - **Office printers.**
-  - The print agent finds them and greys them out. It asks a printer's IPP service only for `media-supported` ([ipp-probe.ts:49](../../../apps/print-agent/src/ipp-probe.ts#L49)), and the dashboard shows "Office printer — not supported for receipts" instead of Add ([strings.ts:950](../../../apps/dashboard/src/i18n/strings.ts#L950), chosen at [printers-screen.ts:1069-1072](../../../apps/dashboard/src/screens/printers-screen.ts#L1069-L1072)).
+  - The print agent finds network printers two ways: the announcement printers make for a raw print port (`_pdl-datastream._tcp`, [network.ts:7](../../../apps/print-agent/src/network.ts#L7)), and a sweep of the local network for port 9100 ([sweep.ts:10](../../../apps/print-agent/src/sweep.ts#L10)). A printer that offers IPP but has its raw port switched off is not found.
+  - It then greys office printers out. It asks a printer's IPP service only for `media-supported` ([ipp-probe.ts:49](../../../apps/print-agent/src/ipp-probe.ts#L49)), and the dashboard shows "Office printer — not supported for receipts" instead of Add ([strings.ts:952](../../../apps/dashboard/src/i18n/strings.ts#L952), decided at [printers-screen.ts:1069-1072](../../../apps/dashboard/src/screens/printers-screen.ts#L1069-L1072) and drawn at [printers-screen.ts:2905-2910](../../../apps/dashboard/src/screens/printers-screen.ts#L2905-L2910)).
+  - The printing package already draws text as dots, for receipts: a fixed-width bitmap font of 12 × 28 dots per character, made from Iosevka ([raster-text.ts](../../../packages/printing/src/raster-text.ts), [glyphs.ts](../../../packages/printing/src/glyphs.ts)).
   - A printer row is `usb`, `network_tcp`, `bluetooth` or `cloud_poll`, with a 58 or 80 mm roll. Database checks hold each of those lists ([printers.ts:55-65](../../../packages/db/src/schema/printers.ts#L55-L65)).
   - Six tables point at `printers`: `devices`, `tills`, `drawer_opens`, `station_printers`, `watcher_printers` and `print_jobs`.
   - A print job's payload is described as ESC/POS bytes ([print-jobs.ts:51-53](../../../packages/db/src/schema/print-jobs.ts#L51-L53)).
@@ -119,7 +170,7 @@ By email or on A4 this means two originals of one invoice cannot be sent. A dupl
 
 ## Make the PDF
 
-**One layout model, two outputs.** The A231 build will lay out the paper F1 for the receipt printer. Build it, or reshape it in this build's first task, as a format-neutral F1 document: sections, lines, totals, the QR text and the legend, all read from the stored F1 facts. Then the roll printer and the PDF draw the same thing, and a reprint, the paper copy and the PDF can never disagree about a figure.
+**One layout model, three outputs.** The A231 build will lay out the paper F1 for the receipt printer. Build it, or reshape it in this build's first task, as a format-neutral F1 document: sections, lines, totals, the QR text and the legend, all read from the stored F1 facts. Then the roll printer, the PDF and the A4 page drawn as dots (for an office printer that takes no PDF, [below](#what-office-printers-accept)) all draw the same thing, and a reprint, the paper copy, the PDF and the printed page can never disagree about a figure.
 
 **Make it on the server with a JavaScript PDF library, not a browser.** Recommendation: `pdfkit`. It is a JavaScript library that draws text, lines and shapes and embeds fonts, and it wraps long text for us. The alternative, `pdf-lib`, would need our own text wrapping. A headless browser is rejected: none is in the image, it is large, and the image builds front ends without ever opening them ([CLAUDE.md §2](../../../CLAUDE.md)). Two risks to settle in the build's first task:
 
@@ -138,7 +189,7 @@ By email or on A4 this means two originals of one invoice cannot be sent. A dupl
   - payment and tip information, kept apart from the tax figures.
 - **Layout rules.** Long names and addresses wrap and are never cut. A duplicate carries «duplicado» near the top. A demo or a venue preparing to go live carries the same practice warning the paper receipt does. The file name is the series and number, for example `FF-000123.pdf`.
 
-**Keep the exact file that was delivered.** Waitron keeps its invoices electronically, so art. 21.1 asks for a sent invoice to be kept in the format it was sent in. Each PDF that is emailed or printed on A4, as an original or a duplicate, is stored once in an append-only table, with its SHA-256 fingerprint and the sale it belongs to.
+**Keep the exact file that was delivered.** Waitron keeps its invoices electronically, so art. 21.1 asks for a sent invoice to be kept in the format it was sent in. Each PDF that is emailed or printed on A4, as an original or a duplicate, is stored once in an append-only table, with its SHA-256 fingerprint and the sale it belongs to. A page sent to an office printer as dots is stored as the PDF drawn from the same layout; the dots themselves are not kept.
 
 The database streams to the owner's bucket, so the bucket holds these files. After A231 it will also hold the same customer name, tax ID and address in the sale row. F1s are rare in a restaurant, but the build measures a realistic file's size and records it.
 
@@ -156,12 +207,11 @@ The statement is shown in the receipt language, and its text is versioned. The v
 
 The dialog follows the shared form rules ([design-system.md → Forms](../../developers/design-system.md#forms)): the required fields are marked, a mistake is explained beside the field, and Issue stays disabled until the fields are right. The server checks everything again.
 
-**When Email is offered.** Email is offered when the box can send mail:
+**When Email is offered, and where it goes.**
 
-- SMTP is set up, in any kind of venue;
-- or the box is in practice mode, where it captures mail in its own inbox.
-
-Today a live venue can only set up SMTP with the terminal command above, which a box operator does not have. Adding a dashboard SMTP setting is the open backlog item "A venue preparing to go live sends real email through SMTP". This design does not build it.
+- **A live venue** sends through its own SMTP server, which it sets up when it goes live ([below](#set-up-email-for-a-live-venue)). Email is offered once that server is set up and the location has a contact email.
+- **A demo or a venue preparing to go live** sends every invoice email to the box's own captured inbox, the test mail gateway the owner named, **even if an SMTP server has been set up**. A practice invoice is not a real invoice, so it must never reach a real customer's address. This is narrower than today's account email, which prefers SMTP whenever one is set ([email-delivery.ts:15-33](../../../apps/server/src/email-delivery.ts#L15-L33)).
+- **A development server** captures every invoice email, in every mode and whether or not an SMTP server is set, as practice venues do.
 
 **Recorded with the sale.** These details go into the bill's invoice choice, with the same check A231 uses so that two tills cannot overwrite each other:
 
@@ -188,13 +238,66 @@ The worker retries a certain failure a bounded number of times with growing gaps
 
 Each of these is the original or a duplicate by the rule above. A final failure also raises an alert, so an undelivered invoice does not go unnoticed. For a consumer the original is due at issue (art. 18), so the till shows the result while the customer is still there. A send normally finishes in seconds, and the failure path offers paper on the spot.
 
-**Practice mode.** A demo or a venue preparing to go live captures the email in the box's inbox (A227). The PDF must fit under the capture service's 1 MB limit. The build measures a long invoice's message size and raises the limit if needed.
+**Practice mode.** A demo or a venue preparing to go live captures the email in the box's inbox (A227), whether or not an SMTP server is set up. The PDF must fit under the capture service's 1 MB limit. The build measures a long invoice's message size and raises the limit if needed.
+
+## Set up email for a live venue
+
+The owner: "when a restaurant goes live with waitron they need to have an smtp gateway set up. before that (eg in the demo) we can use our test mail gateway."
+
+**Where.** Going live is the setup wizard's "live" path, which provisions a fresh database (above). The configuration carried over from a prepare venue holds no credentials, so a new live venue gets its mail server there. So:
+
+- **The live setup gains an Email step**, just before the review screen. Today the live path goes from the venue details to the review, through the certificate and fiscal-test screens where they apply (common-territory Spain, not a development server: [setup-app.ts:637-642](../../../apps/setup/src/setup-app.ts#L637-L642), [cert-screen.ts:179](../../../apps/setup/src/screens/cert-screen.ts#L179), [fiscal-test-screen.ts:60](../../../apps/setup/src/screens/fiscal-test-screen.ts#L60)); the Email step comes after them, or straight after the venue details where they do not apply. It asks for the mail server's address and port, how the connection is encrypted (upgraded after connecting, called STARTTLS, usually port 587; or encrypted from the start, usually port 465), the user name and password if the server needs them, and the "from" address invoices are sent from.
+- **A test message proves it.** The step's "Send test message" sends a short message to the admin's own address, through those settings, from the setup service. Continue stays disabled until the mail server has accepted one. "Accepted" means the mail server took the message; the screen asks the admin to check it arrived, but cannot know.
+- **It travels like the certificate.** The settings go in the provision request beside `aeatCert`, and the server seals them as the existing `email.smtp` credential (its `url` and `from` fields) in the same provisioning step. An SMTP address can carry a password, so the settings are never logged, never echoed back, and never shown again: the screen shows the server and the "from" address only.
+- **Required for a live venue.** A live provision without email settings is refused with a named code. A development server (`WAITRON_ENV=dev`) may skip the step, because it captures invoice email anyway.
+
+**Changing it later.** The dashboard gains an Email settings card: the server and "from" address as set (never the password), "Change" (the same fields and the same test message), for a manager — the `system.manage` permission, which managers already hold for backups ([backup-api.ts:205](../../../apps/server/src/backup-api.ts#L205)). It seals the credential the way the payments connection does. In a practice venue the card says mail is captured on the box and offers no change.
+
+**A live venue without email.** A venue set up live before this build has no SMTP server. A live venue rebuilt by a restore may have none either: the credential is sealed with the machine's own key (the credentials table is classified `local`, [classification.ts:3-13](../../../packages/credentials/src/classification.ts#L3-L13)). That file states that a rebuild from the bucket brings the same machine's key back with it; the other restore paths were not checked here, and the build checks each one (plan task 3). In either case the F1 dialog does not offer Email, and the Email settings card says invoices cannot be emailed until a mail server is set up, with the same Change action. Account email in such a venue stays unsent, as today.
+
+**The open backlog item.** The backlog's "A venue preparing to go live sends real email through SMTP" (owner, 2026-10-03, A227's follow-up) asked for prepare to send through a real server. The owner's answer to this design says the opposite for the period before going live — the test mail gateway — and a mail server set up while preparing would not survive into the live venue anyway. This design therefore keeps prepare on the captured inbox, and asks the owner to confirm that the older item is replaced (decision 7).
 
 ## Print it on an office printer
 
-**Office printers are registered separately, for invoices only.** A page printer the agent finds is offered as "Add as invoice printer" instead of being greyed out. Registration asks the printer, with one Get-Printer-Attributes request like the one the agent already sends, for `document-format-supported` and `media-supported`.
+**Any office printer on the venue's network, added where receipt printers are added.** The owner: "if the user has an A4 printer available we should try to use it." So an office printer is an invoice printer, added through the Printers screen's existing add-printer dialog: the same Scan, the same discovered list, the same name field. Only the action differs.
 
-The first build accepts a printer only if it takes PDF (`application/pdf`) and A4 or US letter. The owner's HP does (measured above). A printer that takes only image formats is refused with a named reason. Sending images instead of a PDF is later work, if a venue needs it.
+- **Finding it.** The agent keeps today's two ways of finding printers and adds a third: it also asks the network for printers announcing IPP (`_ipp._tcp`), which IPP Everywhere requires of every printer that announces itself over mDNS ([register](#printing-standards-checked-2026-10-03)), so a printer whose raw port is switched off is still found.
+  - A printer found this way is a new kind of discovered device, an IPP printer, carrying the port and the resource path its announcement gives: IPP Everywhere requires the path in the announcement's `rp` entry and only recommends `/ipp/print` (v1.1, printed lines 627 and 913–914). Today's check always asks port 631 at `/ipp/print` ([ipp-probe.ts:19](../../../apps/print-agent/src/ipp-probe.ts#L19)), and today's announcement reader turns every record into a raw-port device ([network.ts:103-155](../../../apps/print-agent/src/network.ts#L103-L155)); neither may be reused unchanged.
+  - An IPP printer is never offered as a receipt printer, even when its check fails. It is merged with a raw-port record for the same host, so one printer appears once.
+  - A printer that announces only the encrypted IPP service (`_ipps._tcp`) is not found in this build.
+- **Asking it.** Each office printer found is asked, as today, one read-only Get-Printer-Attributes question, at its own port and path, which now names `document-format-supported`, `media-supported` and the raster attributes (`urf-supported`, `pwg-raster-document-resolution-supported`, `pwg-raster-document-type-supported`) as well.
+- **In the dialog.** An office printer that takes A4 or US letter and a format Waitron can send ([below](#what-office-printers-accept)) shows "Add as invoice printer" where a receipt printer shows Add. One that takes none of those formats stays greyed, with the reason in place of today's "not supported for receipts": "This printer does not accept a format Waitron can print." A receipt printer's row is unchanged.
+- **On the Printers tab.** An invoice printer is listed with the receipt printers, marked "Invoice printer (A4)", with the row menu's rename and disable (a disabled one stays re-addable from the dialog's "Add again", as receipt printers do, [CLAUDE.md §3](../../../CLAUDE.md)), and a "Print test page" that prints one A4 page through the same path an invoice takes. Adding, renaming, disabling and the test page need `printer.manage`, as receipt printers do.
+- **Not in this build.** A USB office printer plugged into the box, and a printer the agent cannot find on its own network. The agent's USB path writes a receipt printer's own commands to the device, which an office printer does not speak; driving one over USB needs IPP over USB, which is separate work.
+
+### What office printers accept
+
+The owner asked: "do most modern printers accept PDFs directly? if so then we should add them as invoice printers… otherwise we look for some other solution."
+
+**No standard promises PDF.** The three programmes a modern office printer is certified under say this (exact words in the [register](#printing-standards-checked-2026-10-03)):
+
+- **IPP Everywhere** (the printing industry's standard for printing with no driver). Version 1.0 (2013) required PDF of printers on the newer IPP versions. Version 1.1 (2020), the current one, requires **PWG Raster** of every printer and only recommends PDF. The draft version 2.0 (April 2026) keeps PDF recommended for a physical printer. JPEG is required only of colour printers.
+- **AirPrint** (Apple). No Apple-published list of required formats was found, on Apple's support and developer pages or in its Bonjour printing specification. The one example found, a made-up "Acme Printer" in Apple's 2016 slides on AirPrint in companies, announces Apple Raster (URF) and JPEG and no PDF, on the encrypted IPP service. That illustrates an announcement; it is not a requirement.
+- **Mopria** (the Android equivalent). Its print specification is for members only. A public Mopria post says the specification "supports the use of PDF, PCLm, and pwg-raster", which says what it allows, not what a printer must take.
+
+How many printers take PDF in practice was not found: the IPP Everywhere certified-printer list records no formats. CUPS, the printing system on Linux and macOS, sends PDF first when a printer lists it, and falls back to a raster otherwise (read in its source code, not run). The one office printer measured here takes PDF.
+
+**So Waitron sends what each printer says it takes, PDF first.** When an invoice printer is added, its `document-format-supported` list is read and one format is chosen and stored:
+
+1. **PDF** (`application/pdf`), when listed. The stored PDF is sent as it is.
+2. **Otherwise PWG Raster** (`image/pwg-raster`), which every IPP Everywhere printer must take. Its format is a published standard (PWG 5102.4).
+3. **Otherwise Apple Raster** (`image/urf`), the format Apple's AirPrint example announces; the measured HP takes it and not PWG Raster. Apple publishes no specification for it; CUPS's own raster library writes it (its `CUPS_RASTER_WRITE_APPLE` mode, beside the PWG one), and the build takes that code as the reference. If any CUPS code is copied or ported, its Apache 2.0 notice ships in `/app/third-party/` ([CLAUDE.md §3](../../../CLAUDE.md)).
+4. **Otherwise the printer is not offered**, with the reason in the dialog. JPEG is not used: version 1.1 does not require it of black-and-white printers, and PWG Raster, which it does require of every printer, reaches every IPP Everywhere printer. PCLm is not used either: no published requirement read here asks for it. A printer that takes only PCLm, or only its maker's own languages (PCL, PostScript), is not offered; such a venue emails the invoice or prints it on the receipt printer.
+
+The choice is read from `document-format-supported`, never from the device id string, because the measured HP's device id names a PWG raster language that its format list does not offer (above).
+
+**How a raster page is made.** The server draws the same F1 layout the PDF draws, as dots:
+
+- The layout is drawn as an SVG picture (a text description of shapes, which an image library can turn into dots), with each letter turned into its outline from the same bundled font the PDF embeds, so drawing needs no installed fonts.
+- `sharp`, already in the box image, turns the SVG into a grey picture at a resolution the printer lists: 300 dots per inch where offered, otherwise the lowest it offers. The measured HP offers Apple Raster at 600 only, a 35 MB page of grey dots before packing. Both resolutions were measured working for a page of shapes (above); the build measures a page of real text, at both, on the box itself.
+- The QR keeps its legal size on paper: 35 mm is 413 dots at 300 per inch and 827 at 600, drawn at level M from the same matrix the PDF uses.
+- The server packs the picture into PWG Raster or Apple Raster and the agent sends those bytes. The agent stays a transport that knows nothing about invoices; it imports no other package in this repo ([CLAUDE.md §3](../../../CLAUDE.md)).
+- If drawing text as outlines through `sharp` proves unworkable, the fallback is the printing package's own bitmap font, drawn at twice its size. The build's first task decides, and says which.
 
 **Keep page printers and their jobs apart from the receipt-printer tables.** Two reasons:
 
@@ -203,14 +306,14 @@ The first build accepts a printer only if it takes PDF (`application/pdf`) and A
 
 So, instead:
 
-- **A new page-printer table** holds each office printer: its location, name, IPP address and paper size.
+- **A new page-printer table** holds each office printer: its location, name, IPP address, paper size, the format chosen for it, and the format list it reported when added.
 - **The invoice-delivery row is the A4 job.** It names the page printer and the stored PDF, and its own states carry the outcome.
 - **The agent claims deliveries for its location.** A delivery whose claim lapses becomes "outcome unknown"; it is not re-sent.
 - **A page printer can never take a receipt, a kitchen ticket or a cash-drawer pulse**, because it is not in the table those jobs point at. Likewise, a receipt printer can never take an A4 invoice.
 
 **Which printer.** The Printing rules screen gains one setting per location: "Invoice printer (A4)", choosing from that location's page printers, or none. The till and the dashboard print A4 invoices there. With none set, A4 is not offered.
 
-**How it travels.** The agent fetches the claimed delivery's PDF and sends it to the printer with an IPP Print-Job request (`document-format = application/pdf`, A4). It then asks Get-Job-Attributes until the printer reports the job completed, aborted or cancelled, or a time limit passes, and reports what it saw.
+**How it travels.** The agent fetches the claimed delivery's document — the stored PDF, or the raster pages the server drew from the same layout in the printer's chosen format — and sends it to the printer with one IPP Print-Job request (`document-format` set to that format, A4 or the printer's letter size). It then asks Get-Job-Attributes until the printer reports the job completed, aborted or cancelled, or a time limit passes, and reports what it saw.
 
 **When paper or the printer fails.** The printer may refuse the job, abort or cancel it, or not answer, or the time limit may pass. In each case the delivery is marked failed, or "outcome unknown" when pages may have printed. Where the printer gives a reason, such as "out of paper", it is recorded as a code. The F1 then shows "Invoice not delivered" with the ways to deliver it.
 
@@ -222,16 +325,15 @@ What this printer reports when its tray is empty or a sheet jams is not known ye
 - **On the dashboard**, the order detail dialog already has Reprint ([order-detail-dialog.ts:163](../../../apps/dashboard/src/widgets/order-detail-dialog.ts#L163)). For an F1 it gains "Print on A4", "Email to customer" and "Download PDF". Each records who did it and when, as receipt copies already do.
 - **Download gives a copy marked «duplicado».** Handing out an unmarked file would let a second original exist. The downloaded file is stored like any other duplicate.
 
-Who may email or download an invoice from the dashboard is the owner's choice (decision 4 below). Either action sends or hands over a customer's tax ID and address.
+Only managers may email or download an invoice from the dashboard (decision 4), because either action sends or hands over a customer's tax ID and address. Today any dashboard session — unless it runs on an enrolled device whose profile lacks receipt printing ([orders-api.ts:197](../../../apps/server/src/orders-api.ts#L197)) — may reprint a receipt from the current business day, and `report.view`, which supervisors hold too, widens that to older orders ([orders-api.ts:110-118, 199-210](../../../apps/server/src/orders-api.ts#L110-L118)). Email and download instead need `report.export`, which managers and admins hold and supervisors do not ([permissions.ts](../../../packages/identity/src/permissions.ts)), for any order.
 
 ## What the owner decides
 
-1. Approve "one original, chosen at issue", the "at most one attempt at the original" rule, and that the first build sends no courtesy PDF alongside a paper original.
-2. Approve the consent statement's content (above), and adding a venue contact email to the location settings as the way to withdraw after leaving. The exact wording comes in the build for review.
-3. Approve storing every delivered PDF in the database, and therefore in the bucket.
-4. Who may email or download an invoice from the dashboard: the same people who may reprint a receipt there today, or only managers.
-5. Approve `pdfkit` (a JavaScript PDF library that wraps text and embeds fonts, so the box needs no browser), and a font, subject to the build's first-task checks.
-6. The order of work. This build needs A231's build. Email in a live venue also needs SMTP set up, which today takes a terminal. A4 printing needs neither, so it could ship first.
+Decisions 1–6 are answered ([above](#owner-decisions-2026-10-03)). Three new ones:
+
+7. **Practice venues use the test mail gateway, always.** A demo or a venue preparing to go live sends invoice email to the box's captured inbox, even if an SMTP server is set up, so a practice invoice never reaches a customer. This replaces the backlog item "A venue preparing to go live sends real email through SMTP", which asked for the opposite before your answer. Confirm both.
+8. **A live venue cannot be set up without email.** The live setup's Email step is required, and Continue waits until the mail server has accepted a test message. The alternative is a step that can be skipped with a warning, leaving invoice email unavailable until the dashboard's Email settings are filled in.
+9. **Which office printers are offered.** A network printer that takes PDF, PWG Raster or Apple Raster is offered as an invoice printer. One that takes only PCLm or its maker's own languages (PCL, PostScript), one announcing only the encrypted IPP service, and any printer plugged into the box by USB, are not offered in this build.
 
 ## Questions for the asesor
 

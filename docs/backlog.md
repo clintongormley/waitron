@@ -971,6 +971,8 @@ every mode, so in a live dev venue the address is the only way in.
 prepare should use a real SMTP server": a prepare venue would send invitations and password resets
 through SMTP instead of capturing them on the box, and the top bar's inbox link (A227) would become
 demo-only again. Not built.
+(2026-10-03: A231d's amended design, below, keeps a venue preparing to go live on the captured
+inbox and sets SMTP up when the venue goes live; it asks the owner to confirm this item is replaced.)
 
 **The sign-in screen's chosen email is drawn as a read-only field (A189, owner 2026-10-02) — DONE
 (#1048).** On every sign-in step after the email, on the passkey offer after sign-in, and on the
@@ -2105,7 +2107,7 @@ test (B7 below). **Next action:** owner reviews the design's B2B delivery, F1 cr
 and manual remedy, and asesor questions; approves the scope and medium before a build; and separately
 signs off fiscal issuance changes before landing.
 
-### A231d. Full invoices by email as a PDF, and on an office printer — DESIGN FOR OWNER REVIEW (2026-10-03)
+### A231d. Full invoices by email as a PDF, and on an office printer — AMENDED DESIGN FOR OWNER REVIEW (2026-10-03)
 
 The owner asked, approving A231's design, that an F1 can also be emailed to the customer as a PDF and
 printed on an ordinary office printer. The [design](superpowers/specs/2026-10-03-invoice-pdf-email-and-office-printing-design.md)
@@ -2113,9 +2115,19 @@ and [plan](superpowers/plans/2026-10-03-invoice-pdf-email-and-office-printing.md
 on the server, QR first), email with the customer's express consent from a queue that never makes a
 sale wait, office printers kept apart from receipt printers, and resending from the till and the
 dashboard. The customer chooses one way to receive the original; anything after it is a «duplicado».
-Measured 2026-10-03: the owner's HP M181fw accepts `application/pdf` over IPP. It builds after A231's
-build. **Next action:** owner decides the design's six points, and the asesor answers its five
-questions. This settles A3's open "Printing A4 invoices on an office printer" design when built.
+
+The owner approved the first version's decisions 1–5 (2026-10-03, about 08:45) and changed the
+sixth; the amended version builds email and A4 printing together. Any network office printer is
+added as an invoice printer through the Printers screen's existing add-printer dialog, and is sent
+PDF when it lists PDF, otherwise PWG Raster, otherwise Apple Raster, drawn on the server from the
+same layout. No printing standard requires PDF: IPP Everywhere 1.1 requires PWG Raster and only
+recommends PDF, and AirPrint and Mopria publish no public list. A live venue sets up its mail server in the
+setup wizard's live path, with a test message, and can change it from the dashboard; practice
+venues send invoice email to the box's captured inbox. Measured 2026-10-03: the owner's HP M181fw
+takes PDF and Apple Raster, not PWG Raster. It builds after A231's build. **Next action:** owner
+decides the amended design's three new points (7–9), and the asesor answers its five questions.
+This settles A3's open "Printing A4 invoices on an office printer" design when built, and would
+replace the open item "A venue preparing to go live sends real email through SMTP" (decision 7).
 
 ### A2. The setup wizard
 
