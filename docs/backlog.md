@@ -911,7 +911,9 @@ a resting label now inherits the field box's font size, which is what the value 
 widens its box, does the same. A test in each field primitive (`wt-input` as text and password,
 `wt-textarea`, `wt-combobox`, `wt-price-input`, `wt-number-stepper`) compares the resting label's
 size with the value's, then changes `--wt-font-size-md` and checks both follow. The phone-zoom
-question below is about a field's TEXT, not its label, so this does not touch it.
+question below is about a field's TEXT, not its label, so this does not touch it. (Since A263,
+2026-10-03, below, `wt-number-stepper`'s label no longer rests: it always floats on the top line,
+and its test checks that the label and its hidden copy follow `--wt-font-size-sm` instead.)
 
 **The setup wizard's review page is grouped, explained and readable (A185, owner 2026-10-02) —
 DONE.** The owner, on a screenshot of "Review and provision": _"This layout looks really messy"_.
@@ -1389,27 +1391,24 @@ exist. The options list editor gives its Default heading the same two rules
 options probably shows the same fault; that has not been opened to check. A198's Chromium checks did
 not cover an empty table; the fix adds that case for both editors.
 
-**The number field with − and + is still too wide (A263, owner 2026-10-03) — DONE on branch
-`feat/narrow-number-stepper` (the owner chose option C: 24px plain − and + either side of a centred
-number, and a clearable Maximum choices).** The owner, on a screenshot of the extras list editor after A202: _"i'm not sure about the
-number fields with the +- buttons, they're very wide"_. Each button is `--wt-tap-min` (44px) wide,
-so 88px of every box is buttons; the box is at least `--wt-stepper-field-width` (152px), or
-`--wt-stepper-field-width-wide` (184px) when its blank value shows words such as "No limit", and a
-longer label such as "Minimum choices" widens it further
+**The number field with − and + is still too wide (A263, owner 2026-10-03) — DONE. (The owner chose
+option C: 24px plain − and + either side of a centred number, and a clearable Maximum choices.)**
+The owner, on a screenshot of the extras list editor after A202: _"i'm not sure about the
+number fields with the +- buttons, they're very wide"_. Each button was `--wt-tap-min` (44px) wide,
+so 88px of every box was buttons; the box was at least `--wt-stepper-field-width` (152px), or
+`--wt-stepper-field-width-wide` (184px) when its blank value showed words such as "No limit", and a
+longer label such as "Minimum choices" widened it further
 (`packages/ui-core/src/tokens/structure.css`, `packages/ui/src/components/wt-number-stepper.ts`).
-**Next step (owner's choice, 2026-10-03):** a brainstorm that draws narrower versions side by side,
-at 1280px and phone width, for the owner to pick from, as A202 did. A202's constraint still stands:
-stacked up/down arrows were turned down because each came to 28px tall, below `--wt-tap-min`.
-Options raised but not chosen: narrower buttons on the dashboard only, an ordinary number box on
-the dashboard with the steppers kept for touch screens, and shorter labels.
+The next step, the owner's choice, was a brainstorm drawing narrower versions side by side for the
+owner to pick from, as A202 did. A202's constraint stood: stacked up/down arrows had been turned down because each came
+to 28px tall, below `--wt-tap-min`. Options raised but not chosen: narrower buttons on the
+dashboard only, an ordinary number box on the dashboard with the steppers kept for touch screens,
+and shorter labels.
 **The owner's direction (2026-10-03):** first _"maybe something simpler like amazon's number
 fields"_, with a screenshot of Amazon's basket quantity (one outline, the number centred between a
 bin or − and a +, plain icons with no filled button squares); then _"it doesn't need to be rounded -
-but the + and - can just be part of the field without needing so much space"_. So: the ordinary
-field box, square as today, with its label as today, and − and + drawn as plain icons inside it
-rather than as filled squares. Questions for the mockups: whether − and + sit together at the
-trailing end or either side of the number; how the blank "No limit" value shows; and how much
-width the icons may take. **On size, the owner (2026-10-03):** _"if the buttons are removed from
+but the + and - can just be part of the field without needing so much space"_. **On size, the
+owner (2026-10-03):** _"if the buttons are removed from
 each other they don't have to be so big - there's less risk of hitting the wrong thing"_. That is
 the web accessibility standard's own exception. WCAG 2.2's level AA rule, 2.5.8 Target Size
 (Minimum), reads: _"The size of the target for pointer inputs is at least 24 by 24 CSS pixels,
@@ -1419,12 +1418,23 @@ intersect another target or the circle for another undersized target"_. The 44px
 stricter level AAA rule, 2.5.5 Target Size (Enhanced), which has no spacing exception (both read
 from https://www.w3.org/TR/WCAG22/, 2026-10-03). Waitron's `--wt-tap-min` (44px on both axes) is
 the house rule, written for POS screens staff touch under time pressure
-([design-system.md](developers/design-system.md), "`--wt-tap-min`"), and `wt-number-stepper` is
-used only on dashboard screens today (`grep -rln wt-number-stepper apps packages`: the backup
-screen, the extras list editor and the venue operations screen). So the mockups can try − and +
-on either side of the number, each well under 44px, kept apart by the number between them. Doing
-so changes the stepper's row in design-system.md and its tap-target sentence, so it is the owner's
-call at the mockups, and the axe and token-painting tests for the primitive change with it.
+([design-system.md](developers/design-system.md), "`--wt-tap-min`"), and `wt-number-stepper` was
+used only on dashboard screens when this was decided (`grep -rln wt-number-stepper apps packages`:
+the backup screen, the extras list editor and the venue operations screen).
+**Decided (owner, 2026-10-03), option C from the mockups:**
+
+- − and + are plain icons inside the ordinary field box (not a rounded pill), − at its start and + at its end,
+  with the number centred between them; each is `--wt-stepper-button-width` (24px) wide, kept
+  apart by the number;
+- the label always sits on the box's top line, even while the box is empty;
+- the narrowest box, `--wt-stepper-field-width`, is 88px; `--wt-stepper-field-width-wide` is gone;
+- the stepper has a new `clearable` setting: − at its lowest number or below empties the box
+  instead of being disabled there;
+- in the extras list editor, Minimum and Maximum choices sit under a "Number of choices" heading,
+  and Maximum choices is clearable from 1, so − goes 3 → 2 → 1 → blank, which means no limit.
+
+The stepper's row and the tap-target paragraph in design-system.md, and the primitive's axe and
+token-painting tests, changed with it.
 
 **The extras list editor's columns move as products are added (A264, owner 2026-10-03) — OPEN,
 queued in lane D as part of W49.** The owner, on two screenshots of the editor before and after adding a second product:
@@ -1577,7 +1587,8 @@ compact `hide-label` box, the width-matching between two steppers side by side, 
 `wt-number-stepper` row and the tap-target paragraph in
 [design-system.md](developers/design-system.md), and the primitive's token-painting and axe tests.
 Name every test changed in the PR. LOOK at every screen that uses it
-(`grep -rln wt-number-stepper apps`), in both themes and at phone width.
+(`grep -rln wt-number-stepper apps`), in both themes and at phone width. (The look described here was changed by
+A263, 2026-10-03, above.)
 
 **An extra is a fixed portion: a product sold by weight is offered as, say, 50 g a pick (A203,
 owner 2026-10-02) — DONE.** The owner: _"today you can add an extra sold eg per kg, but there is

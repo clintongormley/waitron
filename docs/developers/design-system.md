@@ -115,7 +115,10 @@ This works whether or not `#app` also carries `data-theme` — see "Themes" abov
 `--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`, `--wt-color-field-fill`,
 `--wt-color-field-line`, `--wt-color-field-label-focus`, `--wt-color-field-fill-disabled`,
 `--wt-color-field-value`, `--wt-color-google-button-fill`, `--wt-color-google-button-line`,
-`--wt-color-google-button-text`
+`--wt-color-google-button-text`, `--wt-color-stepper-button`
+
+`--wt-color-stepper-button` is the hover tint of `wt-number-stepper`'s − and + buttons: `#e8f0ff`
+in the light theme and `#172946` in the dark.
 
 The three `--wt-color-google-button-*` tokens are the colours Google's sign-in branding guidelines
 give its button, for the dashboard's Google sign-in button only: fill `#ffffff`, line `#747775` and
@@ -366,8 +369,8 @@ the `.trigger` button for `wt-combobox`) — never an element that can overflow 
 in `fieldStyles`) takes `min-width: var(--wt-tap-min)` and `min-height: var(--wt-field-height)`
 (`wt-textarea` moves the floated label's share of that height into its field box's top padding,
 but never lets the textarea itself fall below `--wt-tap-min`, growing the box instead), or
-`--wt-tap-min` in a compact field. `wt-number-stepper`'s two buttons are the one exception, by the
-owner's decision (A263, 2026-10-03): each is `--wt-stepper-button-width` (24px) wide, because the
+`--wt-tap-min` in a compact field. Among the field primitives, `wt-number-stepper`'s two buttons are
+the one exception, by the owner's decision (A263, 2026-10-03): each is `--wt-stepper-button-width` (24px) wide, because the
 number between them keeps them apart and 24 by 24 CSS px is WCAG 2.2's level AA minimum (criterion
 2.5.8; the 44px figure is the level AAA criterion 2.5.5). `wt-switch`'s `:host` and `.control` and
 `wt-price-input`'s unit button take `min-width` and
