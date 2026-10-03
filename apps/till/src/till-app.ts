@@ -3059,9 +3059,9 @@ export class TillApp extends LitElement {
   /** The floor's station summary names the station to open; the station screen reads it from the
    * address when it mounts. */
   #onShowStation(event: Event): void {
+    if (!this.#inShell()) return;
     this.errorKey = undefined;
     const stationId = (event as CustomEvent<{ stationId?: string } | undefined>).detail?.stationId;
-    if (!this.#inShell()) return;
     this.#pushDrill({ kind: "station" });
     if (stationId !== undefined && this.drill?.kind === "station")
       this.#url.write({ "till-station": stationId }, true);
@@ -3089,8 +3089,9 @@ export class TillApp extends LitElement {
   }
 
   #onShowExpo(): void {
+    if (!this.#inShell()) return;
     this.errorKey = undefined;
-    if (this.#inShell()) this.#pushDrill({ kind: "expo" });
+    this.#pushDrill({ kind: "expo" });
   }
 
   /**
@@ -3600,13 +3601,15 @@ export class TillApp extends LitElement {
   }
 
   #onShowSchedule(): void {
+    if (!this.#inShell()) return;
     this.errorKey = undefined;
-    if (this.#inShell()) this.#pushDrill({ kind: "schedule" });
+    this.#pushDrill({ kind: "schedule" });
   }
 
   #onOpenAllergens(): void {
+    if (!this.#inShell()) return;
     this.errorKey = undefined;
-    if (this.#inShell()) this.#pushDrill({ kind: "allergens" });
+    this.#pushDrill({ kind: "allergens" });
   }
 
   #onCloseAllergens(): void {
@@ -6227,7 +6230,7 @@ export class TillApp extends LitElement {
   /** A till's drill goes back to the floor; a card mount selects the canvas's floor tab. */
   #returnToFloor(): void {
     const floorTab = this.canvas?.tabs.find((tab) => this.#tabNeedsFloorData(tab))?.key;
-    if (this.drill?.kind === "table-order" || !this.#inShell() || floorTab === undefined) {
+    if (this.drill?.kind === "table-order" || floorTab === undefined) {
       this.#onBackToFloor();
     } else {
       this.#onTabSelect(floorTab);
@@ -6835,8 +6838,8 @@ export class TillApp extends LitElement {
 
   /** A canvas with no counter tab shows its first tab instead. */
   #onBackToCounter(): void {
-    this.errorKey = undefined;
     if (!this.#inShell()) return;
+    this.errorKey = undefined;
     this.#setActiveTab("counter");
     void this.#loadStations();
     this.#popDrill();

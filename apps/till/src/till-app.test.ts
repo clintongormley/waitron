@@ -2115,14 +2115,14 @@ describe("till-app", () => {
   });
 
   describe("a navigation event that arrives on the lock screen", () => {
-    const handheld = {
+    const handheld = () => ({
       getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
-    };
+    });
     const devices = [
-      { device: "till", overrides: {}, home: "counter", other: "floor" },
+      { device: "till", overrides: () => ({}), home: "counter", other: "floor" },
       { device: "handheld", overrides: handheld, home: "floor", other: "order" },
     ];
 
@@ -2140,7 +2140,44 @@ describe("till-app", () => {
       return el;
     }
 
+    const message = (el: TillApp) => el.shadowRoot!.querySelector("p.error")?.textContent ?? "";
+
     describe.each(devices)("on a $device", ({ overrides, home, other }) => {
+      it.each([
+        { type: "show-station", detail: undefined },
+        { type: "show-expo", detail: undefined },
+        { type: "show-schedule", detail: undefined },
+        { type: "open-allergens", detail: undefined },
+        { type: "close-allergens", detail: undefined },
+        { type: "new-sale", detail: undefined },
+        { type: "back-to-counter", detail: undefined },
+        { type: "back-to-floor", detail: undefined },
+        { type: "floor-refresh", detail: undefined },
+        { type: "move-held-order-open", detail: undefined },
+        { type: "open-table", detail: { tableId: openTable.id, seated: true } },
+      ])("keeps the lock screen's message after $type", async ({ type, detail }) => {
+        const router = new ServerRouter({
+          origin: BOX,
+          fetchImpl: probeFetch(),
+          storage: memoryStorage(),
+        });
+        currentApi = stubApi(overrides());
+        const { el } = await mountWidget<TillApp>("till-app", { api: currentApi, router });
+        await flush(el);
+        await signIn(el);
+        router.dispatchEvent(
+          new CustomEvent("server-changed", { detail: { from: BOX, to: CLOUD } }),
+        );
+        await flush(el);
+        expect(lock(el)).not.toBeNull();
+        expect(message(el)).toContain(t("server.switched"));
+        emit(lock(el)!, type, detail);
+        await flush(el);
+        await flush(el);
+        expect(lock(el)).not.toBeNull();
+        expect(message(el)).toContain(t("server.switched"));
+      });
+
       it.each([
         "show-station",
         "show-expo",
@@ -2154,7 +2191,7 @@ describe("till-app", () => {
       ])(
         "leaves a logged-out till locked after %s, reading neither the stations nor the floor and leaving no destination to restore",
         async (type) => {
-          const el = await lockedTill(overrides);
+          const el = await lockedTill(overrides());
           const stationReads = vi.mocked(currentApi.listStations).mock.calls.length;
           const floorReads = vi.mocked(currentApi.getTablesState).mock.calls.length;
           emit(lock(el)!, type);
@@ -2179,12 +2216,23 @@ describe("till-app", () => {
         {
           name: "open-table on a seated table",
           type: "open-table",
-          detail: { tableId: "tb-1", seated: true },
+          detail: { tableId: openTable.id, seated: true },
         },
       ])(
         "leaves a logged-out till locked after $name, without reading the stations, the floor or the drafts, or seating a table",
         async ({ type, detail }) => {
-          const el = await lockedTill(overrides);
+          // The floor is read before logout, so the till still holds the seated table and its party
+          // when the event arrives; an open that ran would read that party's drafts.
+          const { el } = await mountApp({
+            ...overrides(),
+            getTablesState: vi.fn().mockResolvedValue([openTable]),
+          });
+          await flush(el);
+          await signIn(el);
+          selectTab(el, "floor");
+          await flush(el);
+          emit(shell(el)!, "logout");
+          await flush(el);
           const stationReads = vi.mocked(currentApi.listStations).mock.calls.length;
           const floorReads = vi.mocked(currentApi.getTablesState).mock.calls.length;
           emit(lock(el)!, type, detail);
@@ -2201,7 +2249,7 @@ describe("till-app", () => {
       );
 
       it("ignores a tab-select sent while logout is still taking the shell down", async () => {
-        const { el } = await mountApp(overrides);
+        const { el } = await mountApp(overrides());
         await flush(el);
         await signIn(el);
         const floorReads = vi.mocked(currentApi.getTablesState).mock.calls.length;
