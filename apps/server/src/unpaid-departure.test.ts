@@ -22,12 +22,12 @@ import type { FiscalBackend } from "@waitron/fiscal";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { writeClearingWorkflow } from "@waitron/venue-service";
-import { parkOrder, placeOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   inTx,
   partyRevisionOf,
   paymentRows,
+  placedCounterBillMovedTo,
   provisionBillVenue,
   registroCount,
   seatedWith,
@@ -177,29 +177,6 @@ async function expectNothingWritten(
   expect(await departuresOf(billId)).toEqual([]);
   expect(await statusOf(venue, billId)).toBe(billStatus);
   expect((await partyState(partyId)).state).toBe("open");
-}
-
-/** A counter order of one Tarta (18.00) placed in `zoneId`, then moved to the party at `tableId`. */
-async function placedCounterBillMovedTo(
-  zoneId: string,
-  party: { partyId: string; tableId: string },
-): Promise<string> {
-  const id = randomUUID();
-  const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
-  await parkOrder(deps, venue.cfg, {
-    id,
-    lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
-    zoneId,
-    operatorId: venue.operatorId,
-  });
-  await placeOrder(deps, venue.cfg, id, venue.operatorId, venue.cfg.tillId);
-  const moved = await send(venue.app, venue.cookie, "POST", `/api/bills/${id}/move`, {
-    to: { tableId: party.tableId },
-    otherPartyId: party.partyId,
-    expectedOtherPartyRevision: revisionOf(party.partyId),
-  });
-  expect(moved.status).toBe(200);
-  return id;
 }
 
 /** Records a credit note of 2.00 base (-2.42) against the bill's invoice. */
@@ -575,7 +552,7 @@ describe("the reason", () => {
 describe("bills already presented", () => {
   it("files no second invoice for a bill invoiced when it was placed, and records what that invoice still owes", async () => {
     const party = await seatedWith(venue, "Caña");
-    const placedId = await placedCounterBillMovedTo(invoiceFirstZone, party);
+    const placedId = await placedCounterBillMovedTo(venue, invoiceFirstZone, party);
     await creditTwoEuros(placedId);
     const [invoiced] = await salesOf(placedId);
 
@@ -596,7 +573,7 @@ describe("bills already presented", () => {
 
   it("invoices in full a bill placed without an invoice", async () => {
     const party = await seatedWith(venue, "Caña");
-    const placedId = await placedCounterBillMovedTo(prepayZone, party);
+    const placedId = await placedCounterBillMovedTo(venue, prepayZone, party);
     expect(await salesOf(placedId)).toEqual([]);
 
     const answer = await depart(party.partyId, {
@@ -618,7 +595,7 @@ describe("bills already presented", () => {
 describe("a bill that owes nothing", () => {
   it("settles a presented bill whose credit note brought it to nothing, so no sale is left owing nothing", async () => {
     const party = await seatedWith(venue, "Botella tinto");
-    const placedId = await placedCounterBillMovedTo(invoiceFirstZone, party);
+    const placedId = await placedCounterBillMovedTo(venue, invoiceFirstZone, party);
     await credit(placedId, "14.88", "-18.00");
     const [invoiced] = await salesOf(placedId);
 
@@ -679,7 +656,7 @@ describe("a bill that owes nothing", () => {
 
   it("closes a party whose only owing bill a credit note has brought to nothing, settling it and recording no departure", async () => {
     const party = await seatedWith(venue);
-    const placedId = await placedCounterBillMovedTo(invoiceFirstZone, party);
+    const placedId = await placedCounterBillMovedTo(venue, invoiceFirstZone, party);
     await credit(placedId, "14.88", "-18.00");
     const [invoiced] = await salesOf(placedId);
 
@@ -723,7 +700,7 @@ describe("a bill that owes nothing", () => {
 describe("two departures at once, and a failure part-way", () => {
   it("records a party once when two departures of it are sent together", async () => {
     const party = await seatedWith(venue, "Botella tinto");
-    const placedId = await placedCounterBillMovedTo(prepayZone, party);
+    const placedId = await placedCounterBillMovedTo(venue, prepayZone, party);
     const body = { expectedPartyRevision: revisionOf(party.partyId), reason: REASON };
 
     const answers = await Promise.all([depart(party.partyId, body), depart(party.partyId, body)]);
@@ -741,7 +718,7 @@ describe("two departures at once, and a failure part-way", () => {
 
   it("keeps nothing when filing the second bill's invoice fails after the first was filed", async () => {
     const party = await seatedWith(venue, "Botella tinto");
-    const placedId = await placedCounterBillMovedTo(prepayZone, party);
+    const placedId = await placedCounterBillMovedTo(venue, prepayZone, party);
     let filed = 0;
     const failing = new Proxy(venue.backend, {
       get(target, property) {
@@ -1002,7 +979,7 @@ describe("a departure sent together with a payment or Finish table on the same p
 describe("the party's other bills", () => {
   it("abandons an empty bill, as Finish does", async () => {
     const party = await seatedWith(venue);
-    const placedId = await placedCounterBillMovedTo(invoiceFirstZone, party);
+    const placedId = await placedCounterBillMovedTo(venue, invoiceFirstZone, party);
 
     const answer = await depart(party.partyId, {
       expectedPartyRevision: revisionOf(party.partyId),

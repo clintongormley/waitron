@@ -44,6 +44,7 @@ import { openPartyTab } from "./serve-line.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { offerProducts } from "./zone-offers.js";
 import { partyRevisionOfOrder } from "../parties.js";
+import { parkOrder, placeOrder } from "../working-order.js";
 
 /**
  * A provisioned venue for the bill payment suites that take a card on a reader: real Veri*Factu
@@ -408,4 +409,37 @@ export async function seatedWith(
     sql`select revision from parties where id = ${partyId}`,
   );
   return { partyId, tabId: seated.json.tabId as string, tableId, revision: row!.revision };
+}
+
+/**
+ * A counter order of one Tarta (18.00) placed in `zoneId`, then moved through the till's route to
+ * the party at `party.tableId`; answers its id. Placed in an `invoice_first` zone, its invoice is
+ * filed at placing; in a `prepay` zone, none is.
+ */
+export async function placedCounterBillMovedTo(
+  venue: BillVenue,
+  zoneId: string,
+  party: { partyId: string; tableId: string },
+): Promise<string> {
+  const id = randomUUID();
+  const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
+  await parkOrder(deps, venue.cfg, {
+    id,
+    lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
+    zoneId,
+    operatorId: venue.operatorId,
+  });
+  await placeOrder(deps, venue.cfg, id, venue.operatorId, venue.cfg.tillId);
+  const [row] = venue.db.all<{ revision: number }>(
+    sql`select revision from parties where id = ${party.partyId}`,
+  );
+  const moved = await send(venue.app, venue.cookie, "POST", `/api/bills/${id}/move`, {
+    to: { tableId: party.tableId },
+    otherPartyId: party.partyId,
+    expectedOtherPartyRevision: row!.revision,
+  });
+  if (moved.status !== 200) {
+    throw new Error(`placedCounterBillMovedTo: moving answered ${moved.status}`);
+  }
+  return id;
 }

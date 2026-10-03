@@ -85,10 +85,14 @@ open bills move to the surviving visit. A bill that can no longer move — alrea
 invoiced and awaiting payment — stays recorded on the absorbed visit, but everywhere a visit's bills
 matter it counts as the surviving visit's related bill: it is listed with the others, it counts in
 the outstanding balance until paid, its receipts stay reachable, and it blocks Finish table while
-outstanding. The same holds through any chain of merges (a party merged into one that later merges
-into a third). All bills split from the visit remain attached to it. You can see each bill's paid and
-outstanding amounts, the table's total outstanding balance, and settled bills when you need their
-receipts. **Paying does not free the table** (§8).
+outstanding. _(2026-10-03: a bill already invoiced and awaiting payment now moves to the surviving
+visit too — decision P13 of `docs/superpowers/plans/2026-09-28-table-actions.md`, made possible by
+that plan's Task 7 trigger change; only paid and abandoned bills stay on the absorbed visit. The move
+is pinned by "a merged party's invoiced bill, collected at the till (spec §12 item 9)" in
+`apps/server/src/parties.test.ts`.)_ The same holds through any chain of merges (a party merged
+into one that later merges into a third). All bills split from the visit remain attached to it. You
+can see each bill's paid and outstanding amounts, the table's total outstanding balance, and
+settled bills when you need their receipts. **Paying does not free the table** (§8).
 
 Staff-to-table assignments are deferred. The dashboard must be usable without them.
 

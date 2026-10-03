@@ -233,7 +233,9 @@ names it so the owner can overturn it at review.
       (closed under S, opened under T);
     - S's other OPEN bills (split checks) move to T (`visit_id` = T); every bill of S that is not
       open (placed, settled or abandoned) stays on S, because the transition trigger lets only an
-      open order change (Global Constraints);
+      open order change (Global Constraints); _(2026-10-03: superseded by decision P13 of
+      `docs/superpowers/plans/2026-09-28-table-actions.md` — a placed bill now moves to T too; only
+      settled and abandoned bills stay on S.)_
     - S's groups (Task 3 onwards) move to T, appended after T's last position in their own order,
       held and fired alike: a merge is two parties becoming one, not held work leaving its party;
     - S's open drafts (Task 7 onwards) move to T, and where one person has an open draft on both,
@@ -915,7 +917,9 @@ Spec terms, §1 (seating, related bills, joined tables), §8 (Finish table, Need
     bill and, in an invoice-first venue, a placed (invoiced, unpaid) €15.00 bill. S merges into Mesa
     4 (visit T, with an open €30.00 tab):
     - `readVisitBills(T)` lists all three, the €20.00 one with its receipt reachable, and
-      `visitId` = S on the two S kept;
+      `visitId` = S on the two S kept; _(2026-10-03: superseded by decision P13 of
+      `docs/superpowers/plans/2026-09-28-table-actions.md` — the placed €15.00 bill now moves to
+      T, so only the settled €20.00 bill stays on S.)_
     - T's outstanding is €45.00 (€30.00 + €15.00), and the floor never shows Mesa 4 as paid while
       the €15.00 is unpaid;
     - after the €30.00 tab is paid, Finish on T is `visit.bill_outstanding` because of S's €15.00;
@@ -925,7 +929,8 @@ Spec terms, §1 (seating, related bills, joined tables), §8 (Finish table, Need
       until it is paid; after Finish, a new party at Mesa 4, Mesa 6 or Mesa 8 sees none of these
       bills;
     - control: with the family query replaced by the visit alone, the listing, the outstanding and
-      the Finish refusal each fail.
+      the Finish refusal each fail. _(2026-10-03: this case's mentions of S's €15.00 predate P13;
+      that bill is now one of T's own, and what this control shows since has not been re-checked.)_
   - **Merge (D2):** Mesa 4 (visit T) and Mesa 6 (visit S, with a settled bill and an open split
     check) are merged, S into T:
     - with `freeSourceTable`, Mesa 6 is free and T keeps Mesa 4; without it, both tables resolve to
