@@ -909,6 +909,7 @@ export async function readInvoiceNumbers(
   tx: Transaction,
   saleIds: readonly string[],
 ): Promise<Map<string, string>> {
+  if (saleIds.length === 0) return new Map();
   const issued = await tx
     .select({ id: sales.id, code: invoiceSeries.code, number: sales.invoiceNumber })
     .from(sales)
@@ -5628,6 +5629,8 @@ export interface CounterWaitingOrder {
   /** A placed order's frozen service mode, or `cfg.orderFlow` when it has none frozen; null on a
    * settled one. */
   serviceMode: ServiceMode | null;
+  /** Only on a placed order whose invoice is issued: its number. */
+  invoiceNumber?: string;
 }
 
 /**
@@ -5676,9 +5679,14 @@ export async function listCounterWaiting(
     const placedIds = rows.filter((row) => row.status === "placed").map((row) => row.id);
     const modes = await VENUE_SERVICE.findOrderModes(tx, cfg, placedIds);
     const issued = await readIssuedSales(tx, placedIds);
+    const numbers = await readInvoiceNumbers(
+      tx,
+      [...issued.values()].map((sale) => sale.saleId),
+    );
     const waiting: CounterWaitingOrder[] = [];
     for (const row of rows) {
       const placed = row.status === "placed";
+      const sale = issued.get(row.id);
       const eligible =
         Boolean(row.fired) &&
         row.collectedAt === null &&
@@ -5691,9 +5699,10 @@ export async function listCounterWaiting(
         openedAt: row.openedAt,
         settledAt: row.settledAt,
         collectedAt: row.collectedAt,
-        total: issued.get(row.id)?.amountDue ?? rawCentsToDecimal(row.total),
+        total: sale?.amountDue ?? rawCentsToDecimal(row.total),
         canHandOver: eligible,
         serviceMode: placed ? (modes.get(row.id) ?? cfg.orderFlow) : null,
+        ...(sale === undefined ? {} : { invoiceNumber: numbers.get(sale.saleId)! }),
       });
     }
     return waiting;

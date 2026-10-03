@@ -10,7 +10,13 @@ import { loginWithPin } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { ServiceMode } from "@waitron/module";
 import { VENUE_SERVICE } from "./modules.js";
-import { listStationQueue, markCollected, parkOrder, placeOrder } from "./working-order.js";
+import {
+  listStationQueue,
+  markCollected,
+  parkOrder,
+  placeOrder,
+  readInvoiceNumbers,
+} from "./working-order.js";
 import { inTx, provisionBillVenue, registroCount, send, tabWith } from "./testing/bill-venue.js";
 import { takeBillPayment } from "./bill-payments.js";
 import { runServiceCommand } from "./parties.js";
@@ -803,9 +809,53 @@ describe("GET /api/orders/counter-waiting", () => {
     }
   });
 
+  /** The formatted number of the invoice this order filed. */
+  function invoiceNumberOf(id: string): string {
+    const [row] = venue.db.all<{ code: string; number: number }>(
+      sql`select s.code as code, x.invoice_number as number
+          from sales x join invoice_series s on s.id = x.series_id
+          where x.working_order_id = ${id}`,
+    );
+    return `${row!.code}/${row!.number}`;
+  }
+
+  it("names the invoice an invoice_first order filed when it was placed", async () => {
+    const id = await placed("invoice_first", "Tarta");
+
+    expect(await waitingRow(id)).toMatchObject({
+      status: "placed",
+      invoiceNumber: invoiceNumberOf(id),
+    });
+  });
+
+  it("names no invoice on an order not yet invoiced, or on an invoiced one already paid", async () => {
+    const notInvoiced = await placed("ticket_then_pay", "Tarta");
+    const paid = await placed("invoice_first", "Tarta");
+    await collectCash(paid);
+    expect(saleCount(paid)).toBe(1);
+
+    for (const id of [notInvoiced, paid]) {
+      const row = await waitingRow(id);
+      expect(row).toBeDefined();
+      expect(row).not.toHaveProperty("invoiceNumber");
+    }
+  });
+
   it("requires a signed-in session", async () => {
     const answer = await send(venue.app, "", "GET", "/api/orders/counter-waiting");
     expect(answer.status).toBe(401);
+  });
+
+  it("reading the invoice numbers of no sales asks the database nothing", async () => {
+    await inTx(venue, async (tx) => {
+      const select = vi.spyOn(tx, "select");
+      try {
+        expect(await readInvoiceNumbers(tx, [])).toEqual(new Map());
+        expect(select).not.toHaveBeenCalled();
+      } finally {
+        select.mockRestore();
+      }
+    });
   });
 });
 

@@ -1025,6 +1025,8 @@ export interface CounterWaitingOrder {
   /** A placed order's own service mode, frozen when it was opened, or the order flow of the till's
    * location when the order has none frozen; null on a settled one. */
   serviceMode: OrderFlow | "table_tab" | null;
+  /** Only on a placed order whose invoice is issued: its number ("A/12"). */
+  invoiceNumber?: string;
 }
 
 /**

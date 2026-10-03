@@ -49,4 +49,14 @@ describe.each(["light", "dark"] as const)("till-counter-waiting a11y (%s theme)"
     expect(el.shadowRoot!.querySelectorAll("[data-waiting-state]")).toHaveLength(3);
     await expectNoA11yViolations(host);
   });
+
+  it("an invoiced, unpaid order with Cancel and credit has no violations", async () => {
+    const { el, host } = await mountWidget<TillCounterWaiting>(
+      "till-counter-waiting",
+      { orders: [{ ...sent, serviceMode: "invoice_first", invoiceNumber: "A/12" }] },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-waiting-cancel-credit]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 });

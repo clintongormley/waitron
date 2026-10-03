@@ -10,7 +10,7 @@ import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { REASON_MAX, type DialogRefusal } from "../state/bill-payment.js";
 
-/** A cancelled bill: the number of the credit note issued, or null when it could not be read. */
+/** A cancelled bill: the number of the credit note issued, or null when no number was read. */
 export interface CancelCreditDone {
   creditNote: string | null;
 }
@@ -55,6 +55,8 @@ export class TillCancelCreditDialog extends LitElement {
   @property({ attribute: false }) refusal: DialogRefusal | null = null;
   @property({ attribute: false }) done: CancelCreditDone | null = null;
   @property({ type: Boolean }) busy = false;
+  /** The order is a counter order from the waiting list, not a table's bill. */
+  @property({ type: Boolean }) fromCounter = false;
 
   @state() private reason = "";
   @state() private attempted = false;
@@ -84,6 +86,8 @@ export class TillCancelCreditDialog extends LitElement {
   }
 
   #refusalText(refusal: DialogRefusal): string {
+    if (this.fromCounter && refusal.code === "network")
+      return t("cancel_credit.unconfirmed_counter");
     return Object.hasOwn(REFUSALS, refusal.code)
       ? t(REFUSALS[refusal.code]!)
       : codeMessage(refusal.code);

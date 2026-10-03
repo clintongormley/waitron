@@ -1462,3 +1462,82 @@ describe("a party's bills name the invoice and its credit notes (GET /api/partie
     expect(bill).not.toHaveProperty("creditNotes");
   });
 });
+
+describe("cancelling an invoiced counter order from the counter's waiting list", () => {
+  async function waitingRow(id: string): Promise<Record<string, unknown> | undefined> {
+    const answer = await send(venue.app, venue.cookie, "GET", "/api/orders/counter-waiting");
+    expect(answer.status).toBe(200);
+    return (answer.json as unknown as Record<string, unknown>[]).find((row) => row.id === id);
+  }
+
+  async function formattedNumberOf(sale: { seriesId: string; invoiceNumber: number }) {
+    const [series] = await inTx(venue, (tx) =>
+      tx
+        .select({ code: invoiceSeries.code })
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.id, sale.seriesId)),
+    );
+    return `${series!.code}/${sale.invoiceNumber}`;
+  }
+
+  async function reversedLineIdsOf(saleId: string) {
+    const rows = await inTx(venue, (tx) =>
+      tx
+        .select({ correctsLineId: saleLines.correctsLineId })
+        .from(saleLines)
+        .where(eq(saleLines.saleId, saleId))
+        .orderBy(saleLines.lineNo),
+    );
+    return rows.map((row) => row.correctsLineId);
+  }
+
+  it("lists it with its invoice, and once cancelled one credit note reverses each invoice line and it leaves the list", async () => {
+    const id = await placed([
+      { name: "Mosto", quantity: "1" },
+      { name: "Zumo", quantity: "2" },
+    ]);
+    const original = await invoiceOf(id);
+    expect(await waitingRow(id)).toMatchObject({
+      status: "placed",
+      serviceMode: "invoice_first",
+      invoiceNumber: await formattedNumberOf(original),
+    });
+
+    expect(await cancel(id)).toEqual({ status: 200, json: { body: "" } });
+
+    const credits = await creditsOf(original.id);
+    expect(credits).toHaveLength(1);
+    const invoiceLineIds = (
+      await inTx(venue, (tx) =>
+        tx
+          .select({ id: saleLines.id })
+          .from(saleLines)
+          .where(eq(saleLines.saleId, original.id))
+          .orderBy(saleLines.lineNo),
+      )
+    ).map((row) => row.id);
+    expect(invoiceLineIds).toHaveLength(2);
+    expect(await reversedLineIdsOf(credits[0]!.id)).toEqual(invoiceLineIds);
+    expect(await statusOf(venue, id)).toBe("abandoned");
+    expect(await waitingRow(id)).toBeUndefined();
+  });
+
+  it("refuses a counter order already paid, writing nothing (working_order.not_placed)", async () => {
+    const id = await placed([{ name: "Mosto", quantity: "1" }]);
+    const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/collect`, {
+      tender: { method: "cash", amount: "0.55" },
+    });
+    expect(paid.status).toBe(200);
+    const before = fiscalSnapshot();
+
+    const answer = await cancel(id);
+
+    expect({ status: answer.status, code: answer.json.code }).toEqual({
+      status: 409,
+      code: "working_order.not_placed",
+    });
+    expect(fiscalSnapshot()).toEqual(before);
+    expect(await statusOf(venue, id)).toBe("settled");
+    expect(await creditsOf((await invoiceOf(id)).id)).toEqual([]);
+  });
+});

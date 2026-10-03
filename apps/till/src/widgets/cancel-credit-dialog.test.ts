@@ -168,6 +168,19 @@ describe("till-cancel-credit-dialog: refusals", () => {
     expect(reason(el)!.error).toBe("");
   });
 
+  it("on a counter order, a cancel that got no answer says to check the waiting orders, in English and Spanish", async () => {
+    const english = await mount({ fromCounter: true, refusal: { code: "network" } });
+    setLocale("es");
+    const spanish = await mount({ fromCounter: true, refusal: { code: "network" } });
+
+    expect(actions(english).error).toBe(
+      "The cancel got no answer, so it may have been made. Check the waiting orders before trying again.",
+    );
+    expect(actions(spanish).error).toBe(
+      "La cancelación no obtuvo respuesta, así que puede que se haya hecho. Revisa los pedidos pendientes antes de volver a intentarlo.",
+    );
+  });
+
   it("says each cancel refusal in Spanish too", async () => {
     setLocale("es");
     const own = await mount({ refusal: { code: "bill.payments_received" } });

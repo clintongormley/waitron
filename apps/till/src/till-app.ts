@@ -593,10 +593,11 @@ interface Departing {
   busy: boolean;
 }
 
-/** The cancel and credit dialog, opened from bill `workingOrderId` of party `partyId`. */
+/** The cancel and credit dialog, opened from bill `workingOrderId` of party `partyId`, or, with
+ * `partyId` null, from a counter order on the waiting list. */
 interface CancelCrediting {
   id: number;
-  partyId: string;
+  partyId: string | null;
   workingOrderId: string;
   invoiceNumber: string | null;
   amount: string;
@@ -5854,6 +5855,26 @@ export class TillApp extends LitElement {
     };
   }
 
+  /** Cancel and credit, offered on a placed counter order whose invoice is issued: its dialog
+   * opens. */
+  #onCancelCreditWaitingOrder(event: Event): void {
+    const { id } = (event as CustomEvent<{ id: string }>).detail;
+    if (this.#counterOrderInFlight()) return;
+    const order = this.counterWaiting.find((row) => row.id === id);
+    if (order?.invoiceNumber === undefined || this.cancelCrediting !== null) return;
+    this.cancelCrediting = {
+      id: ++this.#cancelCreditings,
+      partyId: null,
+      workingOrderId: id,
+      invoiceNumber: order.invoiceNumber,
+      amount: order.total,
+      reason: "",
+      refusal: null,
+      busy: false,
+      done: null,
+    };
+  }
+
   #cancelCreditingNow(id: number): CancelCrediting | null {
     return this.cancelCrediting?.id === id ? this.cancelCrediting : null;
   }
@@ -5888,14 +5909,14 @@ export class TillApp extends LitElement {
     await this.#sendCancelCredit(open, { personId: override.personId, pin: override.pin });
   }
 
-  /** Sent once per press, never resent through `resendUnanswered`: after no answer the bills are
-   * read again, and a later press that finds the cancel made is refused `working_order.not_placed`,
-   * after which the bills are read again too. */
+  /** Sent once per press, never resent through `resendUnanswered`: after no answer the bills (or
+   * the waiting list) are read again, and a later press that finds the cancel made is refused
+   * `working_order.not_placed`, after which they are read again too. */
   async #sendCancelCredit(
     open: CancelCrediting,
     override?: { personId: string; pin: string },
   ): Promise<void> {
-    if (this.orderParty?.id !== open.partyId) {
+    if (open.partyId !== null && this.orderParty?.id !== open.partyId) {
       this.#closeCancelCrediting();
       return;
     }
@@ -5919,10 +5940,21 @@ export class TillApp extends LitElement {
   }
 
   /** The bills are read again, which carry the credit note; a read that fails leaves the bill
-   * cancelled all the same, with no number to name. */
+   * cancelled all the same, with no number to name. A counter order's kitchen queue and waiting list
+   * name no credit note, so the result shows first and they are read after it, as reads without a
+   * time limit must not hold the dialog. */
   async #onCancelCredited(id: number, sent: Sent): Promise<void> {
     const open = this.#cancelCreditingNow(id);
     if (open === null) return;
+    if (open.partyId === null) {
+      this.#showCancelCredited(id, null);
+      await this.#refreshAfterWrite("station", "refresh.station_after_cancel");
+      // A read started after the session ended could show the next operator this cancel's failure
+      // notice.
+      if (sent.session !== this.#operatorSession) return;
+      await this.#refreshAfterWrite("waiting", "refresh.waiting_after_cancel");
+      return;
+    }
     const bills = this.#hasLeftParty(open.partyId, sent)
       ? null
       : (await this.#loadPartyBills()).bills;
@@ -5961,7 +5993,9 @@ export class TillApp extends LitElement {
    * Not permitted, with no approver's PIN sent, opens the approvers' PIN prompt; a refusal of the
    * PIN shows there. Any other refusal stays in the dialog, after the party's bills are read again
    * unless the operator has left the party; a bill that then reads abandoned after a refusal
-   * {@link CANCEL_MAY_HAVE_LANDED} names is shown cancelled.
+   * {@link CANCEL_MAY_HAVE_LANDED} names is shown cancelled. A counter order's refusal shows first and
+   * its waiting list is read after it; the list never shows the order cancelled, as an order gone
+   * from it may have been paid.
    */
   async #onCancelCreditRefused(
     open: CancelCrediting,
@@ -5981,6 +6015,11 @@ export class TillApp extends LitElement {
       return;
     }
     this.#closeCancelCreditApprovers();
+    if (open.partyId === null) {
+      this.cancelCrediting = { ...open, refusal, busy: false };
+      await this.#refreshWaiting();
+      return;
+    }
     const bills = this.#hasLeftParty(open.partyId, sent)
       ? null
       : (await this.#loadPartyBills()).bills;
@@ -6004,6 +6043,7 @@ export class TillApp extends LitElement {
         .refusal=${open.refusal}
         .busy=${open.busy}
         .done=${open.done}
+        .fromCounter=${open.partyId === null}
         @cancel-credit-continue=${(event: Event) => void this.#onCancelCreditContinue(event)}
         @cancel-credit-close=${() => this.#closeCancelCrediting()}
       ></till-cancel-credit-dialog>
@@ -7057,6 +7097,7 @@ export class TillApp extends LitElement {
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @hand-over-order=${(event: Event) => void this.#onHandOverOrder(event)}
         @pay-waiting-order=${(event: Event) => void this.#onPayWaitingOrder(event)}
+        @cancel-credit-waiting-order=${(event: Event) => this.#onCancelCreditWaitingOrder(event)}
         @show-station=${(event: Event) => this.#onShowStation(event)}
         @enrolled=${() => void this.#onEnrolled()}
         @switch-device=${() => void this.#onSwitchDevice()}
