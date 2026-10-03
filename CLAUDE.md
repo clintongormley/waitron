@@ -518,8 +518,13 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   functions take a `tx: Transaction` and never open their own; a route handler opens exactly one
   `withTransaction` per request. This is a convention, not a compiler guarantee — `Database` is assignable
   to `Transaction`. A secret check should be the exception: it takes the `Database` and derives its
-  key with no transaction open; the PIN, manager-login and profile checks do not yet
-  (`docs/backlog.md`, [conventions-data.md](docs/developers/conventions-data.md)).
+  key with no transaction open. The PIN, manager-login and profile checks do so through identity's
+  `checkPin`, `checkManagerPassword` and `checkOwnPassword`, whose result the check inside the
+  transaction reuses only while the person, the secret and the stored hash it was derived against
+  are the same — weaker than it looks: those inner checks still
+  take a `tx` and derive inside it when handed no result, so a new route that forgets the early check,
+  or forgets to take turns (`inTurn`, `apps/server/src/attempt-turns.ts`), derives under the lock or
+  once per attempt in a burst, and nothing notices ([conventions-data.md](docs/developers/conventions-data.md)).
   **Splitting one logical change across transactions is a commented decision, never a default.**
   **Queries on one transaction are awaited in turn, never `Promise.all`** — this engine is
   synchronous, so two statements issued together run one after the other in an order nothing

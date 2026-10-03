@@ -187,6 +187,7 @@ import { ordersWithUnfiledPayment, paymentAttemptIsLive, receiptQr } from "./til
 import type { TillSaleResult } from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
+import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import {
   assertBillInvariant,
   issueIfFullyPaid,
@@ -5516,7 +5517,30 @@ export async function cancelPlacedOrder(
   if (reason.trim() === "") {
     throw new AppError("working_order.reason_required", { workingOrderId: id });
   }
+  const toCheck =
+    (await readOrderInvoice(deps.db, id)) === undefined
+      ? undefined
+      : await overrideToCheck(
+          deps.db,
+          { sessionId: operator.sessionId, permission: "sale.rectify" },
+          override,
+        );
 
+  return withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) =>
+    cancelPlaced(deps, cfg, id, reason, operator, saleTillId, withCheck(override, checked)),
+  );
+}
+
+async function cancelPlaced(
+  deps: TillSaleDeps,
+  cfg: TillConfig,
+  id: string,
+  reason: string,
+  operator: { personId: string; sessionId: string; attempts: PinAttempts },
+  saleTillId: () => Promise<TillId>,
+  override: Override | undefined,
+): Promise<void> {
+  const authz = { sessionId: operator.sessionId, override };
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
       .select({ status: workingOrders.status })
@@ -5538,7 +5562,6 @@ export async function cancelPlacedOrder(
       throw new AppError("order.payment_in_flight", { workingOrderId: id });
     }
     if (invoice !== undefined) {
-      const authz = { sessionId: operator.sessionId, override };
       await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
       await creditWholeInvoice(tx, deps, cfg, invoice, authz, await saleTillId());
     }

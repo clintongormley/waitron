@@ -5,6 +5,7 @@ import { readRawJsonBody } from "@waitron/server-kit";
 import { asObject } from "./bill-payments-api.js";
 import { requireSaleTillId } from "./device-session.js";
 import type { Logger } from "./logger.js";
+import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import {
   overridePinAttempts,
   parseOverrideField,
@@ -47,13 +48,30 @@ export function mountUnpaidDepartureApi(
       const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
       const request = parseDeparture(asObject(await readRawJsonBody<unknown>(c)));
       const saleTillId = await requireSaleTillId(deps, c);
-      const result = await withTransaction(deps.db, (tx) =>
-        recordUnpaidDeparture(tx, { ...deps, log }, deps.cfg, saleTillId, partyId, request, {
-          personId,
-          sessionId,
-          attempts: overridePinAttempts(pinThrottle, tillId),
-        }),
+      const attempts = overridePinAttempts(pinThrottle, tillId);
+      const toCheck = await overrideToCheck(
+        deps.db,
+        { sessionId, permission: "sale.void" },
+        request.override,
       );
+      const result = await withPinCheckAhead(deps.db, toCheck, attempts, (checked) => {
+        const checkedRequest = { ...request, override: withCheck(request.override, checked) };
+        return withTransaction(deps.db, (tx) =>
+          recordUnpaidDeparture(
+            tx,
+            { ...deps, log },
+            deps.cfg,
+            saleTillId,
+            partyId,
+            checkedRequest,
+            {
+              personId,
+              sessionId,
+              attempts,
+            },
+          ),
+        );
+      });
       return c.json(result);
     }),
   );

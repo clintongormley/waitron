@@ -10,7 +10,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -28,6 +28,15 @@ import {
 } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
+import {
+  watchingDerivations,
+  writerBesideRequest,
+  whileChangingOnLockRequest,
+} from "./testing/watched-scrypt.js";
+
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse";
@@ -1731,5 +1740,100 @@ describe("Management API — Google sign-in edges, credential checks and staff l
       expect(malformed.status).toBe(404);
       expect(await malformed.json()).toMatchObject({ error: { code: "person.not_found" } });
     }
+  });
+});
+
+describe("Management API — a credential change checks the current password before the write lock is taken", () => {
+  const json = { "content-type": "application/json" };
+  const routes = [
+    { name: "passkey registration options", path: "/management-api/passkey/register/options" },
+    { name: "starting a Google link", path: "/management-api/session/me/google" },
+  ];
+
+  it.each(routes)("lets another writer commit while $name derives the key", async ({ path }) => {
+    await setupTenant();
+    const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const { result, order, outside } = await writerBesideRequest(suite.db, async () =>
+      app.request(path, {
+        method: "POST",
+        headers: { cookie, ...json },
+        body: JSON.stringify({ currentPassword: PASSWORD }),
+      }),
+    );
+
+    expect(result.status).toBe(200);
+    expect(order).toEqual(["writer", "request's transaction"]);
+    expect(outside).toBe(1);
+  });
+
+  it("refuses a current password that was changed while its key was being derived", async () => {
+    const { managerId } = await setupTenant();
+    const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const res = await whileChangingOnLockRequest(
+      suite.db,
+      async (tx) => {
+        await tx
+          .update(persons)
+          .set({ passwordHash: hashPassword("changed elsewhere") })
+          .where(eq(persons.id, managerId));
+      },
+      async () =>
+        app.request("/management-api/session/me/google", {
+          method: "POST",
+          headers: { cookie, ...json },
+          body: JSON.stringify({ currentPassword: PASSWORD }),
+        }),
+    );
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
+    const states = await suite.db.execute<{ count: number }>(
+      sql`select count(*) as count from google_oidc_states`,
+    );
+    expect(states.rows[0]!.count).toBe(0);
+  });
+
+  it("derives no key for a credential change the slow-down refuses", async () => {
+    await setupTenant();
+    const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
+    const cookie = await login(app, MANAGER_EMAIL);
+    const startLink = async (currentPassword: string) =>
+      app.request("/management-api/session/me/google", {
+        method: "POST",
+        headers: { cookie, ...json },
+        body: JSON.stringify({ currentPassword }),
+      });
+    for (let i = 0; i < 4; i++) expect((await startLink("not the password")).status).toBe(401);
+
+    const { result, order, outside } = await watchingDerivations(() => startLink(PASSWORD));
+
+    expect(result.status).toBe(429);
+    expect({ order, outside }).toEqual({ order: [], outside: 0 });
+  });
+  it("derives a key only for the attempts the slow-down lets through when eight arrive at once", async () => {
+    await setupTenant();
+    const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
+    const cookie = await login(app, MANAGER_EMAIL);
+
+    const { result, order, outside } = await watchingDerivations(() =>
+      Promise.all(
+        Array.from({ length: 8 }, () =>
+          app.request("/management-api/session/me/google", {
+            method: "POST",
+            headers: { cookie, ...json },
+            body: JSON.stringify({ currentPassword: "not the password" }),
+          }),
+        ),
+      ),
+    );
+
+    const statuses = result.map((res) => res.status);
+    expect(statuses.filter((status) => status === 401)).toHaveLength(4);
+    expect(statuses.filter((status) => status === 429)).toHaveLength(4);
+    expect(outside + order.length).toBe(4);
   });
 });

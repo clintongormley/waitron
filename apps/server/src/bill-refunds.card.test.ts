@@ -1,12 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { billPaymentRefunds, incidents, printJobs, withTransaction } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
-import { PIN_THROTTLE_FREE_ATTEMPTS, startManagementSession } from "@waitron/identity";
+import {
+  hashPin,
+  persons,
+  PIN_THROTTLE_FREE_ATTEMPTS,
+  startManagementSession,
+} from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
 import type { PaymentProvider, RefundAnswer, RefundLookup } from "@waitron/payments";
 import { SumUpCloudProvider } from "@waitron/payments-sumup";
@@ -40,6 +45,10 @@ import { systemClock } from "./till-backend.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import "./errors.js";
 import { cancelBody } from "./testing/cancel-line.js";
+import { watchDerivationsAndLock, watchedOrder } from "./testing/watched-scrypt.js";
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 // A card refund of a bill payment that survives an interruption (bill payments design §6b, §8 tests
 // 17–23): the refund row is written before the provider is asked, the call is keyed to the row,
@@ -1841,5 +1850,69 @@ describe("manual confirmation on a connected card", () => {
     expect(await providerRefundsOf(card.id)).toEqual([
       { amount: 500, providerRefundRef: row.providerRefundRef },
     ]);
+  });
+});
+
+describe("the refund attestation checks the manager's PIN before the write lock is taken", () => {
+  const NOTE = "El panel de SumUp muestra la devolución 11233372107 como REFUNDED";
+
+  afterEach(async () => {
+    await watchedOrder();
+  });
+
+  const anotherWriter = () => withTransaction(venue.db, (tx) => tx.execute(sql`select 1`));
+  const attest = (refundId: string, pin: string) =>
+    send(
+      managerApp(),
+      managerCookie,
+      "POST",
+      `/management-api/payments/bill-refunds/${refundId}/attest`,
+      {
+        outcome: "failed",
+        note: NOTE,
+        pin,
+      },
+    );
+  const setAdminPin = (pin: string) =>
+    withTransaction(venue.db, (tx) =>
+      tx
+        .update(persons)
+        .set({ pinHash: hashPin(pin) })
+        .where(eq(persons.id, venue.adminId)),
+    );
+
+  it("records the outcome while another writer commits during the PIN check", async () => {
+    const { paymentId, refundId } = await pendingRefund();
+    watchDerivationsAndLock(venue.db, "1234", anotherWriter, anotherWriter, anotherWriter);
+
+    const attested = await attest(refundId, "1234");
+
+    expect(attested.status).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(await onlyRefundOf(paymentId)).toMatchObject({
+      state: "failed",
+      attestedBy: venue.adminId,
+    });
+  });
+
+  it("refuses the outcome when the manager's PIN changes while its key is being derived", async () => {
+    const { paymentId, refundId } = await pendingRefund();
+    watchDerivationsAndLock(venue.db, "1234", () => setAdminPin("4321"));
+
+    try {
+      const attested = await attest(refundId, "1234");
+
+      // The row changed after the early check, so the transaction derives the key again.
+      expect(await watchedOrder()).toEqual([
+        "writer",
+        "derived",
+        "derived under the request's lock",
+      ]);
+      expect(attested.status).toBe(401);
+      expect(attested.json).toEqual({ code: "pin.invalid", params: {} });
+      expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending", attestedBy: null });
+    } finally {
+      await setAdminPin("1234");
+    }
   });
 });

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { kitchenCourses, kitchenStations, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -21,6 +21,7 @@ import type { TillConfig } from "./till-config.js";
 import { mountManagementApi } from "./management-api.js";
 import { generateSync } from "otplib";
 import { enrolAuthenticator, TOTP_KEY_RING, wrongTotpCode } from "./testing/authenticator.js";
+import { writerBesideRequest, whileSuspendingOnLockRequest } from "./testing/watched-scrypt.js";
 
 /**
  * Floor zones, dining tables, table placement, kitchen stations and kitchen courses on the
@@ -30,6 +31,11 @@ import { enrolAuthenticator, TOTP_KEY_RING, wrongTotpCode } from "./testing/auth
  * The malformed-id and malformed-`zoneId` cases pin the response only: a `text` id column matches no
  * row for a malformed id, so none of them tells its screen from its absence.
  */
+
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
+
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
@@ -580,6 +586,54 @@ describe("POST /management-api/session (email login)", () => {
       suspended: refused,
       wrongPassword: refused,
       wrongCode: refused,
+    });
+  });
+
+  it("lets another writer commit while it derives the key", async () => {
+    const { result, order } = await writerBesideRequest(suite.db, async () =>
+      app.request("/management-api/session", {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({ email: MANAGER_EMAIL, password: PASSWORD }),
+      }),
+    );
+
+    expect(result.status).toBe(200);
+    expect(order.slice(0, 2)).toEqual(["writer", "request's transaction"]);
+  });
+
+  it("refuses a manager suspended while the key was being derived, as any refusal", async () => {
+    const email = `${unique("suspended-mid-sign-in")}@x.com`;
+    const personId = await withTransaction(suite.db, async (tx) => {
+      const [person] = await tx
+        .insert(persons)
+        .values({
+          displayName: unique("Manager"),
+          email,
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword(PASSWORD),
+          role: "manager",
+        })
+        .returning({ id: persons.id });
+      return person!.id;
+    });
+
+    const res = await whileSuspendingOnLockRequest(suite.db, personId, async () =>
+      app.request("/management-api/session", {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({ email, password: PASSWORD }),
+      }),
+    );
+
+    expect({
+      status: res.status,
+      body: await res.json(),
+      cookie: res.headers.get("set-cookie"),
+    }).toEqual({
+      status: 401,
+      body: { error: { code: "password.invalid", params: {} } },
+      cookie: null,
     });
   });
 });

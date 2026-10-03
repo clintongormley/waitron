@@ -10,6 +10,7 @@ import { googleOidcStates } from "./schema/google-oidc-states.js";
 import { persons } from "./schema/persons.js";
 import { verifyOwnCredentials } from "./profile.js";
 import type { TotpKeyRing } from "./mfa.js";
+import type { SecretCheck } from "./secret-check.js";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 const AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -77,6 +78,8 @@ export async function beginGoogleLink(
     currentPassword?: string;
     totp?: string;
     keyRing: TotpKeyRing;
+    /** From `checkOwnPassword`, taken before the transaction opened. */
+    checked?: SecretCheck;
   },
 ) {
   const person = await verifyOwnCredentials(tx, input);

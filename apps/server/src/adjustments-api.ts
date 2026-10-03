@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { ADJUSTMENT_ACTIONS, listAdjustmentReasons } from "@waitron/adjustments";
-import { withTransaction } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import {
   listActivePersonsAtOrAboveRole,
   personRole,
@@ -13,6 +13,7 @@ import { requireNullableBodyUuid, requireBodyUuid, readRawJsonBody } from "@wait
 import { decimal } from "@waitron/shared";
 import {
   applyAdjustment,
+  planAdjustment,
   previewAdjustment,
   reasonNameIn,
   type AdjustmentAsk,
@@ -27,6 +28,7 @@ import {
   withSaleTillWhenIssuing,
 } from "./bill-payments-api.js";
 import type { Logger } from "./logger.js";
+import { withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import {
   overridePinAttempts,
@@ -91,6 +93,26 @@ function requireRole(value: string | undefined): PersonRoleValue {
 }
 
 /**
+ * The approver whose PIN the transaction will check: the plan, read now, needs an approver. A plan
+ * that cannot be made is refused inside the transaction, so it names no one here.
+ */
+async function approverToCheck(
+  db: Database,
+  ask: AdjustmentAsk,
+  approver: { personId: string; pin: string } | undefined,
+  venueLocale: string,
+): Promise<{ personId: string; pin: string } | undefined> {
+  if (approver === undefined) return undefined;
+  let approverRole;
+  try {
+    ({ approverRole } = await planAdjustment(db, ask, venueLocale));
+  } catch {
+    return undefined;
+  }
+  return approverRole === null ? undefined : approver;
+}
+
+/**
  * The till's adjustment routes (service plan Task 11, spec §7), behind the till session: apply a
  * cancel, comp or discount to an open bill, a table's or a counter order, preview what it would
  * do, and the reasons and approvers the till offers.
@@ -112,23 +134,28 @@ export function mountAdjustmentsApi(
       const body = asObject(await readRawJsonBody<unknown>(c));
       const ask = parseAsk(id, personId, body);
       const submissionId = submissionIdOf(body);
-      const approver = parseDrawerOverride(
+      const parsedApprover = parseDrawerOverride(
         body.approver as { personId?: unknown; pin?: unknown } | undefined,
       );
-      const answer = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
-        withTransaction(deps.db, async (tx) => {
-          const applied = await applyAdjustment(
-            tx,
-            deps.cfg,
-            { ...ask, submissionId, ...(approver === undefined ? {} : { approver }) },
-            deps.venueLocale,
-            overridePinAttempts(pinThrottle, tillId),
-          );
-          await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
-          await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);
-          return { ...applied, party: await partyRevisionOfOrder(tx, id) };
-        }),
-      );
+      const attempts = overridePinAttempts(pinThrottle, tillId);
+      const toCheck = await approverToCheck(deps.db, ask, parsedApprover, deps.venueLocale);
+      const answer = await withPinCheckAhead(deps.db, toCheck, attempts, (checked) => {
+        const approver = withCheck(parsedApprover, checked);
+        return withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+          withTransaction(deps.db, async (tx) => {
+            const applied = await applyAdjustment(
+              tx,
+              deps.cfg,
+              { ...ask, submissionId, ...(approver === undefined ? {} : { approver }) },
+              deps.venueLocale,
+              attempts,
+            );
+            await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
+            await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);
+            return { ...applied, party: await partyRevisionOfOrder(tx, id) };
+          }),
+        );
+      });
       return c.json(answer);
     }),
   );

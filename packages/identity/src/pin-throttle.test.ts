@@ -196,3 +196,97 @@ describe("the PIN throttle's per-slot bound on how many pairs it holds", () => {
     expect(caught(() => throttle.check(DEVICE, "newcomer"))).toBeUndefined();
   });
 });
+
+describe("asking the PIN throttle whether it would refuse", () => {
+  type Throttle = ReturnType<typeof createPinThrottle>;
+  const checkRefuses = (throttle: Throttle, slot: string, person: string): boolean =>
+    caught(() => throttle.check(slot, person)) !== undefined;
+  const fail = (throttle: Throttle, person: string, times: number, slot = DEVICE): void => {
+    for (let i = 0; i < times; i++) throttle.recordFailure(slot, person);
+  };
+
+  it("answers as check would for a new pair, one waiting, one whose wait is over and one gone idle", () => {
+    let now = 0;
+    const throttle = createPinThrottle({ now: () => now });
+    expect(throttle.wouldRefuse(DEVICE, PERSON)).toBe(false);
+    expect(checkRefuses(throttle, DEVICE, PERSON)).toBe(false);
+
+    fail(throttle, PERSON, 4);
+    now = 1_999;
+    expect(throttle.wouldRefuse(DEVICE, PERSON)).toBe(true);
+    expect(checkRefuses(throttle, DEVICE, PERSON)).toBe(true);
+    now = 2_000;
+    expect(throttle.wouldRefuse(DEVICE, PERSON)).toBe(false);
+    expect(checkRefuses(throttle, DEVICE, PERSON)).toBe(false);
+
+    fail(throttle, PERSON, 5);
+    now += PIN_THROTTLE_IDLE_MS;
+    expect(throttle.wouldRefuse(DEVICE, PERSON)).toBe(false);
+    expect(checkRefuses(throttle, DEVICE, PERSON)).toBe(false);
+  });
+
+  it("answers as check would for a new pair while its slot is full, and once idle pairs make room", () => {
+    let now = 0;
+    const throttle = createPinThrottle({ now: () => now });
+    fail(throttle, "idle", 1);
+    fail(throttle, "idle elsewhere", 1, "device-2");
+    now = PIN_THROTTLE_IDLE_MS / 2;
+    for (let i = 1; i < PIN_THROTTLE_MAX_KEYS_PER_SLOT; i++)
+      throttle.recordFailure(DEVICE, `p-${i}`);
+    expect(throttle.wouldRefuse(DEVICE, "newcomer")).toBe(true);
+    expect(checkRefuses(throttle, DEVICE, "newcomer")).toBe(true);
+    expect(throttle.wouldRefuse("device-2", "newcomer")).toBe(false);
+    expect(checkRefuses(throttle, "device-2", "newcomer")).toBe(false);
+
+    now = PIN_THROTTLE_IDLE_MS;
+    expect(throttle.wouldRefuse(DEVICE, "newcomer")).toBe(false);
+    expect(checkRefuses(throttle, DEVICE, "newcomer")).toBe(false);
+  });
+
+  it("changes nothing: every later check and failure is as if it had never been asked", () => {
+    let now = 0;
+    const asked = createPinThrottle({ now: () => now });
+    const control = createPinThrottle({ now: () => now });
+    const pairs: [string, string][] = [
+      [DEVICE, PERSON],
+      [DEVICE, "person-2"],
+      ["device-2", PERSON],
+      [DEVICE, "never-seen"],
+    ];
+    const ask = () => {
+      for (const [slot, person] of pairs) asked.wouldRefuse(slot, person);
+    };
+    const onBoth = (step: (throttle: Throttle) => void) => {
+      ask();
+      step(asked);
+      step(control);
+      ask();
+    };
+    const history = (throttle: Throttle): string[] => {
+      const start = now;
+      const seen: string[] = [];
+      for (const offset of [0, 1_000, 2_000, 5_000, 6_000, PIN_THROTTLE_IDLE_MS]) {
+        now = start + offset;
+        for (const [slot, person] of pairs) {
+          const after = retryAfter(() => throttle.check(slot, person));
+          seen.push(`${slot} ${person} at ${offset}: ${after ?? "admitted"}`);
+          if (after === undefined) throttle.recordFailure(slot, person);
+        }
+      }
+      now = start;
+      return seen;
+    };
+
+    onBoth((throttle) => fail(throttle, PERSON, 4));
+    onBoth((throttle) => fail(throttle, "person-2", 2));
+    onBoth((throttle) => fail(throttle, PERSON, 1, "device-2"));
+    // Each pair is a minute short of going idle: a check now would keep it live for 15 more.
+    now = PIN_THROTTLE_IDLE_MS - 60_000;
+    ask();
+    now = PIN_THROTTLE_IDLE_MS;
+
+    const askedHistory = history(asked);
+    expect(askedHistory).toEqual(history(control));
+    expect(askedHistory.filter((line) => !line.endsWith("admitted")).length).toBeGreaterThan(0);
+  });
+});

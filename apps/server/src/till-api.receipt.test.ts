@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   devices,
@@ -56,6 +56,15 @@ import {
   printedLines,
 } from "./testing/decode-ticket.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import {
+  watchDerivations,
+  watchedOrder,
+  watchedDerivationCount,
+} from "./testing/watched-scrypt.js";
+
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 // The manual reprint and drawer-open routes over HTTP, against a GENUINE chained fiscal sale read
 // back and paper enqueued for it.
@@ -64,6 +73,8 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });
+
+const anotherWriter = () => withTransaction(suite.db, (tx) => tx.execute(sql`select 1`));
 
 let backend: FiscalBackend;
 let clock: TrustedClock;
@@ -1484,4 +1495,168 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
   expect(text).toContain("Current welcome");
   expect(text).toContain("Current farewell");
   expect(await registroCount(cfg)).toBe(1);
+});
+
+describe("the till's sign-in and drawer override derive the PIN's key outside the write lock", () => {
+  afterEach(async () => {
+    await watchedOrder();
+  });
+
+  function suspend(personId: string) {
+    return () =>
+      withTransaction(suite.db, (tx) =>
+        tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId)),
+      );
+  }
+
+  function signIn(app: Hono, deviceCookie: string, personId: string) {
+    return app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: deviceCookie },
+      body: JSON.stringify({ personId, pin: "5555" }),
+    });
+  }
+
+  function openWithOverride(
+    app: Hono,
+    cookie: string,
+    override: { personId: string; pin: string },
+  ) {
+    return app.request("/api/drawer/open", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ override }),
+    });
+  }
+
+  /** A staff operator signed in at the configured till, whose printer has a drawer. */
+  async function staffAtDrawerTill(pinThrottle = createPinThrottle()) {
+    const venue = await setupVenue();
+    await configureReceipt(venue.cfg, { printerId: await makePrinter(venue.cfg) });
+    const app = new Hono();
+    mountTillApi(app, { ...apiDeps(venue.cfg), pinThrottle }, noopLog);
+    const cookie = await loginAtTill(app, venue.cfg, venue.operatorId);
+    return { ...venue, app, cookie };
+  }
+
+  it("signs in while another writer commits during the PIN check", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const deviceCookie = await enrolConfiguredTillCookie(cfg);
+    watchDerivations("5555", anotherWriter, anotherWriter, anotherWriter);
+
+    const res = await signIn(app, deviceCookie, operatorId);
+
+    expect(res.status).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+  });
+
+  it("refuses a sign-in whose person is suspended while the PIN's key is being derived", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const deviceCookie = await enrolConfiguredTillCookie(cfg);
+    watchDerivations("5555", suspend(operatorId));
+
+    const res = await signIn(app, deviceCookie, operatorId);
+
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(res.status).toBe(401);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("pin.invalid");
+  });
+
+  it("opens the drawer on an override while another writer commits during the PIN check", async () => {
+    const { app, cookie, supervisorId, operatorId, cfg } = await staffAtDrawerTill();
+    watchDerivations("5555", anotherWriter, anotherWriter, anotherWriter);
+
+    const res = await openWithOverride(app, cookie, { personId: supervisorId, pin: "5555" });
+
+    expect(res.status).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(await drawerOpensFor(cfg)).toEqual([
+      expect.objectContaining({
+        personId: operatorId,
+        authorizedBy: supervisorId,
+        viaOverride: true,
+      }),
+    ]);
+  });
+
+  it("refuses an override whose supervisor is suspended while the PIN's key is being derived, writing nothing", async () => {
+    const { app, cookie, supervisorId, cfg } = await staffAtDrawerTill();
+    watchDerivations("5555", suspend(supervisorId));
+
+    const res = await openWithOverride(app, cookie, { personId: supervisorId, pin: "5555" });
+
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(res.status).toBe(401);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("pin.invalid");
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await printJobsFor(cfg)).toEqual([]);
+  });
+
+  it("derives no key for an override sent by an operator who holds cash.drawer", async () => {
+    const { cfg, supervisorId } = await setupVenue();
+    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await loginAtTill(app, cfg, supervisorId);
+    watchDerivations("0000", anotherWriter);
+
+    const res = await openWithOverride(app, cookie, { personId: supervisorId, pin: "0000" });
+
+    expect(res.status).toBe(200);
+    expect(await watchedOrder()).toEqual([]);
+  });
+
+  it("derives no key for an override while the drawer's policy is open", async () => {
+    const { app, cookie, supervisorId, cfg } = await staffAtDrawerTill();
+    await setDrawerPolicy(cfg, "open");
+    watchDerivations("0000", anotherWriter);
+
+    const res = await openWithOverride(app, cookie, { personId: supervisorId, pin: "0000" });
+
+    expect(res.status).toBe(200);
+    expect(await watchedOrder()).toEqual([]);
+  });
+
+  it("counts wrong override PINs sent at once as it counts them sent in turn, deriving as many keys", async () => {
+    const { app, cookie, supervisorId, cfg } = await staffAtDrawerTill(
+      createPinThrottle({ now: () => 1_000_000 }),
+    );
+
+    watchDerivations("0000");
+
+    const wrong = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        openWithOverride(app, cookie, { personId: supervisorId, pin: "0000" }),
+      ),
+    );
+    const derived = watchedDerivationCount();
+    const right = await openWithOverride(app, cookie, { personId: supervisorId, pin: "5555" });
+
+    expect(wrong.map((res) => res.status).sort()).toEqual([401, 401, 401, 401, 429]);
+    // As many keys as when the five are sent in turn: none for the one the limit refuses.
+    expect(derived).toBe(4);
+    expect(right.status).toBe(429);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+
+  it("derives no key for an override the wrong-PIN limit refuses", async () => {
+    const { app, cookie, supervisorId, cfg } = await staffAtDrawerTill(
+      createPinThrottle({ now: () => 1_000_000 }),
+    );
+    for (let i = 0; i < 4; i += 1) {
+      const wrong = await openWithOverride(app, cookie, { personId: supervisorId, pin: "0000" });
+      expect(wrong.status).toBe(401);
+    }
+    watchDerivations("5555", anotherWriter);
+
+    const res = await openWithOverride(app, cookie, { personId: supervisorId, pin: "5555" });
+
+    expect(res.status).toBe(429);
+    expect(await watchedOrder()).toEqual([]);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
 });

@@ -36,6 +36,11 @@ import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { clearRemovedMachine, removeUnjoinedStandby } from "./membership-removal.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
+import { writerBesideRequest } from "./testing/watched-scrypt.js";
+
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 // Pause points for the cases that land a removal part-way through a request. Each runs once and
 // clears itself; unset, the wrapped function behaves as the real one.
@@ -1085,5 +1090,17 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: { code: "mirror.standby_invalid", params: {} } });
+  });
+
+  it("lets another writer commit while it derives the key", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+
+    const { result, order } = await writerBesideRequest(db, () =>
+      post(app, { personId: adminPersonId, password: ADMIN_PASSWORD, ...validStandby() }),
+    );
+
+    expect(result.status).toBe(200);
+    expect(order.slice(0, 2)).toEqual(["writer", "request's transaction"]);
   });
 });

@@ -12,6 +12,11 @@ export interface PasswordThrottle {
   begin(email: string): (outcome: Outcome) => void;
 }
 
+export interface PasswordThrottleProbe {
+  /** Whether `begin` would refuse `email` now. Changes nothing, not even what it forgets. */
+  wouldRefuse(email: string): boolean;
+}
+
 const MAX_TRACKED = 1000;
 const BUCKETS = 2 ** 16;
 const MAX_BUCKET_FAILS = 255;
@@ -52,7 +57,7 @@ export function passwordThrottleBucket(secret: Uint8Array, email: string): numbe
 export function createPasswordThrottle(
   now: () => number = Date.now,
   secret: Uint8Array = randomBytes(32),
-): PasswordThrottle & { tracked(): number } {
+): PasswordThrottle & PasswordThrottleProbe & { tracked(): number } {
   // Finished attempts, oldest `lastAt` first: a finish re-inserts its entry at the end.
   const entries = new Map<string, Entry>();
   // Never forgotten or folded, so trimming `entries` never has to walk past one.
@@ -107,25 +112,35 @@ export function createPasswordThrottle(
     }
   }
 
+  function fresh(bucket: number, fingerprint: number, t: number): Entry {
+    const owned = ownedBucket({ bucket, fingerprint });
+    const inherits = owned !== undefined && bucketLive(owned, bucket, t);
+    return {
+      fails: inherits ? owned.fails[bucket]! : 0,
+      unlockAt: inherits ? owned.unlockAt[bucket]! : 0,
+      lastAt: t,
+      bucket,
+      fingerprint,
+    };
+  }
+
   return {
     tracked: () => entries.size + inFlight.size,
+    wouldRefuse(email) {
+      const { key, bucket, fingerprint } = placeOf(secret, email);
+      const t = now();
+      if (inFlight.has(key)) return true;
+      const kept = entries.get(key);
+      // An idle entry is one `begin` would sweep away before looking.
+      const live = kept !== undefined && t - kept.lastAt < PIN_THROTTLE_IDLE_MS ? kept : undefined;
+      return t < (live ?? fresh(bucket, fingerprint, t)).unlockAt;
+    },
     begin(email) {
       sweepIdle(now());
       const { key, bucket, fingerprint } = placeOf(secret, email);
       const t = now();
       if (inFlight.has(key)) throw new AppError("password.throttled", { retryAfterSeconds: 1 });
-      let entry = entries.get(key);
-      if (entry === undefined) {
-        const owned = ownedBucket({ bucket, fingerprint });
-        const inherits = owned !== undefined && bucketLive(owned, bucket, t);
-        entry = {
-          fails: inherits ? owned.fails[bucket]! : 0,
-          unlockAt: inherits ? owned.unlockAt[bucket]! : 0,
-          lastAt: t,
-          bucket,
-          fingerprint,
-        };
-      }
+      const entry = entries.get(key) ?? fresh(bucket, fingerprint, t);
       if (t < entry.unlockAt) {
         throw new AppError("password.throttled", {
           retryAfterSeconds: pinThrottleRetryAfterSeconds(entry.unlockAt, t),

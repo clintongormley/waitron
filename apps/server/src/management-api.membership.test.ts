@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   readNodeMembership,
   stampDeployment,
@@ -17,12 +17,18 @@ import { ALL_MODULES } from "./modules.js";
 import { mountManagementApi } from "./management-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
+import { writerBesideRequest, whileSuspendingOnLockRequest } from "./testing/watched-scrypt.js";
 
 /**
  * GET /management-api/membership returns this node's held signed membership chart to a peer
  * presenting an admin credential (`loginManagerById`, then `mirror.create`) in the
  * `x-waitron-peer-credential` header.
  */
+
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
+
 const ADMIN_PASSWORD = "dashPass123";
 const STAFF_PASSWORD = "staffPass123";
 
@@ -253,5 +259,29 @@ describe("GET /management-api/membership", () => {
     });
     expect(res.status).toBe(401);
     expect((await res.json()).error.code).toBe("password.invalid");
+  });
+
+  it("lets another writer commit while it derives the key", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated);
+
+    const { result, order } = await writerBesideRequest(suite.db, () =>
+      getMembership(app, { personId: adminPersonId, password: ADMIN_PASSWORD }),
+    );
+
+    expect(result.status).toBe(200);
+    expect(order.slice(0, 2)).toEqual(["writer", "request's transaction"]);
+  });
+
+  it("refuses an admin suspended while the key was being derived with 401 password.invalid", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated);
+
+    const res = await whileSuspendingOnLockRequest(suite.db, adminPersonId, () =>
+      getMembership(app, { personId: adminPersonId, password: ADMIN_PASSWORD }),
+    );
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
   });
 });

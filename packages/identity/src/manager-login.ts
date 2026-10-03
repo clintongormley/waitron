@@ -1,6 +1,6 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
-import type { Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { loginEmailKey, persons } from "./schema/persons.js";
 import { normalizeEmail } from "./email.js";
@@ -14,6 +14,7 @@ import {
   startManagementSession,
   type ManagementSession,
 } from "./management-session.js";
+import { DUMMY, issueCheck, trustedVerdict, type SecretCheck } from "./secret-check.js";
 
 // Checked against on the paths that refuse without a real hash, so they cost the same KDF work as a
 // wrong password: a faster refusal would be a user-enumeration oracle.
@@ -32,6 +33,41 @@ function selectPersonLogin(tx: Transaction) {
 }
 type PersonLoginRow = Awaited<ReturnType<typeof selectPersonLogin>>[number];
 
+/** The row {@link loginManager} (by `email`) or {@link loginManagerById} (by `personId`) signs in. */
+async function findPersonLogin(
+  db: Database | Transaction,
+  who: { email: string } | { personId: string },
+): Promise<PersonLoginRow | undefined> {
+  // `loginEmailKey()` is the SAME expression `persons_tenant_email_uq` is declared over, so the
+  // address that signs in is exactly the one the index treats as taken.
+  const [person] = await selectPersonLogin(db).where(
+    "email" in who
+      ? eq(loginEmailKey(), foldForUniqueness(normalizeEmail(who.email)))
+      : eq(persons.id, who.personId),
+  );
+  return person;
+}
+
+/**
+ * Opens no transaction, so a caller holding none leaves the write lock free while the key is
+ * derived. Pass the result to {@link loginManager} or {@link loginManagerById} inside the
+ * transaction; the authenticator code is still checked there.
+ */
+export async function checkManagerPassword(
+  db: Database,
+  who: { email: string } | { personId: string },
+  password: string,
+): Promise<SecretCheck> {
+  const person = await findPersonLogin(db, who);
+  const personId = person?.id ?? null;
+  if (person?.status !== "active" || person.passwordHash === null) {
+    await verifyPassword(password, DUMMY_PASSWORD_HASH);
+    return issueCheck({ personId, secret: password, derivedAgainst: DUMMY, matches: false });
+  }
+  const matches = await verifyPassword(password, person.passwordHash);
+  return issueCheck({ personId, secret: password, derivedAgainst: person.passwordHash, matches });
+}
+
 // Every refusal is `password.invalid` with no params, whatever the cause, except that the email
 // path asks for the authenticator code with `totp.required` once the password is right. The cause
 // travels only as the error's log-only `reason`.
@@ -42,12 +78,16 @@ async function completeManagerLogin(
     totp?: string;
     recoveryCode?: string;
     totpKeyRing: TotpKeyRing;
+    checked?: SecretCheck;
   },
   person: PersonLoginRow | undefined,
   missingFactorCode: "totp.required" | "password.invalid",
 ): Promise<ManagementSession> {
+  const personId = person?.id ?? null;
   if (person?.status !== "active" || person.passwordHash === null) {
-    await verifyPassword(input.password, DUMMY_PASSWORD_HASH);
+    if (trustedVerdict(input.checked, personId, input.password, DUMMY) === undefined) {
+      await verifyPassword(input.password, DUMMY_PASSWORD_HASH);
+    }
     const reason =
       person === undefined
         ? "unknown_account"
@@ -56,7 +96,10 @@ async function completeManagerLogin(
           : person.status;
     throw new AppError("password.invalid", {}, { reason });
   }
-  if (!(await verifyPassword(input.password, person.passwordHash))) {
+  const matches =
+    trustedVerdict(input.checked, personId, input.password, person.passwordHash) ??
+    (await verifyPassword(input.password, person.passwordHash));
+  if (!matches) {
     throw new AppError("password.invalid", {}, { reason: "wrong_password" });
   }
   if (person.totpSecret !== null) {
@@ -92,12 +135,11 @@ export async function loginManager(
     totp?: string;
     recoveryCode?: string;
     totpKeyRing: TotpKeyRing;
+    /** From {@link checkManagerPassword}, taken before the transaction opened. */
+    checked?: SecretCheck;
   },
 ): Promise<ManagementSession> {
-  // `loginEmailKey()` is the SAME expression `persons_tenant_email_uq` is declared over, so the
-  // address that signs in is exactly the one the index treats as taken.
-  const email = normalizeEmail(input.email);
-  const [person] = await selectPersonLogin(tx).where(eq(loginEmailKey(), foldForUniqueness(email)));
+  const person = await findPersonLogin(tx, { email: input.email });
   return completeManagerLogin(tx, input, person, "totp.required");
 }
 
@@ -109,9 +151,11 @@ export async function loginManagerById(
     totp?: string;
     recoveryCode?: string;
     totpKeyRing: TotpKeyRing;
+    /** From {@link checkManagerPassword}, taken before the transaction opened. */
+    checked?: SecretCheck;
   },
 ): Promise<ManagementSession> {
-  const [person] = await selectPersonLogin(tx).where(eq(persons.id, input.personId));
+  const person = await findPersonLogin(tx, { personId: input.personId });
   return completeManagerLogin(tx, input, person, "password.invalid");
 }
 

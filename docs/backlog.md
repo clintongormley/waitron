@@ -208,9 +208,9 @@ Track C.
   (A181 #990, A183 #997); form fields in the filled style, drawn by the shared field components
   (A178: #1010, #1012, #1015, #1016, #1017, #1019). The Extras and Options editor fixes, A64–A67
   (#714, #716, #717, #718).
-- Secret checks derive the key off the event loop (A126 #900, A125 #912, A146 #941); a product
-  save reads the language setting once (A149, #943); `wt-tabs` sends `wt-tab-change` (A150, #937);
-  undeclared token reads and the Cloud services typography and dates (C69 #865, C75 #867, C76 #879,
+- Secret checks derive the key off the event loop (A126 #900, A125 #912, A146 #941); the PIN,
+  manager-login and profile checks derive their key before the write lock is taken (W1, #1117); a product save reads the language setting once (A149, #943); `wt-tabs` sends
+  `wt-tab-change` (A150, #937); undeclared token reads and the Cloud services typography and dates (C69 #865, C75 #867, C76 #879,
   C85 #896).
 
 **Product folders, menus that include menus, and prep station routing: partly built
@@ -476,30 +476,42 @@ as "no longer on this menu". A shortcut whose target a newly read version lacks 
 with no notice. **Next action:** the owner confirms this meets §9, or asks for a notice when a
 shortcut disappears.
 
-**Some secret checks still hold the venue's write lock while scrypt runs.** Every check against a
-stored hash from `packages/identity/src/secret-hash.ts` derives the key with `verifySecretAsync` on
-Node's thread pool. The print agent's token and the two join-status readers derive it with no
-transaction open (A125, #912), and so does the device token (`tryReadDevice`,
-`apps/server/src/device-session.ts`, menus Task 9). The PIN, manager-login and profile
-checks still await the key while their caller's `withTransaction` (the write lock,
-`packages/db/src/tenancy.ts`) is open, so other writes wait while the key is derived. A search on
-2026-09-30 found every server route among them inside `withTransaction`: PIN login (`loginWithPin`
-in `mountTillApi`, `apps/server/src/till-api.ts`), the drawer override (`POST /api/drawer/open`,
-same file), the payments PIN re-check (`verifyManagerPin` under `gated`,
-`apps/server/src/payments-api.ts`), the refund's override and PIN confirmation
-(`refundBillPayment`'s first transaction, `apps/server/src/bill-refunds.ts`), manager login
-(`apps/server/src/management-api.ts`, and `loginManagerById` in `promote-api.ts` and
-`mirror-bundle-api.ts`), and profile changes (`updateProfile` in `apps/server/src/me-api.ts`, and
-`withCredentialChange` in `apps/server/src/management-api.ts`). **Next action:** move them out of
-`withTransaction`, as A125 did for the print agent. Still blocking the event loop: `hashSecret`
-derives with `scryptSync` (`secret-hash.ts`), so minting a token or setting a PIN or password stops
-the loop; and `deriveKey` (`apps/server/src/scrypt-kdf.ts`) runs `scryptSync` too, reached when the
-server encrypts or decrypts a configuration bundle, decrypts a restore archive or a sealed node
-state, or encrypts a recovery bundle. Left by #912's review: the two join-status readers answer from
-a hash read just before the key is derived, so a request denied or revoked in that window can get
-one stale `pending` or `approved` (both routes return only `{ status }` and issue no credential; the
-till and print-agent clients were not traced); and `verifySecretAsync` could be renamed
-`verifySecret` (optional).
+**Secret checks and the write lock: the PIN, manager-login and profile checks moved — DONE (W1, #1117);
+two blocking derivations and one stale-answer window remain OPEN.** Every check against a stored
+hash from `packages/identity/src/secret-hash.ts` derives the key with `verifySecretAsync` on Node's
+thread pool. The print agent's token and the two join-status readers derive it with no transaction
+open (A125, #912), and so does the device token (`tryReadDevice`, `apps/server/src/device-session.ts`).
+W1 moved the rest: PIN sign-in, the drawer override, the cancel of an invoiced order, the unpaid
+departure, the adjustment approver, the two payment attestations, the bill refund's override and
+confirmer, the four manager password sign-ins (email, membership, promote, mirror bundle) and the ten
+own-password profile and credential changes now derive the key before the transaction opens, and the
+check inside it reuses that result only while the person, the secret and the stored hash it was
+derived against are the same (`docs/developers/conventions-data.md`). Attempts sent at once through
+`withPinCheckAhead` or `ownPasswordChanges` take turns per throttle key. Nothing makes a NEW route
+do the same. **Still open:**
+`hashSecret` derives with `scryptSync` (`secret-hash.ts`), so minting a token or setting a PIN or
+password stops the event loop; and `deriveKey` (`apps/server/src/scrypt-kdf.ts`) runs `scryptSync`
+too, reached when the server encrypts or decrypts a configuration bundle, decrypts a restore archive
+or a sealed node state, or encrypts a recovery bundle. Left by #912's review: the two join-status
+readers answer from a hash read just before the key is derived, so a request denied or revoked in
+that window can get one stale `pending` or `approved` (both routes return only `{ status }` and issue
+no credential; the till and print-agent clients were not traced); and `verifySecretAsync` could be
+renamed `verifySecret` (optional).
+
+**A till sign-in whose PIN is not text answers 500, not `pin.invalid` — OPEN (found 2026-10-03 by W1).**
+`POST /api/session` (`mountTillApi`, `apps/server/src/till-api.ts`) with a PIN that is a number,
+`null`, missing or an object answers 500 `server.internal`; measured the same before and after W1.
+**Next action:** refuse a non-text PIN as `pin.invalid`, with a failing case first. (The payments
+attestation refuses one after its throttle check and counts it as a wrong PIN,
+`apps/server/src/payments-api.ts`.)
+
+**A burst of till PIN sign-ins derives a key for every attempt — OPEN (found 2026-10-03 by W1).**
+`POST /api/session` (`apps/server/src/till-api.ts`) checks its throttle before any failure is
+recorded, so attempts sent at once all pass it. Measured 2026-10-03: 8 wrong attempts at once gave 8
+derivations and eight 401s, on main and on W1's branch alike; manager password sign-in gave 1
+derivation (one 401, seven 429), because `passwordThrottle.begin` refuses a second attempt in
+flight. **Next action:** give the till sign-in the same turn-taking (`inTurn`,
+`apps/server/src/attempt-turns.ts`) or an in-flight refusal.
 
 **The till's removed-layout warning outlives a sign-out.** When the home layout a device's profile
 chose is removed, the till warns until someone presses Dismiss. Signing out does not clear it

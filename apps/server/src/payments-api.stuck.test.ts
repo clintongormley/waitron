@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { billPayments, withTransaction, workingOrders } from "@waitron/db";
@@ -63,6 +63,15 @@ import { payWorkingOrderIntegrated } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import {
+  watchDerivationsAndLock,
+  watchedOrder,
+  watchedDerivationCount,
+} from "./testing/watched-scrypt.js";
+
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 /**
  * The manager's way out of a card payment a crash left `attempting`: the stuck list and the
@@ -1569,5 +1578,125 @@ describe("POST /management-api/payments/bill-payments/:id/attest", () => {
       params: { paymentId: id },
     });
     expect((await billPaymentOf(id)).state).toBe("failed");
+  });
+});
+
+describe("the bill payment attestation checks the manager's PIN before the write lock is taken", () => {
+  const NOTE = "SumUp dashboard shows transaction TX-1 successful";
+
+  afterEach(async () => {
+    await watchedOrder();
+  });
+
+  const anotherWriter = () => withTransaction(suite.db, (tx) => tx.execute(sql`select 1`));
+
+  async function strandedBillPayment(v: Venue): Promise<string> {
+    return strandBillPayment(v, await openOrder(v), { kind: "failed" });
+  }
+
+  it("records the outcome while another writer commits during the PIN check", async () => {
+    const v = await setup();
+    const id = await strandedBillPayment(v);
+    watchDerivationsAndLock(suite.db, "1234", anotherWriter, anotherWriter, anotherWriter);
+
+    const res = await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: "1234" });
+
+    expect(res.status).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(await billPaymentOf(id)).toEqual({
+      state: "failed",
+      attestedBy: v.managerId,
+      attestationNote: NOTE,
+    });
+  });
+
+  it("refuses the outcome when the manager's PIN changes while its key is being derived", async () => {
+    const v = await setup();
+    const id = await strandedBillPayment(v);
+    watchDerivationsAndLock(suite.db, "1234", () =>
+      withTransaction(suite.db, (tx) =>
+        tx
+          .update(persons)
+          .set({ pinHash: hashPin("4321") })
+          .where(eq(persons.id, v.managerId)),
+      ),
+    );
+
+    const res = await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: "1234" });
+
+    // The row changed after the early check, so the transaction derives the key again.
+    expect(await watchedOrder()).toEqual(["writer", "derived", "derived under the request's lock"]);
+    expect(res.status).toBe(401);
+    expect(await errorOf(res)).toEqual({ code: "pin.invalid", params: {} });
+    expect(await billPaymentOf(id)).toEqual({
+      state: "pending",
+      attestedBy: null,
+      attestationNote: null,
+    });
+  });
+
+  it("derives no key for a session without payments.manage", async () => {
+    const v = await setup();
+    const id = await strandedBillPayment(v);
+    watchDerivationsAndLock(suite.db, "1234", anotherWriter);
+
+    const res = await post(
+      v,
+      attestPath(id),
+      { outcome: "failed", note: NOTE, pin: "1234" },
+      v.staffCookie,
+    );
+
+    expect(res.status).toBe(403);
+    expect(await watchedOrder()).toEqual([]);
+  });
+
+  it("derives no key for a PIN that is not text", async () => {
+    const v = await setup();
+    const id = await strandedBillPayment(v);
+    watchDerivationsAndLock(suite.db, "1234", anotherWriter);
+
+    const res = await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: 1234 });
+
+    expect(res.status).toBe(401);
+    expect(await errorOf(res)).toEqual({ code: "pin.invalid", params: {} });
+    expect(await watchedOrder()).toEqual([]);
+  });
+
+  it("derives no key once the wrong-PIN limit refuses", async () => {
+    const v = await setup();
+    const id = await strandedBillPayment(v);
+    const wrong = { outcome: "failed", note: NOTE, pin: "9999" };
+    for (let i = 0; i <= PIN_THROTTLE_FREE_ATTEMPTS; i += 1) {
+      expect((await post(v, attestPath(id), wrong)).status).toBe(401);
+    }
+    watchDerivationsAndLock(suite.db, "1234", anotherWriter);
+
+    const res = await post(v, attestPath(id), { ...wrong, pin: "1234" });
+
+    expect(res.status).toBe(429);
+    expect(await watchedOrder()).toEqual([]);
+  });
+
+  it("counts wrong PINs sent at once as it counts them sent in turn, deriving as many keys", async () => {
+    const v = await setup();
+    const id = await strandedBillPayment(v);
+    const wrong = { outcome: "failed", note: NOTE, pin: "9999" };
+    watchDerivationsAndLock(suite.db, "9999");
+
+    const answers = await Promise.all(
+      Array.from({ length: PIN_THROTTLE_FREE_ATTEMPTS + 2 }, () => post(v, attestPath(id), wrong)),
+    );
+    const derived = watchedDerivationCount();
+    const right = await post(v, attestPath(id), { ...wrong, pin: "1234" });
+
+    expect(answers.map((res) => res.status).sort()).toEqual([
+      ...Array.from({ length: PIN_THROTTLE_FREE_ATTEMPTS + 1 }, () => 401),
+      429,
+    ]);
+    // As many keys as when they are sent in turn: none for the one the limit refuses.
+    expect(derived).toBe(PIN_THROTTLE_FREE_ATTEMPTS + 1);
+    expect(right.status).toBe(429);
+    expect((await billPaymentOf(id)).state).toBe("pending");
   });
 });

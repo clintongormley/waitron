@@ -33,6 +33,7 @@ import {
   verifyThrottledCredential,
   type PersonRoleValue,
   type PinAttempts,
+  type SecretCheck,
 } from "@waitron/identity";
 import {
   AppError,
@@ -94,7 +95,8 @@ export interface AdjustmentArgs extends AdjustmentAsk {
   /** Someone at or above the plan's approver role: the higher of the reason's approver role (when
    * the operator is below its apply role) and a manager (when the bill's discount limit asks for
    * one). */
-  approver?: { personId: string; pin: string };
+  /** `checked` is `checkPin`'s result on this person and PIN, taken before the transaction opened. */
+  approver?: { personId: string; pin: string; checked?: SecretCheck };
 }
 
 /** What an adjustment would do, answered before it is confirmed (plan D4, D15). */
@@ -366,7 +368,7 @@ function zeroed(subjects: readonly Subject[]): Change[] {
  * taken with its extras; part of one splits its extras in proportion, the part covered taking the
  * part of each. An extra is taken on its own, and only whole.
  */
-async function planAdjustment(
+export async function planAdjustment(
   tx: Transaction,
   ask: AdjustmentAsk,
   venueLocale: string,
@@ -693,10 +695,10 @@ async function approvedBy(
   if (approverRole === null) return null;
   const refused = () => new AppError("adjustment.approval_required", { approverRole });
   if (approver === undefined) throw refused();
-  const { personId, pin } = approver;
+  const { personId, pin, checked } = approver;
   const { role } = await (attempts === undefined
-    ? verifyPersonCredential(tx, personId, pin)
-    : verifyThrottledCredential(tx, personId, pin, attempts));
+    ? verifyPersonCredential(tx, personId, pin, checked)
+    : verifyThrottledCredential(tx, personId, pin, attempts, checked));
   if (!roleAtLeast(role, approverRole)) throw refused();
   return approver.personId;
 }

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -15,6 +15,7 @@ import {
   saleSettlements,
   sales,
   unpaidDepartures,
+  withTransaction,
 } from "@waitron/db";
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
@@ -42,6 +43,11 @@ import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { cancelBody, giveAway } from "./testing/cancel-line.js";
 import "./errors.js";
+import { watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
+
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 // Record unpaid departure (spec §8; service plan Task 17; owner's Q28 decision of 2026-10-01): an
 // owing bill with no invoice yet is invoiced for its full amount and a bill already invoiced keeps
@@ -485,6 +491,35 @@ describe("who may record it", () => {
     expect(ids).toEqual(expect.arrayContaining([venue.adminId, supervisorId]));
     expect(ids).not.toContain(venue.operatorId);
     for (const person of people) expect(Object.keys(person)).toEqual(["personId", "displayName"]);
+  });
+});
+
+describe("a supervisor's PIN on a departure", () => {
+  const anotherWriter = () => withTransaction(venue.db, (tx) => tx.execute(sql`select 1`));
+
+  afterEach(async () => {
+    await watchedOrder();
+  });
+
+  it("is checked while another writer commits, outside the write lock", async () => {
+    const party = await seatedWith(venue, "Botella tinto");
+    watchDerivations(SUPERVISOR_PIN, anotherWriter, anotherWriter, anotherWriter);
+
+    const answer = await depart(
+      party.partyId,
+      {
+        expectedPartyRevision: party.revision,
+        reason: REASON,
+        override: { personId: supervisorId, pin: SUPERVISOR_PIN },
+      },
+      venue.cookie,
+    );
+
+    expect(answer.status).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(await departuresOf(party.tabId)).toEqual([
+      expect.objectContaining({ recordedBy: venue.operatorId, authorizedBy: supervisorId }),
+    ]);
   });
 });
 

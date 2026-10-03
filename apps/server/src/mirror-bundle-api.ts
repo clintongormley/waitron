@@ -13,6 +13,7 @@ import {
 import { withMember } from "@waitron/membership";
 import {
   authorizeManager,
+  checkManagerPassword,
   endManagementSession,
   loginManagerById,
   type TotpKeyRing,
@@ -98,12 +99,14 @@ export function mountMirrorBundleApi(
       const standby = { nodeId: body.standbyNodeId, publicKey: body.standbyPublicKey };
       const standbyContactUrl = body.standbyContactUrl;
 
+      const checked = await checkManagerPassword(deps.appDb, { personId }, password);
       await withTransaction(deps.appDb, async (tx) => {
         const session = await loginManagerById(tx, {
           personId,
           password,
           totp,
           totpKeyRing: deps.credentialKeyRing,
+          checked,
         });
         await authorizeManager(tx, {
           managementSessionId: session.token,

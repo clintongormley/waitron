@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -14,11 +14,18 @@ import {
   saleSettlements,
   sales,
   unpaidDepartures,
+  withTransaction,
 } from "@waitron/db";
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
-import { createPinThrottle, hashPin, loginWithPin, persons } from "@waitron/identity";
+import {
+  createPinThrottle,
+  hashPin,
+  loginWithPin,
+  persons,
+  PIN_THROTTLE_IDLE_MS,
+} from "@waitron/identity";
 import { captureAttempting } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import {
@@ -41,6 +48,11 @@ import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { payWorkingOrderIntegrated } from "./till-sale.js";
 import "./errors.js";
+import { failingDerivationsOf, watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
+
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 // Cancelling a placed order whose invoice was issued credits the whole invoice (an R5 corrective
 // invoice) and settles the original owing nothing, in the cancel's one transaction (owner decision
@@ -1023,6 +1035,45 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     ]);
   });
 
+  it("lets a refused cancel that never reaches the PIN check leave the wrong-PIN count to go idle", async () => {
+    const cancelled = await placed([{ name: "Caña", quantity: "1" }]);
+    expect(
+      (await cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN })(cancelled)).status,
+    ).toBe(200);
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const { app, clockAt } = throttledApp();
+    const wrong = cancelWith({ personId: supervisorId, pin: "0000" }, venue.cookie, app);
+    for (let i = 0; i < 4; i += 1) expect((await wrong(id)).status).toBe(401);
+
+    clockAt.now += PIN_THROTTLE_IDLE_MS - 60_000;
+    const notPlaced = await wrong(cancelled);
+    expect({ status: notPlaced.status, code: notPlaced.json.code }).toEqual({
+      status: 409,
+      code: "working_order.not_placed",
+    });
+    clockAt.now += 60_000;
+
+    expect((await wrong(id)).status).toBe(401);
+    const right = cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN }, venue.cookie, app);
+    expect((await right(id)).status).toBe(200);
+  });
+
+  it("refuses a cancel of a cancelled order as before when deriving the override PIN's key fails", async () => {
+    const cancelled = await placed([{ name: "Caña", quantity: "1" }]);
+    expect(
+      (await cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN })(cancelled)).status,
+    ).toBe(200);
+
+    const refused = await failingDerivationsOf("4040", () =>
+      cancelWith({ personId: supervisorId, pin: "4040" })(cancelled),
+    );
+
+    expect({ status: refused.status, code: refused.json.code }).toEqual({
+      status: 409,
+      code: "working_order.not_placed",
+    });
+  });
+
   function noInvoiceZone(name: string) {
     return inTx(venue, async (tx) => {
       const [zone] = await tx
@@ -1092,6 +1143,55 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
       status: 429,
       code: "pin.throttled",
     });
+  });
+});
+
+describe("cancelling an invoiced order on a supervisor's PIN derives its key outside the write lock", () => {
+  const anotherWriter = () => withTransaction(venue.db, (tx) => tx.execute(sql`select 1`));
+
+  afterEach(async () => {
+    await watchedOrder();
+  });
+
+  function cancelWithSupervisor(id: string) {
+    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/cancel`, {
+      reason: REASON,
+      override: { personId: supervisorId, pin: SUPERVISOR_PIN },
+    });
+  }
+
+  it("credits the invoice while another writer commits during the PIN check, deriving the key once", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    watchDerivations(SUPERVISOR_PIN, anotherWriter, anotherWriter, anotherWriter);
+
+    const answer = await cancelWithSupervisor(id);
+
+    expect(answer.status).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(await creditsOf(original.id)).toEqual([
+      expect.objectContaining({ authorizedBy: supervisorId }),
+    ]);
+  });
+
+  it("derives no key for an override sent with an order that has no invoice", async () => {
+    const ticketFirst = await inTx(venue, async (tx) => {
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: venue.cfg.locationId, name: "Barra sin factura, sin clave" })
+        .returning({ id: floorZones.id });
+      return offerProducts(tx, venue.cfg, {
+        zone: { zoneId: zone!.id },
+        serviceMode: "ticket_then_pay",
+      });
+    });
+    const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId);
+    watchDerivations(SUPERVISOR_PIN, anotherWriter);
+
+    const answer = await cancelWithSupervisor(id);
+
+    expect(answer.status).toBe(200);
+    expect(await watchedOrder()).toEqual([]);
   });
 });
 

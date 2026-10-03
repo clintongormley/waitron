@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { deviceProfiles, printJobs, products, workingOrders } from "@waitron/db";
+import { deviceProfiles, printJobs, products, withTransaction, workingOrders } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import { createException, deleteException, writePrintHeldWork } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
@@ -32,6 +32,11 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { mountTillApi } from "./till-api.js";
 import { parkOrder } from "./working-order.js";
 import "./errors.js";
+import { watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
+
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 // The till's adjustment routes (service plan Task 11): apply, preview, and the reasons and
 // approvers the till offers, over HTTP against a provisioned venue.
@@ -505,6 +510,75 @@ describe("approval through the route (plan D6)", () => {
       needsApproval: "manager",
     });
     expect(await recordedOn(billId)).toEqual([]);
+  });
+});
+
+describe("an approver's PIN derives its key outside the write lock", () => {
+  const anotherWriter = () => withTransaction(venue.db, (tx) => tx.execute(sql`select 1`));
+
+  afterEach(async () => {
+    await watchedOrder();
+  });
+
+  it("applies a comp on a manager's PIN while another writer commits during the PIN check", async () => {
+    const { billId } = await billWith(venue, [{ name: "Burger" }]);
+    watchDerivations(PINS.manager, anotherWriter, anotherWriter, anotherWriter);
+
+    const applied = await post(
+      billId,
+      {
+        lineId: await lineIdOf(venue, billId, 1),
+        action: "comp",
+        reasonId: venue.reasonId.complaint,
+        approver: { personId: venue.managerId, pin: PINS.manager },
+      },
+      { cookie: venue.cookie.staff },
+    );
+
+    expect(applied.status).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect((await recordedOn(billId))[0]).toMatchObject({ approvedBy: venue.managerId });
+  });
+
+  it("derives no key for an approver sent with an adjustment the bill refuses", async () => {
+    const { billId } = await billWith(venue, [{ name: "Burger" }]);
+    watchDerivations(PINS.manager, anotherWriter);
+
+    const refused = await post(
+      billId,
+      {
+        lineId: await lineIdOf(venue, billId, 1),
+        action: "comp",
+        reasonId: venue.reasonId.complaint,
+        expectedRevision: (await revisionOf(billId)) + 1,
+        approver: { personId: venue.managerId, pin: PINS.manager },
+      },
+      { cookie: venue.cookie.staff },
+    );
+
+    expect(refused.status).toBe(409);
+    expect(refused.json).toMatchObject({ code: "working_order.out_of_date" });
+    expect(await watchedOrder()).toEqual([]);
+  });
+
+  it("derives no key for an approver sent with an adjustment that needs none", async () => {
+    const { billId } = await billWith(venue, [{ name: "Burger" }, { name: "Water" }]);
+    watchDerivations(PINS.manager, anotherWriter);
+
+    const applied = await post(
+      billId,
+      {
+        lineId: await lineIdOf(venue, billId, 2),
+        action: "discount_percent",
+        percentBp: 100,
+        reasonId: venue.reasonId.house,
+        approver: { personId: venue.managerId, pin: PINS.manager },
+      },
+      { cookie: venue.cookie.staff },
+    );
+
+    expect(applied.status).toBe(200);
+    expect(await watchedOrder()).toEqual([]);
   });
 });
 

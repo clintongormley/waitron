@@ -7,9 +7,15 @@ import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { generateSync } from "otplib";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
+import { writerBesideRequest } from "./testing/watched-scrypt.js";
 
-// The admin-login path of `POST /management-api/promote` on a real database, for an admin who has
-// an authenticator: the sign-in, not the promote itself, so `run` is a stub.
+// The admin-login path of `POST /management-api/promote` on a real database — for an admin who has
+// an authenticator, and beside another writer: the sign-in, not the promote itself, so `run` is a
+// stub.
+
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 const ADMIN_PASSWORD = "promotePass123";
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -113,5 +119,19 @@ describe("POST /management-api/promote — an admin with an authenticator", () =
       missingCode: refused,
     });
     expect(run).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /management-api/promote — the admin login beside another writer", () => {
+  it("lets another writer commit while it derives the key", async () => {
+    const personId = await seedAdmin();
+    const run = vi.fn(async () => ({ alreadyPrimary: false, restarting: true }));
+
+    const { result, order } = await writerBesideRequest(suite.db, () =>
+      post(appWith(run), { personId, password: ADMIN_PASSWORD }),
+    );
+
+    expect(result.status).toBe(200);
+    expect(order.slice(0, 2)).toEqual(["writer", "request's transaction"]);
   });
 });
