@@ -498,6 +498,20 @@
       "when": 1790980408746,
       "tag": "0070_sale_line_corrects",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "6",
+      "when": 1790998195796,
+      "tag": "0071_watchers",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "6",
+      "when": 1790998196488,
+      "tag": "0072_device_binding_watcher_sql",
+      "breakpoints": true
     }
   ]
 }
