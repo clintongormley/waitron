@@ -10628,6 +10628,43 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     return { ...mounted, c };
   }
 
+  it("does not reload held orders when a move to a table answers after sign-out", async () => {
+    let answer!: (result: { partyId: string; billId: string; merged: boolean }) => void;
+    const { el, c } = await counterWith({
+      moveBill: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+    });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    await flush(el);
+    expect(currentApi.moveBill).toHaveBeenCalledOnce();
+
+    emit(c, "logout");
+    await flush(el);
+    const heldReads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
+    answer({ partyId: "v-new", billId: "wo-12", merged: false });
+    await flush(el);
+
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(heldReads);
+  });
+
+  it("does not send a counter move after its dead-end read outlives sign-out", async () => {
+    let answer!: (result: { sends: boolean; deadEnds: [] }) => void;
+    const moveBill = vi.fn();
+    const { el, c } = await counterWith({
+      askOrderDeadEnds: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+      moveBill,
+    });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    await flush(el);
+    expect(currentApi.askOrderDeadEnds).toHaveBeenCalledOnce();
+
+    emit(c, "logout");
+    await flush(el);
+    answer({ sends: false, deadEnds: [] });
+    await flush(el);
+
+    expect(moveBill).not.toHaveBeenCalled();
+  });
+
   it("asks where to make a stored counter dish before moving its bill to a table", async () => {
     const askOrderDeadEnds = vi.fn().mockResolvedValue({
       sends: true,

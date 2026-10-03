@@ -1347,6 +1347,68 @@ describe("till-app: no adjustment while the order is being paid, placed or held"
     saving.resolve({ revision: 5 });
     await flush(el);
   });
+
+  it("does not reload a changed counter order after its operator signs out", async () => {
+    const saving = deferred<{ revision: number }>();
+    const el = await retrieved({ updateWorkingOrder: vi.fn(() => saving.promise) });
+    counter(el).store.setLineQuantity(1, "2");
+    emit(counter(el), "park-order", {});
+    await flush(el);
+    expect(api.updateWorkingOrder).toHaveBeenCalledOnce();
+
+    emit(counter(el), "logout");
+    await flush(el);
+    const orderReads = vi.mocked(api.retrieveWorkingOrder).mock.calls.length;
+    const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+    saving.reject({ code: "working_order.out_of_date" });
+    await flush(el);
+
+    expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(orderReads);
+    expect(api.listWorkingOrders).toHaveBeenCalledTimes(heldReads);
+  });
+
+  it("does not pay a changed order after the save answers for a signed-out operator", async () => {
+    const saving = deferred<{ revision: number }>();
+    const recordSale = vi.fn();
+    const el = await retrieved({
+      updateWorkingOrder: vi.fn(() => saving.promise),
+      recordSale,
+    });
+    counter(el).store.setLineQuantity(1, "2");
+    emit(counter(el), "confirm-payment", { method: "cash", amount: "20" });
+    await flush(el);
+    expect(api.updateWorkingOrder).toHaveBeenCalledOnce();
+
+    emit(counter(el), "logout");
+    await flush(el);
+    saving.resolve({ revision: 5 });
+    await flush(el);
+
+    expect(recordSale).not.toHaveBeenCalled();
+  });
+
+  it("does not refresh held orders when a changed-order reread outlives sign-out", async () => {
+    const reread = deferred<HeldOrder>();
+    const el = await retrieved({
+      updateWorkingOrder: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(heldOrder(4))
+        .mockImplementation(() => reread.promise),
+    });
+    counter(el).store.setLineQuantity(1, "2");
+    emit(counter(el), "park-order", {});
+    await flush(el);
+    expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+
+    emit(counter(el), "logout");
+    await flush(el);
+    const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+    reread.resolve(heldOrder(5));
+    await flush(el);
+
+    expect(api.listWorkingOrders).toHaveBeenCalledTimes(heldReads);
+  });
 });
 
 describe("till-app: the basket while the order is loaded again", () => {
@@ -1477,12 +1539,14 @@ describe("till-app: the basket's lock while the order is loaded again", () => {
 
     emit(counter(el), "logout");
     await flush(el);
+    const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
     store.addProduct(cafe, "1");
 
     expect(store.lineCount).toBe(3);
     reload.resolve(heldOrder(5, "0.00"));
     await flush(el);
     expect(store.lineCount).toBe(3);
+    expect(api.listWorkingOrders).toHaveBeenCalledTimes(heldReads);
   });
 
   it("says the order could not be read again when the reload gets no answer", async () => {

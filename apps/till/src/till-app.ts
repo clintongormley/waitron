@@ -2081,10 +2081,16 @@ export class TillApp extends LitElement {
     }
     if (!this.counterServiceZones.some((zone) => zone.id === zoneId)) return;
     const request = ++this.#counterOfferRequest;
+    const session = this.#operatorSession;
     try {
       const catalogue = await this.api.listZoneOffers(zoneId);
       const { menus, defaultMenuId, context } = catalogue;
-      if (request !== this.#counterOfferRequest || this.#store.lines.length > 0) return;
+      if (
+        request !== this.#counterOfferRequest ||
+        session !== this.#operatorSession ||
+        this.#store.lines.length > 0
+      )
+        return;
       this.#loadCounterOffers(catalogue);
       this.counterServiceZoneId = context.zoneId;
       this.api.setServiceZone(context.zoneId);
@@ -2092,10 +2098,12 @@ export class TillApp extends LitElement {
       this.stage = "order";
       this.collectFlow = undefined;
       await this.#refreshStationQueue();
+      if (session !== this.#operatorSession) return;
       this.#selectMenu(defaultMenuId ?? this.#defaultCatalogueId(menus));
       this.errorKey = undefined;
     } catch {
-      if (request === this.#counterOfferRequest) this.errorKey = "service_zone.load_error";
+      if (request === this.#counterOfferRequest && session === this.#operatorSession)
+        this.errorKey = "service_zone.load_error";
     }
   }
 
@@ -2396,6 +2404,7 @@ export class TillApp extends LitElement {
     if (this.submitting || this.#refusePaidInPart()) return;
     this.submitting = true;
     this.#counterSends++;
+    const session = this.#operatorSession;
     const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     // The store's stable working-order id is the pay-idempotency key: a re-tap after a lost response
     // replays against the same row rather than filing a second record.
@@ -2413,17 +2422,23 @@ export class TillApp extends LitElement {
       // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
       // after retrieving must be saved first or it is silently dropped from the charge and the record.
       if (!(await this.#syncIfDirty(id, lines, label))) return;
+      if (session !== this.#operatorSession) return;
       reachedFiscal = true;
-      this.result = await this.api.recordSale(lines, tender, id);
+      const result = await this.api.recordSale(lines, tender, id);
+      if (session !== this.#operatorSession) return;
+      this.result = result;
       this.#showTicket(id);
       // A just-paid retrieved order must drop off the held list.
       await this.#refreshAfterWrite("held", "refresh.held_after_sale");
+      if (session !== this.#operatorSession) return;
       if (sendsToKitchen) await this.#refreshAfterWrite("station", "refresh.station_after_sale");
+      if (session !== this.#operatorSession) return;
       await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
     } catch (error) {
       // The basket stays intact. `sale.refused` is permanent, and its message covers refunding a manual
       // terminal charge; `sale.unconfirmed` means the fiscal call was reached, so the sale may have
       // filed.
+      if (session !== this.#operatorSession) return;
       if (
         !reachedFiscal &&
         !retried &&
@@ -2481,6 +2496,7 @@ export class TillApp extends LitElement {
     if (this.submitting || this.#refusePaidInPart()) return;
     this.submitting = true;
     this.#counterSends++;
+    const session = this.#operatorSession;
     const detail = (event as CustomEvent<CollectCardDetail>).detail;
     const id = this.#store.id;
     const lines = this.#currentSaleLines();
@@ -2497,6 +2513,7 @@ export class TillApp extends LitElement {
     let inactiveChoice = false;
     try {
       if (!(await this.#syncIfDirty(id, lines, label))) return;
+      if (session !== this.#operatorSession) return;
       reachedFiscal = true;
       const out: PayOutcome = await this.api.pay({
         id,
@@ -2509,11 +2526,14 @@ export class TillApp extends LitElement {
         // Omitted, the server uses the paying device's default reader.
         ...(detail.readerId === undefined ? {} : { readerId: detail.readerId }),
       });
+      if (session !== this.#operatorSession) return;
       if (out.outcome === "captured") {
         this.result = out.ticket;
         this.#showTicket(id, invoiceIssuedNow);
         await this.#refreshAfterWrite("held", "refresh.held_after_sale");
+        if (session !== this.#operatorSession) return;
         if (sendsToKitchen) await this.#refreshAfterWrite("station", "refresh.station_after_sale");
+        if (session !== this.#operatorSession) return;
         await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
       } else {
         this.cardOutcome = out.outcome;
@@ -2521,6 +2541,7 @@ export class TillApp extends LitElement {
     } catch (error) {
       // The terminal may already have captured before the fiscal record was refused (`finalizeCapture`,
       // `apps/server/src/till-sale.ts`), which is what `sale.refused`'s refund sentence is for.
+      if (session !== this.#operatorSession) return;
       if (
         !reachedFiscal &&
         !retried &&
@@ -2709,14 +2730,17 @@ export class TillApp extends LitElement {
    */
   async #syncIfDirty(id: string, lines: SaleLine[], label: string | undefined): Promise<boolean> {
     if (!(this.#store.persisted && this.#store.dirty)) return true;
+    const session = this.#operatorSession;
     try {
       const saved = await this.api.updateWorkingOrder(id, {
         lines,
         label,
         revision: this.#store.revision,
       });
+      if (session !== this.#operatorSession) return false;
       this.#store.markSaved(saved.revision);
     } catch (error) {
+      if (session !== this.#operatorSession) return false;
       const code = (error as { code?: string }).code;
       if (code === "working_order.out_of_date") {
         await this.#reloadChangedOrder(id);
@@ -2740,6 +2764,7 @@ export class TillApp extends LitElement {
     if (this.placing) return;
     this.placing = true;
     this.#counterSends++;
+    const session = this.#operatorSession;
     const id = this.#store.id;
     if (!refusalRetry) this.errorKey = undefined;
     // A network failure after the fiscal call started is `sale.unconfirmed`; before it, nothing was filed.
@@ -2749,22 +2774,27 @@ export class TillApp extends LitElement {
     let inactiveChoice = false;
     try {
       if (!(await this.#askCounterDeadEnds("place", !refusalRetry, clearInactiveChoices))) return;
+      if (session !== this.#operatorSession) return;
       const lines = this.#currentSaleLines();
       const label = this.#store.label;
       if (this.#store.persisted) {
         if (!(await this.#syncIfDirty(id, lines, label))) return;
       } else {
         await this.api.parkOrder({ id, lines, label });
+        if (session !== this.#operatorSession) return;
         this.#store.markPersisted();
       }
       reachedFiscal = true;
       await this.api.placeOrder(id);
+      if (session !== this.#operatorSession) return;
       this.stage = "collect";
       await this.#refreshAfterWrite("station", "refresh.station_after_place");
+      if (session !== this.#operatorSession) return;
       await this.#refreshAfterWrite("waiting", "refresh.waiting_after_place");
     } catch (error) {
       // `place.refused`, not `sale.refused`: placing takes no tender, so its message says nothing
       // about refunds.
+      if (session !== this.#operatorSession) return;
       if (
         !refusalRetry &&
         ["station.no_replacement", "route.station_inactive"].includes(
@@ -2799,21 +2829,26 @@ export class TillApp extends LitElement {
     if (this.submitting) return;
     this.submitting = true;
     this.#counterSends++;
+    const session = this.#operatorSession;
     const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     const id = this.#store.id;
     const fromWaitingList = this.collectFlow !== undefined;
     this.errorKey = undefined;
     try {
-      this.result = await this.api.collectOrder(id, tender);
+      const result = await this.api.collectOrder(id, tender);
+      if (session !== this.#operatorSession) return;
+      this.result = result;
       this.#showTicket(id, this.#basketFlow() !== "invoice_first");
       // A collect settles the order, and the counter's prep-queue card offers Collect only on a
       // settled order. Only a collect opened from the waiting list re-reads the queue
       // (docs/backlog.md, B16).
       if (fromWaitingList) await this.#refreshAfterWrite("station", "refresh.station_after_sale");
+      if (session !== this.#operatorSession) return;
       await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
     } catch (error) {
       // No preliminary save, so any network failure may have filed. Collect carries a tender, so a
       // permanent refusal takes `sale.refused`.
+      if (session !== this.#operatorSession) return;
       this.errorKey = isPermanentSaleRefusal(error)
         ? "sale.refused"
         : isNetworkFailure(error)
@@ -2830,15 +2865,20 @@ export class TillApp extends LitElement {
     if (this.submitting) return;
     const { workingOrderId, tender, invoiced } = (event as CustomEvent<FindBillPayDetail>).detail;
     this.submitting = true;
+    const session = this.#operatorSession;
     this.findBillBusy = true;
     this.findBillError = undefined;
     try {
-      this.result = await this.api.collectOrder(workingOrderId, tender);
+      const result = await this.api.collectOrder(workingOrderId, tender);
+      if (session !== this.#operatorSession) return;
+      this.result = result;
       this.findingBill = false;
       this.#showTicket(workingOrderId, !invoiced);
       await this.#refreshAfterWrite("station", "refresh.station_after_sale");
+      if (session !== this.#operatorSession) return;
       await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
     } catch (error) {
+      if (session !== this.#operatorSession) return;
       this.findBillError = isPermanentSaleRefusal(error)
         ? "sale.refused"
         : isNetworkFailure(error)
@@ -2857,28 +2897,35 @@ export class TillApp extends LitElement {
     const { itemId, to } = (
       event as CustomEvent<{ itemId: string; to: Exclude<TicketState, "queued"> }>
     ).detail;
+    const session = this.#operatorSession;
     this.errorKey = undefined;
     try {
       await this.api.advanceTicketItem(itemId, to);
     } catch {
+      if (session !== this.#operatorSession) return;
       this.errorKey = "station.advance_error";
     }
+    if (session !== this.#operatorSession) return;
     await this.#refreshStationQueue();
   }
 
   /** Non-fiscal, so no single-flight guard; refreshes on both paths like {@link #onAdvanceTicketItem}. */
   async #onMarkCollected(event: Event): Promise<void> {
     const { orderId } = (event as CustomEvent<{ orderId: string }>).detail;
+    const session = this.#operatorSession;
     this.errorKey = undefined;
     let collected = false;
     try {
       await this.api.markCollected(orderId);
       collected = true;
     } catch {
+      if (session !== this.#operatorSession) return;
       this.errorKey = "station.collect_error";
     }
+    if (session !== this.#operatorSession) return;
     if (collected) {
       await this.#refreshAfterWrite("station", "refresh.station_after_hand_over");
+      if (session !== this.#operatorSession) return;
       await this.#refreshAfterWrite("waiting", "refresh.waiting_after_hand_over");
       return;
     }
@@ -2923,6 +2970,7 @@ export class TillApp extends LitElement {
     if (!handedOver) return this.#refreshWaiting();
     // The counter's prep-queue card offers its own Collect, which would now be refused.
     await this.#refreshAfterWrite("station", "refresh.station_after_hand_over");
+    if (!live()) return;
     await this.#refreshAfterWrite("waiting", "refresh.waiting_after_hand_over");
   }
 
@@ -3028,6 +3076,7 @@ export class TillApp extends LitElement {
     if (this.parking) return;
     this.parking = true;
     this.#counterSends++;
+    const session = this.#operatorSession;
     const { label } = (event as CustomEvent<ParkOrderDetail>).detail;
     // Read the id and map the lines BEFORE the await: a successful clear() re-mints the id, so the
     // values sent must be captured against the basket as it stands now.
@@ -3045,11 +3094,13 @@ export class TillApp extends LitElement {
       } else {
         await this.api.parkOrder({ id, lines, label });
       }
+      if (session !== this.#operatorSession) return;
       this.#dismissStationChoices();
       this.#store.clear();
       this.cardOutcome = undefined;
       await this.#refreshAfterWrite("held", "refresh.held_after_park");
     } catch (error) {
+      if (session !== this.#operatorSession) return;
       if (
         !retried &&
         ["station.no_replacement", "route.station_inactive"].includes(
@@ -3080,14 +3131,18 @@ export class TillApp extends LitElement {
    */
   async #onRetrieveOrder(event: Event): Promise<void> {
     const { id } = (event as CustomEvent<{ id: string }>).detail;
+    const session = this.#operatorSession;
     this.errorKey = undefined;
     try {
-      await this.#loadHeldOrder(id);
+      await this.#loadHeldOrder(id, () => session !== this.#operatorSession);
+      if (session !== this.#operatorSession) return;
       this.#refusePaidInPart();
     } catch {
       // Paid or discarded on another till; the basket is untouched.
+      if (session !== this.#operatorSession) return;
       this.errorKey = "held.stale";
     }
+    if (session !== this.#operatorSession) return;
     // Runs on both paths: on success the list is re-read; on the stale race the vanished row drops off.
     await this.#refreshHeldOrders();
   }
@@ -3098,10 +3153,13 @@ export class TillApp extends LitElement {
    * make their change again on it. An order closed meanwhile reads as a stale retrieve.
    */
   async #reloadChangedOrder(id: string): Promise<void> {
+    const session = this.#operatorSession;
     try {
-      await this.#loadHeldOrder(id);
+      await this.#loadHeldOrder(id, () => session !== this.#operatorSession);
+      if (session !== this.#operatorSession) return;
       this.errorKey = "held.changed_elsewhere";
     } catch {
+      if (session !== this.#operatorSession) return;
       this.errorKey = "held.stale";
     }
     await this.#refreshHeldOrders();
@@ -3259,6 +3317,7 @@ export class TillApp extends LitElement {
     }
     const said = failure !== undefined && !movedOn();
     if (said) this.errorKey = failure;
+    if (session !== this.#operatorSession) return "unread";
     await this.#refreshHeldOrders();
     if (failure === undefined) return "read";
     return said && failure === "held.stale" ? "gone" : "unread";
@@ -3268,15 +3327,19 @@ export class TillApp extends LitElement {
    * gone, `held.stale` — for example, another till closed it after the server answered. */
   async #onDiscardOrder(event: Event): Promise<void> {
     const { id } = (event as CustomEvent<{ id: string }>).detail;
+    const session = this.#operatorSession;
     this.errorKey = undefined;
     let refused = false;
     try {
       await this.api.abandonWorkingOrder(id);
     } catch (error) {
+      if (session !== this.#operatorSession) return;
       refused = true;
       this.errorKey = discardError(error);
     }
+    if (session !== this.#operatorSession) return;
     await this.#refreshHeldOrders();
+    if (session !== this.#operatorSession) return;
     if (refused && !this.heldOrders.some((order) => order.id === id)) this.errorKey = "held.stale";
   }
 
@@ -5427,16 +5490,20 @@ export class TillApp extends LitElement {
    */
   async #onMoveHeldOrder(event: Event, retried = false): Promise<void> {
     const { orderId, tableId, seated, bills } = (event as CustomEvent<MoveHeldOrderDetail>).detail;
+    const session = this.#operatorSession;
     const label = this.tables.find((table) => table.id === tableId)?.label ?? "";
     this.errorKey = undefined;
     try {
       const zoneId = this.tables.find((table) => table.id === tableId)?.zoneId;
       if (!(await this.#askStoredDeadEnds(orderId, zoneId ?? undefined))) return;
+      if (session !== this.#operatorSession) return;
       await this.api.moveBill(orderId, { tableId }, bills, {
         partyId: null,
         ...otherPartyRead(seated, null),
       });
+      if (session !== this.#operatorSession) return;
     } catch (error) {
+      if (session !== this.#operatorSession) return;
       if (!retried && (error as { code?: string }).code === "station.no_replacement") {
         await this.#onMoveHeldOrder(event, true);
         return;
