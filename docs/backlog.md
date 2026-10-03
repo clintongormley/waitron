@@ -5906,10 +5906,10 @@ coverage, PR #536).**
 - Four more gaps, found by the branch's review and reproduced on the code before the branch, now
   closed: tab-select does nothing on a locked till; floor-refresh and move-held-order-open (now one
   handler) do nothing on it; open-table does nothing on it; new-sale no longer empties the basket
-  logout keeps. By reading, the tab-select check also covers one sent in the same call stack as
-  logout, before the shell is redrawn, which nothing sends today.
-- Back-to-floor's lock check moved to its top. No test tells the two positions apart, because
-  logout already saves the draft.
+  logout keeps. A new case sends a tab-select in the same call stack as logout, before the shell is
+  redrawn, and it is ignored; by reading, nothing sends one there today.
+- Back-to-floor's lock check moved to its top. No test tells the two positions apart: moving it
+  back failed nothing.
 - Show-station, show-expo, show-schedule, open-allergens and back-to-counter no longer clear the
   lock screen's message (found by a re-read; a new case per event, on a till and on a handheld,
   failed on these five before the fix).
