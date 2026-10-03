@@ -878,6 +878,13 @@ export interface PrintJobPreview {
   unsupported: boolean;
 }
 
+export interface DemoPrinterJob {
+  id: string;
+  kind: "document" | "drawer";
+  createdAt: string;
+  preview: PrintJobPreview | null;
+}
+
 export interface PrintJobRow {
   canResend: boolean;
   id: string;
@@ -2614,6 +2621,10 @@ export class DashboardApi {
 
   getPrintJobPreview(id: string): Promise<PrintJobPreview> {
     return this.#request<PrintJobPreview>(`/management-api/print-jobs/${id}/preview`, "GET");
+  }
+
+  listDemoPrinterJobs(): Promise<DemoPrinterJob[]> {
+    return this.#request<DemoPrinterJob[]>("/management-api/demo-printer/jobs", "GET");
   }
 
   listRecentJobs(): Promise<PrintJobRow[]> {

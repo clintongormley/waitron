@@ -21,6 +21,7 @@ import { seedOptionLists } from "./seed-option-lists.js";
 import { demoSeedEnvironment, seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct } from "./seed-sales.js";
 import type { SeedLocale } from "./menu.js";
+import { DEMO_PRINTER_KEY } from "../../src/demo-printer.js";
 
 /** `seriesId` is the standard series, the first of `applyVenue`'s `seriesIds`. */
 export interface SeedDemoVenue {
@@ -55,7 +56,7 @@ export async function seedDemoRestaurant(
       {
         name: "Demo printer",
         transport: "usb",
-        localKey: "WAITRON-DEMO-PRINTER",
+        localKey: DEMO_PRINTER_KEY,
         hasCashDrawer: true,
       },
     );

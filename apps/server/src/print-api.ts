@@ -72,6 +72,7 @@ import { formatSampleReceipt } from "./sample-receipt.js";
 import { formatPrinterTestPage } from "./printer-test-page.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import { setPrinterWatcher } from "./watchers.js";
+import { DEMO_PRINTER_KEY } from "./demo-printer.js";
 
 export interface PrintApiDeps {
   db: Database;
@@ -1060,6 +1061,51 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   );
 
   // Unfinished jobs are listed whatever their age; completed and exhausted history is bounded.
+  if (deps.cfg.practiceMode === true) {
+    app.get("/management-api/demo-printer/jobs", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const rows = await withPassiveManagementRead(() =>
+          gated(sessionId, (tx) =>
+            tx
+              .select({
+                id: printJobs.id,
+                kind: printJobs.kind,
+                createdAt: printJobs.createdAt,
+                payload: printJobs.payload,
+                paperWidth: printers.paperWidth,
+                resolution: printers.resolution,
+              })
+              .from(printJobs)
+              .innerJoin(printers, eq(printJobs.printerId, printers.id))
+              .where(
+                and(
+                  eq(printers.locationId, deps.cfg.locationId),
+                  eq(printers.localKey, DEMO_PRINTER_KEY),
+                  eq(printJobs.status, "done"),
+                ),
+              )
+              .orderBy(desc(printJobs.createdAt), sql`print_jobs.rowid desc`)
+              .limit(RECENT_JOBS_LIMIT),
+          ),
+        );
+        return c.json(
+          rows.map((row) => ({
+            id: row.id,
+            kind: row.kind,
+            createdAt: row.createdAt,
+            preview:
+              row.kind === "drawer"
+                ? null
+                : previewPrintJob(row.payload, {
+                    widthDots: textGrid(row.paperWidth, row.resolution).widthDots,
+                  }),
+          })),
+        );
+      }),
+    );
+  }
+
   app.get("/management-api/print-jobs", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

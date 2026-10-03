@@ -37,6 +37,8 @@ import {
   captureError,
   deviceProfiles,
   locations,
+  printJobs,
+  printers,
   nodes,
   nodeSealedState,
   openVenueDatabase,
@@ -98,6 +100,7 @@ import { loadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEV_DEVICE_HEADER } from "./device-session.js";
+import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { Turns } from "./backup-turns.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
@@ -650,6 +653,43 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
 }
 
 describe("startServer, against a migrated venue directory", () => {
+  it("starts the pretend printer in Demo and delivers its jobs", async () => {
+    const port = await freePort();
+    let server: StartedServer | undefined;
+    try {
+      server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ONBOARDING_INTENT: "demo",
+      });
+      const [printer] = await sharedDb
+        .select({ id: printers.id, active: printers.active })
+        .from(printers)
+        .where(eq(printers.localKey, "WAITRON-DEMO-PRINTER"));
+      expect(printer?.active).toBe(true);
+      const { jobId } = await withTransaction(sharedDb, (tx) =>
+        enqueuePrintJob(
+          tx,
+          { locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID },
+          printer!.id,
+          esc().kick().bytes(),
+          "drawer",
+        ),
+      );
+      await vi.waitFor(async () => {
+        const [job] = await sharedDb
+          .select({ status: printJobs.status })
+          .from(printJobs)
+          .where(eq(printJobs.id, jobId));
+        expect(job?.status).toBe("done");
+      });
+    } finally {
+      await server?.close();
+    }
+  });
+
   it("boots and serves local requests when a saved Cloud replacement cannot be resumed", async () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-replacement-"));

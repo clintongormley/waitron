@@ -42,6 +42,7 @@ import { printingAlertSource } from "./alert-sources.js";
 import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import type { Logger } from "./logger.js";
 import { mountPrintApi } from "./print-api.js";
+import { configureDemoPrinter, deliverDemoPrinterJobs } from "./demo-printer.js";
 import { createStation } from "./kitchen.js";
 import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
@@ -143,6 +144,7 @@ function mountApp(
     log?: Logger;
     now?: () => Date;
     receiptQrText?: { caption: string; legend: string };
+    practiceMode?: boolean;
   } = {},
 ): Hono {
   const app = new Hono();
@@ -152,7 +154,7 @@ function mountApp(
     app,
     {
       db: suite.db,
-      cfg,
+      cfg: { ...cfg, practiceMode: opts.practiceMode },
       pairingMode,
       readMembership: async () => MEMBERSHIP,
       enrolRateLimiter: opts.enrolRateLimiter,
@@ -2026,6 +2028,34 @@ describe("mountPrintApi — management: print-test-page", () => {
 });
 
 describe("mountPrintApi — management: recent jobs", () => {
+  it("shows Demo paper and drawer openings newest first, only to managers in practice mode", async () => {
+    const app = mountApp({ practiceMode: true });
+    const printerId = await createUsbPrinter(app, "WAITRON-DEMO-PRINTER", "Demo printer");
+    await enqueue(printerId, esc(WIDE).line("Kitchen ticket").bytes());
+    await enqueue(printerId, esc(WIDE).line("Receipt").bytes());
+    await withTransaction(suite.db, (tx) =>
+      enqueuePrintJob(tx, { locationId }, printerId, esc().kick().bytes(), "drawer"),
+    );
+    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    await deliverDemoPrinterJobs(suite.db, locationId, demo!);
+
+    const path = "/management-api/demo-printer/jobs";
+    const response = await send(app, "GET", path, { cookie: managerCookie });
+    expect(response.status).toBe(200);
+    const jobs = (await response.json()) as { kind: string; preview: { text: string } | null }[];
+    expect(jobs.map(({ kind, preview }) => ({ kind, text: preview?.text ?? null }))).toEqual([
+      { kind: "drawer", text: null },
+      { kind: "document", text: "Receipt\n" },
+      { kind: "document", text: "Kitchen ticket\n" },
+    ]);
+    expect((await send(app, "GET", path)).status).toBe(401);
+    expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);
+    expect(
+      (await send(mountApp({ practiceMode: false }), "GET", path, { cookie: managerCookie }))
+        .status,
+    ).toBe(404);
+  });
+
   it("returns a job preview only to printer managers", async () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused");

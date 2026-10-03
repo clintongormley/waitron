@@ -119,6 +119,7 @@ import { mountDeviceApi } from "./device-api.js";
 import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
+import { configureDemoPrinter, startDemoPrinterLoop } from "./demo-printer.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { createCardProviderPool } from "./card-provider-pool.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
@@ -1412,10 +1413,18 @@ async function bootServer(
     { db, cfg: till, nodeId: till.nodeId, isPrimary: isSingletonPrimary && !fencedOrMirror },
     log,
   );
+  let demoPrinterLoop: { stop(): Promise<void> } | undefined;
   // The operational surface (print agents, devices, pairing, card readers) is not mounted on a
   // read-only node at all, so even its safe-verb reads are absent, not merely its writes refused.
   // Un-mounting at boot rather than gating per request is deliberate; see read-only-gate.ts's header.
   if (!fencedOrMirror) {
+    const demoPrinter = await configureDemoPrinter(db, till.locationId, till.practiceMode === true);
+    if (demoPrinter !== null) {
+      demoPrinterLoop = startDemoPrinterLoop(db, till.locationId, demoPrinter, 500, (error) =>
+        log("error", "demo_printer.delivery_failed", { errorCode: codeOf(error) }),
+      );
+      undoOnFailure.push(() => demoPrinterLoop!.stop());
+    }
     // ONE pairing window for the venue: every surface that has a knock shares this holder. In memory,
     // so a restart or a promotion starts SHUT — a node that has just taken over must not inherit an
     // open door.
@@ -2088,6 +2097,7 @@ async function bootServer(
           () => loop,
           () => tunnelWorker?.catch(() => {}),
           () => backupSupervisor.stop(),
+          () => demoPrinterLoop?.stop(),
           // Litestream writes venue.db, so its stop is awaited before the store closes.
           () => streamHost.stop(),
         ]);

@@ -68,6 +68,7 @@ import "./screens/backup-screen.js";
 import "./screens/servers-screen.js";
 import "./screens/cloud-services-screen.js";
 import "./screens/email-screen.js";
+import "./screens/demo-printer-screen.js";
 import "./screens/payments-screen.js";
 import "./screens/alerts-screen.js";
 import "./widgets/alerts-bell.js";
@@ -118,6 +119,7 @@ const CORE_SCREENS = [
   "servers",
   "cloud",
   "email",
+  "demo-printer",
   "payments",
   "alerts",
 ] as const;
@@ -234,7 +236,10 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 /** Core screens with no sidebar entry whose access rule #permittedScreen reads from here. */
-const UNLISTED_SCREENS: ScreenRule[] = [{ screen: "email", requiresManager: true }];
+const UNLISTED_SCREENS: ScreenRule[] = [
+  { screen: "email", requiresManager: true },
+  { screen: "demo-printer", requiresManager: true },
+];
 
 /**
  * Owns session discovery, permitted URL navigation and language preferences.
@@ -885,13 +890,13 @@ export class DashboardApp extends LitElement {
     this.sessionRole = me.role;
     this.liveUpdates?.start();
     this.#sessionPermissions = me.permissions;
+    this.onboardingIntent = me.onboardingIntent;
     // Activate the enabled modules before resolving the permitted screen, so a URL naming an enabled
     // module's screen id is recognised while a disabled module's is not.
     this.#activate(me.modules);
     this.#applyRequestedScreen(this.#url.read("dashboard"));
     this.#venueLocale = me.venueLocale;
     this.venueName = me.venueName;
-    this.onboardingIntent = me.onboardingIntent;
     const remainingSeconds = me.sessionExpiresInSeconds ?? 30 * 60;
     this.sessionIdleTimeoutSeconds = me.sessionIdleTimeoutSeconds ?? 30 * 60;
     this.#scheduleSessionExpiry(remainingSeconds);
@@ -1280,6 +1285,9 @@ export class DashboardApp extends LitElement {
       ...(!authenticated || this.#canOpenScreen("email")
         ? [{ label: t("nav.email_inbox"), href: "/manage/email" }]
         : []),
+      ...(!authenticated || this.#canOpenScreen("demo-printer")
+        ? [{ label: t("demo_printer.title"), href: "/manage/demo-printer" }]
+        : []),
     ];
     return html`<wt-demo-bar
       data-test="demo-bar"
@@ -1413,6 +1421,12 @@ export class DashboardApp extends LitElement {
   #permittedScreen(requested: string | null): ScreenId {
     if (this.sessionRole === "staff") return requested === "orders" ? "orders" : "my-schedule";
     if (requested === "alerts") return "alerts";
+    if (
+      requested === "demo-printer" &&
+      this.onboardingIntent !== "demo" &&
+      this.onboardingIntent !== "prepare"
+    )
+      return "overview";
     const item = [...NAV_GROUPS.flatMap(coreItems), ...UNLISTED_SCREENS].find(
       (entry) => entry.screen === requested,
     );
@@ -1748,6 +1762,10 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-servers-screen .api=${this.api}></dashboard-servers-screen>`;
       case "email":
         return html`<dashboard-email-screen .api=${this.api}></dashboard-email-screen>`;
+      case "demo-printer":
+        return html`<dashboard-demo-printer-screen
+          .api=${this.api}
+        ></dashboard-demo-printer-screen>`;
       case "payments":
         return html`<dashboard-payments-screen
           .api=${this.api}
