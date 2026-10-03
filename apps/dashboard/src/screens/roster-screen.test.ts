@@ -514,6 +514,43 @@ describe("roster-screen — refusals, single-flight and refreshes", () => {
   });
 
   it.each([
+    ["published", "span"],
+    ["draft", "button"],
+  ] as const)(
+    "shows a +02:00 shift's wall-clock times in a %s week's cell",
+    async (status, tag) => {
+      const snap: RosterSnapshot = {
+        version: {
+          ...draftSnapshot().version!,
+          periodStart: "2027-01-04",
+          periodEnd: "2027-01-10",
+          status,
+        },
+        shifts: [
+          {
+            ...shiftS1,
+            startsAt: "2027-01-04T07:00:00Z",
+            startsOffsetMinutes: 120,
+            endsAt: "2027-01-04T15:00:00Z",
+            endsOffsetMinutes: 120,
+          },
+        ],
+      };
+      const api = stubApi({ getRoster: vi.fn().mockResolvedValue(snap) });
+      const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+      await flush(el);
+      const week = el.shadowRoot!.querySelector<WtInput>("[data-test=week-picker]")!;
+      chooseWeek(week, "2027-01-04");
+      await flush(el);
+      const shown =
+        tag === "span"
+          ? el.shadowRoot!.querySelector("[data-test=cell-p1-2027-01-04] span")
+          : el.shadowRoot!.querySelector("[data-test=edit-s1]");
+      expect(shown?.textContent?.trim()).toBe("09:00–17:00");
+    },
+  );
+
+  it.each([
     ["update-shift", "updateShift", { shiftId: "s1", patch: { role: "kitchen" } }],
     ["remove-shift", "removeShift", { shiftId: "s1" }],
   ] as const)("files at most one %s when it fires twice", async (type, method, detail) => {

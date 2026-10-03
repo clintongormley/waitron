@@ -5604,12 +5604,9 @@ characters. Left open:
     `packages/fiscal`'s guard forbids ENGLISH regime terms; its list is half Spanish.
     `no-hardcoded-margin.test.ts` scans only the files directly in `packages/fiscal/src`, not
     `src/testing/`, and does not say so.
-  - `addShift` and the shift update in `packages/workforce/src/clocking.ts` store the caller's
-    spelling of `starts_at`/`ends_at`, and `shifts_interval_ck` compares that text, so two valid
-    times spelled with different offsets, or with fractional seconds on one side only, can be
-    refused as a raw CHECK error instead of `shift.invalid`, and `order by starts_at` can sort
-    them wrongly. Normalising the spelling on write, as `appendToChain` does for `event_at`, is
-    the unmade fix; the gap is stated at `assertShiftInterval`.
+  - **Shift times are stored in one spelling — DONE (W22, 2026-10-03):** `addShift` and
+    `updateShift` write both shift ends as the UTC whole second (`shiftInterval`,
+    `packages/workforce/src/clocking.ts`).
   - The unused payment reconciliation and SumUp provider `nodeId` options were removed in W8.
   - Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
     the SumUp provider's `resolvePending`) do not both succeed: #558's review measured

@@ -21,4 +21,16 @@ export function lastEndedQuarter(now: Date): { year: number; quarter: 1 | 2 | 3 
     : { year: now.getFullYear(), quarter: (current - 1) as 1 | 2 | 3 };
 }
 
+/** A stored instant plus the wall offset recorded beside it, read in UTC, is the local wall clock. */
+export function wallClock(instant: string, offsetMinutes: number): { date: string; time: string } {
+  const shifted = new Date(Date.parse(instant) + offsetMinutes * 60_000).toISOString();
+  return { date: shifted.slice(0, 10), time: shifted.slice(11, 16) };
+}
+
+/** The instant (`YYYY-MM-DDTHH:MM:SSZ`) at which the wall clock reads `day` `HH:MM` at that offset. */
+export function instantAt(day: string, time: string, offsetMinutes: number): string {
+  const instant = new Date(Date.parse(`${day}T${time}:00Z`) - offsetMinutes * 60_000);
+  return `${instant.toISOString().slice(0, 19)}Z`;
+}
+
 export { formatIsoMinute } from "@waitron/dashboard-kit";

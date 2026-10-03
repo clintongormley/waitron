@@ -19,16 +19,13 @@ import type {
   RosterSnapshot,
   Shift,
 } from "../api/client.js";
-import { MS_PER_DAY, mondayOf, today } from "../date-utils.js";
+import { MS_PER_DAY, mondayOf, today, wallClock } from "../date-utils.js";
 
 function weekDays(monday: string): string[] {
   const base = Date.parse(`${monday}T00:00:00Z`);
   return Array.from({ length: 7 }, (_, i) =>
     new Date(base + i * MS_PER_DAY).toISOString().slice(0, 10),
   );
-}
-function localDate(instant: string, offsetMinutes: number): string {
-  return new Date(Date.parse(instant) + offsetMinutes * 60_000).toISOString().slice(0, 10);
 }
 
 /** Breaches are advisory: a breaching roster still publishes (owner decision 2026-08-02). */
@@ -393,10 +390,11 @@ export class RosterScreen extends LitElement {
    * and its content never disagree. */
   #renderCell(personId: string, day: string): TemplateResult {
     const cellShifts = this.snapshot.shifts.filter(
-      (s) => s.personId === personId && localDate(s.startsAt, s.startsOffsetMinutes) === day,
+      (s) => s.personId === personId && wallClock(s.startsAt, s.startsOffsetMinutes).date === day,
     );
     const testId = `cell-${personId}-${day}`;
-    const label = (s: Shift): string => `${s.startsAt.slice(11, 16)}–${s.endsAt.slice(11, 16)}`;
+    const label = (s: Shift): string =>
+      `${wallClock(s.startsAt, s.startsOffsetMinutes).time}–${wallClock(s.endsAt, s.endsOffsetMinutes).time}`;
     if (!this.editable) {
       return html`<td data-test=${testId}>
         ${cellShifts.map((s) => html`<span>${label(s)}</span>`)}

@@ -439,7 +439,7 @@ export class WorkforceBackend {
    * non-draft version (`roster.not_draft`).
    */
   async addShift(tx: Transaction, input: AddShiftInput): Promise<string> {
-    assertShiftInterval(input.startsAt, input.endsAt);
+    const { startsAt, endsAt } = shiftInterval(input.startsAt, input.endsAt);
     const status = await this.rosterVersionStatus(tx, input.versionId);
     if (status !== "draft") {
       throw new AppError("roster.not_draft", {
@@ -451,7 +451,7 @@ export class WorkforceBackend {
       insert into shifts (id, person_id, location_id, starts_at, starts_offset_minutes,
         ends_at, ends_offset_minutes, role, roster_version_id, created_at)
       values (${newId()}, ${input.personId}, ${input.locationId},
-        ${input.startsAt}, ${input.startsOffsetMinutes}, ${input.endsAt}, ${input.endsOffsetMinutes},
+        ${startsAt}, ${input.startsOffsetMinutes}, ${endsAt}, ${input.endsOffsetMinutes},
         ${input.role}, ${input.versionId}, ${nowIso()})
       returning id`);
     return rows[0]!.id;
@@ -461,9 +461,10 @@ export class WorkforceBackend {
    * malformed one. Throws `shift.not_found`, `roster.not_draft` or `shift.invalid`. */
   async updateShift(tx: Transaction, input: UpdateShiftInput): Promise<void> {
     const shift = await this.shiftForWrite(tx, input.shiftId);
-    const startsAt = input.startsAt ?? shift.startsAt;
-    const endsAt = input.endsAt ?? shift.endsAt;
-    assertShiftInterval(startsAt, endsAt);
+    const { startsAt, endsAt } = shiftInterval(
+      input.startsAt ?? shift.startsAt,
+      input.endsAt ?? shift.endsAt,
+    );
     await tx.execute(sql`
       update shifts set
         person_id = ${input.personId ?? shift.personId},
@@ -809,24 +810,31 @@ function shiftDay(date: string, deltaDays: number): string {
 }
 
 /**
- * `NaN >= NaN` is false, so an unparseable endpoint needs its own test.
- *
- * The only real interval check: `shifts_interval_ck` compares TEXT spellings and `addShift` stores the
- * caller's spelling verbatim, so a valid pair spelled differently (another offset, or `09:00:00Z`
- * beside `09:00:00.500Z`) can still be refused by that CHECK as a raw error, and
- * `order by starts_at` can misorder shifts spelled differently. Normalising both endpoints, as
- * `attemptAppend` (./chain.ts) does for `event_at`, is the unmade fix: it would change what a
- * caller reads back.
+ * Both endpoints as the UTC whole second, `YYYY-MM-DDTHH:MM:SSZ` — the spelling the dashboard
+ * sends — because `shifts_interval_ck` and `order by starts_at` compare the stored TEXT.
  */
-function assertShiftInterval(startsAt: string, endsAt: string): void {
-  const startMs = Date.parse(startsAt);
-  const endMs = Date.parse(endsAt);
-  if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+function shiftInterval(startsAt: string, endsAt: string): { startsAt: string; endsAt: string } {
+  const start = wholeSecondUtc(startsAt);
+  const end = wholeSecondUtc(endsAt);
+  if (start === null || end === null) {
     throw new AppError("shift.invalid", { reason: "unparseable_timestamp" });
   }
-  if (startMs >= endMs) {
+  // A year outside 0000–9999 is spelled `+010000-…`, a different width, so it would sort wrongly.
+  if (!FOUR_DIGIT_YEAR.test(start) || !FOUR_DIGIT_YEAR.test(end)) {
+    throw new AppError("shift.invalid", { reason: "year_out_of_range" });
+  }
+  if (start >= end) {
     throw new AppError("shift.invalid", { reason: "ends_not_after_starts" });
   }
+  return { startsAt: start, endsAt: end };
+}
+
+const FOUR_DIGIT_YEAR = /^\d{4}-/;
+
+function wholeSecondUtc(value: string): string | null {
+  const ms = Date.parse(value);
+  if (Number.isNaN(ms)) return null;
+  return new Date(Math.floor(ms / 1000) * 1000).toISOString().replace(".000Z", "Z");
 }
 
 type RosterVersionDbRow = {

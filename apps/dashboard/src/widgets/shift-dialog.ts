@@ -5,6 +5,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
+import { instantAt, wallClock } from "../date-utils.js";
 import type { Shift, ShiftPatch } from "../api/client.js";
 
 /**
@@ -28,8 +29,6 @@ export interface UpdateShiftDetail {
 /**
  * The dialog does NOT call the API and does NOT close itself on confirm — the screen closes it on a
  * successful write, so a rejected write leaves the entered values in place.
- *
- * Offset 0: the entered `HH:MM` wall time is stored AS the UTC instant, with `starts/ends_offset = 0`.
  */
 @customElement("dashboard-shift-dialog")
 export class ShiftDialog extends LitElement {
@@ -61,24 +60,27 @@ export class ShiftDialog extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     if (!changed.has("shift") && !(changed.has("open") && this.open)) return;
-    // Offset 0: startsAt is `${day}T${HH:MM}:00Z`, so slice(11,16) is the time.
-    this.start = this.shift ? this.shift.startsAt.slice(11, 16) : "";
-    this.end = this.shift ? this.shift.endsAt.slice(11, 16) : "";
+    this.start = this.shift
+      ? wallClock(this.shift.startsAt, this.shift.startsOffsetMinutes).time
+      : "";
+    this.end = this.shift ? wallClock(this.shift.endsAt, this.shift.endsOffsetMinutes).time : "";
     this.shiftRole = this.shift?.role ?? "";
   }
 
   #confirm(event: Event): void {
     event.stopPropagation();
     if (this.busy || this.start === "" || this.end === "") return;
-    const startsAt = `${this.day}T${this.start}:00Z`;
-    const endsAt = `${this.day}T${this.end}:00Z`;
+    const startsOffsetMinutes = this.shift?.startsOffsetMinutes ?? 0;
+    const endsOffsetMinutes = this.shift?.endsOffsetMinutes ?? 0;
+    const startsAt = instantAt(this.day, this.start, startsOffsetMinutes);
+    const endsAt = instantAt(this.day, this.end, endsOffsetMinutes);
     const role = this.shiftRole.trim() === "" ? null : this.shiftRole.trim();
     if (this.shift) {
       this.dispatchEvent(
         new CustomEvent<UpdateShiftDetail>("update-shift", {
           detail: {
             shiftId: this.shift.id,
-            patch: { startsAt, startsOffsetMinutes: 0, endsAt, endsOffsetMinutes: 0, role },
+            patch: { startsAt, startsOffsetMinutes, endsAt, endsOffsetMinutes, role },
           },
           bubbles: true,
           composed: true,

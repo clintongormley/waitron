@@ -65,12 +65,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const run = createErrorBoundary(STATUS, "workforce.failed");
 const backend = new WorkforceBackend();
 
-/** Screen a body `startsAt`/`endsAt` as a parseable instant. A non-parseable string is still a
- * `string`, so a bare type check would admit it — and `addShift`'s `Date.parse(x) >= Date.parse(y)`
- * interval guard then passes it too (`NaN >= NaN` is `false`). Nothing below catches it: `starts_at`
- * and `ends_at` are `text`, so the unparseable string is simply STORED, and `shifts_interval_ck`
- * compares the two as text rather than as instants. This screen is the only refusal — a 400
- * `management.request_invalid` naming the field. */
+/** Refuses an unparseable time with a 400 naming the field; the backend's `shift.invalid` names none. */
 function requireTimestamp(v: unknown, field: string): string {
   if (typeof v !== "string" || Number.isNaN(Date.parse(v)))
     throw new AppError("management.request_invalid", { field });

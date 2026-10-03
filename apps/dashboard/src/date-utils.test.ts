@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { formatIsoMinute, lastEndedQuarter } from "./date-utils.js";
+import { formatIsoMinute, instantAt, lastEndedQuarter, wallClock } from "./date-utils.js";
 
 // Runs in the Node project (vitest.config.ts), whose worker has TZ=America/New_York.
 it("runs with the timezone pinned to America/New_York (guards against a vacuous pass)", () => {
@@ -33,3 +33,23 @@ it.each([
 ])("reads the local month and year, not the UTC ones, at %s", (instant, expected) => {
   expect(lastEndedQuarter(new Date(instant))).toEqual(expected);
 });
+
+// Each offset differs from New York's, so a version reading local time gives another answer.
+it.each([
+  ["2027-01-04T07:00:00Z", 120, { date: "2027-01-04", time: "09:00" }],
+  ["2027-01-04T23:30:00Z", 120, { date: "2027-01-05", time: "01:30" }],
+  ["2027-01-04T02:00:00Z", -300, { date: "2027-01-03", time: "21:00" }],
+])("reads the wall clock of %s at offset %i, not the local one", (instant, offset, expected) => {
+  expect(wallClock(instant, offset)).toEqual(expected);
+});
+
+it.each([
+  ["2027-01-04", "00:30", 120, "2027-01-03T22:30:00Z"],
+  ["2027-01-03", "21:00", -300, "2027-01-04T02:00:00Z"],
+  ["2027-01-04", "09:00", 0, "2027-01-04T09:00:00Z"],
+])(
+  "finds the instant when the wall clock reads %s %s at offset %i",
+  (day, time, offset, expected) => {
+    expect(instantAt(day, time, offset)).toBe(expected);
+  },
+);
