@@ -3,13 +3,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
-import {
-  baseStyles,
-  submitOnEnter,
-  visuallyHiddenStyles,
-  type ComboboxOption,
-  type SummaryField,
-} from "@waitron/ui";
+import { baseStyles, submitOnEnter, type ComboboxOption, type SummaryField } from "@waitron/ui";
 import { resolveContentText } from "@waitron/shared";
 import { DIETARY_LABELS } from "@waitron/catalogue/src/dietary-declarations.js";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
@@ -276,9 +270,6 @@ export class ProductEditor extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         overflow-wrap: anywhere;
-      }
-      .visually-hidden {
-        ${visuallyHiddenStyles}
       }
       .nutrition-hints {
         gap: var(--wt-space-1);

@@ -434,7 +434,9 @@ value for each of those fields in `inherited` — for allergens, the parent's pu
 while nothing on the parent has been reviewed or its recipe has an unreviewed ingredient), since
 that is what a blank reads as, while the variant's own allergens field holds only what staff set on
 the variant. Saving a blank keeps the field inheriting, and saving a value overrides it for that
-variant alone. A variant's body may leave its price, tax rate and dietary declarations blank, which
+variant alone. The main category is the exception: the read gives a variant `primaryCategoryId:
+null`, the save refuses a non-null value with `product.invalid`, and the variant always takes its
+parent's (`readProductEditor` and `saveProductEditor`). A variant's body may leave its price, tax rate and dietary declarations blank, which
 a product with no parent may not; it carries no variants and no extras or options lists of its own;
 and its parent never changes, so a body naming a different `parentId` is refused
 (`saveProductEditor`, `packages/catalogue/src/product-editor.ts`).

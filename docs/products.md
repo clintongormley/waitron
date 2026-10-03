@@ -59,6 +59,11 @@ You can create a unit, an extras list or an options list without abandoning a pr
 you are editing. Open the nested form, save the new item and select it when you return. The unsaved
 product fields remain in place if the nested save fails or you cancel it.
 
+Courses are different: **Edit courses…** at the end of the **Default course** list opens the
+course list in a window that saves each change as you make it. When you close it, the last course
+you added becomes the product's course; if you removed the product's course instead, the product
+is left with none. Your other unsaved product fields stay as they were.
+
 ## Add variants when one product has several sellable forms
 
 Use variants for forms of the same product that need distinct names and prices, such as **Coffee,

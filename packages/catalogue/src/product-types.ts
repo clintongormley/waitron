@@ -69,7 +69,8 @@ export type ProductVariantInput = Omit<ProductVariant, "id"> & { id?: string };
 /**
  * One variant as the product list nests it under its parent: the variant as the editor reads it
  * (`unitPrice` its OWN, null where it takes its parent's) and, in `effective`, what it actually
- * carries once its blanks read as its parent's (`variant-fallback.ts`).
+ * carries: its price and VAT class once its blanks read as its parent's, and always its parent's
+ * main category (`variant-fallback.ts`).
  */
 export interface ListedVariant extends ProductVariant {
   effective: {

@@ -37,6 +37,8 @@ names its file, so it can be re-checked before building.
   category row, so it cannot be renamed, moved or deleted.
 - A variant's main reporting category is its own if it has one, otherwise its parent's. That is the
   variant fallback rule the one-product model already applies to inherited fields.
+  _2026-10-03 (A209): a variant's category is now always its product's; see
+  [product-categories.md](../../developers/product-categories.md)._
 - The rule "a product's primary category must be one of its category memberships"
   (`replaceProductCategories`, `packages/catalogue/src/categories.ts`) goes. So does the product's
   many-to-many membership (`product_categories`). Its flexible role passes to labels (§2.2); its

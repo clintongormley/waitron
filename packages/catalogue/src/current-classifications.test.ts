@@ -79,7 +79,7 @@ describe("currentClassifications", () => {
         ],
       },
       [f.water]: { reporting: [] },
-      // A variant with no main category of its own follows its parent's.
+      // A variant reports its parent's main category.
       [f.double]: { reporting: [{ id: f.spirits.id, name: "Spirits" }] },
     });
   });

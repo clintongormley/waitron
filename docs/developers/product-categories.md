@@ -26,8 +26,8 @@ category in every service zone on Prep Stations to route those dishes before the
 the default station.
 
 A variant is always in its product's reporting category. Its effective category
-(`effectiveProductColumns.categoryId`, `packages/catalogue/src/variant-fallback.ts`), which the
-Products list, menus, sale classification and kitchen routing read, is the product's even where an
+(`effectiveProductColumns.categoryId`, `packages/catalogue/src/variant-fallback.ts`), which
+menus, sale classification and kitchen routing read, is the product's even where an
 older variant row still stores one of its own, and the product editor offers a variant no category
 choice. In the tree, variants sit under their product and move with
 it; you cannot select or drag a variant on its own. The product editor shows a product's category as

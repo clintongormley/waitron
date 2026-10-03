@@ -1521,21 +1521,24 @@ describe("mountCatalogueApi — products", () => {
   describe("a variant holding a category of its own, stored before a variant always took its parent's", () => {
     async function withStoredCategory(app: Hono) {
       const seeded = await parentWithVariant(app);
-      await suite.db.execute(
-        sql`update products set category_id = ${seeded.ownCategoryId} where id = ${seeded.variantId}`,
-      );
+      const plantCategory = () =>
+        suite.db.execute(
+          sql`update products set category_id = ${seeded.ownCategoryId} where id = ${seeded.variantId}`,
+        );
+      await plantCategory();
       const storedCategory = async () =>
         (
           await suite.db.execute<{ category_id: string | null }>(
             sql`select category_id from products where id = ${seeded.variantId}`,
           )
         ).rows[0]!.category_id;
-      return { ...seeded, storedCategory };
+      return { ...seeded, plantCategory, storedCategory };
     }
 
     it("is removed and restored by reading its editor value and saving it back", async () => {
       const app = mountApp("es-ES");
-      const { variantId, categoryId, storedCategory } = await withStoredCategory(app);
+      const { variantId, categoryId, ownCategoryId, plantCategory, storedCategory } =
+        await withStoredCategory(app);
       const value = (await (
         await send(app, "GET", `/management-api/products/${variantId}/editor`)
       ).json()) as Record<string, unknown>;
@@ -1551,9 +1554,13 @@ describe("mountCatalogueApi — products", () => {
       expect(removed.status).toBe(200);
       expect(await removed.json()).toMatchObject({ active: false, primaryCategoryId: null });
       expect(await storedCategory()).toBeNull();
+      // Removing cleared it, so it is planted again for Restore to start from a leftover too.
+      await plantCategory();
+      expect(await storedCategory()).toBe(ownCategoryId);
       const restored = await put(true);
       expect(restored.status).toBe(200);
       expect(await restored.json()).toMatchObject({ active: true, primaryCategoryId: null });
+      expect(await storedCategory()).toBeNull();
     });
 
     it("refuses a save naming a category of its own, and keeps the row as it was", async () => {

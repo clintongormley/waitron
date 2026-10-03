@@ -18,7 +18,7 @@ export function categoryPathText(
   return category ? categoryPath(category, categories, PATH_SEPARATOR) : missing;
 }
 
-/** Every category depth-first, siblings in the category list's order. A category whose parent the
+/** Every category depth-first, siblings sorted by name. A category whose parent the
  * list lacks is listed at the top level. */
 function categoryTree(categories: readonly CategorySummary[]): ComboboxOption[] {
   const known = new Set(categories.map(({ id }) => id));
