@@ -5,7 +5,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
 import "@waitron/ui/src/components/wt-switch.js";
-import { helpLinkStyles, actionsStyles } from "../form-styles.js";
+import { helpLinkStyles, actionsStyles, introStyles } from "../form-styles.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
@@ -20,6 +20,7 @@ export class SetupModeScreen extends LitElement {
     helpLinkStyles,
     baseStyles,
     actionsStyles,
+    introStyles,
     css`
       :host {
         display: block;
@@ -27,7 +28,6 @@ export class SetupModeScreen extends LitElement {
 
       .intro {
         margin: var(--wt-space-3) 0;
-        color: var(--wt-color-text-muted);
       }
 
       .cert-note {
@@ -43,8 +43,6 @@ export class SetupModeScreen extends LitElement {
       }
 
       .choices {
-        display: grid;
-        gap: var(--wt-space-2);
         margin-top: var(--wt-space-4);
       }
 

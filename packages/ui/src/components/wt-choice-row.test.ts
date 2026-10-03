@@ -72,6 +72,69 @@ test("takes the lifted surface while the pointer is over it", async () => {
   expect(getComputedStyle(button(el)).backgroundColor).toBe("rgb(13, 14, 15)");
 });
 
+const GROUP = `<div>
+  <h2>Choose</h2>
+  <wt-choice-row heading="Demo">One</wt-choice-row>
+  <wt-choice-row heading="Prepare">Two</wt-choice-row>
+  <wt-choice-row heading="Live">Three</wt-choice-row>
+</div>`;
+
+const corners = (el: WtChoiceRow) => {
+  const style = getComputedStyle(button(el));
+  return [
+    style.borderTopLeftRadius,
+    style.borderTopRightRadius,
+    style.borderBottomRightRadius,
+    style.borderBottomLeftRadius,
+  ];
+};
+
+const borders = (el: WtChoiceRow) => {
+  const style = getComputedStyle(button(el));
+  return [
+    style.borderTopWidth,
+    style.borderRightWidth,
+    style.borderBottomWidth,
+    style.borderLeftWidth,
+  ];
+};
+
+test("rows that share a parent draw one box, a line between each row and rounded only at its ends", async () => {
+  await mount(GROUP);
+  host.style.setProperty("--wt-radius-lg", "7px");
+  const rows = [...host.querySelectorAll<WtChoiceRow>("wt-choice-row")];
+  await Promise.all(rows.map((row) => row.updateComplete));
+  expect(rows.map(corners)).toEqual([
+    ["7px", "7px", "0px", "0px"],
+    ["0px", "0px", "0px", "0px"],
+    ["0px", "0px", "7px", "7px"],
+  ]);
+  expect(rows.map(borders)).toEqual([
+    ["1px", "1px", "0px", "1px"],
+    ["1px", "1px", "0px", "1px"],
+    ["1px", "1px", "1px", "1px"],
+  ]);
+  for (const [above, below] of [
+    [rows[0]!, rows[1]!],
+    [rows[1]!, rows[2]!],
+  ] as const) {
+    expect(button(below).getBoundingClientRect().top).toBe(
+      button(above).getBoundingClientRect().bottom,
+    );
+  }
+});
+
+test("a row alone in its parent draws the whole box, rounded at every corner", async () => {
+  await mount(
+    '<div><h2>Already have one?</h2><wt-choice-row heading="Join">Four</wt-choice-row></div>',
+  );
+  host.style.setProperty("--wt-radius-lg", "7px");
+  const row = host.querySelector<WtChoiceRow>("wt-choice-row")!;
+  await row.updateComplete;
+  expect(corners(row)).toEqual(["7px", "7px", "7px", "7px"]);
+  expect(borders(row)).toEqual(["1px", "1px", "1px", "1px"]);
+});
+
 test("takes the whole width it is given", async () => {
   const el = (await mount(DEMO)) as WtChoiceRow;
   host.style.width = "400px";

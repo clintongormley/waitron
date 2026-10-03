@@ -4,7 +4,9 @@ import { baseStyles } from "../base-styles.js";
 
 /**
  * One choice in a list of choices: a heading, a short description and an arrow, the whole row one
- * button. It fires the native `click`, as `wt-button` does.
+ * button. It fires the native `click`, as `wt-button` does. Only the last `wt-choice-row` in its
+ * parent draws a bottom border, and the first and last take the rounded corners, so rows adjacent
+ * in one parent read as one box; a hidden row still counts as first or last.
  */
 @customElement("wt-choice-row")
 export class WtChoiceRow extends LitElement {
@@ -25,12 +27,26 @@ export class WtChoiceRow extends LitElement {
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-3) var(--wt-space-4);
         border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
+        border-bottom-width: 0;
+        border-radius: 0;
         background: var(--wt-color-surface);
         color: var(--wt-color-text);
         font: inherit;
         text-align: start;
         cursor: pointer;
+      }
+
+      /* The box's corners are drawn on the buttons, not on a clipping parent, so nothing clips a
+         hovered row's background or the focus ring. */
+      :host(:first-of-type) button {
+        border-top-left-radius: var(--wt-radius-lg);
+        border-top-right-radius: var(--wt-radius-lg);
+      }
+
+      :host(:last-of-type) button {
+        border-bottom-width: 1px;
+        border-bottom-left-radius: var(--wt-radius-lg);
+        border-bottom-right-radius: var(--wt-radius-lg);
       }
 
       button:hover {

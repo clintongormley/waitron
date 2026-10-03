@@ -540,7 +540,11 @@ describe("setup-app", () => {
     await flush(el);
     const connection = await screenHost(el, "connection");
     expect(connection.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
-    expect(connection.shadowRoot!.querySelector("[data-test=production-warning]")).toBeNull();
+    goto(el, "mode");
+    await el.updateComplete;
+    const mode = await screenHost(el, "mode");
+    expect(mode.shadowRoot!.querySelector("[data-test=choose-demo]")).not.toBeNull();
+    expect(mode.shadowRoot!.querySelector("[data-test=production-warning]")).toBeNull();
   });
 
   it("#goto flips the visible screen", async () => {

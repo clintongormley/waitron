@@ -21,6 +21,17 @@ const q = (el: SetupModeScreen, sel: string) => el.shadowRoot!.querySelector<HTM
 
 const text = (node: Element): string => node.textContent!.replace(/\s+/g, " ").trim();
 
+const rowBox = (row: Element) => {
+  const button = row.shadowRoot!.querySelector("button")!;
+  const style = getComputedStyle(button);
+  return {
+    rect: button.getBoundingClientRect(),
+    top: [style.borderTopLeftRadius, style.borderTopRightRadius],
+    bottom: [style.borderBottomLeftRadius, style.borderBottomRightRadius],
+    lineAbove: style.borderTopWidth,
+  };
+};
+
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
@@ -45,6 +56,28 @@ describe("setup-mode-screen", () => {
       "Enter your real menus, staff and layouts, then practise with test payments. Nothing is filed to AEAT.",
       "The real thing. Every sale is filed to AEAT. This choice is permanent.",
     ]);
+  });
+
+  it("draws the three new-restaurant choices as one rounded box with a line between rows", async () => {
+    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
+    const [demo, prepare, live] = [
+      ...el.shadowRoot!.querySelectorAll(".choices > wt-choice-row"),
+    ].map(rowBox);
+    expect(prepare!.rect.top).toBe(demo!.rect.bottom);
+    expect(live!.rect.top).toBe(prepare!.rect.bottom);
+    expect([prepare!.lineAbove, live!.lineAbove]).toEqual(["1px", "1px"]);
+    expect(demo!.top).not.toEqual(["0px", "0px"]);
+    expect([demo!.bottom, prepare!.top, prepare!.bottom, live!.top]).toEqual(
+      Array(4).fill(["0px", "0px"]),
+    );
+    expect(live!.bottom).toEqual(demo!.top);
+  });
+
+  it("draws Join or recover as a box of its own, rounded at every corner", async () => {
+    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
+    const existing = rowBox(q(el, "[data-test=choose-existing]")!);
+    expect(existing.top).not.toEqual(["0px", "0px"]);
+    expect(existing.bottom).toEqual(existing.top);
   });
 
   it("puts Join or recover under its own question, apart from the three new-restaurant choices", async () => {

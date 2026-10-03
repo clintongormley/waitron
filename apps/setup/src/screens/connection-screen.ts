@@ -3,7 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { errorStyles } from "../form-styles.js";
+import { errorStyles, introStyles } from "../form-styles.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 
@@ -18,12 +18,10 @@ export class SetupConnectionScreen extends LitElement {
   static override styles = [
     baseStyles,
     errorStyles,
+    introStyles,
     css`
       :host {
         display: block;
-      }
-      .intro {
-        color: var(--wt-color-text-muted);
       }
       wt-form-actions {
         margin-top: var(--wt-space-4);

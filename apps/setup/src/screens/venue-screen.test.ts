@@ -838,11 +838,19 @@ describe("A2 shop form", () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { defaults });
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
-    for (const field of ["taxId", "legalName", "name", "addressLine1", "postalCode", "city"]) {
+    const expected = {
+      taxId: ["Enter the tax ID.", "Of the business that issues the invoices"],
+      legalName: ["Enter the legal name.", "As on the business's tax documents"],
+      name: ["Enter the location name.", "The name you use for this location"],
+      addressLine1: ["Enter the street address.", "Street and building number"],
+      postalCode: ["Enter the postal code.", "Used to suggest the province"],
+      city: ["Enter the city.", "Town or city"],
+    };
+    for (const [field, [error, hint]] of Object.entries(expected)) {
       const input = q(el, `[data-test=${field}]`)!;
-      expect(input.getAttribute("error")).not.toBe("");
+      expect(input.getAttribute("error")).toBe(error);
       expect(input.hasAttribute("required")).toBe(true);
-      expect(input.getAttribute("hint")).not.toBe("");
+      expect(input.getAttribute("hint")).toBe(hint);
       expect(input.querySelector("wt-help-tooltip")).toBeNull();
     }
     expect(await bottomOf(el)).toBe(FIX_FIELDS);

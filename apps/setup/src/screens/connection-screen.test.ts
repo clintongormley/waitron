@@ -28,6 +28,12 @@ describe("setup-connection-screen", () => {
     );
   });
 
+  it("shows the instructions in the muted text colour", async () => {
+    const { el, host } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {});
+    host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+    expect(getComputedStyle(q(el, "[data-test=instructions]")!).color).toBe("rgb(7, 8, 9)");
+  });
+
   it("stays short enough to read at a glance", async () => {
     const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {});
     expect(words(el).length).toBeLessThanOrEqual(40);
