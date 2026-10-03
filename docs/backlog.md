@@ -5604,6 +5604,12 @@ characters. Left open:
   - **Shift times are stored in one spelling — DONE (W22, 2026-10-03):** `addShift` and
     `updateShift` write both shift ends as the UTC whole second (`shiftInterval`,
     `packages/workforce/src/clocking.ts`).
+    Open, found by #1134's review and not taken there: the dashboard's shift dialog
+    (`apps/dashboard/src/widgets/shift-dialog.ts`) builds the end time on the START's day, so a
+    shift that runs past midnight (22:00–02:00) is refused as `shift.invalid` — as it was before
+    #1134. And an edit keeps the shift's stored offsets, so moving a shift across a summer-time
+    change keeps the old offset. Next action: let the dialog put the end on the next day when it
+    is not after the start, and derive each offset from the venue's time zone for the date.
   - The unused payment reconciliation and SumUp provider `nodeId` options were removed in W8.
   - Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
     the SumUp provider's `resolvePending`) do not both succeed: #558's review measured
