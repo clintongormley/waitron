@@ -3771,52 +3771,37 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Remove the till that setup creates (A238) — OPEN, design not started (owner, 2026-10-03).** Every setup
-  creates one till: Demo names it "Caja 1" itself, and Prepare and Live ask for a "Till name"
-  (`packages/provisioning/src/venue-plan.ts`, `create-till`; `applyVenue` refuses a plan without
-  one). The box saves that till's id as its default. Requests from a paired device use the
-  device's own till instead (`deviceTillCfg`, `apps/server/src/device-session.ts`). Accepting a
-  counter till device creates a new till for it (`createRegister`, `apps/server/src/device.ts`),
-  so the setup till usually ends up with no screen behind it. The owner expected a Prepare or Live
-  venue to start with no devices and add each one. Seen using the default so far: the demo's
-  sample sales, the fiscal test sale before going live, two kitchen alerts, and the Prepare to
-  Live configuration transfer. About 20 server sites read it, and not all have been traced.
-  Decide between: no setup till at all; keep one but stop asking for its name; or leave it.
-  Findings (2026-10-03, by reading code and `git log -S`; no tests run):
-  - History: the setup till dates from the one-box, one-till design. `create-till` came in #57
-    (2026-08-04) and `WAITRON_TILL_TILL_ID` in #60 (2026-08-05). Devices got their own tills later
-    (#199, #269, #1011), and the setup till stayed as the server's default.
-  - The server refuses to start without it (`apps/server/src/till-config.ts`).
-  - Still read in production by:
-    - parking an order (`createOpenOrder`, `apps/server/src/working-order.ts`)
-    - the `order_placed` and `order_cancelled` history entries, whose tamper-evident hash
-      includes the till (`packages/db/src/order-amendment-hash.ts`)
-    - a Live standby adopting the primary (`apps/server/src/adopt.ts`)
-    - the Prepare to Live transfer, by name (`apps/server/src/configuration-transfer.ts`)
-    - finding a half-finished setup again, by name (`apps/server/src/provision.ts`)
-    - the demo's sample sales
-  - Fiscal records do not need it. Their till is informational and left out of the hash; the
-    chain is the server's. The readiness test sale runs in its own scratch database.
-  - It shows in the dashboard's till list, and the handheld picker offers it.
-  - Believed bug, not yet shown by a test: the till's "print receipt" and "print payment slip"
-    routes pass the server default, not the device's till, so they pick the setup till's
-    printer (`apps/server/src/till-api.ts`, `apps/server/src/receipt-print.ts`). The one test
-    binds its device to the setup till, so it cannot tell the two apart.
-  - Options:
-    - Keep the till but stop asking for its name: small. The setup screens, translations and the
-      setup request change, and a fixed name keeps the transfer and the retry working.
-    - Remove it: medium to large. The order routes move to the device's till, which changes what
-      the order history hash covers. `applyVenue` stops requiring a till, and many test fixtures
-      change. No migration is needed.
-  - **Owner decision (2026-10-03): remove it, on its own branch, with the full review.** Their
-    principle: any device can do everything; opening the cash drawer is the one exception so far
-    (till form factor only), and even that is open to debate. Fixing the receipt and payment-slip
-    printer routes goes with it.
-  - Open question before the design is written: a handheld today must attach to an existing till
-    (`resolveDeviceBinding`, `apps/server/src/device.ts`). With no setup till, the first device
-    could be a handheld with nothing to attach to. Choose whether every device gets its own till,
-    handhelds keep sharing one, or a handheld may do either. Also ask whether handhelds share a till
-    on purpose today, for example to count cash per till.
+- **A till is a device (A238) — DESIGNED, spec awaiting owner review (2026-10-03).** The `tills`
+  table goes; every record names its source (usually the device; otherwise the dashboard or a named
+  background job); each device gets Takes cash and Opens the cash drawer switches; setup creates no
+  till; the receipt, payment-slip and reprint routes print on the device's own printer. Ships with a
+  venue reset. Spec: `docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`. Next: the
+  owner reviews the spec, then a plan, then it is queued for a campaign lane. Pieces 2 and 3 follow
+  it (A239, A240).
+
+- **Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner,
+  2026-10-03).** Piece 2 of A238. Each top-up or removal of cash from a till device's drawer is a
+  recorded entry: who, how much, why, when (topping up change, paying a supplier, a waiter handing
+  in float cash). The entries replace the two typed totals the daily close takes today (opening float
+  and payouts, `packages/reporting/src/record-daily-close.ts`). Needs A238. No screen collects cash
+  counts yet; this is where one belongs.
+
+- **Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03).** Piece 3 of
+  A238. Owner decisions so far: a float belongs to the WAITER, not the handheld; a waiter with an
+  open float may take cash on any handheld, and it adds to their float; the waiter settles the float
+  at a till before leaving, entering what they hold, the difference is recorded against them and the
+  cash goes into that till's drawer as an A239 entry; the daily close lists any float still open.
+  Cash taken on a handheld with Takes cash on and no float is counted against the handheld until
+  then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs
+  A238 and A239.
+
+- **A pretend printer in Demo mode (A241) — OPEN (owner, 2026-10-03).** Demo mode has no real
+  printer, so receipts and kitchen tickets go nowhere visible. Add a pretend printer and a link in the
+  dashboard header to see what it printed, like the development email viewer.
+
+- **Revisit the Printing rules screen (A242) — OPEN (owner, 2026-10-03).** After A238 it is the one
+  place a device's receipt printer, drawer switch and Takes cash switch are set, which the owner
+  accepted for now; the section needs a proper look later.
 
 - **Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29).** A page saying
   what the section is for and what is in it, opened by the section's header. It was the answer to
