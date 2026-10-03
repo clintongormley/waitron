@@ -1,5 +1,7 @@
 // Side-effect only: registers host codes this file throws (`zone.not_found`, …).
 import "./errors.js";
+// The registry of `printer.not_found`, which `requireListedPrinters` throws.
+import "@waitron/printing";
 import { stationPrintersDown, stationScreensDark } from "./station-outputs-down.js";
 import type { Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";

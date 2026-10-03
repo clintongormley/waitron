@@ -194,11 +194,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   app.get("/api/device/me", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      const [located] = await deps.db
-        .select({ locationId: devices.locationId, profileId: devices.deviceProfileId })
-        .from(devices)
-        .where(ownDeviceById(device.deviceId));
-      const choices = await printerChoices(deps.db, located!.profileId, located!.locationId);
+      const choices = await printerChoices(deps.db, device.deviceProfileId, device.locationId);
       // Non-secret config only: the reader's credentials never ride this response.
       return c.json({
         deviceId: device.deviceId,
@@ -424,10 +420,12 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const updated = await gated(sessionId, async (tx) => {
         await requireDeviceBinding(tx, { deviceProfileId });
         const [device] = await tx
-          .select({ locationId: devices.locationId })
+          .select({ locationId: devices.locationId, deviceProfileId: devices.deviceProfileId })
           .from(devices)
           .where(ownDeviceById(id));
         if (device === undefined) return [];
+        // Reassigning the profile it already has is not a move, so staff's choices stay.
+        if (device.deviceProfileId === deviceProfileId) return [{ id }];
         const printers = await firstUsablePrinters(tx, deviceProfileId, device.locationId);
         return tx
           .update(devices)

@@ -63,29 +63,35 @@ export async function setProfilePrinterLists(
   await resettleDevicesOnProfile(tx, profileId);
 }
 
-/**
- * The printers a device at `locationId` on this profile may use for `role`, in list order: listed,
- * active, and at the device's own location.
- */
-async function usablePrinters(
+type ListedPrinter = PrinterChoice & { role: PrinterRole; active: boolean };
+
+/** Both of the profile's lists, in list order, as offered at `locationId`, switched-off printers included. */
+async function listedAt(
   tx: Transaction,
   profileId: string,
   locationId: string,
-  role: PrinterRole,
-): Promise<PrinterChoice[]> {
+): Promise<ListedPrinter[]> {
   return tx
-    .select({ id: printers.id, name: printers.name })
+    .select({
+      id: printers.id,
+      name: printers.name,
+      role: deviceProfilePrinters.role,
+      active: printers.active,
+    })
     .from(deviceProfilePrinters)
     .innerJoin(printers, eq(printers.id, deviceProfilePrinters.printerId))
     .where(
       and(
         eq(deviceProfilePrinters.deviceProfileId, profileId),
-        eq(deviceProfilePrinters.role, role),
-        eq(printers.active, true),
         eq(printers.locationId, locationId),
       ),
     )
     .orderBy(asc(deviceProfilePrinters.position));
+}
+
+/** The printers a device may newly choose for `role`: listed, at its location, and switched on. */
+function usable(listed: ListedPrinter[], role: PrinterRole): PrinterChoice[] {
+  return listed.filter((p) => p.role === role && p.active).map(({ id, name }) => ({ id, name }));
 }
 
 export async function printerChoices(
@@ -93,10 +99,8 @@ export async function printerChoices(
   profileId: string,
   locationId: string,
 ): Promise<{ receipt: PrinterChoice[]; paymentSlip: PrinterChoice[] }> {
-  return {
-    receipt: await usablePrinters(tx, profileId, locationId, "receipt"),
-    paymentSlip: await usablePrinters(tx, profileId, locationId, "payment_slip"),
-  };
+  const listed = await listedAt(tx, profileId, locationId);
+  return { receipt: usable(listed, "receipt"), paymentSlip: usable(listed, "payment_slip") };
 }
 
 export async function firstUsablePrinters(
@@ -112,9 +116,9 @@ export async function firstUsablePrinters(
 }
 
 /**
- * Every device on the profile whose current receipt or slip printer is no longer usable moves to
- * the first usable one, or to none. A device holding none keeps none. A printer deactivated outside
- * this call stays stored until then.
+ * Every device on the profile whose current receipt or slip printer is no longer listed for that
+ * role at its location moves to the first listed printer there that is switched on, or to none. A
+ * switched-off printer that is still listed keeps its devices, and a device holding none keeps none.
  */
 export async function resettleDevicesOnProfile(tx: Transaction, profileId: string): Promise<void> {
   const onProfile = await tx
@@ -126,12 +130,19 @@ export async function resettleDevicesOnProfile(tx: Transaction, profileId: strin
     })
     .from(devices)
     .where(eq(devices.deviceProfileId, profileId));
+  const byLocation = new Map<string, ListedPrinter[]>();
   for (const device of onProfile) {
-    const choices = await printerChoices(tx, profileId, device.locationId);
-    const settle = (current: string | null, usable: PrinterChoice[]) =>
-      current === null || usable.some((p) => p.id === current) ? current : (usable[0]?.id ?? null);
-    const receiptPrinterId = settle(device.receiptPrinterId, choices.receipt);
-    const paymentSlipPrinterId = settle(device.paymentSlipPrinterId, choices.paymentSlip);
+    let listed = byLocation.get(device.locationId);
+    if (listed === undefined) {
+      listed = await listedAt(tx, profileId, device.locationId);
+      byLocation.set(device.locationId, listed);
+    }
+    const settle = (current: string | null, role: PrinterRole) =>
+      current === null || listed.some((p) => p.role === role && p.id === current)
+        ? current
+        : (usable(listed, role)[0]?.id ?? null);
+    const receiptPrinterId = settle(device.receiptPrinterId, "receipt");
+    const paymentSlipPrinterId = settle(device.paymentSlipPrinterId, "payment_slip");
     if (
       receiptPrinterId !== device.receiptPrinterId ||
       paymentSlipPrinterId !== device.paymentSlipPrinterId
@@ -162,8 +173,8 @@ export async function chooseDevicePrinter(
     .where(eq(devices.id, deviceId));
   if (device === undefined) return { ok: false, field };
   if (printerId !== null) {
-    const usable = await usablePrinters(tx, device.profileId, device.locationId, role);
-    if (!usable.some((p) => p.id === printerId)) return { ok: false, field };
+    const listed = await listedAt(tx, device.profileId, device.locationId);
+    if (!usable(listed, role).some((p) => p.id === printerId)) return { ok: false, field };
   }
   await tx
     .update(devices)

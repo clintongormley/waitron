@@ -1035,6 +1035,37 @@ describe("Device management routes (device.manage)", () => {
       });
     });
 
+    it("keeps the device's chosen printers when it is reassigned to the profile it already has", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const [p1, p2] = await seedNamedPrinters(venue.cfg, ["Bar", "Counter"]);
+      const profileId = await seedProfile("till");
+      await withTransaction(suite.db, (tx) =>
+        setProfilePrinterLists(tx, profileId, {
+          receiptPrinterIds: [p1!, p2!],
+          paymentSlipPrinterIds: [p1!, p2!],
+        }),
+      );
+      const { deviceId } = await knockAndAccept(app, venue, { name: "Caja", profileId });
+      await suite.db
+        .update(devices)
+        .set({ receiptPrinterId: p2!, paymentSlipPrinterId: null })
+        .where(eq(devices.id, deviceId));
+
+      const assign = await send(
+        app,
+        "POST",
+        `/management-api/devices/${deviceId}/assign-device-profile`,
+        { cookie: venue.managerCookie, body: { deviceProfileId: profileId } },
+      );
+      expect(assign.status).toBe(204);
+      expect(await deviceBindings(deviceId)).toMatchObject({
+        deviceProfileId: profileId,
+        receiptPrinterId: p2,
+        paymentSlipPrinterId: null,
+      });
+    });
+
     it("rejects a nonexistent or absent profile — device untouched", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);

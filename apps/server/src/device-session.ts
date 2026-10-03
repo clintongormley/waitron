@@ -86,10 +86,11 @@ export interface DeviceBinding {
   // Read from the device's profile; the device KIND is derived from it via `kindOfFormFactor`.
   formFactor: FormFactor;
   label: string;
+  locationId: string;
   stationId: string | null;
   watcherId: string | null;
   tillId: string | null;
-  deviceProfileId: string | null;
+  deviceProfileId: string;
   receiptPrinterId: string | null;
   paymentSlipPrinterId: string | null;
   capabilities: CapabilityFlag[];
@@ -100,6 +101,7 @@ const deviceProfileJoin = eq(deviceProfiles.id, devices.deviceProfileId);
 const deviceBindingColumns = {
   formFactor: deviceProfiles.formFactor,
   label: devices.label,
+  locationId: devices.locationId,
   stationId: devices.stationId,
   watcherId: devices.watcherId,
   tillId: devices.tillId,
@@ -151,6 +153,7 @@ function toDeviceBinding(
     deviceId,
     formFactor: row.formFactor,
     label: row.label,
+    locationId: row.locationId,
     stationId: row.stationId,
     watcherId: row.watcherId,
     tillId: row.tillId,

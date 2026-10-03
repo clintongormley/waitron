@@ -247,6 +247,71 @@ describe("a profile's printer lists and each device's current printers", () => {
     });
   });
 
+  it("keeps a device on a switched-off printer that is still listed when another list changes", async () => {
+    const { deviceId, profileId } = await seedDevice(suite.db, { locationId: loc });
+    await inTx(async (tx) => {
+      await setProfilePrinterLists(tx, profileId, {
+        receiptPrinterIds: [p2, p1],
+        paymentSlipPrinterIds: [p3],
+      });
+      await chooseDevicePrinter(tx, deviceId, "receipt", p2);
+    });
+    await setActive(p2, false);
+    try {
+      await inTx((tx) =>
+        setProfilePrinterLists(tx, profileId, {
+          receiptPrinterIds: [p2, p1],
+          paymentSlipPrinterIds: [p1],
+        }),
+      );
+      expect((await devicePrinters(deviceId))?.receiptPrinterId).toBe(p2);
+    } finally {
+      await setActive(p2, true);
+    }
+  });
+
+  it("moves a device off a delisted printer to the first ACTIVE one still listed", async () => {
+    const { deviceId, profileId } = await seedDevice(suite.db, { locationId: loc });
+    await inTx(async (tx) => {
+      await setProfilePrinterLists(tx, profileId, {
+        receiptPrinterIds: [p3, p2, p1],
+        paymentSlipPrinterIds: [],
+      });
+      await chooseDevicePrinter(tx, deviceId, "receipt", p3);
+    });
+    await setActive(p2, false);
+    try {
+      await inTx((tx) =>
+        setProfilePrinterLists(tx, profileId, {
+          receiptPrinterIds: [p2, p1],
+          paymentSlipPrinterIds: [],
+        }),
+      );
+      expect((await devicePrinters(deviceId))?.receiptPrinterId).toBe(p1);
+    } finally {
+      await setActive(p2, true);
+    }
+  });
+
+  it("resettles devices on one profile at two locations, each to its own location's printer", async () => {
+    const here = await seedDevice(suite.db, { locationId: loc });
+    const there = await seedDevice(suite.db, { locationId: elsewhere, profileId: here.profileId });
+    await inTx(async (tx) => {
+      await setProfilePrinterLists(tx, here.profileId, {
+        receiptPrinterIds: [p1, away, p2],
+        paymentSlipPrinterIds: [],
+      });
+      await chooseDevicePrinter(tx, here.deviceId, "receipt", p1);
+      await chooseDevicePrinter(tx, there.deviceId, "receipt", away);
+      await setProfilePrinterLists(tx, here.profileId, {
+        receiptPrinterIds: [p2],
+        paymentSlipPrinterIds: [],
+      });
+    });
+    expect((await devicePrinters(here.deviceId))?.receiptPrinterId).toBe(p2);
+    expect((await devicePrinters(there.deviceId))?.receiptPrinterId).toBeNull();
+  });
+
   it("leaves devices on other profiles untouched", async () => {
     const mine = await seedDevice(suite.db, { locationId: loc });
     const other = await seedDevice(suite.db, { locationId: loc });

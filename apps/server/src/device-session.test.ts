@@ -477,7 +477,7 @@ describe("device cookie helpers", () => {
 
 describe("requireDevice (venue database)", () => {
   it("authenticates a valid cookie and touches last_seen_at", async () => {
-    const { deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
+    const { cfg, deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
     expect(await lastSeenAt(deviceId)).toBeNull(); // never seen yet
 
     const result = await probe(`${deviceId}.${token}`);
@@ -487,6 +487,7 @@ describe("requireDevice (venue database)", () => {
         deviceId,
         formFactor: "kds",
         label: "Pantalla",
+        locationId: cfg.locationId,
         stationId,
         deviceProfileId,
         ...NO_BINDINGS,
@@ -497,7 +498,7 @@ describe("requireDevice (venue database)", () => {
   });
 
   it("carries the device's assigned profile + till + hardware bindings back on the binding (SP-A.2 §16, device-profile §5)", async () => {
-    const { deviceId, token, deviceProfileId, tillId } = await enrolTillDeviceFixture();
+    const { cfg, deviceId, token, deviceProfileId, tillId } = await enrolTillDeviceFixture();
     // The canvas is not a device field; it resolves THROUGH the profile at `/api/till`. The till is the
     // register the `till` profile auto-created at enrol.
     expect(await probe(`${deviceId}.${token}`)).toEqual({
@@ -506,6 +507,7 @@ describe("requireDevice (venue database)", () => {
         deviceId,
         formFactor: "till",
         label: "Counter till",
+        locationId: cfg.locationId,
         stationId: null,
         watcherId: null,
         tillId,
@@ -559,12 +561,13 @@ describe("requireDevice (venue database)", () => {
 
 describe("tryReadDevice and assertNotHandheld (venue database)", () => {
   it("tryReadDevice returns the binding for a valid cookie and null at every miss", async () => {
-    const { deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
+    const { cfg, deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
     // Success resolves to the same binding `requireDevice` returns.
     expect(await probeTry(`${deviceId}.${token}`)).toEqual({
       deviceId,
       formFactor: "kds",
       label: "Pantalla",
+      locationId: cfg.locationId,
       stationId,
       deviceProfileId,
       ...NO_BINDINGS,
@@ -714,6 +717,7 @@ describe("assertTakesCash", () => {
     deviceId: randomUUID(),
     formFactor: "phone-portrait",
     label: "Waiter phone",
+    locationId: randomUUID(),
     stationId: null,
     watcherId: null,
     tillId: null,
