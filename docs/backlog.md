@@ -4151,12 +4151,6 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `apps/dashboard/src/screens/my-schedule-screen.ts`, added in 4bfbf03ea, #876) and also puts a
   failure line under each failed list's own heading. **Next action:** add a retry button the
   way the dashboard does, and decide whether each failed list gets its own line.
-- **Two till loading lines are not announced to a screen reader** (found 2026-10-03 in review of
-  lane C's W14, which gave the schedule screen's loading line `role="status"`; read, not run). The
-  lock screen's staff list renders `<p class="status">${t("login.loading")}</p>`
-  (`apps/till/src/screens/till-lock-screen.ts`), and the developer-only device chooser, which no
-  venue sees, renders `<p class="hint">Loading…</p>` (`apps/till/src/screens/till-device-chooser.ts`);
-  neither has `role="status"`. **Next action:** add `role="status"` to both loading lines.
 - **The counter till may start in a zone its service zone dropdown does not list** (found
   2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
   in `apps/server/src/till-api.ts`), but its starting zone comes from `resolveNewOrderZone`
