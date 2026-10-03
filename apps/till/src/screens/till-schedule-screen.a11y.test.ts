@@ -1,4 +1,4 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-schedule-screen.js";
 import type { TillScheduleScreen } from "./till-schedule-screen.js";
@@ -73,6 +73,19 @@ describe.each(["light", "dark"] as const)("till-schedule-screen a11y (%s theme)"
       theme,
     );
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations rendering the load-failed alert", async () => {
+    const api = stubApi();
+    vi.mocked(api.listMyShifts).mockRejectedValue(new Error("offline"));
+    const { el, host } = await mountWidget<TillScheduleScreen>(
+      "till-schedule-screen",
+      { api, staff, operatorPersonId: "me" },
+      theme,
+    );
+    await flush(el);
+    expect(el.shadowRoot?.querySelector(`[role="alert"]`)?.textContent).toContain("schedule");
     await expectNoA11yViolations(host);
   });
 });
