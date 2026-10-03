@@ -1191,7 +1191,7 @@ failure message; the same on `main` before W18. It is the kind of empty-state te
 Roster and Planned vs actual.
 
 **The WAITRON wordmark is nearly invisible in the dashboard's banner in dark mode (A225, seen
-2026-10-02 while checking A206) — DONE.** The dark lettering of the lockup sat on the dark banner.
+2026-10-02 while checking A206) — DONE (#1128).** The dark lettering of the lockup sat on the dark banner.
 The owner chose to keep the banner's `<img>` and let the browser swap in a dark-theme file by the
 computer's dark-mode setting: the banner is now a `<picture>` whose dark source is
 `packages/ui/brand/waitron-lockup-dark.svg`, written by `build-icons.mjs`. The login card and setup
