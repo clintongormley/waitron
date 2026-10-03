@@ -48,11 +48,9 @@ export class KitchenScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.errorKey = codeOf(error);
-    },
-    (error) => {
-      if (this.errorKey === codeOf(error)) this.errorKey = null;
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
     },
   );
 
@@ -60,6 +58,18 @@ export class KitchenScreen extends LitElement {
   @state() private bumpMode: BumpMode = "line";
   @state() private fireControl: FireControl = "waiter";
   @state() private errorKey: string | null = null;
+  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
+
+  #showError(code: string | null, fromRead = false): void {
+    this.errorKey = code;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -67,33 +77,33 @@ export class KitchenScreen extends LitElement {
   }
 
   async #load(): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     try {
       await this.#queries.watch("getFireControl", [], (fire) => {
         this.fireControl = fire.mode;
       });
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
   }
 
   async #setBump(mode: BumpMode): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     this.bumpMode = mode;
     try {
       await this.api.setBumpMode(mode);
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     }
   }
 
   async #setFire(mode: FireControl): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     this.fireControl = mode;
     try {
       await this.api.setFireControl(mode);
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     }
   }
 

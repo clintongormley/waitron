@@ -337,6 +337,13 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   callbacks assign snapshots; they do not rerun loaders that reset drafts. The Backups screen's
   status watcher asks for a recovery key at most once, only while the screen has made none, and
   shares a request already in flight, so a refresh never replaces a key the screen made.
+- **A screen that shows a read's and an action's failure in one field remembers which one set it:
+  the reads' recovery clears only a read's message, a reload that can finish after another action
+  failed clears only a read's message, and a read's failure does not replace an action's** (Devices'
+  queue reload after a wrong-number refusal replaces the refusal on purpose). Cost: a recovery that
+  matched the message's code, or cleared on any successful read, wiped a save's `connection.failed`
+  (A224). Nothing guards it across screens. See
+  [dashboard-live-updates.md](docs/developers/dashboard-live-updates.md).
 - **A background API client does not make POST requests passive.** Only GETs are marked passive;
   automatic pairing renewal uses its own authenticated route.
 - **Dashboard subscription names travel with their server sources.** A rejected subscription closes

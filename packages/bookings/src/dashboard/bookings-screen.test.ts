@@ -639,3 +639,74 @@ it("clears a failed load's message once the server answers again", async () => {
   );
   expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 });
+
+it("keeps a failed move's connection message through a later failed refresh and the recovery", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(
+    stubApi({ markNoShow: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+    { liveData },
+  );
+  const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+  await flush(el);
+  vi.mocked(api.listBookings).mockRejectedValue({ code: "connection.failed" });
+  liveData.refresh();
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull());
+  await click(el, "no-show-bk-late");
+  await vi.waitFor(() => expect(api.markNoShow).toHaveBeenCalledOnce());
+  await flush(el);
+  liveData.refresh();
+  await vi.waitFor(() => expect(api.listBookings).toHaveBeenCalledTimes(3));
+  await flush(el);
+  vi.mocked(api.listBookings).mockResolvedValue(BOOKINGS);
+  liveData.refresh();
+  await vi.waitFor(() => expect(api.listBookings).toHaveBeenCalledTimes(4));
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+    codeMessage("connection.failed", "es-ES"),
+  );
+});
+
+it.each([
+  [
+    "create",
+    async (el: BookingsScreen) => {
+      await click(el, "add-booking");
+      emitFromChild(form(el), "create-booking", {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        partySize: 4,
+        contactName: "García",
+        contactPhone: null,
+        notes: null,
+        tableId: null,
+      });
+    },
+  ],
+  [
+    "update",
+    async (el: BookingsScreen) => {
+      await click(el, "edit-bk-early");
+      emitFromChild(form(el), "update-booking", { id: "bk-early", patch: { partySize: 6 } });
+    },
+  ],
+  ["seat", (el: BookingsScreen) => click(el, "seat-bk-early")],
+  ["no-show", (el: BookingsScreen) => click(el, "no-show-bk-late")],
+] as const)(
+  "clears a reload's failure after a saved %s once the server answers again",
+  async (_name, act) => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+    await flush(el);
+    vi.mocked(api.listBookings).mockRejectedValue({ code: "connection.failed" });
+    await act(el);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+        codeMessage("connection.failed", "es-ES"),
+      ),
+    );
+    vi.mocked(api.listBookings).mockResolvedValue(BOOKINGS);
+    liveData.refresh();
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull());
+  },
+);

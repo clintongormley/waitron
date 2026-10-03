@@ -323,6 +323,7 @@ export class PaymentsScreen extends LitElement {
     super.connectedCallback();
     // So each panel's `displayNameKey` resolves even before its module has registered its strings.
     for (const panel of this.panels) registerCatalogue(panel.strings);
+    this.#showError(null);
     void this.#load();
     void this.#queries
       .watch("listStuckPayments", [], (rows) => {
@@ -359,7 +360,7 @@ export class PaymentsScreen extends LitElement {
 
   /** Disarms the two-tap Disconnect, since the armed row may no longer exist. */
   async #load(): Promise<void> {
-    this.#showError(null);
+    if (this.#readErrorShown) this.#showError(null);
     this.armedDisconnectId = null;
     this.#statusesDue = true;
     // After this load's first readers read fails, only an automatic retry can succeed in its place.

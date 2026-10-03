@@ -80,11 +80,9 @@ export class PrintingRulesScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.errorKey = codeOf(error);
-    },
-    (error) => {
-      if (this.errorKey === codeOf(error)) this.errorKey = null;
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
     },
   );
   @state() private printers: Printer[] = [];
@@ -98,12 +96,24 @@ export class PrintingRulesScreen extends LitElement {
   @state() private printModes: Record<string, ReceiptPrintMode> = {};
   @state() private drawerPolicies: Record<string, DrawerOpenPolicy> = {};
   @state() private errorKey: string | null = null;
+  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
   @state() private saving = false;
+
+  #showError(code: string | null, fromRead = false): void {
+    this.errorKey = code;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load().catch((error: unknown) => {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     });
   }
   async #load(): Promise<void> {
@@ -143,9 +153,11 @@ export class PrintingRulesScreen extends LitElement {
   async #mutate(action: () => Promise<unknown>, printerId?: string): Promise<void> {
     if (this.saving) return;
     this.saving = true;
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await action();
+      written = true;
       await this.#load();
       if (printerId && (this.printerStations[printerId] ?? []).length === 0) {
         this.printerErrors = { ...this.printerErrors, [printerId]: "" };
@@ -154,8 +166,10 @@ export class PrintingRulesScreen extends LitElement {
       const code = codeOf(error);
       if (printerId && code === "printer.makes_and_watches") {
         this.printerErrors = { ...this.printerErrors, [printerId]: code };
+      } else if (written) {
+        this.#showReadError(error);
       } else {
-        this.errorKey = code;
+        this.#showError(code);
       }
     } finally {
       this.saving = false;

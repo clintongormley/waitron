@@ -94,6 +94,8 @@ export class CourseList extends LitElement {
   @state() private courses: Course[] = [];
   @state() private edit: Edit | null = null;
   @state() private errorKey: string | null = null;
+  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
   readonly #writes = new ListWriteQueue();
   /** Moves shown on screen but not yet answered: a list read meanwhile would put their rows back. */
   #movesOut = 0;
@@ -104,11 +106,9 @@ export class CourseList extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.errorKey = codeOf(error);
-    },
-    (error) => {
-      if (this.errorKey === codeOf(error)) this.errorKey = null;
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
     },
   );
 
@@ -150,6 +150,16 @@ export class CourseList extends LitElement {
     await this.#queries.watch("listCourses", [], (rows) => this.#show(rows)).catch(() => undefined);
   }
 
+  #showError(code: string | null, fromRead = false): void {
+    this.errorKey = code;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
+  }
+
   #show(rows: Course[]): void {
     this.#readDropped = this.#movesOut > 0;
     if (this.#readDropped) return;
@@ -189,7 +199,7 @@ export class CourseList extends LitElement {
   }
 
   #saveMove(id: string, to: number): void {
-    this.errorKey = null;
+    this.#showError(null);
     this.#movesOut += 1;
     this.#writes.move(
       SCOPE,
@@ -203,7 +213,7 @@ export class CourseList extends LitElement {
       async (error) => {
         // The queue drops, unsent, every move still waiting behind a refused one.
         this.#movesOut = 0;
-        this.errorKey = codeOf(error);
+        this.#showError(codeOf(error));
         await this.#load();
       },
     );
@@ -251,7 +261,7 @@ export class CourseList extends LitElement {
       return;
     }
     edit.saving = true;
-    this.errorKey = null;
+    this.#showError(null);
     this.requestUpdate();
     this.#writes.run(SCOPE, async () => {
       let added: string | null = null;
@@ -263,7 +273,7 @@ export class CourseList extends LitElement {
         edit.saving = false;
         this.requestUpdate();
         if (this.edit === edit && namesTheName(error)) this.#mark(edit, codeMessage(codeOf(error)));
-        else this.errorKey = codeOf(error);
+        else this.#showError(codeOf(error));
         return;
       }
       if (added !== null)
@@ -306,14 +316,14 @@ export class CourseList extends LitElement {
   // ── Removal ────────────────────────────────────────────────────────────────────────────────────
 
   #remove(course: Course): void {
-    this.errorKey = null;
+    this.#showError(null);
     const at = this.courses.indexOf(course);
     const neighbour = this.courses[at + 1] ?? this.courses[at - 1];
     this.#writes.run(SCOPE, async () => {
       try {
         await this.api.deactivateCourse(course.id);
       } catch (error) {
-        this.errorKey = codeOf(error);
+        this.#showError(codeOf(error));
         return;
       }
       await this.#load();

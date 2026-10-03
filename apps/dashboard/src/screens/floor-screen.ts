@@ -128,11 +128,9 @@ export class FloorScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.errorKey = codeOf(error);
-    },
-    (error) => {
-      if (this.errorKey === codeOf(error)) this.errorKey = null;
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
     },
   );
 
@@ -142,6 +140,8 @@ export class FloorScreen extends LitElement {
   @state() private newZone = "";
   @state() private newTable = "";
   @state() private errorKey: string | null = null;
+  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
   @state() private activeTab: "config" | "plano" = "config";
   // `null` is the "Sin zona" tab; `undefined` means none picked yet, which resolves to the first tab.
   @state() private activeZone: string | null | undefined = undefined;
@@ -166,8 +166,19 @@ export class FloorScreen extends LitElement {
     this.#url.write({ dashboard: "floor", "floor-zone": zone ?? "" });
   }
 
+  #showError(code: string | null, fromRead = false): void {
+    this.errorKey = code;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#showError(null);
     void this.#load();
   }
 
@@ -185,7 +196,7 @@ export class FloorScreen extends LitElement {
   }
 
   async #load(): Promise<void> {
-    this.errorKey = null;
+    if (this.#readErrorShown) this.#showError(null);
     try {
       await Promise.all([
         this.#queries.watch("listZones", [], (rows) => {
@@ -199,19 +210,19 @@ export class FloorScreen extends LitElement {
         }),
       ]);
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
   }
 
   /** For placement writes, which cannot change the zone list. */
   async #loadTables(): Promise<void> {
-    this.errorKey = null;
+    if (this.#readErrorShown) this.#showError(null);
     try {
       await this.#queries.watch("listTables", [], (rows) => {
         this.tables = this.#tablesDrafts.merge(this.tables, this.#toEditableTables(rows));
       });
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
   }
 
@@ -224,7 +235,7 @@ export class FloorScreen extends LitElement {
 
   async #createZone(): Promise<void> {
     if (this.submitting) return;
-    this.errorKey = null;
+    this.#showError(null);
     const name = this.newZone.trim();
     if (name === "") return;
     this.submitting = true;
@@ -233,7 +244,7 @@ export class FloorScreen extends LitElement {
       this.newZone = "";
       await this.#load();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     } finally {
       this.submitting = false;
     }
@@ -245,7 +256,7 @@ export class FloorScreen extends LitElement {
 
   async #saveZone(id: string): Promise<void> {
     if (this.submitting) return;
-    this.errorKey = null;
+    this.#showError(null);
     const row = this.zones.find((z) => z.id === id);
     if (row === undefined) return;
     this.submitting = true;
@@ -253,19 +264,19 @@ export class FloorScreen extends LitElement {
       await this.api.updateZone(row.id, { name: row.name, displayOrder: row.displayOrder });
       await this.#load();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     } finally {
       this.submitting = false;
     }
   }
 
   async #deactivateZone(id: string): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     try {
       await this.api.deactivateZone(id);
       await this.#load();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     }
   }
 
@@ -278,7 +289,7 @@ export class FloorScreen extends LitElement {
 
   async #createTable(): Promise<void> {
     if (this.submitting) return;
-    this.errorKey = null;
+    this.#showError(null);
     const label = this.newTable.trim();
     if (label === "") return;
     this.submitting = true;
@@ -287,7 +298,7 @@ export class FloorScreen extends LitElement {
       this.newTable = "";
       await this.#load();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     } finally {
       this.submitting = false;
     }
@@ -299,7 +310,7 @@ export class FloorScreen extends LitElement {
 
   async #saveTable(id: string): Promise<void> {
     if (this.submitting) return;
-    this.errorKey = null;
+    this.#showError(null);
     const row = this.tables.find((tbl) => tbl.id === id);
     if (row === undefined) return;
     const patch: { label: string; capacity?: number } = { label: row.label };
@@ -309,7 +320,7 @@ export class FloorScreen extends LitElement {
       await this.api.updateTable(row.id, patch);
       await this.#load();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     } finally {
       this.submitting = false;
     }
@@ -323,22 +334,22 @@ export class FloorScreen extends LitElement {
   }
 
   async #assignZone(id: string, zoneId: string): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     try {
       await this.api.updateTable(id, { zoneId });
       await this.#load();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     }
   }
 
   async #deactivateTable(id: string): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     try {
       await this.api.deactivateTable(id);
       await this.#load();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     }
   }
 
@@ -457,13 +468,13 @@ export class FloorScreen extends LitElement {
   // ── Plano ─────────────────────────────────────────────────────────────────────────────────────────
 
   async #setPlacement(detail: PlacementChange): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     const { tableId, posX, posY, shape, rotation, zoneId } = detail;
     try {
       await this.api.setTablePlacement(tableId, { posX, posY, shape, rotation, zoneId });
       await this.#loadTables();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     }
   }
 
@@ -473,12 +484,12 @@ export class FloorScreen extends LitElement {
   }
 
   async #clearTablePlacement(tableId: string): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     try {
       await this.api.clearPlacement(tableId);
       await this.#loadTables();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     }
   }
 

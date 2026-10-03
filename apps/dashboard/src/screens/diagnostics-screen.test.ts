@@ -246,3 +246,60 @@ describe("diagnostics-screen verbosity and polling details", () => {
     }
   });
 });
+
+describe("diagnostics-screen messages across an outage", () => {
+  it("keeps a raise's connection failure when the polls recover", async () => {
+    vi.useFakeTimers();
+    try {
+      const getRecentLogs = vi
+        .fn()
+        .mockResolvedValueOnce({ lines: SEED })
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue({
+          lines: [{ at: "2026-08-31T10:00:02Z", level: "info", event: "poll.recovered" }],
+        });
+      const api = stubApi({
+        getRecentLogs,
+        setVerbosity: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      });
+      const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", { api });
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(1500);
+      await el.updateComplete;
+      expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed"));
+
+      q(el, "[data-test=raise-verbosity]")!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(api.setVerbosity).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1500);
+      await vi.advanceTimersByTimeAsync(1500);
+      await el.updateComplete;
+
+      expect(getRecentLogs).toHaveBeenCalledTimes(4);
+      expect(el.shadowRoot!.textContent).toContain("poll.recovered");
+      expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears a failed raise's message when the next raise succeeds", async () => {
+    const api = stubApi({
+      setVerbosity: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue(undefined),
+    });
+    const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", { api });
+    await flush(el);
+    q(el, "[data-test=raise-verbosity]")!.click();
+    await vi.waitFor(() =>
+      expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed")),
+    );
+    q(el, "[data-test=raise-verbosity]")!.click();
+    await vi.waitFor(() => expect(api.setVerbosity).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(q(el, "[role=alert]")).toBeNull();
+  });
+});

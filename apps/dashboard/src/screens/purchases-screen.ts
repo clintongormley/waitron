@@ -48,11 +48,9 @@ export class PurchasesScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.errorKey = codeOf(error);
-    },
-    (error) => {
-      if (this.errorKey === codeOf(error)) this.errorKey = null;
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
     },
   );
 
@@ -60,6 +58,8 @@ export class PurchasesScreen extends LitElement {
   @state() private formOpen = false;
   @state() private editingInvoice: PurchaseInvoice | null = null;
   @state() private errorKey: string | null = null;
+  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
   @state() private formErrors: PurchaseFormErrors = {};
   // Set synchronously on entry, so a double-fired event files at most one mutation.
   @state() private busy = false;
@@ -70,14 +70,24 @@ export class PurchasesScreen extends LitElement {
   }
 
   async #load(): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     try {
       await this.#queries.watch("listPurchaseInvoices", [], (value) => {
         this.invoices = value;
       });
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
+  }
+
+  #showError(code: string | null, fromRead = false): void {
+    this.errorKey = code;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
   }
 
   async #reload(): Promise<void> {
@@ -87,7 +97,7 @@ export class PurchasesScreen extends LitElement {
   }
 
   #openForm(): void {
-    this.errorKey = null;
+    this.#showError(null);
     this.formErrors = {};
     this.editingInvoice = null;
     this.formOpen = true;
@@ -97,7 +107,7 @@ export class PurchasesScreen extends LitElement {
     event.stopPropagation();
     const invoice = this.invoices.find((i) => i.id === event.detail.id);
     if (invoice === undefined) return;
-    this.errorKey = null;
+    this.#showError(null);
     this.formErrors = {};
     this.editingInvoice = invoice;
     this.formOpen = true;
@@ -125,11 +135,11 @@ export class PurchasesScreen extends LitElement {
    * failure. */
   async #afterWrite(): Promise<void> {
     this.formOpen = false;
-    this.errorKey = null;
+    this.#showError(null);
     try {
       await this.#reload();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
   }
 
@@ -155,12 +165,15 @@ export class PurchasesScreen extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     this.busy = true;
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await this.api.deletePurchaseInvoice(event.detail.id);
+      written = true;
       await this.#reload();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(codeOf(error));
     } finally {
       this.busy = false;
     }

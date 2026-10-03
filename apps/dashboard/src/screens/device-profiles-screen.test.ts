@@ -1088,3 +1088,35 @@ describe("device-profiles-screen home page layouts", () => {
     expect(api.getDeviceHomeLayouts.mock.calls.length).toBe(reads);
   });
 });
+
+it.each(["connection.failed", "server.internal"])(
+  "keeps a failed duplicate's message through a re-read failing with %s and the reads' recovery",
+  async (rereadCode) => {
+    const api = Object.assign(
+      stubApi({ createDeviceProfile: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      { liveData: new LiveData() },
+    );
+    const el = await mount(api);
+    const alert = () => el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim();
+    vi.mocked(api.listDeviceProfiles).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(alert()).toBe(codeMessage("connection.failed")));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
+    await vi.waitFor(() => expect(api.createDeviceProfile).toHaveBeenCalledOnce());
+    await flush(el);
+    vi.mocked(api.listDeviceProfiles).mockRejectedValue({ code: rereadCode });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.listDeviceProfiles).toHaveBeenCalledTimes(3));
+    await flush(el);
+    vi.mocked(api.listDeviceProfiles).mockResolvedValue([
+      ...profiles,
+      { ...profiles[1]!, id: "p3", name: "Bar screen" },
+    ]);
+    api.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=profile-row-p3]")).toBeTruthy(),
+    );
+    await flush(el);
+    expect(alert()).toBe(codeMessage("connection.failed"));
+  },
+);

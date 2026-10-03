@@ -98,11 +98,9 @@ export class UnitsScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
+    (error) => this.#showReadError(error),
     (error) => {
-      this.error = error as UnitError;
-    },
-    (error) => {
-      if (this.error === error) this.error = null;
+      if (this.error === error) this.#showError(null);
     },
   );
   @state() private units: Unit[] = [];
@@ -112,6 +110,8 @@ export class UnitsScreen extends LitElement {
   @state() private editing: Unit | null = null;
   @state() private busy = false;
   @state() private error: UnitError | null = null;
+  /** Whether `error` is a read's failure, the only message a later read's failure may replace. */
+  #readErrorShown = false;
   @state() private fieldErrors: UnitFormErrors = {};
   @state() private inUseUnitId: string | null = null;
   @state() private inUseProducts: ProductUsingUnit[] = [];
@@ -138,10 +138,20 @@ export class UnitsScreen extends LitElement {
         }),
       ]);
     } catch (error) {
-      this.error = error as UnitError;
+      this.#showReadError(error);
     } finally {
       this.loading = false;
     }
+  }
+
+  #showError(error: UnitError | null, fromRead = false): void {
+    this.error = error;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.error === null || this.#readErrorShown) this.#showError(error as UnitError, true);
   }
 
   #renderCreate(slot?: "empty-action") {
@@ -158,7 +168,7 @@ export class UnitsScreen extends LitElement {
     event.stopPropagation();
     this.focusTarget = event.currentTarget as HTMLElement;
     this.editing = null;
-    this.error = null;
+    this.#showError(null);
     this.fieldErrors = {};
     this.editorOpen = true;
   }
@@ -167,7 +177,7 @@ export class UnitsScreen extends LitElement {
     event.stopPropagation();
     this.focusTarget = event.currentTarget as HTMLElement;
     this.editing = unit;
-    this.error = null;
+    this.#showError(null);
     this.fieldErrors = {};
     this.editorOpen = true;
   }
@@ -188,7 +198,7 @@ export class UnitsScreen extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     this.busy = true;
-    this.error = null;
+    this.#showError(null);
     this.fieldErrors = {};
     try {
       const canonical = this.editing
@@ -201,7 +211,7 @@ export class UnitsScreen extends LitElement {
       try {
         this.units = await this.api.background.listUnits();
       } catch (error) {
-        this.error = error as UnitError;
+        this.#showReadError(error);
       }
     } catch (error) {
       this.fieldErrors = unitRefusalErrors(error);
@@ -215,7 +225,7 @@ export class UnitsScreen extends LitElement {
   async #deleteUnit(id: string): Promise<void> {
     if (id === "" || this.busy) return;
     this.busy = true;
-    this.error = null;
+    this.#showError(null);
     try {
       await this.api.deleteUnit(id);
       this.units = this.units.filter((unit) => unit.id !== id);
@@ -225,7 +235,7 @@ export class UnitsScreen extends LitElement {
       if (failure.code === "unit.in_use") {
         this.#openInUse(id, failure.params?.products ?? []);
       } else {
-        this.error = failure;
+        this.#showError(failure);
         this.#closeInUse();
       }
     } finally {
@@ -243,12 +253,12 @@ export class UnitsScreen extends LitElement {
   async #openUnitProducts(unit: Unit): Promise<void> {
     if (this.busy) return;
     this.busy = true;
-    this.error = null;
+    this.#showError(null);
     try {
       const products = await this.api.listUnitProducts(unit.id);
       this.#openInUse(unit.id, products);
     } catch (error) {
-      this.error = error as UnitError;
+      this.#showReadError(error);
     } finally {
       this.busy = false;
     }
@@ -285,7 +295,7 @@ export class UnitsScreen extends LitElement {
     )
       return;
     this.busy = true;
-    this.error = null;
+    this.#showError(null);
     const target = this.reassignTarget === REASSIGN_EACH ? null : this.reassignTarget;
     try {
       this.inUseProducts = await this.api.reassignProductsUnit(
@@ -296,7 +306,7 @@ export class UnitsScreen extends LitElement {
       this.selectedProducts = [];
       this.reassignTarget = "";
     } catch (error) {
-      this.error = error as UnitError;
+      this.#showError(error as UnitError);
     } finally {
       this.busy = false;
     }

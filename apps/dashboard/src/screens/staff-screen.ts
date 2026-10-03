@@ -73,13 +73,9 @@ export class StaffScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.#fail(error);
-    },
-    (error) => {
-      if (this.errorKey !== codeOf(error)) return;
-      this.errorKey = null;
-      this.errorField = null;
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
     },
   );
   @property({ attribute: false }) currentPersonId: string | null = null;
@@ -90,6 +86,8 @@ export class StaffScreen extends LitElement {
   @state() private errorKey: string | null = null;
   /** The refusal's `params.field`, read by the add and edit forms beside `errorKey`. */
   @state() private errorField: string | null = null;
+  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
   @state() private invitationStatus: "sent" | "not_sent" | null = null;
   @state() private search = "";
   @state() private roleFilter: PersonRole | "all" = "all";
@@ -114,7 +112,7 @@ export class StaffScreen extends LitElement {
     if (action === "disable" && person.personId === this.currentPersonId) return;
     this.#closeEdit();
     this.formOpen = false;
-    this.errorKey = null;
+    this.#showError(null);
     this.invitationStatus = null;
     this.rowAction = { person, action: action as NonNullable<typeof this.rowAction>["action"] };
   }
@@ -124,7 +122,7 @@ export class StaffScreen extends LitElement {
     const { person, action } = this.rowAction;
     if (action === "disable" && person.personId === this.currentPersonId) return;
     this.rowBusy = true;
-    this.errorKey = null;
+    this.#showError(null);
     try {
       const result = await (action === "reset-login"
         ? this.api.resetLogin(person.personId)
@@ -176,24 +174,35 @@ export class StaffScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#showError(null);
     void this.#load();
   }
 
   async #load(): Promise<void> {
-    this.errorKey = null;
+    if (this.#readErrorShown) this.#showError(null);
     try {
       await this.#queries.watch("listStaff", [], (value) => {
         this.people = value;
       });
     } catch (error) {
-      this.#fail(error);
+      this.#showReadError(error);
     }
   }
 
-  #fail(error: unknown): void {
-    this.errorKey = codeOf(error);
+  #showError(code: string | null, field: string | null = null, fromRead = false): void {
+    this.errorKey = code;
+    this.errorField = field;
+    this.#readErrorShown = fromRead;
+  }
+
+  #fail(error: unknown, fromRead = false): void {
     const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
-    this.errorField = typeof field === "string" ? field : null;
+    this.#showError(codeOf(error), typeof field === "string" ? field : null, fromRead);
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.errorKey === null || this.#readErrorShown) this.#fail(error, true);
   }
 
   /** The add button that opened the create form, which the closing dialog hands focus back to. */
@@ -201,7 +210,7 @@ export class StaffScreen extends LitElement {
 
   #openForm(): void {
     this.rowAction = null;
-    this.errorKey = null;
+    this.#showError(null);
     this.invitationStatus = null;
     this.#closeEdit(); // the two dialogs are mutually exclusive (both are modal)
     this.formOpen = true;
@@ -218,7 +227,7 @@ export class StaffScreen extends LitElement {
     const person = this.people.find((p) => p.personId === event.detail.personId);
     if (person === undefined) return;
     this.rowAction = null;
-    this.errorKey = null;
+    this.#showError(null);
     this.invitationStatus = null;
     this.formOpen = false;
     this.editingPerson = person;
@@ -229,7 +238,7 @@ export class StaffScreen extends LitElement {
   async #runEditAction(action: () => Promise<void>): Promise<void> {
     if (this.#editing) return;
     this.#editing = true;
-    this.errorKey = null;
+    this.#showError(null);
     try {
       await action();
       await this.#load();
@@ -257,7 +266,7 @@ export class StaffScreen extends LitElement {
     const personId = this.editingPerson?.personId;
     if (personId === undefined || this.#editing) return;
     this.#editing = true;
-    this.errorKey = null;
+    this.#showError(null);
     this.invitationStatus = null;
     try {
       const result = await this.api.resendInvitation(personId);
@@ -289,7 +298,7 @@ export class StaffScreen extends LitElement {
     event.stopPropagation();
     if (this.#creating) return;
     this.#creating = true;
-    this.errorKey = null;
+    this.#showError(null);
     try {
       const result = await this.api.createPerson(event.detail);
       this.invitationStatus = result.invitationSent ? "sent" : "not_sent";

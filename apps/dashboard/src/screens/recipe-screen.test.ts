@@ -806,3 +806,37 @@ it("clears a failed load's message once the server answers again", async () => {
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull());
   expect(list(el).ingredients).toEqual(ingredients);
 });
+
+it.each(["connection.failed", "server.internal"])(
+  "keeps a failed recipe save's message through a re-read failing with %s and the reads' recovery",
+  async (rereadCode) => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({ setProductRecipe: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      { liveData },
+    );
+    const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
+    const alert = () => el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim();
+    await flush(el);
+    await chooseProduct(el);
+    expect(editor(el).product).toEqual(products[0]);
+    vi.mocked(api.listIngredients).mockRejectedValue({ code: "connection.failed" });
+    liveData.refresh();
+    await vi.waitFor(() => expect(alert()).toBe(codeMessage("connection.failed")));
+    emit(editor(el), "save-recipe", { productId: "p1", ingredientIds: ["i1"] });
+    await vi.waitFor(() => expect(api.setProductRecipe).toHaveBeenCalledOnce());
+    await flush(el);
+    vi.mocked(api.listIngredients).mockRejectedValue({ code: rereadCode });
+    liveData.refresh();
+    await vi.waitFor(() => expect(api.listIngredients).toHaveBeenCalledTimes(3));
+    await flush(el);
+    vi.mocked(api.listIngredients).mockResolvedValue([
+      ...ingredients,
+      { ...ingredients[1]!, id: "i3", name: "Azúcar" },
+    ]);
+    liveData.refresh();
+    await vi.waitFor(() => expect(list(el).ingredients).toHaveLength(3));
+    await flush(el);
+    expect(alert()).toBe(codeMessage("connection.failed"));
+  },
+);

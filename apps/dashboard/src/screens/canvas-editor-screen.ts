@@ -189,11 +189,9 @@ export class CanvasEditorScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.errorKey = codeOf(error);
-    },
-    (error) => {
-      if (this.errorKey === codeOf(error)) this.errorKey = null;
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
     },
   );
 
@@ -202,6 +200,8 @@ export class CanvasEditorScreen extends LitElement {
   @state() private canvases: Canvas[] = [];
 
   @state() private errorKey: string | null = null;
+  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
 
   @state() private createOpen = false;
   @state() private createName = "";
@@ -264,28 +264,40 @@ export class CanvasEditorScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#showError(null);
     void this.#load();
   }
 
   async #load(): Promise<void> {
-    this.errorKey = null;
+    if (this.#readErrorShown) this.#showError(null);
     try {
       await this.#queries.watch("listCanvases", [], (value) => {
         this.canvases = value;
       });
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
   }
 
+  #showError(code: string | null, fromRead = false): void {
+    this.errorKey = code;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
+  }
+
   async #mutate(action: () => Promise<unknown>): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     try {
       await action();
-      await this.#load();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
+      return;
     }
+    await this.#load();
   }
 
   /** A shallow parse of the opaque `definition`: a malformed row renders the `no-preview` placeholder
@@ -341,14 +353,14 @@ export class CanvasEditorScreen extends LitElement {
   /** Fetches the canvas fresh via `getCanvas(id)` rather than reusing the possibly-stale list row. */
   async #openEditor(id: string, fromHistory = false): Promise<void> {
     const request = ++this.#editorRequest;
-    this.errorKey = null;
+    this.#showError(null);
     try {
       const canvas = await this.api.getCanvas(id);
       if (!this.isConnected || request !== this.#editorRequest) return;
       const parsed = this.#parseDefinition(canvas.definition);
       if (parsed === null) {
         if (fromHistory) this.#cancelEditor(true);
-        this.errorKey = "canvas.invalid";
+        this.#showError("canvas.invalid");
         return;
       }
       this.#savedTabKeys = new Set(parsed.tabs.map((tab) => tab.key));
@@ -362,7 +374,7 @@ export class CanvasEditorScreen extends LitElement {
     } catch (error) {
       if (!this.isConnected || request !== this.#editorRequest) return;
       if (fromHistory) this.#cancelEditor(true);
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
   }
 
@@ -521,7 +533,7 @@ export class CanvasEditorScreen extends LitElement {
     this.draftName = "";
     this.editingId = null;
     this.selection = null;
-    this.errorKey = null;
+    this.#showError(null);
   }
 
   // ── Property panel: card config / visibleWhen ────────────────────────────────────────────────────
@@ -633,12 +645,12 @@ export class CanvasEditorScreen extends LitElement {
     if (draft === null) return;
     const name = this.draftName.trim();
     if (name === "") {
-      this.errorKey = "canvas_editor.err_no_name";
+      this.#showError("canvas_editor.err_no_name");
       return;
     }
     const err = validateCanvasDraft(draft);
     if (err) {
-      this.errorKey = err;
+      this.#showError(err);
       return;
     }
     const id = this.editingId;

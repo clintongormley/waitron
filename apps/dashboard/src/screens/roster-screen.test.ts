@@ -810,4 +810,40 @@ describe("roster-screen — recovery after the server answers again", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=no-location]")).not.toBeNull();
   });
+
+  it("keeps a save's connection failure when the reads that failed beside it recover", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        getRoster: vi.fn().mockResolvedValue(draftSnapshot()),
+        publishRoster: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      }),
+      { liveData },
+    );
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=publish]")).not.toBeNull(),
+    );
+
+    vi.mocked(api.getRoster).mockRejectedValue({ code: "connection.failed" });
+    liveData.refresh();
+    await vi.waitFor(() => expect(errorText(el)).toBe(codeMessage("connection.failed")));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=publish]")!.click();
+    await vi.waitFor(() => expect(api.publishRoster).toHaveBeenCalledTimes(1));
+    await flush(el);
+    const readsBefore = vi.mocked(api.getRoster).mock.calls.length;
+    liveData.refresh();
+    await vi.waitFor(() =>
+      expect(vi.mocked(api.getRoster).mock.calls.length).toBeGreaterThan(readsBefore),
+    );
+    await flush(el);
+
+    vi.mocked(api.getRoster).mockResolvedValue(published);
+    liveData.refresh();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=readonly]")).not.toBeNull(),
+    );
+    await flush(el);
+    expect(errorText(el)).toBe(codeMessage("connection.failed"));
+  });
 });

@@ -364,6 +364,28 @@ describe("payments-screen", () => {
     expect(q(el, "[role=alert]")?.textContent).toContain("Disable");
     expect(q(el, "[role=alert]")?.textContent).not.toContain("payment.provider_in_use");
   });
+
+  it("keeps a failed disconnect when a provider connect already in flight completes after it", async () => {
+    const api = stubApi({
+      disconnectPaymentProvider: vi.fn().mockRejectedValue({ code: "payment.provider_in_use" }),
+    });
+    const { el } = await mount(api);
+    q(el, "[data-test=connect-zeta]")!.click();
+    await flush(el);
+
+    q(el, "[data-test=disconnect-acme]")!.click();
+    await flush(el);
+    q(el, "[data-test=disconnect-acme]")!.click();
+    await vi.waitFor(() =>
+      expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("payment.provider_in_use")),
+    );
+
+    const reads = vi.mocked(api.listPaymentProviders).mock.calls.length;
+    q(el, "[data-test=fake-connect-zeta]")!.click();
+    await vi.waitFor(() => expect(api.listPaymentProviders).toHaveBeenCalledTimes(reads + 1));
+    await flush(el);
+    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("payment.provider_in_use"));
+  });
 });
 
 const VENDOR_READERS = [

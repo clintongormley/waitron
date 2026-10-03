@@ -66,11 +66,9 @@ export class ServiceStatusScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.errorKey = codeOf(error);
-    },
-    (error) => {
-      if (this.errorKey === codeOf(error)) this.errorKey = null;
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
     },
   );
 
@@ -79,14 +77,27 @@ export class ServiceStatusScreen extends LitElement {
   @state() private newLabel = "";
   @state() private newColor = "#ef4444";
   @state() private errorKey: string | null = null;
+  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
+
+  #showError(code: string | null, fromRead = false): void {
+    this.errorKey = code;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#showError(null);
     void this.#load();
   }
 
   async #load(): Promise<void> {
-    this.errorKey = null;
+    if (this.#readErrorShown) this.#showError(null);
     try {
       await this.#queries.watch("listStatuses", [], (rows) => {
         this.statuses = this.#statusesDrafts.merge(
@@ -101,7 +112,7 @@ export class ServiceStatusScreen extends LitElement {
         );
       });
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
   }
 
@@ -117,7 +128,7 @@ export class ServiceStatusScreen extends LitElement {
 
   async #create(): Promise<void> {
     if (this.submitting) return;
-    this.errorKey = null;
+    this.#showError(null);
     const label = this.newLabel.trim();
     if (label === "") return;
     this.submitting = true;
@@ -130,7 +141,7 @@ export class ServiceStatusScreen extends LitElement {
       this.newLabel = "";
       await this.#load();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     } finally {
       this.submitting = false;
     }
@@ -142,7 +153,7 @@ export class ServiceStatusScreen extends LitElement {
 
   async #saveRow(id: string): Promise<void> {
     if (this.submitting) return;
-    this.errorKey = null;
+    this.#showError(null);
     const row = this.statuses.find((s) => s.id === id);
     if (row === undefined) return;
     this.submitting = true;
@@ -155,19 +166,19 @@ export class ServiceStatusScreen extends LitElement {
       });
       await this.#load();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     } finally {
       this.submitting = false;
     }
   }
 
   async #deactivate(id: string): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     try {
       await this.api.deactivateStatus(id);
       await this.#load();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     }
   }
 

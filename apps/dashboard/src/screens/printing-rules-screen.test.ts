@@ -872,3 +872,39 @@ describe("a till's switch for opening its receipt printer's cash drawer", () => 
     expect(switchChecked(el, opensDrawer)).toBe(true);
   });
 });
+
+it("keeps a save's connection failure when the reads that failed beside it recover", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(
+    stubApi({ setReceiptPrintMode: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+    { liveData },
+  );
+  const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+    api,
+  });
+  await vi.waitFor(() => expect(q(el, "[data-test=till-row-t1]")).not.toBeNull());
+
+  vi.mocked(api.listTills).mockRejectedValue({ code: "connection.failed" });
+  liveData.refresh();
+  await vi.waitFor(() =>
+    expect(text(el, "[role=alert]")).toBe(codeMessage("connection.failed", "es-ES")),
+  );
+  q(el, "[data-test=print-mode-loc-1-never]")!.click();
+  await vi.waitFor(() => expect(api.setReceiptPrintMode).toHaveBeenCalledTimes(1));
+  await flush(el);
+  const readsBefore = vi.mocked(api.listTills).mock.calls.length;
+  liveData.refresh();
+  await vi.waitFor(() =>
+    expect(vi.mocked(api.listTills).mock.calls.length).toBeGreaterThan(readsBefore),
+  );
+  await flush(el);
+
+  vi.mocked(api.listTills).mockResolvedValue([
+    ...tills,
+    { id: "t3", label: "Caja 3", locationId: "loc-1", receiptPrinterId: null, opensDrawer: true },
+  ]);
+  liveData.refresh();
+  await vi.waitFor(() => expect(q(el, "[data-test=till-row-t3]")).not.toBeNull());
+  await flush(el);
+  expect(text(el, "[role=alert]")).toBe(codeMessage("connection.failed", "es-ES"));
+});

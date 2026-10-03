@@ -80,11 +80,9 @@ export class RecipeScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.errorKey = codeOf(error);
-    },
-    (error) => {
-      if (this.errorKey === codeOf(error)) this.errorKey = null;
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
     },
   );
 
@@ -97,6 +95,8 @@ export class RecipeScreen extends LitElement {
   @state() private formOpen = false;
   @state() private editingIngredient: Ingredient | null = null;
   @state() private errorKey: string | null = null;
+  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
   @state() private formErrors: IngredientFormErrors = {};
   // Set synchronously on entry, so a double-fired event files at most one mutation.
   @state() private busy = false;
@@ -109,7 +109,7 @@ export class RecipeScreen extends LitElement {
   }
 
   async #load(): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     try {
       await Promise.all([
         this.#queries.watch("listIngredients", [], (value) => {
@@ -120,8 +120,18 @@ export class RecipeScreen extends LitElement {
         }),
       ]);
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
+  }
+
+  #showError(code: string | null, fromRead = false): void {
+    this.errorKey = code;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
   }
 
   async #reloadIngredients(): Promise<void> {
@@ -129,7 +139,7 @@ export class RecipeScreen extends LitElement {
   }
 
   #openForm(): void {
-    this.errorKey = null;
+    this.#showError(null);
     this.formErrors = {};
     this.editingIngredient = null;
     this.formOpen = true;
@@ -139,7 +149,7 @@ export class RecipeScreen extends LitElement {
     event.stopPropagation();
     const ingredient = this.ingredients.find((i) => i.id === event.detail.id);
     if (ingredient === undefined) return;
-    this.errorKey = null;
+    this.#showError(null);
     this.formErrors = {};
     this.editingIngredient = ingredient;
     this.formOpen = true;
@@ -167,11 +177,11 @@ export class RecipeScreen extends LitElement {
    * failure. */
   async #afterWrite(): Promise<void> {
     this.formOpen = false;
-    this.errorKey = null;
+    this.#showError(null);
     try {
       await this.#reloadIngredients();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
   }
 
@@ -208,13 +218,13 @@ export class RecipeScreen extends LitElement {
   }
 
   async #loadProducts(): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     try {
       await this.#queries.watch("listProducts", [this.selectedCatalogueId], (value) => {
         this.products = value;
       });
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
   }
 
@@ -231,14 +241,14 @@ export class RecipeScreen extends LitElement {
    * reselecting the same product is not told apart. */
   async #loadRecipe(): Promise<void> {
     const productId = this.selectedProductId;
-    this.errorKey = null;
+    this.#showError(null);
     try {
       const recipe = await this.api.getProductRecipe(productId);
       if (this.selectedProductId !== productId) return;
       this.recipe = recipe;
     } catch (error) {
       if (this.selectedProductId !== productId) return;
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     } finally {
       if (this.selectedProductId === productId) this.recipeLoading = false;
     }
@@ -248,12 +258,15 @@ export class RecipeScreen extends LitElement {
     event.stopPropagation();
     if (this.busy || this.recipeLoading) return;
     this.busy = true;
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await this.api.setProductRecipe(event.detail.productId, event.detail.ingredientIds);
+      written = true;
       this.recipe = await this.api.getProductRecipe(event.detail.productId);
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(codeOf(error));
     } finally {
       this.busy = false;
     }

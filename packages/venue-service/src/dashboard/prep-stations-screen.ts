@@ -199,6 +199,8 @@ export class PrepStationsScreen extends LitElement {
   };
   @state() private fieldError: Record<string, string> = {};
   @state() private error = "";
+  /** Whether `error` is a read's failure, the only message a read's success may clear. */
+  #readErrorShown = false;
   @state() private claimError = "";
   @state() private claimField = "";
   @state() private busy = false;
@@ -269,11 +271,17 @@ export class PrepStationsScreen extends LitElement {
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
-    () => {
-      this.error = t("prep.load_error");
-    },
+    () => this.#showReadError(t("prep.load_error")),
   );
   #loaded = false;
+  #showError(message: string, fromRead = false): void {
+    this.error = message;
+    this.#readErrorShown = fromRead;
+  }
+  /** A read's failure never replaces an action's message. */
+  #showReadError(message: string): void {
+    if (this.error === "" || this.#readErrorShown) this.#showError(message, true);
+  }
   override connectedCallback() {
     super.connectedCallback();
     void this.#load();
@@ -312,12 +320,12 @@ export class PrepStationsScreen extends LitElement {
           this.exceptionOrder = [...value.routing.exceptions]
             .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
             .map((e) => e.id);
-          this.error = "";
+          if (this.#readErrorShown) this.#showError("");
           if (this.testProduct) void this.#explain();
         },
       );
     } catch {
-      this.error = t("prep.load_error");
+      this.#showReadError(t("prep.load_error"));
     }
   }
   #path(id: string): string {
@@ -363,12 +371,12 @@ export class PrepStationsScreen extends LitElement {
   async #act(run: () => Promise<unknown>) {
     if (this.busy) return;
     this.busy = true;
-    this.error = "";
+    this.#showError("");
     try {
       await run();
       await this.#load();
     } catch {
-      this.error = t("prep.save_error");
+      this.#showError(t("prep.save_error"));
     } finally {
       this.busy = false;
     }
@@ -381,7 +389,7 @@ export class PrepStationsScreen extends LitElement {
   ) {
     if (this.busy || this.pending) return;
     this.busy = true;
-    this.error = "";
+    this.#showError("");
     this.claimError = "";
     try {
       const moves = await this.api.preview(change);
@@ -392,8 +400,9 @@ export class PrepStationsScreen extends LitElement {
       else if (codeOf(e) === "route.station_inactive" && field) {
         this.claimField = field;
         this.claimError = t("prep.station_inactive");
-      } else if (codeOf(e) === "route.station_inactive") this.error = t("prep.station_inactive");
-      else this.error = t("prep.save_error");
+      } else if (codeOf(e) === "route.station_inactive")
+        this.#showError(t("prep.station_inactive"));
+      else this.#showError(t("prep.save_error"));
       this.#restoreOrder();
     } finally {
       this.busy = false;
@@ -420,8 +429,8 @@ export class PrepStationsScreen extends LitElement {
         this.claimField = pending.field;
         this.claimError = t("prep.station_inactive");
       } else if (codeOf(e) === "route.station_inactive") {
-        this.error = t("prep.station_inactive");
-      } else this.error = t("prep.save_error");
+        this.#showError(t("prep.station_inactive"));
+      } else this.#showError(t("prep.save_error"));
       this.pending = undefined;
       this.#restoreOrder();
     } finally {
@@ -460,12 +469,12 @@ export class PrepStationsScreen extends LitElement {
           forgottenAfterMinutes: 15,
         };
     this.fieldError = {};
-    this.error = "";
+    this.#showError("");
   }
   #change(field: keyof StationInput, value: string) {
     this.draft = { ...this.draft, [field]: field === "name" ? value : Number(value) };
     this.fieldError = { ...this.fieldError, [field]: "" };
-    this.error = "";
+    this.#showError("");
   }
   async #saveStation() {
     const d = this.draft;
@@ -484,14 +493,14 @@ export class PrepStationsScreen extends LitElement {
       errors.forgottenAfterMinutes = t("prep.threshold_invalid");
     this.fieldError = errors;
     if (Object.keys(errors).length) {
-      this.error = t("prep.fix_fields");
+      this.#showError(t("prep.fix_fields"));
       return;
     }
     const id = this.editor?.kind === "station" ? this.editor.id : undefined;
     if (id && !this.view?.stations.some((station) => station.id === id)) return;
     if (this.busy) return;
     this.busy = true;
-    this.error = "";
+    this.#showError("");
     try {
       if (id) await this.api.updateStation(id, d);
       else await this.api.createStation(d);
@@ -499,7 +508,7 @@ export class PrepStationsScreen extends LitElement {
       await this.#load();
     } catch (e) {
       if (codeOf(e) === "station.name_taken") this.fieldError = { name: t("prep.name_taken") };
-      else this.error = t("prep.save_error");
+      else this.#showError(t("prep.save_error"));
     } finally {
       this.busy = false;
     }
@@ -830,7 +839,7 @@ export class PrepStationsScreen extends LitElement {
         : NO_PREPARATION
       : "";
     this.exceptionFieldError = "";
-    this.error = "";
+    this.#showError("");
     this.editor = { kind: "exception", id: exception?.id };
   }
   async #saveException() {
@@ -838,11 +847,11 @@ export class PrepStationsScreen extends LitElement {
     const input = this.exceptionDraft;
     if (!input.zoneId && !input.categoryId && !input.productId) {
       this.exceptionFieldError = t("prep.exception_condition");
-      this.error = t("prep.fix_fields");
+      this.#showError(t("prep.fix_fields"));
       return;
     }
     if (!this.exceptionTarget) {
-      this.error = t("prep.exception_target_required");
+      this.#showError(t("prep.exception_target_required"));
       return;
     }
     const id = this.editor.id;
@@ -927,7 +936,7 @@ export class PrepStationsScreen extends LitElement {
                             variant="danger"
                             @click=${() => {
                               this.editor = { kind: "exception_delete", id };
-                              this.error = "";
+                              this.#showError("");
                             }}
                             >${t("prep.delete")}</wt-button
                           ></wt-row-actions
@@ -1184,7 +1193,7 @@ export class PrepStationsScreen extends LitElement {
           variant="secondary"
           @click=${() => {
             this.editor = { kind: "claim", stationId: s.id };
-            this.error = "";
+            this.#showError("");
           }}
           >${t("prep.claim_folder")}</wt-button
         ><wt-button
@@ -1451,7 +1460,7 @@ export class PrepStationsScreen extends LitElement {
                           productId: value.startsWith("product:") ? value.slice(8) : null,
                         };
                         this.exceptionFieldError = "";
-                        this.error = "";
+                        this.#showError("");
                       }}
                     ></wt-combobox
                     >${this.exceptionFieldError ? html`<p class="error" role="alert" data-field-error="condition">${this.exceptionFieldError}</p>` : nothing}
@@ -1469,7 +1478,7 @@ export class PrepStationsScreen extends LitElement {
                         zoneId: e.detail.value || null,
                       };
                       this.exceptionFieldError = "";
-                      this.error = "";
+                      this.#showError("");
                     }}
                   ></wt-combobox
                   ><wt-combobox
@@ -1485,7 +1494,7 @@ export class PrepStationsScreen extends LitElement {
                         ...this.exceptionDraft,
                         target: targetFor(e.detail.value),
                       };
-                      this.error = "";
+                      this.#showError("");
                     }}
                   ></wt-combobox>`
               : editor.kind === "claim"

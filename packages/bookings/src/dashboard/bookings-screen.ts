@@ -96,11 +96,9 @@ export class BookingsScreen extends LitElement {
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
-    (error) => {
-      this.errorKey = codeOf(error);
-    },
-    (error) => {
-      if (this.errorKey === codeOf(error)) this.errorKey = null;
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
     },
   );
 
@@ -113,12 +111,24 @@ export class BookingsScreen extends LitElement {
   @state() private seatingId: string | null = null;
   @state() private seatTableId = "";
   @state() private errorKey: string | null = null;
+  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
   // Single-flight, so a double-fired event makes at most one call.
   @state() private busy = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#init();
+  }
+
+  #showError(code: string | null, fromRead = false): void {
+    this.errorKey = code;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
   }
 
   /** Bookings load first because `#load()` clears `errorKey`, which would hide a table-load failure. */
@@ -143,16 +153,16 @@ export class BookingsScreen extends LitElement {
         },
       );
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
   }
 
   async #load(): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     try {
       await this.#observeBookings();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
   }
 
@@ -189,7 +199,7 @@ export class BookingsScreen extends LitElement {
   }
 
   #openForm(): void {
-    this.errorKey = null;
+    this.#showError(null);
     this.editingBooking = null;
     this.formOpen = true;
   }
@@ -197,7 +207,7 @@ export class BookingsScreen extends LitElement {
   #onEdit(id: string): void {
     const found = this.bookings.find((b) => b.id === id);
     if (found === undefined) return;
-    this.errorKey = null;
+    this.#showError(null);
     this.editingBooking = found;
     this.formOpen = true;
   }
@@ -206,13 +216,16 @@ export class BookingsScreen extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     this.busy = true;
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await this.api.createBooking(event.detail);
+      written = true;
       this.formOpen = false;
       await this.#reload();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(codeOf(error));
     } finally {
       this.busy = false;
     }
@@ -222,13 +235,16 @@ export class BookingsScreen extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     this.busy = true;
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await this.api.updateBooking(event.detail.id, event.detail.patch);
+      written = true;
       this.formOpen = false;
       await this.#reload();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(codeOf(error));
     } finally {
       this.busy = false;
     }
@@ -243,10 +259,10 @@ export class BookingsScreen extends LitElement {
     }
     if (this.tables.length === 0) {
       this.seatingId = null;
-      this.errorKey = "booking.table_required";
+      this.#showError("booking.table_required");
       return;
     }
-    this.errorKey = null;
+    this.#showError(null);
     this.seatingId = b.id;
     this.seatTableId = this.tables[0]?.id ?? "";
   }
@@ -258,15 +274,18 @@ export class BookingsScreen extends LitElement {
   async #seat(id: string, tableId?: string): Promise<void> {
     if (this.busy) return;
     this.busy = true;
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await (tableId === undefined
         ? this.api.seatBooking(id)
         : this.api.seatBooking(id, { tableId }));
+      written = true;
       this.seatingId = null;
       await this.#reload();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(codeOf(error));
     } finally {
       this.busy = false;
     }
@@ -275,12 +294,15 @@ export class BookingsScreen extends LitElement {
   async #lifecycle(op: (id: string) => Promise<void>, id: string): Promise<void> {
     if (this.busy) return;
     this.busy = true;
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await op(id);
+      written = true;
       await this.#reload();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(codeOf(error));
     } finally {
       this.busy = false;
     }
