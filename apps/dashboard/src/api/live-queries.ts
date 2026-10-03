@@ -242,6 +242,7 @@ export const QUERY_DEPENDENCIES = {
   listTables: ["dining_tables", "floor_zones", "working_orders", "table_service_statuses"],
   listZones: ["floor_zones"],
   getFireControl: ["locations"],
+  getBumpMode: ["locations"],
   listMyAbsences: ["absences"],
   listMyShifts: ["shifts", "employments", "locations"],
   listMySwaps: ["shift_swaps", "shifts"],

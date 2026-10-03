@@ -2329,6 +2329,10 @@ export class DashboardApi {
     return this.#request<void>("/management-api/bump-mode", "PUT", { mode });
   }
 
+  getBumpMode(): Promise<{ mode: BumpMode }> {
+    return this.#request<{ mode: BumpMode }>("/management-api/bump-mode", "GET");
+  }
+
   // ── Kitchen courses + fire control ─────────────────────────────────────────────────────────────
 
   listCourses(): Promise<Course[]> {

@@ -96,6 +96,7 @@ import {
   createStation,
   deactivateCourse,
   deactivateStation,
+  getBumpMode,
   getFireControl,
   listCourses,
   moveCourse,
@@ -1922,6 +1923,15 @@ export function mountManagementApi(
       const cfg = requireVenueCfg(deps);
       await withVenueAuth(deps, sessionId, (tx) => setDefaultStation(tx, cfg, id));
       return c.body(null, 204);
+    }),
+  );
+
+  app.get("/management-api/bump-mode", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const mode = await withVenueAuth(deps, sessionId, (tx) => getBumpMode(tx, cfg));
+      return c.json({ mode });
     }),
   );
 

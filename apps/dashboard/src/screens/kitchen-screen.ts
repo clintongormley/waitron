@@ -54,7 +54,6 @@ export class KitchenScreen extends LitElement {
     },
   );
 
-  // There is no route to read the bump mode back, so the control starts on the column default.
   @state() private bumpMode: BumpMode = "line";
   @state() private fireControl: FireControl = "waiter";
   @state() private errorKey: string | null = null;
@@ -78,13 +77,18 @@ export class KitchenScreen extends LitElement {
 
   async #load(): Promise<void> {
     this.#showError(null);
-    try {
-      await this.#queries.watch("getFireControl", [], (fire) => {
-        this.fireControl = fire.mode;
-      });
-    } catch (error) {
-      this.#showReadError(error);
-    }
+    await Promise.all([
+      this.#queries
+        .watch("getBumpMode", [], (bump) => {
+          this.bumpMode = bump.mode;
+        })
+        .catch((error: unknown) => this.#showReadError(error)),
+      this.#queries
+        .watch("getFireControl", [], (fire) => {
+          this.fireControl = fire.mode;
+        })
+        .catch((error: unknown) => this.#showReadError(error)),
+    ]);
   }
 
   async #setBump(mode: BumpMode): Promise<void> {

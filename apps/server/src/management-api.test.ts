@@ -1589,6 +1589,28 @@ describe("/management-api/stations (KDS-1 config)", () => {
     });
   });
 
+  it("GET /bump-mode reads the stored mode after a manager changes it", async () => {
+    const initial = await req("/bump-mode", { method: "GET" }, managerCookie);
+    expect(initial.status).toBe(200);
+    expect(await initial.json()).toEqual({ mode: "line" });
+    await req(
+      "/bump-mode",
+      { method: "PUT", body: JSON.stringify({ mode: "ticket" }) },
+      managerCookie,
+    );
+    try {
+      const after = await req("/bump-mode", { method: "GET" }, managerCookie);
+      expect(after.status).toBe(200);
+      expect(await after.json()).toEqual({ mode: "ticket" });
+    } finally {
+      await req(
+        "/bump-mode",
+        { method: "PUT", body: JSON.stringify({ mode: "line" }) },
+        managerCookie,
+      );
+    }
+  });
+
   it("lets a manager read both station output lists", async () => {
     const res = await req("/stations/outputs-down", { method: "GET" }, managerCookie);
     expect(res.status).toBe(200);
@@ -1614,6 +1636,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       req(`/stations/${someId}`, { method: "DELETE" }, staffCookie),
       req(`/stations/${someId}/default`, { method: "POST" }, staffCookie),
       req("/bump-mode", { method: "PUT", body: JSON.stringify({ mode: "line" }) }, staffCookie),
+      req("/bump-mode", { method: "GET" }, staffCookie),
     ];
     for (const res of await Promise.all(cases)) {
       expect(res.status).toBe(403);
@@ -1635,6 +1658,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       req(`/stations/${someId}`, { method: "DELETE" }, undefined),
       req(`/stations/${someId}/default`, { method: "POST" }, undefined),
       req("/bump-mode", { method: "PUT", body: JSON.stringify({ mode: "line" }) }, undefined),
+      req("/bump-mode", { method: "GET" }, undefined),
     ];
     for (const res of await Promise.all(cases)) {
       expect(res.status).toBe(401);
