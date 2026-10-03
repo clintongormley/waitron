@@ -1,6 +1,7 @@
 # A fiscal chain that AEAT disagrees with — design (W41s)
 
-Status: **proposed, awaiting the owner's approval.** Nothing here is built. Research done
+Status: **proposed; the owner decided D1–D9 on 2026-10-03 (§11), and the spec and plan await the
+owner's approval as decided.** Nothing here is built. Research done
 2026-10-03 against `main` at `ea57412dc` (W21, #1130, included). Plan:
 `docs/superpowers/plans/2026-10-03-fiscal-chain-divergence.md`. Backlog: W41s.
 
@@ -270,13 +271,31 @@ Each fix names the test that holds it; each guard is proven by deletion when bui
   `drain.test.ts:711` keeps passing: our own resend matches.
 - **P3 — One minting function for every new chain (C3, C5, C6).** Provisioning, `register-till` and
   restore all mint through one function that floors the installation counter at
-  `max(clock, newest record's generation time, newest registro_sif.registrado_en) + 1` and always
-  opens series codes carrying the installation suffix, so two installations ever made for one tax id
-  share neither. **This changes the invoice numbers customers see from the first sale** — `FS/1`
-  becomes, for example, `FS-213192000/1` — decision D9. Tests: "two venues provisioned for one tax id
-  get different installation numbers and disjoint series codes"; "re-registering never re-mints a
-  number a newer copy used"; "a restore on a clock behind the previous restore still mints a fresh
-  number".
+  `max(clock, newest record's generation time, newest registro_sif.registrado_en) + 1`. The
+  installation number goes in the record, never on the receipt.
+  - **Series codes stay short and increment** (owner, 2026-10-03, D9). The first installation uses
+    the prefix the owner types in setup (`FS/1`). Every new series — a restore, a new chain — takes
+    the next free increment of the same prefix: `FS-2`, then `FS-3`; the dash keeps a prefix ending in
+    a digit readable (`T1-2`). A code is **free** only when (1) this database has never held it,
+    retired series included; (2) no selling device reports having seen it (P8 reports series codes
+    as well as numbers); and (3) AEAT holds no `<code>/1` for the tax id in any month from October
+    2024 (the earliest issue date AEAT accepts, `verifactu-findings.md` §1) to now — about two dozen
+    lookups (`ConsultaLR.xsd`: year and month required, `NumSerieFactura` optional), against the
+    environment the box files to. Restore's naming (`reserved-series.ts`, which appends the
+    installation number today) moves to the same rule.
+  - **Setup refuses a prefix AEAT already holds for the tax id.** The wizard runs check (3) on the
+    owner's prefixes; if AEAT holds `<prefix>/1`, it says that invoices were already filed under this
+    tax id with that series, that a box replacing another should be restored instead, and otherwise
+    suggests the next free increment. This is what stops C3 at its source.
+  - **When AEAT cannot be reached** (a new chain started by P5 or P8 offline), the code is chosen on
+    (1) and (2) alone, and check (3) runs as soon as AEAT answers; a code AEAT turns out to hold from
+    elsewhere starts another new chain, under the loop guard (§7.7). Two clones switching offline at
+    the same moment could pick the same code; P9 finds that.
+  - Tests: "two venues provisioned for one tax id get different installation numbers, and the second
+    is refused the first's prefix"; "a new series skips a code this database, a device or AEAT
+    already holds"; "an offline switch checks AEAT once it answers and moves on if the code is held";
+    "re-registering never re-mints a number a newer copy used"; "a restore on a clock behind the
+    previous restore still mints a fresh number".
 - **P4 — An unstamped database holding non-production records does not start as production (C7).**
   A production start of an unstamped database holding any record whose environment is not production
   refuses, with a code the recovery page words. `dev-setup` stays unstamped by design; the refusal
@@ -304,6 +323,16 @@ Each fix names the test that holds it; each guard is proven by deletion when bui
   unchecked pointer would let anyone able to write to the bucket stop the venue's sales. An old box
   that never comes online stays unfenced; that cannot be closed locally. Test: "a box whose bucket
   pointer names a higher term boots fenced: no sales, no filing".
+- **P9 — A daily look at AEAT's month for our series (C2, C3, C12; owner, 2026-10-03, D9).** Once
+  a day, while AEAT is reachable, the box reads the current month's records for the tax id from
+  AEAT, page by page, and flags any record in one of its live series that its own installation did
+  not file. Such a record is a reuse of our numbers by another system — on any date, so it also finds
+  the different-date reuse AEAT accepts (asesor Q36). It is listed for the adviser, and a live series
+  in use elsewhere starts a new chain (cause "another system is using this series"). This wires the
+  existing period audit `reconcile()` (`packages/fiscal-verifactu/src/reconcile.ts`), which today has
+  no production caller. A failed read starts nothing and retries the next day. Tests: "a record in a
+  live series filed by another installation is listed and starts a new chain"; "the box's own
+  records raise nothing".
 - **P8 — Every selling device is a witness the box cannot roll back (C2, C4; owner, 2026-10-03,
   D7).** A disk snapshot or copy rolls back everything on the box, not the devices. Each device keeps
   in `localStorage` (which survives a restart; `sessionStorage` does not) the highest invoice number
@@ -317,7 +346,7 @@ Each fix names the test that holds it; each guard is proven by deletion when bui
   retired series, changes nothing".
 - **P7 — Warn about what only AEAT knows, before the first sale (C9).** The pre-production readiness
   test already files a record; it also reports a legal-name or tax-id mismatch from AEAT's answer as
-  its own outcome. A box clock more than the tolerance away from AEAT's response timestamps raises an
+  its own outcome. A box clock more than one minute (D8) away from AEAT's response timestamps raises an
   alert and a till banner — **it does not refuse the sale** (decision D8): the trusted clock's warning
   is deliberately "constructed, never thrown" so it cannot break the sale path
   (`packages/fiscal/src/clock.ts:31-32`), an unreachable time source must never block a sale
@@ -399,7 +428,7 @@ AEAT never sends again, are kept whatever happens next — marking the record `d
 
 1. starts the new chain exactly as `runRestoreHooks` does — through P3's minting function
    (`registerSif`, chain head reset), `retireNodeSeriesTx`, `insertNodeSeriesTx` — so the next sale
-   is `<series>-<installation>/1` with `PrimerRegistro = S`;
+   is `<prefix>-<n>/1`, the next free increment (P3), with `PrimerRegistro = S`;
 2. writes an audit row in a new `chain_restarts` table (when, the old and new installation numbers,
    the cause, the record and invoice key that diverged, and AEAT's stored fingerprint when there is
    one);
@@ -533,6 +562,7 @@ no fiscal screen, and `fiscal.submission_stopped` has no action and can never cl
 | `fiscal.chain_restarted`, a shared installation | The tax agency (AEAT) reports that another system has filed invoices under this box's installation number. To keep the two apart, Waitron started a new invoice series, {series}, at {time}. Sales were not interrupted.                           | La AEAT indica que otro sistema ha enviado facturas con el número de instalación de este equipo. Para separarlos, Waitron ha abierto una nueva serie de facturas, {series}, a las {time}. Las ventas no se han interrumpido.                                                                    |
 | `fiscal.chain_restarted`, database behind AEAT  | This box's database is older than what the tax agency (AEAT) already holds. To avoid reusing invoice numbers, Waitron started a new invoice series, {series}, at {time}. Sales were not interrupted.                                               | La base de datos de este equipo es más antigua que lo que ya tiene la AEAT. Para no repetir números de factura, Waitron ha abierto una nueva serie de facturas, {series}, a las {time}. Las ventas no se han interrumpido.                                                                     |
 | `fiscal.chain_restarted`, database behind the bucket or a device (P5, P8) | This box's database is older than its own backup or than invoices a till has already shown. To avoid reusing invoice numbers, Waitron started a new invoice series, {series}, at {time}. Sales were not interrupted. | La base de datos de este equipo es más antigua que su propia copia de seguridad o que facturas que ya ha mostrado un TPV. Para no repetir números de factura, Waitron ha abierto una nueva serie de facturas, {series}, a las {time}. Las ventas no se han interrumpido. |
+| `fiscal.chain_restarted`, another system using this series (P3, P9) | The tax agency (AEAT) holds invoices in series {oldSeries} that this box did not send. To avoid repeating invoice numbers, Waitron started a new invoice series, {series}, at {time}. Sales were not interrupted. Your tax adviser needs to review the invoices listed in Fiscal filing. | La AEAT tiene facturas de la serie {oldSeries} que este equipo no ha enviado. Para no repetir números de factura, Waitron ha abierto una nueva serie de facturas, {series}, a las {time}. Las ventas no se han interrumpido. Tu asesor fiscal debe revisar las facturas que aparecen en Envío fiscal. |
 | `fiscal.registro_rechazado`                     | The tax agency (AEAT) refused the record for invoice {invoice}: {mensaje} (code {codigo}). Later records are still being sent. This invoice needs correcting: see Fiscal filing.                                                                    | La AEAT ha rechazado el registro de la factura {invoice}: {mensaje} (código {codigo}). Los registros posteriores se siguen enviando. Esta factura debe corregirse: consulta Envío fiscal.                                                                                                      |
 | `fiscal.chain_restart_limit`                    | The tax agency (AEAT) again holds records Waitron did not expect, less than a day after Waitron started a new invoice series. Waitron has not started another. Sales continue. Contact support.                                                   | La AEAT vuelve a tener registros que Waitron no esperaba, menos de un día después de abrir una nueva serie de facturas. Waitron no ha abierto otra. Las ventas continúan. Contacta con soporte.                                                                                                |
 
@@ -703,10 +733,17 @@ Each has the recommended default this design is written to.
    signature fences a box; the start-up check of §7.6 runs on every box and lists numbers reused on
    another date; P8 (devices as witnesses) is added; and no chain is started merely because AEAT
    cannot be reached. Previously recommended: P5 and P6 wait.
-8. **D8 — A clock out of tolerance warns, and never refuses a sale** (P7). Recommended: yes.
-9. **D9 — Every series code carries its installation number from the first sale** (P3), so receipts
-   read like `FS-213192000/1` instead of `FS/1`. Recommended: yes — it is what stops two
-   installations for one tax id ever sharing an invoice number.
+8. **D8 — A clock out of tolerance warns, and never refuses a sale** (P7). **DECIDED (owner,
+   2026-10-03): yes, with a tolerance of one minute** — the Orden art. 7.f standard, well inside the
+   240 seconds reported (unconfirmed) for AEAT's warning 2004, and early enough to catch a clock that
+   would date a sale made just before midnight on the next day, which AEAT refuses.
+9. **D9 — How new series are named** (P3). **DECIDED (owner, 2026-10-03): short codes that
+   increment** (`FS`, then `FS-2`, `FS-3`), each checked free against the database, the selling
+   devices and AEAT before use; setup refuses a prefix AEAT already holds for the tax id; and a daily
+   look at AEAT's month (P9) finds any reuse the checks missed. The recommendation it replaces, the
+   installation number in every series code from the first sale (`FS-213192000/1`), was rejected as
+   making unreadable invoice numbers. Asesor Q5(f) asks whether the naming and the reason are
+   acceptable.
 
 ## 12. What this does not change
 

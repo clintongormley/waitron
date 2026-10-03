@@ -11,7 +11,8 @@ priority. Q9 is referenced from other documents; do not renumber it.
 
 On **2026-10-03** (W41s, the design for a fiscal chain AEAT disagrees with): **Q33 to Q40 added**
 in a new section, *Recovering from conflicts*. They replace the ten questions the design listed in its
-§10. The standalone copy has no section for them.
+§10. Later the same day **Q5(f)** was added, on how new series are named. The standalone copy has no
+section for them.
 
 On **2026-10-01** (lane B item B17): the owner decided **Q28** without the asesor — the full
 simplified invoice is issued when the table leaves, and a later payment is recorded against it —
@@ -530,6 +531,26 @@ it is the case where a single till needs two series (and, per art. 7.c, still on
 > restaura desde una copia de seguridad, el servidor restaurado recibe un número de instalación
 > nuevo y empieza una cadena nueva. Además, cerramos sus series y abrimos otras nuevas. ¿Es
 > admisible abrir series nuevas por este motivo? ¿Debe documentarse la razón en algún sitio?
+
+**(f), added 2026-10-03 (W41s, design decision D9).** New series are now opened in a second case as
+well: when the software switches to a new installation number after AEAT reports a collision (Q33).
+The owner decided how they are named: the prefix chosen at setup, then the same prefix with a
+number, `FS`, `FS-2`, `FS-3`, rather than a code carrying the installation number
+(`FS-213192000`), which made unreadable invoice numbers. Before a code is used, the software checks
+that its own records, the tills and AEAT (whether invoice number 1 of that series exists, month by
+month since October 2024) show no earlier use. Setup also refuses a prefix AEAT already holds for
+the tax ID. What (e) does not cover: a new series opened because of a collision rather than a
+restore, and whether this naming is acceptable.
+
+> **(f)** *(añadida el 03-10-2026)* También abrimos series nuevas cuando el sistema cambia de nº de
+> instalación tras detectar un conflicto con la AEAT (Q33). Las nombramos con el prefijo que eligió
+> el titular seguido de un número correlativo: FS, después FS-2, FS-3, y antes de usar una
+> comprobamos que no consta en nuestra base de datos, en los TPV ni en la AEAT (consultando si
+> existe la factura número 1 de esa serie en cada mes desde octubre de 2024).
+>
+> - (i) ¿Es este motivo, igual que la restauración de (e), razón suficiente para abrir series nuevas?
+> - (ii) ¿Hay algún inconveniente en este formato de serie? ¿Debe reflejar de algún modo el nº de
+>   instalación o el año?
 
 ---
 
@@ -1811,7 +1832,7 @@ issues the same invoice numbers again. AEAT identifies an invoice by tax ID + nu
 **What the software does.** When it detects a collision, it stops adding to that installation's
 chain and switches to an installation number never used before. That is a new SIF in the sense of
 FAQ §4, and its first record carries `PrimerRegistro = S`. It also opens new invoice series whose
-numbers cannot clash with any earlier one. Sales are never interrupted. The old installation's
+codes are checked unused before they are taken (Q5 f). Sales are never interrupted. The old installation's
 chain stays as it is.
 
 **Settled, so not asked here.** Sending late after an incident ([verifactu-findings.md](verifactu-findings.md)
@@ -1838,7 +1859,7 @@ decision D1), and the box keeps colliding until someone does.
 > nuestro (por ejemplo, porque se ha vuelto a poner en marcha una copia antigua de la base de datos
 > que ha repetido números ya usados), deja de añadir registros a esa cadena y pasa automáticamente a
 > un nº de instalación nuevo, nunca usado, cuyo primer registro lleva `PrimerRegistro` = "S", con
-> series de facturación nuevas que no pueden coincidir con ninguna anterior. La facturación no se
+> series de facturación nuevas que comprobamos que no se han usado antes (Q5 f). La facturación no se
 > interrumpe. La cadena anterior se conserva intacta, junto con las respuestas de la AEAT y un
 > registro interno de cuándo, por qué y con qué factura se produjo el conflicto. No se comunica nada
 > a la AEAT.

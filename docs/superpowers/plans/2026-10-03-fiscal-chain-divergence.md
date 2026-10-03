@@ -3,8 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Status:** proposed with the spec; nothing is built until the owner approves both. The owner's
-decisions D1–D9 (spec §11) are written in as their recommended defaults; a task whose decision the
-owner changes is re-cut before it starts.
+decisions D1–D9 (spec §11) are written in as the owner decided them on 2026-10-03; a probe or an
+asesor answer that goes against one brings it back to the owner before the task that depends on it.
 
 **Goal:** Waitron never ends up with a filing chain that has stopped, and when AEAT holds something
 other than what we hold, Waitron starts a new chain by itself, keeps every sale going, keeps filing
@@ -19,17 +19,18 @@ filing-rule changes (a refusal stops nothing, Task 6; a divergence starts a new 
 a divergent invoice's cancel back (Task 8), and the dashboard with the manual start (Task 9). Tasks
 10–11 add the start-up check against AEAT on every box and the clock warning; Task 12 is the
 compliance-notes pointers. Tasks 13–15 catch an older copy from the bucket (P5), fence an old box
-from the bucket (P6, design first) and use the selling devices as witnesses (P8).
+from the bucket (P6, design first) and use the selling devices as witnesses (P8); Task 16 looks at
+AEAT's month daily for reuse of our series (P9).
 
 **Order and dependencies:** 0 → 1 → 2 → (3, 4 in either order) → 5 (after A238 lands) → 6 (needs 0,
 1) → 7 (needs 0, 1, 2, 3, 5, and 6 unless the owner declines D2) → 8, 9, 10 (each needs 7) → 11, 12
-any time; 13 and 15 after 7; 14 after its design is approved.
+any time; 13, 15 and 16 after 7; 14 after its design is approved.
 
 **Tech stack:** TypeScript 7, drizzle-orm 0.45 + `node:sqlite`, Hono, Lit 3, Vitest 4 (real headless
 Chromium for the front ends), `@waitron/verifactu` 0.2.1 and its fake AEAT.
 
 **Spec:** `docs/superpowers/specs/2026-10-03-fiscal-chain-divergence-design.md` — read it in full
-first. Section numbers (§N), cause numbers (C1–C13), preventions (P1–P8) and decisions (D1–D9) are
+first. Section numbers (§N), cause numbers (C1–C13), preventions (P1–P9) and decisions (D1–D9) are
 the spec's.
 
 ## Global constraints
@@ -49,8 +50,8 @@ the spec's.
   proven by deletion (remove the check, see the case fail, restore). State the experiment, not the
   conclusion (CLAUDE.md §1).
 - **An existing assertion that pins behaviour the approved spec changes** (today's halt after a
-  refusal or a divergence; an installation number of 1 or 2; a series code without its installation
-  suffix) is changed only in the task that changes the behaviour, and listed in that PR by file and
+  refusal or a divergence; an installation number of 1 or 2; a restored series named
+  `<base>-<installation>`) is changed only in the task that changes the behaviour, and listed in that PR by file and
   case. Any other assertion change is a stop.
 - **Error and alert codes:** every new code is registered in its package's `errors.ts`, imported by
   every file that throws it, has English and Spanish wording where a screen or alert shows it, and is
@@ -183,18 +184,26 @@ and the setup wizard's series pre-fill (`apps/setup/src/screens/venue-screen.ts`
 shows the code the customer will see.
 
 - [ ] **Failing case** (a new `new-chain.test.ts`): two venues provisioned for one tax id at different
-  instants get different installation numbers and disjoint series codes. Today both get installation
-  1 and `FS` (spec C3).
+  instants get different installation numbers, and the second is refused the first's prefix because
+  AEAT (the fake) holds `FS/1`; the refusal suggests `FS-2`. Today both get installation 1 and `FS`
+  (spec C3). The setup wizard words the refusal (restore instead, or take the suggested prefix);
+  open it and look.
+- [ ] **Failing case**: a new series (restore or new chain) takes the next free increment of its
+  prefix, skipping a code this database holds (retired included), one a device reports, and one
+  AEAT holds `<code>/1` for in any month from October 2024 (D9, owner 2026-10-03).
+- [ ] **Failing case**: with AEAT unreachable the code is chosen on the database and the devices; once
+  AEAT answers and holds that code, another new chain starts under the loop guard.
 - [ ] **Failing case**: re-registering an older copy of a database never re-mints an installation
   number a newer copy used (spec C5's experiment as a test: two databases from one `vacuum into`).
 - [ ] **Failing case**: a restore whose clock is behind a previous restore's still mints a fresh
   number — the floor is `max(clock, newest FechaHoraHusoGenRegistro, newest registro_sif.registrado_en)
   + 1`.
 - [ ] Implement one exported function (name it for what it does, e.g. `startNewChain(tx, node, now)`)
-  that floors, mints, registers, resets the head and returns the disjoint series codes; provisioning,
-  `register-till` and `restoreFiscal` call it.
-- [ ] List every existing test that pins installation number 1 or 2, or an unsuffixed series code,
-  as behaviour D9 changes (grep `numero_instalacion`, `numeroInstalacion`, `"FS/`, `"A/` across the
+  that floors, mints, registers, resets the head and returns the next free series codes; provisioning,
+  `register-till` and `restoreFiscal` call it. `reserved-series.ts` drops the installation-number
+  suffix for the increment; its suffix-stripping keeps reading the old `-<installation>` form.
+- [ ] List every existing test that pins installation number 1 or 2, or a restored series named
+  `<base>-<installation>`, as behaviour D9 changes (grep `numero_instalacion`, `numeroInstalacion`, `"FS/`, `"A/` across the
   suites first).
 - [ ] Deletion proofs for the floor's three terms.
 - [ ] Gates: `restore*.test.ts`, `registro-sif.test.ts`, `reserved-series.test.ts`,
@@ -288,9 +297,9 @@ incidents, their cause moving to a param), `submission-alerts.ts`, `apps/dashboa
 - [ ] **Failing case** (the spec's live experiment as a test): sell A/1, A/2; plant a different record
   under A/1's key; drain. Assert: A/1 `divergente` and AEAT's receipt code saved; then a new
   `registro_sif` with an installation number at or above the floor; the node's old series retired and
-  new `<base>-<installation>` ones open; a `chain_restarts` row naming A/1's key, both installation
+  new `<prefix>-<n>` ones open (P3); a `chain_restarts` row naming A/1's key, both installation
   numbers, the cause and AEAT's stored fingerprint; one `fiscal.chain_restarted` incident; A/2 filed
-  (accepted). The next sale is `<base>-<installation>/1` with `PrimerRegistro = S` and is accepted.
+  (accepted). The next sale is `<prefix>-<n>/1` with `PrimerRegistro = S` and is accepted.
 - [ ] **Failing case**: the new-chain step throwing (stub the series insert to throw
   `series.code_collision`) leaves the saved reply and A/1's `divergente` committed, raises an alert,
   and the next pass starts the chain.
@@ -386,7 +395,7 @@ Review: FULL. Ends `needs-owner-review` (it can start a chain).
 
 ## Task 11 — Warn about the clock and the registered name (P7, C9, D8)
 
-- [ ] **Failing case**: with the box's clock more than the tolerance away from AEAT's response
+- [ ] **Failing case**: with the box's clock more than one minute (D8) away from AEAT's response
   timestamps, an alert is raised and the till shows a banner; **the sale goes through**. An
   unreachable AEAT raises nothing and blocks nothing.
 - [ ] **Failing case**: the readiness test reports a legal-name or tax-id mismatch from AEAT's answer
@@ -451,6 +460,22 @@ inside `try`), the till's connection to the box, the server's check before the n
   the box no longer has live, changes nothing and refuses nothing.
 - [ ] **Failing case**: with no internet at all, the check still runs.
 - [ ] Deletion proof; the till opened and looked at.
+
+Review: FULL (fiscal). Ends `needs-owner-review`: it can start a chain.
+
+## Task 16 — A daily look at AEAT's month for our series (P9, D9)
+
+Needs Task 7.
+
+Files: `packages/fiscal-verifactu/src/reconcile.ts` (`reconcile()`, today without a production
+caller), its export, the pass loop's daily slot, the lookup client (paged).
+
+- [ ] **Failing case**: a record in one of the box's live series that another installation filed this
+  month (planted in the fake AEAT, on a date the box did not use) is listed for the adviser and
+  starts a new chain, cause "another system is using this series".
+- [ ] **Failing case**: the box's own records raise nothing; a failed read starts nothing and retries
+  the next day; it runs at most once a day.
+- [ ] Deletion proof.
 
 Review: FULL (fiscal). Ends `needs-owner-review`: it can start a chain.
 

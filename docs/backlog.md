@@ -2359,10 +2359,12 @@ chain started in its own transaction right after AEAT's reply is saved, with the
 sale (no restart), what the
 dashboard says, AEAT's procedures quoted from primary sources, and eight asesor questions
 (Q33–Q40 in `docs/compliance/asesor-questions.md`, rewritten with their background on 2026-10-03). The
-[plan](superpowers/plans/2026-10-03-fiscal-chain-divergence.md) has sixteen tasks (0–15), starting
-with five probes at AEAT's pre-production service. **Next action:** owner decides D1–D9 (spec §11)
-and sends the asesor questions (Q33–Q40); the build is queued only after approval. Tasks 1, 2, 3, 6,
-7, 9 and 10 end `needs-owner-review`.
+[plan](superpowers/plans/2026-10-03-fiscal-chain-divergence.md) has seventeen tasks (0–16), starting
+with five probes at AEAT's pre-production service. The owner decided D1–D9 on 2026-10-03 (spec §11):
+automatic new chains, short incrementing series checked against AEAT, nothing waiting for the
+replication work. **Next action:** the owner approves the spec and plan as decided, and sends the asesor
+questions (Q33–Q40 and Q5 f); the build is queued only after approval. Tasks 1, 2, 3, 6, 7, 9, 10 and
+13–16 end `needs-owner-review`.
 
 ### A2. The setup wizard
 
