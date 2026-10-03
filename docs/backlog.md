@@ -1389,8 +1389,9 @@ exist. The options list editor gives its Default heading the same two rules
 options probably shows the same fault; that has not been opened to check. A198's Chromium checks did
 not cover an empty table; the fix adds that case for both editors.
 
-**The number field with − and + is still too wide (A263, owner 2026-10-03) — OPEN, in design in an interactive
-session (mockups first); not in a lane's queue.** The owner, on a screenshot of the extras list editor after A202: _"i'm not sure about the
+**The number field with − and + is still too wide (A263, owner 2026-10-03) — DONE on branch
+`feat/narrow-number-stepper` (the owner chose option C: 24px plain − and + either side of a centred
+number, and a clearable Maximum choices).** The owner, on a screenshot of the extras list editor after A202: _"i'm not sure about the
 number fields with the +- buttons, they're very wide"_. Each button is `--wt-tap-min` (44px) wide,
 so 88px of every box is buttons; the box is at least `--wt-stepper-field-width` (152px), or
 `--wt-stepper-field-width-wide` (184px) when its blank value shows words such as "No limit", and a
