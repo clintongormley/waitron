@@ -5,6 +5,18 @@ import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
 
+export interface SummaryField {
+  label: string;
+  value: string;
+  /** Drawn in italic, as a field's placeholder is: what a blank field will use, not its own value. */
+  placeholder?: boolean;
+}
+
+const summaryPart = ({ label, value, placeholder }: SummaryField) =>
+  html`<span class="summary-label">${label}:</span> ${
+      placeholder ? html`<span class="summary-placeholder">${value}</span>` : value
+    }`;
+
 /**
  * A section holding a validation error must not be hidden: while `has-error` is set the section is
  * forced open and the header click is inert.
@@ -62,6 +74,10 @@ export class WtDisclosure extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      .summary-placeholder {
+        font-style: italic;
+      }
+
       .summary-rows {
         display: flex;
         flex-direction: column;
@@ -94,14 +110,10 @@ export class WtDisclosure extends LitElement {
   @property() summary = "";
   /** The closed line as named values, each after its bold name; used instead of `summary` when it
    * holds any. */
-  @property({ attribute: false }) summaryFields: readonly { label: string; value: string }[] = [];
+  @property({ attribute: false }) summaryFields: readonly SummaryField[] = [];
   /** The closed line as one row per named value, each cut with an ellipsis after its `lines`
    * lines; used instead of `summaryFields` and `summary` when it holds any. */
-  @property({ attribute: false }) summaryRows: readonly {
-    label: string;
-    value: string;
-    lines: number;
-  }[] = [];
+  @property({ attribute: false }) summaryRows: readonly (SummaryField & { lines: number })[] = [];
   @property({ type: Boolean, reflect: true }) open = false;
   @property({ type: Boolean, reflect: true, attribute: "has-error" }) hasError = false;
 
@@ -126,19 +138,18 @@ export class WtDisclosure extends LitElement {
     if (this.summaryRows.length)
       return html`<span class="summary summary-rows"
         >${this.summaryRows.map(
-          ({ label, value, lines }) =>
+          ({ lines, ...field }) =>
             html`<span
               class="summary-row"
               style=${styleMap({ "--summary-row-lines": String(lines) })}
-              ><span class="summary-label">${label}:</span> ${value}</span
+              >${summaryPart(field)}</span
             >`,
         )}</span
       >`;
     if (this.summaryFields.length)
       return html`<span class="summary"
         >${this.summaryFields.map(
-          ({ label, value }, index) =>
-            html`${index ? " · " : nothing}<span class="summary-label">${label}:</span> ${value}`,
+          (field, index) => html`${index ? " · " : nothing}${summaryPart(field)}`,
         )}</span
       >`;
     return this.summary ? html`<span class="summary">${this.summary}</span>` : nothing;

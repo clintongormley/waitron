@@ -60,4 +60,33 @@ describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (them
     expect(el.shadowRoot!.querySelectorAll(".summary-row .summary-label")).toHaveLength(2);
     await expectNoA11yViolations(host);
   });
+
+  test("collapsed, with a value drawn as a placeholder", async () => {
+    const el = (await mountThemed(
+      '<wt-disclosure heading="Kitchen"><p>body</p></wt-disclosure>',
+      theme,
+    )) as WtDisclosure;
+    el.summaryFields = [
+      { label: "Kitchen name", value: "None specified" },
+      { label: "Course", value: "Mains", placeholder: true },
+    ];
+    await el.updateComplete;
+    // Without this the scan could pass on a header that drew no placeholder value.
+    expect(el.shadowRoot!.querySelectorAll(".summary-placeholder")).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+
+  test("collapsed, with a summary row drawn as a placeholder", async () => {
+    const el = (await mountThemed(
+      '<wt-disclosure heading="Descriptors"><p>body</p></wt-disclosure>',
+      theme,
+    )) as WtDisclosure;
+    el.summaryRows = [
+      { label: "Name", value: "None specified", lines: 1 },
+      { label: "Description", value: "EN: Roasted in house", lines: 2, placeholder: true },
+    ];
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll(".summary-row .summary-placeholder")).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
 });
