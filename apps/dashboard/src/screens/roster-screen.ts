@@ -105,11 +105,9 @@ export class RosterScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.errorKey = codeOf(error);
-    },
-    (error) => {
-      if (this.errorKey === codeOf(error)) this.errorKey = null;
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
     },
   );
 
@@ -124,9 +122,21 @@ export class RosterScreen extends LitElement {
   @state() private dialogShift: Shift | null = null;
   @state() private breaches: RosterBreach[] = [];
   @state() private errorKey: string | null = null;
+  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
   // Set synchronously on entry, so a double-fired event files at most one mutation.
   @state() private busy = false;
   #locationsLoaded = false;
+
+  #showError(code: string | null, fromRead = false): void {
+    this.errorKey = code;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -142,7 +152,7 @@ export class RosterScreen extends LitElement {
   }
 
   async #load(): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     this.breaches = [];
     let initial = true;
     try {
@@ -168,7 +178,7 @@ export class RosterScreen extends LitElement {
         }),
       ]);
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
   }
 
@@ -181,13 +191,13 @@ export class RosterScreen extends LitElement {
   async #onSelectLocation(event: CustomEvent<{ locationId: string }>): Promise<void> {
     event.stopPropagation();
     this.locationId = event.detail.locationId;
-    this.errorKey = null;
+    this.#showError(null);
     // The breaches belong to the roster being left.
     this.breaches = [];
     try {
       await this.#loadRoster();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
   }
 
@@ -197,20 +207,20 @@ export class RosterScreen extends LitElement {
     // A date field reads "" while cleared or part-typed, on which mondayOf throws a RangeError.
     if (Number.isNaN(Date.parse(`${value}T00:00:00Z`))) return;
     this.weekMonday = mondayOf(value);
-    this.errorKey = null;
+    this.#showError(null);
     // The breaches belong to the roster being left.
     this.breaches = [];
     try {
       await this.#loadRoster();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
   }
 
   /** `shift` is null for a new one. The caller names it because a cell can hold several shifts. */
   openCell(personId: string, day: string, shift: Shift | null): void {
     if (!this.editable) return;
-    this.errorKey = null;
+    this.#showError(null);
     this.dialogPersonId = personId;
     this.dialogDay = day;
     this.dialogShift = shift;
@@ -221,7 +231,8 @@ export class RosterScreen extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     this.busy = true;
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       let versionId = this.draftVersionId;
       if (versionId === null) {
@@ -229,10 +240,12 @@ export class RosterScreen extends LitElement {
           .versionId;
       }
       await this.api.addShift(versionId, { ...event.detail, locationId: this.locationId });
+      written = true;
       this.dialogOpen = false;
       await this.#loadRoster();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(codeOf(error));
     } finally {
       this.busy = false;
     }
@@ -242,13 +255,16 @@ export class RosterScreen extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     this.busy = true;
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await this.api.updateShift(event.detail.shiftId, event.detail.patch);
+      written = true;
       this.dialogOpen = false;
       await this.#loadRoster();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(codeOf(error));
     } finally {
       this.busy = false;
     }
@@ -258,13 +274,16 @@ export class RosterScreen extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     this.busy = true;
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await this.api.removeShift(event.detail.shiftId);
+      written = true;
       this.dialogOpen = false;
       await this.#loadRoster();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(codeOf(error));
     } finally {
       this.busy = false;
     }
@@ -274,12 +293,15 @@ export class RosterScreen extends LitElement {
     const versionId = this.draftVersionId;
     if (versionId === null || this.busy) return;
     this.busy = true;
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       this.breaches = (await this.api.publishRoster(versionId)).breaches;
+      written = true;
       await this.#loadRoster();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(codeOf(error));
     } finally {
       this.busy = false;
     }

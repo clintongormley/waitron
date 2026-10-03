@@ -887,3 +887,34 @@ it("keeps an unsaved, typed zone name through a failed read and its recovery", a
   expect((await innerInput("[data-test=zone-name-z1]")).value).toBe("Salón");
   expect(api.updateZone).not.toHaveBeenCalled();
 });
+
+it("keeps a save's connection failure when the reads that failed beside it recover", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(
+    stubApi({ deactivateZone: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+    { liveData },
+  );
+  const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+  await vi.waitFor(() => expect(q(el, "[data-test=zone-row-z1]")).not.toBeNull());
+
+  vi.mocked(api.listZones).mockRejectedValue({ code: "connection.failed" });
+  liveData.refresh();
+  await vi.waitFor(() =>
+    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed")),
+  );
+  q(el, "[data-test=zone-deactivate-z1]")!.click();
+  await vi.waitFor(() => expect(api.deactivateZone).toHaveBeenCalledTimes(1));
+  await flush(el);
+  const readsBefore = vi.mocked(api.listZones).mock.calls.length;
+  liveData.refresh();
+  await vi.waitFor(() =>
+    expect(vi.mocked(api.listZones).mock.calls.length).toBeGreaterThan(readsBefore),
+  );
+  await flush(el);
+
+  vi.mocked(api.listZones).mockResolvedValue(TWO_ZONES.map((z) => ({ ...z })));
+  liveData.refresh();
+  await vi.waitFor(() => expect(q(el, "[data-test=zone-row-z2]")).not.toBeNull());
+  await flush(el);
+  expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed"));
+});

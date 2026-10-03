@@ -185,3 +185,37 @@ it("keeps a later refusal when a failed fire-control load recovers", async () =>
   await flush(el);
   expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("server.internal"));
 });
+
+it("keeps a save's connection failure when the reads that failed beside it recover", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(
+    stubApi({
+      getFireControl: vi
+        .fn()
+        .mockResolvedValueOnce({ mode: "waiter" })
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue({ mode: "kitchen" }),
+      setBumpMode: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    }),
+    { liveData },
+  );
+  const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+  await vi.waitFor(() => expect(api.getFireControl).toHaveBeenCalledTimes(1));
+  liveData.refresh();
+  await vi.waitFor(() =>
+    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed")),
+  );
+  q(el, "[data-test=bump-ticket]")!.click();
+  await vi.waitFor(() => expect(api.setBumpMode).toHaveBeenCalledTimes(1));
+  await flush(el);
+  liveData.refresh();
+  await vi.waitFor(() => expect(api.getFireControl).toHaveBeenCalledTimes(3));
+  await flush(el);
+  liveData.refresh();
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=fire-kitchen]")!.getAttribute("variant")).toBe("primary"),
+  );
+  await flush(el);
+  expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed"));
+});
