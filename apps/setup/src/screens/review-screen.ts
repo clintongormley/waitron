@@ -3,7 +3,6 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { errorStyles } from "../form-styles.js";
 import { dispatchProvisionRequested, dispatchSetupGoto } from "../events.js";
 import type { DeepPartial, Screen } from "../setup-app.js";
@@ -70,6 +69,10 @@ export class SetupReviewScreen extends LitElement {
         margin: 0;
         font-size: var(--wt-font-size-lg);
       }
+      .group-help {
+        margin: var(--wt-space-1) 0 0;
+        color: var(--wt-color-text-muted);
+      }
       .group-header wt-button {
         margin-inline-start: auto;
       }
@@ -113,14 +116,8 @@ export class SetupReviewScreen extends LitElement {
     new LocaleChangeController(this);
   }
 
-  #help(key: StringKey, label: StringKey): TemplateResult {
-    return html`<wt-help-tooltip aria-label=${`${t("review.help_label")} ${t(label)}`}>
-      ${t(key)}
-    </wt-help-tooltip>`;
-  }
-
-  #row(label: StringKey, value: unknown, testId: string, help?: StringKey): TemplateResult {
-    return html`<dt>${t(label)}${help === undefined ? nothing : this.#help(help, label)}</dt>
+  #row(label: StringKey, value: unknown, testId: string): TemplateResult {
+    return html`<dt>${t(label)}</dt>
       <dd data-test=${testId}>${value ?? "—"}</dd>`;
   }
 
@@ -134,7 +131,6 @@ export class SetupReviewScreen extends LitElement {
     return html`<section class="group" data-group=${id} aria-labelledby=${`group-${id}`}>
       <div class="group-header">
         <h2 id=${`group-${id}`}>${t(title)}</h2>
-        ${this.#help(help, title)}
         <wt-button
           variant="ghost"
           data-test="edit"
@@ -143,6 +139,7 @@ export class SetupReviewScreen extends LitElement {
           >${t("review.edit")}</wt-button
         >
       </div>
+      <p class="group-help">${t(help)}</p>
       <dl>${rows}</dl>
     </section>`;
   }
@@ -185,8 +182,8 @@ export class SetupReviewScreen extends LitElement {
           html`
             ${this.#row("review.location", location?.name, "summary-location")}
             ${this.#row("review.address", [location?.addressLine1, location?.addressLine2, location?.postalCode, location?.city, location?.province].filter(Boolean).join(", ") || "—", "summary-address")}
-            ${this.#row("review.invoice_locales", location?.invoiceLocales?.map((locale) => RECEIPT_LANGUAGES[locale]?.nativeName ?? locale).join(", "), "summary-invoiceLocales", "review.help.receipt_language")}
-            ${this.#row("review.day_cutover", location?.dayCutover, "summary-dayCutover", "review.help.day_cutover")}
+            ${this.#row("review.invoice_locales", location?.invoiceLocales?.map((locale) => RECEIPT_LANGUAGES[locale]?.nativeName ?? locale).join(", "), "summary-invoiceLocales")}
+            ${this.#row("review.day_cutover", location?.dayCutover, "summary-dayCutover")}
           `,
         )}
         ${this.#group(
@@ -195,14 +192,14 @@ export class SetupReviewScreen extends LitElement {
           "review.help.invoicing",
           "venue",
           html`
-            ${this.#row("review.till", venue?.tillName, "summary-tillName", "review.help.till")}
-            ${this.#row("review.series", venue?.seriesCode, "summary-seriesCode", "review.help.series")}
-            ${this.#row("review.rectificative_series", venue?.rectificativeSeriesCode, "summary-rectificativeSeriesCode", "review.help.corrections_series")}
-            ${this.#row("review.operation_description", location?.operationDescription, "summary-operationDescription", "review.help.operation_description")}
+            ${this.#row("review.till", venue?.tillName, "summary-tillName")}
+            ${this.#row("review.series", venue?.seriesCode, "summary-seriesCode")}
+            ${this.#row("review.rectificative_series", venue?.rectificativeSeriesCode, "summary-rectificativeSeriesCode")}
+            ${this.#row("review.operation_description", location?.operationDescription, "summary-operationDescription")}
             ${
               mode === "demo"
                 ? nothing
-                : html`<dt>${t("review.cert")}${this.#help("review.help.cert", "review.cert")}</dt>
+                : html`<dt>${t("review.cert")}</dt>
                     <dd>
                       <span data-test="summary-cert"
                         >${certAttached ? t("review.cert_attached") : t("review.cert_not_attached")}</span

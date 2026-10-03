@@ -118,21 +118,12 @@ export const venueEn = {
   "review.group.invoicing": "Invoicing",
   "review.group.account": "Your account",
   "review.edit": "Edit",
-  "review.help_label": "About",
   "review.help.business": "These details identify the legal business on invoices and tax records.",
   "review.help.location":
     "These details describe the place where sales are made and receipts are issued.",
   "review.help.invoicing":
     "These settings control invoice numbering and the details printed on invoices.",
   "review.help.account": "This account signs in to manage the venue after setup.",
-  "review.help.receipt_language": "Receipts use this language for their fixed words.",
-  "review.help.day_cutover": "Sales after this time belong to the next business day.",
-  "review.help.till": "This is the name of the first till at this location.",
-  "review.help.series": "Every invoice number starts with this: FS-000001, FS-000002…",
-  "review.help.corrections_series": "Credit notes use this separate numbering series.",
-  "review.help.operation_description":
-    "This description appears on invoices for sales at this location.",
-  "review.help.cert": "The certificate lets Waitron submit live invoice records to the tax agency.",
   "review.operator": "Operator",
   "review.operator_display_name": "Operator display name",
   "review.operator_email": "Operator email",
@@ -318,7 +309,6 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "review.group.invoicing": "Facturación",
   "review.group.account": "Tu cuenta",
   "review.edit": "Editar",
-  "review.help_label": "Sobre",
   "review.help.business":
     "Estos datos identifican al negocio en las facturas y los registros fiscales.",
   "review.help.location":
@@ -327,16 +317,6 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
     "Estos ajustes controlan la numeración y los datos que aparecen en las facturas.",
   "review.help.account":
     "Con esta cuenta iniciarás sesión para gestionar el local después de configurarlo.",
-  "review.help.receipt_language": "Los recibos usan este idioma para sus textos fijos.",
-  "review.help.day_cutover":
-    "Las ventas posteriores a esta hora pertenecen al siguiente día comercial.",
-  "review.help.till": "Este es el nombre de la primera caja de este local.",
-  "review.help.series": "Cada número de factura empieza así: FS-000001, FS-000002…",
-  "review.help.corrections_series": "Las notas de crédito usan una serie de numeración distinta.",
-  "review.help.operation_description":
-    "Esta descripción aparece en las facturas de las ventas de este local.",
-  "review.help.cert":
-    "El certificado permite a Waitron enviar los registros de facturación a la Agencia Tributaria.",
   "review.operator": "Operador",
   "review.operator_display_name": "Nombre visible del operador",
   "review.operator_email": "Correo del operador",

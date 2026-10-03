@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./review-screen.js";
 import type { SetupReviewScreen } from "./review-screen.js";
@@ -31,6 +31,16 @@ afterEach(cleanupWidgets);
 describe.each(["light", "dark"] as const)("setup-review-screen a11y (%s theme)", (theme) => {
   it("has no violations on the populated summary", async () => {
     const { host } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft }, theme);
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations on a demo summary, which has no certificate row", async () => {
+    const { el, host } = await mountWidget<SetupReviewScreen>(
+      "setup-review-screen",
+      { draft: { ...draft, mode: "demo" } },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=summary-cert]")).toBeNull();
     await expectNoA11yViolations(host);
   });
 
