@@ -191,3 +191,19 @@ it("is idle once every write queued so far has finished, a refused one included"
   await settle();
   expect([finished, idle]).toEqual([["first"], true]);
 });
+
+it("is idle only once a write queued while it waited has finished too", async () => {
+  const queue = new ListWriteQueue();
+  const first = deferred();
+  const later = deferred();
+  queue.run("list", () => first.promise);
+  let idle = false;
+  void queue.idle.then(() => (idle = true));
+  queue.run("other", () => later.promise);
+  first.resolve();
+  await settle();
+  expect(idle).toBe(false);
+  later.resolve();
+  await settle();
+  expect(idle).toBe(true);
+});

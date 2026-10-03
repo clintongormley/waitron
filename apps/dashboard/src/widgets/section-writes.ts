@@ -10,18 +10,24 @@ export function fieldOf(error: unknown): string {
 }
 
 /**
- * Writes to a section's member list, run one after another in the order asked, because a move
- * leaves the list's focus on the row rather than waiting for the answer. Each write names the scope
- * it belongs to: the list, or whatever else decides which moves were made against the same order.
+ * Writes to an ordered list, run one after another in the order asked, because a move leaves the
+ * list's focus on the row rather than waiting for the answer. Each write names the scope it belongs
+ * to: the list, or whatever else decides which moves were made against the same order.
  */
 export class ListWriteQueue {
   #chain: Promise<void> = Promise.resolve();
   readonly #pending = new Map<unknown, number>();
   readonly #refusals = new Map<unknown, number>();
 
-  /** Settles once every write queued so far has finished; never rejects. */
+  /** Settles once no write is left, counting those queued while it waits; never rejects. */
   get idle(): Promise<void> {
-    return this.#chain;
+    return (async () => {
+      let chain: Promise<void>;
+      do {
+        chain = this.#chain;
+        await chain;
+      } while (chain !== this.#chain);
+    })();
   }
 
   run(scope: unknown, task: () => Promise<void>): void {

@@ -137,6 +137,8 @@ export class CatalogueScreen extends LitElement {
   #childRefusals: { error: unknown; errors: ChildRefusals } | null = null;
   /** The last course the open courses window added. */
   #addedCourse: string | null = null;
+  /** The editor generation whose courses window is waiting on its saves to close. */
+  #closingCourses: number | null = null;
 
   readonly #queries = new DashboardQueries(
     this,
@@ -548,10 +550,12 @@ export class CatalogueScreen extends LitElement {
   /** The window saves each change as it is made; closing waits for the last of them, then brings the
    * product's course in line. The editor is not reseeded, so the product's unsaved edits survive. */
   async #closeCourses(): Promise<void> {
-    if (this.#child.kind !== "courses") return;
     const generation = this.#editorGeneration;
+    if (this.#child.kind !== "courses" || this.#closingCourses === generation) return;
     const list = this.shadowRoot!.querySelector<CourseList>("dashboard-course-list")!;
+    this.#closingCourses = generation;
     await list.settled();
+    if (this.#closingCourses === generation) this.#closingCourses = null;
     if (generation !== this.#editorGeneration) return;
     // A refused name stays on screen to be fixed, unless Escape has already shut the window.
     if (list.unsaved && this.#coursesWindow().open) return;
@@ -796,7 +800,10 @@ export class CatalogueScreen extends LitElement {
             : nothing
         }
         <wt-form-actions slot="footer"
-          ><wt-button data-test="courses-done" @click=${() => void this.#closeCourses()}
+          ><wt-button
+            slot="cancel"
+            data-test="courses-done"
+            @click=${() => void this.#closeCourses()}
             >${t("action.done")}</wt-button
           ></wt-form-actions
         >

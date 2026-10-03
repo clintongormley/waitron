@@ -326,6 +326,30 @@ describe("renaming", () => {
     expect(field(el)).toBeNull();
   });
 
+  it("takes no typing while a rename is being saved, and takes it again once the save is refused", async () => {
+    let refuse!: (reason: unknown) => void;
+    const updateCourse = vi.fn().mockReturnValueOnce(
+      new Promise((_, fail) => {
+        refuse = fail;
+      }),
+    );
+    const { el } = await mount(stubApi({ updateCourse }));
+    await openRename(el, "c1");
+    await typeName(el, "Coffee");
+    await press(el, "Enter");
+    await userEvent.keyboard("Tea");
+    await el.updateComplete;
+    const input = () => field(el)!.shadowRoot!.querySelector("input")!;
+    expect(input().value).toBe("Coffee");
+    expect(field(el)!.shadowRoot!.activeElement).toBe(input());
+    refuse({ code: "connection.failed" });
+    await settle(el);
+    await press(el, "End");
+    await userEvent.keyboard("s");
+    expect(input().value).toBe("Coffees");
+    expect(updateCourse.mock.calls).toEqual([["c1", { name: "Coffee" }]]);
+  });
+
   it("shows the refusal of a rename left for another name in the alert line, leaving the other open", async () => {
     let reject!: (reason: unknown) => void;
     const updateCourse = vi.fn().mockReturnValueOnce(
@@ -576,6 +600,29 @@ describe("settling", () => {
     expect([settled, el.unsaved]).toEqual([true, false]);
   });
 
+  it("settles only once a change made while it waited has been answered too", async () => {
+    let answerCreate!: (value: { id: string }) => void;
+    let answerRemoval!: () => void;
+    const api = stubApi({
+      createCourse: vi.fn(() => new Promise<{ id: string }>((resolve) => (answerCreate = resolve))),
+      deactivateCourse: vi.fn(() => new Promise<void>((resolve) => (answerRemoval = resolve))),
+    });
+    const { el } = await mount(api);
+    await openNew(el);
+    await typeName(el, "Sharing plates");
+    leaveField(el);
+    let settled = false;
+    void el.settled().then(() => (settled = true));
+    q(el, '[data-test="remove-c1"]')!.click();
+    await settle(el);
+    answerCreate({ id: "c9" });
+    await settle(el);
+    expect([settled, vi.mocked(api.deactivateCourse).mock.calls]).toEqual([false, [["c1"]]]);
+    answerRemoval();
+    await settle(el);
+    expect(settled).toBe(true);
+  });
+
   it("settles with the name still open when its save is refused", async () => {
     const api = stubApi({ createCourse: vi.fn().mockRejectedValue({ code: "course.name_taken" }) });
     const { el } = await mount(api);
@@ -695,6 +742,132 @@ describe("reordering", () => {
     answers[1]!(moved(moved(COURSES, "c1", 1), "c1", 2));
     await settle(el);
     expect(rowIds(el)).toEqual(["c2", "c3", "c1"]);
+  });
+
+  it("puts quick key moves back in the server's order when the first is refused", async () => {
+    let refuse!: (reason: unknown) => void;
+    const moveCourse = vi.fn(
+      () =>
+        new Promise<Course[]>((_, fail) => {
+          refuse = fail;
+        }),
+    );
+    const api = stubApi({ moveCourse });
+    const { el } = await mount(api);
+    const grip = () => q(el, '[data-test="drag-c1"]')!;
+    grip().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    await el.updateComplete;
+    grip().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    await settle(el);
+    expect(rowIds(el)).toEqual(["c2", "c3", "c1"]);
+    refuse({ code: "course.not_found" });
+    await settle(el);
+    expect(moveCourse).toHaveBeenCalledTimes(1);
+    expect(rowIds(el)).toEqual(["c1", "c2", "c3"]);
+  });
+
+  it("shows a rename saved while a move was out once the move is answered, when no later read comes", async () => {
+    let server = copy(COURSES);
+    let answerRename!: () => void;
+    let answerMove!: () => void;
+    const updateCourse = vi
+      .fn()
+      .mockImplementationOnce(
+        (id: string, { name }: { name: string }) =>
+          new Promise<void>((resolve) => {
+            answerRename = () => {
+              server = server.map((course) => (course.id === id ? { ...course, name } : course));
+              resolve();
+            };
+          }),
+      )
+      .mockRejectedValueOnce({ code: "connection.failed" });
+    const api = stubApi({
+      listCourses: vi.fn(() => Promise.resolve(copy(server))),
+      updateCourse,
+      moveCourse: vi.fn(
+        (id: string, to: number) =>
+          new Promise<Course[]>((resolve) => {
+            answerMove = () => {
+              server = moved(server, id, to);
+              resolve(copy(server));
+            };
+          }),
+      ),
+    });
+    const { el } = await mount(api);
+    await openRename(el, "c1");
+    await typeName(el, "Entrées");
+    await press(el, "Enter");
+    q(el, '[data-test="drag-c3"]')!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
+    );
+    await el.updateComplete;
+    await openRename(el, "c2");
+    await typeName(el, "Principales");
+    await press(el, "Enter");
+    answerRename();
+    await settle(el);
+    answerMove();
+    await settle(el);
+    expect(updateCourse).toHaveBeenCalledTimes(2);
+    expect(rowIds(el)).toEqual(["c1", "c3", "c2"]);
+    expect(nameButton(el, "c1")!.textContent!.trim()).toBe("Entrées");
+  });
+
+  it("keeps rows moved while a rename was saved where they were put when the rename's refresh lands", async () => {
+    let server = copy(COURSES);
+    let answerRename!: () => void;
+    const answers: (() => void)[] = [];
+    const api = stubApi({
+      listCourses: vi.fn(() => Promise.resolve(copy(server))),
+      updateCourse: vi.fn(
+        (id: string, { name }: { name: string }) =>
+          new Promise<void>((resolve) => {
+            answerRename = () => {
+              server = server.map((course) => (course.id === id ? { ...course, name } : course));
+              resolve();
+            };
+          }),
+      ),
+      moveCourse: vi.fn(
+        (id: string, to: number) =>
+          new Promise<Course[]>((resolve) =>
+            answers.push(() => {
+              server = moved(server, id, to);
+              resolve(copy(server));
+            }),
+          ),
+      ),
+    });
+    const { el } = await mount(api);
+    await openRename(el, "c2");
+    await typeName(el, "Principales");
+    await press(el, "Enter");
+    async function key(name: string): Promise<void> {
+      q(el, '[data-test="drag-c1"]')!.dispatchEvent(
+        new KeyboardEvent("keydown", { key: name, bubbles: true }),
+      );
+      await el.updateComplete;
+    }
+    await key("ArrowDown");
+    await key("ArrowDown");
+    expect(rowIds(el)).toEqual(["c2", "c3", "c1"]);
+    answerRename();
+    await settle(el);
+    expect(rowIds(el)).toEqual(["c2", "c3", "c1"]);
+    await key("ArrowUp");
+    while (answers.length > 0) {
+      answers.shift()!();
+      await settle(el);
+    }
+    expect(vi.mocked(api.moveCourse).mock.calls).toEqual([
+      ["c1", 1],
+      ["c1", 2],
+      ["c1", 1],
+    ]);
+    expect(rowIds(el)).toEqual(["c2", "c1", "c3"]);
+    expect(nameButton(el, "c2")!.textContent!.trim()).toBe("Principales");
   });
 
   /** Presses on a course's grip, crosses the rows named in `over` one by one, then lets go. */

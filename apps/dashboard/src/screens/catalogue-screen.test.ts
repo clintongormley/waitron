@@ -20,6 +20,7 @@ import type {
 } from "../api/client.js";
 import type { ProductChildKind } from "../state/product-child-create.js";
 import type { AddToMenus } from "../widgets/add-to-menus.js";
+import type { CourseList } from "../widgets/course-list.js";
 import type { ProductEditor } from "../widgets/product-editor.js";
 import type { CatalogueBrowser } from "../widgets/catalogue-browser.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
@@ -1406,6 +1407,7 @@ describe("catalogue-screen", () => {
       expect(
         [...dialog.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
       ).toEqual([t("action.done")]);
+      expect(dialog.querySelector("[data-test=courses-done]")!.getAttribute("slot")).toBe("cancel");
       expect(editor(el).childOpen).toBe(true);
     });
 
@@ -1435,6 +1437,65 @@ describe("catalogue-screen", () => {
       expect(editor(el).courses.map(({ id }) => id)).toEqual(["k1", "k2", "k-new"]);
       expect(await shownCourse(el)).toBe("Postres");
       expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
+    });
+
+    it("closes once when Done is pressed again while it waits", async () => {
+      let answer!: () => void;
+      let added = false;
+      const postres: Course = { id: "k-new", name: "Postres", displayOrder: 2, active: true };
+      const api = courseApi({
+        createCourse: vi.fn(
+          () =>
+            new Promise<{ id: string }>((resolve) => {
+              answer = () => {
+                added = true;
+                resolve({ id: "k-new" });
+              };
+            }),
+        ),
+        listCourses: vi.fn(() =>
+          Promise.resolve([...venueCourses, ...(added ? [postres] : [])].map((c) => ({ ...c }))),
+        ),
+      });
+      const el = await openCourses(api, "k1");
+      await typeNewCourse(el, "Postres");
+      const reads = vi.mocked(api.listCourses).mock.calls.length;
+      const doneButton = el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!;
+      await userEvent.click(doneButton);
+      await userEvent.click(doneButton);
+      await vi.waitFor(() => expect(api.createCourse).toHaveBeenCalledOnce());
+      answer();
+      await vi.waitFor(() => expect(coursesWindow(el).open).toBe(false));
+      await vi.waitFor(() => expect(editor(el).currentValue.courseId).toBe("k-new"));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await flush(el);
+      // The list's own read after the add, then the window's one on closing.
+      expect(api.listCourses).toHaveBeenCalledTimes(reads + 2);
+      expect(editor(el).courses.map(({ id }) => id)).toEqual(["k1", "k2", "k-new"]);
+      expect(await shownCourse(el)).toBe("Postres");
+      expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
+    });
+
+    it("waits as well for a change made in the window while Done was waiting", async () => {
+      let answerRemoval!: () => void;
+      const api = courseApi(
+        {
+          deactivateCourse: vi.fn(() => new Promise<void>((resolve) => (answerRemoval = resolve))),
+        },
+        true,
+      );
+      const el = await openCourses(api, "k1");
+      await typeNewCourse(el, "Postres");
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
+      inList(el, '[data-test="remove-k2"]').click();
+      await vi.waitFor(() => expect(api.createCourse).toHaveBeenCalledOnce());
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await flush(el);
+      expect(vi.mocked(api.deactivateCourse).mock.calls).toEqual([["k2"]]);
+      expect([coursesWindow(el).open, editor(el).currentValue.courseId]).toEqual([true, "k1"]);
+      answerRemoval();
+      await vi.waitFor(() => expect(coursesWindow(el).open).toBe(false));
+      await vi.waitFor(() => expect(editor(el).currentValue.courseId).toBe("k-new"));
     });
 
     it("stays open when a course left by pressing Done is refused, showing why beside its name", async () => {
@@ -1476,6 +1537,30 @@ describe("catalogue-screen", () => {
       await flush(el);
       expect(coursesWindow(el).open).toBe(true);
       expect(editor(el).childOpen).toBe(true);
+      expect(editor(el).currentValue.courseId).toBe("k1");
+    });
+
+    it("closes the next product's window on its Done while the last one's save is still out", async () => {
+      let answer!: (value: { id: string }) => void;
+      const api = courseApi({
+        createCourse: vi.fn(() => new Promise<{ id: string }>((resolve) => (answer = resolve))),
+      });
+      const el = await openCourses(api, "k1");
+      await typeNewCourse(el, "Postres");
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
+      await vi.waitFor(() => expect(api.createCourse).toHaveBeenCalledOnce());
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      emit(editor(el), "wt-create-related", { kind: "courses" });
+      await el.updateComplete;
+      await vi.waitFor(() =>
+        expect(courseList(el)?.shadowRoot!.querySelectorAll("tbody tr").length).toBeGreaterThan(0),
+      );
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
+      await vi.waitFor(() => expect(coursesWindow(el).open).toBe(false));
+      expect(editor(el).childOpen).toBe(false);
+      answer({ id: "k-new" });
+      await flush(el);
       expect(editor(el).currentValue.courseId).toBe("k1");
     });
 
@@ -1532,22 +1617,41 @@ describe("catalogue-screen", () => {
     it("ignores the closed window's late close once another nested form is open", async () => {
       const api = courseApi();
       const el = await openCourses(api, "k1");
-      // Clicked in script, not through the browser: the native close is reported a task later, and
-      // the unit form has to be open by then.
-      el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!.click();
-      await el.updateComplete;
-      await (coursesWindow(el) as unknown as LitElement).updateComplete;
-      emit(editor(el), "wt-create-related", { kind: "unit" });
-      await el.updateComplete;
-      const unitForm = el.shadowRoot!.querySelector("dashboard-unit-form")!;
-      expect(unitForm.open).toBe(true);
-      await closeReportsDelivered();
-      await flush(el);
-      expect([unitForm.open, coursesWindow(el).open, editor(el).childOpen]).toEqual([
-        true,
-        false,
-        true,
-      ]);
+      const unhandled: unknown[] = [];
+      const onRejection = (event: PromiseRejectionEvent) => {
+        unhandled.push(event.reason);
+        event.preventDefault();
+      };
+      window.addEventListener("unhandledrejection", onRejection);
+      try {
+        // Clicked in script, not through the browser: the native close is reported a task later,
+        // and the unit form has to be open by then.
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!.click();
+        // Done waited on this first, so it has let the window go by the time this settles; the render
+        // follows.
+        await el.shadowRoot!.querySelector<CourseList>("dashboard-course-list")!.settled();
+        await el.updateComplete;
+        await (coursesWindow(el) as unknown as LitElement).updateComplete;
+        emit(editor(el), "wt-create-related", { kind: "unit" });
+        await el.updateComplete;
+        const unitForm = el.shadowRoot!.querySelector("dashboard-unit-form")!;
+        expect(unitForm.open).toBe(true);
+        await closeReportsDelivered();
+        await flush(el);
+        expect([unitForm.open, coursesWindow(el).open, editor(el).childOpen]).toEqual([
+          true,
+          false,
+          true,
+        ]);
+        // Rejections are reported in the order they went unhandled, so once this marker arrives a
+        // failure of the late close's handling has been reported too.
+        const marker = new Error("marker");
+        void Promise.reject(marker);
+        await vi.waitFor(() => expect(unhandled).toContain(marker));
+        expect(unhandled).toEqual([marker]);
+      } finally {
+        window.removeEventListener("unhandledrejection", onRejection);
+      }
     });
 
     it("leaves alone a product opened while the closing window's refresh was in flight", async () => {

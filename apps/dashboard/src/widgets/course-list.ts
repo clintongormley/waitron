@@ -95,6 +95,10 @@ export class CourseList extends LitElement {
   @state() private edit: Edit | null = null;
   @state() private errorKey: string | null = null;
   readonly #writes = new ListWriteQueue();
+  /** Moves shown on screen but not yet answered: a list read meanwhile would put their rows back. */
+  #movesOut = 0;
+  /** A list read arrived while moves were out, so what it carried has not been shown yet. */
+  #readDropped = false;
   #dragFrom: number | null = null;
 
   readonly #queries = new DashboardQueries(
@@ -129,7 +133,7 @@ export class CourseList extends LitElement {
     void this.#load();
   }
 
-  /** Settles once every change made so far has been answered. */
+  /** Settles once no change is left unanswered, counting those made while it waits. */
   async settled(): Promise<void> {
     await this.#writes.idle;
   }
@@ -147,6 +151,8 @@ export class CourseList extends LitElement {
   }
 
   #show(rows: Course[]): void {
+    this.#readDropped = this.#movesOut > 0;
+    if (this.#readDropped) return;
     this.courses = rows;
     const edit = this.edit;
     if (edit !== null && edit.id !== NEW && !rows.some((course) => course.id === edit.id))
@@ -184,14 +190,19 @@ export class CourseList extends LitElement {
 
   #saveMove(id: string, to: number): void {
     this.errorKey = null;
+    this.#movesOut += 1;
     this.#writes.move(
       SCOPE,
       () => this.api.moveCourse(id, to),
-      (courses, last) => {
+      async (courses, last) => {
+        this.#movesOut -= 1;
         // An earlier answer would pull rows back under a keyboard that has moved on.
         if (last) this.#show(courses);
+        else if (this.#movesOut === 0 && this.#readDropped) await this.#load();
       },
       async (error) => {
+        // The queue drops, unsent, every move still waiting behind a refused one.
+        this.#movesOut = 0;
         this.errorKey = codeOf(error);
         await this.#load();
       },
@@ -241,6 +252,7 @@ export class CourseList extends LitElement {
     }
     edit.saving = true;
     this.errorKey = null;
+    this.requestUpdate();
     this.#writes.run(SCOPE, async () => {
       let added: string | null = null;
       try {
@@ -249,6 +261,7 @@ export class CourseList extends LitElement {
         else await this.api.updateCourse(edit.id, { name });
       } catch (error) {
         edit.saving = false;
+        this.requestUpdate();
         if (this.edit === edit && namesTheName(error)) this.#mark(edit, codeMessage(codeOf(error)));
         else this.errorKey = codeOf(error);
         return;
@@ -277,6 +290,7 @@ export class CourseList extends LitElement {
       label=${label}
       hide-label
       required
+      ?readonly=${edit.saving}
       .value=${edit.name}
       error=${edit.error}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
