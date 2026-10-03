@@ -1088,6 +1088,24 @@ it("gives the maximum the standard stepper width, not a wider one of its own", a
   expect(root).toBe("88px");
 });
 
+it("sets Maximum choices just after Minimum choices on a wide screen, not at the far side of the form", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 844);
+  try {
+    const { el, host } = await mount({ value: addons });
+    host.style.setProperty("--wt-space-3", "12px");
+    const boxOf = (name: string) =>
+      field(el, name).shadowRoot!.querySelector(".field")!.getBoundingClientRect();
+    const min = boxOf("min-picks");
+    const max = boxOf("max-picks");
+    expect(max.top).toBe(min.top);
+    expect(max.left - min.right).toBe(12);
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
 it("stacks the two choices steppers on a phone and sets them side by side on a wide screen", async () => {
   const width = window.innerWidth,
     height = window.innerHeight;
