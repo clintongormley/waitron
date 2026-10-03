@@ -228,8 +228,7 @@ export { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
  * `"lock"` (or a boot failure) renders the lock screen; every other value renders the canvas tab shell
  * and names the surface a nav action moved to, not a separately rendered screen.
  */
-type Screen =
-  "lock" | "counter" | "ticket" | "schedule" | "floor" | "table-order" | "station" | "expo";
+type Screen = "lock" | "counter" | "floor" | "station";
 
 /** An overlay over the active canvas tab. Sale context remains local; regular destinations have URLs. */
 type Drill = { kind: "table-order" | "ticket" | TillDestination };
@@ -3063,11 +3062,10 @@ export class TillApp extends LitElement {
   #onShowStation(event: Event): void {
     this.errorKey = undefined;
     const stationId = (event as CustomEvent<{ stationId?: string } | undefined>).detail?.stationId;
-    if (this.#inShell()) {
-      this.#pushDrill({ kind: "station" });
-      if (stationId !== undefined && this.drill?.kind === "station")
-        this.#url.write({ "till-station": stationId }, true);
-    } else this.#setScreen("station");
+    if (!this.#inShell()) return;
+    this.#pushDrill({ kind: "station" });
+    if (stationId !== undefined && this.drill?.kind === "station")
+      this.#url.write({ "till-station": stationId }, true);
   }
 
   /**
@@ -3094,7 +3092,6 @@ export class TillApp extends LitElement {
   #onShowExpo(): void {
     this.errorKey = undefined;
     if (this.#inShell()) this.#pushDrill({ kind: "expo" });
-    else this.#setScreen("expo");
   }
 
   /**
@@ -3595,22 +3592,17 @@ export class TillApp extends LitElement {
     this.cardOutcome = undefined;
     // The home tab is the canvas's first tab. After settling a tab the floor is stale, so a floor home
     // refreshes it.
-    if (this.#inShell()) {
-      const home = this.canvas?.tabs[0];
-      this.#setActiveTab(home?.key, true);
-      if (home?.key === "counter") void this.#loadStations();
-      this.#popDrill();
-      if (home !== undefined && this.#tabNeedsFloorData(home)) void this.#refreshFloor();
-    } else {
-      this.#setScreen("counter");
-      void this.#loadStations();
-    }
+    if (!this.#inShell()) return;
+    const home = this.canvas?.tabs[0];
+    this.#setActiveTab(home?.key, true);
+    if (home?.key === "counter") void this.#loadStations();
+    this.#popDrill();
+    if (home !== undefined && this.#tabNeedsFloorData(home)) void this.#refreshFloor();
   }
 
   #onShowSchedule(): void {
     this.errorKey = undefined;
     if (this.#inShell()) this.#pushDrill({ kind: "schedule" });
-    else this.#setScreen("schedule");
   }
 
   #onOpenAllergens(): void {
@@ -3619,13 +3611,7 @@ export class TillApp extends LitElement {
   }
 
   #onCloseAllergens(): void {
-    if (this.#inShell()) this.#popDrill();
-  }
-
-  async #onShowFloor(): Promise<void> {
-    this.errorKey = undefined;
-    await this.#loadFloorData();
-    this.#setScreen("floor");
+    this.#popDrill();
   }
 
   /**
@@ -3825,9 +3811,6 @@ export class TillApp extends LitElement {
         this.#setActiveTab(orderTabKey); // card mount (handheld/tablet)
       else this.#pushDrill({ kind: "table-order" }); // drill mount (till)
       this.#shownOnVisit = this.#orderVisit;
-    } else if (this.screen !== "lock") {
-      // A late answer must not unlock a logged-out till.
-      this.#setScreen("table-order");
     }
     void this.#loadStations();
   }
@@ -6815,12 +6798,6 @@ export class TillApp extends LitElement {
     this.screen = screen;
   }
 
-  /**
-   * The else-arms that set `screen` are also reached by an async handler whose answer arrives after
-   * logout, and setting `screen` there takes the till off the lock screen, which is why
-   * {@link #showTicket} and {@link #onOpenTable} check for `lock` first. {@link #onShowFloor} does
-   * not (docs/backlog.md, "Till code that no test can reach").
-   */
   #inShell(): boolean {
     return this.canvas !== undefined && this.#shellActive();
   }
@@ -6848,22 +6825,16 @@ export class TillApp extends LitElement {
   #showTicket(workingOrderId: string, invoiceIssuedNow = true): void {
     this.ticketWorkingOrderId = workingOrderId;
     this.originalReceiptAvailable = invoiceIssuedNow && this.receiptPrintMode !== "auto";
-    if (this.#inShell()) this.#pushDrill({ kind: "ticket" });
-    // A late answer must not unlock a logged-out till.
-    else if (this.screen !== "lock") this.#setScreen("ticket");
+    this.#pushDrill({ kind: "ticket" });
   }
 
   /** A canvas with no counter tab shows its first tab instead. */
   #onBackToCounter(): void {
     this.errorKey = undefined;
-    if (this.#inShell()) {
-      this.#setActiveTab("counter");
-      void this.#loadStations();
-      this.#popDrill();
-    } else if (this.screen !== "lock") {
-      this.#setScreen("counter");
-      void this.#loadStations();
-    }
+    if (!this.#inShell()) return;
+    this.#setActiveTab("counter");
+    void this.#loadStations();
+    this.#popDrill();
   }
 
   /**
@@ -6875,15 +6846,10 @@ export class TillApp extends LitElement {
     this.cancelOffer = null;
     const session = this.#operatorSession;
     const flushed = this.#flushDraft();
-    if (this.#inShell()) {
-      this.#clearErrorKeepingLateChange();
-      this.#popDrill();
-      void flushed.then(() =>
-        session !== this.#operatorSession ? undefined : this.#refreshFloor(),
-      );
-    } else {
-      void flushed.then(() => this.#onShowFloor());
-    }
+    if (!this.#inShell()) return;
+    this.#clearErrorKeepingLateChange();
+    this.#popDrill();
+    void flushed.then(() => (session !== this.#operatorSession ? undefined : this.#refreshFloor()));
   }
 
   /** Keeps the basket: it belongs to the till. */
@@ -7214,6 +7180,7 @@ export class TillApp extends LitElement {
   }
 
   override render() {
+    const shellCanvas = this.#inShell() ? this.canvas : undefined;
     return html`
       <div
         class="app"
@@ -7252,7 +7219,6 @@ export class TillApp extends LitElement {
         @override-confirm=${(event: Event) => void this.#onOverrideConfirm(event)}
         @override-cancel=${() => this.#closeOverrideDialog()}
         @show-schedule=${() => this.#onShowSchedule()}
-        @show-floor=${() => void this.#onShowFloor()}
         @floor-refresh=${() => void this.#refreshFloor()}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
@@ -7433,11 +7399,11 @@ export class TillApp extends LitElement {
               ? html`<till-enrol-screen .api=${this.api}></till-enrol-screen>`
               : // Keyed on the locale, so a switch rebuilds the subtree in the new language. The lock
                 // screen also shows after a boot failure, rather than an empty shell.
-                this.#inShell()
+                shellCanvas !== undefined
                 ? keyed(
                     currentLocale(),
                     html`<till-tab-shell
-                      .tabs=${this.canvas?.tabs ?? []}
+                      .tabs=${shellCanvas.tabs}
                       .activeTabKey=${this.activeTabKey}
                       .operatorName=${this.operatorName}
                       .affordances=${this.#affordanceList}

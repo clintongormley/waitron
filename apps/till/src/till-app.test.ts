@@ -2114,6 +2114,38 @@ describe("till-app", () => {
     });
   });
 
+  describe("a navigation event that arrives on the lock screen", () => {
+    it.each([
+      "show-station",
+      "show-expo",
+      "show-schedule",
+      "show-floor",
+      "open-allergens",
+      "close-allergens",
+      "new-sale",
+      "back-to-counter",
+      "back-to-floor",
+    ])(
+      "leaves a logged-out till locked after %s, reading nothing and leaving no destination to restore",
+      async (type) => {
+        const { el } = await mountApp();
+        const c = await toCounter(el);
+        emit(c, "logout");
+        await flush(el);
+        const stationReads = vi.mocked(currentApi.listStations).mock.calls.length;
+        const floorReads = vi.mocked(currentApi.getTablesState).mock.calls.length;
+        emit(lock(el)!, type);
+        await flush(el);
+        await flush(el);
+        expect(lock(el)).not.toBeNull();
+        expect(shell(el)).toBeNull();
+        expect(location.pathname).not.toContain("/view/");
+        expect(currentApi.listStations).toHaveBeenCalledTimes(stationReads);
+        expect(currentApi.getTablesState).toHaveBeenCalledTimes(floorReads);
+      },
+    );
+  });
+
   // ── Device front door ───────────────────────────────────────────────────────
   // One boot decision: dev + no adopted tab device → the chooser; not enrolled (401, not dev) → the join
   // screen; enrolled `kds` → the kiosk shell (the kds-boot test above); enrolled other → the login (lock)
