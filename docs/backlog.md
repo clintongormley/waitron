@@ -4686,7 +4686,7 @@ approved.
 
 ### B7. Provisioning and build debt
 
-**`@waitron/verifactu` 0.2.1 (A230, owner 2026-10-03) — DONE on this branch.** Waitron moved from
+**`@waitron/verifactu` 0.2.1 (A230, owner 2026-10-03) — landed as #1099.** Waitron moved from
 0.1.0 to `^0.2.1` (0.2.1 is A230a: the library now accepts a zero VAT amount when the base times the
 rate rounds to 0.00). The fingerprint, built record and XML are unchanged for the same input (both
 published packages fed the same records; controls showed a difference is reported). Done with it:
