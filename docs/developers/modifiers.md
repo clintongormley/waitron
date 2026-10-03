@@ -121,6 +121,14 @@ composes the same two, so a list can be created without leaving the dish being e
 emits `wt-submit` with the complete list input and `wt-cancel` with `{}`; the composing screen owns
 the API call and closes the editor after a successful write.
 
+The extras list form's product picker offers a product with an Active variant, Available or not,
+greyed and unpickable, with "Has variants, so it can't be an extra" as its second line, because the
+save would be refused `extras.product_has_variants`. A row already on the list whose product has an
+Active variant says the same under its name, with "Remove it from this list.", as soon as the form
+opens; a save is then refused beside that row and in the bottom message, and Save stays disabled
+until the row is removed. The catalogue's own saves refuse to build that state (below), so the
+mark is for rows written some other way.
+
 ## Ordering and stored facts
 
 A requested line carries two optional fields, `options` and `extras`. Six routes take them,

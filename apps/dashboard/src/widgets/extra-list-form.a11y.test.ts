@@ -148,4 +148,42 @@ describe.each(["light", "dark"] as const)("extra list form (%s)", (theme) => {
     expect(names.open).toBe(state === "names-open" || state === "names-error");
     await expectNoA11yViolations(host);
   });
+
+  it("renders a listed product with an Active variant, marked on its row, and the picker open on a greyed product, accessibly", async () => {
+    const wine = {
+      ...product(GONE, "Wine", "3.00"),
+      variants: [
+        {
+          id: "66666666-6666-4666-8666-666666666666",
+          name: "Glass",
+          customerName: null,
+          kitchenName: null,
+          image: null,
+          unitPrice: null,
+          available: true,
+          active: true,
+          effective: { unitPrice: "3.00", vatClass: "general" as const, primaryCategoryId: null },
+        },
+      ],
+    };
+    const sparkling = { ...wine, id: "77777777-7777-4777-8777-777777777777", name: "Cava" };
+    const { el, host } = await mountWidget<ExtraListForm>(
+      "dashboard-extra-list-form",
+      {
+        open: true,
+        languages: { defaultLanguage: "en", languages: ["en", "es"] },
+        products: [...products, wine, sparkling],
+        value: { ...addons, items: [{ ...addons.items[0]!, productId: GONE }] },
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector('[data-test="item-0-product-error"]')).not.toBeNull();
+    const picker = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      '[data-test="add-product"]',
+    )!;
+    picker.shadowRoot!.querySelector<HTMLElement>("button.trigger")!.click();
+    await picker.updateComplete;
+    expect(picker.shadowRoot!.querySelector('[aria-disabled="true"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 });

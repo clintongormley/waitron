@@ -235,6 +235,12 @@ export class ExtraListForm extends LitElement {
     return this.#productById.get(productId)?.name ?? t("extras.unknown_product");
   }
 
+  /** The server refuses a list naming a product with an Active variant, Available or not
+   * (`assertNoParentsWithVariants`, packages/catalogue/src/extras.ts). */
+  #hasActiveVariant(productId: string): boolean {
+    return this.#productById.get(productId)?.variants.some((variant) => variant.active) ?? false;
+  }
+
   #inheritedPrice(productId: string): string {
     return this.#productById.get(productId)?.unitPrice ?? "";
   }
@@ -436,6 +442,8 @@ export class ExtraListForm extends LitElement {
       // second one naming `items.N.productId`.
       if (offered.has(item.productId))
         validation[`item-${index}-product`] = t("extras.duplicate_product");
+      else if (this.#hasActiveVariant(item.productId))
+        validation[`item-${index}-product`] = t("extras.has_variants_remove");
       offered.add(item.productId);
     });
     // An active list is asked on every order of a dish carrying it and there is nothing to answer
@@ -533,7 +541,10 @@ export class ExtraListForm extends LitElement {
 
   #itemRow(item: DraftItem, index: number, errors: Record<string, string>) {
     const named = this.#productName(item.productId);
-    const productError = errors[`item-${index}-product`];
+    // Shown before any save too: the server would refuse the list for it.
+    const productError =
+      errors[`item-${index}-product`] ??
+      (this.#hasActiveVariant(item.productId) ? t("extras.has_variants_remove") : undefined);
     return html`<tr data-item=${item.id}>
       <td class="handle-cell">${this.#reorder.handle(item.id)}</td>
       <td>
@@ -658,7 +669,13 @@ export class ExtraListForm extends LitElement {
               : t("extras.no_products_found")
           }
           .disabled=${this.busy}
-          .options=${offered.map((product) => ({ value: product.id, label: product.name }))}
+          .options=${offered.map((product) => ({
+            value: product.id,
+            label: product.name,
+            ...(this.#hasActiveVariant(product.id)
+              ? { disabled: true, description: t("extras.has_variants") }
+              : {}),
+          }))}
           .value=${""}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
