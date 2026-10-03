@@ -1165,19 +1165,22 @@ Not covered — below, "Screens that load outside the
 shared queries never retry".
 
 **Screens that load outside the shared queries never retry (A224, from A206's review, 2026-10-02) —
-OPEN.** A206 fixed every read made through the shared query layer. A screen opened while the server
-is down and loading through a one-off request stays on its message until the page is refreshed:
-Payments (`listPaymentProviders`/`listReaders` in `#load`), Cloud services, and Profile's language
-list (`getLocales`). Also from that review: no read has a time limit, so a request that never
-answers keeps its read loading for ever; and where a save's failure is shown in the same field as a
-read's, a save that failed with `connection.failed` during the outage loses its message when the
-reads recover. Most of the screens where that happens store the message as a code; Profile and the
-reprint dialog store its text. Units compares the error itself and keeps it, and the placement step
-keeps a save's failures in a list of their own. Sales releases its `getSalesOverview` watch in a
-`finally`, so if only that read fails while the daily-close read succeeds, no recovery is announced
-and the business day is not loaded until the screen is reopened — traced by reading, not tested.
-Roster and Planned vs actual show their "no locations" prompt instead of the error when the
-locations read fails.
+PARTLY DONE (W18).** Done: Payments' providers and readers, Cloud services' status and Profile's
+language list now load through the shared queries, so a screen opened while the server is down fills
+in once it is back. Payments asks for each reader's status again only when the list of active
+readers changes, after a change the operator made, or from its refresh button, because a status can
+ask the card provider. On Payments and Cloud services, a failed action's message stays when the reads
+recover. Sales keeps watching the business-day read until it has answered, so it loads when only that
+read failed. Roster and Planned vs actual show the error, not their "no locations" prompt, when the
+locations read fails before it has ever answered. **Still open:** no read has a time limit, so a
+request that never answers keeps its read loading for ever, and the live connection does not re-read
+a read still marked loading (`packages/dashboard-kit/src/live-data.ts`, `#schedule`). And where a
+save's failure is shown in the same field as a read's, a save that failed with `connection.failed`
+during the outage loses its message when the reads recover: most screens store the message as a
+code, Profile and the reprint dialog store its text. Units compares the error itself and keeps it,
+the placement step keeps a save's failures in a list of their own, and Payments and Cloud services
+now keep it too. Both need a choice (asked 2026-10-03 in lane A's questions): the limit's value, and
+whether each screen tracks where its message came from.
 
 **The WAITRON wordmark is nearly invisible in the dashboard's banner in dark mode (A225, seen
 2026-10-02 while checking A206) — OPEN, not investigated.** The dark lettering of the lockup sits on
