@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { captureError, withTransaction, type Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { SaleLineClassification } from "@waitron/shared";
-import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
+import { plantStoredCategory, seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { createCatalogue, createProduct } from "./operations.js";
-import { createCategory, setMainReportingCategory } from "./categories.js";
+import { createCategory } from "./categories.js";
 import { setProductVariants } from "./variants.js";
 import {
   classifyLine,
@@ -67,8 +67,8 @@ async function fixture() {
       [variant("125 ml"), variant("175 ml")],
       "en",
     );
-    // A variant with a main category of its own, which it takes over its parent's.
-    await setMainReportingCategory(tx, wine175!.id, cocktails.id, "any");
+    // A variant still holding a category of its own, which it never reports.
+    await plantStoredCategory(tx, wine175!.id, cocktails.id);
     return {
       categories: { drinks, alcoholic, cocktails, extras },
       products: {
@@ -113,12 +113,12 @@ describe("classifyLine", () => {
     });
   });
 
-  it("gives a variant with a main category of its own that chain", async () => {
+  it("gives a variant holding a stored category of its own its parent's chain", async () => {
     const f = await fixture();
     const c = await loaded(f);
 
     expect(classifyLine(c, f.products.wine175)).toEqual({
-      reporting: chain(f, "drinks", "alcoholic", "cocktails"),
+      reporting: chain(f, "drinks", "alcoholic"),
     });
   });
 

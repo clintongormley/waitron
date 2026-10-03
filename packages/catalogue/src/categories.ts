@@ -1,9 +1,9 @@
 import { categories, now, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { categoryDetails } from "./schema/categories.js";
-import { isTopLevelProduct, productWithId, type ProductScope } from "./variant-fallback.js";
+import { isTopLevelProduct, productWithId } from "./variant-fallback.js";
 import "./errors.js";
 
 export interface Category {
@@ -107,12 +107,28 @@ export async function updateCategory(
     .onConflictDoUpdate({ target: categoryDetails.categoryId, set: { parentId } });
   return readCategory(tx, id);
 }
-export async function deleteCategory(tx: Transaction, id: string): Promise<void> {
-  const category = await readCategory(tx, id);
+/**
+ * Empties categories about to be deleted: the products in them move to `to`, and a variant still
+ * storing one of them has it cleared, since a variant reads its parent's category whatever it stores
+ * and must not keep a key to a deleted row.
+ */
+export async function vacateCategories(
+  tx: Transaction,
+  ids: string[],
+  to: string | null,
+): Promise<void> {
   await tx
     .update(products)
-    .set({ categoryId: category.parentId, updatedAt: now() })
-    .where(eq(products.categoryId, id));
+    .set({ categoryId: to, updatedAt: now() })
+    .where(and(inArray(products.categoryId, ids), isTopLevelProduct));
+  await tx
+    .update(products)
+    .set({ categoryId: null, updatedAt: now() })
+    .where(and(inArray(products.categoryId, ids), isNotNull(products.parentId)));
+}
+export async function deleteCategory(tx: Transaction, id: string): Promise<void> {
+  const category = await readCategory(tx, id);
+  await vacateCategories(tx, [id], category.parentId);
   // Clears the RESTRICT parent key before the delete below.
   await tx
     .update(categoryDetails)
@@ -139,19 +155,18 @@ export async function allTopLevelProducts(
   return found.size === ids.length;
 }
 /**
- * Set a product's main reporting category: any category, or null for Uncategorised. On a variant
- * (reached only with scope `"any"`) null means it follows its parent's.
+ * Set a product's main reporting category: any category, or null for Uncategorised. A variant has
+ * none of its own (it always reads its parent's), so its id answers as an id that names no product.
  */
 export async function setMainReportingCategory(
   tx: Transaction,
   productId: string,
   categoryId: string | null,
-  scope: ProductScope = "top-level",
 ): Promise<{ primaryCategoryId: string | null }> {
   const [product] = await tx
     .select({ id: products.id })
     .from(products)
-    .where(productWithId(productId, scope));
+    .where(productWithId(productId, "top-level"));
   if (!product) throw new AppError("product.not_found", { productId });
   if (categoryId !== null) await readCategory(tx, categoryId);
   await tx

@@ -13,7 +13,7 @@ import {
 } from "./categories.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { setProductVariants } from "./variants.js";
-import { racePair, seedLegacySellingUnits } from "../test/fixtures.js";
+import { plantStoredCategory, racePair, seedLegacySellingUnits } from "../test/fixtures.js";
 
 /**
  * Category authoring against a real database, including pairs of transactions started
@@ -154,7 +154,7 @@ it("a product's main category may be any category, with no membership", async ()
     expect(await mainCategoryOf(productId)).toBe(categoryId);
   }
 });
-it("sets a variant's own main category only on the variant scope", async () => {
+it("refuses a variant's id as it refuses an id that names no product", async () => {
   const { a, b } = await fixture();
   const productId = await seedProduct();
   const variantId = await app(async (tx) => {
@@ -166,11 +166,10 @@ it("sets a variant's own main category only on the variant scope", async () => {
     code: "product.not_found",
     params: { productId: variantId },
   });
-  await app((tx) => setMainReportingCategory(tx, variantId, b.id, "any"));
-  expect(await mainCategoryOf(variantId)).toBe(b.id);
+  expect(await mainCategoryOf(variantId)).toBeNull();
   expect(await mainCategoryOf(productId)).toBe(a.id);
 });
-it("deleting a category moves its products, variants included, to its parent by default", async () => {
+it("deleting a category moves its products to its parent, and clears a variant's stored one", async () => {
   const { a, b } = await fixture();
   const child = await app((tx) => createCategory(tx, { name: "A1", parentId: a.id }));
   const product1 = await seedProduct();
@@ -179,12 +178,12 @@ it("deleting a category moves its products, variants included, to its parent by 
     await setMainReportingCategory(tx, product1, child.id);
     await setMainReportingCategory(tx, product2, b.id);
     const [variant] = await setProductVariants(tx, product2, [unpricedVariant("Half")], "en");
-    await setMainReportingCategory(tx, variant!.id, child.id, "any");
+    await plantStoredCategory(tx, variant!.id, child.id);
     return variant!.id;
   });
   await app((tx) => deleteCategory(tx, child.id));
   expect(await mainCategoryOf(product1)).toBe(a.id);
-  expect(await mainCategoryOf(variantId)).toBe(a.id);
+  expect(await mainCategoryOf(variantId)).toBeNull();
   expect(await mainCategoryOf(product2)).toBe(b.id);
   // A top-level category has no parent, so its products become Uncategorised.
   await app((tx) => deleteCategory(tx, a.id));

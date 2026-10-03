@@ -7521,8 +7521,10 @@ describe("editing a saved order prices only what the edit adds", () => {
 /**
  * "Wine by the glass" (reduced, category "Vinos", course Primero, sulphites, vegan) on the venue's
  * zone menu, with two variants: "Wine 125" sets nothing but its staff name and price, so every other
- * field reads its parent's; "Wine 175" sets its own customer and kitchen names, VAT, category, course,
- * allergens and dietary declarations, so a reader of the parent's value gets it wrong.
+ * field reads its parent's; "Wine 175" sets its own customer and kitchen names, VAT, course,
+ * allergens and dietary declarations, so a reader of the parent's value gets it wrong. Wine 175 also
+ * still stores a category of its own ("Copas"), which a variant never reads: its category is
+ * always its parent's.
  */
 async function seedWine(tx: Transaction, cfg: TillConfig, catalogueId: string) {
   const vinos = await createCategory(tx, { name: "Vinos" });
@@ -7680,7 +7682,7 @@ describe("a variant is sold as the product it is", () => {
         unitPriceGross: 550,
         vatClass: "general",
         courseId: wine.segundoId,
-        category: "Copas",
+        category: "Vinos",
       },
     ]);
   });
@@ -7785,7 +7787,7 @@ describe("a variant is sold as the product it is", () => {
     }
   });
 
-  it("fires variants by their effective folder claims", async () => {
+  it("fires variants by their product's folder claim, never a stored category of their own", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, cfg, catalogueId);
@@ -7794,7 +7796,7 @@ describe("a variant is sold as the product it is", () => {
       const copas = await createStation(tx, cfg, { name: "Copas" });
       await claimFolderFor(tx, cfg, wine.vinosId, barra.id);
       await claimFolderFor(tx, cfg, wine.copasId, copas.id);
-      // Both lines name variants; their effective folders select the two claims.
+      // Both lines name variants; each takes its product's folder, so Copas's claim takes neither.
       const orderId = randomUUID();
       await createOpenOrder(tx, cfg, orderId, [], null);
       await insertContextlessLines(tx, orderId, [wine.wine125, wine.wine175]);
@@ -7807,13 +7809,13 @@ describe("a variant is sold as the product it is", () => {
       expect(new Map(stations.map((s) => [s.lineId, s.stationId]))).toEqual(
         new Map([
           [first!.id, barra.id],
-          [second!.id, copas.id],
+          [second!.id, barra.id],
         ]),
       );
     });
   });
 
-  it("fires variants by their inherited or own folder claim", async () => {
+  it("fires variants by their inherited folder claim", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, cfg, catalogueId);
@@ -7834,20 +7836,21 @@ describe("a variant is sold as the product it is", () => {
       expect(new Map(stations.map((s) => [s.lineId, s.stationId]))).toEqual(
         new Map([
           [first!.id, bodega.id],
-          [second!.id, terraza.id],
+          [second!.id, bodega.id],
         ]),
       );
     });
   });
 
-  it("takes an earlier variant-folder exception before the parent-product exception", async () => {
+  it("takes the parent-product exception past an earlier exception on a variant's stored category", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const orderId = randomUUID();
     await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, cfg, catalogueId);
       const barra = await createStation(tx, cfg, { name: "Barra", isDefault: true });
       const terraza = await createStation(tx, cfg, { name: "Terraza" });
-      // The earlier zoned folder exception wins only for Wine 175; its sibling takes the parent-product exception.
+      // The earlier zoned exception names Wine 175's stored category, which no variant reads, so both
+      // variants take the parent-product exception.
       await insertRoute(tx, cfg, { zoneId, categoryId: wine.copasId, stationId: terraza.id });
       await insertRoute(tx, cfg, { productId: wine.parentId, stationId: barra.id });
       await createOpenOrder(
@@ -7864,11 +7867,11 @@ describe("a variant is sold as the product it is", () => {
       await fireLines(tx, cfg, orderId, await fireableLines(tx, orderId));
       const items = await ticketItemsFor(tx, orderId);
       expect(byProduct(items, wine.wine125).stationId).toBe(barra.id);
-      expect(byProduct(items, wine.wine175).stationId).toBe(terraza.id);
+      expect(byProduct(items, wine.wine175).stationId).toBe(barra.id);
     });
   });
 
-  it("takes a category exception for the parent, and one in its own category for the variant", async () => {
+  it("takes the parent's category exception for both variants, past one on a variant's stored category", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const orderId = randomUUID();
     await withTransaction(db, async (tx) => {
@@ -7891,7 +7894,7 @@ describe("a variant is sold as the product it is", () => {
       await fireLines(tx, cfg, orderId, await fireableLines(tx, orderId));
       const items = await ticketItemsFor(tx, orderId);
       expect(byProduct(items, wine.wine125).stationId).toBe(bodega.id);
-      expect(byProduct(items, wine.wine175).stationId).toBe(terraza.id);
+      expect(byProduct(items, wine.wine175).stationId).toBe(bodega.id);
     });
   });
 

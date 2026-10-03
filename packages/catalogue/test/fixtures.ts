@@ -40,6 +40,16 @@ export async function storedUnitId(tx: Transaction, productId: string): Promise<
   return row.unitId;
 }
 
+/** Writes `categoryId` straight into a product row, past every product path: how a test sets up a
+ * variant still holding a category of its own, which a variant's save now clears. */
+export async function plantStoredCategory(
+  tx: Transaction,
+  productId: string,
+  categoryId: string,
+): Promise<void> {
+  await tx.update(products).set({ categoryId }).where(eq(products.id, productId));
+}
+
 export interface SeededVenue {
   locationId: string;
   tillId: TillId;

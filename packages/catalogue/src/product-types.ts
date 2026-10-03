@@ -160,8 +160,9 @@ export interface ProductEditorInput {
   vatClass: VatClass | null;
   /** Empty on a variant, which has no variants of its own. */
   variants: ProductVariantInput[];
-  /** The main reporting category: any category, or null — Uncategorised on a product, "follow the
-   * parent's" on a variant. */
+  /** The main reporting category: any category, or null for Uncategorised. Always null on a variant,
+   * whose category is its parent's: a variant's save refuses any other value and clears a category
+   * the variant still stores. */
   primaryCategoryId: string | null;
   /** The ordered extras and options lists to attach, replacing whatever the product carries today.
    * Empty on a variant, which offers its parent's. */
@@ -186,6 +187,7 @@ export interface InheritedValues {
   unitPrice: string;
   vatClass: VatClass;
   unitId: string | null;
+  /** The parent's category, which is always the variant's. */
   primaryCategoryId: string | null;
   courseId: string | null;
   /** The parent's PUBLISHED allergens (its manual overlay merged with its recipe derivation, or null

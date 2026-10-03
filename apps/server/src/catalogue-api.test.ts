@@ -1456,7 +1456,7 @@ describe("mountCatalogueApi — products", () => {
 
   it("saves a variant's override, and a blank returns the field to inheriting", async () => {
     const app = mountApp("es-ES");
-    const { variantId, ownCategoryId } = await parentWithVariant(app);
+    const { variantId } = await parentWithVariant(app);
     const { courseId } = await seedRouting();
     const value = (await (
       await send(app, "GET", `/management-api/products/${variantId}/editor`)
@@ -1492,7 +1492,6 @@ describe("mountCatalogueApi — products", () => {
         ...value,
         vatClass: "general",
         unitPrice: "2.60",
-        primaryCategoryId: ownCategoryId,
         allergens: { eggs: { presence: "contains" } },
         courseId,
       },
@@ -1501,14 +1500,13 @@ describe("mountCatalogueApi — products", () => {
     expect(await overridden.json()).toMatchObject({
       vatClass: "general",
       unitPrice: "2.60",
-      primaryCategoryId: ownCategoryId,
       allergens: { eggs: { presence: "contains" } },
       courseId,
     });
     expect(await stored()).toEqual({
       vat_class: "general",
       unit_price: 260,
-      category_id: ownCategoryId,
+      category_id: null,
       manual_allergens: JSON.stringify({ eggs: { presence: "contains" } }),
     });
 
@@ -1518,6 +1516,61 @@ describe("mountCatalogueApi — products", () => {
     expect(cleared.status).toBe(200);
     expect(await cleared.json()).toEqual({ ...value, unitPrice: null });
     expect(await stored()).toEqual(blank);
+  });
+
+  describe("a variant holding a category of its own, stored before a variant always took its parent's", () => {
+    async function withStoredCategory(app: Hono) {
+      const seeded = await parentWithVariant(app);
+      await suite.db.execute(
+        sql`update products set category_id = ${seeded.ownCategoryId} where id = ${seeded.variantId}`,
+      );
+      const storedCategory = async () =>
+        (
+          await suite.db.execute<{ category_id: string | null }>(
+            sql`select category_id from products where id = ${seeded.variantId}`,
+          )
+        ).rows[0]!.category_id;
+      return { ...seeded, storedCategory };
+    }
+
+    it("is removed and restored by reading its editor value and saving it back", async () => {
+      const app = mountApp("es-ES");
+      const { variantId, categoryId, storedCategory } = await withStoredCategory(app);
+      const value = (await (
+        await send(app, "GET", `/management-api/products/${variantId}/editor`)
+      ).json()) as Record<string, unknown>;
+      expect(value).toMatchObject({
+        primaryCategoryId: null,
+        inherited: { primaryCategoryId: categoryId },
+      });
+      const put = (active: boolean) =>
+        send(app, "PUT", `/management-api/products/${variantId}/editor`, {
+          body: { ...value, active },
+        });
+      const removed = await put(false);
+      expect(removed.status).toBe(200);
+      expect(await removed.json()).toMatchObject({ active: false, primaryCategoryId: null });
+      expect(await storedCategory()).toBeNull();
+      const restored = await put(true);
+      expect(restored.status).toBe(200);
+      expect(await restored.json()).toMatchObject({ active: true, primaryCategoryId: null });
+    });
+
+    it("refuses a save naming a category of its own, and keeps the row as it was", async () => {
+      const app = mountApp("es-ES");
+      const { variantId, ownCategoryId, storedCategory } = await withStoredCategory(app);
+      const value = (await (
+        await send(app, "GET", `/management-api/products/${variantId}/editor`)
+      ).json()) as Record<string, unknown>;
+      const refused = await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
+        body: { ...value, primaryCategoryId: ownCategoryId },
+      });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "product.invalid", params: { field: "primaryCategoryId" } },
+      });
+      expect(await storedCategory()).toBe(ownCategoryId);
+    });
   });
 
   it("keeps a removed variant Inactive through the parent's page, and restores it when sent Active", async () => {
@@ -1641,22 +1694,22 @@ describe("mountCatalogueApi — products", () => {
   it("lists every variant, a removed one too, with its own price and its effective price, VAT and category", async () => {
     const app = mountApp("es-ES");
     const { parentId, variantId, categoryId, ownCategoryId } = await parentWithVariant(app);
-    // Café doble sets its own price (2.40, where the parent's is 2.00), and here its own VAT class
-    // and category; Café corto, added Inactive, leaves all three blank.
+    // Café doble sets its own price (2.40, where the parent's is 2.00) and here its own VAT class,
+    // and holds a stored category of its own, which it never reports; Café corto, added Inactive,
+    // leaves all three blank.
     const own = (await (
       await send(app, "GET", `/management-api/products/${variantId}/editor`)
     ).json()) as Record<string, unknown>;
     expect(
       (
         await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
-          body: {
-            ...own,
-            vatClass: "general",
-            primaryCategoryId: ownCategoryId,
-          },
+          body: { ...own, vatClass: "general" },
         })
       ).status,
     ).toBe(200);
+    await suite.db.execute(
+      sql`update products set category_id = ${ownCategoryId} where id = ${variantId}`,
+    );
     const parent = (await (
       await send(app, "GET", `/management-api/products/${parentId}/editor`)
     ).json()) as { variants: unknown[] };
@@ -1694,7 +1747,7 @@ describe("mountCatalogueApi — products", () => {
         effective: {
           unitPrice: "2.40",
           vatClass: "general",
-          primaryCategoryId: ownCategoryId,
+          primaryCategoryId: categoryId,
         },
       }),
       expect.objectContaining({
