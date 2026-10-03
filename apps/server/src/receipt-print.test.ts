@@ -306,7 +306,7 @@ async function drawerOpensFor(cfg: DeviceRequestConfig): Promise<
     reason: string;
     saleId: string | null;
     personId: string;
-    tillId: string | null;
+    deviceId: string | null;
     printerId: string | null;
   }[]
 > {
@@ -317,7 +317,7 @@ async function drawerOpensFor(cfg: DeviceRequestConfig): Promise<
         reason: drawerOpens.reason,
         saleId: drawerOpens.saleId,
         personId: drawerOpens.personId,
-        tillId: drawerOpens.tillId,
+        deviceId: drawerOpens.deviceId,
         printerId: drawerOpens.printerId,
       })
       .from(drawerOpens);
@@ -642,7 +642,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     expect(opens[0]).toMatchObject({
       reason: "cash_sale",
       personId: OPERATOR,
-      tillId: cfg.tillId,
+      deviceId: cfg.origin.deviceId,
       printerId,
     });
     expect(opens[0]!.saleId).toBe(await onlySaleId(cfg));
@@ -731,7 +731,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
         reason: "card_slip",
         saleId: await onlySaleId(cfg),
         personId: OPERATOR,
-        tillId: cfg.tillId,
+        deviceId: cfg.origin.deviceId,
         printerId,
       },
     ]);
@@ -822,7 +822,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
         reason: "card_slip",
         saleId: await onlySaleId(cfg),
         personId: OPERATOR,
-        tillId: cfg.tillId,
+        deviceId: cfg.origin.deviceId,
         printerId,
       },
     ]);
@@ -1093,7 +1093,7 @@ describe("every device whose profile allows the drawer opens its receipt printer
   }
 
   it.each(["cash", "card"] as const)(
-    "two tills sharing one drawer printer, both allowed the drawer: a %s sale on each opens the drawer, naming that till",
+    "two tills sharing one drawer printer, both allowed the drawer: a %s sale on each opens the drawer, naming that device",
     async (method) => {
       const { cfg, other, printerId, product } = await sharedDrawer();
 
@@ -1106,10 +1106,10 @@ describe("every device whose profile allows the drawer opens its receipt printer
         { printerId, kick: true },
       ]);
       expect(
-        (await drawerOpensFor(cfg)).map((row) => [row.reason, row.tillId, row.printerId]),
+        (await drawerOpensFor(cfg)).map((row) => [row.reason, row.deviceId, row.printerId]),
       ).toEqual([
-        [method === "cash" ? "cash_sale" : "card_slip", cfg.tillId, printerId],
-        [method === "cash" ? "cash_sale" : "card_slip", other.tillId, printerId],
+        [method === "cash" ? "cash_sale" : "card_slip", cfg.origin.deviceId, printerId],
+        [method === "cash" ? "cash_sale" : "card_slip", other.origin.deviceId, printerId],
       ]);
     },
   );
@@ -1130,7 +1130,7 @@ describe("every device whose profile allows the drawer opens its receipt printer
           reason: method === "cash" ? "cash_sale" : "card_slip",
           saleId: expect.any(String),
           personId: OPERATOR,
-          tillId: cfg.tillId,
+          deviceId: cfg.origin.deviceId,
           printerId,
         },
       ]);
@@ -1170,8 +1170,8 @@ describe("every device whose profile allows the drawer opens its receipt printer
 
       await collectOn(cfg);
       expect((await jobKinds(cfg)).filter((job) => job.kick)).toEqual([{ printerId, kick: true }]);
-      expect((await drawerOpensFor(cfg)).map((row) => [row.reason, row.tillId])).toEqual([
-        ["cash_sale", cfg.tillId],
+      expect((await drawerOpensFor(cfg)).map((row) => [row.reason, row.deviceId])).toEqual([
+        ["cash_sale", cfg.origin.deviceId],
       ]);
     },
   );

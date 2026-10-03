@@ -1117,7 +1117,7 @@ describe("recordCorrection — no fiscal condition blocks a correction (§5)", (
       confident: false,
       confidence: "degraded",
       anchorAgeSeconds: 999,
-      warning: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+      warning: new AppError("clock.degraded", { deviceId, anchorAgeSeconds: 999 }),
     }));
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);

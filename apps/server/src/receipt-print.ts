@@ -195,7 +195,7 @@ export async function enqueueManualDrawerOpen(
   viaOverride: boolean,
 ): Promise<void> {
   await tx.insert(drawerOpens).values({
-    tillId: cfg.tillId,
+    deviceId: cfg.origin.deviceId,
     printerId,
     personId: operatorId,
     reason: "manual",
@@ -235,7 +235,7 @@ async function enqueueBillDrawer(
   const printer = await drawerPrinter(tx, cfg.origin);
   if (printer === undefined) return;
   await tx.insert(drawerOpens).values({
-    tillId: cfg.tillId,
+    deviceId: cfg.origin.deviceId,
     printerId: printer.id,
     personId: operatorId,
     reason,
@@ -301,7 +301,7 @@ export async function enqueueSaleDrawer(
   const printer = await drawerPrinter(tx, cfg.origin);
   if (printer === undefined) return;
   await tx.insert(drawerOpens).values({
-    tillId: cfg.tillId,
+    deviceId: cfg.origin.deviceId,
     printerId: printer.id,
     personId: operatorId,
     reason: method === "cash" ? "cash_sale" : "card_slip",

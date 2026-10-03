@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, deviceOrigin, jobOrigin } from "@waitron/shared";
-import type { DeviceId, NodeId, Origin, SeriesId, TillId } from "@waitron/shared";
+import type { DeviceId, NodeId, Origin, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { CORE_MIGRATIONS, devices, incidents, nowIso, sales, withTransaction } from "@waitron/db";
@@ -21,7 +21,6 @@ import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { seedTenant } from "../test/fixtures.js";
 
-let tillId: TillId;
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -33,7 +32,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ tillId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -60,7 +59,7 @@ const steadyClock: TrustedClock = fixedClock(() => ({
 
 /**
  * Degraded, and carrying `warning` as the real clock does, because `recordSale` forwards
- * `now.warning` rather than building one. Reads `tillId` lazily, after `beforeEach` has set it.
+ * `now.warning` rather than building one. Reads `deviceId` lazily, after `beforeEach` has set it.
  */
 const degradedClock: TrustedClock = fixedClock(() => ({
   instant: BASE,
@@ -68,7 +67,7 @@ const degradedClock: TrustedClock = fixedClock(() => ({
   confident: false,
   confidence: "degraded",
   anchorAgeSeconds: 999,
-  warning: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+  warning: new AppError("clock.degraded", { deviceId, anchorAgeSeconds: 999 }),
 }));
 
 function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
@@ -266,7 +265,7 @@ describe("recordIncident — origin", () => {
     await withTransaction(suite.db, async (tx) => {
       await recordIncident(tx, {
         origin: deviceOrigin(deviceId),
-        error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+        error: new AppError("clock.degraded", { deviceId, anchorAgeSeconds: 999 }),
         severity: "warning",
         detectedAt: BASE,
       });
@@ -279,7 +278,7 @@ describe("recordIncident — origin", () => {
     await withTransaction(suite.db, async (tx) => {
       await recordIncident(tx, {
         origin: jobOrigin("fiscal_filing"),
-        error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+        error: new AppError("clock.degraded", { deviceId, anchorAgeSeconds: 999 }),
         severity: "warning",
         detectedAt: BASE,
       });
@@ -309,7 +308,7 @@ describe("recordIncident — no sale attached", () => {
     await withTransaction(suite.db, async (tx) => {
       await recordIncident(tx, {
         origin: deviceOrigin(deviceId),
-        error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+        error: new AppError("clock.degraded", { deviceId, anchorAgeSeconds: 999 }),
         severity: "warning",
         detectedAt: BASE,
       });
@@ -364,7 +363,7 @@ describe("openIncidents", () => {
     await withTransaction(suite.db, async (tx) => {
       await recordIncident(tx, {
         origin: jobOrigin("payment_check"),
-        error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+        error: new AppError("clock.degraded", { deviceId, anchorAgeSeconds: 999 }),
         severity: "warning",
         detectedAt: BASE,
       });
@@ -511,7 +510,7 @@ describe("recordIncidentOnce", () => {
       expect(first).toBe(true);
       const otherCode = await recordIncidentOnce(tx, {
         ...base,
-        error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+        error: new AppError("clock.degraded", { deviceId, anchorAgeSeconds: 999 }),
       });
       expect(otherCode).toBe(true);
       expect(await openIncidents(tx, deviceOrigin(deviceId))).toHaveLength(2);
@@ -525,7 +524,7 @@ describe("recordIncidentOnce", () => {
     const { saleId: saleB } = await sell(backend);
 
     await withTransaction(suite.db, async (tx) => {
-      const error = new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 });
+      const error = new AppError("clock.degraded", { deviceId, anchorAgeSeconds: 999 });
       const forSaleA = await recordIncidentOnce(tx, {
         origin: deviceOrigin(deviceId),
         saleId: saleA,
@@ -582,7 +581,7 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
         return recordIncidentOnce(tx, {
           origin: deviceOrigin(deviceId),
           // no saleId — orphan
-          error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+          error: new AppError("clock.degraded", { deviceId, anchorAgeSeconds: 999 }),
           severity: "error",
           detectedAt: new Date("2026-07-24T10:00:00Z"),
         });
@@ -599,7 +598,7 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
     const { deviceId } = await seedDeviceForIncidents();
     const input: RecordIncidentInput = {
       origin: deviceOrigin(deviceId),
-      error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+      error: new AppError("clock.degraded", { deviceId, anchorAgeSeconds: 999 }),
       severity: "error",
       detectedAt: new Date("2026-07-24T10:00:00Z"),
     };

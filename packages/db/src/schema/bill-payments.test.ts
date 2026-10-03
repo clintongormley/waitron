@@ -898,14 +898,12 @@ describe("bill payments: the three tables, their checks and their triggers", () 
   describe("drawer_opens: a cash payment or refund before the invoice names its bill payment", () => {
     function open(values: Partial<typeof drawerOpens.$inferInsert>): Promise<unknown> {
       return inTx((tx) =>
-        tx
-          .insert(drawerOpens)
-          .values({ tillId: TILL, personId: PERSON, reason: "manual", ...values }),
+        tx.insert(drawerOpens).values({ deviceId, personId: PERSON, reason: "manual", ...values }),
       );
     }
 
     it.each(["bill_payment", "bill_refund"] as const)(
-      "accepts a %s open naming the till and the bill payment",
+      "accepts a %s open naming the device and the bill payment",
       async (reason) => {
         const billPaymentId = await receivedPayment({ method: "cash", tendered: 1000 });
         await open({ reason, billPaymentId });
@@ -915,8 +913,8 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     it.each([
       ["a bill payment open with no bill payment", { reason: "bill_payment" }],
       [
-        "a bill refund open with no till",
-        { reason: "bill_refund", tillId: null, withPayment: true },
+        "a bill refund open with no device",
+        { reason: "bill_refund", deviceId: null, withPayment: true },
       ],
       ["a cash sale open naming a bill payment", { reason: "cash_sale", withPayment: true }],
       ["a manual open naming a bill payment", { reason: "manual", withPayment: true }],
@@ -944,12 +942,12 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     });
   });
 
-  describe("drawer_opens: a card slip names its till and exactly one of a sale or a bill payment", () => {
+  describe("drawer_opens: a card slip names its device and exactly one of a sale or a bill payment", () => {
     function open(values: Partial<typeof drawerOpens.$inferInsert>): Promise<unknown> {
       return inTx((tx) =>
         tx
           .insert(drawerOpens)
-          .values({ tillId: TILL, personId: PERSON, reason: "card_slip", ...values }),
+          .values({ deviceId, personId: PERSON, reason: "card_slip", ...values }),
       );
     }
 
@@ -961,11 +959,11 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       return sale!.id;
     }
 
-    it("accepts a card slip naming the till and a sale", async () => {
+    it("accepts a card slip naming the device and a sale", async () => {
       await open({ saleId: await aSale() });
     });
 
-    it("accepts a card slip naming the till and a bill payment", async () => {
+    it("accepts a card slip naming the device and a bill payment", async () => {
       await open({ billPaymentId: await receivedPayment() });
     });
 
@@ -981,9 +979,9 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       expect(checkFailed(error, "drawer_opens_target_ck")).toBe(true);
     });
 
-    it("refuses a card slip with no till", async () => {
+    it("refuses a card slip with no device", async () => {
       const saleId = await aSale();
-      const error = await captureError(() => open({ tillId: null, saleId }));
+      const error = await captureError(() => open({ deviceId: null, saleId }));
       expect(checkFailed(error, "drawer_opens_target_ck")).toBe(true);
     });
   });

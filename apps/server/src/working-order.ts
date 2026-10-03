@@ -5552,21 +5552,19 @@ async function unpaidReceipt(
 export async function markOrderPlaced(
   tx: Transaction,
   clock: TrustedClock,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   id: string,
   operatorId: string,
 ): Promise<void> {
   await tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id));
 
-  // `capturedByTillId` is the CONFIGURED register, as in `cancelPlacedOrder`, so one order's
-  // placed/cancelled pair stays on the same register.
   const now = clock.now();
   await appendOrderAmendment(tx, {
     workingOrderId: id,
     kind: "order_placed",
     actorId: operatorId,
     reason: null,
-    capturedByTillId: cfg.tillId,
+    origin: cfg.origin,
     capturedByNodeId: cfg.nodeId,
     eventAt: now.instant,
     eventOffsetMinutes: now.offsetMinutes,
@@ -5655,7 +5653,7 @@ async function cancelPlaced(
       kind: "order_cancelled",
       actorId: operator.personId,
       reason,
-      capturedByTillId: cfg.tillId,
+      origin: cfg.origin,
       capturedByNodeId: cfg.nodeId,
       eventAt: now.instant,
       eventOffsetMinutes: now.offsetMinutes,

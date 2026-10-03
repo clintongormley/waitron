@@ -390,7 +390,7 @@ const createTableBody = (tableName: string) =>
 /** The SQL type the migration gives each `drawer_opens` column, and the helper that must emit it. */
 const DRAWER_OPENS_TYPES = {
   id: "text",
-  till_id: "text",
+  device_id: "text",
   printer_id: "text",
   person_id: "text",
   opened_at: "text",

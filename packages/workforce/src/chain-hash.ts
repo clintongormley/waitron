@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { Source } from "@waitron/shared";
 
 /** The content of one time entry that the chain hash commits to, plus the predecessor's hash. */
 export interface EntryHashInput {
@@ -19,9 +20,10 @@ export interface EntryHashInput {
   recordedAt: string;
   eventOffsetMinutes: number;
   recordedByPersonId: string;
-  /** Null for a manually recorded entry. Hashed so a captured event cannot be re-pointed at a
-   * different till undetected. */
-  capturedByTillId: string | null;
+  /** Both hashed, so a captured event cannot be re-pointed at another source or device undetected. A
+   * job names no device, hashed as the empty string. */
+  capturedBySource: Source;
+  capturedByDeviceId: string | null;
   /** The four correction fields are null on a base event. */
   correctsEntryId: string | null;
   correctionReason: string | null;
@@ -67,7 +69,8 @@ function canonicalString(input: EntryHashInput): string {
     ["RecordedAtMs", String(Date.parse(input.recordedAt))],
     ["EventOffsetMinutes", String(input.eventOffsetMinutes)],
     ["RecordedByPersonId", input.recordedByPersonId],
-    ["CapturedByTillId", input.capturedByTillId ?? ""],
+    ["CapturedBySource", input.capturedBySource],
+    ["CapturedByDeviceId", input.capturedByDeviceId ?? ""],
     ["CorrectsEntryId", input.correctsEntryId ?? ""],
     ["CorrectionReason", input.correctionReason ?? ""],
     ["CorrectionStatus", input.correctionStatus ?? ""],

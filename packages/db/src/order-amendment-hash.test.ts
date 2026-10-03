@@ -1,6 +1,10 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { computeAmendmentHash, verifyAmendmentChain } from "./order-amendment-hash.js";
 import type { AmendmentHashInput, VerifiableAmendment } from "./order-amendment-hash.js";
+
+const DEVICE_A = "33333333-3333-4333-8333-333333333333";
+const DEVICE_B = "77777777-7777-4777-8777-777777777777";
 
 const base: AmendmentHashInput = {
   sequenceNo: 1,
@@ -8,7 +12,8 @@ const base: AmendmentHashInput = {
   kind: "order_placed",
   actorId: "22222222-2222-4222-8222-222222222222",
   reason: null,
-  capturedByTillId: "33333333-3333-4333-8333-333333333333",
+  capturedBySource: "device",
+  capturedByDeviceId: DEVICE_A,
   capturedByNodeId: "44444444-4444-4444-8444-444444444444",
   eventAt: "2026-08-06T10:00:00.000Z",
   eventOffsetMinutes: 120,
@@ -31,9 +36,24 @@ describe("computeAmendmentHash", () => {
     expect(
       computeAmendmentHash({ ...base, capturedByNodeId: "66666666-6666-4666-8666-666666666666" }),
     ).not.toBe(h);
+  });
+
+  it("changes when only the source changes", () => {
     expect(
-      computeAmendmentHash({ ...base, capturedByTillId: "77777777-7777-4777-8777-777777777777" }),
-    ).not.toBe(h);
+      computeAmendmentHash({ ...base, capturedBySource: "dashboard", capturedByDeviceId: null }),
+    ).not.toBe(
+      computeAmendmentHash({
+        ...base,
+        capturedBySource: "payment_check",
+        capturedByDeviceId: null,
+      }),
+    );
+  });
+
+  it("changes when only the device changes", () => {
+    expect(computeAmendmentHash({ ...base, capturedByDeviceId: DEVICE_A })).not.toBe(
+      computeAmendmentHash({ ...base, capturedByDeviceId: DEVICE_B }),
+    );
   });
 
   it("commits the sequence, kind, order, offset and predecessor — each changes the hash", () => {
@@ -59,23 +79,28 @@ describe("computeAmendmentHash", () => {
 });
 
 describe("the canonical string the amendment hash digests", () => {
-  // The two digests below are RECORDED from this implementation, not published by anyone. They
-  // cannot tell you the format is right; they can only tell you it has changed — and an amendment
-  // chain that no longer recomputes cannot be repaired. Everything the canonical string is made of
-  // is inside them, where the other tests here compare one hash with another and agree whatever the
-  // format is.
-  //
-  // If one of them fails, the format moved. Restoring it is the fix; editing the expected digest is
+  // Each expected digest is hashed here from a canonical string written out by hand, so the case
+  // pins the field names, their order and every fallback rather than echoing the function. An
+  // amendment chain that no longer recomputes cannot be repaired: changing one of these strings is
   // only correct alongside a decision to re-hash every chain that exists.
-  it("digests the genesis shape to a recorded value", () => {
+  const digestOf = (canonical: string): string =>
+    createHash("sha256").update(canonical, "utf8").digest("hex").toUpperCase();
+
+  it("digests the genesis shape to the hand-built canonical string", () => {
     expect(computeAmendmentHash(base)).toBe(
-      "C0718201CE76EEBE28FA2EB5AE0D474CEEDB55E496F709F4AB621177CF65D447",
+      digestOf(
+        "SequenceNo=1&WorkingOrderId=11111111-1111-4111-8111-111111111111&Kind=order_placed" +
+          "&ActorId=22222222-2222-4222-8222-222222222222&Reason=" +
+          "&CapturedBySource=device&CapturedByDeviceId=33333333-3333-4333-8333-333333333333" +
+          "&CapturedByNodeId=44444444-4444-4444-8444-444444444444" +
+          "&EventAtMs=1786010400000&EventOffsetMinutes=120&PrevEntryHash=",
+      ),
     );
   });
 
-  it("digests a linked entry with a reason to a recorded value", () => {
-    // The other half of the pair: a reason and a predecessor that are both present, so the two
-    // fallbacks in the canonical string are pinned in both directions.
+  it("digests a linked entry with a reason to the hand-built canonical string", () => {
+    // A reason and a predecessor that are both present, so the two fallbacks are pinned in both
+    // directions.
     expect(
       computeAmendmentHash({
         ...base,
@@ -83,7 +108,29 @@ describe("the canonical string the amendment hash digests", () => {
         reason: "cancelled by customer",
         prevEntryHash: "A".repeat(64),
       }),
-    ).toBe("C39A5B233D3CD70E6DE4EDF87D54CFE1913DA497A271DB4CDF5374E81A1E9783");
+    ).toBe(
+      digestOf(
+        "SequenceNo=2&WorkingOrderId=11111111-1111-4111-8111-111111111111&Kind=order_placed" +
+          "&ActorId=22222222-2222-4222-8222-222222222222&Reason=cancelled by customer" +
+          "&CapturedBySource=device&CapturedByDeviceId=33333333-3333-4333-8333-333333333333" +
+          "&CapturedByNodeId=44444444-4444-4444-8444-444444444444" +
+          `&EventAtMs=1786010400000&EventOffsetMinutes=120&PrevEntryHash=${"A".repeat(64)}`,
+      ),
+    );
+  });
+
+  it("hashes a missing device as an empty field", () => {
+    expect(
+      computeAmendmentHash({ ...base, capturedBySource: "dashboard", capturedByDeviceId: null }),
+    ).toBe(
+      digestOf(
+        "SequenceNo=1&WorkingOrderId=11111111-1111-4111-8111-111111111111&Kind=order_placed" +
+          "&ActorId=22222222-2222-4222-8222-222222222222&Reason=" +
+          "&CapturedBySource=dashboard&CapturedByDeviceId=" +
+          "&CapturedByNodeId=44444444-4444-4444-8444-444444444444" +
+          "&EventAtMs=1786010400000&EventOffsetMinutes=120&PrevEntryHash=",
+      ),
+    );
   });
 });
 

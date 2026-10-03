@@ -320,6 +320,29 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "core/0083_working_orders_drop_till": {
     refused: ["CHECK constraint failed: working_orders_source_ck"],
   },
+  // Adds `order_amendments.captured_by_source` as required with no default; a held row has none.
+  "core/0085_history_origin_add": {
+    refused: [
+      "ALTER TABLE `order_amendments` ADD `captured_by_source`",
+      "Cannot add a NOT NULL column",
+    ],
+  },
+  // Adds `time_entries.captured_by_source` the same way.
+  "workforce/0001_time_entries_origin_add": {
+    refused: [
+      "ALTER TABLE `time_entries` ADD `captured_by_source`",
+      "Cannot add a NOT NULL column",
+    ],
+  },
+  // Rebuilds `order_amendments` and `drawer_opens` without the till; a carried amendment's source
+  // is not on the list.
+  "core/0086_history_origin_drop_till": {
+    refused: ["CHECK constraint failed: order_amendments_captured_by_source_ck"],
+  },
+  // Rebuilds `time_entries` the same way.
+  "workforce/0002_time_entries_origin_drop_till": {
+    refused: ["CHECK constraint failed: time_entries_captured_by_source_ck"],
+  },
 };
 
 /** What a step's failure lacks against its RESETS entry, or `undefined` when it matches. */

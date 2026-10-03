@@ -100,8 +100,6 @@ interface Venue {
   handheldDeviceId: string;
   /** The operator's session on a handheld whose profile does not take cash. */
   noCashCookie: string;
-  /** The till the enrolled device rings on. */
-  deviceTillId: string;
   printerId: string;
   /** The session's operator, a member of staff, who does not hold `sale.refund`. */
   staffId: string;
@@ -310,7 +308,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     handheldCookie: `${SESSION_COOKIE}=${await sessionOn(handheld.deviceId)}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`,
     handheldDeviceId: handheld.deviceId,
     noCashCookie: `${SESSION_COOKIE}=${await sessionOn(noCash.deviceId)}; ${DEVICE_COOKIE}=${noCash.deviceId}.${noCash.token}`,
-    deviceTillId: deviceRow!.till_id,
     printerId: seeded.printerId,
     staffId: seeded.personId,
     adminId: admin!.id,
@@ -649,7 +646,7 @@ describe("a contribution (design §8 test 2)", () => {
       tx.select().from(drawerOpens).where(eq(drawerOpens.billPaymentId, paymentId)),
     );
     expect(opens).toMatchObject([
-      { reason: "bill_payment", saleId: null, tillId: venue.deviceTillId },
+      { reason: "bill_payment", saleId: null, deviceId: venue.deviceId },
     ]);
   });
 
@@ -763,7 +760,7 @@ describe("a contribution (design §8 test 2)", () => {
       tx.select().from(drawerOpens).where(eq(drawerOpens.billPaymentId, paymentId)),
     );
     expect(opens).toMatchObject([
-      { reason: "card_slip", saleId: null, tillId: venue.deviceTillId, printerId: venue.printerId },
+      { reason: "card_slip", saleId: null, deviceId: venue.deviceId, printerId: venue.printerId },
     ]);
   });
 
@@ -2078,7 +2075,7 @@ describe("a cash refund before the invoice (design §6)", () => {
     ]);
     expect(await refundDrawerOpens(paymentId)).toMatchObject([
       {
-        tillId: venue.deviceTillId,
+        deviceId: venue.deviceId,
         personId: venue.staffId,
         authorizedBy: venue.adminId,
         viaOverride: true,
@@ -3094,7 +3091,7 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
         reason: "card_slip",
         billPaymentId: paymentId,
         saleId: null,
-        tillId: venue.deviceTillId,
+        deviceId: venue.deviceId,
         printerId: venue.printerId,
         personId: venue.staffId,
       },

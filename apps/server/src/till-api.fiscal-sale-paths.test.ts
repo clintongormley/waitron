@@ -2770,7 +2770,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       tx
         .select({
           reason: drawerOpens.reason,
-          tillId: drawerOpens.tillId,
+          deviceId: drawerOpens.deviceId,
           printerId: drawerOpens.printerId,
           personId: drawerOpens.personId,
           saleId: drawerOpens.saleId,
@@ -2834,7 +2834,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
   it("a card sale at the device with the drawer opens it once, audited as a card slip naming the sale, and a replay opens nothing more", async () => {
     const { cfg, each, app, on, operatorId } = await venueWithTill();
     const deviceCookie = await enrolDrawerTill(cfg);
-    const tillId = await tillOf(deviceCookie);
+    const deviceId = deviceIdOf(deviceCookie);
     const printerId = await deviceReceiptPrinter(cfg, deviceCookie, true);
     const workingOrderId = randomUUID();
 
@@ -2846,7 +2846,14 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
 
     const saleId = await saleIdOf(workingOrderId);
     expect(await drawerOpenRows()).toEqual([
-      { reason: "card_slip", tillId, printerId, personId: operatorId, saleId, billPaymentId: null },
+      {
+        reason: "card_slip",
+        deviceId,
+        printerId,
+        personId: operatorId,
+        saleId,
+        billPaymentId: null,
+      },
     ]);
     const printed = await jobs();
     expect(printed.drawer.map((payload) => [...payload])).toEqual([[...DRAWER_KICK]]);
@@ -2959,7 +2966,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     async (orderFlow) => {
       const { cfg, each, app, cookie, on, operatorId } = await venueWithTill(orderFlow);
       const deviceCookie = await enrolDrawerTill(cfg);
-      const tillId = await tillOf(deviceCookie);
+      const deviceId = deviceIdOf(deviceCookie);
       const printerId = await deviceReceiptPrinter(cfg, deviceCookie, true);
       const both = await on(deviceCookie);
 
@@ -2992,7 +2999,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       expect(await drawerOpenRows()).toEqual([
         {
           reason: "card_slip",
-          tillId,
+          deviceId,
           printerId,
           personId: operatorId,
           saleId,

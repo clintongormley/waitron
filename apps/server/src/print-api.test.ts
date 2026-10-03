@@ -1638,15 +1638,17 @@ describe("printer cash-drawer calibration", () => {
     expect([...job!.payload]).toEqual([0x1b, 0x70, 0, 25, 250]);
     const audit = await suite.db.execute<{
       person_id: string;
-      till_id: string | null;
+      device_id: string | null;
       reason: string;
     }>(sql`
-      select person_id, till_id, reason from drawer_opens where printer_id = ${id}`);
+      select person_id, device_id, reason from drawer_opens where printer_id = ${id}`);
     const [manager] = await suite.db
       .select({ id: persons.id })
       .from(persons)
       .where(eq(persons.displayName, "The Manager"));
-    expect(audit.rows).toEqual([{ person_id: manager!.id, till_id: null, reason: "calibration" }]);
+    expect(audit.rows).toEqual([
+      { person_id: manager!.id, device_id: null, reason: "calibration" },
+    ]);
     await suite.db.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, jobId));
     const resend = await send(app, "POST", `/management-api/print-jobs/${jobId}/resend`, {
       cookie: managerCookie,

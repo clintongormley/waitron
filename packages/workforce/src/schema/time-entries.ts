@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   count,
+  devices,
   enumCheck,
   enumType,
   flag,
@@ -10,8 +11,9 @@ import {
   locations,
   newId,
   nodes,
+  originChecks,
+  sourceColumn,
   table,
-  tills,
   tsString,
 } from "@waitron/db";
 import { persons } from "@waitron/identity";
@@ -49,8 +51,9 @@ export const timeEntries = table(
     entryKind: workforceEntryKind("entry_kind").notNull(),
     eventAt: tsString("event_at").notNull(),
     eventOffsetMinutes: count("event_offset_minutes").notNull(),
-    /** Null for a manually recorded entry. */
-    capturedByTillId: id("captured_by_till_id"),
+    /** Where the entry was captured; a device is named exactly when the source is `device`. */
+    capturedBySource: sourceColumn("captured_by_source").notNull(),
+    capturedByDeviceId: id("captured_by_device_id"),
     /** Equals `person_id` for a self-service clock-in; differs when a supervisor records on someone's
      * behalf, which is the attribution art. 34.9 requires. */
     recordedByPersonId: id("recorded_by_person_id").notNull(),
@@ -75,7 +78,7 @@ export const timeEntries = table(
     isFirstEntry: flag("is_first_entry").notNull(),
   },
   (t) => [
-    // restrict everywhere: a clock event must never lose the person, location, till or node it
+    // restrict everywhere: a clock event must never lose the person, location, device or node it
     // attributes work to.
     foreignKey({
       columns: [t.personId],
@@ -88,9 +91,9 @@ export const timeEntries = table(
       name: "time_entries_location_fk",
     }).onDelete("restrict"),
     foreignKey({
-      columns: [t.capturedByTillId],
-      foreignColumns: [tills.id],
-      name: "time_entries_captured_by_till_fk",
+      columns: [t.capturedByDeviceId],
+      foreignColumns: [devices.id],
+      name: "time_entries_captured_by_device_fk",
     }).onDelete("restrict"),
     foreignKey({
       columns: [t.recordedByPersonId],
@@ -154,6 +157,7 @@ export const timeEntries = table(
       sql`${t.recordedAt} glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].000Z'`,
     ),
     check("time_entries_entry_kind_ck", enumCheck(t.entryKind)),
+    ...originChecks("time_entries_captured_by", t.capturedBySource, t.capturedByDeviceId),
     // A null passes this check; the correction-shape check decides when it may be null.
     check("time_entries_correction_status_ck", enumCheck(t.correctionStatus)),
   ],

@@ -34,7 +34,7 @@ export interface TrustedReading {
 }
 
 export interface TrustedClockOptions {
-  tillId: string;
+  deviceId: string;
   monotonic: MonotonicSource;
   wallClock: () => number;
   /**
@@ -64,7 +64,7 @@ export interface TrustedClock {
 }
 
 export function createTrustedClock(options: TrustedClockOptions): TrustedClock {
-  const { tillId, monotonic, wallClock, degradedAfterSeconds, resolveOffsetMinutes } = options;
+  const { deviceId, monotonic, wallClock, degradedAfterSeconds, resolveOffsetMinutes } = options;
 
   let anchor: TrustedTimeAnchor | null = null;
   /** Elapsed time carried over from before a reload. Zero for an anchor set in this page's
@@ -146,7 +146,7 @@ export function createTrustedClock(options: TrustedClockOptions): TrustedClock {
           confident: false,
           confidence: "degraded",
           anchorAgeSeconds,
-          warning: new AppError("clock.degraded", { tillId, anchorAgeSeconds }),
+          warning: new AppError("clock.degraded", { deviceId, anchorAgeSeconds }),
         };
       }
 

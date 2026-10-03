@@ -6,7 +6,7 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     /** Attached to a reading once the anchor has aged past `degradedAfterSeconds`. Warns a
      * member of staff; never thrown, because throwing would stop the sale. */
-    "clock.degraded": { tillId: string; anchorAgeSeconds: number };
+    "clock.degraded": { deviceId: string; anchorAgeSeconds: number };
     /** Attached once a reload's wall-clock comparison proves the wall clock moved backwards
      * while this page's monotonic reference was gone. */
     "clock.jump_detected": { wallClockDeltaSeconds: number; monotonicElapsedSeconds: number };

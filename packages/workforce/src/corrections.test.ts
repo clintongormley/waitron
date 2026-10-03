@@ -1,8 +1,8 @@
 import { CORE_MIGRATIONS, captureError, newId, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
+import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { AppError, deviceOrigin, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
@@ -26,7 +26,7 @@ const suite = useVenueDb({
 });
 
 function event(personId: string, at: string): ClockEventInput {
-  return { nodeId, personId, locationId, at, offsetMinutes: 0 };
+  return { nodeId, personId, locationId, at, offsetMinutes: 0, origin: jobOrigin("dashboard") };
 }
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -74,10 +74,10 @@ async function insertApprovedCorrection(row: {
   // Raw, with `id` supplied, because this is a row the chain append path would never write.
   await suite.db.execute(sql`
     insert into time_entries (
-      id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+      id, captured_by_source, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
       recorded_by_person_id, recorded_at, corrects_entry_id, correction_reason, correction_status,
       correction_actor_id, entry_hash, prev_entry_hash, sequence_no, is_first_entry)
-    values (${newId()}, ${row.personId}, ${locationId}, ${row.node}, 'correction', ${row.eventAt}, 0,
+    values (${newId()}, 'dashboard', ${row.personId}, ${locationId}, ${row.node}, 'correction', ${row.eventAt}, 0,
       ${row.actorId}, ${row.recordedAt}, ${row.correctsEntryId}, 'cross-node merge', 'approved',
       ${row.actorId}, ${"A".repeat(64)}, ${"B".repeat(64)}, ${row.sequenceNo}, false)`);
 }
@@ -109,6 +109,7 @@ describe("requestCorrection", () => {
         offsetMinutes: 0,
         reason: "forgot to clock out",
         actorPersonId: actor,
+        origin: jobOrigin("dashboard"),
       }),
     );
     const rows = await suite.db.execute<{
@@ -136,6 +137,7 @@ describe("requestCorrection", () => {
           offsetMinutes: 0,
           reason: "no such entry",
           actorPersonId: actor,
+          origin: jobOrigin("dashboard"),
         }),
       ),
     );
@@ -155,6 +157,7 @@ describe("approveCorrection", () => {
         offsetMinutes: 0,
         reason: "forgot to clock out",
         actorPersonId: personId,
+        origin: jobOrigin("dashboard"),
       }),
     );
     await run((tx) =>
@@ -168,6 +171,38 @@ describe("approveCorrection", () => {
     expect(original.rows[0]!.at).toBe("2026-01-05T17:00:00.000Z");
   });
 
+  it("records the request where it was captured and the approval as the dashboard's", async () => {
+    const { personId, outEntryId } = await nineToFive("appr-origin");
+    const sup = await supervisor("appr-origin-sup");
+    const { deviceId } = await seedDevice(suite.db, { locationId: brandLocationId(locationId) });
+    const correctionId = await run((tx) =>
+      backend.requestCorrection(tx, {
+        nodeId,
+        correctsEntryId: outEntryId,
+        at: "2026-01-05T18:00:00Z",
+        offsetMinutes: 0,
+        reason: "forgot to clock out",
+        actorPersonId: personId,
+        origin: deviceOrigin(deviceId),
+      }),
+    );
+    const approvalId = await run((tx) =>
+      backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: sup }),
+    );
+
+    const { rows } = await suite.db.execute<{
+      id: string;
+      captured_by_source: string;
+      captured_by_device_id: string | null;
+    }>(sql`
+      select id, captured_by_source, captured_by_device_id from time_entries
+      where id in (${correctionId}, ${approvalId}) order by sequence_no`);
+    expect(rows).toEqual([
+      { id: correctionId, captured_by_source: "device", captured_by_device_id: deviceId },
+      { id: approvalId, captured_by_source: "dashboard", captured_by_device_id: null },
+    ]);
+  });
+
   it("refuses approval by a non-supervisor with correction.not_permitted", async () => {
     const { personId, outEntryId } = await nineToFive("appr-2");
     const correctionId = await run((tx) =>
@@ -178,6 +213,7 @@ describe("approveCorrection", () => {
         offsetMinutes: 0,
         reason: "forgot to clock out",
         actorPersonId: personId,
+        origin: jobOrigin("dashboard"),
       }),
     );
     // `personId` is a plain staff member.
@@ -219,6 +255,7 @@ describe("approveCorrection", () => {
         offsetMinutes: 0,
         reason: "forgot to clock out",
         actorPersonId: personId,
+        origin: jobOrigin("dashboard"),
       }),
     );
     // Approval is a second append, so the request row stays `requested` after it.

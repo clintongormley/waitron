@@ -78,7 +78,7 @@ describe("time_entries constraint declarations (forces the lazy extraConfig call
       expect.arrayContaining([
         "time_entries_person_fk",
         "time_entries_location_fk",
-        "time_entries_captured_by_till_fk",
+        "time_entries_captured_by_device_fk",
         "time_entries_recorded_by_person_fk",
         "time_entries_node_fk",
         "time_entries_corrects_entry_fk",
@@ -94,6 +94,8 @@ describe("time_entries constraint declarations (forces the lazy extraConfig call
     expect(checkNames).toContain("time_entries_chaining_ck");
     expect(checkNames).toContain("time_entries_event_at_second_ck");
     expect(checkNames).toContain("time_entries_recorded_at_second_ck");
+    expect(checkNames).toContain("time_entries_captured_by_source_ck");
+    expect(checkNames).toContain("time_entries_captured_by_source_device_ck");
 
     expect(config.columns.map((c) => c.name)).not.toContain("ingest_seq");
     expect(config.columns.map((c) => c.name)).toContain("node_id");

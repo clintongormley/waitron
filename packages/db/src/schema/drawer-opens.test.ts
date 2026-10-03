@@ -4,18 +4,22 @@ import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
-import { captureError } from "../testing/errors.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
+import { seedDevice } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { drawerOpens } from "./drawer-opens.js";
 import { printers } from "./printers.js";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { locations, tenants, tills } from "./tenants.js";
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL_A = "aaaaaaaa-0000-4000-8000-000000000011";
 const PRINTER_A = "aaaaaaaa-0000-4000-8000-000000000021";
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
 const AUTHORIZER = "cccccccc-0000-4000-8000-000000000002";
+
+let deviceA = "";
+let tillA = "";
 
 describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, FKs)", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
@@ -31,7 +35,6 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await db.insert(tills).values({ id: TILL_A, locationId: LOCATION_A, name: "Till A" });
     await db.insert(printers).values({
       id: PRINTER_A,
       locationId: LOCATION_A,
@@ -39,6 +42,9 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
       transport: "cloud_poll",
       pollId: "poll-a",
     });
+    ({ deviceId: deviceA } = await seedDevice(db, { locationId: brandLocationId(LOCATION_A) }));
+    const [till] = await db.select({ id: tills.id }).from(tills);
+    tillA = till!.id;
   });
 
   function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -52,7 +58,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
     saleId: string | null = null,
   ): Promise<void> {
     await inTx((tx) =>
-      tx.insert(drawerOpens).values({ tillId: TILL_A, personId: PERSON, reason, saleId }),
+      tx.insert(drawerOpens).values({ deviceId: deviceA, personId: PERSON, reason, saleId }),
     );
   }
 
@@ -65,7 +71,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
         .from(drawerOpens)
         .where(and(eq(drawerOpens.personId, PERSON), eq(drawerOpens.reason, "manual"))),
     );
-    expect(row!.tillId).toBe(TILL_A);
+    expect(row!.deviceId).toBe(deviceA);
     expect(row!.personId).toBe(PERSON);
     expect(row!.reason).toBe("manual");
     expect(row!.saleId).toBeNull();
@@ -77,7 +83,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
   it("records authorized_by and via_override on an authorized open (new audit columns present + writable)", async () => {
     await inTx((tx) =>
       tx.insert(drawerOpens).values({
-        tillId: TILL_A,
+        deviceId: deviceA,
         personId: PERSON,
         reason: "manual",
         authorizedBy: AUTHORIZER,
@@ -101,8 +107,8 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
     const e = await captureError(() =>
       inTx(async (tx) =>
         tx.run(
-          sql`insert into drawer_opens (id, till_id, person_id, reason, opened_at)
-              values ('do-bad', ${TILL_A}, ${PERSON}, 'refund', ${new Date().toISOString()})`,
+          sql`insert into drawer_opens (id, device_id, person_id, reason, opened_at)
+              values ('do-bad', ${deviceA}, ${PERSON}, 'refund', ${new Date().toISOString()})`,
         ),
       ),
     );
@@ -116,7 +122,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
     expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
-  it("records calibration against a printer without a till or sale", async () => {
+  it("records calibration against a printer without a device or sale", async () => {
     const [saved] = await inTx((tx) =>
       tx
         .insert(drawerOpens)
@@ -130,7 +136,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
     );
     expect(saved).toMatchObject({
       printerId: PRINTER_A,
-      tillId: null,
+      deviceId: null,
       saleId: null,
       personId: PERSON,
       authorizedBy: AUTHORIZER,
@@ -141,7 +147,6 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
 
   it.each([
     { reason: "calibration" as const },
-    { reason: "calibration" as const, printerId: PRINTER_A, tillId: TILL_A },
     { reason: "manual" as const, printerId: PRINTER_A },
     { reason: "cash_sale" as const, printerId: PRINTER_A },
   ])("rejects a drawer audit with an invalid target: %j", async (target) => {
@@ -154,6 +159,44 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
       ),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+  });
+
+  it("refuses a cash sale's open that names no device", async () => {
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .insert(drawerOpens)
+          .values({ personId: PERSON, printerId: PRINTER_A, reason: "cash_sale" }),
+      ),
+    );
+    expect(engineErrorMessage(error)).toBe("CHECK constraint failed: drawer_opens_target_ck");
+  });
+
+  it("refuses a calibration that names a device", async () => {
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx.insert(drawerOpens).values({
+          personId: PERSON,
+          printerId: PRINTER_A,
+          deviceId: deviceA,
+          reason: "calibration",
+        }),
+      ),
+    );
+    expect(engineErrorMessage(error)).toBe("CHECK constraint failed: drawer_opens_target_ck");
+  });
+
+  it("refuses an open naming a device that does not exist", async () => {
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx.insert(drawerOpens).values({
+          deviceId: "dddddddd-0000-4000-8000-0000000000aa",
+          personId: PERSON,
+          reason: "manual",
+        }),
+      ),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("refuses calibration against a missing printer", async () => {
@@ -171,18 +214,16 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
 
   it("tills.receipt_printer_id is writable and its FK accepts a real printer", async () => {
     await inTx((tx) =>
-      tx.update(tills).set({ receiptPrinterId: PRINTER_A }).where(eq(tills.id, TILL_A)),
+      tx.update(tills).set({ receiptPrinterId: PRINTER_A }).where(eq(tills.id, tillA)),
     );
     const [row] = await inTx((tx) =>
       tx
         .select({ receiptPrinterId: tills.receiptPrinterId })
         .from(tills)
-        .where(eq(tills.id, TILL_A)),
+        .where(eq(tills.id, tillA)),
     );
     expect(row!.receiptPrinterId).toBe(PRINTER_A);
-    await inTx((tx) =>
-      tx.update(tills).set({ receiptPrinterId: null }).where(eq(tills.id, TILL_A)),
-    );
+    await inTx((tx) => tx.update(tills).set({ receiptPrinterId: null }).where(eq(tills.id, tillA)));
   });
 
   it("locations.receipt_print_mode defaults to 'auto' and is settable", async () => {

@@ -1,9 +1,10 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
 import { count, enumCheck, enumType, flag, id, label, newId, table, tsString } from "./columns.js";
+import { devices } from "./devices.js";
 import { nodes } from "./nodes.js";
+import { originChecks, sourceColumn } from "./origin.js";
 import { workingOrders } from "./orders.js";
-import { tills } from "./tenants.js";
 
 /**
  * `order_placed` is the genesis entry, written when the order is placed; `order_cancelled` records
@@ -34,8 +35,9 @@ export const orderAmendments = table(
     actorId: id("actor_id").notNull(),
     // NULL on the genesis `order_placed`; required by the app for `order_cancelled`.
     reason: label("reason"),
-    // Capture provenance — both hashed, so neither can be re-pointed undetected.
-    capturedByTillId: id("captured_by_till_id").notNull(),
+    // Capture provenance — all three hashed, so none can be re-pointed undetected.
+    capturedBySource: sourceColumn("captured_by_source").notNull(),
+    capturedByDeviceId: id("captured_by_device_id"),
     capturedByNodeId: id("captured_by_node_id").notNull(),
     // Truncated to whole seconds so the hashed instant and the read-back agree.
     eventAt: tsString("event_at").notNull(),
@@ -51,9 +53,9 @@ export const orderAmendments = table(
       name: "order_amendments_order_fk",
     }).onDelete("restrict"),
     foreignKey({
-      columns: [t.capturedByTillId],
-      foreignColumns: [tills.id],
-      name: "order_amendments_till_fk",
+      columns: [t.capturedByDeviceId],
+      foreignColumns: [devices.id],
+      name: "order_amendments_device_fk",
     }).onDelete("restrict"),
     foreignKey({
       columns: [t.capturedByNodeId],
@@ -65,6 +67,7 @@ export const orderAmendments = table(
     index("order_amendments_order_idx").on(t.workingOrderId),
     check("order_amendments_sequence_no_ck", sql`${t.sequenceNo} > 0`),
     check("order_amendments_kind_ck", enumCheck(t.kind)),
+    ...originChecks("order_amendments_captured_by", t.capturedBySource, t.capturedByDeviceId),
     // 64 uppercase hex characters (GLOB is case-sensitive, unlike LIKE). Weaker than it looks: a
     // 64-byte blob satisfies both terms, because `length()` counts a blob's bytes.
     check(

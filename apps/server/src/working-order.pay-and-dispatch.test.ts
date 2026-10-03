@@ -439,7 +439,8 @@ async function readAmendments(id: string): Promise<VerifiableAmendment[]> {
       kind: orderAmendments.kind,
       actorId: orderAmendments.actorId,
       reason: orderAmendments.reason,
-      capturedByTillId: orderAmendments.capturedByTillId,
+      capturedBySource: orderAmendments.capturedBySource,
+      capturedByDeviceId: orderAmendments.capturedByDeviceId,
       capturedByNodeId: orderAmendments.capturedByNodeId,
       eventAt: orderAmendments.eventAt,
       eventOffsetMinutes: orderAmendments.eventOffsetMinutes,
@@ -1287,6 +1288,8 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       isFirstEntry: true,
       actorId: OPERATOR,
       reason: null,
+      capturedBySource: "device",
+      capturedByDeviceId: cfg.origin.deviceId,
     });
     expect(verifyAmendmentChain(rows)).toEqual({ ok: true });
 
@@ -1352,6 +1355,8 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       kind: "order_cancelled",
       reason: "customer left",
       actorId: OPERATOR,
+      capturedBySource: "device",
+      capturedByDeviceId: cfg.origin.deviceId,
       prevEntryHash: rows[0]!.entryHash,
     });
     // A genuine 2-entry chain — the cancel links to the genesis's stored hash and re-verifies end to end.

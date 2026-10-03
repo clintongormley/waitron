@@ -304,7 +304,7 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
     reason: string;
     saleId: string | null;
     personId: string;
-    tillId: string | null;
+    deviceId: string | null;
     printerId: string | null;
     authorizedBy: string | null;
     viaOverride: boolean;
@@ -317,7 +317,7 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
         reason: drawerOpens.reason,
         saleId: drawerOpens.saleId,
         personId: drawerOpens.personId,
-        tillId: drawerOpens.tillId,
+        deviceId: drawerOpens.deviceId,
         printerId: drawerOpens.printerId,
         authorizedBy: drawerOpens.authorizedBy,
         viaOverride: drawerOpens.viaOverride,
@@ -422,6 +422,11 @@ async function loginAtTill(app: Hono, cfg: TillConfig, operatorId: string): Prom
   });
   expect(res.status).toBe(200);
   return `${res.headers.get("set-cookie")!.split(";")[0]!}; ${deviceCookie}`;
+}
+
+/** The device a {@link loginAtTill} cookie names. */
+function deviceIn(cookie: string): string {
+  return new RegExp(`${DEVICE_COOKIE}=([^.;]+)\\.`).exec(cookie)![1]!;
 }
 
 /** Ring a cash sale under a KNOWN client-minted `workingOrderId` (the reprint route keys on it). */
@@ -609,14 +614,14 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
     expect([...payload]).toEqual([...DRAWER_KICK]);
     expect(decodeTicket(payload)).not.toContain("VERI*FACTU"); // no receipt, just the kick
 
-    // The manual open is audited: who, which till, no sale. Under 'open' the operator self-authorizes,
+    // The manual open is audited: who, which device, no sale. Under 'open' the operator self-authorizes,
     // so authorized_by is the operator and via_override is false.
     const opens = await drawerOpensFor(cfg);
     expect(opens).toHaveLength(1);
     expect(opens[0]).toMatchObject({
       reason: "manual",
       personId: operatorId,
-      tillId: cfg.tillId,
+      deviceId: deviceIn(cookie),
       printerId,
       authorizedBy: operatorId,
       viaOverride: false,
@@ -692,10 +697,8 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
 });
 
 describe("POST /api/drawer/open from a device opens its own receipt printer's drawer", () => {
-  /** A till device allowed to open a drawer, its cookie, and the register it minted at join. */
-  async function enrolDrawerTill(
-    cfg: TillConfig,
-  ): Promise<{ cookie: string; tillId: string; deviceId: string }> {
+  /** A till device allowed to open a drawer, and its cookie. */
+  async function enrolDrawerTill(cfg: TillConfig): Promise<{ cookie: string; deviceId: string }> {
     tillDeviceCounter += 1;
     const n = tillDeviceCounter;
     const [profile] = await suite.db
@@ -711,14 +714,7 @@ describe("POST /api/drawer/open from a device opens its own receipt printer's dr
       profileId: profile!.id,
     });
     await startOnVenuePrinter(dev.deviceId);
-    const rows = await suite.db.execute<{ till_id: string }>(
-      sql`select till_id from devices where id = ${dev.deviceId}`,
-    );
-    return {
-      cookie: `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`,
-      tillId: rows.rows[0]!.till_id,
-      deviceId: dev.deviceId,
-    };
+    return { cookie: `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`, deviceId: dev.deviceId };
   }
 
   async function setDevicePrinter(deviceId: string, printerId: string): Promise<void> {
@@ -744,7 +740,7 @@ describe("POST /api/drawer/open from a device opens its own receipt printer's dr
     return { ...venue, app, press };
   }
 
-  it("opens the drawer of the pressing device's own receipt printer, and the row names that device's register", async () => {
+  it("opens the drawer of the pressing device's own receipt printer, and the row names that device", async () => {
     const { cfg, operatorId, press } = await venueWithOpenPolicy();
     const till = await enrolDrawerTill(cfg);
     const printerId = await makePrinter(cfg);
@@ -762,7 +758,7 @@ describe("POST /api/drawer/open from a device opens its own receipt printer's dr
         reason: "manual",
         saleId: null,
         personId: operatorId,
-        tillId: till.tillId,
+        deviceId: till.deviceId,
         printerId,
         authorizedBy: operatorId,
         viaOverride: false,
@@ -782,12 +778,12 @@ describe("POST /api/drawer/open from a device opens its own receipt printer's dr
 
     expect(res.status).toBe(200);
     expect((await printJobsFor(cfg)).map((job) => job.printerId)).toEqual([ownPrinter]);
-    expect((await drawerOpensFor(cfg)).map((row) => [row.tillId, row.printerId])).toEqual([
-      [till.tillId, ownPrinter],
+    expect((await drawerOpensFor(cfg)).map((row) => [row.deviceId, row.printerId])).toEqual([
+      [till.deviceId, ownPrinter],
     ]);
   });
 
-  it("two devices sharing one drawer printer: each opens it, naming its own register", async () => {
+  it("two devices sharing one drawer printer: each opens it, naming itself", async () => {
     const { cfg, press } = await venueWithOpenPolicy();
     const first = await enrolDrawerTill(cfg);
     const second = await enrolDrawerTill(cfg);
@@ -797,9 +793,9 @@ describe("POST /api/drawer/open from a device opens its own receipt printer's dr
     for (const till of [first, second]) expect((await press(till.cookie)).status).toBe(200);
 
     expect((await printJobsFor(cfg)).map((job) => job.printerId)).toEqual([printerId, printerId]);
-    expect((await drawerOpensFor(cfg)).map((row) => [row.tillId, row.printerId])).toEqual([
-      [first.tillId, printerId],
-      [second.tillId, printerId],
+    expect((await drawerOpensFor(cfg)).map((row) => [row.deviceId, row.printerId])).toEqual([
+      [first.deviceId, printerId],
+      [second.deviceId, printerId],
     ]);
   });
 });

@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
+import { AppError, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
@@ -38,7 +38,7 @@ beforeEach(async () => {
 });
 
 function event(at: string): ClockEventInput {
-  return { nodeId, personId, locationId, at, offsetMinutes: 0 };
+  return { nodeId, personId, locationId, at, offsetMinutes: 0, origin: jobOrigin("dashboard") };
 }
 
 /**

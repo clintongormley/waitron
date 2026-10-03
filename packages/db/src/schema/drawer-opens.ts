@@ -2,8 +2,8 @@ import { check } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 import { enumCheck, enumText, flag, id, newId, now, table, ts } from "./columns.js";
 import { billPayments } from "./bill-payments.js";
+import { devices } from "./devices.js";
 import { sales } from "./sales.js";
-import { tills } from "./tenants.js";
 import { printers } from "./printers.js";
 
 /**
@@ -22,10 +22,7 @@ export const drawerOpens = table(
   "drawer_opens",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    tillId: id("till_id")
-      /* v8 ignore start */
-      .references(() => tills.id),
-    /* v8 ignore stop */
+    deviceId: id("device_id").references(() => devices.id),
     /* v8 ignore start */
     printerId: id("printer_id").references(() => printers.id),
     /* v8 ignore stop */
@@ -57,7 +54,7 @@ export const drawerOpens = table(
     check("drawer_opens_reason_ck", enumCheck(t.reason)),
     check(
       "drawer_opens_target_ck",
-      sql`(${t.reason} = 'calibration' and ${t.printerId} is not null and ${t.tillId} is null and ${t.saleId} is null and ${t.billPaymentId} is null) or (${t.reason} in ('bill_payment', 'bill_refund') and ${t.tillId} is not null and ${t.billPaymentId} is not null and ${t.saleId} is null) or (${t.reason} in ('cash_sale', 'manual') and ${t.tillId} is not null and ${t.billPaymentId} is null) or (${t.reason} = 'card_slip' and ${t.tillId} is not null and (${t.saleId} is null) <> (${t.billPaymentId} is null))`,
+      sql`(${t.reason} = 'calibration' and ${t.printerId} is not null and ${t.deviceId} is null and ${t.saleId} is null and ${t.billPaymentId} is null) or (${t.reason} in ('bill_payment', 'bill_refund') and ${t.deviceId} is not null and ${t.billPaymentId} is not null and ${t.saleId} is null) or (${t.reason} in ('cash_sale', 'manual') and ${t.deviceId} is not null and ${t.billPaymentId} is null) or (${t.reason} = 'card_slip' and ${t.deviceId} is not null and (${t.saleId} is null) <> (${t.billPaymentId} is null))`,
     ),
   ],
 );

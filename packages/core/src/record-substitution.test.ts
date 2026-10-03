@@ -7,7 +7,7 @@ import {
   deviceOrigin,
   jobOrigin,
 } from "@waitron/shared";
-import type { DeviceId, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
@@ -33,7 +33,6 @@ import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
 import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
-let tillId: TillId;
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series — the F3 reuses it (owner decision)
@@ -48,7 +47,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ tillId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
   const [person] = await suite.db
     .insert(persons)
     .values({ displayName: "P", pinHash: hashPin("1234"), role: "manager" })
@@ -620,7 +619,7 @@ describe("recordSubstitution — no fiscal condition blocks an F3 (§5)", () => 
       confident: false,
       confidence: "degraded",
       anchorAgeSeconds: 999,
-      warning: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+      warning: new AppError("clock.degraded", { deviceId, anchorAgeSeconds: 999 }),
     }));
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: ticket } = await sellTicket(backend);
