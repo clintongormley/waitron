@@ -354,7 +354,7 @@ export class TillLockScreen extends LitElement {
 
   #renderRoster() {
     if (this.staff === undefined) {
-      return html`<p class="status">${t("login.loading")}</p>`;
+      return html`<p class="status" role="status">${t("login.loading")}</p>`;
     }
     if (this.staff.length === 0) {
       return this.errorKey

@@ -2627,11 +2627,6 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     twice (`moveLinesToGroup`, `apps/server/src/order-groups.ts`). A refusal part-way leaves the
     units already split. **Next action:** a server command that splits a line into single units in
     one transaction.
-  - **The Tab drawer's transfer picker marks a picked line with `aria-pressed` on a `wt-button`**
-    (`#transferLineRow`, `apps/till/src/screens/till-table-order-screen.ts`), and so does the split
-    picker (`#splitLineRow`). `wt-button` does not pass `aria-pressed` to its inner button
-    (`packages/ui-core/src/components/wt-button.ts`), so a screen reader does not hear whether a
-    line is picked. The draft's line toggle was changed to a plain button; these two were not.
   - **Task 5 (#750, kitchen, pass and table screen by group; printing problems).** Left open:
     - A party finished while its food is still on the pass keeps its cards there with no group
       button that works (each is refused `party.not_open`); a question for the owner.
@@ -2838,10 +2833,6 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     - **The adjustment history records who approved, but not whether the bill's discount limit,
       rather than the reason, is why.** Recording it would need a column. **Next action:** decide
       whether to record it.
-    - **The till still lists two approver refusals it can no longer receive:**
-      `APPROVER_REFUSALS` in `apps/till/src/till-app.ts` names `person.not_found` and
-      `person.suspended`, which an approver's PIN check stopped returning when every login failure
-      became `pin.invalid` (C95, #930). **Next action:** drop the two entries.
     - **A placed pay-later counter order (`ticket_then_pay` or `invoice_first`) cannot be
       adjusted:** the placed-order trigger freezes its prices, and an `invoice_first` order has
       already filed its invoice. B16 lets such an order be handed over before it is paid but did
@@ -2936,11 +2927,6 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     through each, with ids made to sort against the writing order, and add the `rowid` tie-break
     wherever the order can come back different (as A123 and A136 did elsewhere).
   - **Task 15 (#956, several payments on the till).** Open:
-    - **The generic "received more than the bill" text also answers a comp or discount.** The
-      till's `bill.received_exceeds_total` text (`apps/till/src/i18n/codes.ts`, "Move fewer items,
-      or refund the difference first") is what the adjustment dialog shows when a comp or discount
-      is refused for that code, where nothing is being moved. No assertion pins its wording.
-      **Next action:** word it so it also fits a comp or discount.
     - **Owner call on wording:** the table's button is labelled with the whole sentence "Part of
       this bill is already paid: take the rest as a bill payment", while the counter's says "Take
       the rest". Left as it is.
@@ -4028,8 +4014,6 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   - The membership route, the adjustment approver, the refund override and the manual-refund
     confirmer have no one-answer test case of their own.
   - Refusals thrown in `apps/server` itself (a malformed id or PIN) carry no `reason`.
-  - The till's `APPROVER_REFUSALS` (`apps/till/src/till-app.ts`) still lists `person.not_found` and
-    `person.suspended`, which the approval routes no longer send for an approver.
   - After a refused login the setup wizard's Connect form leaves the cursor where it was (an
     existing test pins that), while Reset and the dashboard sign-in move it to the password; the
     owner's rule covers marking fields, not the cursor, so whether Connect should match is the
@@ -4147,12 +4131,23 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `apps/dashboard/src/screens/my-schedule-screen.ts`, added in 4bfbf03ea, #876) and also puts a
   failure line under each failed list's own heading. **Next action:** add a retry button the
   way the dashboard does, and decide whether each failed list gets its own line.
-- **Two till loading lines are not announced to a screen reader** (found 2026-10-03 in review of
-  lane C's W14, which gave the schedule screen's loading line `role="status"`; read, not run). The
-  lock screen's staff list renders `<p class="status">${t("login.loading")}</p>`
-  (`apps/till/src/screens/till-lock-screen.ts`), and the developer-only device chooser, which no
-  venue sees, renders `<p class="hint">Loading…</p>` (`apps/till/src/screens/till-device-chooser.ts`);
-  neither has `role="status"`. **Next action:** add `role="status"` to both loading lines.
+- **Two till controls put `aria-pressed` on a `wt-button`, which does not pass it to its inner
+  button** (found 2026-10-03 in review of lane C's W23; read, not run). `wt-button`
+  (`packages/ui-core/src/components/wt-button.ts`) forwards `aria-label`, `aria-haspopup`,
+  `aria-expanded` and `aria-invalid` to its inner `<button>`, not `aria-pressed`. The two are the
+  station picker (`#pick`, `apps/till/src/screens/till-station-screen.ts`) and the card-simulation
+  result buttons (`apps/till/src/widgets/tender-pay.ts`). **Next action:** make them native buttons
+  with `aria-pressed`, as the Tab drawer's transfer and split pickers and the draft line toggle are.
+- **Three till loading lines may not be announced** (found 2026-10-03 in review of lane C's W23).
+  The schedule screen (`apps/till/src/screens/till-schedule-screen.ts`, #1103), the lock screen and
+  the device chooser each insert a `role="status"` element already holding the loading text and
+  remove it when loading ends. W3C's technique ARIA22
+  (https://www.w3.org/WAI/WCAG21/Techniques/aria/ARIA22) tests: _"Check that the container destined
+  to hold the status message has a role attribute with a value of status before the status message
+  occurs."_ The review's run-it seat watched the lock screen's and device chooser's DOM in Chromium:
+  each status element was inserted already holding its text and removed when loading ended. The
+  schedule screen's was read, not run, and no real screen reader was tried. **Next action:** decide
+  whether to keep an empty status region on the page and fill it later, and test that sequence.
 - **The counter till may start in a zone its service zone dropdown does not list** (found
   2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
   in `apps/server/src/till-api.ts`), but its starting zone comes from `resolveNewOrderZone`

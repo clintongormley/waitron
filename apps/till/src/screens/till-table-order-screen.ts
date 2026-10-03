@@ -697,8 +697,9 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .transfer-line[aria-pressed="true"] {
-        font-weight: var(--wt-font-weight-bold);
+      /* The muted grey fails contrast on the picked line's primary fill. */
+      .transfer-line[aria-pressed="true"] .qty {
+        color: inherit;
       }
 
       .split-line-row {
@@ -751,8 +752,9 @@ export class TillTableOrderScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* A native button, not a wt-button: wt-button does not pass aria-pressed to its inner button. */
-      .draft-select {
+      /* Native buttons, not wt-buttons: wt-button does not pass aria-pressed to its inner button. */
+      .draft-select,
+      .transfer-line {
         min-width: var(--wt-tap-min);
         text-align: start;
       }
@@ -4524,16 +4526,16 @@ export class TillTableOrderScreen extends LitElement {
   #transferLineRow(line: TabLine): TemplateResult {
     const name = this.#nameForLine(line);
     const selected = this.transferLineNos.has(line.lineNo);
-    return html`<wt-button
-      class="transfer-line ${selected ? "selected" : ""}"
+    return html`<button
+      type="button"
+      class="option transfer-line"
       data-transfer-line=${line.lineNo}
-      variant="secondary"
       aria-pressed=${selected}
       @click=${() => this.#toggleTransferLine(line)}
     >
       <span aria-hidden="true">${selected ? "☑" : "☐"}</span> ${name}
       <span class="qty">${this.#displayQty(line.quantity)}</span>
-    </wt-button>`;
+    </button>`;
   }
 
   #splitLinesStep(): TemplateResult {
@@ -4568,16 +4570,16 @@ export class TillTableOrderScreen extends LitElement {
     const name = this.#nameForLine(line);
     const error = this.splitAttempted && selected ? this.#splitQuantityError(line) : "";
     return html`<div class="split-line-row">
-      <wt-button
-        class="transfer-line ${selected ? "selected" : ""}"
+      <button
+        type="button"
+        class="option transfer-line"
         data-split-line=${line.lineNo}
-        variant="secondary"
         aria-pressed=${selected}
         @click=${() => this.#toggleSplitLine(line)}
       >
         <span aria-hidden="true">${selected ? "☑" : "☐"}</span> ${name}
         <span class="qty">${this.#displayQty(line.quantity)}</span>
-      </wt-button>
+      </button>
       ${
         selected
           ? this.#splitPrecision(line) === 0

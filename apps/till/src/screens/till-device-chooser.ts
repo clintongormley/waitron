@@ -152,7 +152,7 @@ export class TillDeviceChooser extends LitElement {
       </p>`;
     }
     if (this.list === undefined) {
-      return html`<p class="hint">Loading…</p>`;
+      return html`<p class="hint" role="status">Loading…</p>`;
     }
     return html`${this.#devicesSection(this.list)} ${this.#setupSection()}`;
   }

@@ -635,12 +635,7 @@ const NOT_CHARGED_OUTCOMES = new Set<BillPaymentResult["outcome"]>([
 const TYPED_FIELDS = new Set(["tendered", "amount", "shareOf", "addedTip"]);
 
 /** Refusals of an approver's PIN, which the PIN prompt shows. */
-const APPROVER_REFUSALS = new Set([
-  "pin.invalid",
-  "pin.throttled",
-  "person.not_found",
-  "person.suspended",
-]);
+const APPROVER_REFUSALS = new Set(["pin.invalid", "pin.throttled"]);
 
 /** Refusals after which the bill may already be cancelled: no answer, and `working_order.not_placed`,
  * which a cancel gets once an earlier cancel of the same bill has been made. */

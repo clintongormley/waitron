@@ -180,8 +180,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este artículo ya está pagado, así que no se puede cambiar, mover ni cobrar otra vez. Devuelve antes su pago",
   },
   "bill.received_exceeds_total": {
-    en: "The bill would owe less than has already been paid on it. Move fewer items, or refund the difference first",
-    es: "La cuenta quedaría por debajo de lo que ya se ha pagado. Mueve menos artículos o devuelve antes la diferencia",
+    en: "The bill would owe less than has already been paid on it. Take less off the bill, or refund the difference first",
+    es: "La cuenta quedaría por debajo de lo que ya se ha pagado. Quita menos de la cuenta o devuelve antes la diferencia",
   },
   "bill.nothing_outstanding": {
     en: "Nothing is left to pay on this bill",

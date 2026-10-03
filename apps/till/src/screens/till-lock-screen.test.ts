@@ -76,6 +76,13 @@ describe("till-lock-screen", () => {
     expect(el.shadowRoot!.textContent).toContain(t("login.loading"));
   });
 
+  it("marks the loading line as a status while the roster is in flight", async () => {
+    const api = stubApi({ listStaff: vi.fn(() => new Promise<StaffMember[]>(() => {})) });
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
+    const status = el.shadowRoot!.querySelector('[role="status"]');
+    expect(status?.textContent?.trim()).toBe(t("login.loading"));
+  });
+
   it("renders each staff member from listStaff() as a wt-button under the pick heading", async () => {
     const api = stubApi();
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });

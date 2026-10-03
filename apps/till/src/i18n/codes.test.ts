@@ -151,6 +151,15 @@ it("explains each refusal a bill paid in parts can give, in both languages, nami
   );
 });
 
+it("words the bill-would-owe-less refusal so it fits a comp or discount as well as a move, in both languages", () => {
+  expect(codeMessage("bill.received_exceeds_total", "en")).toBe(
+    "The bill would owe less than has already been paid on it. Take less off the bill, or refund the difference first",
+  );
+  expect(codeMessage("bill.received_exceeds_total", "es")).toBe(
+    "La cuenta quedaría por debajo de lo que ya se ha pagado. Quita menos de la cuenta o devuelve antes la diferencia",
+  );
+});
+
 it("explains each refusal of an unsent order, in both languages", () => {
   expect(
     ["draft.taken_over", "draft.already_submitted", "draft.out_of_date", "draft.not_found"].map(

@@ -36,6 +36,14 @@ describe("till-device-chooser", () => {
     expect(customElements.get("till-device-chooser")).toBe(TillDeviceChooser);
   });
 
+  it("marks the loading line as a status while the devices are read", async () => {
+    const { el } = await mountWidget<TillDeviceChooser>("till-device-chooser", {
+      api: stubApi({ getDevDevices: vi.fn(() => new Promise<DevDeviceList>(() => {})) }),
+    });
+    const status = el.shadowRoot!.querySelector('[role="status"]');
+    expect(status?.textContent?.trim()).toBe("Loading…");
+  });
+
   it("lists devices from getDevDevices, labelling each device's kind in human words", async () => {
     const list: DevDeviceList = {
       devices: [
