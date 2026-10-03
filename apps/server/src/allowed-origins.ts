@@ -8,7 +8,7 @@ export interface AllowedOriginsDeps {
   ttlMs?: number;
 }
 
-const DEV_ORIGINS = ["http://localhost:5190", "http://localhost:5191", "http://localhost:5192"];
+const DEV_ORIGINS = [5190, 5191, 5192, 5290, 5291, 5292].map((port) => `http://localhost:${port}`);
 
 /** A contactUrl's origin, or null when it does not parse — a malformed address allows nothing. */
 function originOf(url: string): string | null {
