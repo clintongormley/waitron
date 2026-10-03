@@ -112,6 +112,11 @@ describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)
     await expectNoA11yViolations(host);
   });
 
+  it("the saved settings are incomplete", async () => {
+    const { host } = await mount({ ...PAUSED, bucket: null });
+    await expectNoA11yViolations(host);
+  });
+
   it("the form after an invalid save, with the bottom message and field errors", async () => {
     const { el, host } = await mount(OFF);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
