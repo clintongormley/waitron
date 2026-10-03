@@ -6,6 +6,7 @@ import { locations, printJobs, printers, tills, withTransaction, type Database }
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { listOpenIncidents, recordIncident } from "@waitron/core";
 import {
   hashPin,
@@ -25,6 +26,7 @@ import {
   type ReaderStatus,
 } from "@waitron/payments";
 import { AppError, tillId as brandTillId, type TillId } from "@waitron/shared";
+import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";
 import { mountAlertsApi } from "./alerts-api.js";
 import {
   awaitingCertAlertSource,
@@ -406,6 +408,66 @@ const liveGet = (app: Hono, cookie: string) =>
   });
 
 describe("ongoing alert sources through the route", () => {
+  it("reports a SumUp reader's low battery through its real credential read", async () => {
+    const v = await seedVenue();
+    const ring = loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    });
+    await withTransaction(db, (tx) =>
+      putCredential(tx, ring, {
+        purpose: "payments.sumup",
+        value: {
+          apiKey: "sup_sk_x",
+          merchantCode: "MABC123",
+          affiliateAppId: "-",
+          affiliateKey: "-",
+        },
+      }),
+    );
+    await db.insert(cardReaders).values({
+      provider: "sumup",
+      providerRef: "rdr_low",
+      name: "Counter",
+      active: true,
+    });
+    const paths: string[] = [];
+    const fetch = (async (input: string | URL | Request) => {
+      const path = new URL(String(input)).pathname;
+      paths.push(path);
+      if (path.endsWith("/status"))
+        return new Response(JSON.stringify({ data: { status: "ONLINE", battery_level: 5 } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      return new Response(JSON.stringify({ id: "rdr_low", status: "paired" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof globalThis.fetch;
+    const registry = createAlertRegistry({
+      claims: ALL_ALERT_CLAIMS,
+      sources: [
+        batteryAlertSource({
+          providers: [SUMUP_CARD_PROVIDER],
+          runtimeDeps: () => ({ db, ring, fetch }),
+          cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+        }),
+      ],
+    });
+
+    const response = await get(appFor(registry), "/management-api/alerts", v.manager);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { alerts: { code: string; params: unknown }[] };
+    expect(body.alerts).toContainEqual(
+      expect.objectContaining({
+        code: "reader.battery_low",
+        params: { reader: "Counter", percent: 5 },
+      }),
+    );
+    expect(paths).toContain("/v0.1/merchants/MABC123/readers/rdr_low/status");
+  });
+
   it("filters ongoing sources by permission: a payments.manage-only session sees only card_reader alerts", async () => {
     // Give the supervisor exactly the battery source's permission, then fire all four areas.
     roleOverride.set("supervisor", ["payments.manage"]);
@@ -471,6 +533,28 @@ describe("ongoing alert sources through the route", () => {
         area: "card_reader",
         params: { area: "card_reader" },
       }),
+    ]);
+  });
+
+  it("shows one unavailable alert when transaction and external sources fail in the same area", async () => {
+    const v = await seedVenue();
+    const failing = (readOutsideTransaction: boolean): AlertSource => ({
+      area: "card_reader",
+      permission: "payments.manage",
+      readOutsideTransaction,
+      read: async () => {
+        throw new Error("provider unavailable");
+      },
+    });
+    const registry = createAlertRegistry({
+      claims: ALL_ALERT_CLAIMS,
+      sources: [failing(false), failing(true)],
+    });
+    const body = (await (
+      await get(appFor(registry), "/management-api/alerts", v.manager)
+    ).json()) as { alerts: { code: string; area: string }[] };
+    expect(body.alerts).toEqual([
+      expect.objectContaining({ code: "alert.source_unavailable", area: "card_reader" }),
     ]);
   });
 

@@ -386,6 +386,7 @@ export function batteryAlertSource(deps: {
   return {
     area: "card_reader",
     permission: "payments.manage",
+    readOutsideTransaction: true,
     async read({ tx }): Promise<readonly OngoingAlert[]> {
       const readers = await tx
         .select({

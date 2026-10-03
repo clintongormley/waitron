@@ -9,6 +9,8 @@ import {
   claimFor,
   readHandledAlerts,
   readOpenAlerts,
+  readOutsideTransactionAlerts,
+  sortOpenAlerts,
   type AlertRegistry,
 } from "./alerts.js";
 import "./errors.js";
@@ -46,18 +48,30 @@ export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): voi
     });
   };
 
-  const list = (read: typeof readOpenAlerts) => (c: Context) =>
+  const list = (read: typeof readOpenAlerts, includeExternal: boolean) => (c: Context) =>
     run(c, log, async () => {
+      const now = deps.now();
       const body = await inSession(c, async (tx, { held }) => {
-        if (!alertsVisible(deps.registry, held)) return { visible: false, alerts: [] };
-        const alerts = await read(tx, { registry: deps.registry, now: deps.now(), log }, held);
-        return { visible: true, alerts };
+        if (!alertsVisible(deps.registry, held)) return { visible: false, alerts: [], held };
+        const alerts = await read(tx, { registry: deps.registry, now, log }, held);
+        return { visible: true, alerts, held };
       });
-      return c.json(body);
+      const alerts =
+        body.visible && includeExternal
+          ? sortOpenAlerts([
+              ...body.alerts,
+              ...(await readOutsideTransactionAlerts(
+                deps.db,
+                { registry: deps.registry, now, log },
+                body.held,
+              )),
+            ])
+          : body.alerts;
+      return c.json({ visible: body.visible, alerts });
     });
 
-  app.get("/management-api/alerts", list(readOpenAlerts));
-  app.get("/management-api/alerts/handled", list(readHandledAlerts));
+  app.get("/management-api/alerts", list(readOpenAlerts, true));
+  app.get("/management-api/alerts/handled", list(readHandledAlerts, false));
 
   app.post("/management-api/alerts/incidents/:id/handled", (c) =>
     run(c, log, async () => {
