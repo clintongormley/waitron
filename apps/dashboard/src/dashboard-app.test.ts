@@ -2322,6 +2322,16 @@ describe("dashboard-app", () => {
     },
   );
 
+  it("opens the Devices page from the approval link's URL for a manager", async () => {
+    history.replaceState(null, "", "/manage/devices");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe: vi.fn().mockResolvedValue(meResponse) }),
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-devices-screen")).not.toBeNull();
+    expect(location.pathname).toBe("/manage/devices");
+  });
+
   it("offers the VAT return under Sales to a session holding report.export, and opens its page", async () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["report.export"] }),

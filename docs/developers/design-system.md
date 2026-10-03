@@ -395,6 +395,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-disclosure` | `heading`, `summary` (shown under the heading while the section is closed), `summaryFields` (`{ label, value, placeholder? }[]`; when it holds any, the closed line is these instead of `summary`: each value after its bold label and a colon, joined with a middot; a value marked `placeholder` is drawn in italic, as a field's placeholder is), `summaryRows` (`{ label, value, lines, placeholder? }[]`; when it holds any, it is used instead of both: one row per entry, the value after its bold label and a colon, each row cut with an ellipsis after its own `lines` lines, so a long value never widens the header, and a `placeholder` value in italic), `open` (reflected), `has-error` (reflected); default slot (body). The header is a `<button aria-expanded>` and the shadow root delegates focus to it; clicking it toggles `open`. `has-error` forces the section open and makes the header inert, so a section holding a validation error cannot be collapsed out of view | `wt-toggle` — `detail: { open: boolean }` |
 | `wt-lozenge` | `color` (a hex string; empty or invalid renders the neutral chip); default slot (label) | — |
 | `wt-count-badge` | `count` (renders nothing at zero; shows `99+` above 99), `tone` (`neutral`\|`warning`\|`error`, reflected). It has no accessible name: the control it decorates must say the count | — |
+| `wt-demo-bar` | `modeLabel`, `navigationLabel` (the navigation landmark's name), `links` (`{ label, href, current? }[]`; the current page is text with `aria-current="page"`, the others are links). Used above the dashboard banner and till content in Demo and Preparation | — |
 | `wt-choice-row` | `heading`; `href` (when not empty, the row is one native link to that address instead of a button, drawn the same way and not underlined; for a row that goes to another page, such as the setup wizard's last screen's Till, Dashboard and Email inbox); default slot (a short description under it; a row with no child nodes hides the description line, leaving the heading alone in the row). The whole row — heading, description and a trailing arrow — is one native button (or link), at least `--wt-tap-min` tall and the full width it is given; it takes `--wt-color-surface-lifted` under the pointer. For a list of choices that each lead somewhere, such as the setup wizard's Demo, Prepare and Live. Each row draws a `--wt-color-border` line on its top and sides, and only the last `wt-choice-row` in its parent element (`:last-of-type`) draws a bottom line; the first takes `--wt-radius-lg` top corners and the last bottom ones; each row keeps its own height. So rows placed next to each other, with nothing between them, read as one box, and a row alone in its parent is a box of its own. A hidden row still counts as its parent's first or last, so hiding one can leave the box open or square-cornered. The corners are drawn on the rows' own buttons and links, with no clipping parent, so nothing clips a hovered row's background or the focus ring | native `click` |
 | `wt-toast` | `open`, `tone` (`info`\|`error`, reflected; info is announced politely through `role="status"`, error assertively through `role="alert"`), `message`, `close-label` (required: the close button's accessible name, and an empty one leaves that button nameless), `duration` (milliseconds, default `8000`; `0` keeps it open); `show()` opens it and restarts the full countdown (unless the pointer or keyboard focus is on it, when the countdown waits), which is how to re-announce an identical message. While the pointer or keyboard focus is on it the countdown never runs, even when the message changes; once both have left, the full duration restarts. Positioning belongs to the consumer, which must also register the `close` icon | `wt-activate` — `detail: {}` (the message was pressed; the toast then closes); `wt-close` — `detail: {}` (closed by the timer, the close button, or after activation) |
 | `wt-notice` | `duration` (milliseconds on screen, default `4000`; `0` keeps it until the consumer removes it; a new value is counted from when it is set), `reducedMotion` (property only; overrides the `prefers-reduced-motion` query, which is read when the time is up); default slot (the words). An inline status message: the host takes `role="status"` unless given a role, so a change to its words is announced politely. When its time is up it fades out over `--wt-duration-fade`, then hides itself (`hidden`); under reduced motion it hides at once, with no fade. Taken off the page it stops counting, and counts its full duration again when put back. After hiding itself it shows again when put back or given a new duration; a `hidden` its page set while it was showing is kept, and a duration set while it is off the page starts no count until it is put back. It paints no colour of its own, so the consumer colours it (the Printers screen's Bluetooth rows do, through `::part`) | `wt-notice-gone` — `detail: {}` (its time is up and it is hidden). Not `wt-close`, which `wt-modal` and `wt-dialog` send and consumers listen for on them, so a notice inside one would read as the dialog closing |
@@ -1229,23 +1230,23 @@ focus out of the combobox swaps it back too.
 
 ### Dashboard banner
 
-Keep the dashboard's branded banner at the very top of the page, spanning its full width, on the
-login screen and every authenticated screen. The menu and page content belong underneath it. The
+Keep the dashboard's branded banner across the full page width, on the login screen and every
+authenticated screen. In Demo and Preparation, put `wt-demo-bar` above it; in Live, the banner is
+at the top. The menu and page content belong underneath the banner. The
 banner shows the canonical Waitron lockup and the deployment tenant's legal name, not a location
 name: one deployment database represents one tenant, while that tenant can contain several
 locations. Once a session is active, put the account menu — a person-icon `wt-row-actions` popover
 holding Account settings and Log out — at the banner's trailing (right-hand in the shipped locales)
 edge. Do not show it before authentication. Below the drawer breakpoint (`48rem`) the banner takes
 two rows: the menu toggle, the lockup and the menus share the first, with the lockup shrinking when
-space runs short, and the legal name, the mode pill and, in a demo or a venue preparing to go live,
-the email inbox link take the second in full. The language chooser sits at the trailing edge too,
-before the alerts bell and the account menu, signed in and signed out (see "Navigation and language
-controls"). In a demo or a venue preparing to go live (both capture account email on the box unless
-SMTP is set up), an "Email inbox" link to `/manage/email` (the inbox screen, the address the setup
-wizard's done page links to) sits just before the language chooser: signed out it always shows, and
-signed in it shows only to a session that may open the inbox screen (a manager or an admin). The
-sidebar has no entry for that screen. Below the drawer breakpoint the link goes on the second row,
-after the mode pill, so the lockup keeps its room on the first.
+space runs short, and the legal name and Live mode pill take the second in full. The language chooser
+sits at the trailing edge too, before the alerts bell and the account menu, signed in and signed out
+(see "Navigation and language controls"). In Demo and Preparation, `wt-demo-bar` shows the mode,
+the current dashboard page, a link to the device page, and an "Email inbox" link to `/manage/email`
+(the inbox screen, also linked from setup's done page). Signed out, the inbox link always shows;
+signed in, it shows only to a session that may open the inbox screen (a manager or an admin). The
+sidebar has no entry for that screen. The bar wraps its links at phone width while each link keeps
+the minimum tap height.
 
 When the session may see alerts, the alerts bell (`dashboard-alerts-bell`, a `wt-row-actions` with
 the `bell` icon and a `wt-count-badge` in its `badge` slot) sits immediately before the account menu.
@@ -1999,9 +2000,7 @@ static assets keep their own responses; setup continues to use its existing root
 The language controls display the names from `SUPPORTED_LOCALES` before their options load. Each
 app puts `wt-language-chooser` at the trailing end of its top bar: in the setup wizard's card
 header, after the logo; in the dashboard's banner, before the alerts bell and the account menu, and
-there on its own when nobody is signed in (in a demo or a venue preparing to go live, above the
-drawer breakpoint, the email inbox link sits just before it); in the till's tab-shell bar, before
-the operator's name,
+there on its own when nobody is signed in; in the till's tab-shell bar, before the operator's name,
 as in the counter screen's own header (which it draws only when not embedded in the shell, and the
 app always embeds it). A till screen with no top bar — the sign-in and join screens, and the
 kitchen display, whose shell draws no bar — holds it at the top right on its own, above the

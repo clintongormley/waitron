@@ -41,8 +41,8 @@ export class WtDemoBar extends LitElement {
       }
 
       a:focus-visible {
-        outline: 2px solid var(--wt-color-primary);
-        outline-offset: 2px;
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
       }
     `,
   ];

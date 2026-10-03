@@ -2548,6 +2548,12 @@ Email inbox link lives there, and the till's device setup and approval screens l
 Settings → Devices so a manager can approve the device. Live keeps its existing mode label. The
 pretend printer link follows when A241 adds its page in W37.
 
+**Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
+apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A
+request for `/manage/devices` on 5190 returned the till HTML, while the same path on 5191 returned
+the dashboard HTML (measured 2026-10-03 with `curl`). Make cross-app links reach the other dev
+server without changing their deployed same-origin paths; this also affects setup's existing links.
+
 **Table filters move into a Filters panel, and vanish on an empty table (A248, owner 2026-10-03) —
 DONE in W39.** `wt-data-table` (`packages/ui/src/components/wt-data-table.ts`)
 drew every column filter as a dropdown above the table even when the table had no rows at all — the

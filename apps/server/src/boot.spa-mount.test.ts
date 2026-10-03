@@ -49,6 +49,7 @@ describe("SPA mounting alongside API routes (boot order)", () => {
 
   it.each([
     ["/manage/staff", "dashboard"],
+    ["/manage/devices", "dashboard"],
     ["/manage/floor/view/plano/zone/z1", "dashboard"],
     ["/manage/canvas-editor/canvas/c1/tab/counter", "dashboard"],
     ["/tabs/counter/menu/lunch", "till"],
