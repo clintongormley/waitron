@@ -2321,6 +2321,15 @@ is trading"); its own mode-pill style, separate from the review screen's; and `r
 fallbacks in its styles, against the token rule. The owner also wants the Print agent link
 (`done.link.print_agent`) gone from the page: "i don't think we need the print agent anymore".
 
+**The till ignores the browser's languages before anyone signs in (A245, owner 2026-10-03) — OPEN,
+queued as lane A's W35.** Finishing setup in English and clicking Till opens the device setup screen
+("Configurar este dispositivo") in Spanish. Before a login the till applies the venue's language
+(`setLocale(till.locale)` in `#boot`, `apps/till/src/till-app.ts`; the field starts as `es-ES`),
+where the dashboard matches the browser's `Accept-Language` against the installed languages
+(`loginDefault`, `resolveLoginLocale` in `apps/server/src/me-api.ts`). The owner: "it should be
+following my preferred browser languages". In the owner's screenshot the enrol screen also showed
+no language chooser, although `till-enrol-screen.ts` renders one; not investigated.
+
 The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
