@@ -2217,6 +2217,31 @@ describe("till-app table ordering: paying the tab", () => {
     expect(ticket(el)).toBeNull();
     expect(tableOrder(el)).not.toBeNull();
   });
+
+  it("says the bill is over the simplified-invoice limit, naming the limit, when paying the tab is refused for it", async () => {
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockRejectedValue({
+        code: "sale.total_exceeds_simplified_limit",
+        total: "3150.00",
+        limit: "3010.00",
+        status: 409,
+      }),
+    });
+    const screen = await toTableOrder(el);
+
+    emit(screen, "pay-tab", { method: "cash", amount: "3.00" });
+    await flush(el);
+
+    const text = banner(el)!.textContent!;
+    expect(text).toBe(
+      t("sale.over_simplified_limit").replace("{amount}", () =>
+        formatMoney("3010.00", currentLocale()),
+      ),
+    );
+    expect(text).toContain("3010,00");
+    expect(ticket(el)).toBeNull();
+    expect(tableOrder(el)).not.toBeNull();
+  });
 });
 
 describe("till-app table ordering: logout while a request is waiting for the server", () => {

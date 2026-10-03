@@ -2890,7 +2890,7 @@ export class TillApp extends LitElement {
           ? "sale.unconfirmed"
           : isTakePaymentRefusal(error)
             ? "take_payment.not_permitted"
-            : "sale.error";
+            : (overLimitOf(error) ?? "sale.error");
     } finally {
       this.submitting = false;
     }
@@ -6329,7 +6329,7 @@ export class TillApp extends LitElement {
             ? "sale.unconfirmed"
             : isTakePaymentRefusal(error)
               ? "take_payment.not_permitted"
-              : "sale.error";
+              : (overLimitOf(error) ?? "sale.error");
     } finally {
       this.submitting = false;
     }

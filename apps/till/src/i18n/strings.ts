@@ -740,7 +740,7 @@ export const en = {
     "This change would leave this bill owing {amount} less than has already been paid on it. Change less, or give {amount} back first.",
   "bill.refund_excess": "Give back {amount}",
   "sale.over_simplified_limit":
-    "This would take the order over {amount}, the most a sale can be without a full invoice naming the customer, which this till cannot issue. Take something off the order.",
+    "This would take the order over {amount}, the most this till accepts without a full invoice naming the customer, which it cannot issue. Take something off the order.",
   "bill.take_rest": "Take the rest",
   // The bill payment dialog: paying for items, contributing an amount, or an equal share.
   "bill_pay.title": "Pay part of the bill",
@@ -1654,7 +1654,7 @@ export const es: Record<StringKey, string> = {
     "Con este cambio, la cuenta quedaría {amount} por debajo de lo que ya se ha pagado en ella. Cambia menos o devuelve antes {amount}.",
   "bill.refund_excess": "Devolver {amount}",
   "sale.over_simplified_limit":
-    "El pedido pasaría de {amount}, el máximo de una venta sin factura completa a nombre del cliente, que esta caja no puede emitir. Quita algo del pedido.",
+    "El pedido pasaría de {amount}, el máximo que admite esta caja sin una factura completa a nombre del cliente, y no puede emitirla. Quita algo del pedido.",
   "bill.take_rest": "Cobrar el resto",
   "bill_pay.title": "Cobrar parte de la cuenta",
   "bill_pay.balance": "Esta cuenta",

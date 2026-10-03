@@ -211,7 +211,7 @@ export class WorkingOrderStore {
   #limit: Decimal | null = null;
 
   /**
-   * The largest total a sale with no named customer may have (the server's
+   * The largest total this regime records for a sale with no named customer (the server's
    * `simplifiedInvoiceLimit`), or null for none. An add or a change that would take the total past
    * it is refused with a `"refused"` event and leaves the basket as it was; one that keeps it, or
    * makes it smaller, is not.
