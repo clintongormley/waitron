@@ -21,10 +21,11 @@ import "./errors.js";
 
 // The simplified-invoice limit is the fiscal regime's (`FiscalBackend.simplifiedInvoiceLimit`,
 // 3,010.00 under Veri*Factu). Every till path that enters, grows or pays an order refuses one that
-// would go over it, before money moves or anything is written. Driven over HTTP against a venue
+// would go over it, before anything commits or money moves; an edit that does not raise an order's
+// total is not refused, even with the order still over the limit. Driven over HTTP against a venue
 // that files real Veri*Factu records. `limited` is the till API with the regime's limit, as boot
 // mounts it; the fixture's own `venue.app` carries none, and stands in for an order that grew
-// before the limit existed, so the paying paths have something over the limit to refuse.
+// before the limit existed, so there is something over the limit to refuse or to shrink.
 let venue: BillVenue;
 let limited: Hono;
 let counter: ZoneOffers;
@@ -48,6 +49,7 @@ useVenueDb({
         ["Lote", "3010.00"],
         ["Mitad", "1600.00"],
         ["Céntimo", "0.01"],
+        ["Gratis", "0.00"],
       ] as const) {
         const created = await createProduct(tx, {
           catalogueId: cat.id,
@@ -160,6 +162,21 @@ function partyRevision(partyId: string): number {
   return venue.db.all<{ revision: number }>(
     sql`select revision from parties where id = ${partyId}`,
   )[0]!.revision;
+}
+
+/** A party whose main bill holds `main` and whose second bill holds `second`, made through the
+ * unlimited routes, since either or both may be over the limit. */
+async function twoBills(main: Basket, second: Basket) {
+  const { partyId, tabId } = await seated(venue.app, { ...main, ...second });
+  const secondLines = storedLines(tabId)
+    .slice(Object.keys(main).length)
+    .map((entry) => ({ lineNo: Number(entry.split(":")[0]) }));
+  const split = await send(venue.app, venue.cookie, "POST", `/api/bills/${tabId}/split`, {
+    transfers: secondLines,
+    expectedPartyRevision: partyRevision(partyId),
+  });
+  expect(split.status).toBe(200);
+  return { partyId, mainBill: tabId, secondBill: split.json.billId as string };
 }
 
 /** A counter order parked through `app`. */
@@ -387,21 +404,6 @@ describe("an edit that grows an order", () => {
     expect(storedLines(tabId)).toEqual(["1:1000"]);
   });
 
-  /** A party whose main bill holds `main` and whose second bill holds `second`, made through the
-   * unlimited routes, since the two together may be over the limit. */
-  async function twoBills(main: Basket, second: Basket) {
-    const { partyId, tabId } = await seated(venue.app, { ...main, ...second });
-    const secondLines = storedLines(tabId)
-      .slice(Object.keys(main).length)
-      .map((entry) => ({ lineNo: Number(entry.split(":")[0]) }));
-    const split = await send(venue.app, venue.cookie, "POST", `/api/bills/${tabId}/split`, {
-      transfers: secondLines,
-      expectedPartyRevision: partyRevision(partyId),
-    });
-    expect(split.status).toBe(200);
-    return { partyId, mainBill: tabId, secondBill: split.json.billId as string };
-  }
-
   it("merging two bills into one over the limit is refused, and both keep their lines", async () => {
     const { partyId, mainBill, secondBill } = await twoBills({ Mitad: 1 }, { Lote: 1 });
     const answer = await send(limited, venue.cookie, "POST", `/api/bills/${mainBill}/merge`, {
@@ -442,6 +444,113 @@ describe("an edit that grows an order", () => {
     expect(answer.status).toBe(409);
     expect(answer.json.code).toBe(REFUSED.code);
     expect(storedLines(mainBill)).toEqual(["1:1000"]);
+    expect(storedLines(secondBill)).toEqual(["1:2000"]);
+  });
+});
+
+describe("an edit that does not raise an order already over the limit", () => {
+  it("a held order's update that shrinks it is saved while still over, and again down to the limit", async () => {
+    const id = await parked(venue.app, counter, { Mitad: 3 });
+    const shrunk = await send(limited, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+      lines: linesOf(counter, { Mitad: 2 }),
+      revision: orderRow(id)!.revision,
+    });
+    expect(shrunk.status).toBe(200);
+    expect(storedLines(id).map((entry) => entry.split(":")[1])).toEqual(["2000"]);
+
+    const atLimit = await send(limited, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+      lines: linesOf(counter, { Lote: 1 }),
+      revision: orderRow(id)!.revision,
+    });
+    expect(atLimit.status).toBe(200);
+  });
+
+  it("a held order's update that raises it further is refused, and the stored lines stay", async () => {
+    const id = await parked(venue.app, counter, { Mitad: 2 });
+    const revision = orderRow(id)!.revision;
+    const answer = await send(limited, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+      lines: linesOf(counter, { Mitad: 2, Céntimo: 1 }),
+      revision,
+    });
+    expect(answer).toEqual({
+      status: 409,
+      json: { ...REFUSED, params: { total: "3200.01", limit: "3010.00" } },
+    });
+    expect(storedLines(id)).toEqual(["1:2000"]);
+    expect(orderRow(id)!.revision).toBe(revision);
+  });
+
+  it("a quantity lowered on one line is saved while the bill stays over", async () => {
+    const { tabId } = await seated(venue.app, { Mitad: 3 });
+    const answer = await send(
+      limited,
+      venue.cookie,
+      "PUT",
+      `/api/working-orders/${tabId}/lines/1`,
+      { quantity: "2", revision: orderRow(tabId)!.revision },
+    );
+    expect(answer.status).toBe(200);
+    expect(storedLines(tabId)).toEqual(["1:2000"]);
+  });
+
+  it("a quantity raised on one line of a bill already over is refused, and the quantity stays", async () => {
+    const { tabId } = await seated(venue.app, { Mitad: 2 });
+    const answer = await send(
+      limited,
+      venue.cookie,
+      "PUT",
+      `/api/working-orders/${tabId}/lines/1`,
+      { quantity: "3", revision: orderRow(tabId)!.revision },
+    );
+    expect(answer.status).toBe(409);
+    expect(answer.json.code).toBe(REFUSED.code);
+    expect(storedLines(tabId)).toEqual(["1:2000"]);
+  });
+
+  it("a round of a free dish on a bill already over is sent", async () => {
+    const { partyId, tabId } = await seated(venue.app, { Mitad: 2 });
+    const answer = await send(limited, venue.cookie, "POST", `/api/parties/${partyId}/groups`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: partyRevision(partyId),
+      groups: [{ lines: linesOf(tables, { Gratis: 1 }), release: "fire" }],
+    });
+    expect(answer.status).toBe(200);
+    expect(storedLines(tabId)).toEqual(["1:2000", "2:1000"]);
+  });
+
+  it("moving a free whole line onto a bill already over is done", async () => {
+    const { partyId, mainBill, secondBill } = await twoBills({ Mitad: 2 }, { Gratis: 1 });
+    const answer = await send(limited, venue.cookie, "POST", `/api/bills/${secondBill}/transfer`, {
+      toBillId: mainBill,
+      transfers: [{ lineNo: 1 }],
+      expectedPartyRevision: partyRevision(partyId),
+    });
+    expect(answer.status).toBe(204);
+    expect(storedLines(mainBill)).toEqual(["1:2000", "2:1000"]);
+    expect(storedLines(secondBill)).toEqual([]);
+  });
+
+  it("moving part of a free line onto a bill already over is done", async () => {
+    const { partyId, mainBill, secondBill } = await twoBills({ Mitad: 2 }, { Gratis: 2 });
+    const answer = await send(limited, venue.cookie, "POST", `/api/bills/${secondBill}/transfer`, {
+      toBillId: mainBill,
+      transfers: [{ lineNo: 1, quantity: "1" }],
+      expectedPartyRevision: partyRevision(partyId),
+    });
+    expect(answer.status).toBe(204);
+    expect(storedLines(mainBill)).toEqual(["1:2000", "2:1000"]);
+    expect(storedLines(secondBill)).toEqual(["1:1000"]);
+  });
+
+  it("moving part of a line off a bill over the limit is done, the bill it leaves staying over", async () => {
+    const { partyId, mainBill, secondBill } = await twoBills({ Céntimo: 1 }, { Mitad: 3 });
+    const answer = await send(limited, venue.cookie, "POST", `/api/bills/${secondBill}/transfer`, {
+      toBillId: mainBill,
+      transfers: [{ lineNo: 1, quantity: "1" }],
+      expectedPartyRevision: partyRevision(partyId),
+    });
+    expect(answer.status).toBe(204);
+    expect(storedLines(mainBill)).toEqual(["1:1000", "2:1000"]);
     expect(storedLines(secondBill)).toEqual(["1:2000"]);
   });
 });

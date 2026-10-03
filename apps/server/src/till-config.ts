@@ -51,9 +51,9 @@ export interface TillConfig {
    */
   orderFlow: OrderFlow;
   /**
-   * The largest total a sale with no named customer may have, from the fiscal backend's
-   * `simplifiedInvoiceLimit` at boot, or null when the regime sets none. Every path that enters,
-   * grows or pays an order holds it to this (`refuseOverSimplifiedLimit`, `@waitron/core`).
+   * The largest total this regime records for a sale with no named customer, from the fiscal
+   * backend's `simplifiedInvoiceLimit` at boot, or null when the regime sets none. Every path that
+   * enters, grows or pays an order holds it to this (`refuseOverSimplifiedLimit`, `@waitron/core`).
    */
   simplifiedInvoiceLimit: Decimal | null;
 }
