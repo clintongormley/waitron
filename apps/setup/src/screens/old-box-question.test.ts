@@ -1,7 +1,7 @@
 import { render } from "lit";
 import { afterEach, expect, it } from "vitest";
 import { setLocale } from "../i18n/t.js";
-import { OLD_BOX_PROBLEM, oldBoxProblem, oldBoxQuestion } from "./old-box-question.js";
+import { oldBoxProblem, oldBoxQuestion } from "./old-box-question.js";
 
 const hosts: HTMLElement[] = [];
 
@@ -36,8 +36,8 @@ it("asks about the old server in English by default", () => {
     "Whether the old server is still writing to its bucket could not be checked. If it is still running, two servers would sell from the same records, and that cannot be undone. Switch it off for good before you go on.",
   );
   expect(text(host.querySelector("label")!)).toBe("The old server is switched off for good.");
-  expect(text(host.querySelector("#old-box-gone-error")!)).toBe(OLD_BOX_PROBLEM);
-  expect(oldBoxProblem()).toBe(OLD_BOX_PROBLEM);
+  expect(text(host.querySelector("#old-box-gone-error")!)).toBe(oldBoxProblem());
+  expect(oldBoxProblem()).toBe("Confirm that the old server is switched off for good.");
 });
 
 it("asks about the old server in Spanish", () => {
@@ -77,5 +77,5 @@ it("shows the server's refusal under the checkbox and points the checkbox at it"
 
 it("says the question is unanswered rather than repeating the server's refusal", () => {
   const host = mount({ invalid: true, refusal: "Check your answer about the old server." });
-  expect(text(host.querySelector("#old-box-gone-error")!)).toBe(OLD_BOX_PROBLEM);
+  expect(text(host.querySelector("#old-box-gone-error")!)).toBe(oldBoxProblem());
 });
