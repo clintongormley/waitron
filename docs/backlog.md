@@ -1662,13 +1662,10 @@ The [A203 design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md) an
 [implementation plan](superpowers/plans/2026-10-03-extra-fixed-portion.md) were approved on
 2026-10-03. The implementation follows those decisions.
 
-**Left open after A203 review:** A portion-only edit changes a menu document but has no named
-entry in its pre-publish changes list: `diffEntries` compares an extra's unit, while `EXTRA_FACTS`
-does not include its portion (`packages/catalogue/src/menu-document.ts`). Add a portion-change entry
-and a test before treating that list as complete for extras. The two new core `price_quantity`
-columns have no positive-value CHECK (`packages/db/src/schema/orders.ts`, `sales.ts`); a zero would
-be a divisor in the pricing and report paths. Test the refusal and add a constraint in a separate
-migration if this needs database enforcement. Neither case was run in the A203 review.
+**A portion-only edit now names the extras list, product, and old and new amounts in the
+pre-publish changes list (W51) — DONE.** The two new core `price_quantity` columns still have no
+positive-value CHECK (`packages/db/src/schema/orders.ts`, `sales.ts`); a zero would be a divisor in
+the pricing and report paths. Test the refusal and add a constraint in a separate migration (W52).
 
 **The extras editor's “Preselected” heading stacks one letter per line on a desktop (W49) — OPEN,
 queued after A203 (owner, 2026-10-03).** In the Add extras list dialog at

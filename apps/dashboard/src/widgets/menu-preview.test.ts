@@ -298,6 +298,33 @@ it("names an extra's list and old and new units in both languages", async () => 
   ]);
 });
 
+it("names an extra's list and old and new portions with their units in both languages", async () => {
+  const el = await mount({
+    preview: preview([
+      {
+        kind: "extra_portion_changed",
+        productId: "p-ham",
+        name: "Jamón",
+        listId: "l-extras",
+        listName: "Extras",
+        from: { portion: "0.050", abbreviation: { en: "kg", es: "kg" } },
+        to: { portion: "0.100", abbreviation: { en: "kg", es: "kg" } },
+        source: "shared_product",
+      },
+    ]),
+  });
+  expect(items(el, "changes")).toEqual([
+    "Extras: Jamón portion changed from 0.050 kg to 0.100 kg — shared product",
+  ]);
+
+  setLocale("es-ES");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(items(el, "changes")).toEqual([
+    "Extras: la porción de Jamón ha cambiado de 0.050 kg a 0.100 kg — producto compartido",
+  ]);
+});
+
 /** A dish's VAT change, a variant's own (named in the variants too), and an extra's. */
 const VAT_CHANGES: MenuChange[] = [
   {

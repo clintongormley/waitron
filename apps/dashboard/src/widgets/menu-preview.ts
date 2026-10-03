@@ -319,6 +319,17 @@ export class MenuPreviewPanel extends LitElement {
           toPrecision: String(change.to.precision),
         });
       }
+      case "extra_portion_changed": {
+        const locale = currentLocale().slice(0, 2);
+        const unit = (abbreviations: Record<string, string>) =>
+          abbreviations[locale] ?? abbreviations.en ?? Object.values(abbreviations)[0] ?? "";
+        return fill("menu_preview.extra_portion_changed", {
+          list: change.listName,
+          name: change.name,
+          from: `${change.from.portion} ${unit(change.from.abbreviation)}`.trim(),
+          to: `${change.to.portion} ${unit(change.to.abbreviation)}`.trim(),
+        });
+      }
       case "section_added":
         return this.#at(
           "menu_preview.section_added",

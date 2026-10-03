@@ -210,12 +210,14 @@ function changeSubject({ change, section }: DiffEntry): string {
     case "price_changed":
     case "product_changed":
       return `${change.kind}:${change.productId}`;
+    case "extra_unit_changed":
+    case "extra_portion_changed":
+      return `${change.kind}:${change.listId}:${change.productId}`;
     case "section_added":
     case "section_removed":
     case "section_changed":
       return `${change.kind}:${change.sectionId}`;
     default:
-      // Only `order_changed` can be shared among the rest, and its section says which list.
       return `${change.kind}:${section}`;
   }
 }
