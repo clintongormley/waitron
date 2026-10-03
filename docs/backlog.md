@@ -927,7 +927,8 @@ of three mockups):**
   account (name, email; the display name only when it differs from the name) — each box with an
   Edit link back to the step that collects it;
 - the mode is a badge at the top (Demo, Prepare or Live) with demo's one-line explanation beside
-  it, replacing the Mode row and the demo paragraph;
+  it, replacing the Mode row and the demo paragraph (2026-10-03, A244: the badge is now the mode
+  pill the provisioning and done screens share, and reads Preparation);
 - a language shows by its name ("Català"), never its code; "Rectificative series" reads
   "Corrections series" (Spanish wording to match);
 - help (replaced 2026-10-03 by A243: the review screen has no "?" buttons, and each box's
@@ -2425,7 +2426,8 @@ fallbacks in its styles, against the token rule. The owner also wanted the Print
 Now the Till, Dashboard and Email inbox links are `wt-choice-row` rows (which gained an `href`),
 introduced by one muted sentence; the Print agent link is gone; the device steps and the backup
 nudge sit in cards; the review, provisioning and done screens share one mode pill
-(`apps/setup/src/mode-pill.ts`); and the screen's styles hold no `rem` or `em` sizes, hex colours or fallback values.
+(`apps/setup/src/mode-pill.ts`); and the screen's styles hold no `rem` or `em` sizes, hex colours
+or fallback values.
 
 **The till ignores the browser's languages before anyone signs in (A245, owner 2026-10-03) — OPEN,
 queued as lane A's W35.** Finishing setup in English and clicking Till opens the device setup screen
