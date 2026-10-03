@@ -219,7 +219,7 @@ async function provisionVenue(
     planVenue(
       {
         country: "ES",
-        taxId: "50000000K",
+        taxId: "50000000R",
         legalName: "Waitron Dev SL",
         location: {
           name: "Sala principal",
