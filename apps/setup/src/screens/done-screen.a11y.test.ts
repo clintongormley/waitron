@@ -78,4 +78,51 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     );
     await expectNoA11yViolations(host);
   });
+  it("has no violations live, with the backup nudge and the reload offered", async () => {
+    const { el, host } = await mountWidget<SetupDoneScreen>(
+      "setup-done-screen",
+      {
+        api: apiWith(vi.fn().mockRejectedValue({ code: "server.internal" })),
+        startDelayMs: 0,
+        pollIntervalMs: 3,
+        onboardingIntent: "live",
+      },
+      theme,
+    );
+    await vi.waitFor(() => expect(q(el, "[data-test=reload]")).not.toBeNull());
+    expect(q(el, "[data-test=backup-nudge]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations showing the break-glass code on a trading server", async () => {
+    const { el, host } = await mountWidget<SetupDoneScreen>(
+      "setup-done-screen",
+      {
+        api: apiWith(() => new Promise(() => {})),
+        startDelayMs: 100000,
+        pollIntervalMs: 100000,
+        onboardingIntent: "live",
+        breakGlassSecret: "bg-9f3a",
+      },
+      theme,
+    );
+    expect(q(el, "[data-test=break-glass-secret]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations in preparation mode while waiting", async () => {
+    const { el, host } = await mountWidget<SetupDoneScreen>(
+      "setup-done-screen",
+      {
+        api: apiWith(() => new Promise(() => {})),
+        startDelayMs: 100000,
+        pollIntervalMs: 100000,
+        onboardingIntent: "prepare",
+      },
+      theme,
+    );
+    expect(q(el, "[data-test=mode-indicator]")).not.toBeNull();
+    expect(q(el, "[data-test=status]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 });

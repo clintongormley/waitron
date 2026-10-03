@@ -927,7 +927,8 @@ of three mockups):**
   account (name, email; the display name only when it differs from the name) — each box with an
   Edit link back to the step that collects it;
 - the mode is a badge at the top (Demo, Prepare or Live) with demo's one-line explanation beside
-  it, replacing the Mode row and the demo paragraph;
+  it, replacing the Mode row and the demo paragraph (2026-10-03, A244: the badge is now the mode
+  pill the provisioning and done screens share, and reads Preparation);
 - a language shows by its name ("Català"), never its code; "Rectificative series" reads
   "Corrections series" (Spanish wording to match);
 - help (replaced 2026-10-03 by A243: the review screen has no "?" buttons, and each box's
@@ -1948,8 +1949,9 @@ later"_). Open: page headings follow the Typography roles table in
 `docs/developers/design-system.md` (a page title at `--wt-font-size-xl`) only in part — setup's and
 some dashboard screens' headings (the content languages screen's, for one) take the browser's own
 `<h1>` size, 28px; approvals and email set theirs to `--wt-font-size-lg`; menus and modifiers to
-`--wt-font-size-xl`. Left alone on purpose, sized in `rem`: the till's enrolment number, setup's
-cloud-recovery code, and the done screen's break-glass heading and code. **Phone check, the
+`--wt-font-size-xl`. Left alone on purpose, sized in `rem`: the till's enrolment number and setup's
+cloud-recovery code (the done screen's break-glass heading and code moved to `--wt-font-size-lg` in
+W34, A244). **Phone check, the
 owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is widely reported to
 zoom the page in when a field whose text is under 16px is focused — not yet tried here. If it does,
 the usual remedy is to keep field text at 16px on small screens only.
@@ -2414,13 +2416,18 @@ nothing until a label is taller than its value (a label wrapping onto two lines)
 used to cover it was deleted on the owner's answer to the W33 question; the certificate-row test
 covers only the label's centring.
 
-**The "Setup complete" screen lacks the earlier screens' polish (A244, owner 2026-10-03) — OPEN,
-queued as lane A's W34.** `apps/setup/src/screens/done-screen.ts`: "not terrible but it doesn't
-have the polish of the previous pages" (owner). What reading it shows: a plain bulleted list of
+**The "Setup complete" screen lacks the earlier screens' polish (A244, owner 2026-10-03) — DONE
+(W34, PR pending).** `apps/setup/src/screens/done-screen.ts`: "not terrible but it doesn't
+have the polish of the previous pages" (owner). What reading it showed: a plain bulleted list of
 underlined links; two near-duplicate sentences ("restarting into trading mode" and "once the server
 is trading"); its own mode-pill style, separate from the review screen's; and `rem` sizes and hex
-fallbacks in its styles, against the token rule. The owner also wants the Print agent link
+fallbacks in its styles, against the token rule. The owner also wanted the Print agent link
 (`done.link.print_agent`) gone from the page: "i don't think we need the print agent anymore".
+Now the Till, Dashboard and Email inbox links are `wt-choice-row` rows (which gained an `href`),
+introduced by one muted sentence; the Print agent link is gone; the device steps and the backup
+nudge sit in cards; the review, provisioning and done screens share one mode pill
+(`apps/setup/src/mode-pill.ts`); and the screen's styles hold no `rem` or `em` sizes, hex colours
+or fallback values.
 
 **The till ignores the browser's languages before anyone signs in (A245, owner 2026-10-03) — OPEN,
 queued as lane A's W35.** Finishing setup in English and clicking Till opens the device setup screen
@@ -5797,9 +5804,9 @@ characters. Left open:
     `*.css?inline` declaration in `vite-env.d.ts` is redundant (vite/client declares it);
     `vitest.config.ts` excludes `.stryker-tmp` in a package with no Stryker config; `paintCanvas` in
     `widgets/test-helpers.ts` has no accessibility suite that fails without it; `done-screen.ts`'s
-    styles use hex fallbacks and `rem`, and a CSS comment inside its style string is history; and
-    `connection-screen.ts`'s `connection-continue` event is not named `wt-*` and carries no
-    `detail`.
+    styles used hex fallbacks and `rem`, and a CSS comment inside its style string was history —
+    DONE (W34, A244); and `connection-screen.ts`'s `connection-continue` event is not named `wt-*`
+    and carries no `detail`.
   - "Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)", which #567
     deleted from `apps/setup/src/server-fields.ts`, is too wide: with
     `import "@waitron/fiscal-verifactu";` added there, that guard still passed, since its regime

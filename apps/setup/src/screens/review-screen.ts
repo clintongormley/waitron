@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { errorStyles } from "../form-styles.js";
+import { modePill, modePillStyles } from "../mode-pill.js";
 import { dispatchProvisionRequested, dispatchSetupGoto } from "../events.js";
 import type { DeepPartial, Screen } from "../setup-app.js";
 import { countryName } from "../country-name.js";
@@ -13,12 +14,6 @@ import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { RECEIPT_LANGUAGES } from "../receipt-languages.js";
 import type { ProvisionBody } from "../api/client.js";
 
-const MODE_KEYS = {
-  demo: "review.badge.demo",
-  prepare: "review.badge.prepare",
-  live: "review.badge.live",
-} as const satisfies Record<ProvisionBody["mode"], StringKey>;
-
 /** Never renders a secret: no PIN, password, certificate passphrase or PFX bytes — the certificate
  * appears only as attached or not. */
 @customElement("setup-review-screen")
@@ -26,6 +21,7 @@ export class SetupReviewScreen extends LitElement {
   static override styles = [
     baseStyles,
     errorStyles,
+    modePillStyles,
     css`
       :host {
         display: block;
@@ -36,13 +32,6 @@ export class SetupReviewScreen extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-2);
         margin: var(--wt-space-4) 0;
-      }
-      .badge {
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-full);
-        padding: var(--wt-space-1) var(--wt-space-3);
-        background: var(--wt-color-surface-raised);
-        font-weight: var(--wt-font-weight-bold);
       }
       .mode p {
         margin: 0;
@@ -157,9 +146,7 @@ export class SetupReviewScreen extends LitElement {
       <h1>${t("review.heading")}</h1>
       <p>${t("review.intro")}</p>
       <div class="mode">
-        <span class="badge" data-test="mode-badge"
-          >${mode === undefined ? "—" : Object.hasOwn(MODE_KEYS, mode) ? t(MODE_KEYS[mode as keyof typeof MODE_KEYS]) : mode}</span
-        >
+        ${modePill(mode, "mode-badge")}
         ${mode === "demo" ? html`<p data-test="demo-defaults">${t("review.demo_defaults")}</p>` : nothing}
       </div>
       <div class="groups">

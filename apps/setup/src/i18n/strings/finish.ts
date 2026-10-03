@@ -1,6 +1,10 @@
-// The provisioning, reset and done screens.
+// The provisioning, reset and done screens, and the mode pill they share with the review screen.
 
 export const finishEn = {
+  "mode_pill.demo": "Demo",
+  "mode_pill.prepare": "Preparation",
+  "mode_pill.live": "Live",
+
   "provisioning.heading": "Provisioning this server",
   "provisioning.setting_up": "Setting up {legalName}",
   "provisioning.keep_open": "Keep this page open.",
@@ -37,15 +41,10 @@ export const finishEn = {
 
   "done.heading": "Setup complete",
   "done.heading_rebuilt": "Rebuilt from your bucket",
-  "done.mode.demo": "Demo",
-  "done.mode.prepare": "Preparation",
-  "done.mode.live": "Live",
-  "done.restarting": "The server is restarting into trading mode.",
-  "done.links_intro": "Once the server is trading, reach it here:",
+  "done.restarting": "The server is restarting — once it is back, open it here:",
   "done.link.till": "Till",
   "done.link.dashboard": "Dashboard",
   "done.link.email": "Email inbox",
-  "done.link.print_agent": "Print agent",
   "done.backup_nudge":
     "Your server is trading — but it has no backups yet, so there is no way back from a disk failure.",
   "done.backup_link": "Set up backups now",
@@ -73,6 +72,10 @@ export const finishEn = {
 } as const;
 
 export const finishEs: Record<keyof typeof finishEn, string> = {
+  "mode_pill.demo": "Demostración",
+  "mode_pill.prepare": "Preparación",
+  "mode_pill.live": "En vivo",
+
   "provisioning.heading": "Configurando este servidor",
   "provisioning.setting_up": "Configurando {legalName}",
   "provisioning.keep_open": "Mantén esta página abierta.",
@@ -110,15 +113,10 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
 
   "done.heading": "Configuración completada",
   "done.heading_rebuilt": "Reconstruido desde tu bucket",
-  "done.mode.demo": "Demostración",
-  "done.mode.prepare": "Preparación",
-  "done.mode.live": "En vivo",
-  "done.restarting": "El servidor se está reiniciando en modo de venta.",
-  "done.links_intro": "Cuando el servidor esté vendiendo, ábrelo aquí:",
+  "done.restarting": "El servidor se está reiniciando: cuando vuelva, ábrelo desde aquí:",
   "done.link.till": "Caja",
   "done.link.dashboard": "Panel",
   "done.link.email": "Bandeja de correo",
-  "done.link.print_agent": "Agente de impresión",
   "done.backup_nudge":
     "Tu servidor ya está vendiendo, pero aún no tiene copias de seguridad, así que no hay forma de recuperarse de un fallo del disco.",
   "done.backup_link": "Configura ahora las copias de seguridad",
