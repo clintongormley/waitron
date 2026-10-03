@@ -1197,7 +1197,7 @@ computer's dark-mode setting: the banner is now a `<picture>` whose dark source 
 `packages/ui/brand/waitron-lockup-dark.svg`, written by `build-icons.mjs`. The login card and setup
 wizard were already readable; they paint their inline logo with the tokens.
 
-**The dark logo's colours are copies of the dark theme's (A248, 2026-10-03, from A225) — OPEN.**
+**The dark logo's colours are copies of the dark theme's (A253, 2026-10-03, from A225) — OPEN.**
 `waitron-lockup-dark.svg` is shown through an `<img>`, which cannot read CSS variables, so it carries
 `#4c8dff` (`--wt-color-primary`, dark) and `#eceef2` (`--wt-color-text`, dark) literally, from
 `build-icons.mjs`. Until this is done, change either token and change the generator, then re-run it.
