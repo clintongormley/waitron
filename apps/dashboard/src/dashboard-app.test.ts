@@ -1,4 +1,4 @@
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { applyTokens, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { html } from "lit";
@@ -8,6 +8,14 @@ import { DashboardApp } from "./dashboard-app.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
 import { diag } from "./diagnostics.js";
 import indexHtml from "../index.html?raw";
+import darkLockup from "../../../packages/ui/brand/waitron-lockup-dark.svg?raw";
+import lightLockup from "../../../packages/ui/brand/waitron-lockup.svg?raw";
+
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    emulateColorScheme: (colorScheme: "light" | "dark" | null) => Promise<void>;
+  }
+}
 
 /**
  * Stubs `window.matchMedia` for the drawer breakpoint only; every other query delegates to the real
@@ -726,6 +734,54 @@ describe("dashboard-app", () => {
     expect(venueName(el)!.textContent?.trim()).toBe("Deli Test SL");
     expect(modeIndicator(el)?.textContent?.trim()).toBe("Preparación");
     expect(logoutBtn(el)).toBeNull();
+  });
+
+  it("shows the dark-theme lockup in the banner while the computer is in dark mode, and the light one otherwise", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+
+    // Vite may inline a small SVG as a data URL, rewriting its quotes and spacing on the way, so
+    // the served drawing is compared with the file's once both are parsed.
+    const drawing = (svg: string) =>
+      new XMLSerializer()
+        .serializeToString(new DOMParser().parseFromString(svg, "image/svg+xml").documentElement)
+        .replace(/\s+/g, " ");
+    const served = async (url: string) => drawing(await (await fetch(url)).text());
+    expect(drawing(darkLockup)).not.toBe(drawing(lightLockup));
+    const img = brandBanner(el)!.querySelector<HTMLImageElement>('img[alt="Waitron"]')!;
+    const shown = async () => (img.currentSrc ? served(img.currentSrc) : "");
+    try {
+      await commands.emulateColorScheme("dark");
+      await expect.poll(shown).toBe(drawing(darkLockup));
+      await commands.emulateColorScheme("light");
+      await expect.poll(shown).toBe(drawing(lightLockup));
+    } finally {
+      await commands.emulateColorScheme(null);
+    }
+  });
+
+  it("starts the banner's logo at the identity row's leading edge, with nothing laid out before it", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(el);
+
+    const identity = brandBanner(el)!.querySelector<HTMLElement>(".brand-identity")!;
+    const logo = identity.querySelector<HTMLImageElement>(".brand-logo")!;
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      await page.viewport(1280, 800);
+      expect(window.innerWidth).toBe(1280);
+      expect(identity.querySelector("source")!.getClientRects()).toHaveLength(0);
+      expect(logo.getBoundingClientRect().left).toBeCloseTo(
+        identity.getBoundingClientRect().left,
+        0,
+      );
+    } finally {
+      await page.viewport(width, height);
+    }
   });
 
   it("shows an account-action link before probing an existing management session", async () => {

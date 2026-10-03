@@ -131,6 +131,10 @@ const DRAWER_BREAKPOINT = "(max-width: 48rem)";
 
 const WAITRON_LOGO_URL = new URL("../../../packages/ui/brand/waitron-lockup.svg", import.meta.url)
   .href;
+const WAITRON_LOGO_DARK_URL = new URL(
+  "../../../packages/ui/brand/waitron-lockup-dark.svg",
+  import.meta.url,
+).href;
 
 type ScreenRule = {
   screen: ScreenId;
@@ -409,6 +413,16 @@ export class DashboardApp extends LitElement {
         align-items: center;
         min-width: 0;
         gap: var(--wt-space-3);
+      }
+
+      .brand-logo-picture {
+        display: contents;
+      }
+
+      /* Hidden because under display: contents it becomes an item of the identity row and adds a
+         gap before the logo. */
+      .brand-logo-picture > source {
+        display: none;
       }
 
       .brand-logo {
@@ -1277,7 +1291,10 @@ export class DashboardApp extends LitElement {
               ></wt-button>`
             : nothing
         }
-        <img class="brand-logo" src=${WAITRON_LOGO_URL} alt="Waitron" />
+        <picture class="brand-logo-picture">
+          <source media="(prefers-color-scheme: dark)" srcset=${WAITRON_LOGO_DARK_URL} />
+          <img class="brand-logo" src=${WAITRON_LOGO_URL} alt="Waitron" />
+        </picture>
         <span class="venue-row">
           <span class="venue">
             <span class="venue-name" data-test="venue-name">${this.venueName}</span>

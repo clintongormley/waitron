@@ -1191,8 +1191,20 @@ failure message; the same on `main` before W18. It is the kind of empty-state te
 Roster and Planned vs actual.
 
 **The WAITRON wordmark is nearly invisible in the dashboard's banner in dark mode (A225, seen
-2026-10-02 while checking A206) — OPEN, not investigated.** The dark lettering of the lockup sits on
-the dark banner; the running figure stays visible. Seen at 1280 wide on every screen.
+2026-10-02 while checking A206) — DONE.** The dark lettering of the lockup sat on the dark banner.
+The owner chose to keep the banner's `<img>` and let the browser swap in a dark-theme file by the
+computer's dark-mode setting: the banner is now a `<picture>` whose dark source is
+`packages/ui/brand/waitron-lockup-dark.svg`, written by `build-icons.mjs`. The login card and setup
+wizard were already readable; they paint their inline logo with the tokens.
+
+**The dark logo's colours are copies of the dark theme's (A253, 2026-10-03, from A225) — OPEN.**
+`waitron-lockup-dark.svg` is shown through an `<img>`, which cannot read CSS variables, so it carries
+`#4c8dff` (`--wt-color-primary`, dark) and `#eceef2` (`--wt-color-text`, dark) literally, from
+`build-icons.mjs`. Until this is done, change either token and change the generator, then re-run it.
+`scripts/brand-icons.test.ts` fails when they drift, weaker than its name: it reads `colors.css` as
+text and takes the dark values from the `@media (prefers-color-scheme: dark)` block only.
+**Next action:** have `build-icons.mjs` read the two dark values from `colors.css` when it runs, so
+there is no copy to keep in step.
 
 **The Products screen as a category tree (A208) — DONE.** Spec
 [2026-10-02-products-category-tree-design.md](superpowers/specs/2026-10-02-products-category-tree-design.md);
@@ -2039,9 +2051,9 @@ zone, and a venue with none is refused `service_zone.default_missing`.
   can mix languages when a locale exists on one half only. `wt-price-input` was built from scratch
   rather than on `wt-input`'s end slot. `modifier-limits.ts` holds a product rule as well as modifier
   ones. And five interface faults seen then: the products list heads its Name column "Description",
-  the wordmark is near-invisible in the dark theme, "Top sellers" is rendered twice on the overview,
-  the login screen shows an error before anything is submitted, and the recipe screen is not routed
-  from anywhere.
+  the wordmark is near-invisible in the dark theme (fixed since, A225), "Top sellers" is rendered
+  twice on the overview, the login screen shows an error before anything is submitted, and the
+  recipe screen is not routed from anywhere.
 
 **Allergens and nutrition (#370, #377, #385) — what is left open.**
 
@@ -5480,10 +5492,10 @@ characters. Left open:
     is drawn as a rectangle and saved as round on its first edit**: `wt-table-token.ts` draws
     `shape-${t.shape ?? "rect"}`, while `wt-floor-canvas.ts` marks Round as pressed and sends
     `shape: t.shape ?? "round"` from `#placementOf`, so dragging, nudging or rotating a shapeless
-    table changes it (read from the code, not run). `packages/ui/brand/README.md` still lists four
-    generated icon files and says the generator "reproduced all four derived files"; it also writes
-    `icon-192.png` and `icon-512.png`. `packages/ui/vitest.config.ts` and `stryker.config.json`
-    still exclude `src/tokens/token-test-helpers.ts`, which moved to `packages/ui-core` in #519 (the
+    table changes it (read from the code, not run). `packages/ui/brand/README.md`'s table omits
+    `public/icon-192.png` and `public/icon-512.png`, which the generator writes.
+    `packages/ui/vitest.config.ts` and `stryker.config.json` still exclude
+    `src/tokens/token-test-helpers.ts`, which moved to `packages/ui-core` in #519 (the
     entry "`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests" in Track C still
     names it there too). A reviewer believes the `demo/**` coverage exclusion matches nothing and
     that `**/ui-core/**` is there because `packages/ui-core` starts with `packages/ui` (CLAUDE.md
@@ -6580,12 +6592,6 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   login is really the same state as an inactive product — then change the English and Spanish
   strings together and record the rule in `docs/developers/design-system.md`. String keys are not
   renamed on the way (only their text).
-- **The Waitron wordmark is invisible on the dashboard banner in the dark theme.** One file
-  (`packages/ui/brand/waitron-lockup.svg`) is served to both themes as an `<img>`, so it cannot
-  follow the theme: the wordmark's letters are painted `#16181d` on the dark theme's `#101216` — a
-  contrast ratio of 1.06 to 1, where 4.5 is the readable minimum. **Next action:** give the lockup a
-  light and a dark variant, or paint the wordmark with a token by inlining the SVG, as the setup
-  wizard already does with `--wt-color-text` (`apps/setup/src/setup-app.ts`, C39).
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile · register`; the Spanish
   form-factor label differs between two pickers ("TPV" vs "Caja registradora") — an owner copy call.
 - An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional

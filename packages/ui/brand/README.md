@@ -16,6 +16,7 @@ the command leaves stale derivatives behind a green gate — run it whenever you
 | `waitron-mark.svg`            | source  | The waiter alone, fixed blue, transparent, tight viewBox. Use for anything that is not a favicon.   |
 | `waitron-wordmark.svg`        | source  | The word alone, ink.                                                                                |
 | `waitron-lockup.svg`          | derived | Mark at the word's cap height, then the word. The logo.                                             |
+| `waitron-lockup-dark.svg`     | derived | The lockup in the dark theme's colours, for an `<img>` on a dark ground (the dashboard's banner).   |
 | `public/favicon.svg`          | derived | Chrome, Edge, Firefox, Safari 26+. Carries a `prefers-color-scheme` rule; the rasters below cannot. |
 | `public/favicon.ico`          | derived | Safari below 26, and a browser's implicit `/favicon.ico` request. 16, 32 and 48 as embedded PNGs.   |
 | `public/apple-touch-icon.png` | derived | iOS and iPadOS home screens. 180x180, and deliberately **opaque** — see below.                      |
@@ -33,12 +34,15 @@ property, so the usual rule against inlining a token value does not reach here; 
 change these with it.
 
 **They are inlined in three places.** The two source SVGs here carry `#1f6feb` and `#16181d`;
-`build-icons.mjs` carries `#4c8dff` for the favicon's dark rule; and `apps/server/src/trust-page-logo.ts`
-holds a copy of the whole lockup for the certificate page, which must stay one self-contained string
-with nothing to fetch. Of the three, that copy is the only place `#eceef2` appears.
-`scripts/trust-page-logo.test.ts` compares the two DRAWINGS and
-deliberately ignores paint, so it will not catch a colour that drifts — this paragraph is the only
-thing that will.
+`build-icons.mjs` carries `#4c8dff` and `#eceef2`, for the favicon's dark rule and the dark lockup;
+and `apps/server/src/trust-page-logo.ts` holds a copy of the whole lockup for the certificate page,
+which must stay one self-contained string with nothing to fetch. `scripts/trust-page-logo.test.ts`
+compares the two DRAWINGS and deliberately ignores paint, so it will not catch a colour that drifts.
+`scripts/brand-icons.test.ts` does check both lockups' two colours against `colors.css`, weaker than
+that sounds: it reads the file as text, takes each light value from the file's first declaration
+and each dark value from the `@media (prefers-color-scheme: dark)` block, so a `[data-theme]` block
+that disagrees with either is not seen, and it checks neither the favicon nor the certificate page's
+copy.
 
 The setup wizard (`apps/setup/src/setup-app.ts`) also draws the lockup inline, but copies nothing:
 it imports `waitron-lockup.svg` as-is through a `?raw` import and repaints its two top-level groups
@@ -84,8 +88,11 @@ Hand-run, not a build step — Inkscape is not a workspace dependency, so nothin
 hook can call it. Set `INKSCAPE` if the binary is not on PATH. It prints what it wrote and which
 Inkscape it used.
 
-Re-running it twice over on one machine, with Inkscape 1.4.4 (dcaf3e7), reproduced all four derived
-files byte for byte. That is the whole experiment: it is not a claim about other Inkscape builds,
+On 2026-10-03, one re-run over the committed files on one machine, with Inkscape 1.4.4 (dcaf3e7),
+left all seven files it wrote — `public/favicon.svg`, `waitron-lockup.svg`,
+`waitron-lockup-dark.svg`, `public/apple-touch-icon.png`, `public/icon-192.png`,
+`public/icon-512.png` and `public/favicon.ico` — byte for byte unchanged (`git status` reported none
+of them modified). That is the whole experiment: it is not a claim about other Inkscape builds,
 which may well render differently.
 
 ## If the mark is redrawn
