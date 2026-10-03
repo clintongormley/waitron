@@ -1605,6 +1605,23 @@ describe("the providers and readers once the server answers again", () => {
     expect(api.readerStatus).toHaveBeenCalledTimes(1);
   });
 
+  it("asks for reader status through the background client when the readers' failed opening read recovers in the background", async () => {
+    const background = stubApi();
+    const api = liveApi({
+      background,
+      listReaders: vi.fn().mockRejectedValueOnce(down).mockResolvedValue(READERS),
+    } as Partial<DashboardApi>);
+    const { el } = await mount(api);
+    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed"));
+
+    api.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(qCell(el, "[data-test=reader-status-r-1]")?.textContent).toBe("Online"),
+    );
+    expect(background.readerStatus).toHaveBeenCalledWith("r-1");
+    expect(api.readerStatus).not.toHaveBeenCalled();
+  });
+
   it("does not ask the readers for their status again when a background refresh lists them in another order", async () => {
     const second: ReaderRow = { ...READERS[0]!, id: "r-2", name: "Terrace" };
     const api = liveApi({

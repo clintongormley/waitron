@@ -362,6 +362,8 @@ export class PaymentsScreen extends LitElement {
     this.#showError(null);
     this.armedDisconnectId = null;
     this.#statusesDue = true;
+    // After this load's first readers read fails, only an automatic retry can succeed in its place.
+    let attended = true;
     await Promise.allSettled([
       this.#listQueries.watch("listPaymentProviders", [], (providers) => {
         this.providers = providers;
@@ -369,23 +371,27 @@ export class PaymentsScreen extends LitElement {
         if (!providers.some((p) => p.providerId === armed && p.state === "connected"))
           this.armedDisconnectId = null;
       }),
-      this.#listQueries.watch("listReaders", [], (readers) => {
-        this.readers = readers;
-        // A status may ask the provider itself, so a background refresh asks again only when the
-        // set of active readers changed.
-        const ids = JSON.stringify(
-          readers
-            .filter((r) => r.active)
-            .map((r) => r.id)
-            .sort(),
-        );
-        const background = !this.#statusesDue;
-        if (background && ids === this.#statusIds) return;
-        if (!background) this.statuses = new Map();
-        this.#statusesDue = false;
-        this.#statusIds = ids;
-        void this.#loadStatuses(readers, background);
-      }),
+      this.#listQueries
+        .watch("listReaders", [], (readers) => {
+          this.readers = readers;
+          // A status may ask the provider itself, so a background refresh asks again only when the
+          // set of active readers changed.
+          const ids = JSON.stringify(
+            readers
+              .filter((r) => r.active)
+              .map((r) => r.id)
+              .sort(),
+          );
+          const due = this.#statusesDue;
+          if (!due && ids === this.#statusIds) return;
+          if (due) this.statuses = new Map();
+          this.#statusesDue = false;
+          this.#statusIds = ids;
+          void this.#loadStatuses(readers, !due || !attended);
+        })
+        .catch(() => {
+          attended = false;
+        }),
     ]);
   }
 
