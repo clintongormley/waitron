@@ -2363,6 +2363,14 @@ put in the column headings because a phone scrolls columns out of sight and a hi
 filters. The units table's always-on checkboxes become a Select mode, as the product list already
 has.
 
+**The table's Columns button becomes a Customise dialog (A249, owner 2026-10-03) — OPEN, queued as
+lane A's W40.** Today `wt-data-table`'s Columns button opens a list of checkboxes for the columns a
+screen marked `choosable`, with no order and no reset. Agreed with the owner, after Home Assistant's
+column customiser: an icon button opening a dialog that lists every column with a show/hide eye
+(columns that cannot be hidden listed but greyed), drag handles to reorder with a keyboard
+equivalent, Restore defaults and Done. No "Sort by" control: clicking a column's heading already
+sorts (owner).
+
 The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
