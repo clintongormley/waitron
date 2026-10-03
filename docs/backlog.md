@@ -4062,13 +4062,34 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `scripts/native-form-fields.test.ts` fails on a new native one written in a screen's `.ts` source
   (A178f). Still open:
   `wt-combobox` does not sort its options, and `wt-data-table`'s `localeCompare` takes no locale.
-- **The till's schedule screen still has three defects the dashboard's My Schedule fixed** (C16,
-  #751; found 2026-09-27 by reading `apps/till/src/screens/till-schedule-screen.ts`, not run): its
-  failed-load catch (`:187`-`:193`) fills the lists with `[]`, so the sections say "none" beside the
-  load-failed alert; its loading line (`:278`) has no `role="status"`; and a chosen shift or
-  colleague that a reload removes stays chosen (`coverShiftId` and `coverColleagueId` are cleared
-  only after a cover request is sent, `:222`-`:223`). **Next action:** fix those three defects the
-  way the dashboard screen now does.
+- **The till's schedule screen draws its load-failed alert in grey on red** (found 2026-10-03 by
+  looking at the failed-load state in both themes while fixing lane C's W14; the markup and styles
+  date from 309584d9f, 2026-08-16). The alert is `<p class="status notice" role="alert">` in
+  `apps/till/src/screens/till-schedule-screen.ts`, and `.status` is declared after `.notice`, so its
+  `color: var(--wt-color-text-muted)` replaces `--wt-color-on-danger` and its `margin: 0` removes the
+  gap under the alert. Screenshots: `~/waitron-campaign-c/w14-shots/failed-*.png` (not in the
+  repository). The screen's axe suite never renders the failed state, so nothing fails on it.
+  **Next action:** drop `status` from the alert's classes, and add the failed state to
+  `till-schedule-screen.a11y.test.ts` in both themes.
+- **The till's schedule screen tells the person to try again and gives them no way to** (found
+  2026-10-03 by review of lane C's W14; read, not run). A failed load shows
+  `schedule.load_failed`, "Could not load your schedule, try again" (Spanish: "No se pudo cargar tu
+  horario, inténtalo de nuevo"; `apps/till/src/i18n/strings.ts`), but
+  `apps/till/src/screens/till-schedule-screen.ts` has no retry control. After a failed FIRST load
+  the shifts, swaps and time-off lists show only their headings, and the cover form's shift picker
+  offers only "—", so no cover request can be sent. `#reload` runs only when the screen is attached
+  and after a successful action, and the only action still possible then is a time-off request — so
+  one the server accepts, or leaving the screen and coming back, is the only way to load again. The
+  dashboard's My Schedule screen has a "Try again" button (`#retry`,
+  `apps/dashboard/src/screens/my-schedule-screen.ts`, added in 4bfbf03ea, #876) and also puts a
+  failure line under each failed list's own heading. **Next action:** add a retry button the
+  way the dashboard does, and decide whether each failed list gets its own line.
+- **Two till loading lines are not announced to a screen reader** (found 2026-10-03 in review of
+  lane C's W14, which gave the schedule screen's loading line `role="status"`; read, not run). The
+  lock screen's staff list renders `<p class="status">${t("login.loading")}</p>`
+  (`apps/till/src/screens/till-lock-screen.ts`), and the developer-only device chooser, which no
+  venue sees, renders `<p class="hint">Loading…</p>` (`apps/till/src/screens/till-device-chooser.ts`);
+  neither has `role="status"`. **Next action:** add `role="status"` to both loading lines.
 - **The counter till may start in a zone its service zone dropdown does not list** (found
   2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
   in `apps/server/src/till-api.ts`), but its starting zone comes from `resolveNewOrderZone`
@@ -5852,8 +5873,7 @@ run without the code):
   skips the call), and the `?? []` on the shell's `.tabs` binding.
 - `trust-check.ts:83` (`timer` is always set by then), `widgets/station-queue.ts:501` (the bump
   button renders only when a next step exists), `session-activity.ts:67` and `:125`,
-  `screens/till-station-screen.ts:227` and four `?? []` fallbacks in
-  `screens/till-schedule-screen.ts`.
+  `screens/till-station-screen.ts:227`.
 - `api/server-router.ts` writes a tracked server's `nodeId` at `:184`, `:208` and `:214`, and
   nothing reads it.
 - `deviceKindLabel` (`apps/till/src/i18n/device-label.ts`) looks a kind up in a plain object, so
