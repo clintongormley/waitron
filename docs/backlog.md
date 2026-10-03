@@ -1376,7 +1376,8 @@ languages at phone and desktop widths. A195 asked the same of `wt-data-table`'s 
 done too (above).
 
 **An extras list with no products shows its Preselected heading one letter per line (A262, owner
-2026-10-03) — OPEN, queued.** The owner's screenshot of the extras list editor with an empty items
+2026-10-03) — OPEN, queued in lane D as part of W49, after A203 lands.** Lane D wrote its own
+entry for the same bug on `feat/fixed-extra-portions` ("W49"); W49's PR merges the two into this one. The owner's screenshot of the extras list editor with an empty items
 table: "Preselected" runs down the page a letter at a time, making the empty table several times its
 normal height. A198's rules (#1066) set that heading to `width: 1%` with
 `overflow-wrap: anywhere` (`th:nth-child(4)`, `apps/dashboard/src/widgets/extra-list-form.ts`), so
@@ -1388,8 +1389,8 @@ exist. The options list editor gives its Default heading the same two rules
 options probably shows the same fault; that has not been opened to check. A198's Chromium checks did
 not cover an empty table; the fix adds that case for both editors.
 
-**The number field with − and + is still too wide (A263, owner 2026-10-03) — OPEN, queued: mockups
-first.** The owner, on a screenshot of the extras list editor after A202: _"i'm not sure about the
+**The number field with − and + is still too wide (A263, owner 2026-10-03) — OPEN, in design in an interactive
+session (mockups first); not in a lane's queue.** The owner, on a screenshot of the extras list editor after A202: _"i'm not sure about the
 number fields with the +- buttons, they're very wide"_. Each button is `--wt-tap-min` (44px) wide,
 so 88px of every box is buttons; the box is at least `--wt-stepper-field-width` (152px), or
 `--wt-stepper-field-width-wide` (184px) when its blank value shows words such as "No limit", and a
@@ -1425,7 +1426,7 @@ so changes the stepper's row in design-system.md and its tap-target sentence, so
 call at the mockups, and the axe and token-painting tests for the primitive change with it.
 
 **The extras list editor's columns move as products are added (A264, owner 2026-10-03) — OPEN,
-queued.** The owner, on two screenshots of the editor before and after adding a second product:
+queued in lane D as part of W49.** The owner, on two screenshots of the editor before and after adding a second product:
 _"the layout jumps as you add different extras options"_. Adding "Croquetas" beside "Bravas" moved
 the Maximum quantity, Preselected and Price columns right by about 19 CSS pixels (measured from
 the screenshots), because the table sizes its Product column to its longest name
@@ -1437,7 +1438,7 @@ width (A198), so whether its columns move too has not been checked. Do it with A
 the same column rules.
 
 **Each extras row's Preselected switch repeats its column heading beside it (A265, owner
-2026-10-03) — OPEN, queued.** In the owner's A264 screenshots every row's switch is followed by the
+2026-10-03) — OPEN, queued in lane D as part of W49.** In the owner's A264 screenshots every row's switch is followed by the
 word "Preselected", directly under the column's own "Preselected" heading, widening the column for
 nothing. The row's `wt-switch` (`apps/dashboard/src/widgets/extra-list-form.ts`) sets `label` with
 no `hide-label`; the price input in the same row already sets `hide-label`, and so does the switch
