@@ -1133,9 +1133,9 @@ closing the store, closing the store even if that stop fails (`apps/server/src/b
 
 **The mechanism: a SQLite transaction on an empty file, not a lock file.** `venue.lock` is opened
 with `node:sqlite`, `pragma busy_timeout = 0`, and `begin immediate` is left open. It is the same
-mechanism the migrator uses for `migrations.lock` (`packages/migrations/src/apply.ts`), whose
-comment records why a file created exclusively would not do: a crash would leave it behind and
-refuse every later boot.
+mechanism the migrator uses for `migrations.lock` (`packages/store/src/migration-lock.ts`).
+`packages/migrations/src/apply.ts` records why an exclusively created file would not do: a crash
+would leave it behind and refuse every later boot.
 
 **Measured 2026-09-24, `node:sqlite`, Node v26.7.0, macOS 26.6.2 on arm64**, by a throwaway script
 outside the repository. Each child process opened `venue.lock` with a zero busy timeout. What it
