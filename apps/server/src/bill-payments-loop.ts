@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
@@ -150,7 +150,7 @@ export async function settlePendingBillPayments(
       .select({ id: billPayments.id })
       .from(billPayments)
       .where(eq(billPayments.state, "pending"))
-      .orderBy(billPayments.createdAt),
+      .orderBy(billPayments.createdAt, sql`${billPayments}.rowid`),
   );
   const pass: BillPaymentsPass = {
     received: 0,
@@ -232,7 +232,7 @@ async function settlePendingBillRefunds(
       .from(billPaymentRefunds)
       .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
       .where(eq(billPaymentRefunds.state, "pending"))
-      .orderBy(billPaymentRefunds.createdAt),
+      .orderBy(billPaymentRefunds.createdAt, sql`${billPaymentRefunds}.rowid`),
   );
   pass.pending += pending.length;
   const lastLookups = lastLookupsOf(deps.db);

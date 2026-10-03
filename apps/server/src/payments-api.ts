@@ -688,7 +688,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
               isNotNull(workingOrders.paymentAttemptAt),
             ),
           )
-          .orderBy(payments.createdAt),
+          .orderBy(payments.createdAt, sql`${payments}.rowid`),
       );
       return c.json(
         rows
@@ -815,7 +815,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .innerJoin(tills, eq(tills.id, billPayments.tillId))
           .leftJoin(payments, eq(payments.billPaymentId, billPayments.id))
           .where(eq(billPayments.state, "pending"))
-          .orderBy(billPayments.createdAt),
+          .orderBy(billPayments.createdAt, sql`${billPayments}.rowid`),
       );
       return c.json(
         rows
@@ -976,7 +976,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .innerJoin(tills, eq(tills.id, billPaymentRefunds.tillId))
           .leftJoin(payments, eq(payments.billPaymentId, billPayments.id))
           .where(eq(billPaymentRefunds.state, "pending"))
-          .orderBy(billPaymentRefunds.createdAt),
+          .orderBy(billPaymentRefunds.createdAt, sql`${billPaymentRefunds}.rowid`),
       );
       return c.json(
         rows
