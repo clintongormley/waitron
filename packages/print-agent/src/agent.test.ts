@@ -1724,7 +1724,6 @@ describe("createAgent — start/stop and logging", () => {
       now: Date.now,
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     });
-    let agent!: ReturnType<typeof createAgent>;
     const sent: AgentInventory[] = [];
     const pulls = vi.fn(async (_url: string, _token: string, inventory: AgentInventory) => {
       sent.push(inventory);
@@ -1737,7 +1736,7 @@ describe("createAgent — start/stop and logging", () => {
       });
     });
     const c = client({ pullJobs: pulls });
-    agent = createAgent({ host, client: c });
+    const agent = createAgent({ host, client: c });
     await agent.runOnce(); // opens discovery before the timed loop begins
     const loop = agent.start();
     try {
