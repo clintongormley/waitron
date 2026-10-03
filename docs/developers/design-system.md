@@ -114,7 +114,12 @@ This works whether or not `#app` also carries `data-theme` — see "Themes" abov
 `--wt-color-on-danger`, `--wt-color-success`, `--wt-color-warning`, `--wt-color-on-warning`,
 `--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`, `--wt-color-field-fill`,
 `--wt-color-field-line`, `--wt-color-field-label-focus`, `--wt-color-field-fill-disabled`,
-`--wt-color-field-value`
+`--wt-color-field-value`, `--wt-color-google-button-fill`, `--wt-color-google-button-line`,
+`--wt-color-google-button-text`
+
+The three `--wt-color-google-button-*` tokens are the colours Google's sign-in branding guidelines
+give its button, for the dashboard's Google sign-in button only: fill `#ffffff`, line `#747775` and
+text `#1f1f1f` in the light theme, and `#131314`, `#8e918f` and `#e3e3e3` in the dark.
 
 Colours are semantic, not literal. There is no `--wt-color-blue`. `--wt-color-scrim` was added
 after the rest of the palette to back `wt-dialog`'s `::backdrop` — if you need a similar
@@ -190,7 +195,10 @@ the filled-background idiom only for a colour that is itself the data, never as 
 
 `--wt-space-1` … `--wt-space-6` (4–32px), `--wt-radius-sm|md|lg`, `--wt-font-family`,
 `--wt-font-family-mono` (text read or copied character by character, such as a key or a log line),
-`--wt-font-size-sm|md|lg|xl`, `--wt-font-weight-normal|bold`, `--wt-shadow-1|2`,
+`--wt-font-family-google` (the Google sign-in button only), `--wt-font-size-sm|md|lg|xl`,
+`--wt-font-weight-normal|medium|bold`, `--wt-google-mark-size` (20px), `--wt-google-mark-gap`
+(10px) and `--wt-google-button-line-height` (20px) (the Google sign-in button's "G", the gap after
+it and its label's line height), `--wt-shadow-1|2`,
 `--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-modal-max-width`,
 `--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-form-max-width`,
 `--wt-field-max-width`, `--wt-cell-name-max-width`,
@@ -206,8 +214,9 @@ line at rest and `--wt-field-line-width-active` (2px) the focused or invalid one
 `--wt-dropdown-row-height` (48px) is the least height of a row in `wt-combobox`'s open list.
 
 The type scale is 12px, 14px, 18px and 22px (`--wt-font-size-sm|md|lg|xl`), in each device's own
-system font; the app ships no font files (A179, 2026-10-01 — before it the scale was 13, 15, 19
-and 24px). Body text is `--wt-font-size-md`: `baseStyles` sets it on the host of each component
+system font (A179, 2026-10-01 — before it the scale was 13, 15, 19 and 24px). The only font file
+any app bundles is Google Sans Medium, which the dashboard uses on its Google sign-in button alone
+(A228; see the login section). Body text is `--wt-font-size-md`: `baseStyles` sets it on the host of each component
 that includes it, the dashboard, setup and till shells among them, and each of those apps'
 `index.html` sets it on `<body>` for anything drawn outside the app's own element. A size in `rem`
 does not follow the scale — it is relative to the browser's 16px root, which none of the three
@@ -233,7 +242,10 @@ would not show.
 `wt-button` also exposes its inner `<button>` as a CSS part (`part="button"`), so a consuming
 screen can layer its own hover accent onto specific buttons — `wt-button.foo::part(button):hover`
 — without changing what a variant looks like everywhere else `wt-button` is used. See "Card action
-buttons" under "Page composition" below for the pattern this exists for.
+buttons" under "Page composition" below for the pattern this exists for. The dashboard's Google
+sign-in button uses the same part to repaint its fill, line, text colour, font, line height and
+the gap before its label (`wt-button.google::part(button)` in `apps/dashboard/src/screens/login-screen.ts`; see
+the login section).
 
 `--wt-dialog-max-width` (`min(90vw, 48rem)`) exists so `wt-dialog` never spells out a literal
 `rem` value inline — the no-hardcoded-chrome guard (see below) checks `rem`/`em` sizing, not just
@@ -920,7 +932,7 @@ it stays on the bottom left. A secondary action that belongs beside the primary 
 full width. Where the row shares a line with something else, show the message with `formMessage`
 directly before that line, or let the row take the full width (in a `wt-modal`, the form width)
 while it has a message, as the Add printer dialog's address check does. The sign-in email,
-password, passkey and Google screens put their primary action outside `wt-form-actions`, as a
+password, passkey and Google screens put their own way in outside `wt-form-actions`, as a
 full-width button with the form's message on its own line directly above it (shown with
 `formMessage`); see the login section.
 
@@ -1294,7 +1306,10 @@ in, an **or** line follows, then each other way in as a full-width outlined (`se
 with a leading icon hidden from assistive technology: a key for **Use your password**, a person
 with a key for **Log in with passkey**, and Google's "G" for **Continue with Google**. The Google
 button follows Google's custom-button rules
-(<https://developers.google.com/identity/branding-guidelines>) wherever it appears: the gradient
+(<https://developers.google.com/identity/branding-guidelines>) wherever it appears, except that it keeps
+several things from `wt-button` rather than Google's drawing, among them: it is at least 44px tall (`--wt-tap-min`) where Google's drawing is
+40px, it spans the card's full width with its content centred, and it keeps `wt-button`'s corner
+radius. From Google's rules it takes the gradient
 "G" from Google's download bundle (`apps/dashboard/src/assets/google-g.svg`) at
 `--wt-google-mark-size`, `--wt-google-mark-gap` from its label, Google's light and dark colours
 through `--wt-color-google-button-fill`, `--wt-color-google-button-line` and

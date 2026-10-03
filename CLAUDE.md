@@ -470,8 +470,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   in `/app/third-party/`** (owner, 2026-09-24). Cost: Litestream shipped without its Go modules'
   notices. Guard: the third-party blocks in `scripts/deploy-image-env.test.ts`, weaker than their
   name — they read text, cover libvips, Litestream, the print agent's python3-minimal, the
-  Iosevka font the glyph table is drawn from and the dashboard's Google Sans only, for Litestream compare the version line, not the
-  module list, and for the font tie the licence to the table's header, not the table to the font. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
+  Iosevka font the glyph table is drawn from, the dashboard's Google Sans and the Google "G" trademark line in the notice only, for Litestream compare the version line, not the
+  module list, for Iosevka tie the licence to the table's header, not the table to the font, and for
+  Google Sans match the source file's SHA-256 to the notice, not that a build serves the font. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard**, so `apps/server` cannot deep-import
   its `errors.ts`.
 - **Never build SQL by string concatenation — except where the engine takes no bound value**: an

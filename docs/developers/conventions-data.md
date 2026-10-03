@@ -151,12 +151,13 @@ golang.org/toolchain archive per platform, from proxy.golang.org; `deploy/third-
 has the steps to regenerate it.
 
 What the guards leave open. The third-party blocks in `scripts/deploy-image-env.test.ts` read
-text and cover libvips, Litestream, the print agent's python3-minimal, the Iosevka font and the
-dashboard's Google Sans only; for Google Sans they check the copyright line in the notice and in
-`deploy/third-party/google-sans/OFL.txt` and that the font file is in the dashboard's source,
-never that the built image serves it;
+text and cover libvips, Litestream, the print agent's python3-minimal, the Iosevka font, the
+dashboard's Google Sans and the Google "G" trademark line in the notice only; for Google Sans they check the copyright line in the notice and in
+`deploy/third-party/google-sans/OFL.txt`, that the font file in the dashboard's source matches the
+SHA-256 the notice records, and that image-smoke looks for `google-sans/OFL.txt`, never that a
+build emits the font or that the built image serves it;
 for Litestream they compare `NOTICES.txt`'s `Litestream version:` line with the pin, never the
-module list with the binary; for the font they check that `deploy/third-party/iosevka/LICENSE.md`
+module list with the binary; for Iosevka they check that `deploy/third-party/iosevka/LICENSE.md`
 carries the copyright line `packages/printing/src/glyphs.ts`'s header names and that the
 provenance file names the header's font sha256, never that the table was drawn from that font
 (added 2026-10-01, C107). The npm packages bundled into the server, the web apps and the print-agent have no notice

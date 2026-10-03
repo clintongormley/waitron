@@ -74,16 +74,25 @@ The dashboard web app, served from `/app/web/dashboard/` in the image, carries t
 Sans Medium for its Sign in with Google button, in `assets/` under a name beginning
 `google-sans-medium-latin`, built from `apps/dashboard/src/assets/google-sans-medium-latin.woff2`
 (SHA-256 `4d71eed21cc1dc806f17ef26749c5376980b27bed7996c0546de5a9e54688b81`): the latin subset of
-weight 500, as Google Fonts serves it. Copyright 2025 The Google Sans Project Authors
-(https://github.com/googlefonts/googlesans). It is licensed under the SIL Open Font License,
+weight 500. It is the file that Google Fonts' answer to
+<https://fonts.googleapis.com/css2?family=Google+Sans:wght@500> names for the latin subset,
+<https://fonts.gstatic.com/s/googlesans/v71/4Ua_rENHsxJlGDuGo1OIlJfC6l_24rlCK1Yo_Iqcsih3SAyH6cAwhX9RFD48TE63OOYKtrw2IJllpynAFyo4R4o.woff2>
+(fetched again on 2026-10-03, and the bytes matched:
+`curl -sL <that URL> | cmp - apps/dashboard/src/assets/google-sans-medium-latin.woff2` exits 0). Copyright 2025 The
+Google Sans Project Authors (https://github.com/googlefonts/googlesans). It is licensed under the SIL Open Font License,
 Version 1.1.
 
 - `google-sans/OFL.txt` is that licence with the font's copyright line, copied unchanged from
-  `ofl/googlesans/OFL.txt` in Google's fonts repository (<https://github.com/google/fonts>).
+  `ofl/googlesans/OFL.txt` in Google's fonts repository (<https://github.com/google/fonts>) at
+  commit `fc0842ce25d003e57a2fc72cd4c4a6af6175a2cc`. On 2026-10-03
+  `curl -sL https://raw.githubusercontent.com/google/fonts/fc0842ce25d003e57a2fc72cd4c4a6af6175a2cc/ofl/googlesans/OFL.txt | cmp - deploy/third-party/google-sans/OFL.txt`
+  exited 0.
 
 ## Google "G" mark
 
-The dashboard's Sign in with Google button carries Google's "G" from the download bundle of
+The dashboard web app, served from `/app/web/dashboard/` in the image, carries Google's "G" for its
+Sign in with Google button, in `assets/` under a name beginning `google-g`, built from
+`apps/dashboard/src/assets/google-g.svg`. It is the "G" from the download bundle of
 Google's sign-in branding guidelines (<https://developers.google.com/identity/branding-guidelines>),
 used as those guidelines describe. Google and the Google "G" logo are trademarks of Google LLC.
 
@@ -101,7 +110,7 @@ package has no copyright file.
 
 The server draws the text of every printout as pictures, from a table of letter pictures derived
 from the font Iosevka Term Bold, release 34.9.0, Copyright (c) 2015-2026, Renzhi Li (aka. Belleve
-Invis). The image carries no font file, only that table, which is compiled into the server. The
+Invis). The image carries no Iosevka font file, only that table, which is compiled into the server. The
 font and the table derived from it are licensed under the SIL Open Font License, Version 1.1.
 
 - `iosevka/LICENSE.md` is that licence with the font's copyright line, copied unchanged from the

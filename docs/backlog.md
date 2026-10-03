@@ -975,14 +975,14 @@ profile accepted a saved test password through `navigator.credentials.store`, bu
 it after a reload or restart under automation; that saved-password visual check remains unverified.
 
 **The dashboard's sign-in pages: a card, one blue button, every other way in under "or" (A191,
-owner 2026-10-02) — DONE (#1074).** The owner, on the passkey page: _"this page also looks a bit messy"_;
+owner 2026-10-02) — DONE (#1074).** (Google page and its "G" changed by A228, 2026-10-03, below.) The owner, on the passkey page: _"this page also looks a bit messy"_;
 layout A of three mockups was approved ("i love it"), replacing C96's single bulleted list. Every
 step of `apps/dashboard/src/screens/login-screen.ts` now sits in a card drawn like the setup
 wizard's, with the Waitron logo first (decorative there: the banner above already names Waitron, so
 the page shows the logo twice). On the email, password, passkey and Google pages the page's own way
 in is one full-width blue button, with the form's message on its own line directly above it; every
 other way in follows under an "or" line as a full-width outlined button with an icon — a key for
-"Use your password", a person with a key for "Log in with passkey", and Google's four-colour "G" for
+"Use your password", a person with a key for "Log in with passkey", and Google's four-colour "G" (replaced by A228) for
 "Continue with Google". "I've forgotten my password" is a small link at the right under the password
 field, on the password page only. On the code step the code switch is the same kind of link under
 its field, the heading comes before the email, and Back and Log in are the ordinary action row. The
@@ -6578,8 +6578,8 @@ notices; the server bundles (`scripts/bundle-node.mjs`, esbuild), the three SPAs
 copied to `/app/web/`) and the print-agent bundle (copied to `/app/print-agent.js` in
 `deploy/Dockerfile`'s `print-agent` stage) carry npm packages whose `LICENSE` files are left behind
 by bundling. The app image's `/app/third-party/` holds notices for libvips, Litestream, the Iosevka
-font, the Moby template the print agent's AppArmor profile is copied from, and the Material Symbols
-icons; the print-agent image's holds only `python3-minimal/` (since A140; bluez's copyright files are
+font, the Moby template the print agent's AppArmor profile is copied from, the Material Symbols
+icons, the Google Sans font, and Google's "G" mark (its trademark line in the notice); the print-agent image's holds only `python3-minimal/` (since A140; bluez's copyright files are
 not copied). Measured 2026-09-24: `apps/server/src/bin.ts` bundled with `bundle-node.mjs`'s options
 took in 81 npm packages, 76 of which have a `LICENSE` file, and the output kept one block of legal
 comments covering 9 source files from 8 of those packages; `apps/till` built with `vite build`
