@@ -237,8 +237,9 @@ alert. A dish made at the till is never moved or re-routed
 ([plan](superpowers/plans/2026-10-01-moving-dishes-slice-3c3.md)). What is left:
 - **3d**, watchers ([plan](superpowers/plans/2026-10-01-watchers-slice-3d.md)): the pass and runners
   follow stations and service zones on screen and paper. Each watcher has its own Done, while Away
-  stays shared. A whole-order printer becomes a watcher's printer (owner, 2026-10-01); PF8 is in
-  progress in lane D.
+  stays shared. Watcher printers replace whole-order printing; an existing printer set to
+  "one ticket per order" keeps printing its attached stations' tickets until you attach it to a
+  watcher (owner, 2026-10-01). PF8 is in progress in lane D.
 - **Show how many dishes are being made on the table plan — OPEN (3d, W16).** The plan has no such
   count; adding one needs another value from `listTablesWithState`.
 - **Refresh the floor without a staff action — OPEN (3d, W16).** `till-floor-screen.ts` reads on

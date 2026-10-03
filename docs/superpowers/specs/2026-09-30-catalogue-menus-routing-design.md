@@ -445,8 +445,10 @@ the watcher. [Plan](../plans/2026-10-01-watchers-slice-3d.md)._
 
 _2026-10-01 (slice 3c-1): a station's own tickets, first send, FIRE, HOLD and reprint, and its kitchen screen's card view list it. The whole-order PASE ticket and correction slips do not, and neither does the column view. It lists items now with other stations, held ones as on hold; served, sent-away, made-here and no-preparation lines and dishes not yet sent are left out._
 
-_2026-10-01 (slice 3d): the whole-order PASE printer becomes a watcher's printer. Its copies and
-correction slips are headed by the watcher. [Plan](../plans/2026-10-01-watchers-slice-3d.md)._
+_2026-10-01 (slice 3d): watcher printers replace whole-order printing. A watcher's ticket is headed
+by its name; its printers also receive matching correction slips, headed by the dish's station. An
+existing whole-order printer prints its attached stations' tickets until you attach it to a
+watcher. [Plan](../plans/2026-10-01-watchers-slice-3d.md)._
 
 ### 5.11 "Made here, no ticket"
 
@@ -576,10 +578,11 @@ These were not discussed. Each is the default this document takes.
 - **What the whole-order printer becomes.** A printer that prints one ticket per whole order
   (`printTicketScope = 'order'`) may be a watcher of a delivery area, or of every station. The
   routing plan decides and states why.
-  _2026-10-01 (slice 3d, owner): it becomes a watcher's printer. You set up a named watcher on
-  Prep Stations, choosing stations and service zones that must both match. Its printers produce
-  one copy per send, headed by its name, and every correction slip for a dish on that paper. The
-  "one ticket per order" setting is gone; its column stays unread until the next reset.
+  _2026-10-01 (slice 3d, owner): watcher printers replace that setting. You set up a named watcher
+  on Prep Stations, choosing stations and service zones that must both match. Its printers produce
+  one copy per send, headed by its name, and every correction slip for a dish on that paper. A
+  printer still set to "one ticket per order" prints its attached stations' tickets until you
+  attach it to a watcher. The setting is gone; its column stays unread until the next reset.
   [Plan](../plans/2026-10-01-watchers-slice-3d.md)._
 - **Bundles.** Waitron may gain bundled products, made of a list of other products: a set menu, for
   example. Bundles are not designed here. The direction for routing: each product in a bundle is
