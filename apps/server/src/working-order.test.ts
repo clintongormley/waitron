@@ -1347,6 +1347,92 @@ describe("listHeldOrders", () => {
 });
 
 describe("getHeldOrder", () => {
+  it("parks weighted extras with physical quantity and the frozen per-pick basis", async () => {
+    const { cfg, catalogueId, zoneId, cafeId, premiumCafeOfferId, kgUnitId } = await setupVenue();
+    const extra = await withTransaction(db, async (tx) => {
+      const product = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Jamón staff",
+        customerName: { [CONTENT_LANGUAGE]: "Jamón customer" },
+        kitchenName: "Jamón kitchen",
+        unitId: kgUnitId,
+        unitPrice: "0.27",
+        vatClass: "general",
+      });
+      const list = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Jamones staff",
+          customerName: { [CONTENT_LANGUAGE]: "Jamones customer" },
+          kitchenName: "Jamones kitchen",
+          minPicks: 0,
+          maxPicks: 3,
+          active: true,
+          items: [
+            {
+              productId: product.id,
+              portion: "0.050",
+              maxQuantity: 3,
+              preselected: false,
+              price: null,
+            },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
+      await republishMenus(tx);
+      return { listId: list.id, productId: product.id };
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        {
+          menuItemId: premiumCafeOfferId,
+          quantity: "2",
+          extras: [{ listId: extra.listId, picks: [{ productId: extra.productId, quantity: 3 }] }],
+        },
+      ],
+    });
+
+    const rows = await db.execute<{
+      quantity: number;
+      price_quantity: number;
+      unit_name: string;
+      unit_precision: number;
+      unit_price_gross: number;
+      line_total: number;
+    }>(sql`
+      select quantity, price_quantity, unit_name, unit_precision, unit_price_gross, line_total
+      from working_order_lines where working_order_id = ${id} and parent_line_id is not null`);
+    expect(rows.rows).toEqual([
+      {
+        quantity: 300,
+        price_quantity: 50,
+        unit_name: JSON.stringify({ en: "kg" }),
+        unit_precision: 3,
+        unit_price_gross: 1,
+        line_total: 6,
+      },
+    ]);
+
+    const revision = await revisionOf(id);
+    await withTransaction(db, (tx) =>
+      updateOrderLine(tx, cfg, id, 1, { note: "Sin sal" }, revision),
+    );
+    const after = await db.execute<{
+      quantity: number;
+      price_quantity: number;
+      line_total: number;
+    }>(sql`
+      select quantity, price_quantity, line_total from working_order_lines
+      where working_order_id = ${id} and parent_line_id is not null`);
+    expect(after.rows).toEqual([{ quantity: 300, price_quantity: 50, line_total: 6 }]);
+  });
+
   it("keeps a fractional item's unit snapshot after the live unit is renamed", async () => {
     const { cfg, catalogueId, zoneId } = await setupVenue();
     const { productId, menuItemId, unitId } = await withTransaction(db, async (tx) => {

@@ -43,6 +43,7 @@ import {
   decimal,
   decimalToCents,
   decimalToThousandths,
+  divideDecimal,
   locationId as brandLocationId,
   partyDisplayName,
   MONEY_SCALE,
@@ -299,6 +300,8 @@ function offerModifiers(offer: ZoneMenuOffer, defaultLanguage: string): OfferMod
         maxQuantity: item.maxQuantity,
         preselected: item.preselected,
         price: item.price,
+        portion: item.portion,
+        unit: item.unit,
       })),
     });
   }
@@ -589,6 +592,10 @@ export async function priceOrderLines(
         // Always set, so the dish's class is never inherited.
         vatClass: child.vatClass,
         quantity: child.quantity,
+        physicalQuantity: child.physicalQuantity,
+        priceQuantity: child.priceQuantity,
+        unitName: child.unitName,
+        unitPrecision: child.unitPrecision,
       })),
     });
     // A CHILD row takes no course: kitchen coursing is per dish.
@@ -2476,7 +2483,7 @@ export async function partyAfterEdit(
 
 /** A dish's extras child, and how many of it go with one of the dish. */
 export interface KeptExtra {
-  child: { id: string; unitPriceGross: Decimal };
+  child: { id: string; unitPriceGross: Decimal; priceQuantity?: Decimal };
   perDish: number;
 }
 
@@ -2493,8 +2500,26 @@ export function keptExtrasOf(
 }
 
 /** An extras child's quantity once its dish is `dishQuantity`. */
-export function extraQuantityFor(perDish: number, dishQuantity: Decimal): Decimal {
-  return multiplyDecimal(dishQuantity, decimal(String(perDish)));
+export function extraQuantityFor(
+  perDish: number,
+  dishQuantity: Decimal,
+  priceQuantity: Decimal = decimal("1"),
+): Decimal {
+  return multiplyDecimal(multiplyDecimal(dishQuantity, decimal(String(perDish))), priceQuantity);
+}
+
+function perDishExtraPicks(
+  childQuantity: string,
+  dishQuantity: string,
+  priceQuantity: string,
+): number {
+  return Number(
+    divideDecimal(
+      decimal(childQuantity),
+      multiplyDecimal(decimal(dishQuantity), decimal(priceQuantity)),
+      0,
+    ),
+  );
 }
 
 /** Each child's quantity and total follow its dish to `dishQuantity`, at the child's stored gross
@@ -2505,12 +2530,13 @@ async function rescaleExtras(
   dishQuantity: Decimal,
 ): Promise<void> {
   for (const { child, perDish } of kept) {
-    const quantity = extraQuantityFor(perDish, dishQuantity);
+    const priceQuantity = child.priceQuantity ?? decimal("1");
+    const quantity = extraQuantityFor(perDish, dishQuantity, priceQuantity);
     await tx
       .update(workingOrderLines)
       .set({
         quantity: decimalToThousandths(quantity),
-        lineTotal: decimalToCents(grossLineTotal(child.unitPriceGross, quantity)),
+        lineTotal: decimalToCents(grossLineTotal(child.unitPriceGross, quantity, priceQuantity)),
       })
       .where(eq(workingOrderLines.id, child.id));
   }
@@ -3252,8 +3278,12 @@ export async function readOrderRevision(tx: Transaction, orderId: string): Promi
  * The same composition `grossRows` uses for a line's gross total, so a split line's `line_total` is
  * identical to an add-time line's.
  */
-function grossLineTotal(grossUnit: string, quantity: string): Decimal {
-  return toScale(multiplyDecimal(decimal(grossUnit), decimal(quantity)), MONEY_SCALE);
+function grossLineTotal(grossUnit: string, quantity: string, priceQuantity: string = "1"): Decimal {
+  return divideDecimal(
+    multiplyDecimal(decimal(grossUnit), decimal(quantity)),
+    decimal(priceQuantity),
+    MONEY_SCALE,
+  );
 }
 
 /**
@@ -4009,6 +4039,7 @@ interface EditableLine {
   /** Set on a variant line: the variant's parent, the dish whose lists the line answered. */
   parentProductId: string | null;
   quantity: Decimal;
+  priceQuantity: Decimal;
   unitPriceGross: Decimal;
   unitPrecision: number | null;
   note: string | null;
@@ -4222,6 +4253,7 @@ async function readEditableOrder(
       productId: workingOrderLines.productId,
       parentProductId: products.parentId,
       quantity: workingOrderLines.quantity,
+      priceQuantity: workingOrderLines.priceQuantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       unitPrecision: workingOrderLines.unitPrecision,
@@ -4256,6 +4288,7 @@ async function readEditableOrder(
     productId: row.productId,
     parentProductId: row.parentProductId,
     quantity: thousandthsToDecimal(row.quantity),
+    priceQuantity: thousandthsToDecimal(row.priceQuantity),
     unitPriceGross: centsToDecimal(row.unitPriceGross),
     unitPrecision: row.unitPrecision,
     note: row.note,
@@ -4513,7 +4546,7 @@ async function applyLineEdits(
         ? {
             kept: parent.children.map((child) => ({
               child,
-              perDish: perDishOptionQuantity(child.quantity, parent.quantity),
+              perDish: perDishExtraPicks(child.quantity, parent.quantity, child.priceQuantity),
             })),
             added: [],
             removed: [],

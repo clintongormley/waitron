@@ -271,6 +271,10 @@ export interface SelectedOption {
   /** How many of THIS option, per dish; ABSENT means 1. The child is priced at
    * `dishQuantity × quantity`, so a dish ×3 carrying an option ×2 prices the option 6 times. */
   quantity?: number;
+  physicalQuantity?: string;
+  priceQuantity?: string;
+  unitName?: Record<string, string>;
+  unitPrecision?: number;
 }
 
 /** A basket line that carries the dish plus the modifiers selected on it. */
@@ -314,13 +318,17 @@ export function grossBasketWithOptions(items: readonly BasketItemWithOptions[]):
     for (const opt of item.options) {
       rows.push({
         grossUnit: decimal(opt.priceDelta),
-        quantity: multiplyDecimal(decimal(item.quantity), decimal(String(opt.quantity ?? 1))),
+        quantity: multiplyDecimal(
+          decimal(item.quantity),
+          decimal(opt.physicalQuantity ?? String(opt.quantity ?? 1)),
+        ),
+        ...(opt.priceQuantity === undefined ? {} : { priceQuantity: opt.priceQuantity }),
         vatClass: opt.vatClass ?? item.product.vatClass,
         name: opt.name,
         descriptions: opt.descriptions,
         category: item.product.category,
-        unitName: null,
-        unitPrecision: null,
+        unitName: opt.unitName ?? null,
+        unitPrecision: opt.unitPrecision ?? null,
         parentLineNo,
         kitchenName: opt.kitchenName ?? null,
       });

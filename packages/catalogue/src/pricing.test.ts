@@ -212,6 +212,39 @@ describe("grossBasketWithOptions — the gross figures, which take no date", () 
   const plain = (items: { product: PriceableProduct; quantity: string }[]) =>
     items.map((item) => ({ ...item, options: [] }));
 
+  it("prices three 0.050 kg portions per dish at the rounded price of each pick", () => {
+    const gross = grossBasketWithOptions([
+      {
+        product: each("2.00", "reduced"),
+        quantity: "2",
+        options: [
+          {
+            name: "Jamón",
+            descriptions: { en: "Ham" },
+            priceDelta: "0.01",
+            vatClass: "general",
+            quantity: 3,
+            physicalQuantity: "0.150",
+            priceQuantity: "0.050",
+            unitName: { en: "kg" },
+            unitPrecision: 3,
+          },
+        ],
+      },
+    ]);
+
+    expect(gross.lines[1]).toMatchObject({
+      quantity: "0.300",
+      priceQuantity: "0.050",
+      unitName: { en: "kg" },
+      unitPrecision: 3,
+      grossUnitPrice: "0.01",
+      lineGross: "0.06",
+      vatClass: "general",
+    });
+    expect(gross.total).toBe("4.06");
+  });
+
   it("gives each line's GROSS unitPrice×quantity, its gross unit and its class, and rating keeps the net base apart", () => {
     const items = plain([
       { product: each("1.50", "general"), quantity: "2" }, // 3.00 gross, 2.48 net base

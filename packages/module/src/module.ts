@@ -155,6 +155,12 @@ export type ZoneOfferedModifier =
         readonly kitchenName: string | null;
         /** GROSS, as published. */
         readonly price: string;
+        readonly portion?: string;
+        readonly unit?: {
+          readonly id: string;
+          readonly abbreviation: Readonly<Record<string, string>>;
+          readonly precision: number;
+        };
         readonly vatClass: string;
         readonly maxQuantity: number;
         readonly preselected: boolean;

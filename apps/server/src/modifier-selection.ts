@@ -35,6 +35,10 @@ export interface ExtraChild {
    * (`packages/catalogue/src/pricing.ts`) does that multiplication.
    */
   quantity: number;
+  physicalQuantity?: string;
+  priceQuantity?: string;
+  unitName?: Record<string, string>;
+  unitPrecision?: number;
 }
 
 /**
@@ -89,6 +93,17 @@ export function buildLineExtras(
           listId: list.id,
           vatClass: product.vatClass,
           quantity: pick.quantity,
+          ...(item.portion === undefined
+            ? {}
+            : {
+                physicalQuantity: multiplyDecimal(
+                  decimal(item.portion),
+                  decimal(String(pick.quantity)),
+                ),
+                priceQuantity: item.portion,
+                unitName: item.unit?.abbreviation,
+                unitPrecision: item.unit?.precision,
+              }),
         };
       });
     },
@@ -161,7 +176,12 @@ export function namedPicks(
  * `dishQuantity` is the STORED dish count; a child's stored quantity is it times the per-dish picks.
  */
 export function editLineExtras<
-  Child extends { productId: string | null; extraListId: string | null; quantity: string },
+  Child extends {
+    productId: string | null;
+    extraListId: string | null;
+    quantity: string;
+    priceQuantity?: string;
+  },
 >(
   offered: readonly ResolvedExtraList[],
   products: ReadonlyMap<string, ExtraProductFacts>,
@@ -177,7 +197,10 @@ export function editLineExtras<
         child.extraListId === pick.listId &&
         child.productId === pick.productId &&
         compareDecimal(
-          multiplyDecimal(dish, decimal(String(pick.quantity))),
+          multiplyDecimal(
+            multiplyDecimal(dish, decimal(String(pick.quantity))),
+            decimal(child.priceQuantity ?? "1"),
+          ),
           decimal(child.quantity),
         ) === 0,
     );

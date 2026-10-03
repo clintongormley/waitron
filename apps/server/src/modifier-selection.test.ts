@@ -127,6 +127,39 @@ const products = new Map<string, ExtraProductFacts>([
 ]);
 
 describe("buildLineExtras", () => {
+  it("carries the physical amount, priced portion and unit of a weighed pick", () => {
+    const weighted = {
+      ...drinks,
+      items: [
+        {
+          ...drinks.items[0]!,
+          portion: "0.050",
+          price: "0.01",
+          unit: { id: "unit-kg", abbreviation: { en: "kg", es: "kg" }, precision: 3 },
+        },
+      ],
+    };
+    const { extraChildren } = buildLineExtras(
+      { extras: [weighted], options: [] },
+      products,
+      { extras: [{ listId: weighted.id, picks: [{ productId: "product-wine", quantity: 3 }] }] },
+      "en",
+    );
+
+    expect(extraChildren).toMatchObject([
+      {
+        productId: "product-wine",
+        quantity: 3,
+        physicalQuantity: "0.150",
+        priceQuantity: "0.050",
+        unitName: { en: "kg", es: "kg" },
+        unitPrecision: 3,
+        price: "0.01",
+        vatClass: "general",
+      },
+    ]);
+  });
+
   it("freezes the list's and the chosen label's three names onto one snapshot, carrying no id", () => {
     const { optionSnapshots } = buildLineExtras(
       { extras: [], options: [cooked] },
@@ -397,6 +430,7 @@ describe("editLineExtras", () => {
     extraListId: string | null;
     quantity: string;
     unitPriceGross: string;
+    priceQuantity?: string;
   };
   const child = (
     productId: string,
@@ -463,6 +497,29 @@ describe("editLineExtras", () => {
       kept: [],
       added: [[breads.id, "product-sourdough", "1.50", 2]],
       removed: ["0.10"],
+    });
+  });
+
+  it("keeps three weighted picks from their frozen portion after the live portion changes", () => {
+    const weighted = {
+      ...drinks,
+      items: [{ ...drinks.items[0]!, portion: "0.100", price: "0.05" }],
+    };
+    const stored = {
+      ...child("product-wine", drinks.id, "0.150", "0.01"),
+      priceQuantity: "0.050",
+    };
+
+    expect(
+      edit(
+        [weighted],
+        [{ listId: drinks.id, picks: [{ productId: "product-wine", quantity: 3 }] }],
+        [stored],
+      ),
+    ).toEqual({
+      kept: [["product-wine", "0.01", 3]],
+      added: [],
+      removed: [],
     });
   });
 
