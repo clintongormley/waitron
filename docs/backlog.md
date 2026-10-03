@@ -3104,10 +3104,10 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       label to change. A bill the departure settles because it owes nothing goes through
       `settleIssuedOwingNothing` (`apps/server/src/till-sale.ts`), which sets no label, although
       the trigger allows one there.
-  - **Two gaps against the service plan's acceptance checks (spec §12)**, from a sweep on
+  - **Gaps against the service plan's acceptance checks (spec §12)**, from a sweep on
     2026-10-01:
     - **The merged-party check of §12 item 9 used only a bill whose state is written by hand —
-      DONE (W4, 2026-10-03):** `apps/server/src/parties.test.ts`, "is owed on the surviving visit
+      DONE (W4, 2026-10-03):** `apps/server/src/parties.test.ts`, "is owed on the surviving party
       and blocks Finish until the till collects it under the invoice filed at placing".
     - **No permanent test lays the service screens out at phone and till widths in both themes
       (§12 item 14).** The axe scans run in both themes, mostly at the browser's default size with
