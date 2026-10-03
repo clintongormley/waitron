@@ -2341,6 +2341,16 @@ where the dashboard matches the browser's `Accept-Language` against the installe
 following my preferred browser languages". In the owner's screenshot the enrol screen also showed
 no language chooser, although `till-enrol-screen.ts` renders one; not investigated.
 
+**A Demo bar on every page, so a new user can find their way (A246, owner 2026-10-03) — OPEN,
+queued as lane A's W36.** Clicking Till first after setup lands on the device setup screen with no
+word on what to do next or how to reach the dashboard. The till shows a Demo bar at the top
+(`mode-indicator` in `apps/till/src/till-app.ts`); the dashboard shows the mode as a pill beside the
+venue name, with an Email inbox link in its banner (`apps/dashboard/src/dashboard-app.ts`). The owner
+wants the same bar on the dashboard too, with the email inbox moved into it, and links in it to the
+dashboard, the device page and the pretend demo printer (A241, not built yet), so the user always
+knows where they are. And the device setup screen should say that a manager approves the device in
+the dashboard under Settings → Devices, ideally with a link straight there.
+
 The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
@@ -3811,7 +3821,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 
 - **A pretend printer in Demo mode (A241) — OPEN (owner, 2026-10-03).** Demo mode has no real
   printer, so receipts and kitchen tickets go nowhere visible. Add a pretend printer and a link in the
-  dashboard header to see what it printed, like the development email viewer.
+  dashboard header to see what it printed, like the development email viewer. Its link goes in the
+  Demo bar (A246), beside the email inbox.
 
 - **The rest of the Printing rules screen (A242) — OPEN (owner, 2026-10-03).** A238 removes its
   per-till section; device printers move to the device profile's printer lists. What remains is
