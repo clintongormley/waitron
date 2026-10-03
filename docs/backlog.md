@@ -1212,10 +1212,10 @@ confirmation. The remaining single-choice add pickers are covered by A201b below
 **Choosing one thing to add acts at selection (A201b, owner 2026-10-03) — DONE.** In the
 dashboard, choosing a content language or a menu to include saves it immediately and closes
 the dialog on success; closing without a choice saves nothing. A refused save leaves the
-dialog open so you can choose again. Section products and Add to menus remain multi-select
-flows. Allergen editing was changed separately in A213. The till's station move and unit reassignment
-ask for confirmation, and setup forms need other required fields, so choosing a dropdown
-value there does not submit the form.
+dialog open so you can choose again. Section products and Add to menus let you choose several
+items before saving. Allergen editing was changed separately in A213. The till's station move
+and the dashboard's unit reassignment each ask for confirmation. Setup forms with other required
+fields still wait for those fields before saving.
 
 **The number field's − and + move inside the field, as pale blue buttons (A202, owner 2026-10-02)
 — DONE.** The owner, on a screenshot of the extras form's Minimum and Maximum choices: _"the +-

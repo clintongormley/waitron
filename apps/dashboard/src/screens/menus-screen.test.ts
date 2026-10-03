@@ -5048,7 +5048,6 @@ describe("review fix: inclusion target and validation", () => {
       expect(await bottom(el, "include")).toBe(codeMessage("menu_section.member_cycle")),
     );
     const picker = inModal<HTMLElement>(el, "include", '[name="included-menu"]');
-    await chooseOption(picker, "");
     await chooseOption(picker, "wine-root");
     await vi.waitFor(() => expect(modal(el, "include").open).toBe(false));
   });

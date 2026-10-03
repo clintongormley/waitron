@@ -429,7 +429,6 @@ export class MenusScreen extends LitElement {
   @state() private deletingSection: SectionDetails | null = null;
   @state() private deleteSectionError = "";
   @state() private includingMenu: ListTarget | null = null;
-  @state() private includeAttempted = false;
   #menuFormGeneration = 0;
   @state() private includedRoot = "";
   @state() private includeError = "";
@@ -1221,13 +1220,7 @@ export class MenusScreen extends LitElement {
 
   async #includeMenu(): Promise<void> {
     if (this.busy || !this.includingMenu || this.#closeLostList()) return;
-    this.includeAttempted = true;
     this.includeError = "";
-    if (!this.includedRoot) {
-      await this.updateComplete;
-      this.shadowRoot!.querySelector<HTMLElement>('[name="included-menu"]')?.focus();
-      return;
-    }
     const target = this.includingMenu;
     this.busy = true;
     try {
@@ -1593,19 +1586,25 @@ export class MenusScreen extends LitElement {
     </div>`;
   }
 
-  #formModal(options: {
-    test: string;
-    open: boolean;
-    heading: string;
-    body: unknown;
-    save?: string;
-    saveLabel?: string;
-    saveVariant?: "primary" | "danger";
-    /** The message above Save, and whether a field the form finds wrong holds it. */
-    errors?: { blocked: boolean; bottom: string };
-    close: () => void;
-    submit: () => void;
-  }) {
+  #formModal(
+    options: {
+      test: string;
+      open: boolean;
+      heading: string;
+      body: unknown;
+      /** The message above Save, and whether a field the form finds wrong holds it. */
+      errors?: { blocked: boolean; bottom: string };
+      close: () => void;
+    } & (
+      | {
+          save: string;
+          saveLabel: string;
+          saveVariant?: "primary" | "danger";
+          submit: () => void;
+        }
+      | { save?: never; saveLabel?: never; saveVariant?: never; submit?: never }
+    ),
+  ) {
     // A shut dialog holds no message: a form's errors clear only when it next opens, and the dialog
     // scrolls to its footer row's message as it opens, before the row has taken the cleared one.
     const message = options.open ? (options.errors?.bottom ?? "") : "";
@@ -1838,7 +1837,6 @@ export class MenusScreen extends LitElement {
         .disabled=${this.busy}
         @click=${() => {
           this.includingMenu = this.#here();
-          this.includeAttempted = false;
           this.includedRoot = "";
           this.includeError = "";
         }}
@@ -2182,7 +2180,6 @@ export class MenusScreen extends LitElement {
             label: menu.name,
           }))}
           .value=${this.includedRoot}
-          error=${this.includeAttempted && !this.includedRoot ? t("menus.choose_menu_required") : ""}
           .disabled=${this.busy}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             this.includedRoot = event.detail.value;
@@ -2190,14 +2187,12 @@ export class MenusScreen extends LitElement {
           }}
         ></wt-combobox>`,
         errors: {
-          blocked: this.includeAttempted && !this.includedRoot,
-          bottom:
-            this.includeAttempted && !this.includedRoot ? t("form.fix_fields") : this.includeError,
+          blocked: false,
+          bottom: this.includeError,
         },
         close: () => {
           this.includingMenu = null;
         },
-        submit: () => void this.#includeMenu(),
       })}
       ${this.#formModal({
         test: "delete-section",

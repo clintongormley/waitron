@@ -259,7 +259,6 @@ describe("add content language dialog", () => {
     expect(field(el).value).toBe("fr");
     expect(await shownLanguage(el)).toBe("Francés");
 
-    await choose(el, "");
     await choose(el, "fr");
     await el.updateComplete;
     expect(await bottomOf(el)).toBeNull();
