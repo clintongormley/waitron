@@ -118,7 +118,7 @@ describe("SessionActivity", () => {
     expect(cleared).toContain(7);
   });
 
-  it("is a clean no-op when the Wake Lock API is absent", async () => {
+  it("starts and stops cleanly on the browser's own Wake Lock API when none is injected", async () => {
     const sa = new SessionActivity({
       wakeLock: undefined,
       now: () => 0,

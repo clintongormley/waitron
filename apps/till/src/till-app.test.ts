@@ -4772,7 +4772,7 @@ describe("till-app", () => {
   });
 
   describe("live floor (FP-1)", () => {
-    it("show-floor loads the zones + occupancy read-model and shows the floor (basket preserved)", async () => {
+    it("selecting the floor tab loads the zones + occupancy read-model and shows the floor (basket preserved)", async () => {
       const { el } = await mountApp({
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -4795,7 +4795,7 @@ describe("till-app", () => {
       expect(store.lines).toHaveLength(1);
     });
 
-    it("show-floor degrades to an empty floor when the occupancy load fails (never blocks)", async () => {
+    it("selecting the floor tab shows an empty floor when the occupancy load fails (never blocks)", async () => {
       const { el } = await mountApp({
         getTablesState: vi.fn().mockRejectedValue({ code: "server.internal" }),
         listZones: vi.fn().mockResolvedValue([floorZone]),
