@@ -1567,11 +1567,12 @@ describe("variants", () => {
   it("offers every column but the product's in the column chooser, with the combined price hidden until chosen, and remembers the choice", async () => {
     const el = await mountVariants();
     const trigger = table(el).shadowRoot.querySelector(".columns-trigger")!;
-    expect(text(trigger)).toBe(t("menu_prices.columns"));
+    expect(trigger.getAttribute("aria-label")).toBe(t("table.customise_columns"));
     const choices = [
       ...table(el).shadowRoot.querySelectorAll<HTMLInputElement>("input[data-column]"),
     ].map((box) => [box.dataset.column, box.checked]);
     expect(choices).toEqual([
+      ["name", true],
       ["placements", true],
       ["category", true],
       ["product-price", true],
@@ -1580,6 +1581,7 @@ describe("variants", () => {
       ["price-on-menu", false],
       ["active", true],
       ["from", true],
+      ["actions", true],
     ]);
     expect(headers(el)).toEqual([
       "name",

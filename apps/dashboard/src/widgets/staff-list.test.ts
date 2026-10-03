@@ -124,18 +124,22 @@ describe("staff-list", () => {
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     const root = table.shadowRoot!;
-    expect(root.querySelector(".columns-trigger")?.textContent?.trim()).toBe(t("table.columns"));
+    expect(root.querySelector(".columns-trigger")?.getAttribute("aria-label")).toBe(
+      t("table.customise_columns"),
+    );
     expect(
       [...root.querySelectorAll<HTMLInputElement>("input[data-column]")].map((box) => [
         box.dataset.column,
         box.checked,
       ]),
     ).toEqual([
+      ["displayName", true],
       ["legalName", true],
       ["role", true],
       ["email", true],
       ["telephone", true],
       ["status", true],
+      ["actions", true],
     ]);
     const headerLabels = () =>
       [...root.querySelectorAll("thead th")].map((th) =>

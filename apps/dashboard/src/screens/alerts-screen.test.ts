@@ -120,10 +120,18 @@ describe("dashboard-alerts-screen", () => {
       >(`[data-test=${test}]`)!;
       await table.updateComplete;
       const root = table.shadowRoot!;
-      expect(root.querySelector(".columns-trigger")!.textContent!.trim()).toBe(t("table.columns"));
-      expect(root.querySelector(".columns-trigger")!.textContent!.trim()).toBe("Columnas");
+      expect(root.querySelector(".columns-trigger")!.getAttribute("aria-label")).toBe(
+        t("table.customise_columns"),
+      );
+      expect(root.querySelector(".columns-trigger")!.getAttribute("aria-label")).toBe(
+        "Personalizar columnas",
+      );
       const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
-      expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual(choices);
+      expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([
+        ["alert", true],
+        ...choices,
+        ...(test === "open-alerts-table" ? [["actions", true]] : []),
+      ]);
       const headerTexts = () =>
         [...root.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
       expect(headerTexts()).toContain(t(hiddenLabel));

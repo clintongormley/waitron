@@ -128,7 +128,14 @@ export class StaffList extends LitElement {
         noMatchesMessage=${tableNoMatches()}
         aria-label=${t("staff.title")}
         viewKey="waitron.staff.table"
-        columnsLabel=${t("table.columns")}
+        customiseColumnsLabel=${t("table.customise_columns")}
+        customiseLabel=${t("table.customise")}
+        restoreColumnsLabel=${t("table.restore_columns")}
+        doneLabel=${t("table.done")}
+        moveColumnLabel=${t("table.move_column")}
+        showColumnLabel=${t("table.show_column")}
+        hideColumnLabel=${t("table.hide_column")}
+        columnPositionLabel=${t("table.column_position")}
         .rows=${this.people}
         .columns=${this.#columns()}
         .rowKey=${(person: PersonSummary) => person.personId}

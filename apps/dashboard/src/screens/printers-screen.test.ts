@@ -1344,13 +1344,19 @@ describe("printers-screen", () => {
         updateComplete: Promise<unknown>;
       };
       const root = table.shadowRoot!;
-      expect(root.querySelector(".columns-trigger")?.textContent?.trim()).toBe(t("table.columns"));
+      expect(root.querySelector(".columns-trigger")?.getAttribute("aria-label")).toBe(
+        t("table.customise_columns"),
+      );
       expect(
         [...root.querySelectorAll<HTMLInputElement>("input[data-column]")].map((box) => [
           box.dataset.column,
           box.checked,
         ]),
-      ).toEqual(choices.map((key) => [key, true]));
+      ).toEqual([
+        [tab === "queue" ? "printer" : "name", true],
+        ...choices.map((key) => [key, true]),
+        [tab === "queue" ? "preview" : "actions", true],
+      ]);
       const headerLabels = () =>
         [...root.querySelectorAll("thead th")].map((th) =>
           th.textContent!.replace(/[▲▼]/g, "").trim(),

@@ -1091,7 +1091,7 @@ describe("the venue lists", () => {
 
 describe("the venue lists' column choosers", () => {
   const chooser = (el: VenueOperationsScreen, name: string) =>
-    table(el, name).shadowRoot!.querySelector(".columns-trigger")!.textContent!.trim();
+    table(el, name).shadowRoot!.querySelector(".columns-trigger")!.getAttribute("aria-label");
   const choices = (el: VenueOperationsScreen, name: string) =>
     [...table(el, name).shadowRoot!.querySelectorAll<HTMLInputElement>("input[data-column]")].map(
       (box) => [box.dataset.column, box.checked],
@@ -1114,8 +1114,12 @@ describe("the venue lists' column choosers", () => {
       } as unknown as VenueServiceApi);
       await selectTab(el, tab);
       if (name === "zone-menus") await action(el, "zone-menus-z1");
-      expect(chooser(el, name)).toBe("Columns");
-      expect(choices(el, name)).toEqual(keys.map((key) => [key, true]));
+      expect(chooser(el, name)).toBe("Customise columns");
+      expect(choices(el, name)).toEqual([
+        [name === "hours" ? "department" : name === "zone-menus" ? "menu" : "name", true],
+        ...keys.map((key) => [key, true]),
+        ["actions", true],
+      ]);
       const before = headers(el, name);
       expect(before).toHaveLength(keys.length + 2);
       expect(before.at(-1)).toBe("Actions");
@@ -1137,12 +1141,12 @@ describe("the venue lists' column choosers", () => {
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
     await selectTab(el, "departments");
-    expect(chooser(el, "departments")).toBe("Columnas");
-    expect(chooser(el, "hours")).toBe("Columnas");
+    expect(chooser(el, "departments")).toBe("Personalizar columnas");
+    expect(chooser(el, "hours")).toBe("Personalizar columnas");
     await selectTab(el, "zones");
     await action(el, "zone-menus-z1");
-    expect(chooser(el, "zones")).toBe("Columnas");
-    expect(chooser(el, "zone-menus")).toBe("Columnas");
+    expect(chooser(el, "zones")).toBe("Personalizar columnas");
+    expect(chooser(el, "zone-menus")).toBe("Personalizar columnas");
   });
 });
 

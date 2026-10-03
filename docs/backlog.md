@@ -2664,13 +2664,11 @@ Move focus to the first section heading if the owner approves changing the exist
 in `packages/ui/src/components/wt-data-table.test.ts`; the W39 queue's inherited rule prohibits
 editing that assertion without approval.
 
-**The table's Columns button becomes a Customise dialog (A249, owner 2026-10-03) — OPEN, queued as
-lane E's W40.** Today `wt-data-table`'s Columns button opens a list of checkboxes for the columns a
-screen marked `choosable`, with no order and no reset. Agreed with the owner, after Home Assistant's
-column customiser: an icon button opening a dialog that lists every column with a show/hide eye
-(columns that cannot be hidden listed but greyed), drag handles to reorder with a keyboard
-equivalent, Restore defaults and Done. No "Sort by" control: clicking a column's heading already
-sorts (owner).
+**The table's Columns button becomes a Customise dialog (A249, owner 2026-10-03) — DONE.**
+`wt-data-table` has an icon button opening a dialog that lists every column with a show/hide eye.
+The fixed first and pinned end columns are listed but cannot move or hide. Drag and keyboard controls
+reorder the others; Restore defaults resets order and visibility. The table remembers choices when it
+has a `viewKey`. Clicking a column heading still sorts it.
 
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through
@@ -4275,7 +4273,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   buttons holding several facts together — **DECIDED (owner, 2026-09-29): leave it**, unsplit and
   with no chooser; (3) nothing checks that a NEW dashboard table offers the chooser; (4) where a
   screen keeps its search and filters outside the table (staff, card readers) or the table has none
-  (alerts, venue operations), the Columns button sits alone on a row above the table rather than
+  (alerts, venue operations), the Customise icon button sits alone on a row above the table rather than
   beside those controls — moving a screen's own controls into the table's toolbar would fix it;
   (5) the read-only tables a few screens draw as plain HTML tables rather than `wt-data-table`s have
   no chooser: planned against actual (`apps/dashboard/src/screens/planned-actual-screen.ts`), the

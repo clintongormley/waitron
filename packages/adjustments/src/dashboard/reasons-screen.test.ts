@@ -377,7 +377,7 @@ describe("the reasons list", () => {
 describe("the reasons list's column chooser", () => {
   type Table = HTMLElement & { updateComplete: Promise<unknown> };
   const chooser = (el: AdjustmentReasonsScreen) =>
-    table(el).shadowRoot!.querySelector(".columns-trigger")!.textContent!.trim();
+    table(el).shadowRoot!.querySelector(".columns-trigger")!.getAttribute("aria-label");
   const choices = (el: AdjustmentReasonsScreen) =>
     [...table(el).shadowRoot!.querySelectorAll<HTMLInputElement>("input[data-column]")].map(
       (box) => [box.dataset.column, box.checked],
@@ -387,12 +387,14 @@ describe("the reasons list's column chooser", () => {
 
   it("offers every column but the name and the row's controls, and remembers a hidden one", async () => {
     const el = await mount(fakeApi());
-    expect(chooser(el)).toBe("Columns");
+    expect(chooser(el)).toBe("Customise columns");
     expect(choices(el)).toEqual([
+      ["name", true],
       ["allows", true],
       ["limits", true],
       ["roles", true],
       ["status", true],
+      ["actions", true],
     ]);
     expect(headers(el)).toEqual([
       "Name",
@@ -417,7 +419,7 @@ describe("the reasons list's column chooser", () => {
   it("names the chooser in Spanish when the dashboard speaks it", async () => {
     setLocale("es");
     const el = await mount(fakeApi());
-    expect(chooser(el)).toBe("Columnas");
+    expect(chooser(el)).toBe("Personalizar columnas");
   });
 });
 

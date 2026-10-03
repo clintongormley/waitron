@@ -1549,7 +1549,14 @@ export class PaymentsScreen extends LitElement {
         noMatchesMessage=${tableNoMatches()}
         aria-label=${t("payments.readers_heading")}
         viewKey="waitron.payments.readers.table"
-        columnsLabel=${t("table.columns")}
+        customiseColumnsLabel=${t("table.customise_columns")}
+        customiseLabel=${t("table.customise")}
+        restoreColumnsLabel=${t("table.restore_columns")}
+        doneLabel=${t("table.done")}
+        moveColumnLabel=${t("table.move_column")}
+        showColumnLabel=${t("table.show_column")}
+        hideColumnLabel=${t("table.hide_column")}
+        columnPositionLabel=${t("table.column_position")}
         .rows=${(this.readers ?? []).filter((reader) => this.readerFilter === "all" || reader.active === (this.readerFilter === "active"))}
         .columns=${this.#readerColumns()}
         .rowKey=${(reader: ReaderRow) => reader.id}

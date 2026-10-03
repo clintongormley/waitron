@@ -401,7 +401,6 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     ] satisfies DataTableColumn<Row>[];
     el.rows = [{ id: "1", name: "Ada", status: "Active" }];
     el.rowKey = (row) => row.id;
-    el.columnsLabel = "Columns shown";
     await el.updateComplete;
     return el;
   }
@@ -411,18 +410,30 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
-  test("column chooser open, with the last shown column's box disabled", async () => {
+  test("Customise dialog open, with the first and unchoosable columns fixed", async () => {
     const el = await chooserTable();
     const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".columns-trigger")!;
     await userEvent.click(trigger);
     el.shadowRoot!.querySelector<HTMLInputElement>('input[data-column="status"]')!.click();
     await el.updateComplete;
-    const panel = el.shadowRoot!.querySelector<HTMLElement>(".columns-panel")!;
-    expect(panel.matches(":popover-open")).toBe(true);
+    const panel = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(".columns-panel")!;
+    expect(panel.open).toBe(true);
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(
       el.shadowRoot!.querySelector<HTMLInputElement>('input[data-column="name"]')!.disabled,
     ).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
+  test("Customise dialog after a keyboard move and a hidden column", async () => {
+    const el = await chooserTable();
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLButtonElement>(".columns-trigger")!);
+    const panel = el.shadowRoot!.querySelector<HTMLElement>(".columns-panel")!;
+    const handle = panel.querySelector<HTMLButtonElement>('[data-reorder="id"]')!;
+    handle.focus();
+    await userEvent.keyboard("{ArrowUp}");
+    el.shadowRoot!.querySelector<HTMLInputElement>('input[data-column="status"]')!.click();
+    await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 
