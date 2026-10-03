@@ -1342,7 +1342,8 @@ running caught it (§1, §4).
 
 ## No backwards-compatibility or data-migration code until Waitron is in production
 
-A backfill for an empty database is code to
+No real venue is live, so any installation may be reset at any time instead of carrying its data
+forward (owner, 2026-10-03). A backfill for an empty database is code to
 maintain that buys nothing — and the first draft of the settlement design carried one that could only
 ever GUESS which tender a tip belonged to, which is worse than discarding. This rule expires the day a
 real venue is live; add its replacement in the same change.

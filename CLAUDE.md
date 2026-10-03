@@ -732,7 +732,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   which is the working directory; and a reader with no default refuses `""` explicitly, as
   `resolveVenueDir` does with `provisioning.venue_dir_missing`. See
   [conventions-data.md](docs/developers/conventions-data.md).
-- **No backwards-compatibility or data-migration code until Waitron is in production.** This rule expires the day a real venue is live; add its replacement in the same
+- **No backwards-compatibility or data-migration code until Waitron is in production.** Until then
+  any installation may be reset at any time instead of carrying its data forward (owner,
+  2026-10-03). This rule expires the day a real venue is live; add its replacement in the same
   change.
 
 ---
