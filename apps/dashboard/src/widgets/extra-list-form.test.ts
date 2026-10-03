@@ -988,7 +988,7 @@ it("focuses the kitchen field when a refusal naming it arrives, leaving the name
   expect(kitchen.shadowRoot!.activeElement).toBe(kitchen.shadowRoot!.querySelector("input"));
 });
 
-it("puts the minimum and maximum choices side by side as steppers, the minimum's meaning in its hint", async () => {
+it("puts the minimum and maximum choices side by side as clearable steppers from 1, each showing None while empty", async () => {
   const { el } = await mount({ value: addons });
   const row = el.shadowRoot!.querySelector('[data-test="picks-row"]')!;
   const min = field<HTMLElementTagNameMap["wt-number-stepper"]>(el, "min-picks");
@@ -997,10 +997,10 @@ it("puts the minimum and maximum choices side by side as steppers, the minimum's
   expect([min.tagName, max.tagName]).toEqual(["WT-NUMBER-STEPPER", "WT-NUMBER-STEPPER"]);
   expect([min.parentElement, max.parentElement]).toEqual([row, row]);
   expect([min.label, max.label]).toEqual([t("extras.min_picks"), t("extras.max_picks")]);
-  expect([min.hint, max.hint]).toEqual([t("extras.min_picks_hint"), ""]);
-  expect(max.placeholder).toBe("");
-  expect([min.min, max.min]).toEqual([0, 1]);
-  expect([min.clearable, max.clearable]).toEqual([false, true]);
+  expect([min.hint, max.hint]).toEqual([t("extras.picks_none"), t("extras.picks_none")]);
+  expect([min.placeholder, max.placeholder]).toEqual(["", ""]);
+  expect([min.min, max.min]).toEqual([1, 1]);
+  expect([min.clearable, max.clearable]).toEqual([true, true]);
   expect(min.increaseLabel(min.label)).toBe(
     t("action.increase").replace("{label}", t("extras.min_picks")),
   );
@@ -1020,10 +1020,10 @@ it("saves the minimum one higher after its + button is pressed", async () => {
   expect(submitted[0]!.minPicks).toBe(1);
 });
 
-it("sets the choices under a Number of choices heading, with a line saying a blank maximum is no limit, in English and Spanish", async () => {
-  for (const [locale, heading, line] of [
-    ["en", "Number of choices", "Leave Maximum choices blank for no limit."],
-    ["es", "Número de selecciones", "Deja Selecciones máximas vacío para no poner límite."],
+it("sets the choices under a Number of choices heading, in English and Spanish, with no line under it", async () => {
+  for (const [locale, heading] of [
+    ["en", "Number of choices"],
+    ["es", "Número de selecciones"],
   ] as const) {
     setLocale(locale);
     try {
@@ -1032,12 +1032,10 @@ it("sets the choices under a Number of choices heading, with a line saying a bla
         'fieldset[data-test="picks"]',
       )!;
       const legend = group.querySelector("legend")!;
-      const note = group.querySelector<HTMLElement>('[data-test="picks-note"]')!;
       expect(legend.textContent!.trim(), locale).toBe(heading);
-      expect(note.textContent!.trim(), locale).toBe(line);
-      expect(group.getAttribute("aria-describedby")).toBe(note.id);
       expect(group.contains(el.shadowRoot!.querySelector('[data-test="picks-row"]'))).toBe(true);
-      expect(legend.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(group.querySelector("p")).toBeNull();
+      expect(group.hasAttribute("aria-describedby")).toBe(false);
     } finally {
       setLocale("en");
       cleanupWidgets();
@@ -1045,19 +1043,114 @@ it("sets the choices under a Number of choices heading, with a line saying a bla
   }
 });
 
-it("paints the choices heading and its line from tokens", async () => {
+it("paints the choices heading from tokens", async () => {
   const { el, host } = await mount({ value: addons });
   host.style.setProperty("--wt-color-text-muted", "rgb(41, 42, 43)");
   host.style.setProperty("--wt-font-size-sm", "11px");
   const group = el.shadowRoot!.querySelector('fieldset[data-test="picks"]')!;
-  for (const part of [
-    group.querySelector("legend")!,
-    group.querySelector('[data-test="picks-note"]')!,
-  ]) {
-    expect(getComputedStyle(part).color).toBe("rgb(41, 42, 43)");
-    expect(getComputedStyle(part).fontSize).toBe("11px");
-  }
+  const legend = group.querySelector("legend")!;
+  expect(getComputedStyle(legend).color).toBe("rgb(41, 42, 43)");
+  expect(getComputedStyle(legend).fontSize).toBe("11px");
   expect(getComputedStyle(group).borderTopStyle).toBe("none");
+});
+
+it.each([
+  [1280, "en", "None"],
+  [1280, "es", "Ninguno"],
+  [390, "en", "None"],
+  [390, "es", "Ninguno"],
+] as const)(
+  "shows the whole None in both empty boxes at %ipx in %s",
+  async (frame, locale, word) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(frame, 844);
+    setLocale(locale);
+    try {
+      const { el } = await mount({ value: { ...addons, minPicks: 0, maxPicks: null } });
+      for (const name of ["min-picks", "max-picks"]) {
+        const input = field(el, name).shadowRoot!.querySelector("input")!;
+        expect([input.value, input.placeholder], name).toEqual(["", word]);
+        expect(input.matches(":placeholder-shown"), name).toBe(true);
+        const style = getComputedStyle(input);
+        const probe = document.createElement("span");
+        probe.style.font = style.font;
+        probe.style.position = "absolute";
+        probe.style.whiteSpace = "pre";
+        probe.textContent = input.placeholder;
+        document.body.append(probe);
+        const needed = probe.getBoundingClientRect().width;
+        probe.remove();
+        const room =
+          input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+        expect(needed, `${name} at ${frame}px in ${locale}`).toBeLessThanOrEqual(room);
+      }
+    } finally {
+      setLocale("en");
+      await page.viewport(width, height);
+    }
+  },
+);
+
+it("shows a saved minimum of 0 as the empty box, and saves it back as 0", async () => {
+  const { el, host } = await mount({ value: { ...addons, minPicks: 0 } });
+  const submitted = record(host);
+  const min = field<HTMLElementTagNameMap["wt-number-stepper"]>(el, "min-picks");
+  expect(min.value).toBe("");
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]!.minPicks).toBe(0);
+});
+
+it("starts a new list with an empty minimum", async () => {
+  const { el } = await mount();
+  expect(field<HTMLElementTagNameMap["wt-number-stepper"]>(el, "min-picks").value).toBe("");
+});
+
+it("clears a minimum of 1 with its − button, and saves the list with a minimum of 0", async () => {
+  const { el, host } = await mount({ value: { ...addons, minPicks: 1, maxPicks: 2 } });
+  const submitted = record(host);
+  const min = field<HTMLElementTagNameMap["wt-number-stepper"]>(el, "min-picks");
+
+  min.shadowRoot!.querySelector<HTMLButtonElement>('[data-step="-1"]')!.click();
+  await el.updateComplete;
+  await min.updateComplete;
+  expect(min.value).toBe("");
+  await click(el, "save");
+
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]!.minPicks).toBe(0);
+});
+
+it("saves an empty minimum with a maximum of 1", async () => {
+  const { el, host } = await mount({ value: { ...addons, minPicks: 0, maxPicks: 1 } });
+  const submitted = record(host);
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect([submitted[0]!.minPicks, submitted[0]!.maxPicks]).toEqual([0, 1]);
+});
+
+it("keeps a typed minimum of 0 as typed, and saves it as 0", async () => {
+  const { el, host } = await mount({ value: { ...addons, minPicks: 1 } });
+  const submitted = record(host);
+  await type(el, "min-picks", "0");
+  expect(field<HTMLElementTagNameMap["wt-number-stepper"]>(el, "min-picks").value).toBe("0");
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]!.minPicks).toBe(0);
+});
+
+it("refuses a typed maximum of 0 beside the field and in the bottom message", async () => {
+  const { el, host } = await mount({ value: addons });
+  const submitted = record(host);
+
+  await type(el, "max-picks", "0");
+  await click(el, "save");
+
+  expect(submitted).toEqual([]);
+  expect(errorOf(el, "max-picks")).toBe(t("extras.max_picks_zero"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(t("extras.max_picks_zero")).toBe("Enter 1 or more, or leave it empty for no limit.");
 });
 
 it("clears a maximum of 1 with its − button, and saves the list with no limit", async () => {

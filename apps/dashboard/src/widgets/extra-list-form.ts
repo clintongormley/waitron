@@ -79,11 +79,6 @@ export class ExtraListForm extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         text-transform: uppercase;
       }
-      .picks-note {
-        margin: var(--wt-space-1) 0 var(--wt-space-3);
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
       .picks-row {
         display: grid;
         grid-template-columns: repeat(2, max-content);
@@ -176,7 +171,7 @@ export class ExtraListForm extends LitElement {
   @state() private name = "";
   @state() private customerName: Record<string, string> = {};
   @state() private kitchenName = "";
-  @state() private minPicks = "0";
+  @state() private minPicks = "";
   @state() private maxPicks = "";
   @state() private active = true;
   @state() private items: DraftItem[] = [];
@@ -241,7 +236,8 @@ export class ExtraListForm extends LitElement {
     this.name = value?.name ?? "";
     this.customerName = { ...value?.customerName };
     this.kitchenName = value?.kitchenName ?? "";
-    this.minPicks = String(value?.minPicks ?? 0);
+    // A minimum of 0 is no minimum, which the box shows empty.
+    this.minPicks = value?.minPicks ? String(value.minPicks) : "";
     this.maxPicks = value?.maxPicks == null ? "" : String(value.maxPicks);
     this.active = value?.active ?? true;
     this.items = (value?.items ?? []).map((item) => ({
@@ -494,6 +490,7 @@ export class ExtraListForm extends LitElement {
     const capped = this.maxPicks.trim() !== "";
     const maxPicks = this.#maxPicks();
     if (capped && maxPicks === null) validation["max-picks"] = t("extras.picks_invalid");
+    else if (maxPicks === 0) validation["max-picks"] = t("extras.max_picks_zero");
     // The cap is what is wrong when the pair cannot both hold, so the message goes there rather
     // than on the minimum — the field `parseExtraListInput` names, and for the reason it states.
     else if (minPicks !== null && maxPicks !== null && maxPicks < minPicks)
@@ -841,17 +838,15 @@ export class ExtraListForm extends LitElement {
             this.name,
           )}
           ${this.#namesSection(errors)}
-          <fieldset class="picks" data-test="picks" aria-describedby="picks-note">
+          <fieldset class="picks" data-test="picks">
             <legend class="group-label">${t("extras.picks_heading")}</legend>
-            <p class="picks-note" id="picks-note" data-test="picks-note">
-              ${t("extras.picks_note")}
-            </p>
             <div class="picks-row" data-test="picks-row">
               <wt-number-stepper
                 name="min-picks"
                 label=${t("extras.min_picks")}
-                hint=${t("extras.min_picks_hint")}
-                .min=${0}
+                hint=${t("extras.picks_none")}
+                clearable
+                .min=${1}
                 .decreaseLabel=${decreaseLabel}
                 .increaseLabel=${increaseLabel}
                 .disabled=${this.busy}
@@ -866,6 +861,7 @@ export class ExtraListForm extends LitElement {
               <wt-number-stepper
                 name="max-picks"
                 label=${t("extras.max_picks")}
+                hint=${t("extras.picks_none")}
                 clearable
                 .min=${1}
                 .decreaseLabel=${decreaseLabel}
