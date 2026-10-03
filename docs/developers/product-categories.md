@@ -25,9 +25,14 @@ parent categories. Its tooltip explains the warning. Set a claim or an exception
 category in every service zone on Prep Stations to route those dishes before they fall through to
 the default station.
 
-A variant reads its own reporting category when set, and its product's otherwise. You edit that
-choice in the product editor. In the tree, variants sit under their product and move with it;
-you cannot select or drag a variant on its own.
+A variant is always in its product's reporting category. Its effective category
+(`effectiveProductColumns.categoryId`, `packages/catalogue/src/variant-fallback.ts`), which the
+Products list, menus, sale classification and kitchen routing read, is the product's even where an
+older variant row still stores one of its own, and the product editor offers a variant no category
+choice. In the tree, variants sit under their product and move with
+it; you cannot select or drag a variant on its own. The product editor shows a product's category as
+its path, with a Change link that opens the category list as an indented tree
+([Products](products.md#the-editor-form)).
 
 Reports can use the classification recorded with each sale, or today's catalogue classification.
 Moving a product or renaming a category does not rewrite recorded sale lines. See
@@ -252,8 +257,8 @@ to approve unknown contents. A refused action keeps its dialog open with a messa
 Deleting a category removes its station claim and every exception naming it, because both tables
 have a cascading foreign key to `categories`. The summary counts those removed rules; it does
 not list products whose station would change. **Move to…** also has no routing preview. Check
-Prep Stations' tester after changing the category tree. A variant whose own category is cleared
-uses its product's category for claims.
+Prep Stations' tester after changing the category tree. A variant is routed by its product's
+category, and a variant still storing a deleted category has it cleared.
 
 ## API
 
@@ -294,8 +299,9 @@ is `category.parent_cycle` (409). Malformed arrays or repeated IDs are `manageme
 subtree; the browser counts selected roots when ancestors and descendants are selected together.
 
 The former per-category delete, dependants and product-membership routes are retired. Use the
-category selection operations above. The product editor still saves `primaryCategoryId`; a body
-sending the removed `categoryIds` or `labelIds` is refused with `product.invalid`.
+category selection operations above. The product editor still saves `primaryCategoryId`, which
+must be `null` on a variant; a variant body naming a category, or any body
+sending the removed `categoryIds` or `labelIds`, is refused with `product.invalid`.
 
 ## Storage and development reset
 

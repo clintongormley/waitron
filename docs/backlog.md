@@ -753,7 +753,8 @@ its longer side, turned upright, stripped of its metadata and stored as WebP at 
   Safari was not tried, so what it draws with no colour chosen, and whether the ring and the
   rim-free fill hold there, is unknown; and whether choosing black in the browser's picker from the
   no-colour state registers was not run. With a palette colour chosen, the Custom square shows that
-  colour too, beside the ringed swatch (pinned in `category-form.test.ts`). **Next action:** try
+  colour too, beside the ringed swatch (pinned in `apps/dashboard/src/widgets/color-field.test.ts`,
+  "fills the Custom square right up to its border while a palette colour is chosen"). **Next action:** try
   the first in Safari or Playwright's WebKit, and the second by hand in Chromium.
 
 **The folding section jumps about when it opens (A169, owner 2026-10-01) — DONE (#1026).** `wt-disclosure`
@@ -1393,7 +1394,7 @@ together, in one branch.
 LOOK at each on a product AND on a variant's page (the editor shows a variant with its parent's
 values as the blank choices), at 1280 and 390, light and dark.
 
-**No Add category button, and the category shown as a path (A209) — DECIDED, ready to build.**
+**No Add category button, and the category shown as a path (A209) — DONE.**
 The owner: _"we no longer need the add category button. i'm questioning whether we need the
 category dropdown at all now that we can drag products from category to category (although we
 should show the path to the product eg Drinks > Alcoholic drinks > Cocktails) on that page"_. A
@@ -1419,6 +1420,36 @@ cleared (allowed before go-live, §3). Trace every consumer of a variant's `cate
 among them the Products list's main-category cell on a variant (A221, `apps/dashboard/src/widgets/product-list.ts`), which
 compares the variant's effective main category with its product's and should then always stay
 empty.
+Built: the editor's first line is the product's path, names joined with " › ", or "Uncategorised";
+on a product it is a link-style `wt-combobox` (`appearance="link"`, with the new option fields
+`depth` and `valueLabel`) whose "Change" opens "Uncategorised" and then every category as an
+indented tree. A variant's page shows its product's path as plain text. On the server a variant's
+effective category is always its product's, a variant's editor save naming a category is refused
+with `product.invalid` and otherwise clears what the row stores, and deleting a category clears it
+from any variant still holding it. The Add category button, `editor.add_category`, the catalogue
+screen's nested category create and the `dashboard-category-form` element went; the Products list
+leaves a variant's category cell empty without comparing.
+**Left open:**
+- No migration clears the categories variants already store: the campaign lane that built this
+  adds no migration while another of its pull requests (#1076, A200) waits for the owner. The
+  effective category (`effectiveProductColumns.categoryId`) and the editor's read ignore a stored
+  one, and the variant's next save, or that category's deletion, clears it. Whether to add a
+  one-statement migration that clears them once nothing is parked is a question for the owner.
+- Prep Stations marks a product exception that can never apply when an earlier category exception
+  already catches the product and every one of its variants (`family.every(...)` in `routingModel`,
+  `packages/venue-service/src/routing-store.ts`). A variant's category is now its product's, so the
+  variant half of that check always agrees with the product's and could be dropped.
+- Past sales of a variant that had a category of its own now show under its product's category in
+  the category sales report's "Current categories" mode (`current`,
+  `packages/reporting/src/category-sales.ts`), which classifies each line by the catalogue as it is
+  today; "Categories at time of sale" still reads what each line recorded.
+- A configuration import copies `products` rows as they are (`select *` in
+  `apps/server/src/configuration-transfer.ts`, from `CORE_CONFIGURATION_TRANSFER` in
+  `packages/db/src/configuration-transfer.ts`), so an imported variant can arrive with a stored
+  category that the effective category and the editor's read then ignore.
+- Corrected in passing: the colour field entry above pointed at `category-form.test.ts` for the
+  Custom square showing a chosen palette colour. #968 moved that test to `color-field.test.ts`
+  before this branch, so the pointer was already wrong on `main`; it now names the new file.
 
 **Standalone ordering becomes one dropdown (A210) — DONE (#1070).** The owner: _"Standalone ordering can
 be reduced to a single dropdown"_. Before this, `renderOrdering` drew three radio buttons, Public, Staff
@@ -1708,7 +1739,8 @@ starting left of its product's in the same bold, and its row repeating "Made at"
 rest with "—". **Built (mockup B):** a small, muted arrow; "2 variants" in muted text under a
 product's name; opened variants on a `--wt-color-bg` band, lined up under the product's name, showing
 price, status, row menu and a main category only where it differs from the product's. `wt-data-table`
-gained `rowJoinsParent` and a `tree-toggle` part.
+gained `rowJoinsParent` and a `tree-toggle` part. _2026-10-03 (A209): a variant's category is now
+always its product's, so a variant's row leaves that cell empty._
 **Also check:** tried in the list widget on a test variant, not the owner's data: the arrow showed
 under a search, an ordering filter, for an Unavailable variant and for one with its own main
 category; it was missing only for a variant saved Inactive and for a product with no variant.
@@ -5716,7 +5748,7 @@ reading unless marked run:
   dialog's late `wt-close` into a Cancel without first checking that the form is still open, so
   after a Cancel, once the screen has closed the form, the late close report probably sends
   `wt-cancel` a second time and the product editor would act on it again (found 2026-09-27 in
-  review, by reading, not run). The Units, Options, Extras and category forms carry the
+  review, by reading, not run). The Units, Options and Extras forms carry the
   `!this.open` check `option-label-form.ts` does (C68, #863; C74, #878); the variant form was left
   out of C68 only because B13 changed the product editor, and B13 did not touch it, so its fix no
   longer waits.

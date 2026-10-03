@@ -263,7 +263,14 @@ may have any number of variants, one included.
 tax rate, course, description, image, pricing unit and allergen and dietary declarations
 are its parent's while its own column is blank and its own once it sets them
 (`effectiveProductColumns`, whose keys are `INHERITED_KEYS`,
-`packages/catalogue/src/variant-fallback.ts`), and so is its main reporting category. Its unit is
+`packages/catalogue/src/variant-fallback.ts`). Its main reporting category is always its parent's,
+whatever its own `category_id` holds: `effectiveProductColumns.categoryId` reads the parent's for a
+variant, `readProductEditor` returns `primaryCategoryId: null` for one, the editor save refuses a
+variant body naming a category (`product.invalid`, field `primaryCategoryId`) and writes the
+variant's column back to null, and deleting a category clears it from any variant still holding it
+(`vacateCategories`, `packages/catalogue/src/categories.ts`). No migration cleared the categories
+variants held before this rule (A209, 2026-10-03), so an older variant row may still store one until
+its next save or until that category is deleted. Its unit is
 its parent's while it stores none of its own (`unitOwnerJoin`, same file). Its extras and options
 lists are always its parent's. Its Name, customer-facing name and kitchen name are never inherited: a blank customer or
 kitchen name falls back to the variant's own staff name (_The three names_, above).
@@ -462,12 +469,12 @@ section with a summary on its closed line. Kitchen, Descriptors and Nutritional 
 field they hold, with "None specified" (`modifiers.none_specified`) for one left blank; the Pricing
 fold leaves a blank base price, and a VAT class the form does not offer, off its line. The
 Descriptors rows are cut after one and two lines, which can hide a later language's value, so
-opening the section is what shows every value. Top to bottom: Name, with the photo beside it as a
-small button that opens the image
-library (absent when the editor is given no `api`), Category, Available, Standalone
-ordering (absent on a variant's page), ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info, Pricing (a ▸ fold once some variant is Active),
-Variants, Modifiers, then Cancel and Save. An Inactive product's editor also opens with a line
-saying so, and offers Restore beside Save. Opened on a variant, the same form is the variant's own
+opening the section is what shows every value. Top to bottom: the category path, Name, with the
+photo beside it as a small button that opens the image library (absent when the editor is given no
+`api`), Available, Standalone ordering (absent on a variant's page), ▸ Kitchen, ▸ Descriptors,
+▸ Nutritional info, Pricing (a ▸ fold once some variant is Active), Variants, Modifiers, then Cancel
+and Save. An Inactive product's editor also shows a line saying so, under the category path, and
+offers Restore beside Save. Opened on a variant, the same form is the variant's own
 page: it has no Standalone ordering, Modifiers or Variants section, and each field the variant may
 leave blank to take the parent's value shows that value as its hint; the course, description,
 allergens and dietary preferences also show it in italic on their folded section's closed line.
@@ -481,10 +488,17 @@ does not fold at all while no variant is Active, and its fold starts open on a p
 A section holding a validation error opens itself and cannot be collapsed until the error is fixed —
 that is `wt-disclosure`'s `has-error`, described in [the design system](design-system.md).
 
-The main category is chosen in the editor itself, through the single-choice picker in
-`apps/dashboard/src/widgets/classification-fields.ts`.
-A variant with no main category of its own shows its parent's as the dropdown's empty choice, in
-grey italic, or "Uncategorised" when the parent has none. See
+The main category is the form's first line: its path, the names joined with " › " (`categoryPathText`,
+`apps/dashboard/src/widgets/classification-fields.ts`), "Uncategorised" for none, or "Unavailable
+selection" (`editor.missing_choice`) for a category id the loaded list lacks. On a product the path is
+`categoryPathField` in the same file, a `wt-combobox` with `appearance="link"` and the action word
+"Change" (`editor.change_category`). Its list offers "Uncategorised" first, then every category
+depth-first with each set of siblings sorted by name (`byLabel`), a row showing the category's own
+name indented by its depth while nothing is searched for; once chosen, the path is what shows. The control keeps the name
+`primary`, so a refused `category.not_found` on save lands under it. On a variant's page the
+parent's path is plain text with no Change, and the save always sends `primaryCategoryId: null`.
+New categories are made on the Products screen (`folders.add_category`,
+`apps/dashboard/src/widgets/product-list.ts`); the editor has no button for one. See
 [Product categories](product-categories.md).
 
 ## One save, one transaction
@@ -495,7 +509,8 @@ rolls the whole product back, and you can choose a course as you create the prod
 
 The product write body carries `name` (required, plain text), `customerName` (a language map or
 `null`), `description`, `kitchenName`, `image`, the price and tax fields, `primaryCategoryId` (the
-main reporting category; a body carrying the retired `labelIds` is refused), `modifiers` (the ordered attachment list, each entry a `kind` of `extras` or
+main reporting category; on a variant it must be `null`, and any other value is refused with
+`product.invalid`; a body carrying the retired `labelIds` is refused), `modifiers` (the ordered attachment list, each entry a `kind` of `extras` or
 `options` and a list id — it replaced the flat `modifierIds` on 2026-09-19), the allergen and
 dietary declarations, the two required state flags `active` and `available` (below), the required
 `ordering` (a body carrying the retired `soldAlone` is refused), and `variants`

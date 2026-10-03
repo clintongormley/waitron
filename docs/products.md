@@ -43,16 +43,19 @@ beside the name at the top of the editor.
 
 ## Give the product a main category
 
-Each product has one **Main category**, chosen under **Category** in the product editor.
-Categories form a tree, so the field shows each category's full path. Leave it empty and the product
-is Uncategorised. The main category also plays a part in choosing the kitchen station a dish goes to,
-as described below.
+Each product has one main category. Categories form a tree, so the product editor shows the
+category's full path on the first line under the window's title, such as
+**Drinks › Alcoholic drinks › Cocktails**, or **Uncategorised** when the product is in none. Choose
+**Change** after the path to pick another: the list starts with **Uncategorised** and then shows
+every category as an indented tree, each subcategory under its parent. You can also move the product
+to another category on the Products screen, by dragging it or with **Move to…**. The main category
+also plays a part in choosing the kitchen station a dish goes to, as described below.
 
 Use the **Default course** field under **Kitchen** to decide when the product fires. It saves with
 the product. Prep stations choose where the dish is made: an ordered exception applies first, then
 the nearest claimed folder, then the venue's default station.
 
-You can create a unit, a category, an extras list or an options list without abandoning a product
+You can create a unit, an extras list or an options list without abandoning a product
 you are editing. Open the nested form, save the new item and select it when you return. The unsaved
 product fields remain in place if the nested save fails or you cancel it.
 
@@ -83,10 +86,11 @@ offers **Open**, **Edit** and **Remove**. **Edit**, or a click on the variant's 
 small window. Changes you make in the table, including the Available switch, are saved when you save
 the product.
 
-**Open** takes you to the variant's own page, where it can have its own VAT, main category,
-allergens and the other product details. Apart from the names, each detail you leave blank there
+**Open** takes you to the variant's own page, where it can have its own VAT, allergens and the
+other product details. Its main category is always its product's: the page shows the product's
+category path as plain text, with no **Change**. Apart from the names, each detail you leave blank there
 shows the product's value greyed out as a hint or, where the product has none, what will be used
-("None", "Uncategorised", "Each"; "Not yet reviewed" for allergens nobody has reviewed), and the variant
+("None", "Each"; "Not yet reviewed" for allergens nobody has reviewed), and the variant
 uses the product's value. The
 description works as one value across all languages: to use the product's description, leave every
 language of the description blank. Once you write the description in one language, the variant uses
@@ -110,7 +114,7 @@ The products list keeps each product's variants folded away under it. A product 
 variants says how many under its name, such as **2 variants**, and the small arrow just before
 its drag handle opens them.
 Each variant's row shows its own name, the price it sells at, its status and its
-row menu, plus its main category when that differs from its product's. If a variant's VAT differs
+row menu; its main category is its product's, shown on the product's row. If a variant's VAT differs
 from its product's, the list notes it under the variant's price. A variant's row menu offers
 **Remove** or **Restore** there too, and an Inactive variant is listed once you change the
 **Status** filter from **Active**.
