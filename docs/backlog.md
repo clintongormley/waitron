@@ -1413,6 +1413,15 @@ desktop width. The options list editor (`option-list-form.ts`) gives its Name co
 width (A198), so whether its columns move too has not been checked. Do it with A262, which changes
 the same column rules.
 
+**Each extras row's Preselected switch repeats its column heading beside it (A265, owner
+2026-10-03) — OPEN, queued.** In the owner's A264 screenshots every row's switch is followed by the
+word "Preselected", directly under the column's own "Preselected" heading, widening the column for
+nothing. The row's `wt-switch` (`apps/dashboard/src/widgets/extra-list-form.ts`) sets `label` with
+no `hide-label`; the price input in the same row already sets `hide-label`, and so does the switch
+in `apps/dashboard/src/widgets/variant-table.ts`. **Wanted:** the switch drawn without its text,
+still named for screen readers. Do it with A262 and A264: dropping the text changes how wide the
+Preselected column needs to be.
+
 **The option form opens with its names section expanded (A199, owner 2026-10-02) — DONE by A170
 (#1040):** the option window no longer folds its names at all, so they show on open on Add and Edit;
 "can still be collapsed" no longer applies, because nothing folds. The
