@@ -5508,7 +5508,8 @@ export class TillApp extends LitElement {
         await this.#onMoveHeldOrder(event, true);
         return;
       }
-      await this.#onTableRefusal(error);
+      await this.#onTableRefusal(error, () => session === this.#operatorSession);
+      if (session !== this.#operatorSession) return;
       // A failed re-read keeps the list it had; the banner says the refusal.
       await this.#refreshHeldOrders().catch(() => undefined);
       return;

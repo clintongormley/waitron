@@ -10665,6 +10665,28 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     expect(moveBill).not.toHaveBeenCalled();
   });
 
+  it("does not reload held orders after a move refusal's floor read outlives sign-out", async () => {
+    let answerFloor!: (tables: (typeof mesa7)[]) => void;
+    const { el, c } = await counterWith({
+      moveBill: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
+    });
+    vi.mocked(currentApi.getTablesState).mockImplementation(
+      () => new Promise((resolve) => (answerFloor = resolve)),
+    );
+
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    await flush(el);
+    expect(currentApi.getTablesState).toHaveBeenCalled();
+
+    emit(c, "logout");
+    await flush(el);
+    const heldReads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
+    answerFloor([mesa7, mesa9]);
+    await flush(el);
+
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(heldReads);
+  });
+
   it("asks where to make a stored counter dish before moving its bill to a table", async () => {
     const askOrderDeadEnds = vi.fn().mockResolvedValue({
       sends: true,
