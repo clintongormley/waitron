@@ -9353,12 +9353,10 @@ describe("persistent till destinations", () => {
     history.replaceState(null, "", "/tabs/counter/view/expo/watcher/pass");
     const { el } = await mountApp({
       listWatchers: vi.fn().mockResolvedValue([{ id: "pass", name: "Pass", runsPass: true }]),
-      getWatcherQueue: vi
-        .fn()
-        .mockResolvedValue({
-          watcher: { id: "pass", name: "Pass", runsPass: true, active: true },
-          orders: [],
-        }),
+      getWatcherQueue: vi.fn().mockResolvedValue({
+        watcher: { id: "pass", name: "Pass", runsPass: true, active: true },
+        orders: [],
+      }),
     });
     await toCounter(el);
     const expo = el.shadowRoot!.querySelector("till-expo-screen")!;

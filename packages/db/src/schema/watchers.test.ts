@@ -31,14 +31,12 @@ describe("watchers schema", () => {
     await suite.db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture" });
-    await suite.db
-      .insert(locations)
-      .values({
-        id: LOCATION,
-        name: "Kitchen",
-        invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
-      });
+    await suite.db.insert(locations).values({
+      id: LOCATION,
+      name: "Kitchen",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
   });
 
   async function insertWatcher(id: string, name: string) {
@@ -130,16 +128,14 @@ describe("watchers schema", () => {
       })
       .returning({ id: ticketItems.id });
     await suite.db.insert(deviceProfiles).values({ id: "kds", name: "Screen", formFactor: "kds" });
-    await suite.db
-      .insert(devices)
-      .values({
-        id: "device",
-        locationId: LOCATION,
-        deviceProfileId: "kds",
-        stationId: station!.id,
-        label: "Screen",
-        tokenHash: "hash",
-      });
+    await suite.db.insert(devices).values({
+      id: "device",
+      locationId: LOCATION,
+      deviceProfileId: "kds",
+      stationId: station!.id,
+      label: "Screen",
+      tokenHash: "hash",
+    });
     await insertWatcher(WATCHER, "Pass");
     return { itemId: item!.id, lineId: line!.id };
   }

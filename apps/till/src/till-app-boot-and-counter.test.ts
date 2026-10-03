@@ -356,12 +356,10 @@ describe("till-app session activity", () => {
         .fn()
         .mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: ["act-as-kds"] }),
       getDeviceIdentity,
-      getDeviceWatcher: vi
-        .fn()
-        .mockResolvedValue({
-          watcher: { id: "pass", name: "Pass", runsPass: true, active: true },
-          orders: [],
-        }),
+      getDeviceWatcher: vi.fn().mockResolvedValue({
+        watcher: { id: "pass", name: "Pass", runsPass: true, active: true },
+        orders: [],
+      }),
       getDeviceStation: vi
         .fn()
         .mockResolvedValue({ station: { id: "st-1", queue: [], notices: [], printersDown: [] } }),

@@ -310,29 +310,25 @@ describe("station output status", () => {
         runsPass: false,
       }),
     );
-    await suite.db
-      .insert(devices)
-      .values({
-        locationId: f.venue.cfg.locationId,
-        watcherId: pass.id,
-        deviceProfileId: profile!.id,
-        label: "Dark pass",
-        tokenHash: "hash",
-        lastSeenAt: "2026-10-02T17:55:00.000Z",
-      });
+    await suite.db.insert(devices).values({
+      locationId: f.venue.cfg.locationId,
+      watcherId: pass.id,
+      deviceProfileId: profile!.id,
+      label: "Dark pass",
+      tokenHash: "hash",
+      lastSeenAt: "2026-10-02T17:55:00.000Z",
+    });
     expect(
       await withTransaction(suite.db, (tx) => stationScreensDark(tx, f.venue.cfg.locationId, at)),
     ).toEqual([]);
-    await suite.db
-      .insert(devices)
-      .values({
-        locationId: f.venue.cfg.locationId,
-        stationId: f.grill,
-        deviceProfileId: profile!.id,
-        label: "Dark Grill",
-        tokenHash: "hash",
-        lastSeenAt: "2026-10-02T17:55:00.000Z",
-      });
+    await suite.db.insert(devices).values({
+      locationId: f.venue.cfg.locationId,
+      stationId: f.grill,
+      deviceProfileId: profile!.id,
+      label: "Dark Grill",
+      tokenHash: "hash",
+      lastSeenAt: "2026-10-02T17:55:00.000Z",
+    });
     await suite.db
       .update(devices)
       .set({ lastSeenAt: "2026-10-02T18:05:00.000Z" })
