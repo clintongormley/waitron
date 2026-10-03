@@ -1,12 +1,12 @@
 # A231d implementation plan: full invoices by email as a PDF, and on an office printer
 
-**Status:** proposed, blocked on the [design's three open owner decisions](../specs/2026-10-03-invoice-pdf-email-and-office-printing-design.md#what-the-owner-decides) (7–9; decisions 1–6 were answered on 2026-10-03) and on the A231 build. Do not start on the strength of this plan alone. Read the design's two registers before deciding a legal, delivery or printing detail. Read [A231's design](../specs/2026-10-03-full-invoices-at-till-design.md) and [plan](2026-10-03-full-invoices-at-till.md) too, because every task here reads facts the A231 build stores.
+**Status:** proposed, blocked on the [design's open owner decision](../specs/2026-10-03-invoice-pdf-email-and-office-printing-design.md#what-the-owner-decides) (10, drawing pages ourselves rather than through CUPS; decisions 1–9 were answered on 2026-10-03) and on the A231 build. Do not start on the strength of this plan alone. Read the design's two registers before deciding a legal, delivery or printing detail. Read [A231's design](../specs/2026-10-03-full-invoices-at-till-design.md) and [plan](2026-10-03-full-invoices-at-till.md) too, because every task here reads facts the A231 build stores.
 
 **One build, both deliveries (owner, 2026-10-03).** Email and A4 printing are built together. Tasks 4 (email) and 5 (office printers) may land in either order, each leaving `main` working, and the build is not finished until both have landed. Task 6 needs both.
 
 ## 0. Reconcile the starting point
 
-1. **Owner and asesor answers.** The design records the owner's answers to decisions 1–6. Confirm decisions 7–9 are answered, and change this plan where an answer differs from the design's proposal. Record the asesor's answers to the design's five questions, or the owner's decision to go ahead without them for a named question. Read the latest `CLAUDE.md` and the topic files its §3 and §4 point to for each area touched: data, UI, testing, CI.
+1. **Owner and asesor answers.** The design records the owner's answers to decisions 1–9. Confirm decision 10 is answered. If the owner chose CUPS, rewrite tasks 1 and 5 around it before starting (the design's comparison names what changes), and change this plan wherever else an answer differs from the design's proposal. Record the asesor's answers to the design's five questions, or the owner's decision to go ahead without them for a named question. Read the latest `CLAUDE.md` and the topic files its §3 and §4 point to for each area touched: data, UI, testing, CI.
 2. **What A231 actually built.** Confirm A231's build has landed. Read what it built, not what its plan proposed:
    - the F1 snapshot on the sale (customer tax ID, legal name, address);
    - the taxpayer domicile;
@@ -83,7 +83,7 @@
 - A live provision without email settings is refused with a named code, field `email` (decision 8). A demo or prepare provision carrying them is refused the way a certificate is today (`setup.request_invalid`). A development server may omit them.
 - The setup's test-message route sends one short message to the admin's address through the given settings, and answers accepted, refused (as a code) or no answer within a bound. It writes nothing to the database, and neither its log lines nor its answer carry the SMTP address, user or password. Test against a fake SMTP server in the suite.
 - The dashboard's email-settings route needs `system.manage`: one role without it is refused and a manager is allowed. It seals `email.smtp` the way `payments-api.ts` seals a provider credential, and its read answer carries the server and the "from" address, never the password or the whole URL.
-- In practice mode the dashboard route refuses a change with a named code.
+- In a demo or a venue preparing to go live, the dashboard route refuses a change with a named code. Setting a prepare venue's mail server stays with the open backlog item (decision 7).
 - **Restores.** For each way the wizard and `waitron-restore` rebuild a live venue (from an archive, from the bucket, the cloud recovery), find out by running it whether `email.smtp` survives, on the same machine and on a different one. Where it does not, the restored venue reports invoice email unavailable and the dashboard card asks for the settings again; write the result in the PR.
 
 **Red first, setup and dashboard browser suites:**
@@ -91,7 +91,7 @@
 - The live path shows the Email step just before review: after the certificate and fiscal-test screens where they apply, straight after the venue details otherwise; demo and prepare do not.
 - Its fields follow the forms rules: required fields marked, a mistake explained beside its field, and Continue disabled until the mail server has accepted a test message from the current values. Changing a value after a test needs a new test.
 - A refused test shows its reason under the form and keeps the fields.
-- The dashboard card shows the server and "from" address, or, in a live venue without email, that invoices cannot be emailed until a mail server is set up; in a practice venue, that mail is captured on the box.
+- The dashboard card shows the server and "from" address, or, in a live venue without email, that invoices cannot be emailed until a mail server is set up. In a demo or a venue preparing to go live it offers no change, and says where invoice email goes: in a prepare venue, through the mail server if one is set, otherwise captured on the box; in a demo, always captured on the box.
 - Check both themes, phone width, keyboard and focus, and run axe for each new state.
 
 **Look at it.** Open the wizard's Email step and the dashboard card in both themes, at 1280 and 390 px wide, in English and Spanish.
@@ -101,7 +101,7 @@
 **Inspect/change:**
 
 - `apps/server/src/account-email.ts`: the mail message type gains attachments, or a sibling invoice-mail module shares the transport.
-- `apps/server/src/email-delivery.ts`: invoice email in practice mode resolves to the captured inbox even when `email.smtp` is set.
+- `apps/server/src/email-delivery.ts`: invoice email in a demo resolves to the captured inbox even when `email.smtp` is set; a venue preparing to go live follows account email's rule (SMTP when set, otherwise the captured inbox). `resolveEmailDelivery` takes only a practice-mode flag today, which cannot tell a demo from a prepare venue, so the invoice rule needs the venue's mode.
 - The server's background work loop.
 - The location settings (a contact email and optional phone) and the screen that edits them.
 - A231's full-invoice dialog in `apps/till`, and `apps/till/src/api/client.ts`.
@@ -121,7 +121,8 @@
 
 - **Where invoice email goes.**
   - On a server that is not a development server, a live venue with `email.smtp` set sends through it; a live venue without it reports invoice email unavailable, and an email choice is refused with a named code before issue.
-  - A demo or prepare venue sends to the captured inbox, with `email.smtp` set and without it. Delete the practice-mode check and this case fails.
+  - A demo sends to the captured inbox, with `email.smtp` set and without it. Delete the demo check and this case fails.
+  - A venue preparing to go live sends through `email.smtp` when it is set, and to the captured inbox when it is not; the PDF carries the practice warning either way.
   - A development server sends invoice email to the captured inbox in every mode, with `email.smtp` set and without it.
   - Account email keeps today's behaviour (it prefers SMTP when set): its existing cases pass unedited.
 - **Issue.**
@@ -230,6 +231,6 @@ Write what the printer reported into the PR and `docs/backlog.md`. PWG Raster ca
    - CI builds a front end only when an image input changed (CLAUDE.md §2), so build and open the till, dashboard and setup wizard locally.
 2. **Prose that goes stale.**
    - Read the base-to-tip prose claims for the retired behaviours: "office printers are not supported", "email is account email only", and "SMTP needs a terminal" (`apps/server/README.md`'s `waitron-credentials set --purpose email.smtp` instructions stay true but are no longer the only way).
-   - Read the backlog's A3 entry "Printing A4 invoices on an office printer" and its "virtual PDF printer" line, and the item "A venue preparing to go live sends real email through SMTP", and mark what this build settles.
+   - Read the backlog's A3 entry "Printing A4 invoices on an office printer" and its "virtual PDF printer" line, and the item "A venue preparing to go live sends real email through SMTP", and mark what this build settles. That item stays open (decision 7): this build sends a prepare venue's invoice email through a mail server when one is set, and adds no way to set one there.
    - Update `docs/backlog.md` in the same change.
 3. **Owner review.** Ask the owner to review each PR before landing. It changes how an issued invoice reaches a customer, task 3 changes going live, and task 5 prints real paper.
