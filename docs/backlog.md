@@ -2668,7 +2668,7 @@ earlier missing chooser was not reproduced; no separate chooser change was made.
 Preparation, the shared bar links to the dashboard, device page and Email inbox. The dashboard's
 Email inbox link lives there, and the till's device setup and approval screens link directly to
 Settings → Devices so a manager can approve the device. Live keeps its existing mode label. The
-pretend printer link follows when A241 adds its page in W37.
+W37 adds the pretend printer link beside Email inbox.
 
 **Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
 apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A
@@ -4246,10 +4246,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   handheld until then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs
   A238 and A239.
 
-- **A pretend printer in Demo mode (A241) — OPEN (owner, 2026-10-03).** Demo mode has no real
-  printer, so receipts and kitchen tickets go nowhere visible. Add a pretend printer and a link in the
-  dashboard header to see what it printed, like the development email viewer. Its link goes in the
-  Demo bar (A246), beside the email inbox. Queued as lane A's W37 (owner, 2026-10-03).
+- **A pretend printer in Demo mode (A241) — DONE in W37.** Demo and Preparation provide a printer
+  for receipts, kitchen tickets and separate drawer openings. A manager can open its page from the
+  Demo bar beside Email inbox and see the printed jobs newest first. Live deactivates the pretend
+  printer and does not serve the page.
 
 - **A pretend connected card reader in Demo mode (A247) — OPEN, queued as lane A's W38 (owner,
   2026-10-03).** Today the till's pay dialog carries its own Approve/Decline choice and the card

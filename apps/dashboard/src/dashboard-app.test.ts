@@ -3787,6 +3787,48 @@ describe("the banner's email inbox link", () => {
     },
   );
 
+  it("links to the pretend printer beside the inbox only in Demo or Preparation", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: withIntent(true, "demo"),
+    });
+    await flush(el);
+    const bar = el.shadowRoot!.querySelector("wt-demo-bar")!;
+    const links = [...bar.shadowRoot!.querySelectorAll("a")].map((link) =>
+      link.getAttribute("href"),
+    );
+    expect(links.indexOf("/manage/demo-printer")).toBe(links.indexOf("/manage/email") + 1);
+  });
+
+  it("opens the pretend printer page for a manager", async () => {
+    history.replaceState(null, "", "/manage/demo-printer");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi
+          .fn()
+          .mockResolvedValue({ ...meResponse, role: "manager", onboardingIntent: "demo" }),
+        listDemoPrinterJobs: vi.fn(() => new Promise(() => undefined)),
+      }),
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-demo-printer-screen")).not.toBeNull();
+    expect(location.pathname).toBe("/manage/demo-printer");
+  });
+
+  it.each([
+    ["supervisor", "demo"],
+    ["manager", "live"],
+  ] as const)("refuses the pretend printer page for %s in %s", async (role, intent) => {
+    history.replaceState(null, "", "/manage/demo-printer");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, role, onboardingIntent: intent }),
+      }),
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-demo-printer-screen")).toBeNull();
+    expect(location.pathname).toBe("/manage/overview");
+  });
+
   it.each([
     ["signed in", "live", true],
     ["signed in", undefined, true],

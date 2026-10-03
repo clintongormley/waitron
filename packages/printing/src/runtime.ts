@@ -100,7 +100,7 @@ function dueNow(): { claimedAt: string; due: SQL } {
 export async function claimPrintJobs(
   tx: Transaction,
   agentId: string,
-  ctx: { locationId: string; visibleKeys: string[] },
+  ctx: { locationId: string; visibleKeys: string[]; printerId?: string },
 ): Promise<ClaimedJob[]> {
   const { claimedAt, due } = dueNow();
   const usbBt =
@@ -113,6 +113,7 @@ export async function claimPrintJobs(
     claimableJoin: sql`join printers p on p.id = j.printer_id`,
     claimable: sql`p.active = true
       and ( (p.transport = 'network_tcp' and p.location_id = ${ctx.locationId}) or ${usbBt} )
+      ${ctx.printerId === undefined ? sql`` : sql`and p.id = ${ctx.printerId}`}
       and ${due}`,
     order: sql`j.created_at`,
     limit: PULL_BATCH_LIMIT,

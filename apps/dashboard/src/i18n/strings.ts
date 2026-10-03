@@ -569,6 +569,11 @@ export const en = {
   "nav.backup": "Backups",
   "nav.servers": "Servers",
   "nav.email_inbox": "Email inbox",
+  "demo_printer.title": "Demo printer",
+  "demo_printer.explanation": "Printed receipts, kitchen tickets and drawer openings appear here.",
+  "demo_printer.refresh": "Refresh printed jobs",
+  "demo_printer.empty": "Nothing has printed yet.",
+  "demo_printer.drawer_opened": "The cash drawer opened.",
   "nav.payments": "Card payments",
   "email.title": "Account email",
   "email.local_capture":
@@ -2692,6 +2697,12 @@ export const es: Record<StringKey, string> = {
   "nav.backup": "Copias de seguridad",
   "nav.servers": "Servidores",
   "nav.email_inbox": "Bandeja de correo",
+  "demo_printer.title": "Impresora de demostración",
+  "demo_printer.explanation":
+    "Aquí aparecen los recibos, comandas de cocina y aperturas del cajón.",
+  "demo_printer.refresh": "Actualizar trabajos impresos",
+  "demo_printer.empty": "Todavía no se ha impreso nada.",
+  "demo_printer.drawer_opened": "Se abrió el cajón de efectivo.",
   "nav.payments": "Pagos con tarjeta",
   "email.title": "Correo de cuentas",
   "email.local_capture":
