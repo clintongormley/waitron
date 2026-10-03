@@ -7,6 +7,7 @@ import {
   deleteCategory,
   listCategories,
   tablePresent,
+  vacateCategories,
   validateParent,
   type Category,
 } from "./categories.js";
@@ -126,10 +127,7 @@ export async function deleteCatalogueItems(
         .from(products)
         .where(and(inArray(products.categoryId, batch), isTopLevelProduct));
       for (const product of inside) await deactivateProduct(tx, product.id);
-      await tx
-        .update(products)
-        .set({ categoryId: parent, updatedAt: now() })
-        .where(inArray(products.categoryId, batch));
+      await vacateCategories(tx, batch, parent);
     }
     for (const folder of tree.byDepth(subtree, "deepest")) {
       await deleteCategory(tx, folder);

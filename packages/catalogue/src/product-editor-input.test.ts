@@ -220,9 +220,9 @@ it("refuses a body that still carries labelIds, rather than dropping them", () =
     expect.objectContaining({ code: "product.invalid", params: { field: "labelIds" } }),
   );
 });
-it("takes a variant's own main category", () => {
-  expect(parseVariant({ ...inheriting, primaryCategoryId: categoryId }).primaryCategoryId).toBe(
-    categoryId,
+it("refuses a main category on a variant, which always has its parent's", () => {
+  expect(() => parseVariant({ ...inheriting, primaryCategoryId: categoryId })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "primaryCategoryId" } }),
   );
 });
 it("normalizes optional text and prices without mutating caller or copied allergen text", () => {

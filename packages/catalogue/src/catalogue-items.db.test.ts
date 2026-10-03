@@ -2,13 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { products, withTransaction, type Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
-import {
-  createCategory,
-  listCategories,
-  readCategory,
-  setMainReportingCategory,
-} from "./categories.js";
+import { plantStoredCategory, seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
+import { createCategory, listCategories, readCategory } from "./categories.js";
 import { createCatalogue, createProduct, deactivateProduct } from "./operations.js";
 import { setProductVariants } from "./variants.js";
 import { deleteCatalogueItems, moveCatalogueItems, summariseFolders } from "./catalogue-items.js";
@@ -182,6 +177,16 @@ describe("deleteCatalogueItems", () => {
     });
   });
 
+  it("clears a variant's stored category in a deleted folder whose contents move up", async () => {
+    await app((tx) => plantStoredCategory(tx, variant, b));
+    await app((tx) => deleteCatalogueItems(tx, { productIds: [], categoryIds: [b] }, "move_up"));
+    expect(await product(lager)).toMatchObject({ active: true, categoryId: d });
+    expect(await product(variant)).toMatchObject({ categoryId: null, parentId: lager });
+    await expect(app((tx) => readCategory(tx, b))).rejects.toMatchObject({
+      code: "category.not_found",
+    });
+  });
+
   it.each(["parent-first", "child-first"])(
     "moves nested selected folders' contents to their grandparent (%s)",
     async (order) => {
@@ -214,10 +219,10 @@ describe("deleteCatalogueItems", () => {
     },
   );
 
-  it("moves a variant's own category out of a deleted subtree while retaining its product", async () => {
-    await app((tx) => setMainReportingCategory(tx, variant, b, "any"));
+  it("clears a variant's stored category in a deleted subtree while retaining its product", async () => {
+    await app((tx) => plantStoredCategory(tx, variant, b));
     await app((tx) => deleteCatalogueItems(tx, { productIds: [], categoryIds: [b] }, "delete"));
-    expect(await product(variant)).toMatchObject({ categoryId: d, parentId: lager });
+    expect(await product(variant)).toMatchObject({ categoryId: null, parentId: lager });
     expect(await product(lager)).toMatchObject({ active: false, categoryId: d });
     expect((await product(cola)).active).toBe(true);
   });
@@ -244,7 +249,7 @@ describe("deleteCatalogueItems", () => {
 describe("summariseFolders", () => {
   it("counts descendants and active or inactive top-level products in request order", async () => {
     await app((tx) => deactivateProduct(tx, lager));
-    await app((tx) => setMainReportingCategory(tx, variant, b, "any"));
+    await app((tx) => plantStoredCategory(tx, variant, b));
     expect(await app((tx) => summariseFolders(tx, [f, d, b]))).toEqual([
       { id: f, folders: 0, products: 1, routes: 0 },
       { id: d, folders: 1, products: 2, routes: 0 },

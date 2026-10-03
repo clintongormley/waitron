@@ -16,7 +16,7 @@ import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import { setProductVariants } from "./variants.js";
 import { contentLanguages } from "./schema/menu.js";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { plantStoredCategory, useCatalogueDb } from "../test/fixtures.js";
 
 const fx = useCatalogueDb();
 let catalogueId: string;
@@ -685,7 +685,6 @@ describe("a variant's own page", () => {
       unitPrice: "2.50",
       vatClass: "general",
       unitId: input.unitId,
-      primaryCategoryId: categories.own,
       allergens: { eggs: { presence: "may_contain" } },
       dietaryDeclarations: ["halal"],
     });
@@ -693,12 +692,10 @@ describe("a variant's own page", () => {
       unitPrice: "2.50",
       vatClass: "general",
       unitId: input.unitId,
-      primaryCategoryId: categories.own,
       allergens: { eggs: { presence: "may_contain" } },
       dietaryDeclarations: ["halal"],
       inherited: value.inherited,
     });
-    expect(await storedRow(variantId)).toMatchObject({ categoryId: categories.own });
     expect(await storedRow(variantId)).toMatchObject({ pricingUnit: "each" });
     const cleared = await save(variantId, value);
     expect(cleared).toEqual(value);
@@ -714,6 +711,32 @@ describe("a variant's own page", () => {
     const blankPrice = await save(variantId, { ...value, unitPrice: null });
     expect(blankPrice.unitPrice).toBeNull();
     expect((await read(parentId)).variants[0]!.unitPrice).toBeNull();
+  });
+
+  describe("holding a category of its own, stored before a variant always took its parent's", () => {
+    beforeEach(() => plantStoredCategory(fx.db, variantId, categories.own));
+
+    it("reads no category of its own, and its parent's beside it", async () => {
+      expect(await read(variantId)).toMatchObject({
+        primaryCategoryId: null,
+        inherited: { primaryCategoryId: categories.parent },
+      });
+    });
+
+    it("refuses a category of its own, naming the field, and leaves the row as it was", async () => {
+      const before = await storedRow(variantId);
+      expect(before).toMatchObject({ categoryId: categories.own });
+      await expect(
+        save(variantId, { ...(await read(variantId)), primaryCategoryId: categories.parent }),
+      ).rejects.toMatchObject({ code: "product.invalid", params: { field: "primaryCategoryId" } });
+      expect(await storedRow(variantId)).toEqual(before);
+    });
+
+    it("clears the stored category when the read value is saved back", async () => {
+      const value = await read(variantId);
+      expect(await save(variantId, value)).toEqual(value);
+      expect(await storedRow(variantId)).toMatchObject({ categoryId: null });
+    });
   });
 
   it("leaves the parent, its variants list and its attached lists as they were", async () => {

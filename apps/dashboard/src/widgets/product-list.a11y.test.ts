@@ -128,7 +128,7 @@ const products: Product[] = [
         effective: {
           unitPrice: "4.50",
           vatClass: "general",
-          primaryCategoryId: "cat-2",
+          primaryCategoryId: "cat-1",
         },
       },
       {

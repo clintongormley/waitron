@@ -716,12 +716,6 @@ export class ProductList extends LitElement {
     return category ? categoryPath(category, this.categories) : t("editor.missing_choice");
   }
 
-  /** A variant's row reads the main category it is reported under, which the server resolves: its
-   * own or its parent's. */
-  #values({ product, variant }: ProductRow): { primaryCategoryId: string | null } {
-    return variant?.effective ?? product;
-  }
-
   #modifierNames(product: Product): string {
     return product.modifiers.map((ref) => modifierListName(ref, this.#listNames)).join(", ");
   }
@@ -815,11 +809,9 @@ export class ProductList extends LitElement {
         key: "reporting-category",
         choosable: "shown",
         label: t("editor.main_category"),
-        cell: (row) =>
-          row.variant && row.variant.effective.primaryCategoryId === row.product.primaryCategoryId
-            ? nothing
-            : this.#category(this.#values(row).primaryCategoryId),
-        searchValue: (row) => this.#category(this.#values(row).primaryCategoryId),
+        // A variant is always in its product's category, which its product's row already shows.
+        cell: (row) => (row.variant ? nothing : this.#category(row.product.primaryCategoryId)),
+        searchValue: (row) => this.#category(row.product.primaryCategoryId),
       },
       {
         key: "made-at",

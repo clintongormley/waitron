@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { catalogues, products, type Transaction } from "@waitron/db";
+import { catalogues, now, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { setMainReportingCategory } from "./categories.js";
 import { assertContentTranslations, readContentLanguages } from "./content-languages.js";
@@ -80,7 +80,8 @@ async function readInherited(tx: Transaction, parentId: string): Promise<Inherit
   };
 }
 
-/** A product's editor value, or a variant's: its own stored values, and its parent's beside them. */
+/** A product's editor value, or a variant's: its own stored values, and its parent's beside them.
+ * A variant has no category of its own, so a category it still stores is never read back. */
 export async function readProductEditor(
   tx: Transaction,
   productId: string,
@@ -89,6 +90,7 @@ export async function readProductEditor(
   if (row.parentId !== null) {
     return {
       ...row,
+      primaryCategoryId: null,
       inherited: await readInherited(tx, row.parentId),
       modifiers: [],
       variants: [],
@@ -179,9 +181,14 @@ export async function saveProductEditor(
       dietaryDeclarations: value.dietaryDeclarations,
     });
   }
-  // The row is known here (found above, or just created), so the scope only has to admit a variant.
-  await setMainReportingCategory(tx, productId, value.primaryCategoryId, "any");
-  if (!isVariant) {
+  if (isVariant) {
+    // A variant's category is always its parent's, so it stores none.
+    await tx
+      .update(products)
+      .set({ categoryId: null, updatedAt: now() })
+      .where(eq(products.id, productId));
+  } else {
+    await setMainReportingCategory(tx, productId, value.primaryCategoryId);
     await writeProductVariants(tx, productId, value.variants, config);
     await writeProductModifiers(tx, productId, value.modifiers);
   }

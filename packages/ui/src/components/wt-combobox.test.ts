@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-combobox.js";
@@ -3022,4 +3022,337 @@ test("DROPDOWN_ICONS holds a path that draws for the chevron and for the tick", 
   } finally {
     svg.remove();
   }
+});
+
+const TREE: ComboboxOption[] = [
+  { value: "", label: "Uncategorised" },
+  { value: "drinks", label: "Drinks", valueLabel: "Drinks", depth: 0 },
+  {
+    value: "alcoholic",
+    label: "Alcoholic drinks",
+    valueLabel: "Drinks › Alcoholic drinks",
+    depth: 1,
+  },
+  {
+    value: "cocktails",
+    label: "Cocktails",
+    valueLabel: "Drinks › Alcoholic drinks › Cocktails",
+    depth: 2,
+  },
+  { value: "food", label: "Food", valueLabel: "Food", depth: 0 },
+];
+
+function rowTexts(el: WtCombobox): string[] {
+  return optionRows(el).map((row) => row.textContent!.trim());
+}
+
+function startPaddings(el: WtCombobox): string[] {
+  return optionRows(el).map((row) => getComputedStyle(row).paddingInlineStart);
+}
+
+test("with no search text, a row is indented by its depth times --wt-space-4 beyond its own start padding", async () => {
+  const el = await mountWith('<wt-combobox label="Category"></wt-combobox>', TREE);
+  host.style.setProperty("--wt-space-3", "10px");
+  host.style.setProperty("--wt-space-4", "7px");
+  await userEvent.click(fieldParts(el).trigger);
+  expect(rowTexts(el)).toEqual([
+    "Uncategorised",
+    "Drinks",
+    "Alcoholic drinks",
+    "Cocktails",
+    "Food",
+  ]);
+  expect(startPaddings(el)).toEqual(["10px", "10px", "17px", "24px", "10px"]);
+});
+
+test("the closed trigger shows a chosen option's valueLabel, while its row in the list shows its label", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Category" value="cocktails"></wt-combobox>',
+    TREE,
+  );
+  expect(fieldParts(el).value.textContent!.trim()).toBe("Drinks › Alcoholic drinks › Cocktails");
+  await userEvent.click(fieldParts(el).trigger);
+  const chosen = el.shadowRoot!.querySelector('[role="option"][aria-selected="true"]')!;
+  expect(chosen.textContent!.trim()).toBe("Cocktails");
+});
+
+test("a multiple choice with one option chosen shows that option's valueLabel", async () => {
+  const el = await mountWith('<wt-combobox label="Category" multiple></wt-combobox>', TREE);
+  el.values = ["alcoholic"];
+  await el.updateComplete;
+  expect(fieldParts(el).value.textContent!.trim()).toBe("Drinks › Alcoholic drinks");
+});
+
+test("while searching, a row matches on its valueLabel and shows it, with no indent; clearing the search restores both", async () => {
+  const el = await mountWith('<wt-combobox label="Category"></wt-combobox>', TREE);
+  host.style.setProperty("--wt-space-3", "10px");
+  host.style.setProperty("--wt-space-4", "7px");
+  await userEvent.click(fieldParts(el).trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  await userEvent.type(search, "drinks ›");
+  expect(rowTexts(el)).toEqual([
+    "Drinks › Alcoholic drinks",
+    "Drinks › Alcoholic drinks › Cocktails",
+  ]);
+  expect(startPaddings(el)).toEqual(["10px", "10px"]);
+  await userEvent.clear(search);
+  expect(rowTexts(el)).toHaveLength(TREE.length);
+  expect(startPaddings(el)).toEqual(["10px", "10px", "17px", "24px", "10px"]);
+});
+
+test("at phone width, a panel near the right edge that widens for a search's full paths stays inside the gutter", async () => {
+  const [viewportWidth, viewportHeight] = [innerWidth, innerHeight];
+  await page.viewport(390, 844);
+  try {
+    const el = await mountWith('<wt-combobox label="Category" hide-label></wt-combobox>', TREE);
+    el.style.cssText = "position: fixed; left: 230px; top: 40px; width: 150px";
+    await el.updateComplete;
+    const { trigger, popup } = fieldParts(el);
+    await userEvent.click(trigger);
+    await new Promise(requestAnimationFrame);
+    const opened = popup.getBoundingClientRect();
+    expect(opened.right).toBeLessThanOrEqual(innerWidth - 8);
+    await userEvent.type(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "drinks ›");
+    await new Promise(requestAnimationFrame);
+    expect(rowTexts(el)).toEqual([
+      "Drinks › Alcoholic drinks",
+      "Drinks › Alcoholic drinks › Cocktails",
+    ]);
+    const searched = popup.getBoundingClientRect();
+    // Wider than when it opened, or the panel never had to move to stay on screen.
+    expect(searched.width).toBeGreaterThan(opened.width);
+    expect(searched.left).toBeGreaterThanOrEqual(8);
+    expect(searched.right).toBeLessThanOrEqual(innerWidth - 8);
+  } finally {
+    await page.viewport(viewportWidth, viewportHeight);
+  }
+});
+
+test("a panel opened near the bottom keeps its search box where it was while a search shrinks the list", async () => {
+  const el = await mountWith('<wt-combobox label="Category" hide-label></wt-combobox>', TREE);
+  el.style.cssText = `position: fixed; left: 20px; top: ${innerHeight - 60}px; width: 250px`;
+  await el.updateComplete;
+  const { trigger, popup } = fieldParts(el);
+  await userEvent.click(trigger);
+  await new Promise(requestAnimationFrame);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  const before = search.getBoundingClientRect().top;
+  // Pulled up above the trigger, or a shrinking list could not have moved it down.
+  expect(popup.getBoundingClientRect().top).toBeLessThan(trigger.getBoundingClientRect().bottom);
+  await userEvent.type(search, "cocktails");
+  await new Promise(requestAnimationFrame);
+  expect(rowTexts(el)).toEqual(["Drinks › Alcoholic drinks › Cocktails"]);
+  expect(search.getBoundingClientRect().top).toBeCloseTo(before, 0);
+  const box = popup.getBoundingClientRect();
+  expect(box.top).toBeGreaterThanOrEqual(8);
+  expect(box.bottom).toBeLessThanOrEqual(innerHeight - 8);
+});
+
+test("a search matching an option's label but not its valueLabel does not find it", async () => {
+  const el = await mountWith('<wt-combobox label="Category"></wt-combobox>', [
+    { value: "a", label: "Leaf", valueLabel: "Branch › Twig" },
+    { value: "b", label: "Leafy", depth: 1 },
+  ]);
+  await userEvent.click(fieldParts(el).trigger);
+  await userEvent.type(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "leaf");
+  expect(rowTexts(el)).toEqual(["Leafy"]);
+});
+
+test("a described row shows its valueLabel while searching", async () => {
+  const el = await mountWith('<wt-combobox label="Category"></wt-combobox>', [
+    { value: "a", label: "Twig", valueLabel: "Branch › Twig", description: "Small", depth: 1 },
+  ]);
+  await userEvent.click(fieldParts(el).trigger);
+  await userEvent.type(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "twig");
+  expect(el.shadowRoot!.querySelector(".option-label")!.textContent!.trim()).toBe("Branch › Twig");
+});
+
+test("stable-width reserves the width of each option's closed text, its valueLabel when it has one", async () => {
+  const el = await mountWith('<wt-combobox label="Category" stable-width></wt-combobox>', TREE);
+  const reserved = [...el.shadowRoot!.querySelectorAll(".width-option")].map((span) =>
+    span.textContent!.trim(),
+  );
+  expect(reserved).toEqual([
+    "Uncategorised",
+    "Drinks",
+    "Drinks › Alcoholic drinks",
+    "Drinks › Alcoholic drinks › Cocktails",
+    "Food",
+  ]);
+});
+
+async function mountLink(attrs = 'value="cocktails"', options: ComboboxOption[] = TREE) {
+  const el = await mountWith(
+    `<wt-combobox label="Category" appearance="link" ${attrs}></wt-combobox>`,
+    options,
+  );
+  el.actionLabel = "Change";
+  await el.updateComplete;
+  const root = el.shadowRoot!;
+  return {
+    el,
+    trigger: root.querySelector<HTMLButtonElement>(".trigger")!,
+    value: root.querySelector<HTMLElement>(".value")!,
+    action: root.querySelector<HTMLElement>(".action")!,
+    popup: root.querySelector<HTMLElement>("[popover]")!,
+  };
+}
+
+test('appearance="link" draws the chosen value then the action word, with no field box, drawn label or chevron', async () => {
+  const { el, trigger, value, action } = await mountLink();
+  const root = el.shadowRoot!;
+  expect(root.querySelector(".field")).toBeNull();
+  expect(root.querySelector("label")).toBeNull();
+  expect(root.querySelector(".chevron")).toBeNull();
+  expect(trigger.contains(value)).toBe(true);
+  expect(trigger.contains(action)).toBe(true);
+  expect(value.textContent!.trim()).toBe("Drinks › Alcoholic drinks › Cocktails");
+  expect(action.textContent!.trim()).toBe("Change");
+  expect(action.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+    value.getBoundingClientRect().right,
+  );
+  expect(getComputedStyle(trigger).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  expect(getComputedStyle(trigger).boxShadow).toBe("none");
+  expect(getComputedStyle(trigger).borderStyle).toBe("none");
+});
+
+test("the appearance property is reflected to its attribute, and defaults to the field", async () => {
+  const el = await mountWith('<wt-combobox label="Category"></wt-combobox>', TREE);
+  expect(el.appearance).toBe("field");
+  el.appearance = "link";
+  await el.updateComplete;
+  expect(el.getAttribute("appearance")).toBe("link");
+  expect(el.shadowRoot!.querySelector(".field")).toBeNull();
+});
+
+test("a link trigger is named by its label and its visible words, with no aria-label replacing them", async () => {
+  const { trigger } = await mountLink();
+  expect(trigger.hasAttribute("aria-label")).toBe(false);
+  expect(trigger.hasAttribute("aria-labelledby")).toBe(false);
+  await expect
+    .element(
+      page.getByRole("button", { name: "Category: Drinks › Alcoholic drinks › Cocktails Change" }),
+    )
+    .toBe(trigger);
+});
+
+test("a link trigger is at least --wt-tap-min tall", async () => {
+  const { trigger } = await mountLink();
+  host.style.setProperty("--wt-tap-min", "52px");
+  expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
+  expect(trigger.getBoundingClientRect().width).toBeGreaterThanOrEqual(52);
+});
+
+test("a link trigger with an error shows it under the trigger and marks the trigger invalid", async () => {
+  const { el, trigger } = await mountLink('value="cocktails" error="Choose a category"');
+  const error = el.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+  expect(error.textContent!.trim()).toBe("Choose a category");
+  expect(trigger.getAttribute("aria-invalid")).toBe("true");
+  expect(trigger.getAttribute("aria-describedby")).toBe(error.id);
+  expect(error.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    trigger.getBoundingClientRect().bottom,
+  );
+});
+
+test("a disabled link trigger is disabled and does not open", async () => {
+  const { trigger, popup, action } = await mountLink('value="cocktails" disabled');
+  host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+  expect(trigger.disabled).toBe(true);
+  expect(getComputedStyle(action).color).toBe("rgb(7, 8, 9)");
+  await userEvent.click(trigger, { force: true });
+  expect(popup.matches(":popover-open")).toBe(false);
+});
+
+test("a link trigger opens its list on a click, with the list's left edge at the value's", async () => {
+  const { el, trigger, value, popup } = await mountLink();
+  el.style.cssText = "position: fixed; left: 120px; top: 40px; width: 600px";
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+  await new Promise(requestAnimationFrame);
+  const box = popup.getBoundingClientRect();
+  expect(box.left).toBeCloseTo(trigger.getBoundingClientRect().left, 0);
+  expect(box.left).toBeCloseTo(value.getBoundingClientRect().left, 0);
+  expect(box.left).toBeCloseTo(120, 0);
+  expect(box.top).toBeCloseTo(trigger.getBoundingClientRect().bottom, 0);
+});
+
+test("a link trigger opens its list on Enter, with the chosen row active", async () => {
+  const { el, trigger, popup } = await mountLink();
+  trigger.focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+  expect(el.shadowRoot!.querySelector(".option.active")!.textContent!.trim()).toBe("Cocktails");
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
+  expect(el.shadowRoot!.activeElement).toBe(trigger);
+});
+
+test("choosing a row from a link trigger shows the new value's valueLabel", async () => {
+  const { el, trigger, value } = await mountLink();
+  const changes: unknown[] = [];
+  el.addEventListener("wt-change", (event) => changes.push((event as CustomEvent).detail));
+  await userEvent.click(trigger);
+  await userEvent.click(optionRows(el).find((row) => row.textContent!.trim() === "Food")!);
+  expect(changes).toEqual([{ value: "food" }]);
+  expect(value.textContent!.trim()).toBe("Food");
+});
+
+test("a focused link trigger draws the focus ring, having no field line to mark focus with", async () => {
+  const { el, trigger } = await mountLink();
+  host.style.setProperty("--wt-color-focus", "rgb(1, 2, 3)");
+  trigger.focus();
+  await userEvent.keyboard("{Shift}");
+  expect(el.shadowRoot!.activeElement).toBe(trigger);
+  expect(getComputedStyle(trigger).outlineStyle).toBe("solid");
+  expect(getComputedStyle(trigger).outlineColor).toBe("rgb(1, 2, 3)");
+});
+
+test("a long value on a link trigger wraps at phone width rather than being cut", async () => {
+  const long = "Drinks › Alcoholic drinks › Cocktails › Classic cocktails › Stirred › Served short";
+  const short = await mountLink('value="food"');
+  host.style.width = "390px";
+  const { trigger, value, action } = await mountLink('value="long"', [
+    { value: "long", label: "Served short", valueLabel: long, depth: 5 },
+  ]);
+  host.style.width = "390px";
+  expect(value.textContent!.trim()).toBe(long);
+  expect(value.scrollWidth).toBeLessThanOrEqual(value.clientWidth);
+  expect(value.getBoundingClientRect().height).toBeGreaterThan(
+    short.value.getBoundingClientRect().height,
+  );
+  expect(trigger.getBoundingClientRect().right).toBeLessThanOrEqual(
+    host.getBoundingClientRect().right,
+  );
+  expect(action.getBoundingClientRect().right).toBeLessThanOrEqual(
+    host.getBoundingClientRect().right,
+  );
+});
+
+test("stable-width is ignored by a link trigger", async () => {
+  const { el, trigger } = await mountLink('value="food" stable-width');
+  expect(el.shadowRoot!.querySelectorAll(".width-option")).toHaveLength(0);
+  expect(getComputedStyle(trigger).display).not.toBe("grid");
+  expect(trigger.getBoundingClientRect().width).toBeLessThan(el.getBoundingClientRect().width);
+});
+
+describe.each(["light", "dark"] as const)("a link trigger's colours (%s theme)", (theme) => {
+  function tokenColour(token: string): string {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${token})`;
+    host.append(probe);
+    const colour = getComputedStyle(probe).color;
+    probe.remove();
+    return colour;
+  }
+
+  test("the value paints --wt-color-text-muted and the action word --wt-color-primary-text", async () => {
+    const { value, action } = await mountLink();
+    host.setAttribute("data-theme", theme);
+    const muted = tokenColour("--wt-color-text-muted");
+    const primary = tokenColour("--wt-color-primary-text");
+    expect(muted).not.toBe(primary);
+    expect(getComputedStyle(value).color).toBe(muted);
+    expect(getComputedStyle(action).color).toBe(primary);
+  });
 });

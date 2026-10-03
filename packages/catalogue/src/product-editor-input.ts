@@ -144,6 +144,8 @@ export function parseProductEditorInput(
     isVariant,
   );
   const primaryCategoryId = nullableId(body.primaryCategoryId, "primaryCategoryId");
+  // A variant's category is always its parent's.
+  if (isVariant && primaryCategoryId !== null) invalid("primaryCategoryId");
   const tax = inheritable(body.vatClass, "vatClass", isVariant, vatClass);
   if (!Array.isArray(body.variants)) invalid("variants");
   const listed = emptyOnVariant(body.variants, "variants", isVariant);

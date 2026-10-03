@@ -81,6 +81,8 @@ product with no unit already shows (A178h). The unit is a quiet second word afte
   keys.
 - The category form (`apps/dashboard/src/widgets/category-form.ts`) stays for the one place that
   still needs it: creating a category from inside the product editor.
+  _2026-10-03 (A209): the product editor's Add category button is gone, so the form had no caller
+  and its element was removed; the helpers `category-form.ts` exports stay._
 
 The name box is a field primitive (`wt-input`), as CLAUDE.md §3 requires. It sits in a cell of
 `wt-data-table`, whose cells render in the table's shadow root, so it is styled with `part=`, never
@@ -127,7 +129,8 @@ like any menu; it does not reopen until the screen is next opened empty.
 the `folders.*` strings in `apps/dashboard/src/i18n/strings.ts` (for example "New folder" /
 "Nueva carpeta", "Folder path", "Carpetas"), the Move to… dialog, the delete confirmation, the
 selection count and the search placeholder. The product editor's "Main category" field keeps its
-name. The string KEYS may keep their `folders.` prefix or be renamed — before go-live either is
+name. _(2026-10-03, A209: the field is gone; the editor shows the product's category as a path
+with a Change link.)_ The string KEYS may keep their `folders.` prefix or be renamed — before go-live either is
 free; say which in the PR. The till's menu sections are not touched.
 
 ## 6. Smaller decisions (defaults; the owner may overturn them on the spec)

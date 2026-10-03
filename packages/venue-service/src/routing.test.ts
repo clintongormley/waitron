@@ -111,7 +111,7 @@ describe("chooseMaker", () => {
     });
   });
 
-  it("routes a variant with a folder of its own by that folder", () => {
+  it("routes by the category the facts carry, not by the routed product's", () => {
     const mocktail = { productId: "virgin", routedProductId: "mojito", categoryId: "food" };
     expect(chooseMaker(base, mocktail, null, null).decidedBy).toEqual({ kind: "default" });
   });

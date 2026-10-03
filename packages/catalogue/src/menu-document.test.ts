@@ -2,7 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { products, withTransaction, type Transaction } from "@waitron/db";
 import { decimal } from "@waitron/shared";
-import { useCatalogueDb } from "../test/fixtures.js";
+import { plantStoredCategory, useCatalogueDb } from "../test/fixtures.js";
 import {
   menusFixture,
   NO_ICE,
@@ -492,6 +492,16 @@ describe("applyLiveFields", () => {
       ["No ice", true],
       ["With ice", false],
     ]);
+  });
+
+  it("puts back a variant's category as its product's, whatever category the variant stores", async () => {
+    const f = await menusFixture(fx.db);
+    const lunch = await build(f.lunch);
+    await plantStoredCategory(fx.db, f.large, f.coldDrinks);
+    const live = await app((tx) => applyLiveFields(tx, [lunch]));
+    const lemonade = live.get(f.lunch)!.find((offer) => offer.productId === f.lemonade)!;
+    expect(lemonade.category).toBe("Soft drinks");
+    expect(lemonade.variants[0]).toMatchObject({ id: f.large, category: "Soft drinks" });
   });
 
   it("serves the VAT class the version froze, whatever each product's class is now", async () => {

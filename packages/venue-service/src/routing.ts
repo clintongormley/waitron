@@ -55,7 +55,7 @@ export type StationStatus =
 export interface ProductFacts {
   readonly productId: string;
   readonly routedProductId: string; // the parent's id for a variant, else productId
-  readonly categoryId: string | null; // the EFFECTIVE category (a variant's own, else its parent's)
+  readonly categoryId: string | null; // the EFFECTIVE category (a variant's is its parent's)
 }
 
 export type RoutingDecision =

@@ -9,7 +9,6 @@ import "@waitron/ui/src/components/wt-modal.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
   CatalogueSummary,
-  CategoryInput,
   CategorySummary,
   DashboardApi,
   ExtraList,
@@ -38,7 +37,6 @@ import {
   type PlacementFailure,
   type PlacementMenu,
 } from "../widgets/add-to-menus.js";
-import { categoryRefusalErrors } from "../widgets/category-form.js";
 import "../widgets/extra-list-form.js";
 import "../widgets/option-list-form.js";
 import "../widgets/product-editor.js";
@@ -130,8 +128,6 @@ export class CatalogueScreen extends LitElement {
   /** The category whose menu started the open add, or null for All products; undefined while none is. */
   #addFrom: string | null | undefined = undefined;
   #linkedProduct: string | null = null;
-  /** The parent the last nested category create named, to place a `category.not_found` about it. */
-  #submittedParent: string | null = null;
   /** Rebuilt only when a new refusal arrives: a form takes a new `fieldErrors` object as a new
    * refusal and shows again the ones the operator had since dismissed. */
   #childRefusals: { error: unknown; errors: ChildRefusals } | null = null;
@@ -526,10 +522,8 @@ export class CatalogueScreen extends LitElement {
   #childRefusalErrors(): ChildRefusals {
     const error = this.#child.error ?? null;
     if (this.#childRefusals?.error === error) return this.#childRefusals.errors;
-    const errors: ChildRefusals = { unit: {}, category: {}, lists: {} };
+    const errors: ChildRefusals = { unit: {}, lists: {} };
     if (error !== null && this.#child.kind === "unit") errors.unit = unitRefusalErrors(error);
-    if (error !== null && this.#child.kind === "category")
-      errors.category = categoryRefusalErrors(error, this.#submittedParent);
     if (error !== null && (this.#child.kind === "extras" || this.#child.kind === "options")) {
       // Keyed by the field path the server named, or `_form` when it names none.
       const params = (error as { params?: { field?: unknown } }).params ?? {};
@@ -542,7 +536,6 @@ export class CatalogueScreen extends LitElement {
 
   async #refreshRelated(kind: ProductChildKind): Promise<void> {
     if (kind === "unit") this.units = await this.api.background.listUnits();
-    if (kind === "category") this.categories = await this.api.background.listCategories();
     if (kind === "extras") this.extraLists = await this.api.background.listExtraLists();
     if (kind === "options") this.optionLists = await this.api.background.listOptionLists();
   }
@@ -585,15 +578,6 @@ export class CatalogueScreen extends LitElement {
     event.stopPropagation();
     void this.#submitChild(async () => {
       const value = await this.api.createUnit(event.detail.value);
-      return { id: value.id, name: value.name };
-    });
-  }
-
-  #submitCategory(event: CustomEvent<{ value: CategoryInput }>): void {
-    event.stopPropagation();
-    this.#submittedParent = event.detail.value.parentId ?? null;
-    void this.#submitChild(async () => {
-      const value = await this.api.createCategory(event.detail.value);
       return { id: value.id, name: value.name };
     });
   }
@@ -816,14 +800,6 @@ export class CatalogueScreen extends LitElement {
         @wt-submit=${this.#submitUnit}
         @wt-cancel=${() => this.#cancelChild("unit")}
       ></dashboard-unit-form>
-      <dashboard-category-form
-        .open=${this.#child.kind === "category"}
-        .busy=${this.#child.busy}
-        .categories=${this.categories}
-        .fieldErrors=${refusals.category}
-        @wt-submit=${this.#submitCategory}
-        @wt-cancel=${() => this.#cancelChild("category")}
-      ></dashboard-category-form>
       ${
         // Both list forms carry translated name fields, so they wait for the content languages
         // rather than offering a field in a guessed language.
@@ -880,7 +856,6 @@ function missingChoiceField(
 
 interface ChildRefusals {
   unit: UnitFormErrors;
-  category: Record<string, string>;
   lists: Record<string, string>;
 }
 

@@ -25,8 +25,7 @@ import "./allergen-dietary-picker.js";
 import "./image-upload.js";
 import "./variant-form.js";
 import { EACH_CHOICE } from "./variant-table.js";
-import { categoryPath } from "./category-form.js";
-import { categoryField } from "./classification-fields.js";
+import { categoryPathField, categoryPathText } from "./classification-fields.js";
 import {
   defaultLanguageHint,
   namesLine,
@@ -262,6 +261,16 @@ export class ProductEditor extends LitElement {
         margin: 0;
         color: var(--wt-color-text-muted);
       }
+      /* As tall as the product page's Change link, so the form below starts at the same height. */
+      .category-path {
+        display: flex;
+        align-items: center;
+        min-height: var(--wt-tap-min);
+        margin: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        overflow-wrap: anywhere;
+      }
       .nutrition-hints {
         gap: var(--wt-space-1);
         margin-top: var(--wt-space-3);
@@ -463,7 +472,6 @@ export class ProductEditor extends LitElement {
   private shownFields(): ReadonlySet<string> {
     const keys = [
       "name",
-      "primary",
       "kitchen-name",
       "tax",
       "unit",
@@ -472,7 +480,7 @@ export class ProductEditor extends LitElement {
       ...this.locales.flatMap((locale) => [`customer-name-${locale}`, `description-${locale}`]),
     ];
     if (this.api) keys.push("image");
-    if (this.inherited === null) keys.push("ordering", "modifier");
+    if (this.inherited === null) keys.push("primary", "ordering", "modifier");
     return new Set(keys);
   }
   private dismiss(...keys: string[]): void {
@@ -564,10 +572,6 @@ export class ProductEditor extends LitElement {
   private taxLabel(tax: { label: string; rate: string }) {
     return `${tax.label} (${tax.rate.replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1")}%)`;
   }
-  private categoryLabel(id: string) {
-    const category = this.categories.find((category) => category.id === id);
-    return category ? categoryPath(category, this.categories) : t("editor.missing_choice");
-  }
   private text(value: LocalizedText) {
     return resolveContentText(value, this.language, this.language);
   }
@@ -623,7 +627,6 @@ export class ProductEditor extends LitElement {
   /** A nested create returns through the composing screen, without reseeding the product. */
   selectRelated(kind: ProductChildKind, id: string): void {
     if (kind === "unit") this.change("unitId", id);
-    if (kind === "category") this.change("primaryCategoryId", id);
     if (kind === "courses") this.change("courseId", id);
     if (kind === "extras" || kind === "options") {
       if (this.draft.modifiers.some((ref) => ref.kind === kind && ref.id === id)) return;
@@ -659,7 +662,11 @@ export class ProductEditor extends LitElement {
     this.submitted = true;
     const value = this.currentValue;
     delete value.inherited;
-    if (this.inherited !== null && !(value.unitPrice ?? "").trim()) value.unitPrice = null;
+    if (this.inherited !== null) {
+      if (!(value.unitPrice ?? "").trim()) value.unitPrice = null;
+      // A variant is always in its product's category; the server refuses one of its own.
+      value.primaryCategoryId = null;
+    }
     if (restore) value.active = true;
     value.name = value.name.trim();
     value.kitchenName = value.kitchenName?.trim() || null;
@@ -734,35 +741,33 @@ export class ProductEditor extends LitElement {
     this.change("variants", variants);
   }
 
-  /** The main category. A variant's empty main category reads as its parent's, which the combobox
-   * names as its empty choice. */
+  /** The product's category as a path, with Change; a variant's page shows its product's path,
+   * which it cannot change. */
   private renderCategories() {
     const parent = this.inherited;
-    const parentCategory = parent?.primaryCategoryId
-      ? this.categoryLabel(parent.primaryCategoryId)
-      : null;
+    if (parent) {
+      const path = parent.primaryCategoryId
+        ? categoryPathText(parent.primaryCategoryId, this.categories, t("editor.missing_choice"))
+        : t("categories.uncategorised");
+      return html`<div class="group" data-section="categories">
+        <p class="category-path" data-test="category-path">
+          <span class="visually-hidden">${t("editor.classification")}: </span>${path}
+        </p>
+      </div>`;
+    }
     return html`<div class="group" data-section="categories">
-      <span class="group-label">${t("editor.classification")}</span>
-      ${categoryField({
+      ${categoryPathField({
         name: "primary",
-        label: t("editor.main_category"),
+        label: t("editor.classification"),
+        actionLabel: t("editor.change_category"),
         categories: this.categories,
         value: this.draft.primaryCategoryId,
-        noneLabel: parentCategory ?? t("categories.uncategorised"),
-        showNoneAsValue: parent === null,
+        noneLabel: t("categories.uncategorised"),
+        missingLabel: t("editor.missing_choice"),
         error: this.error("primary"),
         disabled: this.suspended,
         change: (id) => this.change("primaryCategoryId", id),
       })}
-      <div class="row">
-        <wt-button
-          variant="secondary"
-          data-test="add-category"
-          ?disabled=${this.suspended}
-          @click=${(event: Event) => this.related(event, "category")}
-          >${t("editor.add_category")}</wt-button
-        >
-      </div>
     </div>`;
   }
 
@@ -1515,6 +1520,7 @@ export class ProductEditor extends LitElement {
         }}
       >
         <div class="form">
+          ${this.renderCategories()}
           ${
             this.draft.active
               ? nothing
@@ -1522,7 +1528,7 @@ export class ProductEditor extends LitElement {
                   ${t("product.inactive_notice")}
                 </p>`
           }
-          ${keyed(this.generation, this.renderName(fields))} ${this.renderCategories()}
+          ${keyed(this.generation, this.renderName(fields))}
           <div class="group" data-section="available">
             ${switchField(
               fields,

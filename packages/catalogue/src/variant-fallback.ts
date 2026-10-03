@@ -8,20 +8,20 @@ import { productUnits } from "./schema/units.js";
  * `docs/developers/products.md`, under _Variants_).
  *
  * A `products` row with a `parent_id` is a variant. Every field in the inherited set below that the
- * variant leaves NULL reads as its parent's value; one it sets reads as its own. The exception is
- * the unit, which a variant inherits by having NO `product_units` row of its own — see the owner
- * join at the end. The three names are never inherited — a blank customer or kitchen name falls
- * back to the variant's OWN staff name — nor is anything that says what the row is (`id`,
- * `catalogue_id`, `parent_id`, `variant_order`), whether it is sold (`active`, `available`,
- * `ordering`), or when it was written.
+ * variant leaves NULL reads as its parent's value; one it sets reads as its own. The category is the
+ * one inherited field a variant cannot override: it always reads as its parent's, whatever the
+ * variant's own `category_id` holds. The unit is inherited by having NO `product_units` row of its
+ * own — see the owner join at the end. The three names are never inherited — a blank customer or
+ * kitchen name falls back to the variant's OWN staff name — nor is anything that says what the row
+ * is (`id`, `catalogue_id`, `parent_id`, `variant_order`), whether it is sold (`active`,
+ * `available`, `ordering`), or when it was written.
  *
  * The nullability of the four columns a variant may leave blank (`vat_class`, `pricing_unit`,
  * `unit_price`, `dietary_declarations`) stops here for reads that go through
  * `effectiveProductColumns`: their callers see non-null types. A variant's own price is read raw, and
  * may be blank, in the variant list (`ProductVariant.unitPrice`) and in the menu price chain
  * (`readOfferVariants`), and the product editor (`readProductEditor`) reads a variant's own price,
- * VAT class and dietary declarations raw, blanks included. Reads keyed on a product's main
- * category read each row's OWN `category_id`.
+ * VAT class and dietary declarations raw, blanks included.
  */
 
 /** A `products` row with no parent: a product in its own right, never a variant. */
@@ -77,6 +77,17 @@ function inherited<C extends AnyColumn>(
   return owned(column, parentColumn);
 }
 
+/** The parent's value on a variant, whatever the variant stores; the row's own on a product with no
+ * parent. Typed nullable. */
+function parentsAlways<C extends AnyColumn>(
+  column: C,
+  parentColumn: AnyColumn,
+): SQL<C["_"]["data"] | null> {
+  return sql`case when ${products.parentId} is null then ${column} else ${parentColumn} end`.mapWith(
+    column,
+  );
+}
+
 /**
  * Each inherited field's EFFECTIVE value, keyed by the `products` property it replaces. Valid only
  * in a query that reads `products` unaliased and has `.leftJoin(parentProducts, parentJoin)`.
@@ -86,7 +97,7 @@ export const effectiveProductColumns = {
   vatClass: owned(products.vatClass, parentProducts.vatClass),
   pricingUnit: owned(products.pricingUnit, parentProducts.pricingUnit),
   unitPrice: owned(products.unitPrice, parentProducts.unitPrice),
-  categoryId: inherited(products.categoryId, parentProducts.categoryId),
+  categoryId: parentsAlways(products.categoryId, parentProducts.categoryId),
   courseId: inherited(products.courseId, parentProducts.courseId),
   image: inherited(products.image, parentProducts.image),
   allergens: inherited(products.allergens, parentProducts.allergens),

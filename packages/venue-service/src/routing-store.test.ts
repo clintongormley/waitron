@@ -469,7 +469,7 @@ describe("stored preparation rules", () => {
       ).toEqual([[b, 0]]);
     }));
 
-  it("flags a product caught with all variants, but permits a variant in another folder", async () =>
+  it("flags a product caught with all variants, a variant's stored category of its own included", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       const earlier = await createException(tx, f.cfg, f.input);
@@ -488,7 +488,7 @@ describe("stored preparation rules", () => {
         (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.find(
           (e) => e.id === product,
         )?.neverMatches,
-      ).toBe(false);
+      ).toBe(true);
       await tx.update(products).set({ categoryId: null }).where(eq(products.id, f.variant));
       await updateException(tx, f.cfg, earlier, { ...f.input, zoneId: null, target: noPrep });
       expect(
@@ -849,6 +849,17 @@ describe("resolveMakers", () => {
       ).rejects.toMatchObject({
         code: "service_zone.not_found",
       });
+    }));
+  it("routes a variant holding a stored category of its own by its product's folder", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await tx.update(products).set({ categoryId: f.food }).where(eq(products.id, f.variant));
+      expect(
+        (await resolveMakers(tx, f.cfg, null, [f.variant], new Date("2026-10-02T18:30:00Z"))).get(
+          f.variant,
+        ),
+      ).toEqual({ kind: "made", route: { kind: "station", stationId: f.terraceBar } });
     }));
   it("keeps the first caller spelling and the effective variant folder", async () =>
     scoped(async (tx) => {

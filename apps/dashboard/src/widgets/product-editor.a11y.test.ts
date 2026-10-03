@@ -128,6 +128,7 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
     "modifiers",
     "open-sections",
     "categories",
+    "category-tree",
     "variant-window",
     "inactive",
     "variant-page",
@@ -156,8 +157,8 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
                   ? { ...coffee, active: false, available: false }
                   : state === "variant-page"
                     ? variantPage
-                    : state === "categories"
-                      ? { ...coffee, primaryCategoryId: "food" }
+                    : state === "categories" || state === "category-tree"
+                      ? { ...coffee, primaryCategoryId: "wine" }
                       : state === "ordering"
                         ? { ...coffee, ordering: "staff_only" }
                         : state === "photo"
@@ -170,6 +171,7 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
         categories: [
           { id: "drinks", name: "Drinks", parentId: null },
           { id: "food", name: "Food", parentId: null },
+          { id: "wine", name: "Wine", parentId: "drinks" },
         ],
         courses: [{ id: "starters", name: "Starters" }],
         fieldErrors:
@@ -211,13 +213,26 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
         expect(el.shadowRoot!.querySelector("[data-test=image-error]")).not.toBeNull();
     }
     if (state === "errors") el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
-    if (state === "categories") {
+    if (state === "categories" || state === "category-tree") {
       // Without this the scan could pass on an editor that drew no chosen category.
-      expect(
-        el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
-          'wt-combobox[name="primary"]',
-        )!.value,
-      ).toBe("food");
+      const field = el.shadowRoot!.querySelector<
+        HTMLElement & { value: string; updateComplete: Promise<unknown> }
+      >('wt-combobox[name="primary"]')!;
+      expect(field.value).toBe("wine");
+      await field.updateComplete;
+      if (state === "category-tree") {
+        // Open, so the scan reads the tree's rows, an indented one among them.
+        field.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+        await field.updateComplete;
+        const rows = [...field.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
+        expect(rows.map((row) => row.checkVisibility())).toEqual([true, true, true, true]);
+      }
+    }
+    if (state === "variant-page") {
+      // Without this the scan could pass on a variant's page that drew no category path.
+      expect(el.shadowRoot!.querySelector("[data-test=category-path]")!.textContent).toContain(
+        "Drinks",
+      );
     }
     if (state === "inactive") {
       // Without this the scan could pass on an editor that never drew the notice and Restore.

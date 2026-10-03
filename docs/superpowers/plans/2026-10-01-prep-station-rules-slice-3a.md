@@ -54,6 +54,9 @@ Each is a default this plan takes. Approving the plan approves them.
   subfolders. **Lost:** today a variant can carry a station of its own (the product editor's
   station field, `catalogue-api.ts:775`, scope `"any"`); after 3a a variant routes by its own folder
   or follows its parent.
+  _2026-10-03 (A209): a variant no longer routes by a category of its own — its category is always
+  its product's, so every "folder of its own" below no longer applies; see
+  [product-categories.md](../../developers/product-categories.md)._
 - **R5. A new claim or exception cannot name a switched-off station** (`route.station_inactive`, the
   code today's route writes use). Switching a station off later leaves its rules in place, flagged.
 - **R6. Deleting a folder deletes its claim and every exception naming it** (a database cascade).
@@ -155,6 +158,7 @@ These are the inputs likeliest to hurt a venue, each pinned by a test in the tas
    `venue.default_station_missing`. (Tasks 1, 3, 4)
 4. **A variant with a folder of its own.** A variant whose own category differs from its parent's
    routes by its own folder; a product exception naming the parent covers the variant. (Task 1)
+   _2026-10-03 (A209): no longer true — a variant routes by its product's folder; see R4's pointer._
 5. **Upgrading a database the old migrations built.** `scripts/migration-upgrade.test.ts` passes
    through the rebuild; afterwards the five core triggers on `products` and media's four
    product-image triggers all exist. (Task 5)
@@ -759,6 +763,8 @@ export async function claimFolderFor(tx: Transaction, cfg: Cfg, categoryId: stri
   station becomes `routeProductTo`; a category's becomes `claimFolderFor`. The test at
   `working-order.test.ts:7327-7328` gives a VARIANT a station of its own, which the new rule cannot
   express (R4): it becomes a variant with a folder of its own, claimed by that station.
+  _2026-10-03 (A209): a variant no longer routes by a category of its own, so this no longer sends
+  one variant elsewhere; see [product-categories.md](../../developers/product-categories.md)._
 
 **Keep the behaviour each old test protected.** Re-express, do not delete:
 - "zoned fire has nowhere to go" (`testing-zone-offers.test.ts:254-268`) and "still refuses a table
