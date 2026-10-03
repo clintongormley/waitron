@@ -1079,7 +1079,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     }
     this.filtersPanel.showPopover();
     this.filtersOpen = true;
-    this.filtersPanel.querySelector<HTMLButtonElement>(".filters-clear-all")?.focus();
+    this.filtersPanel.querySelector<HTMLElement>(".filter-section summary")?.focus();
     this.#positionFilters();
   }
 
