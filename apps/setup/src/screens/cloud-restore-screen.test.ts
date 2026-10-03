@@ -3,9 +3,10 @@ import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { SetupCloudRestoreScreen } from "./cloud-restore-screen.js";
 import "./cloud-restore-screen.js";
-import { OLD_BOX_PROBLEM } from "./old-box-question.js";
+import { oldBoxProblem } from "./old-box-question.js";
 
 afterEach(cleanupWidgets);
+afterEach(() => setLocale("en-GB"));
 const q = (el: SetupCloudRestoreScreen, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector);
 const approvedView = (pointId = "e8722eb0-3f02-4f35-920b-9b5f6bfb05e8") => ({
@@ -274,6 +275,7 @@ describe("Cloud restore screen", () => {
 
 describe("Cloud restore screen asking whether the old server is gone", () => {
   it("names when the old server last wrote, and restores only once the owner says it is gone", async () => {
+    setLocale("es-ES");
     const { el, host } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
       view: approvedView(),
       liveSince: "2026-09-23T11:58:00.000Z",
@@ -285,7 +287,7 @@ describe("Cloud restore screen asking whether the old server is gone", () => {
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(listener).not.toHaveBeenCalled();
-    expect(q(el, "#old-box-gone-error")!.textContent).toBe(OLD_BOX_PROBLEM);
+    expect(q(el, "#old-box-gone-error")!.textContent).toBe(oldBoxProblem());
     expect(q(el, "[data-test=old-box-gone]")!.getAttribute("aria-invalid")).toBe("true");
     await tick(el, "[data-test=old-box-gone]");
     expect(q(el, "#old-box-gone-error")).toBeNull();
@@ -366,10 +368,10 @@ describe("Cloud restore screen listing what is still unanswered", () => {
     });
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
-    expect(fieldMessages(el)).toEqual([ACKNOWLEDGE_PROBLEM, OLD_BOX_PROBLEM]);
+    expect(fieldMessages(el)).toEqual([ACKNOWLEDGE_PROBLEM, oldBoxProblem()]);
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
     await tick(el, "[data-test=acknowledge]");
-    expect(fieldMessages(el)).toEqual([OLD_BOX_PROBLEM]);
+    expect(fieldMessages(el)).toEqual([oldBoxProblem()]);
     expect(q(el, "#acknowledge-error")).toBeNull();
     const acknowledge = q(el, "[data-test=acknowledge]")!;
     expect(acknowledge.getAttribute("aria-invalid")).toBe("false");

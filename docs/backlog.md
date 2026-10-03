@@ -2507,9 +2507,6 @@ pop-up (C39, #828); Spanish and English with a language chooser (C42, #837); the
   ("Gestionar certificados importados de Windows", "Acceso a Llaveros", "Sus certificados"…), and
   the FNMT links still open FNMT's English pages. Check them on real Spanish systems with the item
   below.
-- `OLD_BOX_PROBLEM` (`apps/setup/src/screens/old-box-question.ts`) is kept, English only, because
-  `cloud-restore-screen.test.ts` imports it; the screens call `oldBoxProblem()`. Point the test at
-  the function and delete the constant.
 
 **Still open after #334:**
 

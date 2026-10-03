@@ -6,9 +6,6 @@ export function oldBoxProblem(): string {
   return t("old_box.problem");
 }
 
-/** @deprecated English only, so it cannot follow a language switch: call `oldBoxProblem()`. */
-export const OLD_BOX_PROBLEM = t("old_box.problem", "en-GB");
-
 function when(iso: string): TemplateResult {
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return html`${iso}`;
