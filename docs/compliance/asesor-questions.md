@@ -11,8 +11,9 @@ priority. Q9 is referenced from other documents; do not renumber it.
 
 On **2026-10-03** (W41s, the design for a fiscal chain AEAT disagrees with): **Q33 to Q40 added**
 in a new section, *Recovering from conflicts*. They replace the ten questions the design listed in its
-§10. Later the same day **Q5(f)** was added, on how new series are named. The standalone copy has no
-section for them.
+§10. Later the same day **Q5(f)** was added, on how new series are named. The standalone copy (the
+English and Spanish Word files) was updated the same day: its new section 6 carries Q33 to Q40 as 6.1
+to 6.8, and Q5(f) is its section 4.3's questions (e) and (f).
 
 On **2026-10-01** (lane B item B17): the owner decided **Q28** without the asesor — the full
 simplified invoice is issued when the table leaves, and a later payment is recorded against it —
