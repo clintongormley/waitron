@@ -66,6 +66,30 @@ describe("applyVenue: the one taxpayer row", () => {
     expect(rows.rows).toEqual([{ id: 1, country: "ES", tax_id: "B10000002" }]);
   });
 
+  it("reuses a venue when a retry gives the same day cutover without seconds", async () => {
+    const first = await applyVenue(planVenue(request("B10000005"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const shortCutover = request("B10000005");
+    shortCutover.location.dayCutover = "06:00";
+    const retry = applyVenue(planVenue(shortCutover, ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+
+    await expect(retry).resolves.toMatchObject({
+      locationId: first.locationId,
+      tillId: first.tillId,
+      nodeId: first.nodeId,
+      seriesIds: first.seriesIds,
+    });
+    const rows = await suite.db.execute<{ day_cutover: string }>(
+      sql`select day_cutover from locations`,
+    );
+    expect(rows.rows).toEqual([{ day_cutover: "06:00:00" }]);
+  });
+
   it("refuses a re-run whose tax id differs, by name", async () => {
     await applyVenue(planVenue(request("B10000003"), ALL_MODULES), {
       db: suite.db,

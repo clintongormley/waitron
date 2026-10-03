@@ -4831,15 +4831,13 @@ characters. Left open:
   neither plan dies on a `tenants_*` key. **Next action:** decide where the lock belongs — a
   database advisory lock around guard→stamp→apply is the obvious home — and prove it with two
   concurrent provisions against a real database, not with the row-level check alone.
-- **A venue plan giving `dayCutover` as `HH:MM` would make an idempotent re-provision fail.**
-  `packages/provisioning/src/venue-plan.ts` documents the field as `"HH:MM" or "HH:MM:SS"`, but on a
-  re-run `packages/provisioning/src/venue-apply.ts` compares the stored value — read back from a
-  `time` column, so always `HH:MM:SS` — against the plan's string with `===`. A plan carrying
-  `"06:00"` would therefore look like a different venue and be refused with
-  `provisioning.second_venue`. Latent, not live: every fixture and every caller uses the long form,
-  and the short form is not reachable through `dev:setup`, so nothing covers it either. **Next
-  action:** either normalise the value where the plan is built, or narrow the documented type to
-  `HH:MM:SS` — and add the failing case first.
+- **DONE — a short `dayCutover` and its long form now identify the same venue (W6).**
+  `planVenue` turns `"06:00"` into `"06:00:00"` before creating the location action. The
+  real-database retry test first applied the long form, then observed the short form fail with
+  `provisioning.second_venue` before the fix and pass afterwards. The old note's claim that the
+  database always reads a time value back in the long form was wrong: `timeOfDay` is a text column
+  (`packages/db/src/schema/columns.ts`), and a repeated short-form plan succeeded before this
+  change. The venue-plan test also checks the normalized action directly.
 
 ### B8. Module framework follow-ons
 
