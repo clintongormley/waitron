@@ -454,7 +454,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **The composition list lives in `@waitron/composition`, and it is the only place that names every
   module.** Generic code reaches the regime through the descriptor's `provisioning` and `fiscal`
   seats. The boundary is the swappable SLOT, not "any module". Guard: `scripts/module-seams.test.ts`
-  (root project, reads text)
+  (root project, blanks comments then reads text; the shared reader guesses whether `/` opens a
+  regular expression, and import-like strings can still match)
   — shrink its allowlist, never grow it. `@waitron/dashboard-modules` is the browser-side twin.
 - **A test-only dependency closes a workspace dependency loop as surely as a runtime one.** A suite
   needing packages from both ends of a loop goes in a package nothing depends on. Guard:
@@ -943,7 +944,8 @@ browser test** — most of these rules exist because a test passed while proving
   [testing-guide.md](docs/developers/testing-guide.md).
 - **`errors.ts` reachability is guarded once, in `scripts/errors-reachable.test.ts`.** Thirteen
   hand-copied per-package versions were deleted; six of them passed with `errors.ts` fully
-  unreachable. It reads TEXT, so a `from "./errors.js"` inside a comment fakes an edge.
+  unreachable. It blanks comments before reading TEXT; the shared reader guesses whether `/` opens
+  a regular expression, and an import-like string can still fake an edge.
 - **Vitest 4 ships no default coverage excludes at all.** `coverageConfigDefaults.exclude` is `[]`
   in 4.1.11 and there is no `all` key, where 3.2.7 carried a 17-entry list (`**/[.]**` among them)
   and `all: true`. What scopes a package's report now is its own `coverage.include`.

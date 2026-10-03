@@ -5598,12 +5598,10 @@ characters. Left open:
   replaced…", which holds the copy of `/--.*$/` in `scripts/module-graph-honesty.test.ts`: a fix to
   one touches the other's code.
 
-- **`scripts/errors-reachable.test.ts` and `scripts/module-seams.test.ts` read comments as code —
-  OPEN.** They deliberately strip no comments, so an import written inside one counts. The next
-  action is to add a failing commented-import case for each, then adopt the shared reader
-  (`blankComments`, `packages/shared/src/source-comments.ts`, which A128 gave
-  `scripts/spawn-timeout-budget.test.ts` and `scripts/write-path-tables.test.ts`) and update their
-  stated limits and `docs/developers/testing-guide.md`. `scripts/column-vocabulary.test.ts` also
+- **DONE — `scripts/errors-reachable.test.ts` and `scripts/module-seams.test.ts` ignore imports
+  inside comments (W7).** Each guard now scans text after `blankComments`, with a commented-import
+  regression case. The shared reader still guesses whether `/` opens a regular expression, and
+  imports written inside strings can still match. `scripts/column-vocabulary.test.ts` also
   has a `withoutComments`, left out on purpose: it runs only on the text between an import's
   braces, which its header says holds no string or template literal.
 
