@@ -171,6 +171,7 @@ describe("paper for a move to another station", () => {
             },
           ],
           "Grill",
+          grill.id,
         );
         return {
           notices: await listStationNotices(tx, cfg, bar.id),

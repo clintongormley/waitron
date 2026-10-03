@@ -19,7 +19,14 @@ import { createProduct } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, updatePrinter } from "@waitron/printing";
 import { createStation } from "./kitchen.js";
-import { enqueueKitchenTickets, enqueueWatcherCopies } from "./kitchen-print.js";
+import {
+  enqueueCorrectionSlips,
+  enqueueExtraCancelled,
+  enqueueHoldCorrections,
+  enqueueKitchenTickets,
+  enqueueStationMoved,
+  enqueueWatcherCopies,
+} from "./kitchen-print.js";
 import type { WatcherCopies } from "./kitchen-print.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
@@ -45,6 +52,286 @@ beforeAll(() => {
 });
 
 describe("watcher paper", () => {
+  it("sends correction slips to the watchers of each dish even without station paper", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    cfg.locale = "en-GB";
+    const result = await withTransaction(db, async (tx) => {
+      const grill = await createStation(tx, cfg, { name: "Grill", isDefault: true });
+      const bar = await createStation(tx, cfg, { name: "Bar" });
+      const watcherIds: string[] = [];
+      for (const [name, stationIds] of [
+        ["Both", [grill.id, bar.id]],
+        ["Grill only", [grill.id]],
+      ] as const) {
+        const watcher = await createWatcher(tx, cfg, {
+          name,
+          runsPass: false,
+          everyStation: false,
+          stationIds: [...stationIds],
+          everyZone: true,
+          zoneIds: [],
+        });
+        const printer = await createPrinter(
+          tx,
+          { locationId: cfg.locationId },
+          {
+            name,
+            transport: "cloud_poll",
+            pollId: `poll-${randomUUID()}`,
+          },
+        );
+        await setPrinterWatcher(tx, cfg, printer.id, watcher.id);
+        await tx.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, printer.id));
+        watcherIds.push(printer.id);
+      }
+      const products: string[] = [];
+      for (const [name, stationId] of [
+        ["Steak", grill.id],
+        ["Beer", bar.id],
+      ] as const) {
+        const product = await createProduct(tx, {
+          catalogueId,
+          categoryId: null,
+          name,
+          kitchenName: name.toUpperCase(),
+          pricingUnit: "each",
+          unitPrice: "1.50",
+          vatClass: "general",
+        });
+        await routeProductTo(tx, cfg, product.id, stationId);
+        products.push(product.id);
+      }
+      const orderId = await fireNewOrder(
+        tx,
+        cfg,
+        products.map((productId) => ({ productId, quantity: "1" })),
+      );
+      const items = await tx
+        .select({ lineId: ticketItems.workingOrderLineId, stationId: ticketItems.stationId })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      const beer = items.find((item) => item.stationId === bar.id)!;
+      const steak = items.find((item) => item.stationId === grill.id)!;
+      await enqueueCorrectionSlips(
+        tx,
+        cfg,
+        orderId,
+        [{ workingOrderLineId: beer.lineId, stationId: bar.id, quantity: 1000, wasStarted: false }],
+        "VOID",
+      );
+      await enqueueCorrectionSlips(
+        tx,
+        cfg,
+        orderId,
+        [
+          {
+            workingOrderLineId: steak.lineId,
+            stationId: grill.id,
+            quantity: 1000,
+            wasStarted: false,
+          },
+        ],
+        "RECALLED",
+      );
+      const held = {
+        workingOrderLineId: beer.lineId,
+        stationId: bar.id,
+        quantity: 1000,
+        wasStarted: false,
+        group: 1,
+      };
+      await enqueueHoldCorrections(tx, cfg, orderId, [held], {
+        kind: "HOLD CHANGED",
+        direction: "added",
+      });
+      await enqueueHoldCorrections(tx, cfg, orderId, [held], { kind: "HOLD CANCELLED" });
+      await enqueueExtraCancelled(tx, cfg, orderId, held, "LIME");
+      return { watcherIds, jobs: await tx.select().from(printJobs) };
+    });
+    const both = result.jobs.filter((job) => job.printerId === result.watcherIds[0]);
+    const grill = result.jobs.filter((job) => job.printerId === result.watcherIds[1]);
+    expect(both).toHaveLength(6);
+    expect(printedLines(both[1]!.payload).join(" ")).toContain("BEER");
+    expect(printedLines(both[1]!.payload).join(" ")).toContain("VOID");
+    expect(printedLines(both[2]!.payload).join(" ")).toContain("RECALLED");
+    expect(printedLines(both[3]!.payload).join(" ")).toContain("HOLD CHANGED");
+    expect(printedLines(both[4]!.payload).join(" ")).toContain("HOLD CANCELLED");
+    expect(printedLines(both[5]!.payload).join(" ")).toContain("LIME");
+    expect(grill).toHaveLength(2);
+    expect(result.jobs.every((job) => job.kind === "document")).toBe(true);
+  });
+
+  it("filters made-here records from every watcher slip and copy path", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const result = await withTransaction(db, async (tx) => {
+      const grill = await createStation(tx, cfg, { name: "Grill", isDefault: true });
+      const bar = await createStation(tx, cfg, { name: "Bar" });
+      const printerIds: string[] = [];
+      for (const [name, stationIds] of [
+        ["Old", [grill.id]],
+        ["New", [bar.id]],
+      ] as const) {
+        const watcher = await createWatcher(tx, cfg, {
+          name,
+          runsPass: false,
+          everyStation: false,
+          stationIds: [...stationIds],
+          everyZone: true,
+          zoneIds: [],
+        });
+        const printer = await createPrinter(
+          tx,
+          { locationId: cfg.locationId },
+          {
+            name,
+            transport: "cloud_poll",
+            pollId: `poll-${randomUUID()}`,
+          },
+        );
+        await setPrinterWatcher(tx, cfg, printer.id, watcher.id);
+        printerIds.push(printer.id);
+      }
+      const product = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Lager",
+        kitchenName: "LAGER",
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      await routeProductTo(tx, cfg, product.id, grill.id);
+      const orderId = await fireNewOrder(tx, cfg, [{ productId: product.id, quantity: "1" }]);
+      const [item] = await tx
+        .select({ lineId: ticketItems.workingOrderLineId })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      const baseline = await tx.select().from(printJobs);
+      await tx
+        .update(ticketItems)
+        .set({ madeHere: true })
+        .where(eq(ticketItems.workingOrderLineId, item!.lineId));
+      await enqueueStationMoved(
+        tx,
+        cfg,
+        orderId,
+        [
+          {
+            workingOrderLineId: item!.lineId,
+            stationId: grill.id,
+            quantity: 1000,
+            wasStarted: false,
+            group: 1,
+          },
+        ],
+        "Bar",
+        bar.id,
+      );
+      const afterSlip = await tx.select().from(printJobs);
+      await enqueueKitchenTickets(
+        tx,
+        cfg,
+        orderId,
+        [{ workingOrderLineId: item!.lineId, stationId: bar.id, quantity: 1000 }],
+        { watchers: { newSince: grill.id } },
+      );
+      const afterNewSince = await tx.select().from(printJobs);
+      await enqueueWatcherCopies(
+        tx,
+        cfg,
+        orderId,
+        [{ workingOrderLineId: item!.lineId, stationId: bar.id, quantity: 1000 }],
+        {
+          rerouted: new Map([[item!.lineId, { stationId: grill.id, stationName: "Grill" }]]),
+        },
+      );
+      return {
+        baseline,
+        afterSlip,
+        afterNewSince,
+        jobs: await tx.select().from(printJobs),
+        printerIds,
+      };
+    });
+    const count = (jobs: typeof result.jobs) =>
+      jobs.filter((job) => result.printerIds.includes(job.printerId)).length;
+    expect(count(result.afterSlip)).toBe(count(result.baseline));
+    expect(count(result.afterNewSince)).toBe(count(result.baseline));
+    expect(count(result.jobs)).toBe(count(result.baseline));
+  });
+  it("sends a station move slip only to a watcher that stops following the dish", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    cfg.locale = "en-GB";
+    const result = await withTransaction(db, async (tx) => {
+      const grill = await createStation(tx, cfg, { name: "Grill", isDefault: true });
+      const downstairs = await createStation(tx, cfg, { name: "Downstairs grill" });
+      const { id: burger } = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Burger",
+        kitchenName: "BURG",
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      await routeProductTo(tx, cfg, burger, grill.id);
+      const ids: string[] = [];
+      for (const [name, stationIds] of [
+        ["Old only", [grill.id]],
+        ["Both", [grill.id, downstairs.id]],
+        ["New only", [downstairs.id]],
+      ] as const) {
+        const watcher = await createWatcher(tx, cfg, {
+          name,
+          runsPass: false,
+          everyStation: false,
+          stationIds: [...stationIds],
+          everyZone: true,
+          zoneIds: [],
+        });
+        const printer = await createPrinter(
+          tx,
+          { locationId: cfg.locationId },
+          {
+            name,
+            transport: "cloud_poll",
+            pollId: `poll-${randomUUID()}`,
+          },
+        );
+        await setPrinterWatcher(tx, cfg, printer.id, watcher.id);
+        ids.push(printer.id);
+      }
+      const orderId = await fireNewOrder(tx, cfg, [{ productId: burger, quantity: "1" }]);
+      const [item] = await tx
+        .select({ id: ticketItems.workingOrderLineId })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      await enqueueStationMoved(
+        tx,
+        cfg,
+        orderId,
+        [
+          {
+            workingOrderLineId: item!.id,
+            stationId: grill.id,
+            quantity: 1000,
+            wasStarted: false,
+          },
+        ],
+        "Downstairs grill",
+        downstairs.id,
+      );
+      return ids.map((id) => ({ id, jobs: [] as string[] }));
+    });
+    const jobs = await withTransaction(db, (tx) => tx.select().from(printJobs));
+    const slips = result.map(({ id }) =>
+      jobs.filter((job) => job.printerId === id).map((job) => printedLines(job.payload).join(" ")),
+    );
+    expect(slips[0]).toHaveLength(2);
+    expect(slips[0]![1]).toContain("MOVED TO DOWNSTAIRS GRILL");
+    expect(slips[1]).toHaveLength(1);
+    expect(slips[2]).toHaveLength(0);
+  });
   it("builds an 80mm and a 58mm copy for two printers on one watcher", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const result = await withTransaction(db, async (tx) => {

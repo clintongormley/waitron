@@ -584,6 +584,7 @@ async function planKitchenTickets(
     }
   }
   if (watcherRows.length > 0) {
+    const printable = await withoutMadeHere(tx, firedItems);
     const zoneId = (await orderWatchZones(tx, cfg, [order])).get(orderId) ?? null;
     const byWatcher = new Map<string, WatcherPrinter[]>();
     for (const printer of watcherRows) {
@@ -605,7 +606,7 @@ async function planKitchenTickets(
       );
       if (seen.length === 0) continue;
       const sections = new Map<string | null, FiredItem[]>();
-      for (const fired of firedItems) {
+      for (const fired of printable) {
         if (!seen.some((station) => station.id === fired.stationId)) continue;
         const previous = rerouted?.get(fired.workingOrderLineId);
         const from =
@@ -808,11 +809,10 @@ async function withoutMadeHere<T extends { workingOrderLineId: string }>(
 
 /**
  * Record a kitchen notice per item for a RECALL ({@link recallLines}) or VOID ({@link removeFromLine})
- * of a line that had already fired, then enqueue a correction slip per item where its station has
- * an active printer; callers pass only fired lines. The notice is recorded whether or not a printer
- * exists, so a station screen sees every correction. Each slip goes to every active printer on the
- * line's station, whatever its scope, and prints the item through {@link buildTicketItems}, at the
- * item's quantity. The header's never-block argument applies unchanged.
+ * of a line that had already fired, then enqueue a correction slip per item for its station and
+ * watchers; callers pass only fired lines. The notice is recorded whether or not a printer exists,
+ * so a station screen sees every correction. Each slip prints the item through
+ * {@link buildTicketItems}, at the item's quantity. The header's never-block argument applies unchanged.
  *
  * A void must call this before deleting the line: the delete cascades its ticket item away, and both
  * the notice and the slip re-read the line from `working_order_lines`.
@@ -844,6 +844,7 @@ export async function enqueueStationMoved(
   orderId: string,
   items: CorrectionItem[],
   toStationName: string,
+  toStationId: string,
 ): Promise<void> {
   if (items.length === 0) return;
   await VENUE_SERVICE.recordKitchenNotices(
@@ -860,13 +861,24 @@ export async function enqueueStationMoved(
   const fired = items.filter((item) => item.group === undefined);
   const held = items.filter((item) => item.group !== undefined);
   if (fired.length > 0)
-    await printCorrectionSlips(tx, cfg, orderId, fired, {
-      kind: "TO STATION",
-      toStation: toStationName,
-      locale: cfg.locale,
-    });
+    await printCorrectionSlips(
+      tx,
+      cfg,
+      orderId,
+      fired,
+      {
+        kind: "TO STATION",
+        toStation: toStationName,
+        locale: cfg.locale,
+      },
+      undefined,
+      { kind: "followed_until", toStationId },
+    );
   if (held.length > 0)
-    await printCorrectionSlips(tx, cfg, orderId, held, { kind: "HOLD CANCELLED" });
+    await printCorrectionSlips(tx, cfg, orderId, held, { kind: "HOLD CANCELLED" }, undefined, {
+      kind: "followed_until",
+      toStationId,
+    });
 }
 
 /**
@@ -996,7 +1008,12 @@ function toNoticeItem(item: CorrectionItem) {
   };
 }
 
-/** One slip per item, to every active printer on its station, headed with the order's CURRENT table. */
+type WatcherSlipRule =
+  | { kind: "follows" }
+  | { kind: "followed_in"; zoneIds: readonly (string | null)[] }
+  | { kind: "followed_until"; toStationId: string };
+
+/** One slip per item, to its station and eligible watcher printers, headed with the current table. */
 async function printCorrectionSlips(
   tx: Transaction,
   cfg: TillConfig,
@@ -1004,15 +1021,23 @@ async function printCorrectionSlips(
   items: CorrectionItem[],
   change: CorrectionChange,
   knownHeader?: OrderHeader,
+  watchers: WatcherSlipRule = { kind: "follows" },
 ): Promise<void> {
   const stationIds = [...new Set(items.map((i) => i.stationId))];
   const mappingRows = await printerMappings(tx, stationIds);
-  if (mappingRows.length === 0) return;
+  const watcherRows = await readWatcherPrinters(tx, cfg);
+  if (mappingRows.length === 0 && watcherRows.length === 0) return;
 
   const lineIds = [...new Set(items.map((i) => i.workingOrderLineId))];
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
   const stationNames = await readStations(tx, stationIds);
   const header = knownHeader ?? (await readOrderHeader(tx, cfg, orderId));
+  const watcherItems = watcherRows.length === 0 ? [] : await withoutMadeHere(tx, items);
+  const zoneId =
+    watcherRows.length === 0 || watchers.kind === "followed_in"
+      ? null
+      : ((await orderWatchZones(tx, cfg, [header])).get(orderId) ?? null);
+  const watcherLineIds = new Set(watcherItems.map((item) => item.workingOrderLineId));
 
   const printersByStation = new Map<string, (EscSetting & { printerId: string })[]>();
   for (const mapping of mappingRows) {
@@ -1030,11 +1055,25 @@ async function printCorrectionSlips(
 
   for (const target of items) {
     const attachedPrinters = printersByStation.get(target.stationId);
-    // A line whose station has no active printer produced no paper — nothing to correct there.
-    if (attachedPrinters === undefined) continue;
+    const watcherPrinters = watcherLineIds.has(target.workingOrderLineId)
+      ? watcherRows.filter((printer) => {
+          const sees = (stationId: string, zone: string | null) =>
+            watcherSees(printer.follows, { stationId, zoneId: zone });
+          switch (watchers.kind) {
+            case "follows":
+              return sees(target.stationId, zoneId);
+            case "followed_in":
+              return watchers.zoneIds.some((zone) => sees(target.stationId, zone));
+            case "followed_until":
+              return sees(target.stationId, zoneId) && !sees(watchers.toStationId, zoneId);
+          }
+        })
+      : [];
+    const targets = [...(attachedPrinters ?? []), ...watcherPrinters];
+    if (targets.length === 0) continue;
     const entry = itemsByLine.get(target.workingOrderLineId)!;
     const item = atFiredQuantity(entry.item, target);
-    for (const group of groupByLayout(attachedPrinters)) {
+    for (const group of groupByLayout(targets)) {
       const bytes = formatCorrectionSlip(
         {
           ...change,
@@ -1053,11 +1092,12 @@ async function printCorrectionSlips(
   }
 }
 
-/** An order's fired kitchen work, and the table and order number its correction slips name. */
+/** An order's fired kitchen work and its table, order number and pre-move zone. */
 export interface SentWork {
   tableLabel: string | null;
   orderNumber: string;
   ticketItemIds: ReadonlySet<string>;
+  zoneId: string | null;
 }
 
 /** Read before a path moves an order's lines to another table. */
@@ -1070,10 +1110,17 @@ export async function readSentWork(
     .select({ id: ticketItems.id })
     .from(ticketItems)
     .where(and(eq(ticketItems.workingOrderId, orderId), isNotNull(ticketItems.firedAt)));
-  if (fired.length === 0) return { tableLabel: null, orderNumber: "", ticketItemIds: new Set() };
+  if (fired.length === 0)
+    return { tableLabel: null, orderNumber: "", ticketItemIds: new Set(), zoneId: null };
+  const header = await readOrderHeader(tx, cfg, orderId);
+  const zoneId =
+    (await readWatcherPrinters(tx, cfg)).length === 0
+      ? null
+      : ((await orderWatchZones(tx, cfg, [header])).get(orderId) ?? null);
   return {
-    ...(await readOrderHeader(tx, cfg, orderId)),
+    ...header,
     ticketItemIds: new Set(fired.map((row) => row.id)),
+    zoneId,
   };
 }
 
@@ -1081,7 +1128,7 @@ export async function readSentWork(
  * Tell the kitchen of sent work that moved to another table. When the table a correction slip names
  * for `toOrderId` now differs from the one `before` read, each of `before`'s fired items now on
  * `toOrderId` gets a `moved` notice, at the quantity its ticket asks for, and a MOVED slip where its
- * station has an active printer. `splitFrom` maps a ticket item a split made to the one it copied.
+ * station or a watcher has an active printer. `splitFrom` maps a ticket item a split made to the one it copied.
  * `force` tells the kitchen whatever the two labels read: a bill moved to or from the counter can
  * read the same on both sides.
  */
@@ -1179,6 +1226,15 @@ async function notifyMoved(
       movedFrom: { tableLabel: before.tableLabel, orderNumber: before.orderNumber },
     },
     header,
+    {
+      kind: "followed_in",
+      zoneIds: [
+        before.zoneId,
+        ...((await readWatcherPrinters(tx, cfg)).length === 0
+          ? []
+          : [(await orderWatchZones(tx, cfg, [header])).get(toOrderId) ?? null]),
+      ],
+    },
   );
 }
 
@@ -1228,11 +1284,20 @@ export async function readPartiesSentWork(
     cfg.locationId,
     [...sent.values()].map(({ bill }) => bill),
   );
+  const zones =
+    (await readWatcherPrinters(tx, cfg)).length === 0
+      ? new Map<string, string | null>()
+      : await orderWatchZones(
+          tx,
+          cfg,
+          [...sent.values()].map(({ bill }) => bill),
+        );
   for (const { bill, fired } of sent.values()) {
     work.set(bill.id, {
       tableLabel: labels.get(bill.id)!,
       orderNumber: String(bill.orderNumber),
       ticketItemIds: fired,
+      zoneId: zones.get(bill.id) ?? null,
     });
   }
   return work;

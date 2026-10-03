@@ -168,6 +168,7 @@ import {
   enqueueCorrectionSlips,
   enqueueExtraCancelled,
   enqueueKitchenTickets,
+  enqueueWatcherCopies,
   firedQuantity,
   isStarted,
   ordersWithPrintProblem,
@@ -1867,7 +1868,7 @@ async function finishRelease(
   const ordinary = [...fired, ...extras.filter((item) => item.firedAt !== null)].filter(
     (item) => !rerouted.has(item.workingOrderLineId),
   );
-  await enqueueKitchenTickets(tx, cfg, orderId, ordinary, { mark });
+  await enqueueKitchenTickets(tx, cfg, orderId, ordinary, { mark, watchers: "none" });
   const byOldStation = new Map<string, { from: string; items: FiredItem[] }>();
   for (const item of fired) {
     const old = rerouted.get(item.workingOrderLineId);
@@ -1877,7 +1878,14 @@ async function finishRelease(
     byOldStation.set(old.stationId, bucket);
   }
   for (const { from, items } of byOldStation.values())
-    await enqueueKitchenTickets(tx, cfg, orderId, items, { from });
+    await enqueueKitchenTickets(tx, cfg, orderId, items, { from, watchers: "none" });
+  await enqueueWatcherCopies(
+    tx,
+    cfg,
+    orderId,
+    [...fired, ...extras.filter((item) => item.firedAt !== null)],
+    { mark, rerouted },
+  );
   if (released.length > 0) await bumpRevision(tx, [orderId]);
 }
 

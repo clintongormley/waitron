@@ -9,12 +9,15 @@ import {
   floorZones,
   orderGroups,
   partyTables,
+  printJobs,
   tableServiceStatuses,
   ticketItems,
   workingOrderLines,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { writeClearingWorkflow } from "@waitron/venue-service";
+import { createPrinter } from "@waitron/printing";
+import { createStation } from "./kitchen.js";
 import { splitBill } from "./bill-actions.js";
 import { readDrafts, saveDraft } from "./order-drafts.js";
 import { placeGroups } from "./order-groups.js";
@@ -30,6 +33,9 @@ import {
   type TableActionOptions,
 } from "./table-actions.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { routeProductTo } from "./testing/zone-offers.js";
+import { createWatcher, setPrinterWatcher } from "./watchers.js";
+import { decodeTicket } from "./testing/decode-ticket.js";
 import {
   OPERATOR,
   activeTablesOf,
@@ -269,6 +275,72 @@ function noticesOn(billIds: string[]) {
 }
 
 describe("move guests", () => {
+  it("sends MOVED to watchers of both the old and new zones, but not a third zone", async () => {
+    const indoor = await v.table(`Indoor ${randomUUID()}`);
+    const terrace = await v.table(`Terrace ${randomUUID()}`, terrazaZone);
+    const thirdZone = await act(async (tx) => {
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: v.cfg.locationId, name: `Third ${randomUUID()}` })
+        .returning({ id: floorZones.id });
+      return (
+        await offerProducts(tx, v.cfg, { zone: { zoneId: zone!.id }, serviceMode: "table_tab" })
+      ).zoneId;
+    });
+    const station = await act(async (tx) => {
+      const station = await createStation(tx, v.cfg, {
+        name: `Grill ${randomUUID()}`,
+        isDefault: true,
+      });
+      await routeProductTo(tx, v.cfg, v.productId("Burger"), station.id);
+      return station;
+    });
+    const printerIds = await act(async (tx) => {
+      const ids: string[] = [];
+      for (const [name, zoneId] of [
+        ["Terrace", terrazaZone],
+        ["Indoor", v.tables.zoneId],
+        ["Third", thirdZone],
+      ] as const) {
+        const watcher = await createWatcher(tx, v.cfg, {
+          name: `${name} ${randomUUID()}`,
+          runsPass: false,
+          everyStation: false,
+          stationIds: [station.id],
+          everyZone: false,
+          zoneIds: [zoneId],
+        });
+        const printer = await createPrinter(
+          tx,
+          { locationId: v.cfg.locationId },
+          {
+            name: `${name} ${randomUUID()}`,
+            transport: "cloud_poll",
+            pollId: randomUUID(),
+          },
+        );
+        await setPrinterWatcher(tx, v.cfg, printer.id, watcher.id);
+        ids.push(printer.id);
+      }
+      return ids;
+    });
+    const party = await seat(v, terrace);
+    await order(v, party.tabId, "Burger");
+    await placeByHand(v, party.tabId);
+    const before = await act((tx) => tx.select().from(printJobs));
+    const moving = await opts(party.partyId);
+    await act((tx) => moveGuests(tx, v.cfg, party.partyId, indoor, moving));
+    const after = await act((tx) => tx.select().from(printJobs));
+    const added = after.filter((job) => !before.some((prior) => prior.id === job.id));
+    expect(added.filter((job) => job.printerId === printerIds[0])).toHaveLength(1);
+    expect(added.filter((job) => job.printerId === printerIds[1])).toHaveLength(1);
+    expect(added.filter((job) => job.printerId === printerIds[2])).toHaveLength(0);
+    for (const printerId of printerIds.slice(0, 2)) {
+      expect(decodeTicket(added.find((job) => job.printerId === printerId)!.payload)).toContain(
+        "MOVED",
+      );
+    }
+  });
   it("moves the party off all its tables to a free one, and the tables left behind need clearing", async () => {
     await withClearing(async () => {
       const [m4, m5, m9] = await tables("Mesa", 4, 5, 9);

@@ -48,6 +48,7 @@ import { routeProductTo } from "./testing/zone-offers.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { moveDishesToStation, stillMovable } from "./station-move.js";
+import { createWatcher, setPrinterWatcher } from "./watchers.js";
 import {
   addTabRound,
   carveOffLines,
@@ -827,7 +828,7 @@ describe("release", () => {
   });
 
   it("leaves a made-here drink untouched beside a held dish that reroutes", async () => {
-    const { deviceId, routeId } = await inTx(venue, async (tx) => {
+    const { deviceId, routeId, watcherPrinter } = await inTx(venue, async (tx) => {
       const [profile] = await tx
         .insert(deviceProfiles)
         .values({ name: `Bar till ${randomUUID()}`, formFactor: "till", capabilities: [] })
@@ -850,7 +851,26 @@ describe("release", () => {
         productId: venue.productId("Vino"),
         target: { kind: "station", stationId: grill },
       });
-      return { deviceId: device!.id, routeId };
+      const watcher = await createWatcher(tx, venue.cfg, {
+        name: `Every station ${randomUUID()}`,
+        runsPass: false,
+        everyStation: true,
+        stationIds: [],
+        everyZone: true,
+        zoneIds: [],
+      });
+      const printer = await createPrinter(
+        tx,
+        { locationId: venue.cfg.locationId },
+        {
+          name: `Every station ${randomUUID()}`,
+          transport: "cloud_poll",
+          pollId: randomUUID(),
+        },
+      );
+      await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
+      await writePrintHeldWork(tx, true);
+      return { deviceId: device!.id, routeId, watcherPrinter: printer.id };
     });
     const tableId = await venue.table(`M-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
@@ -886,6 +906,9 @@ describe("release", () => {
     const dishItem = itemsBefore.find((item) => !item.madeHere)!;
     expect(madeHere).toMatchObject({ stationId: bar, state: "ready", firedAt: expect.any(String) });
     expect(dishItem).toMatchObject({ stationId: grill, firedAt: null });
+    expect(
+      (await jobs(watcherPrinter)).map((job) => decodeTicket(job.payload).includes("CAÑA")),
+    ).toEqual([false]);
     const at = new Date("2026-10-02T18:45:00.000Z");
     await inTx(venue, async (tx) => {
       await setStationFallback(tx, venue.cfg, bar, null);
@@ -915,6 +938,9 @@ describe("release", () => {
         (await jobs(barPrinter))
           .slice(barJobs)
           .every((job) => !decodeTicket(job.payload).includes("CAÑA")),
+      ).toBe(true);
+      expect(
+        (await jobs(watcherPrinter)).every((job) => !decodeTicket(job.payload).includes("CAÑA")),
       ).toBe(true);
     } finally {
       vi.useRealTimers();
@@ -1178,6 +1204,194 @@ describe("release", () => {
 });
 
 describe("moveDishesToStation", () => {
+  it("releases a rerouted HOLD dish once per watcher with the right correction or heading", async () => {
+    await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+    const printerIds = await inTx(venue, async (tx) => {
+      const ids: string[] = [];
+      for (const [name, stationIds] of [
+        [`Both release ${randomUUID()}`, [bar, grill]],
+        [`Old release ${randomUUID()}`, [bar]],
+        [`New release ${randomUUID()}`, [grill]],
+      ] as const) {
+        const watcher = await createWatcher(tx, venue.cfg, {
+          name,
+          runsPass: false,
+          everyStation: false,
+          stationIds: [...stationIds],
+          everyZone: true,
+          zoneIds: [],
+        });
+        const printer = await createPrinter(
+          tx,
+          { locationId: venue.cfg.locationId },
+          {
+            name,
+            transport: "cloud_poll",
+            pollId: randomUUID(),
+          },
+        );
+        await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
+        ids.push(printer.id);
+      }
+      return ids;
+    });
+    const routeId = await inTx(venue, async (tx) => {
+      await setStationToday(tx, venue.cfg, grill, null, new Date());
+      return createException(tx, venue.cfg, {
+        zoneId: null,
+        categoryId: null,
+        productId: venue.productId("Vino"),
+        target: { kind: "station", stationId: grill },
+      });
+    });
+    const tableId = await venue.table(`R-${randomUUID().slice(0, 8)}`);
+    const { partyId, tabId } = await seat(venue, tableId);
+    const revision = (
+      await inTx(venue, (tx) =>
+        tx
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, tabId)),
+      )
+    )[0]!.revision;
+    const submitted = await inTx(venue, (tx) =>
+      submitGroups(tx, venue.cfg, partyId, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: revision,
+        operatorId: OPERATOR,
+        billId: tabId,
+        groups: [
+          {
+            release: "hold",
+            lines: [
+              { menuItemId: venue.item("Burger"), quantity: "1" },
+              { menuItemId: venue.item("Vino"), quantity: "1" },
+            ],
+          },
+        ],
+      }),
+    );
+    const group = {
+      partyId,
+      tabId,
+      groupId: submitted.groups[0]!.id,
+      lineId: submitted.groups[0]!.lineIds[0]!,
+      revision: submitted.revision,
+    };
+    const before = await Promise.all(printerIds.map(async (id) => (await jobs(id)).length));
+    const at = new Date("2026-10-02T18:45:00.000Z");
+    await inTx(venue, async (tx) => {
+      await tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, bar));
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: true })
+        .where(eq(kitchenStations.id, grill));
+      await setStationFallback(tx, venue.cfg, bar, grill);
+      await setStationToday(tx, venue.cfg, bar, "closed", at);
+      const [held] = await tx
+        .select({ stationChosenAt: ticketItems.stationChosenAt, stationId: ticketItems.stationId })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, group.lineId));
+      expect(held).toMatchObject({ stationId: bar, stationChosenAt: null });
+      expect((await VENUE_SERVICE.stationStates(tx, venue.cfg, at)).get(bar)?.open).toBe(false);
+    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(at);
+    try {
+      await fireHeldBurger(group);
+    } finally {
+      vi.useRealTimers();
+      await inTx(venue, async (tx) => {
+        await deleteException(tx, venue.cfg, routeId);
+        await setStationFallback(tx, venue.cfg, bar, null);
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: false })
+          .where(eq(kitchenStations.id, grill));
+        await tx
+          .update(kitchenStations)
+          .set({ isDefault: true })
+          .where(eq(kitchenStations.id, bar));
+      });
+    }
+    const added = await Promise.all(
+      printerIds.map(async (id, i) => (await jobs(id)).slice(before[i])),
+    );
+    expect(added[0]).toHaveLength(1);
+    expect(decodeTicket(added[0]![0]!.payload)).toContain("FIRE");
+    expect(decodeTicket(added[0]![0]!.payload)).toContain("BURG");
+    expect(decodeTicket(added[0]![0]!.payload)).toContain("TINTO");
+    expect(added[1]).toHaveLength(1);
+    expect(decodeTicket(added[1]![0]!.payload)).toContain("HOLD CANCELLED");
+    expect(decodeTicket(added[1]![0]!.payload)).not.toContain("FIRE");
+    expect(added[2]).toHaveLength(2);
+    expect(
+      added[2]!.some(
+        (job) =>
+          decodeTicket(job.payload).includes("FIRE") &&
+          decodeTicket(job.payload).includes("TINTO") &&
+          !decodeTicket(job.payload).includes("BURG"),
+      ),
+    ).toBe(true);
+    expect(
+      added[2]!.some(
+        (job) =>
+          decodeTicket(job.payload).includes("From Bar") &&
+          !decodeTicket(job.payload).includes("FIRE") &&
+          decodeTicket(job.payload).includes("BURG"),
+      ),
+    ).toBe(true);
+  });
+  it("corrects only watchers losing a moved dish and copies only to watchers gaining it", async () => {
+    const printerIds = await inTx(venue, async (tx) => {
+      const ids: string[] = [];
+      for (const [name, stationIds, everyStation] of [
+        [`Every ${randomUUID()}`, [], true],
+        [`Both ${randomUUID()}`, [bar, grill], false],
+        [`Old ${randomUUID()}`, [bar], false],
+        [`New ${randomUUID()}`, [grill], false],
+      ] as const) {
+        const watcher = await createWatcher(tx, venue.cfg, {
+          name,
+          runsPass: false,
+          everyStation,
+          stationIds: [...stationIds],
+          everyZone: true,
+          zoneIds: [],
+        });
+        const printer = await createPrinter(
+          tx,
+          { locationId: venue.cfg.locationId },
+          {
+            name,
+            transport: "cloud_poll",
+            pollId: randomUUID(),
+          },
+        );
+        await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
+        ids.push(printer.id);
+      }
+      return ids;
+    });
+    const { tabId, item } = await burger();
+    const before = await Promise.all(printerIds.map(async (id) => (await jobs(id)).length));
+    await inTx(venue, (tx) =>
+      moveDishesToStation(tx, venue.cfg, tabId, {
+        submissionId: randomUUID(),
+        lineIds: [item.workingOrderLineId],
+        stationId: grill,
+      }),
+    );
+    const added = await Promise.all(
+      printerIds.map(async (id, i) => (await jobs(id)).slice(before[i])),
+    );
+    expect(added[0]).toHaveLength(0);
+    expect(added[1]).toHaveLength(0);
+    expect(added[2]).toHaveLength(1);
+    expect(decodeTicket(added[2]![0]!.payload)).toContain("MOVED TO GRILL");
+    expect(added[3]).toHaveLength(1);
+    expect(decodeTicket(added[3]![0]!.payload)).toContain("From Bar");
+  });
   it("prints at both stations, records a reroute, and replays without moving work again", async () => {
     const { tabId, item } = await burger();
     expect(item.stationId).toBe(bar);
