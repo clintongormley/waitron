@@ -887,7 +887,7 @@ async function sendingCfg(
 
 /** Mount the till routes with the shared error boundary. */
 export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
-  app.use("/api/*", madeHereAnswer(deps.db));
+  app.use("/api/*", madeHereAnswer(deps.db, deps.cfg.locale));
   // Built once per mount so its in-memory state persists across requests.
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
   // What a write that leaves a bill fully paid issues its invoice with (bill payments design §7).
