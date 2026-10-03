@@ -1,6 +1,31 @@
 import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 const en = {
+  "watchers.title": "Watchers",
+  "watchers.new": "New watcher",
+  "watchers.follows": "Follows: {list}",
+  "watchers.every_station": "every station",
+  "watchers.choose_every_station": "Every station",
+  "watchers.for": "For: {list}",
+  "watchers.every_zone": "every service zone",
+  "watchers.choose_every_zone": "Every service zone",
+  "watchers.runs_pass": "Runs the pass",
+  "watchers.runs_pass_hint":
+    "Shows Fire (when the pass fires held work), Ready and Away for whole courses and groups.",
+  "watchers.fix_fields": "Fix the fields marked above.",
+  "watchers.screens": "Screens",
+  "watchers.printers": "Printers",
+  "watchers.remove_confirm":
+    "Remove {name}? Its screens will say it was removed, and its printers stop printing its copies.",
+  "watchers.need_station": "Choose at least one station, or every station",
+  "watchers.need_zone": "Choose at least one service zone, or every service zone",
+  "watchers.watched_by": "Watched by: {list}",
+  "watchers.none_follow": "No watcher follows it.",
+  "watchers.name_taken": "A watcher already has this name.",
+  "watchers.not_found": "This watcher could not be found.",
+  "watchers.stations": "Stations",
+  "watchers.zones": "Service zones",
+  "watchers.remove": "Remove",
   "nav.prep_stations": "Prep stations",
   "prep.title": "Prep stations",
   "prep.new_station": "New station",
@@ -270,6 +295,31 @@ const en = {
 } as const;
 
 const es: Record<keyof typeof en, string> = {
+  "watchers.title": "Puntos de seguimiento",
+  "watchers.new": "Nuevo punto de seguimiento",
+  "watchers.follows": "Sigue: {list}",
+  "watchers.every_station": "todas las estaciones",
+  "watchers.choose_every_station": "Todas las estaciones",
+  "watchers.for": "Para: {list}",
+  "watchers.every_zone": "todas las zonas de servicio",
+  "watchers.choose_every_zone": "Todas las zonas de servicio",
+  "watchers.runs_pass": "Lleva el pase",
+  "watchers.runs_pass_hint":
+    "Muestra Marchar (cuando el pase marcha el trabajo retenido), Listo y En camino para cursos y grupos enteros.",
+  "watchers.fix_fields": "Corrige los campos marcados arriba.",
+  "watchers.screens": "Pantallas",
+  "watchers.printers": "Impresoras",
+  "watchers.remove_confirm":
+    "¿Eliminar {name}? Sus pantallas dirán que se ha eliminado y sus impresoras dejarán de imprimir sus copias.",
+  "watchers.need_station": "Elige al menos una estación, o todas",
+  "watchers.need_zone": "Elige al menos una zona de servicio, o todas",
+  "watchers.watched_by": "Lo siguen: {list}",
+  "watchers.none_follow": "Ningún punto de seguimiento lo sigue.",
+  "watchers.name_taken": "Ya existe un punto de seguimiento con este nombre.",
+  "watchers.not_found": "No se encontró este punto de seguimiento.",
+  "watchers.stations": "Estaciones",
+  "watchers.zones": "Zonas de servicio",
+  "watchers.remove": "Eliminar",
   "nav.prep_stations": "Estaciones de preparación",
   "prep.title": "Estaciones de preparación",
   "prep.new_station": "Nueva estación",

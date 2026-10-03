@@ -33,12 +33,34 @@ it("loads the routing and station context, including each station printer assign
     "/management-api/products": [],
     "/management-api/printers": [],
     "/management-api/devices": [],
+    "/management-api/watchers": [],
     "/management-api/stations/bar/printers": [{ stationId: "bar", printerId: "receipt" }],
   };
   const request = vi.fn(async (path: string) => responses[path]);
   const view = await new PrepStationsApi(request as DashboardRequest).load();
   expect(request.mock.calls.map((call) => call[0])).toEqual(Object.keys(responses));
   expect(view.stationPrinters).toEqual([{ stationId: "bar", printerId: "receipt" }]);
+});
+
+it("creates, updates and removes watchers through management routes", async () => {
+  const request = vi.fn(async () => ({ id: "pass" }));
+  const api = new PrepStationsApi(request as DashboardRequest);
+  const input = {
+    name: "Pass",
+    everyStation: true,
+    stationIds: [],
+    everyZone: true,
+    zoneIds: [],
+    runsPass: true,
+  };
+  await api.createWatcher(input);
+  await api.updateWatcher("pass", input);
+  await api.removeWatcher("pass");
+  expect(request.mock.calls).toEqual([
+    ["/management-api/watchers", "POST", input],
+    ["/management-api/watchers/pass", "PUT", input],
+    ["/management-api/watchers/pass", "DELETE"],
+  ]);
 });
 
 it("keeps top-level names for exceptions and offers active variants only to the tester", async () => {
@@ -162,7 +184,7 @@ it("uses passive reads for the background routing refresh", async () => {
   const background = new PrepStationsApi(request as DashboardRequest, liveData).background;
   expect(background.liveData).toBe(liveData);
   await background.load();
-  expect(request).toHaveBeenCalledTimes(7);
+  expect(request).toHaveBeenCalledTimes(8);
   expect(
     (request.mock.calls as unknown as [string, string, unknown, { passive: boolean }][]).every(
       (call) => call[3]?.passive === true,

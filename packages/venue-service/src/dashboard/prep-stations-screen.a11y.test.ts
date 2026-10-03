@@ -26,6 +26,7 @@ const empty = {
   printers: [],
   stationPrinters: [],
   devices: [],
+  watchers: [],
 };
 describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (theme) => {
   it.each([
@@ -38,6 +39,9 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
     "exception",
     "exception-editor",
     "exception-delete",
+    "watcher",
+    "watcher-form",
+    "watcher-remove",
   ] as const)("checks %s state", async (state) => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
@@ -90,6 +94,22 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
                   showsRestOfOrder: state === "station-rest-on",
                 },
               ],
+              watchers: state.startsWith("watcher")
+                ? [
+                    {
+                      id: "pass",
+                      name: "Pass",
+                      active: true,
+                      displayOrder: 0,
+                      everyStation: true,
+                      stationIds: [],
+                      everyZone: true,
+                      zoneIds: [],
+                      runsPass: true,
+                      printerIds: [],
+                    },
+                  ]
+                : [],
             },
       ),
     } as unknown as PrepStationsApi;
@@ -123,6 +143,17 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
         new CustomEvent("wt-change", { detail: { value: "5" } }),
       );
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-station"]')!.click();
+      await el.updateComplete;
+    }
+    if (state === "watcher-form") {
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-watcher-pass"]')!.click();
+      await el.updateComplete;
+      const form = el.shadowRoot!.querySelector<HTMLElement>("watcher-form")!;
+      (form as HTMLElement & { refusal: object }).refusal = { code: "watcher.name_taken" };
+      await (form as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+    }
+    if (state === "watcher-remove") {
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-watcher-pass"]')!.click();
       await el.updateComplete;
     }
     expect(el.shadowRoot!.querySelector("h1")).not.toBeNull();
