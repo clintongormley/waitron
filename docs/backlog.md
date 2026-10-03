@@ -161,11 +161,11 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    venue that has used its printers refuses to start"). A real sale's slip, the duplicates, the
    cash-settlement drawer job and the feed-before-cut are still unwalked.
 
-7. **Smaller, independent pieces**, in no fixed order: a dashboard screen for the modelo 303 download
-   (*Detail → Reporting*); refusing requests from a device that is not enrolled (A4); the pairing
-   alert, "devices tried to join" (A5); Logging Slice 2, the one-touch bug report (A9); the
-   first real Bluetooth pairing at the box through the dashboard (A3; the print agent's side, P2b,
-   and the dashboard's, P2c, are built); paying at the table from a handheld (A6, Slice 2).
+7. **Smaller, independent pieces**, in no fixed order: refusing requests from a device that is not
+   enrolled (A4); the pairing alert, "devices tried to join" (A5); Logging Slice 2, the one-touch
+   bug report (A9); the first real Bluetooth pairing at the box through the dashboard (A3; the print
+   agent's side, P2b, and the dashboard's, P2c, are built); paying at the table from a handheld (A6,
+   Slice 2).
 
 Then the on-prem mirror and failover — slices 3 to 5 of the storage design — then the cloud primary,
 under *Afterwards*. Everything else ranks beneath these.
@@ -3731,6 +3731,17 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   may not be reachable; next action is to find out whether it is, then either fix the test or drop
   the correction and its test.
 
+- **The configuration export does not tell the shell about an expired session (A236) — OPEN
+  (found 2026-10-03).** `exportConfiguration` in `apps/dashboard/src/api/client.ts` makes its own
+  `fetch` instead of going through the request helper, so it never calls the session-expiry and
+  activity hooks `apps/dashboard/src/main.ts` passes to the client: an expired session is not
+  reported to the shell (no `waitron-session-invalid` event), and an export does not count as
+  activity (no `waitron-session-active` event). Run 2026-10-03 with a stub client: a 401
+  answering `management_session.expired` and a successful export each called neither hook, while
+  `downloadVatReturnFile` on the same 401 called the expiry hook once. It also drops a refusal's
+  `params`. It came in with #296 (`fabdb224d`). Fix: move it onto the request helper's
+  `as: "blob"` option, which the VAT return download uses.
+
 - **Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29).** A page saying
   what the section is for and what is in it, opened by the section's header. It was the answer to
   C35's question about the header of the section you are on; A161 (#979) has since answered that
@@ -6992,7 +7003,7 @@ partial scope; the detail for a live thread is in its track.
 | 5 | Identity | persons/sessions, PIN (+ wrong-PIN back-off: per device at sign-in, per till for override PINs), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297) | multiple locations, edit/deactivate; then location-scope the by-id verb family |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, canvas/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end | — |
-| 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file and its download route (no dashboard screen yet), purchase-invoice UI; dashboard sales screen (with a category sales report, at time of sale or current, printable) + business-overview home | the modelo 303 screen; fiscal filing remainder parked (*Detail → Reporting*) |
+| 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file and its download route and its dashboard screen, purchase-invoice UI; dashboard sales screen (with a category sales report, at time of sale or current, printable) + business-overview home | fiscal filing remainder parked (*Detail → Reporting*) |
 | 9 | Deployment | the box as two containers with `waitron.sh` install/reset (#285, #314); guided node onboarding (#296); boot diagnosability (#310); CA-trust onboarding + per-OS certificate walkthrough (#330); till reroute S1–S6; promotion endpoint (#272) | USB installer (B3); cloud standby live link + the Waitron Cloud boundary |
 | 10 | Tabs / table service | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer, till action-flow wiring, TS-5 split-bill (#324) | core COMPLETE; owner-added extensions parked |
 | 11 | Floor plan | FP-1 live floor + FP-2 spatial canvas/editor | — |
@@ -7293,14 +7304,17 @@ that slice 3 has to restore:
 
 Built: the VAT summary and the sales side of modelo 303 (#76), the purchases side, the form's boxes
 and the DR303 file (#91), and its download route, `GET /management-api/reports/modelo-303`, with
-quarterly and annual periods (#98). **No dashboard screen calls that route**, so today the file can
-only be fetched from the API. Two pre-filing caveats a human must clear before the first LIVE 303
-filing: validate the DR303 file once against the real
-AEAT "por fichero" uploader (we omit página 2, régimen simplificado); and an asesor must confirm the
-**prorrata** treatment (`computeInputVat` scales only the cuota by `deductible_proportion`). Deferred
-build slices: rectificativas de facturas recibidas (casilla 40/41, needs a
-`corrects_purchase_invoice_id` self-FK); bienes-de-inversión regularización (43); the prorrata rule
-(44, asesor-driven); intra-community and import boxes (32–39); a libro-registro / Pre303 export.
+monthly and quarterly periods (#98). An annual period is refused: `requireLiquidationPeriod` in
+`apps/server/src/report-api.ts` accepts only `01`..`12` and `1T`..`4T` (trimmed and upper-cased
+first), and its comment gives the reason — the annual summary is modelo 390, not a 303. The
+dashboard's VAT return screen (Reports, under Sales, shown to a session holding `report.export`)
+downloads the file — DONE (this branch). Two pre-filing caveats a human must clear before the first
+LIVE 303 filing: validate the DR303 file once against the real AEAT "por fichero" uploader (we
+omit página 2, régimen simplificado); and an asesor must confirm the **prorrata** treatment
+(`computeInputVat` scales only the cuota by `deductible_proportion`). Deferred build slices:
+rectificativas de facturas recibidas (casilla 40/41, needs a `corrects_purchase_invoice_id`
+self-FK); bienes-de-inversión regularización (43); the prorrata rule (44, asesor-driven);
+intra-community and import boxes (32–39); a libro-registro / Pre303 export.
 
 ---
 
