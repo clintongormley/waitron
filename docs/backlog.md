@@ -1311,20 +1311,24 @@ code and show `codeMessage(code)`, and decide separately whether a timed-out pol
 
 **Several card readers' status reads at once can use up the browser's connections to the box
 (A260, found by W18c's review, 2026-10-03) — DONE (lane A's W18c, owner's option (b)).** At most
-two of the readers table's status reads are in flight at once from every Payments screen in one
-browser tab, including one closed while its reads still wait (`takeStatusSlot`,
-`apps/dashboard/src/screens/payments-screen.ts`); a load a refresh has replaced, or a closed screen,
-starts no further status read (the `isConnected` check in `#loadStatuses`). Limits: each tab has its
-own two, and the review measured three tabs of the real screen in headless Chromium against held
-HTTP/1.1 responses: six status requests reached the server, and an unrelated read was still
-unanswered after 3000 ms until one status request was released. The SumUp pairing dialog's status
-reads (`#pollTick` and `#unpairOrphan`, `packages/payments-sumup/src/dashboard/sumup-add-reader.ts`)
-are outside the limit, other screens' reads are not limited, and it was not measured in a real
-browser against a real silent provider. Guard: the "readers' status reads" cases in
+two of the readers table's status reads are in flight at once, shared by every Payments screen in
+one browser tab, including one closed while its reads still wait (`takeStatusSlot`,
+`apps/dashboard/src/screens/payments-screen.ts`). A load a refresh has replaced, and a closed
+screen's reads still waiting for a slot, give up through the status version number
+(`disconnectedCallback` bumps it); a new load on a closed screen (an action that finishes after it
+closed) is stopped by the `isConnected` check in `#loadStatuses`. Limits: each tab has its own two,
+and the review measured three tabs of the real screen in headless Chromium against held HTTP/1.1
+responses: six status requests reached the server, and an unrelated read was still unanswered after
+3000 ms until one status request was released. The SumUp pairing dialog's status reads (`#pollTick`
+and `#unpairOrphan`, `packages/payments-sumup/src/dashboard/sumup-add-reader.ts`) are outside the
+limit, other screens' reads are not limited, and it was not measured in a real browser against a
+real silent provider. Guard: the "readers' status reads" cases in
 `apps/dashboard/src/screens/payments-screen.test.ts`; at least one of them failed under each of five
 changes tried one at a time: the limit raised to 99, the replaced-load check removed, the
 closed-screen version bump removed, the slot never given back, and the `isConnected` check removed.
-What it was: with five or more active card
+All five were re-run on the final code on 2026-10-03
+(`pnpm --filter @waitron/dashboard exec vitest run src/screens/payments-screen.test.ts -t "status reads"`;
+unchanged, 6 passed). What it was: with five or more active card
 readers and a stalled provider, the Payments screen's status reads (one per active reader, all at
 once, `#loadStatuses` in `apps/dashboard/src/screens/payments-screen.ts`) can hold every connection
 the browser allows to the box for up to 250 seconds, so other dashboard requests wait behind them.
