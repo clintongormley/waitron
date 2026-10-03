@@ -526,6 +526,71 @@ describe("dashboard-sales-screen after the server comes back", () => {
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=error]")).toBeNull());
     expect(el.shadowRoot!.querySelector("[data-test=tender-table]")).not.toBeNull();
   });
+
+  it("moves to Overview's business day once the server answers again when only Overview failed", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-27T01:00:00Z"));
+    const api = Object.assign(stubApi({ getSalesOverview: vi.fn().mockRejectedValue(down) }), {
+      liveData: new LiveData(),
+    });
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+    const root = el.shadowRoot!;
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-test=error]")?.textContent?.trim()).toBe(
+        codeMessage("connection.failed"),
+      ),
+    );
+    expect(api.getDailyClose).toHaveBeenLastCalledWith("2026-09-27");
+
+    vi.mocked(api.getSalesOverview).mockResolvedValue(overview("2026-09-26"));
+    api.liveData.refresh();
+
+    await vi.waitFor(() => expect(api.getDailyClose).toHaveBeenLastCalledWith("2026-09-26"));
+    expect(api.getCategorySales).toHaveBeenLastCalledWith(
+      "2026-09-26",
+      "2026-09-26",
+      "at_time_of_sale",
+      false,
+    );
+    expect(root.querySelector<WtInput>("[data-test=from-picker]")!.value).toBe("2026-09-26");
+    await vi.waitFor(() => expect(root.querySelector("[data-test=error]")).toBeNull());
+    expect(root.querySelector("[data-test=tender-table]")).not.toBeNull();
+  });
+
+  it("clears Overview's message once it answers again with the day already shown", async () => {
+    const api = Object.assign(stubApi({ getSalesOverview: vi.fn().mockRejectedValue(down) }), {
+      liveData: new LiveData(),
+    });
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+    const root = el.shadowRoot!;
+    await vi.waitFor(() => expect(root.querySelector("[data-test=error]")).not.toBeNull());
+
+    vi.mocked(api.getSalesOverview).mockResolvedValue(overview(today()));
+    api.liveData.refresh();
+
+    await vi.waitFor(() => expect(root.querySelector("[data-test=error]")).toBeNull());
+    expect(api.getDailyClose).toHaveBeenLastCalledWith(today());
+    expect(root.querySelector("[data-test=tender-table]")).not.toBeNull();
+  });
+
+  it("stops reading Overview once it has answered after a failure", async () => {
+    const api = Object.assign(stubApi({ getSalesOverview: vi.fn().mockRejectedValue(down) }), {
+      liveData: new LiveData(),
+    });
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=error]")).not.toBeNull(),
+    );
+    vi.mocked(api.getSalesOverview).mockResolvedValue(overview(today()));
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=error]")).toBeNull());
+    const reads = vi.mocked(api.getSalesOverview).mock.calls.length;
+
+    api.liveData.refresh();
+    await flush(el);
+
+    expect(api.getSalesOverview).toHaveBeenCalledTimes(reads);
+  });
 });
 
 describe("dashboard-sales-screen date fields", () => {

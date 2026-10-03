@@ -196,7 +196,9 @@ export class SalesScreen extends LitElement {
     },
     (error) => {
       if (this.errorKey === codeOf(error)) this.errorKey = null;
-      if (!this.#rangeChosen) void this.#loadInitialRange();
+      // Released here rather than in its own apply, which would stop this callback from firing.
+      if (this.#rangeChosen) this.#queries.release("getSalesOverview");
+      else void this.#loadInitialRange();
     },
   );
 
@@ -272,10 +274,11 @@ export class SalesScreen extends LitElement {
         void this.#loadCategories();
       });
     } catch {
-      // The query's error callback has already recorded the code.
-    } finally {
-      this.#queries.release("getSalesOverview");
+      // The query's error callback has already recorded the code; the read stays watched so it is
+      // retried, and the recovery callback releases it.
+      return;
     }
+    this.#queries.release("getSalesOverview");
   }
 
   /** Cleared before the request, like `#load`, so a refusal never sits beside an older report. */
