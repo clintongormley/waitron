@@ -3582,6 +3582,7 @@ export class TillApp extends LitElement {
 
   /** Clear the completed order and return home, retaining this browser tab's menu preference. */
   #onNewSale(): void {
+    if (!this.#inShell()) return;
     this.#dismissStationChoices();
     this.#store.clear();
     this.ticketWorkingOrderId = undefined;
@@ -3592,7 +3593,6 @@ export class TillApp extends LitElement {
     this.cardOutcome = undefined;
     // The home tab is the canvas's first tab. After settling a tab the floor is stale, so a floor home
     // refreshes it.
-    if (!this.#inShell()) return;
     const home = this.canvas?.tabs[0];
     this.#setActiveTab(home?.key, true);
     if (home?.key === "counter") void this.#loadStations();
@@ -3662,6 +3662,7 @@ export class TillApp extends LitElement {
    * overlay; history restores a permitted regular destination over the tab. The first floor visit
    * loads zones and statuses too, while later visits refresh only live occupancy. */
   #onTabSelect(key: string, fromHistory = false): void {
+    if (!this.#inShell()) return;
     const tab = this.canvas?.tabs.find((candidate) => candidate.key === key);
     if (tab === undefined) return;
     this.#dismissStationChoices();
@@ -3684,6 +3685,10 @@ export class TillApp extends LitElement {
     }
   }
 
+  #onFloorRefresh(): void {
+    if (this.#inShell()) void this.#refreshFloor();
+  }
+
   /** Tables only: a placement write changes neither the zones nor the statuses. A failed read keeps
    * the last-known floor. */
   async #refreshFloor(): Promise<boolean> {
@@ -3698,6 +3703,7 @@ export class TillApp extends LitElement {
   /** A free table seats a party with the guest count given; a seated one resumes its party
    * ({@link billToOpen}). */
   async #onOpenTable(event: Event): Promise<void> {
+    if (!this.#inShell()) return;
     const { tableId, seated, guestCount } = (
       event as CustomEvent<{ tableId: string; seated: boolean; guestCount?: number | null }>
     ).detail;
@@ -6842,11 +6848,11 @@ export class TillApp extends LitElement {
    * `back-to-floor`.
    */
   #onBackToFloor(): void {
+    if (!this.#inShell()) return;
     this.#orderVisit++;
     this.cancelOffer = null;
     const session = this.#operatorSession;
     const flushed = this.#flushDraft();
-    if (!this.#inShell()) return;
     this.#clearErrorKeepingLateChange();
     this.#popDrill();
     void flushed.then(() => (session !== this.#operatorSession ? undefined : this.#refreshFloor()));
@@ -7219,7 +7225,7 @@ export class TillApp extends LitElement {
         @override-confirm=${(event: Event) => void this.#onOverrideConfirm(event)}
         @override-cancel=${() => this.#closeOverrideDialog()}
         @show-schedule=${() => this.#onShowSchedule()}
-        @floor-refresh=${() => void this.#refreshFloor()}
+        @floor-refresh=${() => this.#onFloorRefresh()}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
         @check-dead-ends=${(event: Event) => void this.#onCheckDeadEnds(event)}
@@ -7244,7 +7250,7 @@ export class TillApp extends LitElement {
         @set-status=${(event: Event) => void this.#onSetStatus(event)}
         @move-guests=${(event: Event) => void this.#onMoveGuests(event)}
         @move-bill=${(event: Event) => void this.#onMoveBill(event)}
-        @move-held-order-open=${() => void this.#refreshFloor()}
+        @move-held-order-open=${() => this.#onFloorRefresh()}
         @move-held-order=${(event: Event) => void this.#onMoveHeldOrder(event)}
         @join-tables=${(event: Event) => void this.#onJoinTables(event)}
         @split-table=${(event: Event) => void this.#onSplitTable(event)}

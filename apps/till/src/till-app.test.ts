@@ -2115,35 +2115,125 @@ describe("till-app", () => {
   });
 
   describe("a navigation event that arrives on the lock screen", () => {
-    it.each([
-      "show-station",
-      "show-expo",
-      "show-schedule",
-      "show-floor",
-      "open-allergens",
-      "close-allergens",
-      "new-sale",
-      "back-to-counter",
-      "back-to-floor",
-    ])(
-      "leaves a logged-out till locked after %s, reading nothing and leaving no destination to restore",
-      async (type) => {
-        const { el } = await mountApp();
-        const c = await toCounter(el);
-        emit(c, "logout");
+    const handheld = {
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+    };
+    const devices = [
+      { device: "till", overrides: {}, home: "counter", other: "floor" },
+      { device: "handheld", overrides: handheld, home: "floor", other: "order" },
+    ];
+
+    async function signIn(el: TillApp): Promise<void> {
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el);
+    }
+
+    async function lockedTill(overrides: Record<string, unknown>): Promise<TillApp> {
+      const { el } = await mountApp(overrides);
+      await flush(el);
+      await signIn(el);
+      emit(shell(el)!, "logout");
+      await flush(el);
+      return el;
+    }
+
+    describe.each(devices)("on a $device", ({ overrides, home, other }) => {
+      it.each([
+        "show-station",
+        "show-expo",
+        "show-schedule",
+        "show-floor",
+        "open-allergens",
+        "close-allergens",
+        "new-sale",
+        "back-to-counter",
+        "back-to-floor",
+      ])(
+        "leaves a logged-out till locked after %s, reading nothing and leaving no destination to restore",
+        async (type) => {
+          const el = await lockedTill(overrides);
+          const stationReads = vi.mocked(currentApi.listStations).mock.calls.length;
+          const floorReads = vi.mocked(currentApi.getTablesState).mock.calls.length;
+          emit(lock(el)!, type);
+          await flush(el);
+          await flush(el);
+          expect(lock(el)).not.toBeNull();
+          expect(shell(el)).toBeNull();
+          expect(location.pathname).not.toContain("/view/");
+          expect(currentApi.listStations).toHaveBeenCalledTimes(stationReads);
+          expect(currentApi.getTablesState).toHaveBeenCalledTimes(floorReads);
+        },
+      );
+
+      it.each([
+        { name: "floor-refresh", type: "floor-refresh", detail: undefined },
+        { name: "move-held-order-open", type: "move-held-order-open", detail: undefined },
+        {
+          name: "open-table on a free table",
+          type: "open-table",
+          detail: { tableId: "tb-1", seated: false, guestCount: 2 },
+        },
+        {
+          name: "open-table on a seated table",
+          type: "open-table",
+          detail: { tableId: "tb-1", seated: true },
+        },
+      ])(
+        "leaves a logged-out till locked after $name, reading and writing nothing",
+        async ({ type, detail }) => {
+          const el = await lockedTill(overrides);
+          const stationReads = vi.mocked(currentApi.listStations).mock.calls.length;
+          const floorReads = vi.mocked(currentApi.getTablesState).mock.calls.length;
+          emit(lock(el)!, type, detail);
+          await flush(el);
+          await flush(el);
+          expect(lock(el)).not.toBeNull();
+          expect(shell(el)).toBeNull();
+          expect(location.pathname).not.toContain("/view/");
+          expect(currentApi.listStations).toHaveBeenCalledTimes(stationReads);
+          expect(currentApi.getTablesState).toHaveBeenCalledTimes(floorReads);
+          expect(currentApi.seatTable).not.toHaveBeenCalled();
+          expect(currentApi.listDrafts).not.toHaveBeenCalled();
+        },
+      );
+
+      it("ignores a tab-select sent while logout is still taking the shell down", async () => {
+        const { el } = await mountApp(overrides);
         await flush(el);
-        const stationReads = vi.mocked(currentApi.listStations).mock.calls.length;
+        await signIn(el);
         const floorReads = vi.mocked(currentApi.getTablesState).mock.calls.length;
-        emit(lock(el)!, type);
+        const outgoing = shell(el)!;
+        emit(outgoing, "logout");
+        emit(outgoing, "tab-select", { key: other });
         await flush(el);
         await flush(el);
         expect(lock(el)).not.toBeNull();
-        expect(shell(el)).toBeNull();
-        expect(location.pathname).not.toContain("/view/");
-        expect(currentApi.listStations).toHaveBeenCalledTimes(stationReads);
+        expect(location.pathname).toBe(`/tabs/${home}`);
         expect(currentApi.getTablesState).toHaveBeenCalledTimes(floorReads);
-      },
-    );
+        await signIn(el);
+        expect(shell(el)!.activeTabKey).toBe(home);
+      });
+    });
+
+    // A handheld's canvas has no counter tab, so nothing on it fills the basket.
+    it("leaves a logged-out till's basket in place after new-sale, for the next sign-in", async () => {
+      const { el } = await mountApp();
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "logout");
+      await flush(el);
+      expect(c.store.lines).toHaveLength(1);
+      emit(lock(el)!, "new-sale");
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(c.store.lines).toHaveLength(1);
+      await toCounter(el);
+      expect(counter(el)!.store.lines).toHaveLength(1);
+    });
   });
 
   // ── Device front door ───────────────────────────────────────────────────────
