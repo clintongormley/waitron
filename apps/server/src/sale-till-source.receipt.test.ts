@@ -36,6 +36,7 @@ import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
+import { nifWithControlLetter } from "./testing/nif.js";
 
 /**
  * Exercise device authentication through the sale route to a fiscal record.
@@ -80,7 +81,7 @@ function systemClock(): TrustedClock {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(61_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(61_000_000 + nifCounter);
 }
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {

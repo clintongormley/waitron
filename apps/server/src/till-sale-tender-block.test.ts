@@ -38,6 +38,7 @@ import { createOpenOrder } from "./working-order.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
+import { nifWithControlLetter } from "./testing/nif.js";
 
 // The whole manifest is migrated because the seed runs the real provisioning plan and `recordSale`.
 // Each case seeds its own sale under its own working-order id, which `sales_working_order_id_key`
@@ -77,7 +78,7 @@ function systemClock(): TrustedClock {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(60_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {

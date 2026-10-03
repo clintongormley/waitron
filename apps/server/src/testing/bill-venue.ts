@@ -109,7 +109,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     planVenue(
       {
         country: "ES",
-        taxId: "61000002K",
+        taxId: "61000002T",
         legalName: "Tarjetas SL",
         location: {
           name: "Sala",

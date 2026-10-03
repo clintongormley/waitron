@@ -19,7 +19,7 @@ describe("settle-invoice-first against a real venue directory", () => {
     workDir = await mkdtemp(join(tmpdir(), "waitron-settle-invoice-first-"));
     venueDir = join(workDir, "venue");
     await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
-    venue = await provisionTestVenue(venueDir, "50000000K");
+    venue = await provisionTestVenue(venueDir, "50000000R");
 
     lines = [];
     await settleInvoiceFirst(

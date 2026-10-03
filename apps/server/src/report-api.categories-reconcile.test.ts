@@ -84,7 +84,7 @@ describe("the category report reconciles with the till's sales", () => {
       planVenue(
         {
           country: "ES",
-          taxId: "71234567K",
+          taxId: "71234567W",
           legalName: "Deli Test SL",
           location: {
             name: "Sala principal",

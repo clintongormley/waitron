@@ -83,7 +83,7 @@ async function venueWith(
     planVenue(
       {
         country: "ES",
-        taxId: "66000001K",
+        taxId: "66000001Y",
         legalName: "Idiomes SL",
         location: {
           name: "Sala",

@@ -30,6 +30,7 @@ import { readImageBytes } from "@waitron/media";
 import { seedDemoRestaurant } from "./seed.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
+import { nifWithControlLetter } from "../../src/testing/nif.js";
 
 const LOCALE: SeedLocale = "en";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -43,7 +44,7 @@ const suite = useVenueDb({
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(95_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(95_000_000 + nifCounter);
 }
 
 interface Venue {

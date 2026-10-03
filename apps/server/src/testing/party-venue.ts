@@ -99,7 +99,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     planVenue(
       {
         country: "ES",
-        taxId: "60000001K",
+        taxId: "60000001Q",
         legalName: "Visitas SL",
         location: {
           name: "Sala",

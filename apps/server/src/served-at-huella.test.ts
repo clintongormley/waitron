@@ -43,6 +43,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { fireAll, openPartyTab, serveLine } from "./testing/serve-line.js";
 import "./errors.js";
+import { nifWithControlLetter } from "./testing/nif.js";
 
 // The fiscal firewall (CLAUDE.md §5): our own metadata never enters `computeHuella`. `served_at` is
 // a `working_order_lines` field the pay path never reads: `payWorkingOrder` files from the tab's
@@ -101,7 +102,7 @@ function makeBackend(db: Database): FiscalBackend {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(80_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(80_000_000 + nifCounter);
 }
 
 function venueRequest(nif: string): VenueRequest {

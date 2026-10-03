@@ -51,7 +51,7 @@ describe("seedSales across a rate change", () => {
       planVenue(
         {
           country: "ES",
-          taxId: "81000001K",
+          taxId: "81000001G",
           legalName: "Casa Delgado SL",
           location: {
             name: "Sala principal",

@@ -55,6 +55,7 @@ import {
   printedCommands,
   printedLines,
 } from "./testing/decode-ticket.js";
+import { nifWithControlLetter } from "./testing/nif.js";
 
 // The manual reprint and drawer-open routes over HTTP, against a GENUINE chained fiscal sale read
 // back and paper enqueued for it.
@@ -92,7 +93,7 @@ function systemClock(): TrustedClock {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(64_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(64_000_000 + nifCounter);
 }
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {

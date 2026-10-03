@@ -130,7 +130,7 @@ describe("till bill lookup", () => {
         nodeId: venue.cfg.nodeId,
         seriesId: venue.cfg.seriesId,
         substitutedSaleIds: [brandSaleId(issued!.id)],
-        counterparty: { taxId: "B12345678", legalName: "Cliente SL", countryCode: "ES" },
+        counterparty: { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
         total: "30.00",
         lines: [
           {

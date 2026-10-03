@@ -33,6 +33,7 @@ import { addTabRound, parkOrder, placeOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
+import { nifWithControlLetter } from "./testing/nif.js";
 
 // A release that ships a reduced rate of 11% from 1 January 2027, the shipped table otherwise.
 vi.mock("@waitron/catalogue/src/vat-rates.js", async (importOriginal) => {
@@ -117,7 +118,7 @@ beforeAll(() => {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(78_000_000 + nifCounter).padStart(8, "0")}Z`;
+  return nifWithControlLetter(78_000_000 + nifCounter);
 }
 
 async function setupVenue(orderFlow: OrderFlow = "prepay") {

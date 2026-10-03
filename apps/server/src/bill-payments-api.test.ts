@@ -144,7 +144,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     planVenue(
       {
         country: "ES",
-        taxId: "61000001K",
+        taxId: "61000001E",
         legalName: "Cuentas SL",
         location: {
           name: "Sala",

@@ -63,6 +63,7 @@ import {
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
+import { nifWithControlLetter } from "./testing/nif.js";
 
 // A line takes the VAT class the zone's published menu version froze, when its price locks, and
 // issuance files that stored class's rate on every path. Every product is published at `reduced`
@@ -98,7 +99,7 @@ afterEach(() => {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(77_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(77_000_000 + nifCounter);
 }
 
 const sessionOf = (tx: Transaction) =>

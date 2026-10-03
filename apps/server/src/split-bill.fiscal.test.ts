@@ -33,6 +33,7 @@ import { payWorkingOrder } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
+import { nifWithControlLetter } from "./testing/nif.js";
 
 // Each case provisions its own venue, so a readback count is that case's alone.
 const LOCALE = "es-ES";
@@ -68,7 +69,7 @@ function systemClock(): TrustedClock {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(60_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {

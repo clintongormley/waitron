@@ -79,6 +79,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
+import { nifWithControlLetter } from "./testing/nif.js";
 
 // The integrated (split-transaction) card-pay orchestration, end to end on one venue: P1 commits a
 // walk-up before `collect`, because the provider's payment row has a foreign key to
@@ -121,7 +122,7 @@ function systemClock(): TrustedClock {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(70_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(70_000_000 + nifCounter);
 }
 
 function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConfig {

@@ -63,6 +63,7 @@ import type { GrossOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
+import { nifWithControlLetter } from "./testing/nif.js";
 
 // Path by path: a line records its classification snapshot when it is added to the order, each
 // filing path copies it onto the sale line, and nothing after it re-classifies.
@@ -92,7 +93,7 @@ beforeAll(() => {
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
-  return `${String(76_000_000 + nifCounter).padStart(8, "0")}K`;
+  return nifWithControlLetter(76_000_000 + nifCounter);
 }
 
 const sessionOf = (tx: Transaction) =>
