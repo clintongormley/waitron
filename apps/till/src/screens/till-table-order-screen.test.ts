@@ -3047,6 +3047,24 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
     });
 
+    it("says on the native button, the element a screen reader announces, whether a split line is picked", async () => {
+      const second = { ...pendingLine, lineNo: 2, productId: "agua", quantity: "1.000" };
+      const { el } = await mount({ lines: [pendingLine, second], orderId: "wo-7" });
+      await toMenu(el);
+      click(el, '[data-action="split"]');
+      await el.updateComplete;
+      const pressed = (lineNo: number) => {
+        const button = el.shadowRoot!.querySelector(`[data-split-line="${lineNo}"]`);
+        expect(button).toBeInstanceOf(HTMLButtonElement);
+        return button!.getAttribute("aria-pressed");
+      };
+      expect([pressed(1), pressed(2)]).toEqual(["false", "false"]);
+
+      click(el, '[data-split-line="2"]');
+      await el.updateComplete;
+      expect([pressed(1), pressed(2)]).toEqual(["false", "true"]);
+    });
+
     it("split dispatches a mixed partial each quantity and whole weight line", async () => {
       const each = { ...pendingLine, quantity: "4.000" };
       const weight = {
@@ -3917,6 +3935,30 @@ describe("till-table-order-screen", () => {
       expect(captured!.composed).toBe(true);
       expect(captured!.detail).toEqual({ toBillId: "wo-check", transfers: [{ lineNo: 1 }] });
       expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+    });
+
+    it("says on the native button, the element a screen reader announces, whether a transfer line is picked", async () => {
+      const second = { ...pendingLine, lineNo: 2, productId: "agua", quantity: "1.000" };
+      const { el } = await mount({
+        ...partyBills(),
+        lines: [pendingLine, second],
+        orderId: "wo-4",
+      });
+      await toMenu(el);
+      click(el, '[data-action="transfer"]');
+      await el.updateComplete;
+      click(el, '[data-target="wo-check"]');
+      await el.updateComplete;
+      const pressed = (lineNo: number) => {
+        const button = el.shadowRoot!.querySelector(`[data-transfer-line="${lineNo}"]`);
+        expect(button).toBeInstanceOf(HTMLButtonElement);
+        return button!.getAttribute("aria-pressed");
+      };
+      expect([pressed(1), pressed(2)]).toEqual(["false", "false"]);
+
+      click(el, '[data-transfer-line="1"]');
+      await el.updateComplete;
+      expect([pressed(1), pressed(2)]).toEqual(["true", "false"]);
     });
 
     it("dispatches no transfer while no item is chosen, even when Confirm is pressed", async () => {

@@ -2615,11 +2615,6 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     twice (`moveLinesToGroup`, `apps/server/src/order-groups.ts`). A refusal part-way leaves the
     units already split. **Next action:** a server command that splits a line into single units in
     one transaction.
-  - **The Tab drawer's transfer picker marks a picked line with `aria-pressed` on a `wt-button`**
-    (`#transferLineRow`, `apps/till/src/screens/till-table-order-screen.ts`), and so does the split
-    picker (`#splitLineRow`). `wt-button` does not pass `aria-pressed` to its inner button
-    (`packages/ui-core/src/components/wt-button.ts`), so a screen reader does not hear whether a
-    line is picked. The draft's line toggle was changed to a plain button; these two were not.
   - **Task 5 (#750, kitchen, pass and table screen by group; printing problems).** Left open:
     - A party finished while its food is still on the pass keeps its cards there with no group
       button that works (each is refused `party.not_open`); a question for the owner.
