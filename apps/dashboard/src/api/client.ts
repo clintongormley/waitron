@@ -3068,8 +3068,7 @@ export class DashboardApi {
     );
   }
 
-  /** The ordinary request helper parses JSON, so this binary response keeps its own small fetch
-   * path. */
+  /** Not yet moved onto the request helper's `as: "blob"` option: docs/backlog.md A236. */
   async exportConfiguration(passphrase: string): Promise<Blob> {
     const fetchImpl = this.#fetch;
     const response = await fetchImpl(`${this.#baseUrl}/management-api/configuration-export`, {

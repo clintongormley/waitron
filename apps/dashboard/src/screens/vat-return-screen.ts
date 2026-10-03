@@ -14,7 +14,7 @@ import { currentLocale, t } from "../i18n/t.js";
 type Field = "year" | "period" | "declarationType";
 
 const YEARS_OFFERED = 5;
-/** AEAT's own order, from the DR303 record design. */
+/** AEAT's order, from packages/reporting/reference/DR303e26.xlsx. */
 const DECLARATION_TYPES = ["C", "D", "G", "I", "N", "V"] as const;
 const REFUSED: Record<Field, StringKey> = {
   year: "vat_return.year_refused",
@@ -112,29 +112,27 @@ export class VatReturnScreen extends LitElement {
     this.refused = {};
     this.refusal = "";
     if (this.declarationType === "") {
-      void focusFirstInvalid(this.shadowRoot!);
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
+    // The fields stay editable while the file is asked for.
+    const sent = { year: this.year, period: this.period, declarationType: this.declarationType };
     this.busy = true;
     try {
-      const file = await this.api.downloadVatReturnFile({
-        year: Number(this.year),
-        period: this.period,
-        declarationType: this.declarationType,
-      });
+      const file = await this.api.downloadVatReturnFile({ ...sent, year: Number(sent.year) });
       const url = URL.createObjectURL(file);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `modelo-303-${this.year}-${this.period}.txt`;
+      link.download = `modelo-303-${sent.year}-${sent.period}.txt`;
       link.click();
       URL.revokeObjectURL(url);
       this.attempted = false;
     } catch (error) {
       const code = codeOf(error);
       const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
-      if (code === "management.request_invalid" && isField(field)) {
+      if (code === "management.request_invalid" && isField(field) && this[field] === sent[field]) {
         this.refused = { [field]: t(REFUSED[field]) };
-        void focusFirstInvalid(this.shadowRoot!);
+        void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       } else this.refusal = codeMessage(code);
     } finally {
       this.busy = false;

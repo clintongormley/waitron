@@ -31,9 +31,9 @@ export type DashboardRequest = <T>(
  * becomes a rejected `{ code, status }` read from the server's `{ error: { code } }` envelope, falling
  * back to `server.internal` when the body is missing, non-JSON or names no code — so callers branch
  * on a stable domain code, never an HTTP status, while `status` (the answered response's HTTP status)
- * rides along for the rare caller that needs it. A 2xx with an EMPTY body resolves to `undefined`,
- * keyed off the empty body, not the status. This primitive does NOT redirect on 401 — it only decodes
- * and throws the code.
+ * rides along for the rare caller that needs it. Without `as: "blob"`, a 2xx with an EMPTY body
+ * resolves to `undefined`, keyed off the empty body, not the status. This primitive does NOT redirect
+ * on 401 — it only decodes and throws the code.
  */
 export function createRequest(
   opts: {

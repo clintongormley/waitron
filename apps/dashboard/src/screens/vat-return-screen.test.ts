@@ -159,6 +159,52 @@ describe("dashboard-vat-return-screen", () => {
     expect(field(el, "declarationType").value).toBe("N");
   });
 
+  it("names the file for the period it asked for, even when the fields change before the answer", async () => {
+    let answer!: (file: Blob) => void;
+    const api = stubApi(() => new Promise<Blob>((resolve) => (answer = resolve)));
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:vat-return");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const clicked: HTMLAnchorElement[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      clicked.push(this);
+    });
+    const el = await mount(api);
+    await chooseOption(field(el, "declarationType"), "I");
+    await press(el);
+
+    await chooseOption(field(el, "year"), "2025");
+    await chooseOption(field(el, "period"), "01");
+    answer(FILE);
+    await flush(el);
+
+    expect(api.downloadVatReturnFile).toHaveBeenCalledWith({
+      year: 2026,
+      period: "3T",
+      declarationType: "I",
+    });
+    expect(clicked).toHaveLength(1);
+    expect(clicked[0]!.download).toBe("modelo-303-2026-3T.txt");
+  });
+
+  it("puts a refusal naming a field changed while the file was asked for at the bottom", async () => {
+    let refuse!: (reason: unknown) => void;
+    const el = await mount(stubApi(() => new Promise<Blob>((_, reject) => (refuse = reject))));
+    await chooseOption(field(el, "declarationType"), "I");
+    await press(el);
+
+    await chooseOption(field(el, "period"), "01");
+    refuse({ code: "management.request_invalid", params: { field: "period" } });
+    await flush(el);
+
+    for (const name of ["year", "period", "declarationType"]) {
+      expect(field(el, name).error).toBe("");
+    }
+    expect(await bottom(el)).toBe(codeMessage("management.request_invalid"));
+    expect(button(el).disabled).toBe(false);
+  });
+
   it.each([
     ["period", "vat_return.period_refused", "01"],
     ["year", "vat_return.year_refused", "2025"],

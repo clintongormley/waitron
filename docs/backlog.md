@@ -7307,7 +7307,7 @@ and the DR303 file (#91), and its download route, `GET /management-api/reports/m
 monthly and quarterly periods (#98). An annual period is refused: `requireLiquidationPeriod` in
 `apps/server/src/report-api.ts` accepts only `01`..`12` and `1T`..`4T` (trimmed and upper-cased
 first), and its comment gives the reason — the annual summary is modelo 390, not a 303. The
-dashboard's VAT return screen (Reports, under Sales, shown to a session holding `report.export`)
+dashboard's VAT return screen (in the sidebar right after Sales, shown to a session holding `report.export`)
 downloads the file — DONE (this branch). Two pre-filing caveats a human must clear before the first
 LIVE 303 filing: validate the DR303 file once against the real AEAT "por fichero" uploader (we
 omit página 2, régimen simplificado); and an asesor must confirm the **prorrata** treatment
