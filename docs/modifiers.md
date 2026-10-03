@@ -69,7 +69,9 @@ with its own choice to make a new one, **New extras list…** or **New options l
 build a list without abandoning the product you are editing.
 
 Every menu offer carries the product's extras and options lists in the order you set here.
-An extra uses its list entry's price when you set one, otherwise its product's own price.
+An extra uses its list entry's price per portion when you set one. With the price blank, its
+portion multiplied by the product's unit price sets the price per pick, rounded once to a cent.
+For a weighed or fractional unit, enter the amount one pick adds to a dish. An Each extra adds one.
 Publish each menu to make these changes available on the till.
 
 ## See what uses a list
@@ -99,7 +101,7 @@ it is wording, not something eaten.
 ## What the till does with a list
 
 Tapping a dish that carries a list opens the question straight away, one list after another in the
-order you arranged them. An extras list shows its entries at the price you set, with a tick box
+order you arranged them. An extras list shows each entry's price per portion, with a tick box
 each, or a stepper where you allowed more than one; a list you made required keeps **Add** shut
 until something is picked. An options list shows its options as a set of radio buttons, exactly one
 to choose, with your default already selected (nothing is selected on a list that has no stored

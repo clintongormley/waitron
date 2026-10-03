@@ -71,7 +71,8 @@ An **extras list** bounds how many picks it takes — `minPicks` 0 makes it opti
 it required, `maxPicks` null leaves it uncapped — and each item bounds its own product with
 `maxQuantity` (at least 1, where 1 means "one or none"). An item names a product and adds only the
 terms of the offer: it duplicates none of the product's names, VAT class, allergens, dietary labels
-or photo, which all come from the product. A product may appear at most once in
+or photo, which all come from the product. Each item stores the amount one pick adds in the
+product's unit; an Each item stores one. A product may appear at most once in
 one list (`extra_list_items_list_product_uq`).
 
 ### Attaching a list to a dish
@@ -100,10 +101,10 @@ per-menu extras publication or price override.
 
 ### What an extra costs
 
-Two rungs, first one wins (`resolveExtraPrice`, `packages/catalogue/src/extras.ts`):
-the list item's own `price`, then the product's
-`unit_price` (its own, or its parent's where a variant leaves it blank). A null at a rung means "ask
-the next one". Every price on the wire is a GROSS (VAT-inclusive) two-place decimal string; the
+The list item's own `price` is the gross price per portion. When it is null,
+`resolveExtraPrice` (`packages/catalogue/src/extras.ts`) multiplies the stored portion by the
+product's unit price and rounds once to a cent. A stored zero is a free portion. Every price on
+the wire is a GROSS (VAT-inclusive) two-place decimal string; the
 column underneath holds a count of whole cents and the row converts (`stringToCents` /
 `centsToDecimal`, `packages/shared/src/cents.ts`).
 
@@ -186,7 +187,9 @@ the basket resolved, and decides what is stored:
   own, or its parent's where a variant leaves it blank — never the dish's), as the published menu
   version froze it for that product, and taxed at that class's rate on the day the invoice is
   issued.
-  The child's stored quantity is dish quantity × pick quantity.
+  The child's stored quantity is dish quantity × pick quantity × the item's frozen portion. Its
+  `price_quantity` stores that portion, so its price remains per portion when the physical amount
+  is fractional.
   If its routing rule sends it to another station, that child also gets its own kitchen record at
   that station. Its `+` line on the dish becomes a cross-reference, retaining the extra's allergen
   and dietary marks; paper prints cross-references on `> ` lines (`readQueueSubItems`,
@@ -300,9 +303,9 @@ Six things it is worth knowing about that payload:
 
 - **The order is the product's own `product_modifiers.sort`, on both reads.** Each menu offer
   carries the same product attachment list.
-- **Every price is settled**: the list item's price, then the product's `unit_price`, its own or
-  its parent's where a variant leaves it blank. A till cannot resolve that last step itself,
-  because the product price is not on the list item.
+- **Every price is settled per portion**: the list item's explicit price, or its portion times
+  the product's unit price, rounded once to a cent. The published item carries that price and its
+  frozen portion; the till does not recalculate it from today's product price.
 - **A published version holds the lists that were Active when it was published, and every label of
   each options list; each label is served marked with whether it is Available now**
   (`applyLiveFields`, which reads no list's `active`, so a list switched off after publishing is
