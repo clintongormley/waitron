@@ -1006,16 +1006,15 @@ a passkey is picked failed the picked-passkey refusal case, which showed Google'
 of the passkey refusal.
 
 **A focused table search box turns its own border blue, with no second ring (A192, owner
-2026-10-02) — OPEN.** The owner, on two screenshots of the Modifiers screen's "Search extras
+2026-10-02) — DONE (A192).** The owner, on two screenshots of the Modifiers screen's "Search extras
 lists": _"Focusing on the search box adds a second thicker blue border. instead it should turn the
 existing border blue."_ The box is `wt-data-table`'s `.table-search`
-(`packages/ui/src/components/wt-data-table.ts`), which has a grey 1px border and no focus rule of
-its own; no global focus rule was found in the dashboard or the tokens, so the ring is presumably
-the browser's own focus outline — check in a real Chromium. **Wanted:** on focus the existing
+(`packages/ui/src/components/wt-data-table.ts`). At rest it has a grey 1px border. On focus the existing
 border turns the primary blue and nothing is drawn outside it, as `wt-combobox`'s search box already
 does (its `.search:focus-visible` rule: "Its own primary border is the focus marking"). Every table
-with a search box gets it, since they all share this one. The focus must stay visible enough to
-pass the primitive's axe test in both themes, and LOOK at it in both.
+with a search box gets it, since they all share this one. The border and outline are checked in
+Chromium; its visible focus state was inspected in light and dark at phone width. The axe check runs
+in both themes but does not assess the focus indicator's visibility.
 
 **A table filter's "Any …" choice is drawn as a chosen value, not a hint (A193, owner
 2026-10-02) — OPEN.** The owner, on a screenshot of the Modifiers screen's status filter: _"The Any
