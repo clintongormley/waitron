@@ -92,13 +92,10 @@ describe("setup-review-screen's explanations", () => {
     "shows each section's explanation as a muted line directly under its heading (%s)",
     async (locale) => {
       setLocale(locale);
-      const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+      const { el, host } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
         draft: everyRowDraft("live"),
       });
-      const muted = document.createElement("span");
-      muted.style.color = "var(--wt-color-text-muted)";
-      el.shadowRoot!.append(muted);
-      const mutedColour = getComputedStyle(muted).color;
+      host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
       const groups = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-group]")];
       expect(groups).toHaveLength(4);
       groups.forEach((group, index) => {
@@ -109,7 +106,7 @@ describe("setup-review-screen's explanations", () => {
         expect(line.tagName).toBe("P");
         expect(line.textContent?.trim()).toBe(GROUP_EXPLANATIONS[locale][index]);
         expect(line.checkVisibility()).toBe(true);
-        expect(getComputedStyle(line).color).toBe(mutedColour);
+        expect(getComputedStyle(line).color).toBe("rgb(7, 8, 9)");
         const lineBox = line.getBoundingClientRect();
         expect(lineBox.top).toBeGreaterThanOrEqual(header.getBoundingClientRect().bottom - 1);
         expect(lineBox.bottom).toBeLessThanOrEqual(
