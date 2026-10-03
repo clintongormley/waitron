@@ -1407,10 +1407,22 @@ but the + and - can just be part of the field without needing so much space"_. S
 field box, square as today, with its label as today, and − and + drawn as plain icons inside it
 rather than as filled squares. Questions for the mockups: whether − and + sit together at the
 trailing end or either side of the number; how the blank "No limit" value shows; and how much
-width the icons may take. That last one is the real trade: each button is 44px wide today because
-that is `--wt-tap-min`, the tap size a finger needs, so plain icons in 44px tap areas save only the
-fills and separators, not the width. Saving width means smaller tap areas (on the dashboard only,
-or everywhere), and the mockups should show what each choice costs at phone width.
+width the icons may take. **On size, the owner (2026-10-03):** _"if the buttons are removed from
+each other they don't have to be so big - there's less risk of hitting the wrong thing"_. That is
+the web accessibility standard's own exception. WCAG 2.2's level AA rule, 2.5.8 Target Size
+(Minimum), reads: _"The size of the target for pointer inputs is at least 24 by 24 CSS pixels,
+except when: Spacing Undersized targets (those less than 24 by 24 CSS pixels) are positioned so
+that if a 24 CSS pixel diameter circle is centered on the bounding box of each, the circles do not
+intersect another target or the circle for another undersized target"_. The 44px figure is the
+stricter level AAA rule, 2.5.5 Target Size (Enhanced), which has no spacing exception (both read
+from https://www.w3.org/TR/WCAG22/, 2026-10-03). Waitron's `--wt-tap-min` (44px on both axes) is
+the house rule, written for POS screens staff touch under time pressure
+([design-system.md](developers/design-system.md), "`--wt-tap-min`"), and `wt-number-stepper` is
+used only on dashboard screens today (`grep -rln wt-number-stepper apps packages`: the backup
+screen, the extras list editor and the venue operations screen). So the mockups can try − and +
+on either side of the number, each well under 44px, kept apart by the number between them. Doing
+so changes the stepper's row in design-system.md and its tap-target sentence, so it is the owner's
+call at the mockups, and the axe and token-painting tests for the primitive change with it.
 
 **The extras list editor's columns move as products are added (A264, owner 2026-10-03) — OPEN,
 queued.** The owner, on two screenshots of the editor before and after adding a second product:
