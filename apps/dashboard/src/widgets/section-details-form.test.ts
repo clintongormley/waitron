@@ -410,6 +410,6 @@ it("hints each blank customer-facing name with the default language's name, then
   expect(hints()).toEqual(["Starters", "To begin"]);
   await type("internalName", "First courses");
   expect(hints()).toEqual(["First courses", "To begin"]);
-  await type("names-en", "");
+  await type("names-en", " ");
   expect(hints()).toEqual(["First courses", "First courses"]);
 });

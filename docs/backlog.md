@@ -4395,12 +4395,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   language alphabetically rather than the default. The receipt fills the variant's text per
   receipt language before it gets there (`apps/server/src/working-order.ts`), so whether any
   surface shows the difference is unknown; reproduce before fixing.
-- **The menu section form's customer-name hints skip the default language — DONE (W11).** Each
-  blank customer-facing name in `apps/dashboard/src/widgets/section-details-form.ts` now hints the
-  default language's name, then the internal name, because the form passes its default language to
-  `optionalTextFields` as the product, variant, options list, option and extras list editors do.
-  The same form is the menu's Create and Rename form (`#renderMenuForm`,
-  `apps/dashboard/src/screens/menus-screen.ts`), so a menu's own names are hinted the same way.
+- **The menu section form's customer-name hints skip the default language — DONE (W11; found
+  2026-10-02 during A172).** Each blank customer-facing name in
+  `apps/dashboard/src/widgets/section-details-form.ts` now hints the default language's name, then
+  the internal name, because the form passes its default language to `optionalTextFields` as the
+  product, variant, options list, option and extras list editors do. The same form is the menu's
+  Create and Rename form (`#renderMenuForm`, `apps/dashboard/src/screens/menus-screen.ts`), so a
+  menu's own names are hinted the same way.
 - **The default-change check counts deleted and switched-off things — OPEN (noted 2026-10-01 by
   C122; I believe this predates the branch).** `listContentTranslationGaps`
   (`packages/catalogue/src/content-languages.ts`) has no `active` filter on top-level products,
