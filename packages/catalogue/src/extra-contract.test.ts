@@ -185,6 +185,13 @@ describe("extra list authoring contract", () => {
     );
   });
 
+  it("refuses a maxPicks of 0, which would let nobody pick anything, and accepts 1", () => {
+    expect(() => parseExtraListInput({ ...breadsBody, minPicks: 0, maxPicks: 0 })).toThrowError(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "maxPicks" } }),
+    );
+    expect(parseExtraListInput({ ...breadsBody, minPicks: 0, maxPicks: 1 }).maxPicks).toBe(1);
+  });
+
   it("refuses a fractional pick bound", () => {
     expect(() => parseExtraListInput({ ...breadsBody, maxPicks: 1.5 })).toThrowError(
       expect.objectContaining({ code: "extras.invalid", params: { field: "maxPicks" } }),
