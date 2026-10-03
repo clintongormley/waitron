@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import type { NodeId, SaleId } from "@waitron/shared";
+import type { Decimal, NodeId, SaleId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type {
   FiscalBackend,
@@ -42,10 +42,21 @@ const nextId = (): string => `fake-${String(++counter).padStart(8, "0")}`;
  */
 export class FakeFiscalBackend implements FiscalBackend {
   readonly id = "fake";
+  readonly simplifiedInvoiceLimit: Decimal | null;
+  readonly recipientNameMaxLength: number | null;
 
   private readonly injectedIssues = new Map<string, IntegrityIssue[]>();
 
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    limits: {
+      simplifiedInvoiceLimit?: Decimal | null;
+      recipientNameMaxLength?: number | null;
+    } = {},
+  ) {
+    this.simplifiedInvoiceLimit = limits.simplifiedInvoiceLimit ?? null;
+    this.recipientNameMaxLength = limits.recipientNameMaxLength ?? null;
+  }
 
   /**
    * Creates this fake's two bookkeeping tables. Hand-written rather than in `@waitron/db`'s column

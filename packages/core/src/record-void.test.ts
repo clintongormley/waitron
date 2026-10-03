@@ -165,6 +165,8 @@ async function countRows(table: string): Promise<number> {
 function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>): FiscalBackend {
   return {
     id: fake.id,
+    simplifiedInvoiceLimit: fake.simplifiedInvoiceLimit,
+    recipientNameMaxLength: fake.recipientNameMaxLength,
     registerNode: (tx, node) => fake.registerNode(tx, node),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     filedReceiptFor: (tx, saleId) => fake.filedReceiptFor(tx, saleId),
@@ -370,6 +372,8 @@ describe("recordVoid — error propagation", () => {
 
     const backend: FiscalBackend = {
       id: "fake",
+      simplifiedInvoiceLimit: null,
+      recipientNameMaxLength: null,
       registerNode: () => {
         throw new Error("not used by this test");
       },

@@ -12,6 +12,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@waitron/country-packs": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/fiscal": "workspace:*",
     "@waitron/identity": "workspace:*",

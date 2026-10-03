@@ -708,6 +708,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@waitron/country-packs':
+        specifier: workspace:*
+        version: link:../country-packs
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
@@ -1064,6 +1067,9 @@ importers:
       '@waitron/catalogue':
         specifier: workspace:*
         version: link:../catalogue
+      '@waitron/country-packs':
+        specifier: workspace:*
+        version: link:../country-packs
       '@waitron/identity':
         specifier: workspace:*
         version: link:../identity

@@ -44,6 +44,11 @@ describe("NoneBackend records nothing", () => {
     expect(make().receiptQrText).toBeUndefined();
   });
 
+  it("sets no simplified-invoice limit and no recipient name cap: a venue with no regime has none", () => {
+    expect(make().simplifiedInvoiceLimit).toBeNull();
+    expect(make().recipientNameMaxLength).toBeNull();
+  });
+
   it("recordSale writes nothing and returns a recorded ref carrying the sale's own instants", async () => {
     const sale = sampleSale();
     const ref = await make().recordSale(tx, sale);

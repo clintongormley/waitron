@@ -178,6 +178,17 @@ export interface FiscalBackend {
   /** Printed around `verificationUrl`'s QR, and never without one; absent when the regime prints none. */
   readonly receiptQrText?: ReceiptQrText;
 
+  /**
+   * The largest total a sale with no named customer (a simplified invoice) may have, or `null` when
+   * this regime sets none. A total equal to it is allowed; one a cent over is refused before
+   * anything is written or charged (`refuseOverSimplifiedLimit`, `@waitron/core`).
+   */
+  readonly simplifiedInvoiceLimit: Decimal | null;
+
+  /** The most characters (Unicode code points) a named customer's legal name may have on this
+   * regime's record, or `null` when it sets no cap. */
+  readonly recipientNameMaxLength: number | null;
+
   registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration>;
 
   /**

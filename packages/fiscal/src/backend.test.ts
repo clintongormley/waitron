@@ -40,6 +40,18 @@ describe("FiscalBackend", () => {
     expect(backend).toBeInstanceOf(FakeFiscalBackend);
   });
 
+  it("the fake sets no simplified-invoice limit and no recipient name cap unless told to", () => {
+    const plain = new FakeFiscalBackend(null as never);
+    expect(plain.simplifiedInvoiceLimit).toBeNull();
+    expect(plain.recipientNameMaxLength).toBeNull();
+    const limited = new FakeFiscalBackend(null as never, {
+      simplifiedInvoiceLimit: decimal("50.00"),
+      recipientNameMaxLength: 7,
+    });
+    expect(limited.simplifiedInvoiceLimit).toBe("50.00");
+    expect(limited.recipientNameMaxLength).toBe(7);
+  });
+
   it("accepts a sale whose monetary fields are exact decimals", () => {
     const sale: SaleForFiscalRecord = {
       tillId: TILL,

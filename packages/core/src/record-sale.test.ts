@@ -146,6 +146,8 @@ async function rows<T extends Record<string, unknown>>(
 function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>): FiscalBackend {
   return {
     id: fake.id,
+    simplifiedInvoiceLimit: fake.simplifiedInvoiceLimit,
+    recipientNameMaxLength: fake.recipientNameMaxLength,
     registerNode: (tx, node) => fake.registerNode(tx, node),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     filedReceiptFor: (tx, saleId) => fake.filedReceiptFor(tx, saleId),
@@ -1565,4 +1567,53 @@ it("stores no corrected line on an ordinary sale's line, even when the caller na
     .from(saleLines)
     .where(eq(saleLines.saleId, saleId));
   expect(saved.map((line) => line.correctsLineId)).toEqual([null, null]);
+});
+
+describe("recordSale — a regime's simplified-invoice limit", () => {
+  /** One 10% line whose gross total is `total`, so the limit is the only rule a total can trip. */
+  function saleOf(total: string): Partial<RecordSaleInput> {
+    return {
+      total,
+      lines: [
+        {
+          lineNo: 1,
+          name: "Banquete",
+          descriptions: { "es-ES": "Banquete" },
+          quantity: "1",
+          unitPrice: total,
+          vatRate: "10.00",
+          lineTotal: total,
+        },
+      ],
+      vatBreakdown: [{ rate: decimal("10.00"), base: decimal(total), tax: decimal("0.00") }],
+      settlement: { kind: "deferred" },
+    };
+  }
+  const limited = () =>
+    new FakeFiscalBackend(suite.db, { simplifiedInvoiceLimit: decimal("3010.00") });
+
+  it("files a sale whose total equals the limit", async () => {
+    const { saleId } = await run(limited(), saleOf("3010.00"));
+    expect(await countRows("sales")).toBe(1);
+    expect(saleId).toBeDefined();
+  });
+
+  it("refuses a sale a cent over the limit, writing nothing and spending no number", async () => {
+    const error = await captureError(() => run(limited(), saleOf("3010.01")));
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("sale.total_exceeds_simplified_limit");
+    expect((error as AppError).params).toEqual({ total: "3010.01", limit: "3010.00" });
+    expect(await countRows("sales")).toBe(0);
+    expect(await countRows("sale_lines")).toBe(0);
+    const [series] = await suite.db
+      .select({ next: invoiceSeries.nextNumber })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, seriesId));
+    expect(series!.next).toBe(1);
+  });
+
+  it("files any total for a regime that sets no limit", async () => {
+    await run(new FakeFiscalBackend(suite.db), saleOf("99999.99"));
+    expect(await countRows("sales")).toBe(1);
+  });
 });

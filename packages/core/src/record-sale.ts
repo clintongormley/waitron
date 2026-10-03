@@ -32,6 +32,7 @@ import type { RecordSaleLine } from "./sale-line.js";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { settleSale } from "./settle-sale.js";
+import { refuseOverSimplifiedLimit } from "./simplified-limit.js";
 
 export type { RecordSaleLine };
 
@@ -169,6 +170,10 @@ export async function recordSale(
     assertSumsTo(input.vatBreakdown, decimal(input.total));
     assertSumsTo(vatBreakdown, total);
   }
+
+  // An ordinary sale names no customer, so it is a simplified invoice. Refused before anything is
+  // written, like the breakdown above.
+  refuseOverSimplifiedLimit(backend.simplifiedInvoiceLimit, total);
 
   // Verification must run against exactly the state this transaction is about to extend; one
   // write transaction runs on the venue file at a time (`withTransaction`,

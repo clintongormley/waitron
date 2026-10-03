@@ -38,10 +38,16 @@ import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { verifyChain } from "./verify.js";
+import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
 
 /** `FiscalRecordRef.backend`/`NodeRegistration.backend` — the regime-neutral interface's own
  * "which module produced this" tag. */
 const BACKEND_ID = "verifactu";
+
+/** AEAT's ceiling on a simplified invoice (F2), as `@waitron/verifactu`'s `validate` applies it
+ * (`F2_AMOUNT_LIMIT`): 3,000.00 plus its 10.00 tolerance, exceeded only by a cent more.
+ * ./record-limits.test.ts compares it with the validator's verdict. */
+const SIMPLIFIED_INVOICE_LIMIT = decimal("3010.00");
 
 /**
  * Software-identity fields of `SistemaInformatico` that describe THIS PRODUCT rather than any
@@ -151,6 +157,9 @@ export class VerifactuBackend implements FiscalBackend {
    * the legend is the law's (Orden HAC/1177/2024 art. 20.1.b).
    */
   readonly receiptQrText: ReceiptQrText = { caption: "QR tributario:", legend: "VERI*FACTU" };
+
+  readonly simplifiedInvoiceLimit = SIMPLIFIED_INVOICE_LIMIT;
+  readonly recipientNameMaxLength = NOMBRE_RAZON_MAX;
 
   private readonly db: Database;
   private readonly clock: TrustedClock;
