@@ -90,7 +90,9 @@ describe("startS3TestServer", () => {
 
     expect(second.endpoint).not.toBe(first.endpoint);
     expect(await listing(second)).toBe("answered");
-    second.pause();
+    const paused = second.pause();
+    expect(paused).toBeInstanceOf(Promise);
+    await paused;
     const pending = listing(second);
     expect(await listing(first)).toBe("answered");
     expect(await pending).toBe("unanswered");

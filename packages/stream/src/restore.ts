@@ -31,6 +31,8 @@ export interface RestoreGenerationArgs {
   stallMs?: number;
   ceilingMs?: number;
   pollMs?: number;
+  /** Receives process diagnostics on a failed child restore; never included in the AppError. */
+  onFailure?: (details: { exitCode: number | null; output: string; abandoned: boolean }) => void;
 }
 
 async function sizeOf(path: string): Promise<number> {
@@ -117,6 +119,7 @@ export async function restoreGeneration(args: RestoreGenerationArgs): Promise<vo
     clearTimeout(timer);
   }
   if (abandoned || exitCode !== 0) {
+    args.onFailure?.({ exitCode, output: child.output(), abandoned });
     throw new AppError("backup.stream_restore_failed", {
       exitCode: abandoned ? null : exitCode,
       diskFull: exitCategory(exitCode, child.output()) === "disk_full",

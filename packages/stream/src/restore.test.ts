@@ -67,7 +67,12 @@ const BUCKET = {
 
 const GENERATION = "gen-3-n1-20260923T101500Z";
 
-type Bounds = { stallMs?: number; ceilingMs?: number; pollMs?: number };
+type Bounds = {
+  stallMs?: number;
+  ceilingMs?: number;
+  pollMs?: number;
+  onFailure?: (details: { exitCode: number | null; output: string; abandoned: boolean }) => void;
+};
 
 async function run(
   mode: string,
@@ -163,6 +168,18 @@ describe("restoreGeneration", () => {
     await expect(promise).rejects.toMatchObject({
       code: "backup.stream_restore_failed",
       params: { exitCode: 1, diskFull: false },
+    });
+  });
+
+  it("reports the child's exit and output to a caller collecting failure diagnostics", async () => {
+    const onFailure = vi.fn();
+    const { promise } = await run("fail", { onFailure });
+
+    await expect(promise).rejects.toMatchObject({ code: "backup.stream_restore_failed" });
+    expect(onFailure).toHaveBeenCalledWith({
+      exitCode: 1,
+      output: expect.stringContaining("no matching backup files available"),
+      abandoned: false,
     });
   });
 

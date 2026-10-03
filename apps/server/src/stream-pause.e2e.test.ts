@@ -528,7 +528,7 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
 
       // 6. The bucket freezes (SIGSTOP), so every call to it goes unanswered while it is frozen.
       //    The control: a call that does wait on the bucket is still unanswered at the bound.
-      s3.pause();
+      await s3.pause();
       expect(
         await Promise.race([
           store.list("").then(
@@ -624,14 +624,24 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
         UPLOAD_WAIT_MS,
         async () => {
           const out = join(await mkdtemp(join(scratch!, "probe-")), "venue.db");
-          await restoreGeneration({
-            litestreamBin,
-            bucket,
-            venueId: box.venueId,
-            generation,
-            outPath: out,
-            ceilingMs: RESTORE_MS,
-          });
+          try {
+            await restoreGeneration({
+              litestreamBin,
+              bucket,
+              venueId: box.venueId,
+              generation,
+              outPath: out,
+              ceilingMs: RESTORE_MS,
+              onFailure: ({ exitCode, output, abandoned }) => {
+                console.error(
+                  `stream pause restore probe: exitCode=${exitCode}, abandoned=${abandoned}, Litestream output:\n${output}`,
+                );
+              },
+            });
+          } catch (error) {
+            console.error("stream pause restore probe failed:", error);
+            throw error;
+          }
           const db = new DatabaseSync(out);
           try {
             return db

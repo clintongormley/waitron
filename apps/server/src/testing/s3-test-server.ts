@@ -1,6 +1,6 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -35,6 +35,7 @@ const BUCKET = "waitron-loop";
 export const READY_TIMEOUT_MS = 10_000;
 const STOP_GRACE_MS = 5_000;
 const VERSION_TIMEOUT_MS = 10_000;
+const PAUSE_TIMEOUT_MS = 5_000;
 
 export type BinaryLookup = { ok: true; bin: string } | { ok: false; reason: string };
 
@@ -48,8 +49,8 @@ export interface S3TestServer {
   log(): string;
   /** SIGTERM, then SIGKILL after a grace period; resolves once the process is gone either way. */
   stop(): Promise<void>;
-  /** Freezes the process (SIGSTOP): every call to it then goes unanswered. Throws once it has exited. */
-  pause(): void;
+  /** Resolves once SIGSTOP has stopped the process. Throws once it has exited. */
+  pause(): Promise<void>;
   /** Lets a paused process run again (SIGCONT). Throws once it has exited. */
   resume(): void;
 }
@@ -207,6 +208,19 @@ async function startOnPort(
     }
     child.kill(name);
   };
+  const state = async (): Promise<string | undefined> => {
+    if (child.pid === undefined) return undefined;
+    try {
+      if (process.platform === "linux") {
+        const stat = await readFile(`/proc/${child.pid}/stat`, "utf8");
+        return stat.slice(stat.lastIndexOf(") ") + 2, stat.lastIndexOf(") ") + 3);
+      }
+      const { stdout } = await promisify(execFile)("ps", ["-o", "state=", "-p", String(child.pid)]);
+      return stdout.trim().charAt(0);
+    } catch {
+      return undefined;
+    }
+  };
 
   const server: S3TestServer = {
     endpoint: `http://127.0.0.1:${port}`,
@@ -215,7 +229,18 @@ async function startOnPort(
     accessKeyId,
     secretAccessKey,
     log: () => log,
-    pause: () => signal("SIGSTOP"),
+    pause: () => {
+      signal("SIGSTOP");
+      return (async () => {
+        const deadline = Date.now() + PAUSE_TIMEOUT_MS;
+        while ((await state()) !== "T") {
+          if (exitCode !== undefined || Date.now() >= deadline) {
+            throw new Error(`versitygw did not stop after SIGSTOP: ${log}`);
+          }
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      })();
+    },
     resume: () => signal("SIGCONT"),
     async stop() {
       if (exitCode !== undefined) return;
