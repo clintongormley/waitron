@@ -52,7 +52,7 @@ test("defines the structural contract", () => {
     "--wt-field-max-width",
     "--wt-cell-name-max-width",
     "--wt-stepper-field-width",
-    "--wt-stepper-field-width-wide",
+    "--wt-stepper-button-width",
     "--wt-price-field-width",
     "--wt-duration-fade",
     "--wt-duration-move",
@@ -149,11 +149,14 @@ test("a stepper's number box is never narrower than the tap target", () => {
   );
 });
 
-test("a wide stepper box is wider than the standard one", () => {
+test("a stepper's buttons are 24px wide, WCAG 2.2's level AA minimum target", () => {
   const el = mount();
-  expect(parseInt(token(el, "--wt-stepper-field-width-wide"), 10)).toBeGreaterThan(
-    parseInt(token(el, "--wt-stepper-field-width"), 10),
-  );
+  expect(token(el, "--wt-stepper-button-width")).toBe("24px");
+});
+
+test("the narrowest stepper box is 88px", () => {
+  const el = mount();
+  expect(token(el, "--wt-stepper-field-width")).toBe("88px");
 });
 
 test("a field box is never shorter than the tap target", () => {

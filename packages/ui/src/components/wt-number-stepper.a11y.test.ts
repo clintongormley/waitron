@@ -50,9 +50,12 @@ describe.each(["light", "dark"] as const)("wt-number-stepper a11y (%s theme)", (
       theme,
     );
     await expectNoA11yViolations(host);
-    const button = host.querySelector("wt-number-stepper")!.shadowRoot!.querySelector("button")!;
+    const root = host.querySelector("wt-number-stepper")!.shadowRoot!;
+    const button = root.querySelector("button")!;
     const style = getComputedStyle(button);
-    expect(contrastRatio(style.color, style.backgroundColor)).toBeGreaterThanOrEqual(3);
+    // An unfilled button shows the field's fill behind its icon.
+    const field = getComputedStyle(root.querySelector(".field")!).backgroundColor;
+    expect(contrastRatio(style.color, field)).toBeGreaterThanOrEqual(3);
     await userEvent.hover(button);
     expect(contrastRatio(style.color, style.backgroundColor)).toBeGreaterThanOrEqual(3);
   });
@@ -60,6 +63,22 @@ describe.each(["light", "dark"] as const)("wt-number-stepper a11y (%s theme)", (
   test("at min", async () => {
     await mountThemed(
       '<wt-number-stepper label="Max quantity" name="q" value="1" min="1"></wt-number-stepper>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("clearable, at its lowest number", async () => {
+    await mountThemed(
+      '<wt-number-stepper label="Maximum choices" name="max" value="1" min="1" clearable></wt-number-stepper>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("clearable and blank", async () => {
+    await mountThemed(
+      '<wt-number-stepper label="Maximum choices" name="max" min="1" clearable></wt-number-stepper>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -75,7 +94,7 @@ describe.each(["light", "dark"] as const)("wt-number-stepper a11y (%s theme)", (
 
   test("required, with a hint", async () => {
     await mountThemed(
-      '<wt-number-stepper label="Minimum choices" name="min" value="0" required hint="0 makes the list optional"></wt-number-stepper>',
+      '<wt-number-stepper label="Minimum choices" name="min" value="0" required hint="Leave empty if none"></wt-number-stepper>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -110,7 +129,7 @@ describe.each(["light", "dark"] as const)("wt-number-stepper a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  test("resting label in an empty box", async () => {
+  test("an empty box with no hint or placeholder", async () => {
     await mountThemed('<wt-number-stepper label="Máximo" name="max"></wt-number-stepper>', theme);
     await expectNoA11yViolations(host);
   });

@@ -142,14 +142,17 @@ const panel = (theme: "light" | "dark") => `
       <wt-number-stepper
         label="Mínimo"
         name="minimo"
-        value="0"
-        hint="0 hace la lista opcional"
+        min="1"
+        clearable
+        placeholder="Ninguna"
       >
       </wt-number-stepper>
       <wt-number-stepper
         label="Máximo"
         name="maximo"
-        placeholder="∞"
+        min="1"
+        clearable
+        placeholder="Ninguna"
       >
       </wt-number-stepper>
       <wt-number-stepper

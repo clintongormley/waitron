@@ -59,7 +59,9 @@ export interface ExtraListItem {
 
 /**
  * A reusable, named list of products the diner may add to a dish. `minPicks` 0 makes the list
- * optional and 1 or more makes it required; `maxPicks` null leaves it uncapped.
+ * optional and 1 or more makes it required; `maxPicks` null leaves it uncapped. The request check
+ * refuses a `maxPicks` of 0, but the database CHECK allows it and configuration transfer copies rows
+ * without the parser, so a reader has to accept a stored 0.
  */
 export interface ExtraList {
   id: string;

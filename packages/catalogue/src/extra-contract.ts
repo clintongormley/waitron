@@ -122,7 +122,7 @@ export function parseExtraListInput(value: unknown): ExtraListInput {
     "extraList",
   );
   const minPicks = row.minPicks === undefined ? 0 : whole(row.minPicks, "minPicks", 0);
-  const maxPicks = row.maxPicks == null ? null : whole(row.maxPicks, "maxPicks", 0);
+  const maxPicks = row.maxPicks == null ? null : whole(row.maxPicks, "maxPicks", 1);
   // The cap is what is wrong when the pair cannot both hold, so the refusal names it rather than
   // `minPicks`: an editor showing both fields puts the message on the one the manager just raised.
   if (maxPicks !== null && maxPicks < minPicks) invalid("maxPicks");

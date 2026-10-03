@@ -66,14 +66,25 @@ export class ExtraListForm extends LitElement {
         display: grid;
         gap: var(--wt-space-3);
       }
+      .picks {
+        min-inline-size: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+      .group-label {
+        padding: 0;
+        margin-block-end: var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        text-transform: uppercase;
+      }
       .picks-row {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, max-content));
         gap: var(--wt-space-3);
         align-items: start;
-      }
-      .picks-row wt-number-stepper {
-        --wt-stepper-field-width: var(--wt-stepper-field-width-wide);
       }
       /* The same narrow case, and the same width, as the variants table's (design-system.md): a
          container query cannot read a token. There the column heading alone names the switches. */
@@ -161,7 +172,7 @@ export class ExtraListForm extends LitElement {
   @state() private name = "";
   @state() private customerName: Record<string, string> = {};
   @state() private kitchenName = "";
-  @state() private minPicks = "0";
+  @state() private minPicks = "";
   @state() private maxPicks = "";
   @state() private active = true;
   @state() private items: DraftItem[] = [];
@@ -226,7 +237,8 @@ export class ExtraListForm extends LitElement {
     this.name = value?.name ?? "";
     this.customerName = { ...value?.customerName };
     this.kitchenName = value?.kitchenName ?? "";
-    this.minPicks = String(value?.minPicks ?? 0);
+    // A minimum of 0 is no minimum, which the box shows empty.
+    this.minPicks = value?.minPicks ? String(value.minPicks) : "";
     this.maxPicks = value?.maxPicks == null ? "" : String(value.maxPicks);
     this.active = value?.active ?? true;
     this.items = (value?.items ?? []).map((item) => ({
@@ -479,6 +491,7 @@ export class ExtraListForm extends LitElement {
     const capped = this.maxPicks.trim() !== "";
     const maxPicks = this.#maxPicks();
     if (capped && maxPicks === null) validation["max-picks"] = t("extras.picks_invalid");
+    else if (maxPicks === 0) validation["max-picks"] = t("extras.max_picks_zero");
     // The cap is what is wrong when the pair cannot both hold, so the message goes there rather
     // than on the minimum — the field `parseExtraListInput` names, and for the reason it states.
     else if (minPicks !== null && maxPicks !== null && maxPicks < minPicks)
@@ -826,41 +839,45 @@ export class ExtraListForm extends LitElement {
             this.name,
           )}
           ${this.#namesSection(errors)}
-          <div class="picks-row" data-test="picks-row">
-            <wt-number-stepper
-              name="min-picks"
-              label=${t("extras.min_picks")}
-              hint=${t("extras.min_picks_hint")}
-              .min=${0}
-              .decreaseLabel=${decreaseLabel}
-              .increaseLabel=${increaseLabel}
-              .disabled=${this.busy}
-              .value=${this.minPicks}
-              .error=${errors["min-picks"] ?? ""}
-              .invalid=${!!errors["min-picks"]}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                event.stopPropagation();
-                this.#edit(() => (this.minPicks = event.detail.value), "min-picks");
-              }}
-            ></wt-number-stepper>
-            <wt-number-stepper
-              name="max-picks"
-              label=${t("extras.max_picks")}
-              hint=${t("extras.max_picks_hint")}
-              placeholder=${t("extras.no_limit")}
-              .min=${0}
-              .decreaseLabel=${decreaseLabel}
-              .increaseLabel=${increaseLabel}
-              .disabled=${this.busy}
-              .value=${this.maxPicks}
-              .error=${errors["max-picks"] ?? ""}
-              .invalid=${!!errors["max-picks"]}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                event.stopPropagation();
-                this.#edit(() => (this.maxPicks = event.detail.value), "max-picks");
-              }}
-            ></wt-number-stepper>
-          </div>
+          <fieldset class="picks" data-test="picks">
+            <legend class="group-label">${t("extras.picks_heading")}</legend>
+            <div class="picks-row" data-test="picks-row">
+              <wt-number-stepper
+                name="min-picks"
+                label=${t("extras.min_picks")}
+                placeholder=${t("extras.picks_none")}
+                clearable
+                .min=${1}
+                .decreaseLabel=${decreaseLabel}
+                .increaseLabel=${increaseLabel}
+                .disabled=${this.busy}
+                .value=${this.minPicks}
+                .error=${errors["min-picks"] ?? ""}
+                .invalid=${!!errors["min-picks"]}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  this.#edit(() => (this.minPicks = event.detail.value), "min-picks");
+                }}
+              ></wt-number-stepper>
+              <wt-number-stepper
+                name="max-picks"
+                label=${t("extras.max_picks")}
+                placeholder=${t("extras.picks_none")}
+                clearable
+                .min=${1}
+                .decreaseLabel=${decreaseLabel}
+                .increaseLabel=${increaseLabel}
+                .disabled=${this.busy}
+                .value=${this.maxPicks}
+                .error=${errors["max-picks"] ?? ""}
+                .invalid=${!!errors["max-picks"]}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  this.#edit(() => (this.maxPicks = event.detail.value), "max-picks");
+                }}
+              ></wt-number-stepper>
+            </div>
+          </fieldset>
           <wt-switch
             name="active"
             data-test="active"
