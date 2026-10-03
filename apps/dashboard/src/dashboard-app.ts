@@ -147,11 +147,13 @@ type NavGroup = {
   headerKey?: StringKey;
   icon?: string;
   items: NavItem[];
-  /** Listed after the group's module screens. */
-  lastItems?: NavItem[];
+  itemsAfterModules?: NavItem[];
 };
 
-const coreItems = (group: NavGroup): NavItem[] => [...group.items, ...(group.lastItems ?? [])];
+const coreItems = (group: NavGroup): NavItem[] => [
+  ...group.items,
+  ...(group.itemsAfterModules ?? []),
+];
 /** A nav row as shown: a core item or a module's screen, labelled in the current language. */
 type NavPage = { screen: ScreenId; label: string };
 
@@ -169,7 +171,7 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "sales", labelKey: "nav.sales" },
       { screen: "vat-return", labelKey: "nav.vat_return", requiresPermission: "report.export" },
     ],
-    lastItems: [{ screen: "orders", labelKey: "nav.orders" }],
+    itemsAfterModules: [{ screen: "orders", labelKey: "nav.orders" }],
   },
   {
     id: "menu",
@@ -1506,7 +1508,7 @@ export class DashboardApp extends LitElement {
           screen: screen.id,
           label: tKit(screen.navLabelKey),
         })),
-        ...shown(group.lastItems),
+        ...shown(group.itemsAfterModules),
       ];
       if (term === "") return { group, pages: permitted };
       const headerMatches =

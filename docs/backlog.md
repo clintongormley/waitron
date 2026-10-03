@@ -4042,8 +4042,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Orders, in that order, sit in a collapsible section headed Reporting ("Informes"); Overview stays
   on top in a group of its own with no heading, and a staff session's short list (My schedule,
   Orders) sits in that headless group, unchanged. The section keeps the id `reports`, so the module
-  is untouched; a group's `lastItems` (`NAV_GROUPS`, `apps/dashboard/src/dashboard-app.ts`) are
-  listed after its module screens, which is how Orders comes last.
+  is untouched; a group's `itemsAfterModules` (`NAV_GROUPS`, `apps/dashboard/src/dashboard-app.ts`)
+  are listed after its module screens, which is how Orders comes last.
 
 - **A generated display name is the first given name and first surname (C38, #827, owner decision
   2026-09-28).** Left as they were, from #827's review: unlike the two staff forms, the profile
