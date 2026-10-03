@@ -411,14 +411,15 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
     const value = await app((tx) => readProductEditor(tx, f.variantId));
     expect(value).toMatchObject({ id: f.variantId, parentId: f.parentId, vatClass: null });
     const parent = await app((tx) => readProductEditor(tx, f.parentId));
-    // The parent's body names no parent, so it is refused on the variant, writing nothing.
+    // The parent's body names no parent, so it is refused on the variant, writing nothing. Its unit
+    // is left out, which a variant's body refuses first.
     await expect(
       app((tx) =>
         saveProductEditor(
           tx,
           f.variantId,
           f.catalogueId,
-          { ...parent, vatClass: "general", variants: [] },
+          { ...parent, unitId: null, vatClass: "general", variants: [] },
           "en",
         ),
       ),

@@ -260,7 +260,7 @@ may have any number of variants, one included.
 ### What a variant reads from its parent
 
 **Every field a variant leaves blank reads its parent's, except its three names.** Among them its
-tax rate, course, description, image, pricing unit and allergen and dietary declarations
+tax rate, course, description, image and allergen and dietary declarations
 are its parent's while its own column is blank and its own once it sets them
 (`effectiveProductColumns`, whose keys are `INHERITED_KEYS`,
 `packages/catalogue/src/variant-fallback.ts`). Its main reporting category is always its parent's,
@@ -271,9 +271,20 @@ variant's column back to null, and deleting a category clears it from any varian
 (`vacateCategories`, `packages/catalogue/src/categories.ts`). No migration clears the categories
 variants held before this rule (A209), and the owner decided on 2026-10-03 that none will be
 written: there is no data-migration code before go-live (CLAUDE.md §3) and the dev venue is reset
-before then. So an older variant row may still store one until its next save or until that
-category is deleted. Its unit is
-its parent's while it stores none of its own (`unitOwnerJoin`, same file). Its extras and options
+before then. So an older variant row may still store one until the next save of the variant's
+own page or until that category is deleted.
+
+Its unit is always its parent's too (A222), and with it the legacy `pricing_unit`: the unit read
+joins the parent's `product_units` row, never one the variant stores (`unitOwnerJoin`, same file),
+and `effectiveProductColumns.pricingUnit` reads the parent's. `readProductEditor` returns
+`unitId: null` for a variant; the editor save refuses a variant body naming a unit
+(`product.invalid`, field `unitId`) and otherwise deletes any unit row the variant stores and
+blanks its `pricing_unit`; and `assignProductUnit` answers a variant's id with `product.not_found`.
+No migration clears the units variants stored before this rule: that carries the owner's category
+decision above over to units, which the owner has yet to confirm. Unit management ignores such a
+row: `productsUsingUnit` lists products with no parent only, reassigning a unit's products skips a
+variant, and `deleteUnit` deletes those rows before the unit (`packages/catalogue/src/units.ts`).
+Its extras and options
 lists are always its parent's. Its Name, customer-facing name and kitchen name are never inherited: a blank customer or
 kitchen name falls back to the variant's own staff name (_The three names_, above).
 
@@ -436,9 +447,11 @@ value for each of those fields in `inherited` — for allergens, the parent's pu
 while nothing on the parent has been reviewed or its recipe has an unreviewed ingredient), since
 that is what a blank reads as, while the variant's own allergens field holds only what staff set on
 the variant. Saving a blank keeps the field inheriting, and saving a value overrides it for that
-variant alone. The main category is the exception: the read gives a variant `primaryCategoryId:
-null`, the save refuses a non-null value with `product.invalid`, and the variant always takes its
-parent's (`readProductEditor` and `saveProductEditor`). A variant's body may leave its price, tax rate and dietary declarations blank, which
+variant alone. The main category and the unit are the exceptions: the read gives a variant
+`primaryCategoryId: null` and `unitId: null`, the save refuses a non-null value of either with
+`product.invalid`, and the variant always takes its parent's (`readProductEditor` and
+`saveProductEditor`). The page shows the parent's unit beside the price as fixed text, with no unit
+button or dropdown (`renderPrice`, `apps/dashboard/src/widgets/product-editor.ts`). A variant's body may leave its price, tax rate and dietary declarations blank, which
 a product with no parent may not; it carries no variants and no extras or options lists of its own;
 and its parent never changes, so a body naming a different `parentId` is refused
 (`saveProductEditor`, `packages/catalogue/src/product-editor.ts`).

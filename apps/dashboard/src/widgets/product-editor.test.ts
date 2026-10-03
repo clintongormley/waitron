@@ -2910,10 +2910,8 @@ it("never hints a variant's names from the parent's", async () => {
 
 it("offers each inherited choice first as the parent's value, with an empty value", async () => {
   const el = await mountVariant();
-  await openUnits(el);
   const expected = {
     tax: "Reduced (10%)",
-    unit: "Litre (l)",
     "product-course": "Mains",
   };
   for (const [name, text] of Object.entries(expected)) {
@@ -2922,31 +2920,25 @@ it("offers each inherited choice first as the parent's value, with an empty valu
     expect(option.label, name).toBe(text);
     expect(combobox(el, name)!.value, name).toBe("");
   }
-  // "Each" stands for NO unit on a product of its own; on a variant no unit means the parent's, so
-  // the synthetic Each choice would say one thing and save another.
-  expect(combobox(el, "unit")!.options.map((option) => option.value)).toEqual([
-    "",
-    unit.id,
-    litre.id,
-  ]);
-  // The price field's unit button names the unit the variant sells in: the parent's.
+  // The price field names the unit the variant sells in: the parent's.
   expect(control<{ unit: string }>(el, "unit-price").unit).toBe(
     t("editor.per_unit").replace("{unit}", "l"),
   );
 });
 
 it.each([
-  { locale: "en-GB", label: "Price", button: "Each" },
-  { locale: "es-ES", label: "Precio", button: "Unidad" },
+  { locale: "en-GB", label: "Price", unit: "Each" },
+  { locale: "es-ES", label: "Precio", unit: "Unidad" },
 ])(
-  "labels a variant's price $label with the button $button when the parent has no unit ($locale)",
-  async ({ locale, label, button }) => {
+  "labels a variant's price $label with the fixed unit $unit when the parent has no unit ($locale)",
+  async ({ locale, label, unit }) => {
     setLocale(locale);
     try {
       const el = await mountVariant({ ...glass, inherited: { ...parentValues, unitId: null } });
-      const price = control<{ label: string; unit: string }>(el, "unit-price");
+      const price = control<{ label: string; unit: string; fixedUnit: boolean }>(el, "unit-price");
       expect(price.label).toBe(label);
-      expect(price.unit).toBe(button);
+      expect(price.unit).toBe(unit);
+      expect(price.fixedUnit).toBe(true);
     } finally {
       setLocale("es-ES");
     }
@@ -3017,14 +3009,64 @@ it("names a parent's course or unit missing from the lists as unavailable, never
     ...glass,
     inherited: { ...parentValues, courseId: "gone", unitId: "gone" },
   });
-  await openUnits(el);
-  for (const name of ["product-course", "unit"]) {
-    expect(combobox(el, name)!.placeholder, name).toBe(t("editor.missing_choice"));
-    expect(firstOption(el, name), name).toEqual({ value: "", label: t("editor.missing_choice") });
-  }
+  expect(combobox(el, "product-course")!.placeholder).toBe(t("editor.missing_choice"));
+  expect(firstOption(el, "product-course")).toEqual({
+    value: "",
+    label: t("editor.missing_choice"),
+  });
   expect(control<{ unit: string }>(el, "unit-price").unit).toBe(
     t("editor.per_unit").replace("{unit}", t("editor.missing_choice")),
   );
+});
+
+function priceInput(el: ProductEditor) {
+  return control<HTMLElementTagNameMap["wt-price-input"]>(el, "unit-price");
+}
+async function unitButton(el: ProductEditor) {
+  const price = priceInput(el);
+  await price.updateComplete;
+  return price.shadowRoot!.querySelector("button.unit");
+}
+
+it("shows a variant's product's unit as fixed text in the price field, with no unit button or dropdown, and saves no unit of its own", async () => {
+  // A unit left stored on the variant from before it could not have one.
+  const el = await mountVariant({ ...glass, unitId: unit.id });
+  const price = priceInput(el);
+  expect(price.fixedUnit).toBe(true);
+  expect(price.unit).toBe(t("editor.per_unit").replace("{unit}", "l"));
+  expect(price.label).toBe(t("editor.price_unit").replace("{unit}", "l"));
+  expect(await unitButton(el)).toBeNull();
+  expect(price.shadowRoot!.querySelector("span.unit")!.textContent).toBe(price.unit);
+  await openUnits(el);
+  expect(combobox(el, "unit")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=add-unit]")).toBeNull();
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value.unitId).toBeNull();
+});
+
+it("says a refused unit on a variant's page in the message above Save, opening no unit dropdown", async () => {
+  const el = await mountVariant();
+  el.fieldErrors = { unit: "A variant takes its product's unit" };
+  await el.updateComplete;
+  expect(await bottomOf(el)).toBe("A variant takes its product's unit");
+  expect(combobox(el, "unit")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=add-unit]")).toBeNull();
+});
+
+it("keeps a product's unit button, its dropdown and Add unit on the product's own page", async () => {
+  const el = await mountPricing(
+    { ...product, id: "coffee", unitId: litre.id },
+    { units: [unit, litre] },
+  );
+  expect(priceInput(el).fixedUnit).toBe(false);
+  expect((await unitButton(el))!.textContent!.trim()).toBe(
+    t("editor.per_unit").replace("{unit}", "l"),
+  );
+  await openUnits(el);
+  expect(combobox(el, "unit")!.value).toBe(litre.id);
+  expect(el.shadowRoot!.querySelector("[data-test=add-unit]")).not.toBeNull();
 });
 
 it.each([
@@ -3062,9 +3104,7 @@ it.each([
           dietaryDeclarations: [],
         },
       });
-      await openUnits(el);
-      expect(combobox(el, "unit")!.placeholder).toBe(expected.unit);
-      expect(firstOption(el, "unit")).toEqual({ value: "", label: expected.unit });
+      expect(control<{ unit: string }>(el, "unit-price").unit).toBe(expected.unit);
       expect(variantPath(el)).toBe(`${t("editor.classification")}: ${expected.category}`);
       expect(combobox(el, "product-course")!.placeholder).toBe(expected.course);
       expect(hint(el, "allergens-hint")).toBe(expected.allergens);
@@ -3641,10 +3681,8 @@ it("picks the unit from a shared dropdown behind the price field, Each being its
 
 it("keeps a variant's inherited choice as each inherited dropdown's prompt and first row", async () => {
   const el = await mountVariant();
-  await openUnits(el);
   const expected = {
     tax: "Reduced (10%)",
-    unit: "Litre (l)",
     "product-course": "Mains",
   };
   for (const [name, text] of Object.entries(expected)) {

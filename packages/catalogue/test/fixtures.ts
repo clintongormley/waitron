@@ -28,7 +28,7 @@ import { createUnit } from "../src/units.js";
 import { productUnits, units } from "../src/schema/units.js";
 
 /** The unit a product's OWN `product_units` row names, or null when it has none (a
- * top-level product then reads as Each; a variant reads its parent's unit).
+ * top-level product then reads as Each). A variant reads its parent's unit whatever row it stores.
  * Throws when no such product exists, so a null always means "no unit row", never "wrong id". */
 export async function storedUnitId(tx: Transaction, productId: string): Promise<string | null> {
   const [row] = await tx
@@ -48,6 +48,19 @@ export async function plantStoredCategory(
   categoryId: string,
 ): Promise<void> {
   await tx.update(products).set({ categoryId }).where(eq(products.id, productId));
+}
+
+/** Writes a `product_units` row and a `pricing_unit` straight into a product, past every product
+ * path: how a test sets up a variant still holding a unit of its own, which a variant's save now
+ * clears. */
+export async function plantStoredUnit(
+  tx: Transaction,
+  productId: string,
+  unitId: string,
+  pricingUnit: "each" | "weight",
+): Promise<void> {
+  await tx.insert(productUnits).values({ productId, unitId });
+  await tx.update(products).set({ pricingUnit }).where(eq(products.id, productId));
 }
 
 export interface SeededVenue {

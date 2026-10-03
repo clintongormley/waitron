@@ -26,14 +26,14 @@ import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductEditor } from "./product-editor.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { productUnits } from "./schema/units.js";
-import { createUnit } from "./units.js";
+import { createUnit, EACH_UNIT } from "./units.js";
 import {
   effectiveProductColumns,
   INHERITED_KEYS,
   parentJoin,
   parentProducts,
 } from "./variant-fallback.js";
-import { seedVenue } from "../test/fixtures.js";
+import { plantStoredUnit, seedVenue } from "../test/fixtures.js";
 
 /**
  * A variant row is a `products` row with a `parent_id`, and a null in any inherited field reads as
@@ -139,8 +139,9 @@ beforeEach(async () => {
         dietaryDeclarations: null,
       })
       .returning({ id: products.id });
-    // Its own value for every inherited field, and its own names and unit row. Its category is one
-    // a variant still holds from before it always took its parent's, which every read ignores.
+    // Its own value for every inherited field, and its own names. Its category, unit row and
+    // pricing unit are ones a variant still holds from before it always took its parent's, which
+    // every read ignores.
     const [wine175] = await tx
       .insert(products)
       .values({
@@ -343,8 +344,8 @@ describe("listMenuOffers reads a variant's blanks from its parent", () => {
       unitPrice: "5.50",
       image: "large.jpg",
       vatClass: "general",
-      pricingUnit: "weight",
-      unit: { id: f.largeGlass },
+      pricingUnit: "each",
+      unit: { id: f.glass },
       category: "Wines",
       allergens: W175_PUBLISHED_ALLERGENS,
       diet: W175_DIET,
@@ -385,6 +386,32 @@ describe("a variant's main category is always its parent's", () => {
     const variants = offers[0]!.variants;
     expect(variants.find((v) => v.id === wine250)!.category).toBe("Wines");
     expect(variants.find((v) => v.id === f.wine175)!.category).toBe("Wines");
+  });
+});
+
+describe("a variant's unit is always its product's", () => {
+  it("reads Each for a variant whose product has no unit, whatever unit row the variant stores", async () => {
+    const { parentId, variantId } = await run(async (tx) => {
+      const parent = await createProduct(tx, {
+        catalogueId: f.catalogueId,
+        categoryId: null,
+        name: "Cider",
+        unitId: null,
+        unitPrice: "3.00",
+        vatClass: "general",
+      });
+      const [variant] = await tx
+        .insert(products)
+        .values({ catalogueId: f.catalogueId, parentId: parent.id, name: "Cider pint" })
+        .returning({ id: products.id });
+      await plantStoredUnit(tx, variant!.id, f.largeGlass, "weight");
+      await addProductToMenu(tx, { menuId: f.menuId, productId: parent.id, grossPrice: null });
+      return { parentId: parent.id, variantId: variant!.id };
+    });
+    const offers = await run((tx) => listMenuOffers(tx, [f.menuId]));
+    const cider = offers.find((o) => o.productId === parentId)!;
+    expect(cider.variants.map((v) => v.id)).toEqual([variantId]);
+    expect(cider.variants[0]).toMatchObject({ pricingUnit: "each", unit: EACH_UNIT });
   });
 });
 
@@ -446,8 +473,8 @@ describe("readOfferedModifiers", () => {
 
 describe("readProductEditor", () => {
   // The editor shows a variant's OWN values, a blank field blank, and its parent's value for every
-  // inherited field beside them. Wine 125 has no unit row and so inherits it; Wine 175 has its own.
-  // Neither reads a category of its own: Wine 175's stored one is never shown.
+  // inherited field beside them. Neither reads a category or unit of its own: Wine 175's stored
+  // ones are never shown.
   const parentValues = () => ({
     description: { en: "A dry white from Rueda" },
     image: "parent.jpg",
@@ -479,7 +506,7 @@ describe("readProductEditor", () => {
     });
   });
 
-  it("reads a variant's own value for every field it sets, never its parent's, and no category of its own", async () => {
+  it("reads a variant's own value for every field it sets, never its parent's, and no category or unit of its own", async () => {
     expect(await run((tx) => readProductEditor(tx, f.wine175))).toMatchObject({
       parentId: f.parentId,
       name: "Wine 175",
@@ -489,7 +516,7 @@ describe("readProductEditor", () => {
       image: "large.jpg",
       unitPrice: "5.50",
       vatClass: "general",
-      unitId: f.largeGlass,
+      unitId: null,
       primaryCategoryId: null,
       courseId: f.ownCourseId,
       allergens: W175_MANUAL_ALLERGENS,
@@ -510,10 +537,10 @@ describe("readProductEditor", () => {
 });
 
 describe("effectiveProductColumns, entry by entry", () => {
-  // Every entry read straight, for the parent and both variants: Wine 125 (every field blank)
-  // must read the parent's value and Wine 175 (every field set, each different from the parent's)
-  // its own. An entry with its two sides swapped fails one of the two.
-  it("reads the parent's value for a blank field and the variant's own for a set one", async () => {
+  // Every entry read straight, for the parent and both variants: Wine 125 has every field blank and
+  // Wine 175 every field set, each different from the parent's. An entry with its two sides swapped
+  // fails one of the two.
+  it("reads the parent's value for a blank field and the variant's own for a set one, except the category and pricing unit, always the parent's", async () => {
     const raw = await run((tx) =>
       tx
         .select({ id: products.id, ...pickRaw() })
@@ -535,8 +562,9 @@ describe("effectiveProductColumns, entry by entry", () => {
       expect(parentRaw[key], key).not.toBeNull();
       expect(wine175Raw[key], key).not.toEqual(parentRaw[key]);
       expect(byId.get(f.wine125)![key], key).toEqual(parentRaw[key]);
-      // The category is the one entry a variant cannot set: its stored one is ignored.
-      const own = key === "categoryId" ? parentRaw[key] : wine175Raw[key];
+      // The category and the pricing unit are the entries a variant cannot set: its stored ones are
+      // ignored.
+      const own = key === "categoryId" || key === "pricingUnit" ? parentRaw[key] : wine175Raw[key];
       expect(byId.get(f.wine175)![key], key).toEqual(own);
     }
   });

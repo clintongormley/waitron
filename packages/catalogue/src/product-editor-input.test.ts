@@ -109,7 +109,7 @@ it.each(["not-a-uuid", 42, false])("refuses a malformed parent id %j", (parentId
 
 it("preserves explicit zero tax, unavailable and unreviewed rather than choosing defaults", () => {
   expect(parse(input)).toEqual(input);
-  expect(parseVariant(input)).toEqual(input);
+  expect(parseVariant({ ...input, unitId: null })).toEqual({ ...input, unitId: null });
 });
 it.each(["public", "staff_only", "not_sold_separately"] as const)(
   "carries the ordering %s through",
@@ -218,6 +218,11 @@ it("refuses a body that still carries labelIds, rather than dropping them", () =
   );
   expect(() => parseVariant({ ...inheriting, labelIds: [] })).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field: "labelIds" } }),
+  );
+});
+it("refuses a unit on a variant, which always has its parent's", () => {
+  expect(() => parseVariant({ ...inheriting, unitId })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "unitId" } }),
   );
 });
 it("refuses a main category on a variant, which always has its parent's", () => {

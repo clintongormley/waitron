@@ -1054,7 +1054,7 @@ tree; the same reference inside the shadow root did describe it).
 #### A field that falls back to another value
 
 Some fields store a value only to override one they would otherwise take from somewhere else — a
-variant's VAT, unit or photo from its parent product, an extra's price from its product's. Such a field is
+variant's VAT or photo from its parent product, an extra's price from its product's. Such a field is
 **empty while it falls back**, and shows the value it falls back to as a placeholder hint, so the operator sees
 what will apply without a copy being stored. Leaving it empty keeps the fallback; typing or choosing
 a value overrides it; clearing it returns to the fallback and saves `null`. Never mark such a field
@@ -1075,17 +1075,18 @@ shows a product description today (the reader check in A220, `docs/backlog.md`).
   default grey measured 3.70:1 on `wt-input` against the dark theme's field (2026-09-24), under the
   4.5:1 text needs. axe does not check placeholder contrast, so an a11y test for a new placeholder-hinted field measures the ratio itself
   (`packages/ui-core/src/components/wt-input.a11y.test.ts`).
-- **A single-choice `wt-combobox`** (the product editor's VAT, unit and course): its
+- **A single-choice `wt-combobox`** (the product editor's VAT and course): its
   first option has an empty value and reads as the fallback value itself, with no "Same as" before
   it (owner, 2026-10-02: "we just want to show the value"), e.g. "Reduced (10%)"; where the parent
-  names nothing it reads as what will be used instead — `product.no_course` for the course,
-  `editor.unit_each` for the unit; and where the parent names a course or unit the loaded
+  names nothing it reads as what will be used instead, `product.no_course` for the course; and
+  where the parent names a course the loaded
   list lacks, it reads `editor.missing_choice` ("Unavailable selection"), while the VAT dropdown
   shows the class's code. Its placeholder
   reads the same, in the combobox's grey italic, and is what it shows while the stored value is
   null; it has no separate hint line. A choice that means "none" on a record of its own
-  (`editor.unit_each` for the unit and `product.no_course` for the course) is left out where the empty value already means "fall
-  back": offering both would read as one thing and save as another.
+  (`product.no_course` for the course) is left out where the empty value already means "fall
+  back": offering both would read as one thing and save as another. A variant's unit is not such a
+  field: it is always its product's, and its page shows it beside the price as fixed text (A222).
 - **The allergen and dietary pickers**: a muted hint line beside each
   shows the fallback value while the stored value is empty, and goes away once the record sets its
   own. The allergen and dietary hint lines name the values in grey italic ("Allergens: Milk"), "None"
@@ -1177,9 +1178,11 @@ Two notes on the primitives this pattern uses, both in the table above:
   button. The button's visible text is its accessible name, so a unit button's `unit` must never be
   empty. A plain money field with no unit is `fixed-unit` with no `unit`, as `priceField`
   (`apps/dashboard/src/widgets/form-fields.ts`) draws it. Its `locale` draws the euro sign in the amount where that language writes it. A fixed-unit value that is not money, such as a percentage, is `fixed-unit` with `unit="%"` and no `locale`, as the bill discount limit draws it. It emits
-  `wt-change` on input and `wt-unit-click` when the button is pressed. The product editor draws its
-  price field with that button whether or not the product has variants, and opens the unit dropdown
-  under the field on `wt-unit-click`. A product with variants also has a unit dropdown (`pricing-unit`)
+  `wt-change` on input and `wt-unit-click` when the button is pressed. On a product's own page the
+  product editor draws its price field with that button, whether or not the product has variants,
+  and opens the unit dropdown under the field on `wt-unit-click`. On a variant's page it sets
+  `fixed-unit` and shows the product's unit as text, because a variant's unit is always its
+  product's (A222). A product with variants also has a unit dropdown (`pricing-unit`)
   in the variants table's price heading. Both change the same product unit, on purpose. A table
   30rem wide or less hides its price column and that dropdown with it, so on a phone the price
   field's button is the only way to the unit. The extras list form's price cells set `fixed-unit`:

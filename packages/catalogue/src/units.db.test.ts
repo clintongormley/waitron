@@ -1,5 +1,5 @@
 import { inArray } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { catalogues, CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -14,7 +14,7 @@ import {
   reassignProductsToUnit,
   updateUnit,
 } from "./units.js";
-import { racePair, storedUnitId } from "../test/fixtures.js";
+import { plantStoredUnit, racePair, storedUnitId } from "../test/fixtures.js";
 
 /**
  * Units against a real database: rollback, two transactions started together, and the bulk
@@ -219,30 +219,31 @@ it("reassigning to null returns the products to each-priced and leaves products 
   expect(pricingById[onOther]).toBe("weight");
 });
 
-it("reassigning a variant's own unit to null leaves its pricing unit blank, so it follows its parent's", async () => {
-  await seedTenant(suite.db);
-  const parent = await product();
+/** A variant of `parent`, with no unit row of its own. */
+async function variantOf(parent: string): Promise<string> {
   const [parentRow] = await suite.db
     .select({ catalogueId: products.catalogueId })
     .from(products)
     .where(inArray(products.id, [parent]));
   const [variantRow] = await suite.db
     .insert(products)
-    .values({
-      catalogueId: parentRow!.catalogueId,
-      parentId: parent,
-      name: "Small",
-      pricingUnit: "weight",
-    })
+    .values({ catalogueId: parentRow!.catalogueId, parentId: parent, name: "Small" })
     .returning({ id: products.id });
-  const variant = variantRow!.id;
-  const sourceUnit = await app((tx) =>
+  return variantRow!.id;
+}
+
+const kg = () =>
+  app((tx) =>
     createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
   );
-  await app(async (tx) => {
-    await assignProductUnit(tx, parent, sourceUnit.id);
-    await assignProductUnit(tx, variant, sourceUnit.id);
-  });
+
+it("reassigning to null skips a variant's stored unit row, as it skips an id not on the unit", async () => {
+  await seedTenant(suite.db);
+  const parent = await product();
+  const variant = await variantOf(parent);
+  const sourceUnit = await kg();
+  await app((tx) => assignProductUnit(tx, parent, sourceUnit.id));
+  await plantStoredUnit(suite.db, variant, sourceUnit.id, "weight");
   await suite.db
     .update(products)
     .set({ pricingUnit: "weight" })
@@ -256,7 +257,61 @@ it("reassigning a variant's own unit to null leaves its pricing unit blank, so i
     .where(inArray(products.id, [parent, variant]));
   expect(Object.fromEntries(pricing.map((row) => [row.id, row.pricingUnit]))).toEqual({
     [parent]: "each",
-    [variant]: null,
+    [variant]: "weight",
   });
-  expect(await app((tx) => storedUnitId(tx, variant))).toBeNull();
+  expect(await app((tx) => storedUnitId(tx, parent))).toBeNull();
+  expect(await app((tx) => storedUnitId(tx, variant))).toBe(sourceUnit.id);
+});
+
+describe("a variant's stored unit row, from before a variant always took its product's", () => {
+  it("refuses to give a variant a unit, as it refuses an id that names no product", async () => {
+    await seedTenant(suite.db);
+    const variant = await variantOf(await product());
+    const unit = await kg();
+    await expect(app((tx) => assignProductUnit(tx, variant, unit.id))).rejects.toMatchObject({
+      code: "product.not_found",
+      params: { productId: variant },
+    });
+    expect(await app((tx) => storedUnitId(tx, variant))).toBeNull();
+  });
+
+  it("is not listed among the products using the unit", async () => {
+    await seedTenant(suite.db);
+    const parent = await product();
+    const variant = await variantOf(parent);
+    const unit = await kg();
+    await app((tx) => assignProductUnit(tx, parent, unit.id));
+    await plantStoredUnit(suite.db, variant, unit.id, "weight");
+    expect(await app((tx) => productsUsingUnit(tx, unit.id))).toEqual([
+      { id: parent, name: "Soup", active: true },
+    ]);
+  });
+
+  it("does not stop the unit being deleted, and is deleted with it", async () => {
+    await seedTenant(suite.db);
+    const parent = await product();
+    const variant = await variantOf(parent);
+    const unit = await kg();
+    await plantStoredUnit(suite.db, variant, unit.id, "weight");
+    await app((tx) => deleteUnit(tx, unit.id));
+    await expect(app((tx) => getUnit(tx, unit.id))).rejects.toMatchObject({
+      code: "unit.not_found",
+    });
+    expect(await app((tx) => storedUnitId(tx, variant))).toBeNull();
+  });
+
+  it("is left where it is when the unit's products move to another unit", async () => {
+    await seedTenant(suite.db);
+    const parent = await product();
+    const variant = await variantOf(parent);
+    const source = await kg();
+    const target = await app((tx) =>
+      createUnit(tx, { name: { en: "litre" }, precision: 2, abbreviation: { en: "u" } }, "en"),
+    );
+    await app((tx) => assignProductUnit(tx, parent, source.id));
+    await plantStoredUnit(suite.db, variant, source.id, "weight");
+    await app((tx) => reassignProductsToUnit(tx, source.id, [parent, variant], target.id));
+    expect(await app((tx) => storedUnitId(tx, parent))).toBe(target.id);
+    expect(await app((tx) => storedUnitId(tx, variant))).toBe(source.id);
+  });
 });

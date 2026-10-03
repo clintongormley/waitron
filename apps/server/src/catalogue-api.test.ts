@@ -1342,7 +1342,13 @@ describe("mountCatalogueApi — products", () => {
 
     // A variant offers its parent's lists and has no variants of its own.
     const saveVariant = await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
-      body: await editorBody(app, { name: "Copa", vatClass: "general", variants: [variant] }),
+      // No unit, which a variant's body refuses before its variants.
+      body: await editorBody(app, {
+        name: "Copa",
+        vatClass: "general",
+        unitId: null,
+        variants: [variant],
+      }),
     });
     expect(saveVariant.status).toBe(400);
     expect(await saveVariant.json()).toMatchObject({
@@ -1578,6 +1584,76 @@ describe("mountCatalogueApi — products", () => {
         error: { code: "product.invalid", params: { field: "primaryCategoryId" } },
       });
       expect(await storedCategory()).toBe(ownCategoryId);
+    });
+  });
+
+  describe("a variant holding a unit of its own, stored before a variant always took its parent's", () => {
+    // The parent sells by the seeded each; the planted row names kg, with a weight pricing unit.
+    async function withStoredUnit(app: Hono) {
+      const seeded = await parentWithVariant(app);
+      const kgUnitId = (
+        await suite.db.execute<{ id: string }>(sql`select id from units where seed_key = 'kg'`)
+      ).rows[0]!.id;
+      const plantUnit = async () => {
+        await suite.db.execute(
+          sql`insert into product_units (product_id, unit_id) values (${seeded.variantId}, ${kgUnitId})`,
+        );
+        await suite.db.execute(
+          sql`update products set pricing_unit = 'weight' where id = ${seeded.variantId}`,
+        );
+      };
+      await plantUnit();
+      const storedUnit = async () =>
+        (
+          await suite.db.execute<{ unit_id: string | null; pricing_unit: string | null }>(
+            sql`select product_units.unit_id, products.pricing_unit from products
+                left join product_units on product_units.product_id = products.id
+                where products.id = ${seeded.variantId}`,
+          )
+        ).rows[0]!;
+      return { ...seeded, kgUnitId, plantUnit, storedUnit };
+    }
+
+    it("is removed and restored by reading its editor value and saving it back", async () => {
+      const app = mountApp("es-ES");
+      const { variantId, kgUnitId, plantUnit, storedUnit } = await withStoredUnit(app);
+      const value = (await (
+        await send(app, "GET", `/management-api/products/${variantId}/editor`)
+      ).json()) as { unitId: string | null; inherited: { unitId: string | null } };
+      expect(value.unitId).toBeNull();
+      expect(value.inherited.unitId).not.toBeNull();
+      expect(value.inherited.unitId).not.toBe(kgUnitId);
+      const put = (active: boolean) =>
+        send(app, "PUT", `/management-api/products/${variantId}/editor`, {
+          body: { ...value, active },
+        });
+      const removed = await put(false);
+      expect(removed.status).toBe(200);
+      expect(await removed.json()).toMatchObject({ active: false, unitId: null });
+      expect(await storedUnit()).toEqual({ unit_id: null, pricing_unit: null });
+      // Removing cleared it, so it is planted again for Restore to start from a leftover too.
+      await plantUnit();
+      expect(await storedUnit()).toEqual({ unit_id: kgUnitId, pricing_unit: "weight" });
+      const restored = await put(true);
+      expect(restored.status).toBe(200);
+      expect(await restored.json()).toMatchObject({ active: true, unitId: null });
+      expect(await storedUnit()).toEqual({ unit_id: null, pricing_unit: null });
+    });
+
+    it("refuses a save naming a unit of its own, and keeps the row as it was", async () => {
+      const app = mountApp("es-ES");
+      const { variantId, kgUnitId, storedUnit } = await withStoredUnit(app);
+      const value = (await (
+        await send(app, "GET", `/management-api/products/${variantId}/editor`)
+      ).json()) as Record<string, unknown>;
+      const refused = await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
+        body: { ...value, unitId: kgUnitId },
+      });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "product.invalid", params: { field: "unitId" } },
+      });
+      expect(await storedUnit()).toEqual({ unit_id: kgUnitId, pricing_unit: "weight" });
     });
   });
 

@@ -16,7 +16,12 @@ import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import { setProductVariants } from "./variants.js";
 import { contentLanguages } from "./schema/menu.js";
-import { plantStoredCategory, useCatalogueDb } from "../test/fixtures.js";
+import {
+  plantStoredCategory,
+  plantStoredUnit,
+  storedUnitId,
+  useCatalogueDb,
+} from "../test/fixtures.js";
 
 const fx = useCatalogueDb();
 let catalogueId: string;
@@ -684,19 +689,17 @@ describe("a variant's own page", () => {
       ...value,
       unitPrice: "2.50",
       vatClass: "general",
-      unitId: input.unitId,
       allergens: { eggs: { presence: "may_contain" } },
       dietaryDeclarations: ["halal"],
     });
     expect(overridden).toMatchObject({
       unitPrice: "2.50",
       vatClass: "general",
-      unitId: input.unitId,
       allergens: { eggs: { presence: "may_contain" } },
       dietaryDeclarations: ["halal"],
       inherited: value.inherited,
     });
-    expect(await storedRow(variantId)).toMatchObject({ pricingUnit: "each" });
+    expect(await storedRow(variantId)).toMatchObject({ pricingUnit: null });
     const cleared = await save(variantId, value);
     expect(cleared).toEqual(value);
     expect(await storedRow(variantId)).toEqual({
@@ -736,6 +739,37 @@ describe("a variant's own page", () => {
       const value = await read(variantId);
       expect(await save(variantId, value)).toEqual(value);
       expect(await storedRow(variantId)).toMatchObject({ categoryId: null });
+    });
+  });
+
+  describe("holding a unit of its own, stored before a variant always took its parent's", () => {
+    // The parent sells by kg; the planted row names the Each-like unit and pricing unit instead.
+    beforeEach(() => plantStoredUnit(fx.db, variantId, input.unitId!, "each"));
+    const storedUnit = (id: string) => withTransaction(fx.db, (tx) => storedUnitId(tx, id));
+
+    it("reads no unit of its own, and its parent's beside it", async () => {
+      expect(await read(variantId)).toMatchObject({
+        unitId: null,
+        inherited: { unitId: kgUnitId },
+      });
+    });
+
+    it("refuses a unit of its own, naming the field, and leaves the row and its unit as they were", async () => {
+      const before = await storedRow(variantId);
+      expect(before).toMatchObject({ pricingUnit: "each" });
+      expect(await storedUnit(variantId)).toBe(input.unitId);
+      await expect(
+        save(variantId, { ...(await read(variantId)), unitId: kgUnitId }),
+      ).rejects.toMatchObject({ code: "product.invalid", params: { field: "unitId" } });
+      expect(await storedRow(variantId)).toEqual(before);
+      expect(await storedUnit(variantId)).toBe(input.unitId);
+    });
+
+    it("clears the stored unit and pricing unit when the read value is saved back", async () => {
+      const value = await read(variantId);
+      expect(await save(variantId, value)).toEqual(value);
+      expect(await storedRow(variantId)).toMatchObject({ pricingUnit: null });
+      expect(await storedUnit(variantId)).toBeNull();
     });
   });
 

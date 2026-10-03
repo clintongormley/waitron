@@ -7688,6 +7688,53 @@ describe("a variant is sold as the product it is", () => {
     ]);
   });
 
+  it("sells a variant in its product's unit, whatever unit the variant still stores", async () => {
+    const { cfg, zoneId, catalogueId, kgUnitId } = await setupVenue();
+    const wine = await withTransaction(db, async (tx) => {
+      const seeded = await seedWine(tx, cfg, catalogueId);
+      // Wine by the glass sells by the each; Wine 175 still stores kg, from before a variant always
+      // took its product's unit. The menu is published after, so the live menu is built from it.
+      await tx.execute(
+        sql`insert into product_units (product_id, unit_id) values (${seeded.wine175}, ${kgUnitId})`,
+      );
+      await tx
+        .update(products)
+        .set({ pricingUnit: "weight" })
+        .where(eq(products.id, seeded.wine175));
+      await publishWorkingMenu(tx, catalogueId);
+      return seeded;
+    });
+    await expect(
+      parkOrder({ db }, cfg, {
+        id: randomUUID(),
+        zoneId,
+        lines: [{ menuItemId: wine.offerId, variantId: wine.wine175, quantity: "0.5" }],
+      }),
+    ).rejects.toMatchObject({ code: "quantity.invalid", params: { reason: "precision" } });
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: wine.offerId, variantId: wine.wine175, quantity: "2" }],
+    });
+    const stored = await db
+      .select({
+        productId: workingOrderLines.productId,
+        unitName: workingOrderLines.unitName,
+        unitPrecision: workingOrderLines.unitPrecision,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(stored).toEqual([
+      // A line freezes the unit's abbreviation as its unit name.
+      {
+        productId: wine.wine175,
+        unitName: EACH_UNIT.abbreviation,
+        unitPrecision: EACH_UNIT.precision,
+      },
+    ]);
+  });
+
   it("refuses a parent with Active variants rung up alone, and sells one whose variants are all Inactive as itself", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const wine = await withTransaction(db, (tx) => seedWine(tx, cfg, catalogueId));
