@@ -14,6 +14,7 @@ interface Canvas extends HTMLElement {
   editable: boolean;
   gridSnap: boolean;
   copy: Partial<FloorCanvasCopy>;
+  locale: string;
   // Private state on the component, exposed here so a test can drive and read it.
   selectedId: string | null;
   draft: { id: string; posX: number; posY: number } | null;
@@ -96,6 +97,15 @@ test("renders one wrapper carrying the shared occupancy token per table", async 
   const wrappers = el.shadowRoot!.querySelectorAll("[data-table]");
   expect(wrappers.length).toBe(2);
   expect(tokenEl(el, "a").querySelector("wt-table-token")).not.toBeNull();
+});
+
+test("hands its locale to every token, so a tab total is written the locale's way", async () => {
+  const el = await mountCanvas([oneTable("t1", { state: "open-tab", tabTotal: "47.50" })]);
+  el.locale = "es";
+  await el.updateComplete;
+  const token = tokenEl(el, "t1").querySelector("wt-table-token")!;
+  await (token as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  expect(token.shadowRoot!.querySelector(".total")?.textContent).toBe("47,50\u00a0€");
 });
 
 test("tapping a table asks the app to open it (composed, bubbling)", async () => {

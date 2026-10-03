@@ -23,8 +23,8 @@ import type {
   PlacementClear,
   ZoneTab,
 } from "@waitron/ui";
-import { decimal, isZeroDecimal } from "@waitron/shared";
-import { countText, named, t } from "../i18n/t.js";
+import { decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
+import { countText, currentLocale, named, t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
 import type { FloorZone, TableState, TableParty, TillApi, UnsentDraft } from "../api/client.js";
@@ -707,6 +707,7 @@ export class TillFloorScreen extends LitElement {
           .tables=${placed.map((table) => this.#toFloorTable(table))}
           .editable=${this.editing}
           .copy=${this.#canvasCopy()}
+          .locale=${currentLocale()}
           @wt-open-table=${(event: Event) => this.#onCanvasOpen(event)}
           @wt-placement-change=${(event: Event) => void this.#onPlacementChange(event)}
           @wt-placement-clear=${(event: Event) => void this.#onPlacementClear(event)}
@@ -732,6 +733,7 @@ export class TillFloorScreen extends LitElement {
     >
       <wt-table-token
         .table=${this.#toFloorTable(table)}
+        .locale=${currentLocale()}
         .labels=${{
           covers: t("floor.capacity"),
           toServe: t("floor.to_serve"),
@@ -1008,7 +1010,9 @@ export class TillFloorScreen extends LitElement {
           ${
             partyPaid(table)
               ? html`<span class="paid" data-paid>${t("floor.paid")}</span>`
-              : html`<span class="total">${table.party?.outstanding ?? table.tabTotal} €</span>`
+              : html`<span class="total"
+                  >${formatMoney(table.party?.outstanding ?? table.tabTotal!, currentLocale())}</span
+                >`
           }
           ${
             table.hasOpenTab

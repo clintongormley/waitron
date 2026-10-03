@@ -165,7 +165,7 @@ describe("till-floor-screen: what a seated party owes", () => {
     const el = await mountFloor([seated()]);
 
     const text = card(el, "t4").textContent!;
-    expect(card(el, "t4").querySelector(".total")!.textContent).toBe("44.00 €");
+    expect(card(el, "t4").querySelector(".total")!.textContent).toBe("€44.00");
     expect(text).toContain(`${t("floor.guests")}: 3`);
     expect(text).toContain(`${t("floor.bills")}: 2`);
     expect(card(el, "t4").querySelector("[data-paid]")).toBeNull();
@@ -182,7 +182,7 @@ describe("till-floor-screen: what a seated party owes", () => {
     ]);
 
     expect(card(el, "t4").querySelector("[data-paid]")).toBeNull();
-    expect(card(el, "t4").querySelector(".total")!.textContent).toBe("30.00 €");
+    expect(card(el, "t4").querySelector(".total")!.textContent).toBe("€30.00");
   });
 
   it("reads as paid once no bill of the party is left to pay", async () => {
@@ -231,6 +231,31 @@ describe("till-floor-screen: what a seated party owes", () => {
 
     const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
     expect(canvas.tables[0]!.tabTotal).toBe("30.00");
+  });
+
+  it("writes what the party owes the Spanish way in the list", async () => {
+    setLocale("es");
+    const el = await mountFloor([seated()]);
+
+    expect(card(el, "t4").querySelector(".total")!.textContent).toBe("44,00\u00a0€");
+  });
+
+  it("writes what the party owes the Spanish way in the unplaced tray, and hands the map the language", async () => {
+    setLocale("es");
+    const el = await mountFloor([
+      seated(),
+      seated(
+        { id: "t5", label: "5", posX: 200, posY: 200, shape: "round", rotation: 0 },
+        { id: "v5", outstanding: "30.00", tableIds: ["t5"] },
+      ),
+    ]);
+
+    expect(el.shadowRoot!.querySelector("wt-floor-canvas")!.locale).toBe("es");
+    const tray = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      '[data-tray-table="t4"] wt-table-token',
+    )!;
+    await tray.updateComplete;
+    expect(tray.shadowRoot!.querySelector(".total")!.textContent).toBe("44,00\u00a0€");
   });
 });
 
