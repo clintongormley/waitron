@@ -5883,9 +5883,10 @@ reading unless marked run:
   the dialog itself. `apps/dashboard/src/widgets/allergen-picker.ts` avoids the problem by mounting
   a fresh dialog for each open (`keyed`). Seen once under coverage load in a test (run); we believe
   a person cannot reopen it that fast; not tested.
-- DONE (W20): the product editor's variant form (`apps/dashboard/src/widgets/variant-form.ts`) no
-  longer turns the dialog's late `wt-close` into a second Cancel once the editor has closed it; it
-  carries the `!this.open` check the Units, Options and Extras forms do (C68, #863; C74, #878).
+- DONE (lane A's W20): the product editor's variant form
+  (`apps/dashboard/src/widgets/variant-form.ts`) no longer turns the dialog's late `wt-close` into a
+  Cancel once the editor has closed it; it carries the `!this.open` check the Units, Options and
+  Extras forms do (C68, #863; C74, #878).
 - `login-screen.ts` checks an account link's purpose with `=== null`, so a reply with no purpose at
   all would pass; the server always sends one.
 - Guards no test can reach, left uncovered rather than deleted: the canvas editor's "no draft" and
