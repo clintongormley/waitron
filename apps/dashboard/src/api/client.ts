@@ -1915,6 +1915,10 @@ export class DashboardApi {
     return this.#request<ProductUsingUnit[]>(`/management-api/units/${id}/products`, "GET");
   }
 
+  getUnitExtraUsage(id: string): Promise<ExtraOfferUsage[]> {
+    return this.#request<ExtraOfferUsage[]>(`/management-api/units/${id}/extra-usage`, "GET");
+  }
+
   createUnit(input: UnitInput): Promise<Unit> {
     return this.#request<Unit>("/management-api/units", "POST", input);
   }

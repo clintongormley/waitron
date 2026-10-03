@@ -722,6 +722,10 @@ export const en = {
   "units.precision_help": "Choose 0, 1, 2 or 3 decimal places.",
   "units.precision_help_label": "About decimal places",
   "units.precision_invalid": "Choose a whole number from 0 to 3.",
+  "units.precision_usage_warning":
+    "Changing precision affects portions in these extras lists and menus:",
+  "units.precision_usage_unavailable":
+    "Could not check which extras lists and menus use this unit.",
   "units.filter_precision_all": "All precisions",
   "units.actions": "Actions",
   "units.empty": "No units yet.",
@@ -2837,6 +2841,10 @@ export const es: Record<StringKey, string> = {
   "units.precision_help": "Elige 0, 1, 2 o 3 decimales.",
   "units.precision_help_label": "Acerca de los decimales",
   "units.precision_invalid": "Elige un número entero entre 0 y 3.",
+  "units.precision_usage_warning":
+    "Cambiar la precisión afecta a las porciones de estas listas de extras y cartas:",
+  "units.precision_usage_unavailable":
+    "No se pudo comprobar qué listas de extras y cartas usan esta unidad.",
   "units.filter_precision_all": "Todas las precisiones",
   "units.actions": "Acciones",
   "units.empty": "Todavía no hay unidades.",

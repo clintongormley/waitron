@@ -3,6 +3,7 @@ import { products, type Transaction } from "@waitron/db";
 import { buildMenuDocuments } from "./menu-document.js";
 import { extraListItems, extraLists } from "./schema/extras.js";
 import { productUnits } from "./schema/units.js";
+import { productsUsingUnit } from "./units.js";
 
 export interface ExtraOfferUsage {
   productId: string;
@@ -76,4 +77,25 @@ export async function extraOfferUsageForUnitChange(
     .leftJoin(productUnits, eq(productUnits.productId, products.id))
     .where(and(eq(products.parentId, productId), isNull(productUnits.productId)));
   return extraOfferUsage(tx, [productId, ...inherited.map((row) => row.id)]);
+}
+
+export async function extraOfferUsageForUnitPrecisionChange(
+  tx: Transaction,
+  unitId: string,
+): Promise<ExtraOfferUsage[]> {
+  const parents = await productsUsingUnit(tx, unitId);
+  if (parents.length === 0) return [];
+  const children = await tx
+    .select({ id: products.id })
+    .from(products)
+    .where(
+      inArray(
+        products.parentId,
+        parents.map((parent) => parent.id),
+      ),
+    );
+  return extraOfferUsage(tx, [
+    ...parents.map((parent) => parent.id),
+    ...children.map((row) => row.id),
+  ]);
 }
