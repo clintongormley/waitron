@@ -144,10 +144,10 @@ async function enrolDeviceFixture(): Promise<{
   return { cfg, deviceId: dev.deviceId, token: dev.token, stationId, deviceProfileId };
 }
 
-/** The bindings a device enrolled with NONE assigned surfaces: a `kds_station` (like
- * `enrolDeviceFixture`'s) binds no till and no hardware, so every binding is the column default. */
+/** The bindings a station screen enrolled without a till, watcher, or hardware target carries. */
 const NO_BINDINGS = {
   tillId: null,
+  watcherId: null,
   receiptPrinterId: null,
   // `enrolDeviceFixture`'s kds profile declares no capabilities, so the binding carries `[]`.
   capabilities: [],
@@ -504,6 +504,7 @@ describe("requireDevice (venue database)", () => {
         formFactor: "till",
         label: "Counter till",
         stationId: null,
+        watcherId: null,
         tillId,
         deviceProfileId,
         receiptPrinterId: null,

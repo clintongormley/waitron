@@ -50,6 +50,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.binding_invalid": 400,
   "device_profile.not_found": 404,
   "station.not_found": 404,
+  "watcher.not_found": 404,
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,
@@ -214,6 +215,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         choice?: unknown;
         profileId?: unknown;
         stationId?: unknown;
+        watcherId?: unknown;
         registerId?: unknown;
       }>(c);
       const result = await gated(sessionId, "device.manage", (tx) => {
@@ -221,12 +223,14 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         const choice = requireString(body.choice, "choice");
         const profileId = requireBodyUuid(body.profileId, "profileId");
         const stationId = optionalBodyUuid(body.stationId, "stationId");
+        const watcherId = optionalBodyUuid(body.watcherId, "watcherId");
         const registerId = optionalBodyUuid(body.registerId, "registerId");
         if (!isUuid(id)) throw new AppError("join_request.not_found", {});
         return acceptDeviceJoinRequest(tx, deps.cfg, id, {
           choice,
           profileId,
           stationId,
+          watcherId,
           registerId,
         });
       });

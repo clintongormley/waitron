@@ -87,6 +87,7 @@ export interface DeviceBinding {
   formFactor: FormFactor;
   label: string;
   stationId: string | null;
+  watcherId: string | null;
   tillId: string | null;
   deviceProfileId: string | null;
   receiptPrinterId: string | null;
@@ -99,6 +100,7 @@ const deviceBindingColumns = {
   formFactor: deviceProfiles.formFactor,
   label: devices.label,
   stationId: devices.stationId,
+  watcherId: devices.watcherId,
   tillId: devices.tillId,
   deviceProfileId: devices.deviceProfileId,
   receiptPrinterId: devices.receiptPrinterId,
@@ -148,6 +150,7 @@ function toDeviceBinding(
     formFactor: row.formFactor,
     label: row.label,
     stationId: row.stationId,
+    watcherId: row.watcherId,
     tillId: row.tillId,
     deviceProfileId: row.deviceProfileId,
     receiptPrinterId: row.receiptPrinterId,

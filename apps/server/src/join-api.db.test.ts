@@ -17,6 +17,7 @@ import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
+import { createWatcher, removeWatcher } from "./watchers.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -415,6 +416,59 @@ describe("POST /management-api/join-requests/:id/deny", () => {
 });
 
 describe("POST /management-api/device-join-requests/:id/accept", () => {
+  it("accepts a watcher-bound kitchen screen and validates its watcher field", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const profileId = await seedProfile("kds");
+    const { id: watcherId } = await withTransaction(suite.db, (tx) =>
+      createWatcher(tx, venue.cfg, {
+        name: "Pass",
+        everyStation: true,
+        stationIds: [],
+        everyZone: true,
+        zoneIds: [],
+        runsPass: false,
+      }),
+    );
+    const made = await knock(venue, { kind: "device", label: "Pass screen" });
+    const path = `/management-api/device-join-requests/${made.joinId}/accept`;
+    const body = { choice: made.verificationNumber, profileId, watcherId };
+    const accepted = await send(app, "POST", path, { cookie: venue.managerCookie, body });
+    expect(accepted.status).toBe(200);
+    const [binding] = await suite.db
+      .select({ stationId: devices.stationId, watcherId: devices.watcherId })
+      .from(devices)
+      .where(eq(devices.id, made.joinId));
+    expect(binding).toEqual({ stationId: null, watcherId });
+    const malformed = await knock(venue, { kind: "device", label: "Bad screen" });
+    const invalid = await send(
+      app,
+      "POST",
+      `/management-api/device-join-requests/${malformed.joinId}/accept`,
+      {
+        cookie: venue.managerCookie,
+        body: { choice: malformed.verificationNumber, profileId, watcherId: "bad" },
+      },
+    );
+    expect(invalid.status).toBe(400);
+    expect(await errorOf(invalid)).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "watcherId" },
+    });
+    await withTransaction(suite.db, (tx) => removeWatcher(tx, venue.cfg, watcherId));
+    const removed = await knock(venue, { kind: "device", label: "Removed screen" });
+    const refused = await send(
+      app,
+      "POST",
+      `/management-api/device-join-requests/${removed.joinId}/accept`,
+      {
+        cookie: venue.managerCookie,
+        body: { choice: removed.verificationNumber, profileId, watcherId },
+      },
+    );
+    expect(refused.status).toBe(404);
+    expect(await errorOf(refused)).toMatchObject({ code: "watcher.not_found" });
+  });
   it("enrols the device when the number matches, and the request is consumed", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);

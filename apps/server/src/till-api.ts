@@ -46,6 +46,9 @@ import { tenantCredentials } from "@waitron/credentials";
 import { routableServers } from "@waitron/membership";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
+import { listWatcherQueue, markWatcherItems } from "./watcher-board.js";
+import { listWatchers } from "./watchers.js";
+import { parseWatcherDoneBody } from "./watcher-done-body.js";
 import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -328,6 +331,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // permanent until the catalogue is fixed, and not the till's fault.
   "sale_classification.invalid": 409,
   "working_order.not_found": 404,
+  "watcher.not_found": 404,
   "working_order.not_open": 409,
   "working_order.out_of_date": 409,
   "order.payment_in_flight": 409,
@@ -1579,6 +1583,45 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         return listExpoQueue(tx, deps.cfg);
       });
       return c.json(queue);
+    }),
+  );
+
+  app.get("/api/watchers", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const watchers = await withTransaction(deps.db, (tx) => listWatchers(tx, deps.cfg));
+      return c.json(watchers.map(({ id, name, runsPass }) => ({ id, name, runsPass })));
+    }),
+  );
+
+  app.get("/api/watchers/:id/queue", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("watcher.not_found", { watcherId: id });
+      return c.json(await withTransaction(deps.db, (tx) => listWatcherQueue(tx, deps.cfg, id)));
+    }),
+  );
+
+  app.post("/api/watchers/:id/done", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("watcher.not_found", { watcherId: id });
+      const body = parseWatcherDoneBody(await readJsonBody(c));
+      const at = new Date();
+      await withTransaction(deps.db, (tx) =>
+        markWatcherItems(
+          tx,
+          deps.cfg,
+          id,
+          body.ticketItemIds,
+          body.done,
+          { personId: session.personId },
+          at,
+        ),
+      );
+      return c.body(null, 204);
     }),
   );
 

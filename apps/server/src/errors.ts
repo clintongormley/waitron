@@ -697,8 +697,7 @@ declare module "@waitron/shared" {
      */
     "device.not_found": { deviceId: string };
     /**
-     * A join request was accepted under a station-binding profile (`kds_station`) with NO station.
-     * Distinct from `station.not_found`, raised when a station WAS supplied but is unusable.
+     * A join request was accepted under a kitchen-screen profile with no station and no watcher.
      */
     "device.station_required": Record<string, never>;
     /**
