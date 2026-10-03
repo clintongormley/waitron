@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Move the dashboard sidebar to the spec's layout and gather the set-once settings (receipts, table statuses, adjustment reasons, kitchen, floor) onto one new **Venue settings** page with a tab per subject, changing no behaviour except two small fixes and one missing switch.
+**Goal:** Move the dashboard sidebar to the spec's layout and gather the set-once settings (receipts, tables, adjustment reasons, kitchen) onto one new **Venue settings** page with a tab per subject, changing no behaviour except two small fixes and one missing switch, and renaming the demo seed's three hand-set table statuses.
 
 **Architecture:** A new core screen, `dashboard-venue-settings-screen` (in `apps/dashboard`), owns the page's one `h1` and a `wt-tabs` strip whose tab keys and order are fixed in core. Each tab holds one or more **panels**. Core panels are today's Receipts, Statuses and Kitchen screens with their own `h1` removed. Modules add panels through a new `settingsPanels` seat on the dashboard contract (`packages/dashboard-kit/src/contract.ts`), validated in `#activate` the way nav groups are. The sidebar gains a **Venue operations** group; a group with no visible page no longer draws its header.
 
@@ -13,8 +13,8 @@
 ## Decisions (the driver's defaults — the owner may strike any of them)
 
 1. **Sidebar order:** Overview (no header), Reporting, Service, Products and menus, **Venue operations** (new), Team, Purchasing, Settings. Service keeps only Bookings (a module) for now; Live floor is a later spec. Venue operations holds, in order: **Departments and zones** (today's venue-service `venue-operations` screen, renamed in the sidebar), **Floor plan** (core `floor`, moved from Service), **Prep stations** (module, moved from Service), **Venue settings** (new). Hours (spec §7) arrives in step 5 and will slot between Departments and zones and Floor plan. Statuses, Kitchen, Receipts and Adjustment reasons leave the sidebar. A group with no page this session may open draws no header (today it would draw an empty header — checked: `#shownNav` returns `pages: []` and `#nav` draws the header for it).
-2. **Venue settings** is a core screen at `/manage/venue-settings/view/<tab>`. It owns the page's single `h1`. Tab keys and order: `receipts`, `table-statuses`, `adjustment-reasons`, `kitchen`, `floor`. A missing, unknown or not-visible tab in the address shows the first visible tab and replaces the history entry; choosing a tab pushes one. A tab shows only when at least one of its panels is visible to this session; ~~the page shows in the sidebar only when at least one tab does~~ — **left out by this plan** (see I). Hidden panels stay mounted (design-system rule).
-3. **Panels.** Core: Receipts (manager or admin only, as today), Table statuses (today's Statuses screen; no rule, as today), Kitchen (courses, bump mode, fire control; no rule, as today; its "Stations are set up on Prep stations" link goes). Module: adjustments contributes its reasons screen as the `adjustment-reasons` panel (permission `adjustment.manage`) and stops placing it in the sidebar; its report stays in Reporting. venue-service contributes the four "Changes after sending" settings as a `kitchen` panel, removes that tab from its own screen, and contributes a `floor` panel with one switch for `service_settings.clearing_workflow`, which gets a route for the first time.
+2. **Venue settings** is a core screen at `/manage/venue-settings/view/<tab>`. It owns the page's single `h1`. Tab keys and order: `receipts`, `tables`, `adjustment-reasons`, `kitchen`. A missing, unknown or not-visible tab in the address shows the first visible tab and replaces the history entry; choosing a tab pushes one. A tab shows only when at least one of its panels is visible to this session; ~~the page shows in the sidebar only when at least one tab does~~ — **left out by this plan** (see I). Hidden panels stay mounted (design-system rule).
+3. **Panels.** Core: Receipts (manager or admin only, as today), Statuses (today's Statuses screen, unchanged apart from its `h1`, on the `tables` tab; no rule, as today), Kitchen (courses, bump mode, fire control; no rule, as today; its "Stations are set up on Prep stations" link goes). Module: adjustments contributes its reasons screen as the `adjustment-reasons` panel (permission `adjustment.manage`) and stops placing it in the sidebar; its report stays in Reporting. venue-service contributes the four "Changes after sending" settings as a `kitchen` panel, removes that tab from its own screen, and contributes a `tables` panel with one switch, **Needs clearing**, for `service_settings.clearing_workflow`, which gets a route for the first time. That panel has order -10, so it sits above the core Statuses panel (decision F).
 4. **Fix:** bump mode gets `GET /management-api/bump-mode`, and the Kitchen panel shows the stored value instead of always starting on "Per item".
 5. ~~Fix the receipt-language save~~ — **struck by the driver** (see A): one receipt language per location is the owner's landed decision C113, so the save is right as it is.
 6. The Departments and zones screen keeps its **Status** (readiness) tab until step 2.
@@ -28,16 +28,17 @@
 - **C. The venue-service screen's own heading follows its new sidebar name.** Its `h1` and tab-strip label (`venue.title`) become "Departments and zones" / "Departamentos y zonas", and its nav key is renamed from `nav.venue_operations` to `nav.departments_zones`, so the group header "Venue operations" and a page of the same name do not sit one above the other. The screen id and address (`venue-operations`, `/manage/venue-operations`) stay.
 - **D. Adjustments keeps the contract's `screen` field required.** Its first screen becomes the adjustment report (today its `moreScreens[0]`), so `screen` does not need to become optional.
 - **E. Core items can sit among module items.** Venue operations interleaves module and core pages, which `items`/`itemsAfterModules` cannot express. A group gains `itemsAmongModules`: core items with an `order`, sorted together with the group's module pages by `order` (ties keep the core item first). Departments and zones takes order 10, Floor plan 20, Prep stations 30, leaving room for Hours at 15 later.
-- **F. Module panels carry an `order`; core panels count as 0** and come first on a tie. On the Kitchen tab the core panel (courses, bump mode, fire control) comes first and venue-service's panel (order 10) after it.
+- **F. Module panels carry an `order`; core panels count as 0** and come first on a tie. On the Kitchen tab the core panel (courses, bump mode, fire control) comes first and venue-service's panel (order 10) after it. On the Tables tab venue-service's Needs clearing switch (order -10) comes first and the core Statuses panel after it.
 - **G. The venue-service panels read the existing `GET /management-api/venue-service`** through a new `loadSettings()` that keeps only the settings fields, with a new live-query group `settings: ["service_settings"]`. No new GET route.
-- **H. Spanish wording:** group "Operaciones del local"; page "Ajustes del local"; tabs "Recibos", "Estados de mesa", "Motivos de ajuste", "Cocina", "Mesas". The Floor tab in Spanish is «Mesas», because «Sala» is already the Floor plan page (`nav.floor`, `apps/dashboard/src/i18n/strings.ts` ~2644), and both sit under Venue operations — owner to confirm. The floor switch reuses the till's own words for Finish table ("Cerrar mesa") and Needs clearing ("Por recoger"), read from `apps/till/src/i18n/strings.ts`.
-- **I. "The page shows in the sidebar only when a tab does" is not built in this step.** No real session can reach the hidden case today: Table statuses and Kitchen carry no access rule (as today), so every non-staff session sees at least those two tabs, and staff never see this sidebar. A check written now would have a false branch no test can reach, which counts against the package's 98% coverage bar. The rule is added when the first panel gains an access rule. The page itself still renders only the tabs that have a visible panel (Task 3).
+- **H. Spanish wording:** group "Operaciones del local"; page "Ajustes del local"; tabs "Recibos", "Mesas", "Motivos de ajuste", "Cocina". The Statuses page and the Needs clearing switch share one "Tables" tab («Mesas»), owner 2026-10-03. The switch is named with the till's own word for the state, Needs clearing (`floor.needs_clearing`: "Needs clearing" / "Por recoger"), and its hint names Finish table in the till's words (`table.finish`: "Finish table" / "Cerrar mesa"), both read from `apps/till/src/i18n/strings.ts`.
+- **I. "The page shows in the sidebar only when a tab does" is not built in this step.** No real session can reach the hidden case today: the Statuses panel (Tables tab) and the Kitchen panel carry no access rule (as today), so every non-staff session sees at least those two tabs, and staff never see this sidebar. A check written now would have a false branch no test can reach, which counts against the package's 98% coverage bar. The rule is added when the first panel gains an access rule. The page itself still renders only the tabs that have a visible panel (Task 3).
 - **J. Two §5 Receipts details wait for step 2.** Spec §5's header line "described as printed under the legal name" and "the Receipts tab says where the trading name is edited" both depend on the trading name, which step 2 adds; this step leaves the Receipts panel's wording as it is.
-- **K. The panels keep their own Add buttons.** Design-system.md → "Tabbed management pages" asks for a page's Add button in the tab strip's `actions` slot. Here each panel is a self-contained screen and several tabs hold more than one panel, so each panel keeps its Add button inside itself (the Table statuses panel's and the adjustment reasons panel's Add buttons stay where they are). The owner may strike this.
+- **K. The panels keep their own Add buttons.** Design-system.md → "Tabbed management pages" asks for a page's Add button in the tab strip's `actions` slot. Here each panel is a self-contained screen and several tabs hold more than one panel, so each panel keeps its Add button inside itself (the Statuses panel's and the adjustment reasons panel's Add buttons stay where they are). The owner may strike this.
+- **L. Built-in table states are a separate design.** The table states and signals Waitron sets itself (Free, Occupied, Reserved, Needs clearing, Bill requested and the kitchen signals), signals a customer triggers, and reserving a table by hand are A267, a separate design (spec §3, §10). This step only moves the Statuses page onto the Tables tab and adds the Needs clearing switch. It also renames the demo seed's three hand-set statuses, whose labels copy the built-in states' names (Task 4, Steps 9-13).
 
 ## Global Constraints
 
-- No behaviour changes beyond decisions 3 (the new clearing switch and its route) and 4 (spec §11 step 1: "No behaviour changes").
+- No behaviour changes beyond decisions 3 (the new clearing switch and its route) and 4 (spec §11 step 1: "No behaviour changes"). The demo seed's status labels change (decision L); that is seed data, not product behaviour.
 - No schema change, no migration file touched, no server permission changed.
 - `apps/dashboard` reaches module code only through `@waitron/dashboard-modules` (`scripts/module-seams.test.ts`).
 - A module's `src/dashboard` files never import server code (`scripts/dashboard-browser-purity.test.ts` covers `packages/adjustments/src/dashboard`; keep venue-service's to the same rule: import only `./client.js`, `./strings.js`, `./live-queries.js`, `@waitron/dashboard-kit`, `@waitron/ui` and `lit`).
@@ -52,9 +53,9 @@
 
 ## Review Focus
 
-1. **A tab in the address the session may not see** (for example a supervisor opening `/manage/venue-settings/view/receipts`, or `/view/floor` when venue-service is disabled): expect the first visible tab, the address corrected with a replace, and no extra Back stop. Owned by Task 3 (element) and Task 5 (through the shell).
-2. **A module disabled for the venue** (`me.modules` lacks it): its panels and their tab are absent, nothing throws, and its tab key in the address falls back. Owned by Task 5.
-3. **Two panels on one tab**: core first, then module panels by `order`; both mounted; a save in one does not disturb the other. Owned by Task 5 (order) and Task 6 (the Kitchen tab with both).
+1. **A tab in the address the session may not see** (for example a supervisor opening `/manage/venue-settings/view/receipts`, or `/view/adjustment-reasons` when adjustments is disabled), and **an address naming no tab at all** (for example `/manage/venue-settings/view/floor`, the retired Floor tab, which is now simply an unknown tab): expect the first visible tab, the address corrected with a replace, and no extra Back stop. Owned by Task 3 (element) and Task 5 (through the shell).
+2. **A module disabled for the venue** (`me.modules` lacks it): its panels are absent and nothing throws. A disabled venue-service removes the Needs clearing switch from Tables and its panel from Kitchen; both tabs still show, holding only their core panels. A tab left with no panel at all (Adjustment reasons, when adjustments is disabled) is absent, and its key in the address falls back. Owned by Task 5 and Task 6 Step 8.
+3. **Two panels on one tab**: ordered by `order`, core panels counting as 0 and first on a tie — on Tables, venue-service's switch (-10) above the core Statuses panel; on Kitchen, the core panel above venue-service's (10); both mounted; a save in one does not disturb the other. Owned by Task 5 (order) and Task 6 Step 8 (the Tables and Kitchen tabs with both).
 4. **The one-`h1` rule across nested shadow roots**: the page's `h1` is the only one, counting inside each panel's own shadow root. Owned by Task 4 (`allH1` helper in `dashboard-app.test.ts`) and the a11y suite.
 5. **An empty group**: a session that can open no Service page (Bookings disabled, or no `booking.manage`) sees no "Service" header, and a search still reports "No pages match." correctly. Owned by Task 8.
 6. **A session that can see no tab** (decision I): not reachable today, and the sidebar item is not hidden for it in this step; the element itself renders only its `h1` with no panels (Task 3 tests that). Reviewer: confirm decision I's claim that no real session reaches it against `CORE_SETTINGS_PANELS` before accepting it.
@@ -79,11 +80,12 @@
 | `packages/dashboard-kit/src/contract.ts` | modify | `DashboardSettingsPanel`, `settingsPanels` |
 | `packages/venue-service/src/routes.ts` (+ test) | modify | clearing-workflow route, GET field |
 | `packages/venue-service/src/dashboard/client.ts`, `live-queries.ts` (+ test) | modify | `loadSettings`, `saveClearingWorkflow` |
-| `packages/venue-service/src/dashboard/service-settings-panel.ts` (+ tests) | **create** | kitchen and floor panels |
+| `packages/venue-service/src/dashboard/service-settings-panel.ts` (+ tests) | **create** | kitchen panel and the Tables tab's Needs clearing switch |
 | `packages/venue-service/src/dashboard/venue-operations-screen.ts` (+ tests) | modify | Kitchen tab removed |
 | `packages/venue-service/src/dashboard/index.ts`, `strings.ts` (+ test) | modify | panels, placements, labels |
 | `packages/adjustments/src/dashboard/index.ts`, `reasons-screen.ts`, `strings.ts` (+ tests) | modify | reasons as a panel |
 | `packages/dashboard-modules/src/registry.test.ts` | modify | adjustments' new shape |
+| `apps/server/scripts/demo-seed/floor.ts`, `seed-floor.test.ts` | modify | the demo's hand-set statuses no longer copy built-in state names |
 | `docs/developers/design-system.md`, `conventions-ui.md`, `testing-guide.md`, `docs/content-and-images.md`, `docs/backlog.md` | modify | retire stale claims |
 
 ---
@@ -515,12 +517,12 @@ git commit -s -m "Venue service: a route and client for whether tables need clea
 **Interfaces:**
 - Consumes: `dashboardPath` (`apps/dashboard/src/navigation.ts`; its `"*"` entry already maps the `view` field to the `view` path segment), `UrlStateController` (`@waitron/ui`), `wt-tabs`.
 - Produces (exported from `venue-settings-screen.ts`):
-  - `export const VENUE_SETTINGS_TABS = ["receipts", "table-statuses", "adjustment-reasons", "kitchen", "floor"] as const;`
+  - `export const VENUE_SETTINGS_TABS = ["receipts", "tables", "adjustment-reasons", "kitchen"] as const;`
   - `export type VenueSettingsTab = (typeof VENUE_SETTINGS_TABS)[number];`
   - `export function isVenueSettingsTab(value: string | null): value is VenueSettingsTab;`
   - `export interface VenueSettingsPanel { key: string; tab: VenueSettingsTab; render(): TemplateResult; }` — panels arrive already filtered for the session and ordered.
   - element `dashboard-venue-settings-screen`, class `VenueSettingsScreen`, property `panels: readonly VenueSettingsPanel[]`.
-  - string keys `venue_settings.title`, `venue_settings.tab.receipts`, `venue_settings.tab.table_statuses`, `venue_settings.tab.adjustment_reasons`, `venue_settings.tab.kitchen`, `venue_settings.tab.floor`.
+  - string keys `venue_settings.title`, `venue_settings.tab.receipts`, `venue_settings.tab.tables`, `venue_settings.tab.adjustment_reasons`, `venue_settings.tab.kitchen`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -603,16 +605,18 @@ describe("the Venue settings page", () => {
   it.each([
     "/manage/venue-settings",
     "/manage/venue-settings/view/nowhere",
-    // A real tab this session has no panel on.
+    // The retired Floor tab: an unknown key like any other.
     "/manage/venue-settings/view/floor",
+    // A real tab this session has no panel on.
+    "/manage/venue-settings/view/adjustment-reasons",
   ])("replaces %s with the first visible tab, keeping the query", async (path) => {
     navigate(path);
     const query = location.search;
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
-    const el = await mount([panel("s", "table-statuses"), panel("k", "kitchen")]);
-    expect(selected(el)).toBe("table-statuses");
-    expect(location.pathname).toBe("/manage/venue-settings/view/table-statuses");
+    const el = await mount([panel("s", "tables"), panel("k", "kitchen")]);
+    expect(selected(el)).toBe("tables");
+    expect(location.pathname).toBe("/manage/venue-settings/view/tables");
     expect(location.search).toBe(query);
     expect(replace).toHaveBeenCalledTimes(1);
     expect(push).not.toHaveBeenCalled();
@@ -674,15 +678,14 @@ describe("the Venue settings page", () => {
     navigate("/manage/venue-settings");
     const el = await mount([
       panel("r", "receipts"),
-      panel("s", "table-statuses"),
+      panel("s", "tables"),
       panel("a", "adjustment-reasons"),
       panel("k", "kitchen"),
-      panel("f", "floor"),
     ]);
     expect(el.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Ajustes del local");
     expect(
       [...tabs(el)!.shadowRoot!.querySelectorAll('[role="tab"]')].map((t) => t.textContent!.trim()),
-    ).toEqual(["Recibos", "Estados de mesa", "Motivos de ajuste", "Cocina", "Mesas"]);
+    ).toEqual(["Recibos", "Mesas", "Motivos de ajuste", "Cocina"]);
   });
 });
 ```
@@ -730,10 +733,9 @@ In `apps/dashboard/src/i18n/strings.ts`, English block (beside `nav.group.*`):
 ```ts
   "venue_settings.title": "Venue settings",
   "venue_settings.tab.receipts": "Receipts",
-  "venue_settings.tab.table_statuses": "Table statuses",
+  "venue_settings.tab.tables": "Tables",
   "venue_settings.tab.adjustment_reasons": "Adjustment reasons",
   "venue_settings.tab.kitchen": "Kitchen",
-  "venue_settings.tab.floor": "Floor",
 ```
 
 Spanish block (same position):
@@ -741,10 +743,9 @@ Spanish block (same position):
 ```ts
   "venue_settings.title": "Ajustes del local",
   "venue_settings.tab.receipts": "Recibos",
-  "venue_settings.tab.table_statuses": "Estados de mesa",
+  "venue_settings.tab.tables": "Mesas",
   "venue_settings.tab.adjustment_reasons": "Motivos de ajuste",
   "venue_settings.tab.kitchen": "Cocina",
-  "venue_settings.tab.floor": "Mesas",
 ```
 
 - [ ] **Step 4: Write the element**
@@ -762,21 +763,14 @@ import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
 /** The page's tabs in the order they show; a module's panel names one of these keys. */
-export const VENUE_SETTINGS_TABS = [
-  "receipts",
-  "table-statuses",
-  "adjustment-reasons",
-  "kitchen",
-  "floor",
-] as const;
+export const VENUE_SETTINGS_TABS = ["receipts", "tables", "adjustment-reasons", "kitchen"] as const;
 export type VenueSettingsTab = (typeof VENUE_SETTINGS_TABS)[number];
 
 const TAB_LABELS: Record<VenueSettingsTab, StringKey> = {
   receipts: "venue_settings.tab.receipts",
-  "table-statuses": "venue_settings.tab.table_statuses",
+  tables: "venue_settings.tab.tables",
   "adjustment-reasons": "venue_settings.tab.adjustment_reasons",
   kitchen: "venue_settings.tab.kitchen",
-  floor: "venue_settings.tab.floor",
 };
 
 export function isVenueSettingsTab(value: string | null): value is VenueSettingsTab {
@@ -888,9 +882,9 @@ git commit -s -m "Dashboard: a Venue settings page with one tab per subject, its
 
 ---
 
-### Task 4: Receipts, Table statuses and Kitchen open as tabs of Venue settings
+### Task 4: Receipts, Statuses and Kitchen open as tabs of Venue settings
 
-This task turns the three core screens into panels (no `h1`, no prep-stations link) and wires the page into the shell in the same commit — the two cannot land apart without breaking the shell's one-`h1` tests.
+This task turns the three core screens into panels (no `h1`, no prep-stations link) and wires the page into the shell in the same commit — the two cannot land apart without breaking the shell's one-`h1` tests. The Statuses screen becomes the core panel of the **Tables** tab. A second commit (Steps 9-13) renames the demo seed's hand-set statuses (decision L).
 
 **Files:**
 - Modify: `apps/dashboard/src/screens/receipts-screen.ts:785` (render), `service-status-screen.ts:30-34, 253` (style + render), `kitchen-screen.ts` (style `.title`, render)
@@ -898,13 +892,15 @@ This task turns the three core screens into panels (no `h1`, no prep-stations li
 - Modify: `apps/dashboard/src/dashboard-app.ts` (imports 51-55; `CORE_SCREENS` 89-122; types 139-156; `NAV_GROUPS` 165-233; `#mayOpen` 1410; `#renderScreen` 1710-1719)
 - Modify: `apps/dashboard/src/i18n/strings.ts` (add `nav.venue_settings`; delete keys listed in Step 7)
 - Test: `apps/dashboard/src/dashboard-app.test.ts`, `dashboard-app.a11y.test.ts`, `dashboard-app.module-order.test.ts`
+- Modify: `apps/server/scripts/demo-seed/floor.ts:161-165` (`DEMO_STATUSES`)
+- Test: `apps/server/scripts/demo-seed/seed-floor.test.ts:74`
 
 **Interfaces:**
 - Consumes: `VenueSettingsPanel`, `VenueSettingsTab`, element `dashboard-venue-settings-screen` (Task 3).
 - Produces, in `dashboard-app.ts`:
   - `type AccessRule = { requiresManager?: boolean; requiresPermission?: string };` and `type ScreenRule = AccessRule & { screen: ScreenId };` — `#mayOpen(rule: AccessRule)`.
   - `type CoreSettingsPanel = AccessRule & { key: string; tab: VenueSettingsTab; render(api: DashboardApi): TemplateResult };`
-  - `const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[]` with keys `receipts`, `table-statuses`, `kitchen`.
+  - `const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[]` with keys `receipts` (tab `receipts`), `statuses` (tab `tables`), `kitchen` (tab `kitchen`).
   - `#settingsPanels(): (VenueSettingsPanel & { order: number })[]` (Task 5 adds the module part).
   - screen id `venue-settings` in `CORE_SCREENS`; nav item `{ screen: "venue-settings", labelKey: "nav.venue_settings" }` (no access rule — decision I), placed in the `configuration` group where `receipts` was (Task 8 moves it).
 
@@ -980,7 +976,7 @@ function allH1(root: ParentNode): Element[] {
 5. Replace `navigates to the service-status screen` and `navigates to the kitchen (Cocina) screen` with:
 
 ```ts
-  it("opens Venue settings, with Table statuses and Kitchen among its tabs, under one h1", async () => {
+  it("opens Venue settings, with Tables and Kitchen among its tabs, under one h1", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -991,8 +987,10 @@ function allH1(root: ParentNode): Element[] {
     const keys = [
       ...page.shadowRoot!.querySelector("wt-tabs")!.shadowRoot!.querySelectorAll('[role="tab"]'),
     ].map((tab) => tab.getAttribute("data-key"));
-    expect(keys).toEqual(["receipts", "table-statuses", "kitchen"]);
-    expect(page.shadowRoot!.querySelector("dashboard-service-status-screen")).not.toBeNull();
+    expect(keys).toEqual(["receipts", "tables", "kitchen"]);
+    expect(
+      page.shadowRoot!.querySelector('[slot="tables"] dashboard-service-status-screen'),
+    ).not.toBeNull();
     expect(page.shadowRoot!.querySelector("dashboard-kitchen-screen")).not.toBeNull();
     expect(allH1(el.shadowRoot!)).toHaveLength(1);
     expect(location.pathname).toBe("/manage/venue-settings/view/receipts");
@@ -1062,7 +1060,7 @@ function allH1(root: ParentNode): Element[] {
     await flush(el);
     const page = venueSettings(el)!;
     expect(page.shadowRoot!.querySelector("dashboard-receipts-screen")).toBeNull();
-    expect(location.pathname).toBe("/manage/venue-settings/view/table-statuses");
+    expect(location.pathname).toBe("/manage/venue-settings/view/tables");
 ```
 
    and rename it `shows a supervisor Venue settings without its Receipts tab`.
@@ -1154,8 +1152,8 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
     render: (api) => html`<dashboard-receipts-screen .api=${api}></dashboard-receipts-screen>`,
   },
   {
-    key: "table-statuses",
-    tab: "table-statuses",
+    key: "statuses",
+    tab: "tables",
     render: (api) =>
       html`<dashboard-service-status-screen .api=${api}></dashboard-service-status-screen>`,
   },
@@ -1215,7 +1213,55 @@ For each of `nav.receipts`, `nav.statuses`, `nav.kitchen`, `receipts.title`, `st
 
 ```bash
 git add apps/dashboard/src
-git commit -s -m "Dashboard: Receipts, Table statuses and Kitchen become tabs of Venue settings, each without its own heading"
+git commit -s -m "Dashboard: Receipts, Statuses and Kitchen become tabs of Venue settings (Statuses on the Tables tab), each without its own heading"
+```
+
+- [ ] **Step 9: Change the demo seed's test to the new status labels**
+
+The demo seed hand-sets three statuses whose labels copy the states Waitron sets itself ("Free", "Occupied", "Reserved") while driving nothing (spec §3, decision L). In `apps/server/scripts/demo-seed/seed-floor.test.ts:74`, replace
+
+```ts
+    expect(res.statuses.map((s) => s.label)).toEqual(["Free", "Occupied", "Reserved"]);
+```
+
+with
+
+```ts
+    expect(res.statuses.map((s) => s.label)).toEqual(["VIP", "Allergy at this table", "Birthday"]);
+```
+
+and leave the next line (three distinct colours) as it is. The suite seeds in English only (`const LOCALE: SeedLocale = "en"`), so the Spanish labels are checked by reading `floor.ts` in Step 11, not by this test.
+
+Nothing else relies on the three seeded labels. Checked with `/usr/bin/grep -rn "DEMO_STATUSES" apps packages scripts docs` (hits only `floor.ts:161` and its one reader, `seed-floor.ts:272`, which inserts each label as it stands) and `/usr/bin/grep -rnwE "Free|Occupied|Reserved|Libre|Ocupada|Reservada" apps packages scripts docs`: every other hit builds its own status row or is a built-in state's string — `apps/server/src/service-statuses.test.ts:92-122` and `management-api.status.test.ts:189, 303` (their own labels), `scripts/behavioural-triggers.test.ts:334` (inserts its own `'Ocupada'` row), `apps/server/src/party-table-actions.test.ts:375` (`"Libre"` is a table-name prefix), the till and `packages/ui` test fixtures (`{ id: "s1", label: "Reservada", … }`), the till's own `floor.free`/`floor.reserved` strings and `wt-floor-canvas.ts:44` (built-in state labels), and `docs/backlog.md:3138, 3212` (the built-in reserved chip and badge). Re-run both greps before Step 11 in case something new landed.
+
+- [ ] **Step 10: Run it and watch it fail**
+
+Run: `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed-floor.test.ts`
+(`apps/server/vitest.config.ts` sets no `include`, so Vitest's default file pattern picks up `scripts/**` test files; `scripts/**` is excluded from coverage only. Run 2026-10-03 on this worktree: `Test Files 1 passed (1)`.)
+Expected: FAIL on the labels' `toEqual`, receiving `["Free", "Occupied", "Reserved"]`.
+
+- [ ] **Step 11: Rename the seeded statuses**
+
+In `apps/server/scripts/demo-seed/floor.ts`, replace `DEMO_STATUSES` (161-165) with:
+
+```ts
+export const DEMO_STATUSES: SeedStatus[] = [
+  { label: { en: "VIP", es: "VIP" }, color: "#8b5cf6" },
+  { label: { en: "Allergy at this table", es: "Alergia en esta mesa" }, color: "#ef4444" },
+  { label: { en: "Birthday", es: "Cumpleaños" }, color: "#ec4899" },
+];
+```
+
+- [ ] **Step 12: Run it and see it pass**
+
+Run: `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed-floor.test.ts`
+Expected: PASS.
+
+- [ ] **Step 13: Commit**
+
+```bash
+git add apps/server/scripts/demo-seed/floor.ts apps/server/scripts/demo-seed/seed-floor.test.ts
+git commit -s -m "Demo seed: the hand-set table statuses are VIP, Allergy at this table and Birthday, no longer copying the names of states Waitron sets itself"
 ```
 
 ---
@@ -1265,8 +1311,9 @@ import type { DashboardApi } from "./api/client.js";
 import "./dashboard-app.js";
 import type { DashboardApp } from "./dashboard-app.js";
 
-// "widgets" adds a kitchen panel this session may see and a floor panel it may not; "gadgets" is
-// not enabled for the venue and adds a floor panel too.
+// "widgets" adds kitchen panels this session may see and an adjustment-reasons panel it may not;
+// "gadgets" is not enabled for the venue and adds an adjustment-reasons panel too. No core panel
+// sits on that tab, so with both left out the tab itself is absent.
 function panelModule(module: string, panels: DashboardContribution["settingsPanels"]) {
   return {
     module,
@@ -1293,10 +1340,10 @@ vi.mock("@waitron/dashboard-modules", async (importOriginal) => ({
     panelModule("widgets", [
       { id: "widgets-late", tab: "kitchen", order: 5, requiresPermission: "test.use", create: shown("late") },
       { id: "widgets-early", tab: "kitchen", order: -1, requiresPermission: "test.use", create: shown("early") },
-      { id: "widgets-floor", tab: "floor", requiresPermission: "test.audit", create: shown("floor") },
+      { id: "widgets-reasons", tab: "adjustment-reasons", requiresPermission: "test.audit", create: shown("reasons") },
     ]),
     panelModule("gadgets", [
-      { id: "gadgets-floor", tab: "floor", requiresPermission: "test.use", create: shown("gadgets") },
+      { id: "gadgets-reasons", tab: "adjustment-reasons", requiresPermission: "test.use", create: shown("gadgets") },
     ]),
   ],
 }));
@@ -1366,9 +1413,9 @@ it("puts a module's panels on their tab by their stated order, the core panel co
 });
 
 it("leaves out a panel the session lacks the permission for, and a disabled module's panel", async () => {
-  const el = await mount("/manage/venue-settings/view/floor");
-  expect(tabKeys(el)).toEqual(["receipts", "table-statuses", "kitchen"]);
-  expect(page(el).shadowRoot!.querySelector("[data-test=panel-floor]")).toBeNull();
+  const el = await mount("/manage/venue-settings/view/adjustment-reasons");
+  expect(tabKeys(el)).toEqual(["receipts", "tables", "kitchen"]);
+  expect(page(el).shadowRoot!.querySelector("[data-test=panel-reasons]")).toBeNull();
   expect(page(el).shadowRoot!.querySelector("[data-test=panel-gadgets]")).toBeNull();
   expect(location.pathname).toBe("/manage/venue-settings/view/receipts");
 });
@@ -1541,7 +1588,7 @@ git commit -s -m "Dashboard contract: modules can add panels to a Venue settings
 
 ---
 
-### Task 6: venue-service's kitchen and floor panels; its screen loses the "Changes after sending" tab
+### Task 6: venue-service's kitchen panel and its Needs clearing switch on Tables; its screen loses the "Changes after sending" tab
 
 **Files:**
 - Create: `packages/venue-service/src/dashboard/service-settings-panel.ts`
@@ -1553,9 +1600,9 @@ git commit -s -m "Dashboard contract: modules can add panels to a Venue settings
 
 **Interfaces:**
 - Consumes: `VenueServiceApi.loadSettings()`, `saveClearingWorkflow()`, `saveSettings()`, `saveKitchenTicketGrouping()`, `savePrintHeldWork()`, `saveReleaseReminderMinutes()`, `VenueServiceSettingsView`, `QUERY_DEPENDENCIES.settings` (Task 2); `DashboardSettingsPanel` (Task 5).
-- Produces: element `dashboard-venue-service-settings`, class `ServiceSettingsPanel`, properties `api: VenueServiceApi` and `subject: "kitchen" | "floor"`; `VENUE_SERVICE_DASHBOARD.settingsPanels` = `[{ id: "venue-service-kitchen", tab: "kitchen", order: 10, requiresPermission: "venue_service.manage" }, { id: "venue-service-floor", tab: "floor", requiresPermission: "venue_service.manage" }]`; strings `venue.clearing_workflow`, `venue.clearing_workflow_hint`.
+- Produces: element `dashboard-venue-service-settings`, class `ServiceSettingsPanel`, properties `api: VenueServiceApi` and `subject: "kitchen" | "tables"`; `VENUE_SERVICE_DASHBOARD.settingsPanels` = `[{ id: "venue-service-kitchen", tab: "kitchen", order: 10, requiresPermission: "venue_service.manage" }, { id: "venue-service-tables", tab: "tables", order: -10, requiresPermission: "venue_service.manage" }]` (order -10 puts the switch above the core Statuses panel, which counts as 0 — decision F); strings `venue.clearing_workflow`, `venue.clearing_workflow_hint`.
 
-- [ ] **Step 1: Move the kitchen-setting tests to the new panel, and add the floor tests**
+- [ ] **Step 1: Move the kitchen-setting tests to the new panel, and add the Needs clearing tests**
 
 Create `service-settings-panel.test.ts` with this header:
 
@@ -1585,7 +1632,7 @@ const model: VenueServiceSettingsView = {
 
 async function mount(
   api: VenueServiceApi,
-  subject: "kitchen" | "floor" = "kitchen",
+  subject: "kitchen" | "tables" = "kitchen",
 ): Promise<ServiceSettingsPanel> {
   const host = document.createElement("div");
   applyTokens(host);
@@ -1625,10 +1672,10 @@ Then **move** — cut from `venue-operations-screen.test.ts` and paste here — 
 
 Also move the `it("gives the two kitchen settings' dropdowns their hints", …)` case (~2668) into a `describe("the kitchen panel's fields", …)` here, applying the same edits; if it uses a `dropdown(root, name)` helper, copy that helper too.
 
-Add the floor cases:
+Add the Needs clearing cases:
 
 ```ts
-describe("the setting that leaves tables needing clearing after Finish table", () => {
+describe("the Needs clearing setting", () => {
   function clearingSwitch(el: ServiceSettingsPanel) {
     const host = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
       'wt-switch[name="clearingWorkflow"]',
@@ -1641,18 +1688,16 @@ describe("the setting that leaves tables needing clearing after Finish table", (
     clearingWorkflow,
   });
 
-  it("shows only the clearing switch on the floor panel, with its hint, off by default", async () => {
+  it("shows only the Needs clearing switch on the tables panel, with its hint, off by default", async () => {
     const el = await mount(
       { loadSettings: vi.fn().mockResolvedValue(model) } as unknown as VenueServiceApi,
-      "floor",
+      "tables",
     );
     const { host, input } = clearingSwitch(el);
-    expect(host.shadowRoot!.querySelector("label")!.textContent).toBe(
-      "Tables need clearing after Finish table",
-    );
+    expect(host.shadowRoot!.querySelector("label")!.textContent).toBe("Needs clearing");
     expect(input.checked).toBe(false);
     expect(el.shadowRoot!.querySelector('[data-test="clearing-workflow-hint"]')!.textContent).toContain(
-      "Needs clearing",
+      "Finish table",
     );
     expect(el.shadowRoot!.querySelector('wt-switch[name="editSentLines"]')).toBeNull();
     expect(el.shadowRoot!.querySelector("h1")).toBeNull();
@@ -1664,7 +1709,7 @@ describe("the setting that leaves tables needing clearing after Finish table", (
       loadSettings: vi.fn().mockResolvedValueOnce(model).mockResolvedValue(withClearing(true)),
       saveClearingWorkflow: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
     } as unknown as VenueServiceApi;
-    const el = await mount(api, "floor");
+    const el = await mount(api, "tables");
     clearingSwitch(el).input.click();
     await settle(el);
     expect(api.saveClearingWorkflow).toHaveBeenCalledWith(true);
@@ -1681,7 +1726,7 @@ describe("the setting that leaves tables needing clearing after Finish table", (
       loadSettings: vi.fn().mockResolvedValue(model),
       saveClearingWorkflow: vi.fn().mockRejectedValue(new Error("offline")),
     } as unknown as VenueServiceApi;
-    const el = await mount(api, "floor");
+    const el = await mount(api, "tables");
     clearingSwitch(el).input.click();
     await settle(el);
     expect(pageAlert(el)).toContain("could not be saved");
@@ -1694,7 +1739,7 @@ describe("the setting that leaves tables needing clearing after Finish table", (
   it("follows a change another dashboard makes", async () => {
     const liveData = new LiveData();
     const loadSettings = vi.fn().mockResolvedValue(model);
-    const el = await mount({ loadSettings, liveData } as unknown as VenueServiceApi, "floor");
+    const el = await mount({ loadSettings, liveData } as unknown as VenueServiceApi, "tables");
     loadSettings.mockResolvedValue(withClearing(true));
     liveData.invalidate([{ type: "service_settings" }]);
     await vi.waitFor(() => expect(clearingSwitch(el).input.checked).toBe(true));
@@ -1704,10 +1749,13 @@ describe("the setting that leaves tables needing clearing after Finish table", (
     setLocale("es");
     const el = await mount(
       { loadSettings: vi.fn().mockResolvedValue(model) } as unknown as VenueServiceApi,
-      "floor",
+      "tables",
     );
     expect(clearingSwitch(el).host.shadowRoot!.querySelector("label")!.textContent).toBe(
-      "Las mesas quedan por recoger tras Cerrar mesa",
+      "Por recoger",
+    );
+    expect(el.shadowRoot!.querySelector('[data-test="clearing-workflow-hint"]')!.textContent).toContain(
+      "Cerrar mesa",
     );
   });
 });
@@ -1723,7 +1771,7 @@ it("says the settings could not be loaded when the read fails", async () => {
 Move the four kitchen-tab describes from `venue-operations-screen.a11y.test.ts` — `kitchen changes setting accessibility (%s)` (~36), `kitchen ticket grouping setting accessibility (%s)` (~75), `print held work setting accessibility (%s)` (~124) and `release reminder setting accessibility (%s)` (~167), each of which clicks `[data-key="kitchen"]` — into `service-settings-panel.a11y.test.ts`, with the same edits (mount the panel directly, `load` → `loadSettings` resolving a `VenueServiceSettingsView`, delete the tab click), and add:
 
 ```ts
-describe.each(["light", "dark"] as const)("floor panel accessibility (%s)", (theme) => {
+describe.each(["light", "dark"] as const)("tables panel accessibility (%s)", (theme) => {
   it("has no violations", async () => {
     const host = document.createElement("div");
     host.dataset.theme = theme;
@@ -1734,7 +1782,7 @@ describe.each(["light", "dark"] as const)("floor panel accessibility (%s)", (the
       el.api = {
         loadSettings: vi.fn().mockResolvedValue(model),
       } as unknown as VenueServiceApi;
-      el.subject = "floor";
+      el.subject = "tables";
       host.append(el);
       await el.updateComplete;
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1761,20 +1809,20 @@ Expected: FAIL — `./service-settings-panel.js` does not exist; the screen stil
 `packages/venue-service/src/dashboard/strings.ts`, English (after `venue.print_held_work_hint`):
 
 ```ts
-  "venue.clearing_workflow": "Tables need clearing after Finish table",
+  "venue.clearing_workflow": "Needs clearing",
   "venue.clearing_workflow_hint":
-    "When on, a table a party leaves — when it finishes, moves to another table or joins another party — shows Needs clearing until someone marks it cleared.",
+    "When on, a table a party leaves — at Finish table, or by moving to another table or joining another party — shows Needs clearing until someone marks it cleared.",
 ```
 
 Spanish:
 
 ```ts
-  "venue.clearing_workflow": "Las mesas quedan por recoger tras Cerrar mesa",
+  "venue.clearing_workflow": "Por recoger",
   "venue.clearing_workflow_hint":
     "Si está activado, una mesa que un grupo deja —al Cerrar mesa, al cambiarse a otra mesa o al unirse a otro grupo— aparece Por recoger hasta que alguien la marca como recogida.",
 ```
 
-The hint names every path the setting governs, not only Finish table: `leaveForClearing` (`apps/server/src/parties.ts` ~506) reads the setting, and it is called by Finish table (`parties.ts` ~566), by moving guests (`moveGuests`, `apps/server/src/table-actions.ts` ~85) and by combining parties with `tables: "leave"` (~218), which is what a move onto a table another party holds does (~74). The label keeps the till's own "Finish table" words.
+The label is the till's own name for the state the switch turns on (`floor.needs_clearing` in `apps/till/src/i18n/strings.ts`), so the hint carries what the switch does. The hint names every path the setting governs, not only Finish table: `leaveForClearing` (`apps/server/src/parties.ts` ~506) reads the setting, and it is called by Finish table (`parties.ts` ~566), by moving guests (`moveGuests`, `apps/server/src/table-actions.ts` ~85) and by combining parties with `tables: "leave"` (~218), which is what a move onto a table another party holds does (~74). It names Finish table in the till's own words (`table.finish`).
 
 - [ ] **Step 4: Write the panel**
 
@@ -1799,7 +1847,7 @@ type Field =
   | "releaseReminderMinutes"
   | "clearingWorkflow";
 
-/** The venue-service settings on one Venue settings tab: the kitchen's, or the floor's. */
+/** The venue-service settings on one Venue settings tab: the kitchen's, or Tables' Needs clearing. */
 @customElement("dashboard-venue-service-settings")
 export class ServiceSettingsPanel extends LitElement {
   static override styles = [
@@ -1831,7 +1879,7 @@ export class ServiceSettingsPanel extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: VenueServiceApi;
-  @property() subject: "kitchen" | "floor" = "kitchen";
+  @property() subject: "kitchen" | "tables" = "kitchen";
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
@@ -1937,8 +1985,8 @@ export class ServiceSettingsPanel extends LitElement {
     </section>`;
   }
 
-  #floor(model: VenueServiceSettingsView): TemplateResult {
-    return html`<section data-test="floor-settings">
+  #tables(model: VenueServiceSettingsView): TemplateResult {
+    return html`<section data-test="clearing-settings">
       ${this.#switch(
         "clearingWorkflow",
         t("venue.clearing_workflow"),
@@ -2038,7 +2086,7 @@ export class ServiceSettingsPanel extends LitElement {
           ? nothing
           : this.subject === "kitchen"
             ? this.#kitchen(this.model)
-            : this.#floor(this.model)
+            : this.#tables(this.model)
       }`;
   }
 }
@@ -2086,15 +2134,17 @@ In `venue-operations-screen.ts`:
       },
     },
     {
-      id: "venue-service-floor",
-      tab: "floor",
+      id: "venue-service-tables",
+      tab: "tables",
+      // Above the core Statuses panel, which counts as 0.
+      order: -10,
       requiresPermission: "venue_service.manage",
       create(ctx) {
         const api = new VenueServiceApi(ctx.request, ctx.liveData);
         return {
           render: () =>
             html`<dashboard-venue-service-settings
-              subject="floor"
+              subject="tables"
               .api=${api}
             ></dashboard-venue-service-settings>`,
         };
@@ -2106,7 +2156,7 @@ In `venue-operations-screen.ts`:
 `index.test.ts`, add:
 
 ```ts
-  it("adds a kitchen panel and a floor panel to Venue settings for managers of venue service", () => {
+  it("adds a kitchen panel, and a Needs clearing switch above the statuses on Tables, to Venue settings for managers of venue service", () => {
     expect(
       VENUE_SERVICE_DASHBOARD.settingsPanels!.map(({ id, tab, order, requiresPermission }) => ({
         id,
@@ -2116,11 +2166,11 @@ In `venue-operations-screen.ts`:
       })),
     ).toEqual([
       { id: "venue-service-kitchen", tab: "kitchen", order: 10, requiresPermission: "venue_service.manage" },
-      { id: "venue-service-floor", tab: "floor", order: undefined, requiresPermission: "venue_service.manage" },
+      { id: "venue-service-tables", tab: "tables", order: -10, requiresPermission: "venue_service.manage" },
     ]);
   });
 
-  it("renders the floor panel on the context's request and live data", async () => {
+  it("renders the tables panel on the context's request and live data", async () => {
     const fetchImpl = vi.fn(() =>
       Promise.resolve({
         ok: true,
@@ -2145,7 +2195,7 @@ In `venue-operations-screen.ts`:
     containers.push(container);
     render(handle.render(), container);
     const panel = container.querySelector("dashboard-venue-service-settings")!;
-    expect(panel.subject).toBe("floor");
+    expect(panel.subject).toBe("tables");
     expect(panel.api.liveData).toBe(liveData);
     await vi.waitFor(() =>
       expect(panel.shadowRoot!.querySelector('wt-switch[name="clearingWorkflow"]')).not.toBeNull(),
@@ -2162,13 +2212,19 @@ In `venue-operations-screen.ts`:
 Run: `pnpm --filter @waitron/venue-service typecheck && pnpm --filter @waitron/venue-service exec vitest run src/dashboard`
 Expected: PASS — every moved assertion passes against the panel; the screen's remaining suites pass with three tabs.
 
-- [ ] **Step 8: Check the panel inside the shell**
+- [ ] **Step 8: Check the panels inside the shell**
 
 Add to `apps/dashboard/src/dashboard-app.test.ts`:
 
 ```ts
-  it("shows venue service's kitchen panel after the core one, and its Floor tab, to a manager of venue service", async () => {
-    history.replaceState(null, "", "/manage/venue-settings/view/kitchen");
+  /** The tag names of the panels on one Venue settings tab, in the order they render. */
+  const panelsOn = (el: DashboardApp, tab: string) =>
+    [...venueSettings(el)!.shadowRoot!.querySelector(`[slot="${tab}"]`)!.children].map((child) =>
+      child.tagName.toLowerCase(),
+    );
+
+  it("puts venue service's Needs clearing switch above the statuses on Tables, and its kitchen panel after the core one, for a manager of venue service", async () => {
+    history.replaceState(null, "", "/manage/venue-settings/view/tables");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
@@ -2196,26 +2252,45 @@ Add to `apps/dashboard/src/dashboard-app.test.ts`:
         : stubRequest(path, method, body, options);
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
     await flush(el);
-    const page = venueSettings(el)!;
-    const kitchen = page.shadowRoot!.querySelector('[slot="kitchen"]')!;
-    expect([...kitchen.children].map((child) => child.tagName.toLowerCase())).toEqual([
+    expect(panelsOn(el, "tables")).toEqual([
+      "dashboard-venue-service-settings",
+      "dashboard-service-status-screen",
+    ]);
+    expect(panelsOn(el, "kitchen")).toEqual([
       "dashboard-kitchen-screen",
       "dashboard-venue-service-settings",
     ]);
-    expect(page.shadowRoot!.querySelector('[slot="floor"] dashboard-venue-service-settings')).not.toBeNull();
+    expect(location.pathname).toBe("/manage/venue-settings/view/tables");
+  });
+
+  it("keeps Tables and Kitchen, each with only its core panel, when venue service is disabled", async () => {
+    history.replaceState(null, "", "/manage/venue-settings/view/tables");
+    // The permission is held, so only the module's absence can leave the panels out.
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        modules: ["bookings"],
+        permissions: ["booking.manage", "venue_service.manage"],
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    expect(panelsOn(el, "tables")).toEqual(["dashboard-service-status-screen"]);
+    expect(panelsOn(el, "kitchen")).toEqual(["dashboard-kitchen-screen"]);
+    expect(location.pathname).toBe("/manage/venue-settings/view/tables");
   });
 ```
 
-The stubbed body is the shape `GET /management-api/venue-service` answers (`packages/venue-service/src/routes.ts` ~401-417, plus the `clearingWorkflow` Task 2 adds). `DashboardRequest` is already imported in that file.
+The stubbed body is the shape `GET /management-api/venue-service` answers (`packages/venue-service/src/routes.ts` ~401-417, plus the `clearingWorkflow` Task 2 adds). `DashboardRequest` is already imported in that file. The second case passes before this task's Step 6 too (no module panel exists then); it guards against Step 6 showing a disabled module's panels, not against it showing nothing — the first case does that.
 
-Run: `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts -t "venue service's kitchen panel"`
+Run: `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts -t "Needs clearing switch above|venue service is disabled"`
 Expected: PASS.
 
 - [ ] **Step 9: Commit**
 
 ```bash
 git add packages/venue-service/src/dashboard apps/dashboard/src/dashboard-app.test.ts
-git commit -s -m "Venue service: its kitchen and floor settings move to Venue settings, with a switch for clearing tables"
+git commit -s -m "Venue service: its kitchen settings move to Venue settings, and a Needs clearing switch heads the Tables tab"
 ```
 
 ---
@@ -2707,7 +2782,7 @@ Read each hit in context (CLAUDE.md §1: a behaviour change retires every receip
 
 - [ ] **Step 2: Update each one**
 
-- `design-system.md` ~1964-1966: replace "Venue operations uses `status`, `departments`, `zones` and `kitchen` (Changes after sending)." with "Departments and zones (`/manage/venue-operations`) uses `status`, `departments` and `zones`. Venue settings (`/manage/venue-settings`) uses `receipts`, `table-statuses`, `adjustment-reasons`, `kitchen` and `floor`; a tab shows only when a panel on it is visible to the session, and an address naming a tab the session does not see shows the first one it does."
+- `design-system.md` ~1964-1966: replace "Venue operations uses `status`, `departments`, `zones` and `kitchen` (Changes after sending)." with "Departments and zones (`/manage/venue-operations`) uses `status`, `departments` and `zones`. Venue settings (`/manage/venue-settings`) uses `receipts`, `tables`, `adjustment-reasons` and `kitchen`; a tab shows only when a panel on it is visible to the session, and an address naming a tab the session does not see shows the first one it does."
 - `design-system.md` ~1505 ("on the Kitchen screen"): "on Venue settings' Kitchen tab".
 - `design-system.md` ~504 ("the Venue operations screen's Tills table"): "the Departments and zones screen's Tills table" (the table is still there: `venue-operations-screen.ts` ~729 renders `venue.tills`).
 - `design-system.md` ~280 and ~292-294 name `venue-operations-screen.test.ts` and "the venue operations screen"; the file names stand, the screen's name becomes "Departments and zones".
@@ -2741,7 +2816,7 @@ Run each line on its own and read each exit status (CLAUDE.md §2: a newline-sep
 
 - [ ] **Step 4: Look at the page**
 
-Start the dev stack from this worktree with `wa-wt demo waitron-a261-1-venue-settings` (`wa-wt` matches the worktree directory's name exactly), sign in as a manager, and open Venue settings: check each tab in light and dark theme and at phone width (390px), that the Kitchen tab shows courses, bump mode (on the stored value), fire control and then "Changes after sending", that Floor shows the one switch, and that the sidebar reads Overview, Reporting, Service, Products and menus, Venue operations, Team, Purchasing, Settings. Record what you saw in the ledger; a string-only assertion cannot show that a page renders (CLAUDE.md §4).
+Start the dev stack from this worktree with `wa-wt demo waitron-a261-1-venue-settings` (`wa-wt` matches the worktree directory's name exactly), sign in as a manager, and open Venue settings: check each tab in light and dark theme and at phone width (390px), that the Kitchen tab shows courses, bump mode (on the stored value), fire control and then "Changes after sending", that Tables shows the Needs clearing switch above the statuses list and that list holds the demo's VIP, Allergy at this table and Birthday, and that the sidebar reads Overview, Reporting, Service, Products and menus, Venue operations, Team, Purchasing, Settings. Record what you saw in the ledger; a string-only assertion cannot show that a page renders (CLAUDE.md §4).
 
 - [ ] **Step 5: Commit**
 
@@ -2756,7 +2831,7 @@ Then tell the owner the branch is ready for `/finish-branch` (this branch touche
 
 ## Self-review
 
-- **Spec coverage (§11 step 1):** sidebar moves — Task 8; Venue settings with tabs — Tasks 3-5; Receipts and the receipt language on the Receipts tab — Task 4 (the existing Receipts screen already holds the language picker; one language per location, C113); Kitchen — Tasks 1, 4, 6; Table statuses — Task 4; Adjustment reasons — Task 7; Floor — Tasks 2, 6. Venue details (§3) is step 7, Hours step 5: no task, by design. §5's header-line and trading-name sentences wait for step 2 (decision J). The spec's "Statuses page goes", "Kitchen page goes", "Receipts page goes" and the "Changes after sending" tab's removal — Tasks 4 and 6. The Status (readiness) tab stays (decision 6).
+- **Spec coverage (§11 step 1):** sidebar moves — Task 8; Venue settings with tabs — Tasks 3-5; Receipts and the receipt language on the Receipts tab — Task 4 (the existing Receipts screen already holds the language picker; one language per location, C113); Kitchen — Tasks 1, 4, 6; Tables (the Statuses page, and the Needs clearing switch above it) — Tasks 2, 4, 6; the demo seed's renamed hand-set statuses — Task 4 Steps 9-13; Adjustment reasons — Task 7. Built-in table states and signals are A267, not this plan (decision L). Venue details (§3) is step 7, Hours step 5: no task, by design. §5's header-line and trading-name sentences wait for step 2 (decision J). The spec's "Statuses page goes", "Kitchen page goes", "Receipts page goes" and the "Changes after sending" tab's removal — Tasks 4 and 6. The Status (readiness) tab stays (decision 6).
 - **Placeholders:** the only deferred value is the PR number in the backlog line, filled by `/finish-branch`.
 - **Type consistency:** `VenueSettingsPanel { key, tab, render }` (Task 3) is what `#settingsPanels` returns (Tasks 4-5, plus `order`); `DashboardSettingsPanel { id, tab, order?, requiresPermission, create }` (Task 5) is what Tasks 6 and 7 contribute; `VenueServiceSettingsView` and `loadSettings`/`saveClearingWorkflow` (Task 2) are what Task 6's panel calls; `QUERY_DEPENDENCIES.settings` (Task 2) is what the panel watches.
-- **Review Focus lines and their tests:** 1 — Task 3 `it.each` of replaced addresses and Task 5 "leaves out a panel…"; 2 — Task 5 (the disabled `gadgets` module); 3 — Task 5 order case and Task 6 Step 8; 4 — Task 4 `allH1` and the a11y case; 5 — Task 8 `it.each` "draws no Service header"; 6 — Task 3 "draws only its heading when no panel is visible"; the sidebar item is not hidden for such a session in this step (decision I), so nothing tests that.
+- **Review Focus lines and their tests:** 1 — Task 3 `it.each` of replaced addresses (`/view/floor` among them) and Task 5 "leaves out a panel…"; 2 — Task 5 (the disabled `gadgets` module) and Task 6 Step 8 ("…when venue service is disabled"); 3 — Task 5 order case and Task 6 Step 8 (Tables and Kitchen); 4 — Task 4 `allH1` and the a11y case; 5 — Task 8 `it.each` "draws no Service header"; 6 — Task 3 "draws only its heading when no panel is visible"; the sidebar item is not hidden for such a session in this step (decision I), so nothing tests that.

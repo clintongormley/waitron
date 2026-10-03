@@ -46,9 +46,10 @@ Checked by reading the code on `main` at `92711bdf5`; nothing was run.
 - **Receipts** is its own page under Settings (`apps/dashboard/src/screens/receipts-screen.ts`):
   the receipt language, an owner-written header line, a footer message, the description sent to
   the tax agency, and a live preview the server draws as the printer will print it.
-- **The receipt language** is stored as a list on the venue (`locations.invoice_locales`), but since
-  #1014 (C113, owner-approved 2026-10-02) a receipt prints in one language and every save stores
-  exactly one entry.
+- **The receipt language** is stored as a list on the venue (`locations.invoice_locales`). Since
+  #1014 (C113, owner-approved 2026-10-02) every save stores exactly one entry: the venue's default
+  receipt language. Staff can still print a copy in another of the country's receipt languages
+  (#1022), for example Spanish in Catalonia, where the default must be Catalan.
 - **The cash drawer policy** (`locations.drawer_open_policy`, `gated` or `open`) decides whether
   opening the drawer by hand needs the `cash.drawer` permission. Permissions come only from the
   four-level role ladder, and `cash.drawer` starts at supervisor
@@ -75,7 +76,7 @@ The sidebar, top to bottom:
 Pages that go:
 
 - the **Kitchen** page: its settings move to Venue settings › Kitchen (§3);
-- the **Statuses** page: it becomes Venue settings › Table statuses;
+- the **Statuses** page: it becomes Venue settings › Tables;
 - the **Receipts** page: it becomes Venue settings › Receipts (§5);
 - the **Printing rules** page (§9);
 - on today's Venue operations screen, the **Status** tab (a readiness checklist: a problem now shows
@@ -89,13 +90,18 @@ One page, one tab per group. Each tab's settings are set once and left.
 - **Venue details** (new): the venue's name, address, time zone and business-day start. Today these
   are set only during setup. The legal name and tax ID are the taxpayer's and are not edited here.
 - **Receipts**: §5.
-- **Table statuses**: today's Statuses page.
+- **Tables** («Mesas»): a **Needs clearing** switch at the top (whether a table a party leaves shows
+  "Needs clearing" until staff mark it clear; `service_settings.clearing_workflow`, which has no
+  switch today), then today's Statuses page unchanged: the labels staff set on a table by hand from
+  the till. These labels are separate from the states Waitron sets itself (Free, Occupied,
+  Reserved, Needs clearing, Bill requested and the kitchen signals), which are not on this tab;
+  designing those is A267 (§10). The demo seed's hand-set labels are renamed, because "Free",
+  "Occupied" and "Reserved" copy the built-in states' names while driving nothing.
 - **Adjustment reasons**: the discount and void reasons, and the largest discount on one bill.
 - **Kitchen**: courses; bump mode; fire control; the late-flag defaults (§6.5); the held-course
   reminder; identical dishes on a ticket; printing held courses; allowing changes after sending.
   Fire control was missing from the list the owner saw; it is the Kitchen page's third setting, so
   it moves with the other two.
-- **Floor**: whether tables need clearing after Finish table.
 
 ## 4. Departments and zones
 
@@ -152,7 +158,8 @@ Mockups: `receipt-trading-name.html` (option A) and `receipts-under-venue.html`.
   printer prints every line at one size, so position is the only emphasis.
 - **Which trading name:** the department the sale was made under.
 - **Receipts becomes a tab of Venue settings.** It holds:
-  - the **receipt language**, one per location (C113); it lives only here; `receipts-under-venue.html` shows
+  - the **default receipt language** (C113; a copy can be printed in another, #1022); it lives
+    only here; `receipts-under-venue.html` shows
     two languages, drawn before C113 was noticed; today's single picker is what moves;
   - the header line, now described as printed under the legal name;
   - the footer message;
@@ -348,6 +355,12 @@ Where each part of Printing rules goes:
 
 ## 10. Recorded elsewhere
 
+- **Table states and signals (A267)**: which states and signals a table has that Waitron sets
+  itself, which a venue can switch off, which customers can trigger (asking for the bill or calling
+  a waiter from a QR code, for example), whether marking a table reserved by hand becomes a
+  built-in action rather than a hand-set label, and whether hand-set labels are still needed after
+  that (owner: "we may find we don't need custom table states"). Owner, 2026-10-03; its own design
+  session.
 - **Waiters' floats (A240)** belong with clocking in and out, under Team. Where the settings for
   recording cash in and out of a drawer (A239) go is not decided; its own spec decides.
 
@@ -356,8 +369,8 @@ Where each part of Printing rules goes:
 Each step is one queue item, with its own plan.
 
 1. **Navigation and Venue settings.** The sidebar moves; Venue settings with its tabs; Receipts and
-   the receipt language on the Receipts tab; Kitchen, Table statuses, Adjustment reasons and Floor
-   gathered from their old pages. No behaviour changes.
+   the receipt language on the Receipts tab; Tables, Adjustment reasons and Kitchen gathered
+   from their old pages, and the Needs clearing switch. No behaviour changes.
 2. **Departments and zones.** The table (§4), A254 §3's separate settings, the trading name on the
    receipt with the Preview link (§5), and the receipt print mode per department and zone.
 3. **Prep stations tabs.** Stations with the live numbers, Tickets, Watchers and Settings, with the
