@@ -1165,7 +1165,7 @@ measured only before the review's fixes: a 90 s outage recovers and an unsaved f
 Not covered — below, A224.
 
 **Dashboard reads have no time limit, and a save's lost-connection message can vanish when reads
-recover (A224, from A206's review, 2026-10-02) — PARTLY DONE (lane A's W18, #1125; W18a, #1135).** Done: Payments'
+recover (A224, from A206's review, 2026-10-02) — DONE (lane A's W18, #1125; W18a, #1135; W18b).** Done: Payments'
 providers and readers, Cloud services' status and Profile's language list now load through the
 shared queries, so a screen opened while the server is down fills in once it is back. Payments asks
 for each reader's status again only when the set of active readers changes, after a change the
@@ -1182,12 +1182,17 @@ keeps (`packages/dashboard-kit/src/live-data.ts`) is then read again like any ot
 once if something asked for it while it waited (the live connection, the query's timed refresh, or
 a save on the same screen), otherwise the next time one of those asks. A one-off read, such as
 opening the product editor, shows the error and is read again only when the person tries again.
-Writes have no limit. **Still open (W18b):** where a save's failure is shown in
-the same field as a read's, a save that failed with `connection.failed` during the outage loses its
-message when the reads recover: most screens store the message as a code, Profile and the reprint
-dialog store its text. Units compares the error itself and keeps it, the placement step keeps a
-save's failures in a list of their own, and Payments and Cloud services now keep it too. The owner
-chose (2026-10-03) that each screen tracks where its message came from.
+Writes have no limit. Since lane A's W18b, a save's or other action's failure is no longer lost
+when the reads recover on the screens that show a read's and an action's failure in one place: each
+remembers whether its message came from a read (the owner's choice, 2026-10-03); the reads' recovery
+clears only a read's message, and a read failing again during the outage no longer replaces an
+action's. An action that saves and then re-reads counts a failure after the save as the re-read's.
+Screens: Floor, Roster, Kitchen, Printing rules, Device profiles, Recipes, Purchases, Canvases,
+Approvals, Devices, Service status, Staff, Products, the courses list, Profile, the reprint dialog,
+Diagnostics, Units, Bookings and Prep stations; Payments and Cloud services already kept it, and the
+placement step keeps a save's failures in a list of their own. Prep stations used to clear any
+message on every successful read; an action's message there now stays until the next action or
+editor opens.
 
 **A dashboard read that waits on an outside service can be cut off at 30 seconds and reported as a
 broken connection (A255, from lane A's W18a, #1135, 2026-10-03) — OPEN, queued as lane A's W18c.**
