@@ -40,6 +40,8 @@ import {
   updateProduct,
 } from "./operations.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
+import { extraListItems } from "./schema/extras.js";
+import { createUnit, updateUnit } from "./units.js";
 import { addMember, moveMember, removeMember, updateSection, deleteSection } from "./sections.js";
 import { setProductVariants, setMenuVariants } from "./variants.js";
 import { menuDetails } from "./schema/menu.js";
@@ -157,6 +159,44 @@ describe("publishMenu", () => {
     expect(isRefusal(removeImage, TRIGGER_ABORT)).toBe(true);
     expect(engineErrorMessage(removeImage)).toBe("menu_version_images is append-only");
     expect(await versionRows()).toEqual(rows);
+  });
+
+  it("warns about an exact saved portion after unit precision drops and still publishes it", async () => {
+    const f = await menusFixture(fx.db);
+    const unitId = await app(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+        "en",
+      );
+      await updateProduct(tx, f.extraLemon, { unitId: unit.id });
+      await tx
+        .update(extraListItems)
+        .set({ portion: 55 })
+        .where(eq(extraListItems.listId, f.extrasList));
+      return unit.id;
+    });
+    await publish(f.lunch);
+    await app((tx) => updateUnit(tx, unitId, { precision: 2 }, "en"));
+
+    const preview = await app((tx) => previewMenu(tx, f.lunch));
+    expect(preview.warnings).toContainEqual({
+      kind: "extra_portion_precision",
+      listName: "Extras",
+      name: "Extra lemon",
+      portion: "0.055",
+      abbreviation: { en: "kg" },
+      precision: 2,
+    });
+    await app((tx) => publishMenu(tx, f.lunch, preview.hash, "person-1"));
+    const versions = await versionRows();
+    expect(versions).toHaveLength(2);
+    const offerId = await app((tx) => offerOf(tx, f.lunch, f.lemonade));
+    const oldExtra = versions[0]!.document.offers[offerId]!.offeredModifiers[0]!;
+    const newExtra = versions[1]!.document.offers[offerId]!.offeredModifiers[0]!;
+    if (oldExtra.kind !== "extras" || newExtra.kind !== "extras") throw new Error("extras");
+    expect(oldExtra.items[0]).toMatchObject({ portion: "0.055", unit: { precision: 3 } });
+    expect(newExtra.items[0]).toMatchObject({ portion: "0.055", unit: { precision: 2 } });
   });
 
   it("counts the photo of a product used only as an extra among the version's images", async () => {

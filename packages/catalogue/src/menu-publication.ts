@@ -357,11 +357,36 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   }
 
   const hash = menuDocumentHash(mine.document);
+  const precisionWarnings: MenuPreview["warnings"] = [];
+  const warned = new Set<string>();
+  for (const offer of Object.values(mine.document.offers))
+    for (const list of offer.offeredModifiers) {
+      if (list.kind !== "extras") continue;
+      for (const item of list.items) {
+        const key = `${list.id}:${item.productId}`;
+        if (warned.has(key)) continue;
+        warned.add(key);
+        const portion = item.portion ?? "1.000";
+        const significantPlaces = (portion.split(".")[1] ?? "").replace(/0+$/, "").length;
+        if (significantPlaces <= (item.unit?.precision ?? 0)) continue;
+        precisionWarnings.push({
+          kind: "extra_portion_precision",
+          listName: list.name,
+          name: item.name,
+          portion,
+          abbreviation: item.unit?.abbreviation ?? {},
+          precision: item.unit?.precision ?? 0,
+        });
+      }
+    }
   return {
     hash,
     clashes: mine.clashes,
     changes: entries.map(({ change }) => change),
-    warnings: await shortcutWarnings(tx, mine.document, mine.omittedShortcuts, sectionNames),
+    warnings: [
+      ...(await shortcutWarnings(tx, mine.document, mine.omittedShortcuts, sectionNames)),
+      ...precisionWarnings,
+    ],
     status: statusOf(hash, own, mine.clashes.length),
     document: mine.document,
   };

@@ -538,6 +538,31 @@ it.each(["en-GB", "es-ES"])(
   },
 );
 
+it.each(["en-GB", "es-ES"])(
+  "shows an exact over-precision extra portion without disabling Publish (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const warning = {
+      kind: "extra_portion_precision" as const,
+      listName: "Extras",
+      name: "Extra lemon",
+      portion: "0.055",
+      abbreviation: { en: "kg", es: "kg" },
+      precision: 2,
+    };
+    const el = await mount({ preview: preview([], [warning]) });
+    const words = items(el, "warnings").join(" ");
+    expect(words).toContain("Extras");
+    expect(words).toContain("Extra lemon");
+    expect(words).toContain("0.055 kg");
+    expect(words).toContain(locale === "en-GB" ? "2 decimal places" : "2 decimales");
+    expect(q(el, '[data-test="publish"]')).not.toBeNull();
+    q(el, '[data-test="publish"]')!.click();
+    await el.updateComplete;
+    expect(text(q(el, '[data-test="publish-confirmation"]'))).toContain("0.055 kg");
+  },
+);
+
 it("holds the publish button while a publish is out, saying what it is doing", async () => {
   const el = await mount({
     preview: preview([{ kind: "order_changed", list: [], source: "this_menu" }]),

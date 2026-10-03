@@ -2055,6 +2055,8 @@ export const en = {
     "1 shortcut on {menu}'s {layout} layout points at something no longer in this menu. It stays as an empty space until you remove or replace it.",
   "menu_preview.shortcut_missing":
     "{count} shortcuts on {menu}'s {layout} layout point at things no longer in this menu. They stay as empty spaces until you remove or replace them.",
+  "menu_preview.extra_portion_precision":
+    "{product} in {list} has a saved portion of {amount}, which exceeds the unit's {precision} decimal places. Check it before publishing.",
   "menu_preview.publish": "Publish {menu}",
   "menu_preview.publishing": "Publishing {menu}…",
   "menu_preview.only_this_menu":
@@ -4176,6 +4178,8 @@ export const es: Record<StringKey, string> = {
     "1 acceso directo de la página {layout} de {menu} apunta a un elemento que ya no está en este menú. Permanece como un espacio vacío hasta que lo quites o reemplaces.",
   "menu_preview.shortcut_missing":
     "{count} accesos directos de la página {layout} de {menu} apuntan a elementos que ya no están en este menú. Permanecen como espacios vacíos hasta que los quites o reemplaces.",
+  "menu_preview.extra_portion_precision":
+    "{product} en {list} tiene una porción guardada de {amount}, que supera los {precision} decimales de la unidad. Revísala antes de publicar.",
   "menu_preview.publish": "Publicar {menu}",
   "menu_preview.publishing": "Publicando {menu}…",
   "menu_preview.only_this_menu":

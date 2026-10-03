@@ -194,7 +194,17 @@ export interface MenuPreview {
   clashes: MenuClash[];
   hash: string;
   changes: MenuChange[];
-  warnings: { kind: "shortcut_missing"; layoutName: string; name: string }[];
+  warnings: (
+    | { kind: "shortcut_missing"; layoutName: string; name: string }
+    | {
+        kind: "extra_portion_precision";
+        listName: string;
+        name: string;
+        portion: string;
+        abbreviation: Record<string, string>;
+        precision: number;
+      }
+  )[];
   /** The menu's publication state, as `menuStatus` answers it. */
   status: MenuStatus;
   /** What the publish would make live. */
