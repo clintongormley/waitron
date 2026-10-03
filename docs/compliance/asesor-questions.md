@@ -1923,8 +1923,9 @@ Building whichever remedy the asesor picks is a separate piece of work.
 > **(b)** ¿Cambia la respuesta si B era un destinatario identificado (factura completa, F1) al que
 > podemos entregar una factura nueva?
 
-**Default until answered:** option 2. The invoice is listed for the adviser with AEAT's reply, and the
-till refuses to void or credit it (design decision D4).
+**Default until answered:** option 2. The invoice is listed for the adviser with AEAT's reply. Staff
+can still cancel or credit it at the till, but that record is kept back, never sent (Q40; design
+decision D4).
 
 This records a question; no enquiry has been sent.
 
@@ -2053,7 +2054,9 @@ This records a question; no enquiry has been sent.
 ### Q40. Records the software deliberately keeps back (added 2026-10-03)
 
 **Why it matters.** A void or a refund of an invoice that collided as in Q35 would act on the other
-customer's invoice at AEAT, so the software never sends one. That is in tension with FAQ §5's «no
+customer's invoice at AEAT, so the software never sends one. Staff can still make one at the till
+(design decision D4, owner 2026-10-03), so the order is cancelled and the bill settled as usual; the
+record is kept back and listed beside the invoice it names. That is in tension with FAQ §5's «no
 pueden quedar RF generados sin remitir a la AEAT». Part (c) is a different case: a void of an
 invoice AEAT refused. Sending it and keeping AEAT's refusal leaves nothing unsent and harms nobody.
 The design's first draft would have held that back too.
@@ -2062,10 +2065,11 @@ The design's first draft would have held that back too.
 > devuelve; las dos identifican la factura original por NIF + número + fecha, y sólo se remiten
 > cuando la AEAT ha aceptado la original. Si la original resulta ser una de las facturas en conflicto
 > de Q35 (la AEAT tiene otra factura real con ese número y esa fecha), cualquier anulación o
-> rectificativa actuaría sobre esa otra factura. Por eso, una vez detectado el conflicto, el TPV no
-> permite anular ni rectificar esa factura; pero las que se hicieron antes de detectarlo (por
-> ejemplo, una anulación justo después de la venta durante un corte de Internet) se retienen sin
-> remitir y se señalan al asesor.
+> rectificativa actuaría sobre esa otra factura. Por eso el sistema no las remite nunca: el TPV
+> permite anular o rectificar la factura como cualquier otra (el pedido se cancela y la cuenta se
+> salda), pero el registro se retiene sin remitir y se señala al asesor junto a la factura a la que
+> se refiere. Lo mismo ocurre con las que se hicieron antes de detectar el conflicto (por ejemplo,
+> una anulación justo después de la venta durante un corte de Internet).
 >
 > **(a)** La FAQ §5 dice que «no pueden quedar RF generados sin remitir a la AEAT». ¿Es admisible
 > retener estos registros, dado que remitirlos alteraría ante la AEAT la factura de otro cliente?

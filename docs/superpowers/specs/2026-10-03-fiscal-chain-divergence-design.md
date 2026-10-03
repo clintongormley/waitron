@@ -242,8 +242,9 @@ Each fix names the test that holds it; each guard is proven by deletion when bui
     and the drain reports the earliest next-due time whenever a row waits.
   - A cancellation, credit note or substitution is claimed only once the record of each invoice it
     names is `aceptado` or `aceptado_con_errores` — so never in the same batch as it, and across
-    chains too. If a named invoice's record is `divergente` or `rechazado`, the referring record
-    becomes `retenido` (§6) instead of being sent. A cancellation names only the invoice key
+    chains too. If a named invoice's record is `divergente`, the referring record becomes
+    `retenido` (§6) instead of being sent. One naming a `rechazado` invoice is sent once D2 is built
+    (§6); until then it is `retenido` too. A cancellation names only the invoice key
     (`IDEmisorFacturaAnulada`, `NumSerieFacturaAnulada`, `FechaExpedicionFacturaAnulada` in
     `SuministroInformacion.xsd`), not the fingerprint of the record it cancels, so one sent for a key
     AEAT holds under someone else's record would cancel THAT record; the fake AEAT did exactly that —
@@ -301,6 +302,11 @@ Each fix names the test that holds it; each guard is proven by deletion when bui
   (CLAUDE.md §5), and in Veri\*Factu mode Orden art. 3 switches off the art. 7.f clock duty. Tests:
   "a clock a day ahead raises the alert and the sale goes through"; "the readiness test reports a
   name mismatch".
+  - **The setup wizard's fiscal test shows AEAT's reason when it is refused** (owner, 2026-10-03).
+    Today its screen (`apps/setup/src/screens/fiscal-test-screen.ts`) receives only accepted,
+    rejected or uncertain, and a refusal reads "Correct the certificate or restaurant details". It
+    shows AEAT's code and message, in plain words where the code is known (a name that does not
+    match the tax id first). Test: "a refused fiscal test shows AEAT's code and message".
   - **A change to what AEAT checks is tested before it is saved** (owner, 2026-10-03, with D2). The
     readiness test (`apps/server/src/fiscal-readiness-runner.ts`) files one sale with AEAT's
     pre-production service from its own throwaway database beside the venue's, never the venue
@@ -323,7 +329,7 @@ Today a stop is classified only by which branch of `drain.ts` fired. After this 
 | **Divergence**          | A duplicate answer whose stored fingerprint is not ours (P2; today's Route B mismatch); an `Anulada` answer to a sale whose stored fingerprint is not our own cancellation's | The record becomes `divergente`; on the CURRENT installation, a new chain starts (§7)                             |
 | **Shared installation** | Warning 2007 on our chain's first record: another system has already filed under our installation number                                                                   | The record is `aceptado_con_errores` (AEAT holds ours); a new chain starts (§7); nothing goes on the adviser list |
 | **Ordinary refusal**    | `Incorrecto` with any code but 3000 — bad data on one record, or a cause about us (C9)                                                                                      | The record stays `rechazado`; the chain carries on (§7.5); an alert names the record and AEAT's reason            |
-| **Held**                | A cancellation, credit note or substitution naming an invoice whose record is `divergente` or `rechazado`                                                                   | The record becomes `retenido`, is never sent, and goes on the adviser list                                        |
+| **Held**                | A cancellation, credit note or substitution naming an invoice whose record is `divergente`                                                                                  | The record becomes `retenido`, is never sent, and goes on the adviser list                                        |
 | **Our ordering bug**    | A cancellation refused 3002 because its sale had not been sent; a resent sale meeting our own cancellation                                                                  | Removed by P1 and P2                                                                                              |
 
 **The same sale recorded twice is not a divergence that starts a chain** (owner, 2026-10-03, with
@@ -331,6 +337,13 @@ D1). When AEAT's stored record under our key has our issue date, total and tax t
 the lookup, `RespuestaConsultaLR.xsd`), it is our own sale recorded a second time — for example a
 till's retry reaching a rolled-back copy. The record is marked `divergente` with that cause, listed
 for the adviser until asesor Q38 is answered, and is not counted by §7.1's step that starts a chain.
+
+**A record naming a refused invoice is sent, not held** (owner, 2026-10-03, with D4). A credit note
+is AEAT's own remedy for a refused invoice (developer FAQ v1.3 §17, case 2.a) and cannot reach
+another invoice, since AEAT holds nothing under that key; whether AEAT accepts one is §13's fourth
+probe. A cancellation of a refused invoice is refused in turn (3002) and stays `rechazado`, so
+nothing generated is left unsent (asesor Q40 c). This needs D2: until a refusal stops holding its
+chain, such a record is `retenido` instead.
 
 `divergente` and `retenido` are terminal for their one record and never hold others. With D2 below, a
 refusal holds nothing either, so **nothing writes `detenido` any more**: the state, `haltSuccessors`,
@@ -421,11 +434,15 @@ invoice; developer FAQ v1.3 §17, p. 37). P1 makes it wait until the old invoice
 accepted. **[ran]** Without that wait, the fake AEAT refused such a cancellation 3002 and the new
 chain stopped again.
 
-For a **divergent** invoice the till refuses a void, a credit note and a substitution alike, with a
-new code `fiscal.invoice_needs_adviser`: AEAT keys every one of them by that invoice's key, which
+For a **divergent** invoice the till still lets staff void, credit or substitute it (owner,
+2026-10-03, D4): the order is cancelled and the bill settled as for any other invoice, and the
+record is made as usual. It is never sent: AEAT keys every one of them by that invoice's key, which
 names the other copy's record there, so a cancellation would cancel the other copy's invoice and a
-credit note or substitution would amend it. Records already made before the divergence was found
-become `retenido` (P1). The remedy the adviser chooses (§9.3) is a later, separate path.
+credit note or substitution would amend it. The drain makes it `retenido` (P1), and the adviser list
+shows it beside the invoice it names. Records made before the divergence was found are treated the
+same way. The remedy the adviser chooses (§9.3; asesor Q35, Q40) is a later, separate path. Today
+the only till action that makes such a record is the cancel of an issued order
+(`apps/server/src/cancel-credit.ts`).
 
 ### 7.5 An ordinary refusal no longer stops the chain
 
@@ -638,10 +655,13 @@ Each has the recommended default this design is written to.
    yes, once §13's first probe shows AEAT accepts a record linked to a refused one;** if it does
    not, D2 comes back to the owner. This changes what is filed after a
    refusal: later records go to AEAT instead of waiting forever.
-3. **D3 — The series is read per sale and `WAITRON_TILL_SERIES_ID` goes** (§7.2). Recommended: yes,
-   rather than a restart.
-4. **D4 — Voids, credit notes and substitutions of a divergent invoice are refused at the till, and
-   such records made earlier are held** (§7.4). Recommended: yes, until the asesor answers Q35/Q36.
+3. **D3 — The series is read per sale and `WAITRON_TILL_SERIES_ID` goes** (§7.2). **DECIDED
+   (owner, 2026-10-03): yes,** rather than a restart.
+4. **D4 — Voids, credit notes and substitutions of a divergent invoice.** **DECIDED (owner,
+   2026-10-03): the till lets staff make them as usual, and the record is held, never sent** (§7.4),
+   until the asesor answers Q35 and Q40. The spec's first choice, refusing them at the till, was
+   dropped: it left the order open as owed and pushed staff to work outside the system. A record
+   naming a refused invoice is sent (§6).
 5. **D5 — The old chain's records keep filing, unchanged, after the switch** (§7.3). Recommended: yes,
    pending asesor Q34 and §13's first probe.
 6. **D6 — Where the Fiscal filing section lives** (§8). Recommended: decided in the plan's screen

@@ -261,9 +261,9 @@ Files: `drain.ts` (`haltSuccessors` ~718-731, `haltOpenChainClaims` ~433-466 inc
 - [ ] **Failing case**: a record made after the refusal is submitted (today halted at claim,
   `drain.test.ts:614`) — this needs `haltOpenChainClaims`' query narrowed to `detenido` only, not
   just the `haltSuccessors` call removed.
-- [ ] A cancellation or credit note naming the refused invoice still becomes `retenido` (Task 1's
-  rule), is never sent, and no longer has a halted chain behind it: add the case that the records
-  after it file.
+- [ ] **Failing case** (owner, 2026-10-03, D4): a credit note naming the refused invoice is now sent
+  rather than `retenido`, and a cancellation naming it is sent, refused 3002 and stays `rechazado`;
+  the records after each file. Task 1's held rule narrows to `divergente` here (spec §6).
 - [ ] The tests pinning today's halt after a refusal (`:553`, `:614`, and any other found) are listed
   in the PR as behaviour D2 changes.
 - [ ] `fiscal.registro_rechazado`'s wording (spec §8) names the invoice and says later records still
@@ -320,22 +320,22 @@ incidents, their cause moving to a param), `submission-alerts.ts`, `apps/dashboa
 
 Review: FULL. Ends `needs-owner-review`.
 
-## Task 8 — The till refuses to void, credit or substitute a divergent invoice (D4, spec §7.4)
+## Task 8 — A cancel of a divergent invoice goes through, and its record is held (D4, spec §7.4)
 
 Needs Task 7.
 
 Files: the void, credit-note and substitution paths (find each caller of the backend's void,
-`recordCorrection` and `recordSubstitution` writers in `apps/server/src`, e.g. `till-sale.ts`,
-`cancel-credit.ts`), `packages/fiscal-verifactu/src/errors.ts` (`fiscal.invoice_needs_adviser`), the
-till's error wording.
+`recordCorrection` and `recordSubstitution` writers in `apps/server/src`; today `cancel-credit.ts`),
+`drain.ts`.
 
-- [ ] **Failing cases**: voiding, crediting or substituting an invoice whose record is `divergente` is
-  refused `fiscal.invoice_needs_adviser`; no record is appended in any of the three.
-- [ ] The till shows the refusal in English and Spanish; open it and look, both themes and phone width
-  (CLAUDE.md §4).
-- [ ] Deletion proof for each path.
+- [ ] **Failing case**: cancelling an issued order whose invoice's record is `divergente` cancels the
+  order and settles the bill as usual; the credit note is appended; at the next pass it becomes
+  `retenido`, is never in a batch, and the records after it on its chain file.
+- [ ] **Failing case**: the same for each other path that names an invoice, as it exists when this
+  task starts.
+- [ ] Deletion proof: removing the `divergente` clause from Task 1's held rule sends the credit note.
 
-Review: FULL (fiscal-adjacent). Lands autonomously: it refuses actions and files nothing.
+Review: FULL (fiscal-adjacent). Lands autonomously: it holds records back and sends nothing new.
 
 ## Task 9 — Fiscal filing in the dashboard, and the manual start (spec §7.7, §8, D6)
 
@@ -384,6 +384,9 @@ Review: FULL. Ends `needs-owner-review` (it can start a chain).
   unreachable AEAT raises nothing and blocks nothing.
 - [ ] **Failing case**: the readiness test reports a legal-name or tax-id mismatch from AEAT's answer
   as its own outcome.
+- [ ] **Failing case**: a refused readiness test carries AEAT's code and message to the setup wizard's
+  fiscal test screen (`apps/setup/src/screens/fiscal-test-screen.ts`), which shows them, in plain words
+  where the code is known (owner, 2026-10-03). Opened and looked at in both themes and at phone width.
 - [ ] Every new code worded in English and Spanish; the banner opened and looked at.
 
 Review: FULL (fiscal-adjacent). Lands autonomously: nothing filed changes and no sale is refused.
