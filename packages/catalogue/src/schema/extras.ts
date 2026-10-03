@@ -25,7 +25,7 @@ export const extraLists = table(
   },
   (t) => [
     // The backstop under `parseExtraListInput` (extra-contract.ts), which refuses the same pair with
-    // a field an editor can use.
+    // a field an editor can use. The parser also refuses a maximum of 0, which this CHECK allows.
     check(
       "extra_lists_picks_ck",
       sql`${t.minPicks} >= 0 and (${t.maxPicks} is null or ${t.maxPicks} >= ${t.minPicks})`,

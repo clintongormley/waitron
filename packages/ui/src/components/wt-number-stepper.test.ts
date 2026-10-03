@@ -123,7 +123,7 @@ test("a step that leaves the value where it is emits nothing", async () => {
   expect(seen).toEqual(["2"]);
 });
 
-test("- on a blank value does nothing, so only clearing the box reaches blank", async () => {
+test("- on a blank value does nothing, so, without clearable, only clearing the box reaches blank", async () => {
   const el = await mount('<wt-number-stepper label="Max"></wt-number-stepper>');
   const seen = changes(el);
   expect(parts(el).minus.disabled).toBe(true);
@@ -399,11 +399,11 @@ test("a valid stepper is not marked invalid", async () => {
 
 test("describes the box with its hint, before any error", async () => {
   const el = await mount(
-    '<wt-number-stepper label="Min" hint="0 makes the list optional" error="Too many"></wt-number-stepper>',
+    '<wt-number-stepper label="Min" hint="Leave empty if none" error="Too many"></wt-number-stepper>',
   );
   const hint = el.shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
   const error = el.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
-  expect(hint.textContent).toBe("0 makes the list optional");
+  expect(hint.textContent).toBe("Leave empty if none");
   expect(hint.id).toMatch(/^wt-number-stepper-hint-\d+$/);
   expect(parts(el).input.getAttribute("aria-describedby")).toBe(`${hint.id} ${error.id}`);
   const bare = await mount('<wt-number-stepper label="Min"></wt-number-stepper>');
@@ -440,7 +440,7 @@ test("an explicit placeholder wins over the hint, which still describes the box"
 
 test("draws no hint line: the description is visually hidden and takes no room", async () => {
   const hinted = await mount(
-    '<wt-number-stepper label="Min" hint="0 makes the list optional"></wt-number-stepper>',
+    '<wt-number-stepper label="Min" hint="Leave empty if none"></wt-number-stepper>',
   );
   const plain = await mount('<wt-number-stepper label="Min"></wt-number-stepper>');
   const hint = hinted.shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;

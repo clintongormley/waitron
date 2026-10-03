@@ -94,7 +94,7 @@ describe.each(["light", "dark"] as const)("wt-number-stepper a11y (%s theme)", (
 
   test("required, with a hint", async () => {
     await mountThemed(
-      '<wt-number-stepper label="Minimum choices" name="min" value="0" required hint="0 makes the list optional"></wt-number-stepper>',
+      '<wt-number-stepper label="Minimum choices" name="min" value="0" required hint="Leave empty if none"></wt-number-stepper>',
       theme,
     );
     await expectNoA11yViolations(host);
