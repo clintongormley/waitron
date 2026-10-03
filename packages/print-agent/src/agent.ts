@@ -92,6 +92,7 @@ export function createAgent(opts: AgentOptions): Agent {
   let scanning = false;
   let scanGeneration = 0;
   let scanFound: DiscoveredDevice[] = [];
+  let nextScanAt = 0;
 
   function replaceWakeSignal(): void {
     wakePromise = new Promise((resolve) => {
@@ -131,6 +132,7 @@ export function createAgent(opts: AgentOptions): Agent {
     bluetoothGeneration += 1;
     scanFound = [];
     scanGeneration += 1;
+    nextScanAt = 0;
   }
 
   replaceWakeSignal();
@@ -289,6 +291,8 @@ export function createAgent(opts: AgentOptions): Agent {
     const generation = scanGeneration;
     let found: DiscoveredDevice[] = [];
     try {
+      // A delivery wake may run the next tick early, but passes stay at least one interval apart.
+      nextScanAt = host.now() + intervalMs;
       found = await host.scan();
     } catch (error) {
       try {
@@ -298,9 +302,11 @@ export function createAgent(opts: AgentOptions): Agent {
       }
     }
     scanning = false;
-    if (generation === scanGeneration && found.length > 0) {
-      scanFound = found;
-      wake();
+    if (generation === scanGeneration) {
+      if (found.length > 0) {
+        scanFound = found;
+        wake();
+      }
     }
   }
 
@@ -440,7 +446,9 @@ export function createAgent(opts: AgentOptions): Agent {
     // carrying it succeeds, and only if no newer pass or reset has replaced it meanwhile.
     const sentScan = scanFound;
     let scanned = [...sentScan];
-    if (host.now() < discoveryUntil && !scanning) void discover();
+    if (host.now() < discoveryUntil && !scanning && (!running || host.now() >= nextScanAt)) {
+      void discover();
+    }
     const targets =
       current === probeServer
         ? networkProbes.filter((probe) => host.now() < probe.expiresAt).map((probe) => probe.target)

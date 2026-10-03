@@ -5737,7 +5737,7 @@ characters. Left open:
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
 
-**While Add a printer is open, a scan that finds devices starts the next one with no pause — OPEN
+**While Add a printer is open, a scan that finds devices starts the next one with no pause — DONE (W5)
 (found 2026-09-30 by a trial Codex review of C117's branch; on `main` since #955).** In
 `packages/print-agent/src/agent.ts`, a scan pass that finishes with devices wakes the loop
 (`discover`), the woken loop polls at once instead of waiting out the 2-second pause (`start`), and
@@ -5746,10 +5746,10 @@ that poll starts the next pass because none is running and the discovery window 
 job pull. The review's test drove the real loop with a fake host whose scan returns one USB device
 at once, no queued jobs, for 250 ms: it counted 195 pulls where it allows at most 2; the loop from
 before #955 made one. How quickly a real scan returns on a box, for example one with only a USB
-printer, has not been measured, so how often a real box repeats is not known. **Next action:**
-test-first, keep the prompt delivery of a finished pass's devices but stop the wake from launching
-the next pass early (for example, start a pass only when the pause since the last one has passed),
-with the 250 ms fast-scan case as the regression test.
+printer, has not been measured, so how often a real box repeats is not known. The running loop
+starts passes at least one polling interval apart, while sending a finished pass's devices on the
+next pull. A 250 ms fast-scan case checks delivery without repeat passes; a controlled-clock case
+checks that an empty scan starts again at the next interval.
 
 **Comments and test titles still cite sections of specs that were deleted — OPEN (2026-09-26).**
 The docs prune that day deleted every spec and plan for built work (#711 and the direct docs commits

@@ -1564,6 +1564,26 @@ describe("createAgent — inventory, discovery and resolve", () => {
       expect(host.logs).toContain('warn scan failed {"error":"unstringifiable rejection"}');
     });
 
+    it("contains a clock failure when a discovery pass starts", async () => {
+      let reads = 0;
+      const scan = vi.fn(async () => [bt]);
+      const host = fakeHost({
+        config: CONFIG,
+        token: "a1.s",
+        scan,
+        now: () => {
+          reads += 1;
+          if (reads === 4) throw new Error("clock boom");
+          return 1_000;
+        },
+      });
+      const agent = createAgent({ host, client: client({ pullJobs: vi.fn(async () => open()) }) });
+      await agent.runOnce();
+      await agent.runOnce();
+      expect(host.logs).toContain('warn scan failed {"error":"clock boom"}');
+      expect(scan).not.toHaveBeenCalled();
+    });
+
     it("a logger that throws while a pass fails neither escapes nor stops the pulls", async () => {
       const host = fakeHost({
         config: CONFIG,
@@ -1692,6 +1712,81 @@ describe("createAgent — start/stop and logging", () => {
     await agent.start();
     expect(pulls).toHaveBeenCalledTimes(1);
     expect(host.sleeps).toEqual([]);
+  });
+
+  it("delivers a fast scan without starting passes back to back", async () => {
+    const device = { transport: "usb" as const, name: "USB-80", localKey: "SN-9" };
+    const scan = vi.fn(async () => [device]);
+    const host = fakeHost({
+      config: CONFIG,
+      token: "a1.s",
+      scan,
+      now: Date.now,
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    });
+    const sent: AgentInventory[] = [];
+    const pulls = vi.fn(async (_url: string, _token: string, inventory: AgentInventory) => {
+      sent.push(inventory);
+      if (pulls.mock.calls.length > 10) agent.stop();
+      return okR<PullReply>({
+        nodeId: "n1",
+        servers: [],
+        jobs: [],
+        discoveryUntil: Date.now() + 10_000,
+      });
+    });
+    const c = client({ pullJobs: pulls });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce(); // opens discovery before the timed loop begins
+    const loop = agent.start();
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      expect(pulls.mock.calls.length - 1).toBeLessThanOrEqual(2);
+      expect(scan).toHaveBeenCalledTimes(1);
+      expect(
+        sent.some((inventory) => inventory.scanned.some((item) => item.localKey === "SN-9")),
+      ).toBe(true);
+    } finally {
+      agent.stop();
+      await loop;
+    }
+  });
+
+  it("starts another empty scan at the next polling interval", async () => {
+    let clock = 1_000;
+    const sleeps: ReturnType<typeof deferred<void>>[] = [];
+    const scan = vi.fn(async () => {
+      clock += 20;
+      return [];
+    });
+    const host = fakeHost({
+      config: CONFIG,
+      token: "a1.s",
+      scan,
+      now: () => clock,
+      sleep: () => {
+        const pause = deferred();
+        sleeps.push(pause);
+        return pause.promise;
+      },
+    });
+    const pulls = vi.fn(async () =>
+      okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 10_000 }),
+    );
+    const agent = createAgent({ host, client: client({ pullJobs: pulls }), intervalMs: 50 });
+    await agent.runOnce();
+    const loop = agent.start();
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(scan).toHaveBeenCalledTimes(1);
+      clock = 1_050;
+      sleeps[0]!.resolve(undefined);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(scan).toHaveBeenCalledTimes(2);
+    } finally {
+      agent.stop();
+      await loop;
+    }
   });
 
   it("logs on a phase change, not on every tick", async () => {
