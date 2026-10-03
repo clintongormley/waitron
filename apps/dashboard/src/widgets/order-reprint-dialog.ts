@@ -27,22 +27,33 @@ export class OrderReprintDialog extends LitElement {
   @state() private sentTo: string | null = null;
   @state() private printerError: string | null = null;
   @state() private error: string | null = null;
+  /** Whether `error` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.error = codeMessage(codeOf(error));
-    },
-    (error) => {
-      if (this.error === codeMessage(codeOf(error))) this.error = null;
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
     },
   );
+
+  #showError(message: string | null, fromRead = false): void {
+    this.error = message;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.error === null || this.#readErrorShown)
+      this.#showError(codeMessage(codeOf(error)), true);
+  }
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (!changed.has("row")) return;
     this.sentTo = null;
     this.printerError = null;
-    this.error = null;
+    this.#showError(null);
     if (this.row === null) this.#queries.release("getOrderPrinters");
     else
       void this.#queries
@@ -58,14 +69,14 @@ export class OrderReprintDialog extends LitElement {
     if (this.row === null || this.printerId === "" || this.printing) return;
     this.printing = true;
     this.printerError = null;
-    this.error = null;
+    this.#showError(null);
     try {
       await this.api.reprintOrder(this.row.id, this.printerId);
       this.sentTo = this.printers?.find((printer) => printer.id === this.printerId)?.name ?? "";
     } catch (error) {
       const message = codeMessage(codeOf(error));
       if (codeOf(error) === "printer.not_found") this.printerError = message;
-      else this.error = message;
+      else this.#showError(message);
     } finally {
       this.printing = false;
     }

@@ -1668,3 +1668,61 @@ describe("your profile — the signed-in email is named as the username beside t
     expect(noEmail.shadowRoot!.querySelector("input[autocomplete=username]")).toBeNull();
   });
 });
+
+describe("your profile — a save's message across an outage", () => {
+  async function mountLive() {
+    const liveData = new LiveData();
+    const api = Object.assign(apiStub(), { liveData });
+    const { el } = await mountWidget<ProfileScreen>("dashboard-profile-screen", {
+      api: api as unknown as DashboardApi,
+    });
+    await vi.waitFor(() => expect((el as unknown as { profile: unknown }).profile).not.toBeNull());
+    const value = await api.getProfile();
+    return { el, api, liveData, value };
+  }
+  const displayName = (el: ProfileScreen) =>
+    (el as unknown as { profile: { displayName: string } }).profile.displayName;
+
+  it("keeps a save's connection failure when the reads recover", async () => {
+    const { el, api, liveData, value } = await mountLive();
+    await click(el, "change-pin");
+    input(el, "currentPassword", "current");
+    input(el, "pin", "4321");
+    input(el, "confirmPin", "4321");
+    api.getProfile.mockRejectedValue({ code: "connection.failed" });
+    liveData.refresh();
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(codeMessage("connection.failed")));
+    api.changePin.mockRejectedValueOnce({ code: "connection.failed" });
+    await click(el, "save");
+    expect(api.changePin).toHaveBeenCalledTimes(1);
+    const before = api.getProfile.mock.calls.length;
+    liveData.refresh();
+    await vi.waitFor(() => expect(api.getProfile.mock.calls.length).toBeGreaterThan(before));
+    await flush(el);
+    api.getProfile.mockResolvedValue({ ...value, displayName: "Back again" });
+    liveData.refresh();
+    await vi.waitFor(() => expect(displayName(el)).toBe("Back again"));
+    expect(await bottomOf(el)).toBe(codeMessage("connection.failed"));
+  });
+
+  it("keeps a passkey's refusal when a later read fails and recovers", async () => {
+    const { el, api, liveData, value } = await mountLive();
+    vi.mocked(navigator.credentials.create).mockRejectedValueOnce(
+      new DOMException("already registered", "InvalidStateError"),
+    );
+    await click(el, "add-passkey");
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    expect(await bottomOf(el)).toBe(codeMessage("passkey.already_registered"));
+    api.getProfile.mockRejectedValue({ code: "connection.failed" });
+    const before = api.getProfile.mock.calls.length;
+    liveData.refresh();
+    await vi.waitFor(() => expect(api.getProfile.mock.calls.length).toBeGreaterThan(before));
+    await flush(el);
+    expect(await bottomOf(el)).toBe(codeMessage("passkey.already_registered"));
+    api.getProfile.mockResolvedValue({ ...value, displayName: "Back again" });
+    liveData.refresh();
+    await vi.waitFor(() => expect(displayName(el)).toBe("Back again"));
+    expect(await bottomOf(el)).toBe(codeMessage("passkey.already_registered"));
+  });
+});

@@ -203,11 +203,9 @@ export class ProfileScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.error = codeMessage(codeOf(error));
-    },
-    (error) => {
-      if (this.error === codeMessage(codeOf(error))) this.error = "";
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError("");
     },
   );
   @property({ attribute: false }) navigate: (url: string) => void = (url) =>
@@ -223,6 +221,8 @@ export class ProfileScreen extends LitElement {
   @state() private requestRefused: Partial<Record<Field, string>> = {};
   /** The message above the action that names no field this form shows. */
   @state() private error = "";
+  /** Whether `error` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
   #fieldErrors: Partial<Record<Field, string>> = {};
   @state() private saved = false;
   @state() private busy = false;
@@ -291,8 +291,17 @@ export class ProfileScreen extends LitElement {
         }
       }
     } catch (error) {
-      this.error = codeMessage(codeOf(error));
+      this.#showReadError(error);
     }
+  }
+  #showError(message: string, fromRead = false): void {
+    this.error = message;
+    this.#readErrorShown = fromRead;
+  }
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.error === "" || this.#readErrorShown)
+      this.#showError(codeMessage(codeOf(error)), true);
   }
   #edit(mode: Mode, id = ""): void {
     this.mode = mode;
@@ -300,7 +309,7 @@ export class ProfileScreen extends LitElement {
     this.attempted = false;
     this.refused = {};
     this.requestRefused = {};
-    this.error = "";
+    this.#showError("");
     this.saved = false;
     this.visible = new Set();
     this.totpSetup = null;
@@ -502,7 +511,7 @@ export class ProfileScreen extends LitElement {
     this.attempted = true;
     this.refused = {};
     this.requestRefused = {};
-    this.error = "";
+    this.#showError("");
     if (Object.keys(this.#validate()).length) {
       this.#focusFirstInvalid();
       return;
@@ -575,11 +584,11 @@ export class ProfileScreen extends LitElement {
         // A cancelled or aborted prompt is not a failure: leave the modal open, show nothing.
         if (passkey === "cancelled") return;
         if (passkey === "already_registered") {
-          this.error = codeMessage("passkey.already_registered");
+          this.#showError(codeMessage("passkey.already_registered"));
           return;
         }
         if (passkey === "failed") {
-          this.error = codeMessage("passkey.verification_failed");
+          this.#showError(codeMessage("passkey.verification_failed"));
           return;
         }
         // passkey === null → a server { code } rejection or startRegistration's plain "not supported"
@@ -619,7 +628,7 @@ export class ProfileScreen extends LitElement {
       if (field !== undefined && this.#shownFields().has(field)) {
         this.requestRefused = { [field]: message };
         this.#focusFirstInvalid();
-      } else this.error = message;
+      } else this.#showError(message);
     } finally {
       this.busy = false;
     }

@@ -90,6 +90,8 @@ export class DiagnosticsScreen extends LitElement {
   // While true the interval still fires but skips the refresh.
   @state() private paused = false;
   @state() private errorKey: string | null = null;
+  /** Whether `errorKey` is a read's failure, the only message a later successful read may clear. */
+  #readErrorShown = false;
   #timer?: ReturnType<typeof setInterval>;
 
   /** `#refresh` is driven by both the interval and `#raise()` and awaits two round trips; a call that
@@ -119,9 +121,9 @@ export class DiagnosticsScreen extends LitElement {
       const [recent, verbosity] = await Promise.all([api.getRecentLogs(200), api.getVerbosity()]);
       this.lines = recent.lines;
       this.verbosity = verbosity;
-      this.errorKey = null;
+      if (this.#readErrorShown) this.#showError(null);
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     } finally {
       this.#inFlight = false;
     }
@@ -130,12 +132,23 @@ export class DiagnosticsScreen extends LitElement {
   /** If a refresh is already in flight the guard skips this one, so the header catches up on the next
    * poll tick. */
   async #raise(): Promise<void> {
+    this.#showError(null);
     try {
       await this.api.setVerbosity("debug", WINDOW_MINUTES);
       await this.#refresh();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     }
+  }
+
+  #showError(code: string | null, fromRead = false): void {
+    this.errorKey = code;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
   }
 
   /** `t()` does NO substitution, so the `{time}` placeholder is filled here. */
