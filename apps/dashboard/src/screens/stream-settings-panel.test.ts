@@ -138,6 +138,36 @@ async function press(el: StreamSettingsPanel, button: string): Promise<void> {
 }
 
 describe("stream-settings-panel: the bucket form", () => {
+  it.each([
+    [
+      "en-GB",
+      "The saved bucket settings are incomplete. Change bucket to enter them again, or turn off the copy.",
+    ],
+    [
+      "es-ES",
+      "Los ajustes guardados del bucket están incompletos. Cambia de bucket para introducirlos de nuevo o desactiva la copia.",
+    ],
+  ] as const)("explains incomplete settings and offers repair in %s", async (locale, message) => {
+    const before = currentLocale();
+    setLocale(locale);
+    try {
+      const broken: StreamSettingsView = {
+        ...ON,
+        bucket: null,
+        status: { state: "off", reason: "start_failed", stateSince: "2026-09-23T10:15:30.000Z" },
+      };
+      const { el } = await mount(stubApi({}, broken));
+      expect(text(el, "[data-test=settings-incomplete]")).toBe(message);
+      expect(q(el, "[data-test=show-kit]")).toBeNull();
+      expect(q(el, "[data-test=change]")).not.toBeNull();
+      expect(q(el, "[data-test=turn-off]")).not.toBeNull();
+      await press(el, "change");
+      expect(field(el, "bucket-name").value).toBe("");
+    } finally {
+      setLocale(before);
+    }
+  });
+
   it("offers the bucket form with every field named and the required ones marked", async () => {
     const { el } = await mount(stubApi());
     const inputs = [...el.shadowRoot!.querySelectorAll("wt-input")];
@@ -736,6 +766,14 @@ describe("stream-settings-panel: once set up", () => {
     finish({ kit: NEW_KIT, keyFingerprint: "ffee0011" });
     await flush(el);
     expect(text(el, "[data-test=kit]")).toBe(NEW_KIT);
+  });
+
+  it("does not fetch a recovery kit when a changed key arrives with unusable bucket settings", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    await refresh(el, api, { ...ON, bucket: null, keyFingerprint: "ffee0011" });
+    expect(api.getRecoveryKit).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=kit]")).toBeNull();
   });
 
   it("takes the banner away when a second key change's re-issue fails, so the first new kit is not offered as the one to download", async () => {

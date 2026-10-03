@@ -308,7 +308,7 @@ export class StreamSettingsPanel extends LitElement {
     if (!value.configured) this.turnOffArmed = false;
     const known = this.#knownFingerprint;
     const after = value.keyFingerprint;
-    const reissue = value.configured && known != null && after !== null && after !== known;
+    const reissue = value.bucket !== null && known != null && after !== null && after !== known;
     if (!reissue || !this.#reissueFailed) this.readFailure = null;
     if (reissue) {
       void this.#reissueKit(after);
@@ -361,7 +361,7 @@ export class StreamSettingsPanel extends LitElement {
   }
 
   #current(request: number): boolean {
-    return request === this.#kitRequest && this.settings?.configured === true;
+    return request === this.#kitRequest && this.settings?.bucket != null;
   }
 
   /** Also discards the answer of any kit fetch still running. */
@@ -575,11 +575,18 @@ export class StreamSettingsPanel extends LitElement {
     return html`
       ${s.configured ? this.#renderStatus(s.status) : nothing}
       ${
+        s.configured && s.bucket === null
+          ? html`<p class="hint" data-test="settings-incomplete">
+              ${t("stream.settings_incomplete")}
+            </p>`
+          : nothing
+      }
+      ${
         !s.configured || this.editing
           ? this.#renderForm(s.configured)
           : html`<div class="actions">
               ${
-                this.kit === null
+                this.kit === null && s.bucket !== null
                   ? html`<wt-button
                       variant="secondary"
                       data-test="show-kit"

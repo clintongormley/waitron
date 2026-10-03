@@ -4830,28 +4830,25 @@ characters. Left open:
   started from inside the app container can remove the Docker volumes the script removes, or has
   to empty them instead.
 
-- **The bucket-stream reader still passes a missing field on unchecked.** `readStreamSettings`
-  (`apps/server/src/stream-host.ts`) hands each `backup.stream` field on as read, so a row sealed
-  before a field was added yields `undefined` in the bucket settings; a missing `endpoint` reads as
-  Amazon's, pointing the stream at the wrong host. Routing each field through `credentialField`
-  (`apps/server/src/credentials.ts`) is one line, but from reading the code on 2026-09-27 (nothing
-  run), three callers would then refuse where the owner needs a way forward: the Backups screen's
-  `GET /api/backup/stream` (`view()` in `apps/server/src/stream-api.ts`) would fail, and the dashboard
-  panel then shows none of the form, Change or Turn off, the only ways to repair it; the first start
-  after a restore (`readBucketPointerTerm`, `apps/server/src/rebuild-first-start.ts`) would fail on
-  every start; and the archive restore (`apps/server/src/restore-stream.ts`) reads the settings
-  outside its mapping to `restore.stream_source_unchecked`, so the command line would print a bare
-  "restore failed". The recovery-kit download and the stream host's start can refuse without harm.
-  Reachable only once the `backup.stream` field list changes. **Next action:** add the check
-  together with those three callers' handling, each with a failing test first.
+- **DONE 2026-10-03 (W29): the bucket-stream reader checks missing fields.** A test fixture sealed
+  a `backup.stream` row with each of its seven fields omitted in turn; all seven reader cases first
+  returned a value and now refuse `server.credential_unusable` naming the field. A route test first
+  got an error for the omitted endpoint; `GET /api/backup/stream` now reports a stored but unusable
+  bucket with `bucket: null`. A Chromium panel case in English and Spanish checked that Change and
+  Turn off remain available, the recovery-kit action is hidden, and the missing settings are
+  explained. The first-start case keeps its restore marker and holds streaming until the settings
+  are repaired; the test then writes complete settings and the next start clears the marker. An
+  archive-restore case first received the raw credential error; it now receives
+  `restore.stream_source_unchecked` with reason `bucket`. The four
+  focused server suites passed 172 tests with
+  `pnpm --filter @waitron/server exec vitest run src/stream-host.test.ts src/stream-api.route.test.ts src/rebuild-first-start.test.ts src/restore-stream.test.ts --reporter=dot`.
 - **Reading a credential does not re-check it against `PURPOSES` — owner decision 2026-09-15.**
   `getCredential`/`tryGetCredential` (`packages/credentials/src/store.ts`) return what was sealed,
   rather than refuse the read, which would stop every venue holding that kind of secret the moment
-  a field is added; each reader is to check the fields it uses instead (the bucket-stream reader,
-  above, does not yet). `rotate` re-checks a secret against the current list only when it re-seals
-  one: it skips a secret already on the current key (`rotateCredentials`,
-  `packages/credentials/src/store.ts`), so an out-of-date one stops a key rotation only when it is
-  on an older key, until it is re-entered.
+  a field is added; each reader must check the fields it uses instead. `rotate` re-checks a secret
+  against the current list only when it re-seals one: it skips a secret already on the current key
+  (`rotateCredentials`, `packages/credentials/src/store.ts`), so an out-of-date one stops a key
+  rotation only when it is on an older key, until it is re-entered.
 - **Unused payment adapter `nodeId` arguments — DONE (W8).** The card-provider build path,
   the SumUp adapter, and Stripe's terminal, device, reversal and reconciliation paths no longer
   carry the value they did not read.

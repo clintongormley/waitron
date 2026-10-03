@@ -26,7 +26,13 @@ import { createTurns, type Turns } from "./backup-turns.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountStreamApi, type StreamApiDeps } from "./stream-api.js";
-import { readStreamSettings, streamSettingsPayload, type StreamSettings } from "./stream-host.js";
+import {
+  readStreamSettings,
+  STREAM_PURPOSE,
+  streamSettingsPayload,
+  type StreamSettings,
+} from "./stream-host.js";
+import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 // The route calls `putCredential` itself, so the harness sees the credential write through this
@@ -452,6 +458,37 @@ describe("stream settings routes", () => {
     expect(res.status).toBe(200);
     expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
     expect(key.value).toBe("recovery-key-one-strong");
+  });
+
+  it("keeps Change and Turn off available when stored bucket settings lack a field", async () => {
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING, {
+        purpose: STREAM_PURPOSE,
+        value: streamSettingsPayload({ venueId: VENUE_ID, bucket: BUCKET }),
+      }),
+    );
+    await omitStoredStreamField(suite.db, RING, "endpoint");
+    const { app } = harness();
+    const cookie = await login(app);
+    const broken = await app.request("/api/backup/stream", { headers: { cookie } });
+    expect(broken.status).toBe(200);
+    expect(await broken.json()).toMatchObject({ configured: true, bucket: null });
+
+    const repaired = await app.request("/api/backup/stream", {
+      method: "PUT",
+      ...json(cookie, BODY),
+    });
+    expect(repaired.status).toBe(200);
+    expect(await repaired.json()).toMatchObject({
+      configured: true,
+      bucket: { endpoint: BUCKET.endpoint },
+    });
+    const turnedOff = await app.request("/api/backup/stream", {
+      method: "DELETE",
+      headers: { cookie },
+    });
+    expect(turnedOff.status).toBe(200);
+    expect(await turnedOff.json()).toMatchObject({ configured: false, bucket: null });
   });
 
   it("two Saves at once set one recovery key and both succeed", async () => {

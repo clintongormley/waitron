@@ -1097,6 +1097,8 @@ export const en = {
   "stream.explanation":
     "The box sends every change to an S3-compatible storage bucket you own, within seconds. If the box is lost, a new one can be rebuilt from the bucket with the recovery kit.",
   "stream.not_primary": "Only the main server sends the copy to the bucket.",
+  "stream.settings_incomplete":
+    "The saved bucket settings are incomplete. Change bucket to enter them again, or turn off the copy.",
   "stream.status.state": "Bucket copy",
   "stream.state.opening": "Starting",
   "stream.state.streaming": "On",
@@ -3186,6 +3188,8 @@ export const es: Record<StringKey, string> = {
   "stream.explanation":
     "El equipo envía cada cambio a un bucket de almacenamiento compatible con S3 que es tuyo, en segundos. Si el equipo se pierde, se puede reconstruir otro desde el bucket con el kit de recuperación.",
   "stream.not_primary": "Solo el servidor principal envía la copia al bucket.",
+  "stream.settings_incomplete":
+    "Los ajustes guardados del bucket están incompletos. Cambia de bucket para introducirlos de nuevo o desactiva la copia.",
   "stream.status.state": "Copia en el bucket",
   "stream.state.opening": "Iniciando",
   "stream.state.streaming": "Activada",

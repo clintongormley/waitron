@@ -3,7 +3,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { readMembershipTrustSet, withTransaction, type Database } from "@waitron/db";
 import { deleteCredential, putCredential, type KeyRing } from "@waitron/credentials";
 import { authorizeManager } from "@waitron/identity";
-import { AppError } from "@waitron/shared";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import {
   encodeRecoveryKit,
@@ -115,11 +115,20 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
   };
 
   const view = async (): Promise<StreamSettingsView> => {
-    const bucket = (await readStreamSettings(deps.db, deps.ring))?.bucket ?? null;
+    let bucket: BucketConfig | null;
+    let configured: boolean;
+    try {
+      bucket = (await readStreamSettings(deps.db, deps.ring))?.bucket ?? null;
+      configured = bucket !== null;
+    } catch (error) {
+      if (!isAppError(error) || !hasCode(error, "server.credential_unusable")) throw error;
+      bucket = null;
+      configured = true;
+    }
     const { held: recoveryKeySet, key } = await readHeldKey(deps.readRecoveryKey);
     return {
       isPrimary: deps.isPrimary(),
-      configured: bucket !== null,
+      configured,
       bucket:
         bucket === null
           ? null

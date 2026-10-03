@@ -51,6 +51,7 @@ import {
 import { stageStreamRestore } from "./restore-request.js";
 import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
+import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -655,6 +656,7 @@ describe("refuseIfArchiveSourceLive", () => {
     withSettings: boolean,
     secrets = true,
     settingsBucket: BucketConfig = KIT.bucket,
+    missingField?: string,
   ): Promise<ValidatedArtifact> {
     const file = join(await fresh("waitron-archive-db-"), "venue.db");
     await suite.db.archiveTo(file);
@@ -667,6 +669,9 @@ describe("refuseIfArchiveSourceLive", () => {
             value: streamSettingsPayload({ venueId: T.locationId, bucket: settingsBucket }),
           }),
         );
+        if (missingField !== undefined) {
+          await omitStoredStreamField(store.venue, ring, missingField);
+        }
       } finally {
         await store.close();
       }
@@ -696,6 +701,17 @@ describe("refuseIfArchiveSourceLive", () => {
     const openStore = vi.fn();
     const a = await args(await archive(false), openStore);
     await refuseIfArchiveSourceLive(a);
+    expect(openStore).not.toHaveBeenCalled();
+    await expectStateUntouched(a.stateDir);
+  });
+
+  it("asks for confirmation when an archive's sealed bucket lacks an endpoint", async () => {
+    const openStore = vi.fn();
+    const a = await args(await archive(true, true, KIT.bucket, "endpoint"), openStore);
+    await expect(refuseIfArchiveSourceLive(a)).rejects.toMatchObject({
+      code: "restore.stream_source_unchecked",
+      params: { reason: "bucket" },
+    });
     expect(openStore).not.toHaveBeenCalled();
     await expectStateUntouched(a.stateDir);
   });
