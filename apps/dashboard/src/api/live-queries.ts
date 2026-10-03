@@ -229,6 +229,7 @@ export const QUERY_DEPENDENCIES = {
   getDeviceProfile: ["device_profiles", "canvases"],
   listDevices: [
     "devices",
+    "watchers",
     "device_profiles",
     "tills",
     "kitchen_stations",

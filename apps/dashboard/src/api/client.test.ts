@@ -1983,6 +1983,20 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     });
   });
 
+  it("acceptDeviceJoinRequest sends a watcher binding without a station binding", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ deviceId: "j1", name: "Pass", formFactor: "kds" }));
+    const api = new DashboardApi("", fetchImpl);
+    await api.acceptDeviceJoinRequest("j1", { choice: "47", profileId: "dp3", watcherId: "w1" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-join-requests/j1/accept", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ choice: "47", profileId: "dp3", watcherId: "w1" }),
+    });
+  });
+
   it("acceptDeviceJoinRequest rejects with device.join_mismatch when the number was wrong", async () => {
     const fetchImpl = vi
       .fn()

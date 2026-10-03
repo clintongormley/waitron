@@ -15,6 +15,7 @@ import type {
   ReaderRow,
   Station,
   Till,
+  Watcher,
 } from "../api/client.js";
 import { DevicesScreen } from "./devices-screen.js";
 
@@ -66,12 +67,28 @@ const stations: Station[] = [
   },
 ];
 
+const watchers: Watcher[] = [
+  {
+    id: "w1",
+    name: "Pass",
+    everyStation: true,
+    stationIds: [],
+    everyZone: true,
+    zoneIds: [],
+    runsPass: true,
+    displayOrder: 0,
+    active: true,
+    printerIds: [],
+  },
+];
+
 const devices: DeviceRow[] = [
   {
     id: "d1",
     madeHereStationIds: [],
     kind: "kds_station",
     stationId: "s1",
+    watcherId: null,
     label: "Pantalla Cocina",
     active: true,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
@@ -83,6 +100,7 @@ const devices: DeviceRow[] = [
     madeHereStationIds: [],
     kind: "kds_station",
     stationId: null,
+    watcherId: null,
     label: "Pase revocado",
     active: false,
     lastSeenAt: null,
@@ -180,6 +198,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     listDevices: vi.fn().mockResolvedValue(devices),
     listStations: vi.fn().mockResolvedValue(stations),
+    listWatchers: vi.fn().mockResolvedValue(watchers),
     listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
     listPrinters: vi.fn().mockResolvedValue(printers),
     listTills: vi.fn().mockResolvedValue(tills),
@@ -420,6 +439,14 @@ describe("devices-screen", () => {
     expect(text(el, "[data-test=device-last-seen-d1]")).toBe("2026-08-25 14:30");
   });
 
+  it("names a watcher-bound kitchen screen distinctly from a station screen", async () => {
+    const pass = { ...devices[0]!, id: "pass", stationId: null, watcherId: "w1" };
+    const api = stubApi({ listDevices: vi.fn().mockResolvedValue([pass]) });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    expect(text(el, "[data-test=device-station-pass]")).toBe("Punto de seguimiento: Pass");
+  });
+
   it("resolves a null profile/station to the neutral placeholder and a null last-seen to Never", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
@@ -642,9 +669,79 @@ describe("devices-screen", () => {
     await el.updateComplete;
     expect(choice().disabled).toBe(true);
 
-    pickSelect(el, "join-station", "s1");
+    pickSelect(el, "join-binding", "station:s1");
     await el.updateComplete;
     expect(choice().disabled).toBe(false);
+  });
+
+  it("offers active stations and watchers as distinct grouped binding choices", async () => {
+    const api = stubApi({
+      listStations: vi
+        .fn()
+        .mockResolvedValue([...stations, { ...stations[0]!, id: "retired", active: false }]),
+      listWatchers: vi
+        .fn()
+        .mockResolvedValue([...watchers, { ...watchers[0]!, id: "retired-w", active: false }]),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    q(el, "[data-test=join-review-j1]")!.click();
+    await flush(el);
+    pickSelect(el, "join-profile", "dp3");
+    await el.updateComplete;
+    const binding = q(el, "[data-test=join-binding]") as Dropdown & {
+      name: string;
+      label: string;
+      placeholder: string;
+    };
+    expect(binding.name).toBe("binding");
+    expect(binding.label).toBe("Muestra");
+    expect(binding.options).toEqual([
+      { value: "", label: "Elige qué muestra" },
+      { value: "station:s1", label: "Cocina", group: "Estaciones" },
+      { value: "station:s2", label: "Barra", group: "Estaciones" },
+      { value: "watcher:w1", label: "Pass", group: "Puntos de seguimiento" },
+    ]);
+  });
+
+  it("accepts a watcher binding without sending a station binding", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    q(el, "[data-test=join-review-j1]")!.click();
+    await flush(el);
+    pickSelect(el, "join-profile", "dp3");
+    await el.updateComplete;
+    pickSelect(el, "join-binding", "watcher:w1");
+    await el.updateComplete;
+    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+    await flush(el);
+    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("j1", {
+      choice: REAL_NUMBER,
+      profileId: "dp3",
+      watcherId: "w1",
+    });
+  });
+
+  it("shows a removed watcher refusal at the bottom of the open dialog", async () => {
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi.fn().mockRejectedValue({ code: "watcher.not_found" }),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    q(el, "[data-test=join-review-j1]")!.click();
+    await flush(el);
+    pickSelect(el, "join-profile", "dp3");
+    await el.updateComplete;
+    pickSelect(el, "join-binding", "watcher:w1");
+    await el.updateComplete;
+    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+    await flush(el);
+    const dialog = q(el, "[data-test=join-dialog]")!;
+    expect(dialog).toBeTruthy();
+    const alert = dialog.querySelector("[role=alert]");
+    expect(alert?.textContent).toContain(codeMessage("watcher.not_found", "es-ES"));
+    expect(alert?.nextElementSibling?.getAttribute("slot")).toBe("footer");
   });
 
   // A till profile binds NEITHER picker — the server creates the register the device rings against.
@@ -658,7 +755,7 @@ describe("devices-screen", () => {
     pickSelect(el, "join-profile", "dp1");
     await el.updateComplete;
 
-    expect(q(el, "[data-test=join-station]")).toBeNull();
+    expect(q(el, "[data-test=join-binding]")).toBeNull();
     expect(q(el, "[data-test=join-register]")).toBeNull();
     expect(
       (q(el, `[data-choice="${REAL_NUMBER}"]`) as import("@waitron/ui").WtButton).disabled,
@@ -674,7 +771,7 @@ describe("devices-screen", () => {
 
     pickSelect(el, "join-profile", "dp2");
     await el.updateComplete;
-    expect(q(el, "[data-test=join-station]")).toBeNull();
+    expect(q(el, "[data-test=join-binding]")).toBeNull();
     pickSelect(el, "join-register", "t1");
     await el.updateComplete;
     q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
@@ -695,7 +792,7 @@ describe("devices-screen", () => {
     await flush(el);
     pickSelect(el, "join-profile", "dp3");
     await el.updateComplete;
-    pickSelect(el, "join-station", "s1");
+    pickSelect(el, "join-binding", "station:s1");
     await el.updateComplete;
 
     q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
@@ -725,7 +822,7 @@ describe("devices-screen", () => {
     await flush(el);
     pickSelect(el, "join-profile", "dp3");
     await el.updateComplete;
-    pickSelect(el, "join-station", "s1");
+    pickSelect(el, "join-binding", "station:s1");
     await el.updateComplete;
 
     q(el, '[data-choice="12"]')!.click();
@@ -750,7 +847,7 @@ describe("devices-screen", () => {
     await flush(el);
     pickSelect(el, "join-profile", "dp3");
     await el.updateComplete;
-    pickSelect(el, "join-station", "s1");
+    pickSelect(el, "join-binding", "station:s1");
     await el.updateComplete;
 
     q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
@@ -1142,11 +1239,16 @@ describe("devices-screen fields", () => {
 
     await chooseOption(profile, "dp3");
     await el.updateComplete;
-    const station = box(el, "join-station");
-    expect(station.name).toBe("stationId");
-    expect(station.label).toBe(t("devices.station"));
-    expect(station.placeholder).toBe(t("devices.join_pick_station"));
-    expect(station.options.map((o) => o.value)).toEqual(["", "s1", "s2"]);
+    const station = box(el, "join-binding");
+    expect(station.name).toBe("binding");
+    expect(station.label).toBe(t("devices.shows"));
+    expect(station.placeholder).toBe(t("devices.join_pick_binding"));
+    expect(station.options.map((o) => o.value)).toEqual([
+      "",
+      "station:s1",
+      "station:s2",
+      "watcher:w1",
+    ]);
     expect(station.value).toBe("");
 
     await chooseOption(profile, "dp2");
@@ -1194,7 +1296,7 @@ describe("devices-screen remaining edges", () => {
     await vi.waitFor(() => expect(q(el, `[data-choice="${REAL_NUMBER}"]`)).not.toBeNull());
     pickSelect(el, "join-profile", "dp3");
     await el.updateComplete;
-    pickSelect(el, "join-station", "s1");
+    pickSelect(el, "join-binding", "station:s1");
     await el.updateComplete;
     return el;
   }

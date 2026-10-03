@@ -510,6 +510,7 @@ export interface DeviceRow {
   madeHereStationIds: string[];
   kind: string;
   stationId: string | null;
+  watcherId: string | null;
   label: string;
   active: boolean;
   lastSeenAt: string | null;
@@ -2364,7 +2365,13 @@ export class DashboardApi {
    * `device.join_mismatch`, so the caller refreshes rather than offering a second attempt. */
   acceptDeviceJoinRequest(
     id: string,
-    input: { choice: string; profileId: string; stationId?: string; registerId?: string },
+    input: {
+      choice: string;
+      profileId: string;
+      stationId?: string;
+      watcherId?: string;
+      registerId?: string;
+    },
   ): Promise<{ deviceId: string; name: string; formFactor: FormFactor }> {
     return this.#request<{ deviceId: string; name: string; formFactor: FormFactor }>(
       `/management-api/device-join-requests/${id}/accept`,
