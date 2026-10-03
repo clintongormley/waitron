@@ -1989,6 +1989,20 @@ series for full invoices (a new purpose, provisioned by the setup wizard beside 
 rectificativa series) and make each path pick its series by invoice type. Fiscal core: owner
 sign-off at land. Asesor Q5(d) confirms where the F3 and the R5 go.
 
+### A231. Full invoices at the till — DESIGN FOR OWNER REVIEW (2026-10-03)
+
+A231 proposes an F1 path for bills above €3,000 VAT included and for smaller bills on request,
+chosen before invoice issue. The legal basis and dated primary-source excerpts are in the
+[design](superpowers/specs/2026-10-03-full-invoices-at-till-design.md). It and the
+[implementation plan](superpowers/plans/2026-10-03-full-invoices-at-till.md) cover Spanish recipient
+details, A230's tax-ID check-letter validation, a separate full-invoice series (A1e), every issuance
+path, receipt-printer delivery, VAT reporting and mixed/split payments. F3 conversion of an already
+issued F2, F1's R1–R4 correction path and foreign-recipient `IDOtro`/`IDType` remain separate decisions.
+A230's validator is itself blocked on an owner decision about the 0.2.0 dependency and unedited golden
+test (B7 below). **Next action:** owner reviews the design's B2B delivery, F1 credit/refund limitation
+and manual remedy, and asesor questions; approves the scope and medium before a build; and separately
+signs off fiscal issuance changes before landing.
+
 ### A2. The setup wizard
 
 The restore choice now includes guided Cloud recovery of a verified test-venue snapshot. The
