@@ -487,6 +487,45 @@ describe("backup admin routes", () => {
     });
   }, 60_000);
 
+  it("apply keeps the recovery key's rotation date after archives are turned on", async () => {
+    const stateDir = await makeStateDir();
+    await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+    const sc: Scenario = { stateDir, base: {}, role: "primary" };
+    const sup = makeSupervisor(sc);
+    await sup.reload();
+    const app = buildApp(sup, stateDir);
+    const cookie = await login(app);
+
+    const rotated = await app.request("/api/backup/rotate", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ recoveryKey: KEY_2 }),
+    });
+    expect(rotated.status).toBe(200);
+    const rotatedFile = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
+    const rotatedAt = rotatedFile.WAITRON_BACKUP_KEY_ROTATED_AT;
+    expect(typeof rotatedAt).toBe("string");
+
+    const applied = await app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destinationDir: makeDestDir(),
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    expect(applied.status).toBe(200);
+    expect((await applied.json()).keyRotatedAt).toBe(rotatedAt);
+    const status = await app.request("/api/backup/status", { headers: { cookie } });
+    expect(status.status).toBe(200);
+    expect((await status.json()).keyRotatedAt).toBe(rotatedAt);
+    expect(
+      parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"))
+        .WAITRON_BACKUP_KEY_ROTATED_AT,
+    ).toBe(rotatedAt);
+  }, 60_000);
+
   it("apply accepts an interval schedule and a weekday-array + auto time", async () => {
     for (const schedule of [
       { kind: "interval", ms: 3_600_000 },

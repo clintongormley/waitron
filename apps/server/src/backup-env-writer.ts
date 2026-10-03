@@ -69,6 +69,16 @@ export async function writeBackupEnv(stateDir: string, input: BackupEnvInput): P
   await writeFileAtomic(join(stateDir, "backup.env"), formatEnvFile(record), 0o600);
 }
 
+export async function readBackupKeyRotatedAt(stateDir: string): Promise<string | undefined> {
+  try {
+    const record = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
+    return record.WAITRON_BACKUP_KEY_ROTATED_AT;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw err;
+  }
+}
+
 /** Sets the recovery key (and its rotation time when one is given), keeping every other setting the
  * file holds, so a box with no archive destination can still hold a key. */
 export async function writeRecoveryKey(
