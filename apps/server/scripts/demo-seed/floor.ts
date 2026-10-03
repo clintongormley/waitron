@@ -159,7 +159,7 @@ export const DEMO_TABLES: SeedTable[] = [
 ];
 
 export const DEMO_STATUSES: SeedStatus[] = [
-  { label: { en: "Free", es: "Libre" }, color: "#22c55e" },
-  { label: { en: "Occupied", es: "Ocupada" }, color: "#ef4444" },
-  { label: { en: "Reserved", es: "Reservada" }, color: "#f59e0b" },
+  { label: { en: "VIP", es: "VIP" }, color: "#8b5cf6" },
+  { label: { en: "Allergy at this table", es: "Alergia en esta mesa" }, color: "#ef4444" },
+  { label: { en: "Birthday", es: "Cumpleaños" }, color: "#ec4899" },
 ];
