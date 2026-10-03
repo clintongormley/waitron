@@ -4848,8 +4848,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   [Spec](superpowers/specs/2026-10-03-departments-service-styles-hours-design.md); §6 lists what is
   open, including advisor questions Q21, Q14, Q27 and Q22.
   Its §4 day types and §5 placement are revised by A261.
-- **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — DRAFT
-  SPEC, not planned.** The sidebar's Venue operations group; Venue settings with one tab per group
+- **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — SPEC
+  APPROVED; step 1 planned** ([plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)). The sidebar's Venue operations group; Venue settings with one tab per group
   (Receipts moves there); Departments and zones as one table edited in place; Prep stations as one
   tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
   special dates, a calendar and public holidays; Printing rules and the cash drawer policy deleted.

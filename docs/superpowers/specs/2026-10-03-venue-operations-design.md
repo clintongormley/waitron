@@ -1,7 +1,8 @@
 # Venue operations: how the venue is organised and configured
 
 **Status:** Draft, 2026-10-03. Every decision below was made by the owner in a design conversation
-that day, over a series of mockups, unless it is marked **Proposed**. No plan has been written.
+that day, over a series of mockups, unless it is marked **Proposed**. Each §11 step gets its own
+plan; step 1's is [2026-10-03-venue-settings-and-navigation.md](../plans/2026-10-03-venue-settings-and-navigation.md).
 Backlog entry: A261.
 
 This spec builds on [A254](2026-10-03-departments-service-styles-hours-design.md) (departments,
@@ -45,8 +46,9 @@ Checked by reading the code on `main` at `92711bdf5`; nothing was run.
 - **Receipts** is its own page under Settings (`apps/dashboard/src/screens/receipts-screen.ts`):
   the receipt language, an owner-written header line, a footer message, the description sent to
   the tax agency, and a live preview the server draws as the printer will print it.
-- **The receipt languages** are one ordered list on the venue (`locations.invoice_locales`); a sale
-  prints in the first.
+- **The receipt language** is stored as a list on the venue (`locations.invoice_locales`), but since
+  #1014 (C113, owner-approved 2026-10-02) a receipt prints in one language and every save stores
+  exactly one entry.
 - **The cash drawer policy** (`locations.drawer_open_policy`, `gated` or `open`) decides whether
   opening the drawer by hand needs the `cash.drawer` permission. Permissions come only from the
   four-level role ladder, and `cash.drawer` starts at supervisor
@@ -150,7 +152,8 @@ Mockups: `receipt-trading-name.html` (option A) and `receipts-under-venue.html`.
   printer prints every line at one size, so position is the only emphasis.
 - **Which trading name:** the department the sale was made under.
 - **Receipts becomes a tab of Venue settings.** It holds:
-  - the **receipt languages**, which now live only here (§3's Venue details no longer lists them);
+  - the **receipt language**, one per location (C113); it lives only here; `receipts-under-venue.html` shows
+    two languages, drawn before C113 was noticed; today's single picker is what moves;
   - the header line, now described as printed under the legal name;
   - the footer message;
   - the description sent to the tax agency with each sale;
@@ -353,7 +356,7 @@ Where each part of Printing rules goes:
 Each step is one queue item, with its own plan.
 
 1. **Navigation and Venue settings.** The sidebar moves; Venue settings with its tabs; Receipts and
-   the receipt languages on the Receipts tab; Kitchen, Table statuses, Adjustment reasons and Floor
+   the receipt language on the Receipts tab; Kitchen, Table statuses, Adjustment reasons and Floor
    gathered from their old pages. No behaviour changes.
 2. **Departments and zones.** The table (§4), A254 §3's separate settings, the trading name on the
    receipt with the Preview link (§5), and the receipt print mode per department and zone.
