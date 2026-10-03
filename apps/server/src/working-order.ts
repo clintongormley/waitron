@@ -84,6 +84,7 @@ import {
   workingOrderLines,
   workingOrders,
   workingOrderStatus,
+  watcherItemMarks,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
@@ -3585,6 +3586,13 @@ async function splitTicketItem(
     workingOrderLineId: splitLineId,
     quantity: movedThousandths,
   });
+  const marks = await tx
+    .select()
+    .from(watcherItemMarks)
+    .where(eq(watcherItemMarks.ticketItemId, ticketItemId));
+  if (marks.length) {
+    await tx.insert(watcherItemMarks).values(marks.map((mark) => ({ ...mark, ticketItemId: id })));
+  }
   return id;
 }
 
@@ -6336,6 +6344,27 @@ export async function listExpoQueue(
   locationId?: string,
 ): Promise<ExpoOrder[]> {
   const loc = locationId ?? cfg.locationId;
+  return readPassBoard(
+    tx,
+    cfg,
+    loc,
+    sql`exists (
+      select 1 from ${ticketItems} tix
+      where tix.working_order_id = ${workingOrders.id}
+        and tix.made_here = 0
+        and tix.away_at is null)`,
+  );
+}
+
+/** Build every section of the selected pass orders before a watcher narrows their items. */
+export async function readPassBoard(
+  tx: Transaction,
+  cfg: TillConfig,
+  locationId: string,
+  scope: SQL,
+): Promise<ExpoOrder[]> {
+  const loc = locationId;
+  void cfg;
   const rows = await tx
     .select({
       itemId: ticketItems.id,
@@ -6386,13 +6415,7 @@ export async function listExpoQueue(
         eq(ticketItems.madeHere, false),
         ne(workingOrders.status, "abandoned"),
         isNull(workingOrders.collectedAt),
-        // An order leaves once every item is away. `served_at` is a separate floor marker, not
-        // consulted here.
-        sql`exists (
-          select 1 from ${ticketItems} tix
-          where tix.working_order_id = ${workingOrders.id}
-            and tix.made_here = 0
-            and tix.away_at is null)`,
+        scope,
       ),
     )
     .orderBy(
