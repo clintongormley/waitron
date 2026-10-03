@@ -666,7 +666,7 @@ test("navigating an empty list never points aria-activedescendant at a missing r
   expect(search.getAttribute("aria-activedescendant")).toBeNull();
 });
 
-test("an empty value means nothing selected, even when an option carries an empty value", async () => {
+test("without show-empty-option, an empty value uses the placeholder even when an option carries it", async () => {
   const { el } = await mountCombobox(
     '<wt-combobox label="Dietary tags" placeholder="Choose a tag"></wt-combobox>',
   );

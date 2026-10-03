@@ -374,7 +374,6 @@ export class TillScheduleScreen extends LitElement {
     </section>`;
   }
 
-  /** A dropdown shows no row's text for the empty value, so a NONE row's text is also its placeholder. */
   #dropdown(
     name: string,
     label: string,

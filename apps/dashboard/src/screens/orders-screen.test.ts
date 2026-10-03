@@ -94,6 +94,18 @@ describe("dashboard Orders", () => {
     }
   });
 
+  it("draws the staff filter's Anyone choice as a value", async () => {
+    const { el } = await loaded();
+    const staff = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      'wt-combobox[name="staff"]',
+    )!;
+    await staff.updateComplete;
+    const shown = staff.shadowRoot!.querySelector<HTMLElement>(".trigger .value")!;
+    expect(shown.textContent).toBe("Anyone");
+    expect(shown.classList.contains("placeholder")).toBe(false);
+    expect(getComputedStyle(shown).fontStyle).toBe("normal");
+  });
+
   it("shows a debt's status, credit mark and still owed, with the row menu pinned", async () => {
     const { el } = await loaded();
     const table = el.shadowRoot!.querySelector("wt-data-table")!;

@@ -1022,8 +1022,9 @@ Status shouldn't be a hint, it is a value that appears in the dropdown"_. `wt-da
 each column filter's `wt-combobox` a first option `{ value: "", label: allLabel }` and also passes
 `allLabel` as its `placeholder`. The table now asks the combobox to display its offered empty-string
 option as a selected value. "Any status" and the other table-filter "Any …" choices use the ordinary
-value style. The standalone product editor uses the same combobox setting for "Uncategorised" and
-"No course"; a variant's inherited values still read as hints. The empty string still means no
+value style. The Orders screen's staff filter uses it too, so its "Anyone" choice appears as a value.
+The standalone product editor uses the same combobox setting for "Uncategorised" and "No course";
+a variant's inherited values still read as hints. The empty string still means no
 filter to the saved view (`#persistView`) and to `wt-filter-change` listeners; their existing
 behavior tests remain in place.
 
