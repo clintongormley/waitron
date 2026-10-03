@@ -27,6 +27,9 @@ export function saleLineRows(
     unitName: line.unitName ?? null,
     unitPrecision: line.unitPrecision ?? null,
     quantity: stringToThousandths(line.quantity),
+    ...(line.priceQuantity === undefined
+      ? {}
+      : { priceQuantity: stringToThousandths(line.priceQuantity) }),
     unitPrice: stringToCents(line.unitPrice),
     vatRate: stringToBasisPoints(line.vatRate),
     lineTotal: stringToCents(line.lineTotal),

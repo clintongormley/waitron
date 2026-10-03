@@ -12,6 +12,8 @@ export interface RecordSaleLine {
   unitName?: Record<string, string> | null;
   unitPrecision?: number | null;
   quantity: string;
+  /** Physical amount bought by one stored unit price; absent for ordinary one-unit lines. */
+  priceQuantity?: string;
   unitPrice: string;
   /** A percentage literal, e.g. "21.00" meaning 21%. `sale_lines.vat_rate` stores the same rate
    * as a count of basis points; `saleLineRows` is where the two forms meet. */

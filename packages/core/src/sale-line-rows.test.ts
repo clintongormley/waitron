@@ -14,6 +14,22 @@ const cookedRare: OptionSnapshot = {
 };
 
 describe("saleLineRows", () => {
+  it("stores a priced portion separately from a sale line's physical quantity", () => {
+    const [row] = saleLineRows("sale-1", [
+      {
+        lineNo: 1,
+        name: "Jamón",
+        descriptions: { en: "Ham" },
+        quantity: "0.150",
+        priceQuantity: "0.050",
+        unitPrice: "0.01",
+        vatRate: "10.00",
+        lineTotal: "0.03",
+      },
+    ]);
+    expect(row).toMatchObject({ quantity: 150, priceQuantity: 50, unitPrice: 1, lineTotal: 3 });
+  });
+
   it("carries the frozen name, the variant's three names and the frozen options answers onto the row", () => {
     const line: RecordSaleLine = {
       lineNo: 1,

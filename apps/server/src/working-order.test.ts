@@ -6210,6 +6210,28 @@ it("shows the dish's own allergens and diet beside a frozen options answer", asy
 });
 
 describe("frozen answers through a fractional quantity edit", () => {
+  it("reads a frozen priced portion separately from the physical held quantity", async () => {
+    const { cfg, cafeOfferId, zoneId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: cafeOfferId, quantity: "1" }],
+    });
+    await db
+      .update(workingOrderLines)
+      .set({ quantity: 150, priceQuantity: 50, unitPriceGross: 1, lineTotal: 3 })
+      .where(eq(workingOrderLines.workingOrderId, id));
+
+    const read = await withTransaction(db, (tx) => readStoredOrder(tx, id));
+    expect(read.gross.lines[0]).toMatchObject({
+      quantity: "0.150",
+      priceQuantity: "0.050",
+      grossUnitPrice: "0.01",
+      lineGross: "0.03",
+    });
+  });
+
   it.each(["menu", "product"])(
     "preserves the answers on a %s-priced offer and the locked price when a weighed dish's quantity changes",
     async (source) => {

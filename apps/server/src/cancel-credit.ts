@@ -82,6 +82,7 @@ function reversedLines(rows: (typeof saleLines.$inferSelect)[]): RecordSaleLine[
         unitName: row.unitName,
         unitPrecision: row.unitPrecision,
         quantity: thousandthsToDecimal(-row.quantity),
+        priceQuantity: thousandthsToDecimal(row.priceQuantity),
         unitPrice: centsToDecimal(row.unitPrice),
         vatRate: basisPointsToDecimal(row.vatRate),
         lineTotal: centsToDecimal(-row.lineTotal),

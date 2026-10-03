@@ -34,6 +34,34 @@ const weight = (unitPrice: string, vatClass: PriceableProduct["vatClass"]): Pric
 const ON = "2026-09-27";
 
 describe("priceBasket — difference method", () => {
+  it("prices a frozen extra by portions while retaining its physical amount", () => {
+    const gross = grossLockedLines([
+      {
+        grossUnitPrice: "0.01",
+        quantity: "0.150",
+        priceQuantity: "0.050",
+        vatClass: "reduced",
+        name: "Jamón",
+        descriptions: { en: "Ham" },
+        category: "Food",
+        unitName: { en: "kg" },
+        unitPrecision: 3,
+        parentLineNo: 1,
+      },
+    ]);
+
+    expect(gross.lines[0]).toMatchObject({
+      quantity: "0.150",
+      priceQuantity: "0.050",
+      grossUnitPrice: "0.01",
+      lineGross: "0.03",
+    });
+    expect(rateLines(gross, ON).lines[0]).toMatchObject({
+      quantity: "0.150",
+      priceQuantity: "0.050",
+      lineGross: "0.03",
+    });
+  });
   it("carries selected variant presentation facts through live and locked pricing", () => {
     const product: PriceableProduct = {
       ...each("4.10", "general"),

@@ -670,6 +670,9 @@ export async function priceOrderLines(
       unitName: line.unitName,
       unitPrecision: line.unitPrecision,
       quantity: stringToThousandths(line.quantity),
+      ...(line.priceQuantity === undefined
+        ? {}
+        : { priceQuantity: stringToThousandths(line.priceQuantity) }),
       // The gross unit price LOCKED at add time: a retrieved order is filed from it without a
       // re-price, so a later catalogue price change never moves the filed total. Never derived as
       // `line_total ÷ quantity`, which drifts for a weighed line.
@@ -732,6 +735,7 @@ const storedLineColumns = {
   grossUnitPrice: workingOrderLines.unitPriceGross,
   listUnitPriceGross: workingOrderLines.listUnitPriceGross,
   quantity: workingOrderLines.quantity,
+  priceQuantity: workingOrderLines.priceQuantity,
   vatClass: workingOrderLines.vatClass,
   name: workingOrderLines.name,
   descriptions: workingOrderLines.descriptions,
@@ -814,6 +818,7 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
     locked: {
       grossUnitPrice: centsToDecimal(line.grossUnitPrice),
       quantity: thousandthsToDecimal(line.quantity),
+      priceQuantity: thousandthsToDecimal(line.priceQuantity),
       vatClass: line.vatClass as VatClass,
       name: line.name,
       descriptions: line.descriptions,

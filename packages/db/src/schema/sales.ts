@@ -173,6 +173,7 @@ export const saleLines = table(
     unitName: json<Record<string, string>>("unit_name"),
     unitPrecision: count("unit_precision"),
     quantity: quantity("quantity").notNull(),
+    priceQuantity: quantity("price_quantity").notNull().default(1000),
     unitPrice: money("unit_price").notNull(),
     vatRate: rate("vat_rate").notNull(),
     lineTotal: money("line_total").notNull(),

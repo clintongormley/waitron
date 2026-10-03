@@ -57,6 +57,8 @@ export interface LockedLine {
   grossUnitPrice: string;
   /** The stored quantity, validated against the snapshotted unit precision. */
   quantity: string;
+  /** Physical amount bought by one stored gross price; ordinary lines use one. */
+  priceQuantity?: string;
   vatClass: VatClass;
   name: string;
   /** locale -> customer-facing text. */
@@ -121,6 +123,7 @@ interface PricingRow {
   /** GROSS (VAT-inclusive) price per selected unit. */
   grossUnit: Decimal;
   quantity: string;
+  priceQuantity?: string;
   vatClass: VatClass;
   name: string;
   descriptions: Record<string, string>;
@@ -144,6 +147,7 @@ function grossRows(rows: readonly PricingRow[]): GrossLines {
     descriptions: row.descriptions,
     optionSnapshots: row.optionSnapshots ?? [],
     quantity: row.quantity,
+    ...(row.priceQuantity === undefined ? {} : { priceQuantity: row.priceQuantity }),
     category: row.category,
     unitName: row.unitName,
     unitPrecision: row.unitPrecision,
@@ -154,7 +158,14 @@ function grossRows(rows: readonly PricingRow[]): GrossLines {
     kitchenName: row.kitchenName ?? null,
     vatClass: row.vatClass,
     grossUnitPrice: toScale(row.grossUnit, MONEY_SCALE),
-    lineGross: toScale(multiplyDecimal(row.grossUnit, decimal(row.quantity)), MONEY_SCALE),
+    lineGross:
+      row.priceQuantity === undefined
+        ? toScale(multiplyDecimal(row.grossUnit, decimal(row.quantity)), MONEY_SCALE)
+        : divideDecimal(
+            multiplyDecimal(row.grossUnit, decimal(row.quantity)),
+            decimal(assertQuantityPrecision(row.priceQuantity, 3, { positive: true })),
+            MONEY_SCALE,
+          ),
   }));
   return { lines, total: sumDecimals(lines.map((line) => line.lineGross)) };
 }
@@ -226,6 +237,7 @@ export function grossLockedLines(lines: readonly LockedLine[]): GrossLines {
     lines.map((line) => ({
       grossUnit: decimal(line.grossUnitPrice),
       quantity: line.quantity,
+      priceQuantity: line.priceQuantity,
       vatClass: line.vatClass,
       name: line.name,
       descriptions: line.descriptions,
