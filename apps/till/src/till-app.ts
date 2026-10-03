@@ -225,8 +225,7 @@ import { setContentLanguages } from "@waitron/ui";
 export { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
 
 /**
- * `"lock"` (or a boot failure) renders the lock screen; every other value renders the canvas tab shell
- * and names the surface a nav action moved to, not a separately rendered screen.
+ * `"lock"` (or a boot failure) renders the lock screen; every other value renders the canvas tab shell.
  */
 type Screen = "lock" | "counter" | "floor" | "station";
 

@@ -2152,7 +2152,7 @@ describe("till-app", () => {
         "back-to-counter",
         "back-to-floor",
       ])(
-        "leaves a logged-out till locked after %s, reading nothing and leaving no destination to restore",
+        "leaves a logged-out till locked after %s, reading neither the stations nor the floor and leaving no destination to restore",
         async (type) => {
           const el = await lockedTill(overrides);
           const stationReads = vi.mocked(currentApi.listStations).mock.calls.length;
@@ -2182,7 +2182,7 @@ describe("till-app", () => {
           detail: { tableId: "tb-1", seated: true },
         },
       ])(
-        "leaves a logged-out till locked after $name, reading and writing nothing",
+        "leaves a logged-out till locked after $name, without reading the stations, the floor or the drafts, or seating a table",
         async ({ type, detail }) => {
           const el = await lockedTill(overrides);
           const stationReads = vi.mocked(currentApi.listStations).mock.calls.length;
@@ -4756,7 +4756,7 @@ describe("till-app", () => {
     });
   });
 
-  it("session activity: uses the real controller as a clean no-op when wake lock is unavailable", async () => {
+  it("session activity: with no injected controller, a logout still reaches the lock screen", async () => {
     // No injected sessionActivity → the app builds a real SessionActivity.
     const { el } = await mountApp();
     const c = await toCounter(el);
