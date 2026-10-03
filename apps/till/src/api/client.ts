@@ -1348,6 +1348,7 @@ export interface DeviceIdentity {
   formFactor: string;
   name: string;
   stationId: string | null;
+  watcherId?: string | null;
   /** The `tills` row a sale-capable device rings against; `null` for a `kds_station`. */
   tillId?: string | null;
   /** The per-device receipt printer; `null` when none. */
@@ -2233,6 +2234,14 @@ export class TillApi {
    */
   getDeviceStation(options: ReadOptions = {}): Promise<DeviceStation> {
     return this.#request<DeviceStation>("/api/device/station", "GET", undefined, options.signal);
+  }
+
+  getDeviceWatcher(options: ReadOptions = {}): Promise<WatcherBoard> {
+    return this.#request<WatcherBoard>("/api/device/watcher", "GET", undefined, options.signal);
+  }
+
+  async markDeviceWatcherDone(ticketItemIds: string[], done: boolean): Promise<void> {
+    await this.#request<void>("/api/device/watcher/done", "POST", { ticketItemIds, done });
   }
 
   /**

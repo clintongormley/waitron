@@ -23,6 +23,7 @@ import type {
   WatcherSummary,
   WatcherCourse,
   WatcherGroup,
+  WatcherBoard,
 } from "../api/client.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
 
@@ -439,12 +440,15 @@ export class TillExpoScreen extends LitElement {
   @property({ attribute: false }) reducedMotion?: boolean;
   /** Mounted inside a card host, which supplies the header. */
   @property({ type: Boolean }) embedded = false;
+  @property({ type: Boolean }) deviceMode = false;
+  @property({ attribute: false }) initialDeviceWatcher?: WatcherBoard;
 
   @state() private orders: ExpoOrder[] = [];
   @state() private watchers: WatcherSummary[] = [];
   @state() private selected: string | null = null;
   @state() private choosing = false;
   @state() private watcherRemoved = false;
+  @state() private deviceWatcherName = "";
   @state() private watcherRunsPass = false;
   @state() private doneErrorCode?: string;
   @state() private doneNotice?: { ids: string[]; dish: string };
@@ -478,7 +482,16 @@ export class TillExpoScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    if (this.embedded) void this.#reload();
+    if (this.deviceMode) {
+      const board = this.initialDeviceWatcher;
+      if (board) {
+        this.selected = board.watcher.id;
+        this.deviceWatcherName = board.watcher.name;
+        this.orders = board.orders;
+        this.watcherRemoved = !board.watcher.active;
+        this.watcherRunsPass = board.watcher.runsPass;
+      } else void this.#reload();
+    } else if (this.embedded) void this.#reload();
     else void this.#loadWatchers();
     this.#refreshTimer = setInterval(() => void this.#refresh(), REFRESH_MS);
   }
@@ -553,8 +566,9 @@ export class TillExpoScreen extends LitElement {
     const epoch = this.#selectionEpoch;
     const request = ++this.#request;
     try {
-      const result =
-        boardId === "all"
+      const result = this.deviceMode
+        ? await this.api.getDeviceWatcher({ signal })
+        : boardId === "all"
           ? await this.api.getExpoQueue({ signal })
           : await this.api.getWatcherQueue(boardId, { signal });
       if (request < this.#appliedRequest || !this.#isCurrent(boardId, epoch)) return;
@@ -563,6 +577,7 @@ export class TillExpoScreen extends LitElement {
       else {
         this.orders = result.orders;
         this.watcherRemoved = !result.watcher.active;
+        if (this.deviceMode) this.deviceWatcherName = result.watcher.name;
         this.watcherRunsPass = result.watcher.runsPass;
       }
       this.stale = false;
@@ -599,7 +614,8 @@ export class TillExpoScreen extends LitElement {
     if (watcherId === null || watcherId === "all") return;
     if (this.#isCurrent(watcherId, epoch)) this.doneErrorCode = undefined;
     try {
-      await this.api.markWatcherDone(watcherId, ids, true);
+      if (this.deviceMode) await this.api.markDeviceWatcherDone(ids, true);
+      else await this.api.markWatcherDone(watcherId, ids, true);
       if (!this.#isCurrent(watcherId, epoch)) return;
       this.doneNotice = { ids, dish };
       clearTimeout(this.#undoTimer);
@@ -621,7 +637,8 @@ export class TillExpoScreen extends LitElement {
     this.doneNotice = undefined;
     clearTimeout(this.#undoTimer);
     try {
-      await this.api.markWatcherDone(watcherId, notice.ids, false);
+      if (this.deviceMode) await this.api.markDeviceWatcherDone(notice.ids, false);
+      else await this.api.markWatcherDone(watcherId, notice.ids, false);
       if (this.#isCurrent(watcherId, epoch)) await this.#reload();
     } catch (error) {
       if (this.#isCurrent(watcherId, epoch))
@@ -685,8 +702,9 @@ export class TillExpoScreen extends LitElement {
   override render() {
     return html`
       <section class="screen" aria-label=${t("expo.title")}>
+        ${this.deviceMode && !this.watcherRemoved ? html`<h1 class="title">${this.deviceWatcherName}</h1>` : nothing}
         ${
-          this.embedded
+          this.embedded || this.deviceMode
             ? nothing
             : html`<header class="head">
                 <h1 class="title">${t("expo.title")}</h1>
@@ -696,7 +714,7 @@ export class TillExpoScreen extends LitElement {
               </header>`
         }
         ${
-          this.choosing
+          this.choosing && !this.deviceMode
             ? html`<p>${t("expo.choose")}</p>
                 <div class="chooser">
                   <wt-button data-watcher="all" @click=${() => this.#select("all")}
@@ -707,7 +725,11 @@ export class TillExpoScreen extends LitElement {
             : nothing
         }
         ${
-          !this.embedded && this.selected !== null && this.watchers.length > 0 && !this.choosing
+          !this.embedded &&
+          !this.deviceMode &&
+          this.selected !== null &&
+          this.watchers.length > 0 &&
+          !this.choosing
             ? html`<div class="selection">
                 <strong
                   >${this.selected === "all" ? t("expo.all_stations") : this.watchers.find((watcher) => watcher.id === this.selected)?.name}</strong
@@ -722,17 +744,17 @@ export class TillExpoScreen extends LitElement {
               </div>`
             : nothing
         }
-        ${this.choosing ? nothing : this.#overdueBadge()}
-        ${this.choosing ? nothing : html`<p class="stale" role="status" ?data-stale=${this.stale}>${this.stale ? html`<till-stale-since .since=${this.#lastGoodAt}></till-stale-since>` : nothing}</p>`}
-        ${this.doneNotice && !this.choosing ? html`<p class="done-notice" role="status">${t("expo.marked_done").replace("{dish}", this.doneNotice.dish)} <wt-button data-undo variant="secondary" @click=${() => void this.#undo()}>${t("expo.undo")}</wt-button></p>` : nothing}
-        ${this.doneErrorCode ? html`<p class="error" role="alert">${codeMessage(this.doneErrorCode)}</p>` : nothing}
+        ${this.choosing || this.watcherRemoved ? nothing : this.#overdueBadge()}
+        ${this.choosing || this.watcherRemoved ? nothing : html`<p class="stale" role="status" ?data-stale=${this.stale}>${this.stale ? html`<till-stale-since .since=${this.#lastGoodAt}></till-stale-since>` : nothing}</p>`}
+        ${this.doneNotice && !this.choosing && !this.watcherRemoved ? html`<p class="done-notice" role="status">${t("expo.marked_done").replace("{dish}", this.doneNotice.dish)} <wt-button data-undo variant="secondary" @click=${() => void this.#undo()}>${t("expo.undo")}</wt-button></p>` : nothing}
+        ${this.doneErrorCode && !this.watcherRemoved ? html`<p class="error" role="alert">${codeMessage(this.doneErrorCode)}</p>` : nothing}
         ${
-          this.reprintErrorCode
+          this.reprintErrorCode && !this.watcherRemoved
             ? html`<p class="error" role="alert">${codeMessage(this.reprintErrorCode)}</p>`
             : nothing
         }
         ${
-          this.tableChanged === null
+          this.tableChanged === null || this.watcherRemoved
             ? nothing
             : html`<p class="table-changed" role="status" data-table-changed>
                 ${t("station.table_changed_named").replace("{table}", () => this.tableChanged!)}
@@ -786,7 +808,7 @@ export class TillExpoScreen extends LitElement {
             >`
           : nothing
       }
-      ${this.#reprintAction(order)}
+      ${this.deviceMode ? nothing : this.#reprintAction(order)}
     </article>`;
   }
 
@@ -844,7 +866,7 @@ export class TillExpoScreen extends LitElement {
     groupId: string,
     name: string,
   ): TemplateResult | typeof nothing {
-    if (this.#isWatcher() && (!this.#runsPass() || group.away)) return nothing;
+    if (this.deviceMode || (this.#isWatcher() && (!this.#runsPass() || group.away))) return nothing;
     if (group.state === "held") {
       if (this.fireControl !== "expo") return nothing;
       return html`<button
@@ -1008,7 +1030,8 @@ export class TillExpoScreen extends LitElement {
    * Lit fixes an attribute NAME at template-compile time, so one binding cannot name three attributes.
    */
   #lever(order: ExpoOrder, course: ExpoCourse): TemplateResult | typeof nothing {
-    if (this.#isWatcher() && (!this.#runsPass() || course.away)) return nothing;
+    if (this.deviceMode || (this.#isWatcher() && (!this.#runsPass() || course.away)))
+      return nothing;
     if (course.courseId === null) return nothing;
     const courseId = course.courseId;
     const name = course.courseName ?? "";

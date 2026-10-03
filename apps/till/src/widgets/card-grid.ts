@@ -23,6 +23,7 @@ import type {
   CounterWaitingOrder,
   CurrentOrders,
   DeviceStation,
+  WatcherBoard,
   FloorZone,
   HeldOrderSummary,
   OrderFlow,
@@ -126,6 +127,7 @@ export class TillCardGrid extends LitElement {
   /** The device station the app already probed at cold boot, handed to the embedded station screen so it
    * does not re-fetch on mount. */
   @property({ attribute: false }) initialDeviceStation?: DeviceStation;
+  @property({ attribute: false }) initialDeviceWatcher?: WatcherBoard;
   @property({ attribute: false }) tabLines: TabLine[] = [];
   @property({ attribute: false }) tabGroups: OrderGroup[] = [];
   @property({ attribute: false }) currentOrders: CurrentOrders | null = null;
@@ -296,14 +298,21 @@ export class TillCardGrid extends LitElement {
       case "kds-board":
         // Self-fetching: it reads its own station list and queue. `stationQueue` is the prep-queue
         // card's default-station data, not this display's station, so it is deliberately not passed.
-        return html`<till-station-screen
-          embedded
-          .api=${this.api}
-          .bumpMode=${this.bumpMode}
-          .fireControl=${this.fireControl}
-          .deviceMode=${this.deviceMode}
-          .initialDeviceStation=${this.initialDeviceStation}
-        ></till-station-screen>`;
+        return this.initialDeviceWatcher
+          ? html`<till-expo-screen
+              embedded
+              .api=${this.api}
+              .deviceMode=${this.deviceMode}
+              .initialDeviceWatcher=${this.initialDeviceWatcher}
+            ></till-expo-screen>`
+          : html`<till-station-screen
+              embedded
+              .api=${this.api}
+              .bumpMode=${this.bumpMode}
+              .fireControl=${this.fireControl}
+              .deviceMode=${this.deviceMode}
+              .initialDeviceStation=${this.initialDeviceStation}
+            ></till-station-screen>`;
       case "table-order":
         // `canSettle` is left the screen's DEFAULT `true` — a card-mounted tab settles like the standalone screen
         // — so it is not passed.

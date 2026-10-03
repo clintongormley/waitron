@@ -6,7 +6,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { TillExpoScreen } from "./till-expo-screen.js";
-import type { ExpoGroup, ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
+import type { ExpoGroup, ExpoItem, ExpoOrder, TillApi, WatcherBoard } from "../api/client.js";
 
 const FIRED = "2026-08-17T10:00:00.000Z";
 
@@ -92,6 +92,20 @@ const threeCourseOrder: ExpoOrder = {
     },
   ],
 };
+
+const deviceBoard = (active: boolean): WatcherBoard => ({
+  watcher: { id: "pass", name: "Pass", runsPass: true, active },
+  orders: [
+    {
+      ...threeCourseOrder,
+      courses: threeCourseOrder.courses.map((course) => ({
+        ...course,
+        allReady: course.items.every((item) => item.state === "ready"),
+      })),
+      groups: [],
+    },
+  ],
+});
 
 const firedNotReadyOrder: ExpoOrder = {
   orderId: "wo-2",
@@ -203,6 +217,8 @@ async function mount(props: {
   now?: number;
   reducedMotion?: boolean;
   embedded?: boolean;
+  deviceMode?: boolean;
+  initialDeviceWatcher?: WatcherBoard;
 }): Promise<TillExpoScreen> {
   const { el } = await mountWidget<TillExpoScreen>("till-expo-screen", {
     api: stubApi([]),
@@ -228,6 +244,73 @@ function deferred<T>() {
 afterEach(cleanupWidgets);
 
 describe("till-expo-screen", () => {
+  it("keeps an unattended watcher on its bound board with Done as its only action", async () => {
+    const api = stubApi([threeCourseOrder], {
+      getDeviceWatcher: vi.fn().mockResolvedValue(deviceBoard(true)),
+      markDeviceWatcherDone: vi.fn().mockResolvedValue(undefined),
+    });
+    const el = await mount({
+      api,
+      deviceMode: true,
+      fireControl: "expo",
+      initialDeviceWatcher: deviceBoard(true),
+    });
+    expect(el.shadowRoot!.textContent).toContain("Pan");
+    expect(el.shadowRoot!.querySelector("h1")?.textContent).toBe("Pass");
+    expect(api.getDeviceWatcher).not.toHaveBeenCalled();
+    expect(
+      el.shadowRoot!.querySelector(
+        "[data-back], [data-change], [data-watcher], [data-reprint], .lever",
+      ),
+    ).toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!.click();
+    await flush(el);
+    expect(api.markDeviceWatcherDone).toHaveBeenCalledWith(["ti-0"], true);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-undo]")!.click();
+    await flush(el);
+    expect(api.markDeviceWatcherDone).toHaveBeenCalledWith(["ti-0"], false);
+    expect(api.getWatcherQueue).not.toHaveBeenCalled();
+  });
+
+  it("shows only the removed notice for an unattended watcher that was disabled", async () => {
+    const el = await mount({
+      api: stubApi(),
+      deviceMode: true,
+      initialDeviceWatcher: deviceBoard(false),
+    });
+    expect(el.shadowRoot!.textContent).toContain("watcher was removed");
+    expect(el.shadowRoot!.querySelector("[data-order], [data-done], [data-all-done]")).toBeNull();
+  });
+
+  it("sends All done through the bound device route", async () => {
+    const api = stubApi([], {
+      getDeviceWatcher: vi.fn().mockResolvedValue(deviceBoard(true)),
+      markDeviceWatcherDone: vi.fn().mockResolvedValue(undefined),
+    });
+    const el = await mount({ api, deviceMode: true, initialDeviceWatcher: deviceBoard(true) });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-all-done="wo-1"]')!.click();
+    await flush(el);
+    expect(api.markDeviceWatcherDone).toHaveBeenCalledWith(["ti-0", "ti-1", "ti-2"], true);
+  });
+
+  it("refreshes the bound device watcher every fifteen seconds", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
+    try {
+      const api = stubApi([], { getDeviceWatcher: vi.fn().mockResolvedValue(deviceBoard(true)) });
+      const el = await mount({
+        api,
+        deviceMode: true,
+        initialDeviceWatcher: { ...deviceBoard(true), orders: [] },
+      });
+      expect(el.shadowRoot!.textContent).not.toContain("Pan");
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(api.getDeviceWatcher).toHaveBeenCalledTimes(1);
+      expect(el.shadowRoot!.textContent).toContain("Pan");
+      expect(api.getWatcherQueue).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("keeps the embedded card on All stations without requesting watchers", async () => {
     const api = stubApi([threeCourseOrder], {
       listWatchers: vi.fn().mockResolvedValue([{ id: "pass", name: "Pass", runsPass: true }]),

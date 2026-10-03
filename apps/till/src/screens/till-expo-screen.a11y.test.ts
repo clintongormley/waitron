@@ -201,16 +201,39 @@ async function flush(el: TillExpoScreen): Promise<void> {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (theme) => {
+  it("has no violations on the unattended watcher board and Undo notice", async () => {
+    const board = {
+      watcher: { id: "pass", name: "Pass", runsPass: true, active: true },
+      orders: queue.map((order) => ({
+        ...order,
+        courses: order.courses.map((course) => ({ ...course, allReady: true })),
+        groups: [],
+      })),
+    };
+    const api = {
+      ...stubApi(),
+      getDeviceWatcher: vi.fn().mockResolvedValue(board),
+      markDeviceWatcherDone: vi.fn().mockResolvedValue(undefined),
+    } as unknown as TillApi;
+    const { el, host } = await mountWidget<TillExpoScreen>(
+      "till-expo-screen",
+      { api, deviceMode: true, initialDeviceWatcher: board },
+      theme,
+    );
+    await flush(el);
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!.click();
+    await flush(el);
+    await expectNoA11yViolations(host);
+  });
   it("has no violations in the watcher chooser, board and Undo notice", async () => {
     const api = {
       ...stubApi(),
       listWatchers: vi.fn().mockResolvedValue([{ id: "pass", name: "Pass", runsPass: false }]),
-      getWatcherQueue: vi
-        .fn()
-        .mockResolvedValue({
-          watcher: { id: "pass", name: "Pass", runsPass: false, active: true },
-          orders: queue,
-        }),
+      getWatcherQueue: vi.fn().mockResolvedValue({
+        watcher: { id: "pass", name: "Pass", runsPass: false, active: true },
+        orders: queue,
+      }),
       markWatcherDone: vi.fn().mockResolvedValue(undefined),
     } as unknown as TillApi;
     const { el, host } = await mountWidget<TillExpoScreen>("till-expo-screen", { api }, theme);
@@ -228,12 +251,10 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
     const api = {
       ...stubApi(),
       listWatchers: vi.fn().mockResolvedValue([{ id: "pass", name: "Pass", runsPass: true }]),
-      getWatcherQueue: vi
-        .fn()
-        .mockResolvedValue({
-          watcher: { id: "pass", name: "Pass", runsPass: true, active: false },
-          orders: [],
-        }),
+      getWatcherQueue: vi.fn().mockResolvedValue({
+        watcher: { id: "pass", name: "Pass", runsPass: true, active: false },
+        orders: [],
+      }),
     } as unknown as TillApi;
     const { el, host } = await mountWidget<TillExpoScreen>("till-expo-screen", { api }, theme);
     await flush(el);

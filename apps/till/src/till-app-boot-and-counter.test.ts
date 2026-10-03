@@ -271,6 +271,109 @@ afterEach(() => {
 });
 
 describe("till-app session activity", () => {
+  it("opens an enrolled watcher screen without asking for a station", async () => {
+    const board = {
+      watcher: { id: "pass", name: "Pass", runsPass: true, active: true },
+      orders: [],
+    };
+    const getDeviceStation = vi.fn().mockRejectedValue({ code: "device.unauthorized" });
+    const getDeviceWatcher = vi.fn().mockResolvedValue(board);
+    const { el } = await mountApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: ["act-as-kds"] }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "watcher-device",
+        name: "Pass",
+        formFactor: "kds",
+        stationId: null,
+        watcherId: "pass",
+      }),
+      getDeviceStation,
+      getDeviceWatcher,
+    });
+    await flush(el);
+    const screen = el
+      .shadowRoot!.querySelector("till-card-grid")!
+      .shadowRoot!.querySelector<
+        HTMLElement & { deviceMode: boolean; initialDeviceWatcher: unknown }
+      >("till-expo-screen");
+    expect(screen).not.toBeNull();
+    expect(screen!.deviceMode).toBe(true);
+    expect(screen!.initialDeviceWatcher).toBe(board);
+    expect(getDeviceWatcher).toHaveBeenCalledTimes(1);
+    expect(getDeviceStation).not.toHaveBeenCalled();
+  });
+
+  it("keeps an enrolled station screen on its station board", async () => {
+    const getDeviceStation = vi
+      .fn()
+      .mockResolvedValue({ station: { id: "st-1", queue: [], notices: [], printersDown: [] } });
+    const getDeviceWatcher = vi.fn().mockRejectedValue({ code: "device.unauthorized" });
+    const { el } = await mountApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: ["act-as-kds"] }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "station-device",
+        name: "Grill",
+        formFactor: "kds",
+        stationId: "st-1",
+        watcherId: null,
+      }),
+      getDeviceStation,
+      getDeviceWatcher,
+    });
+    await flush(el);
+    expect(
+      el
+        .shadowRoot!.querySelector("till-card-grid")!
+        .shadowRoot!.querySelector("till-station-screen"),
+    ).not.toBeNull();
+    expect(getDeviceStation).toHaveBeenCalledTimes(1);
+    expect(getDeviceWatcher).not.toHaveBeenCalled();
+  });
+
+  it("replaces a watcher board when the device is enrolled to a station", async () => {
+    const getDeviceIdentity = vi
+      .fn()
+      .mockResolvedValueOnce({
+        deviceId: "watcher-device",
+        name: "Pass",
+        formFactor: "kds",
+        stationId: null,
+        watcherId: "pass",
+      })
+      .mockResolvedValueOnce({
+        deviceId: "station-device",
+        name: "Grill",
+        formFactor: "kds",
+        stationId: "st-1",
+        watcherId: null,
+      });
+    const { el } = await mountApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: ["act-as-kds"] }),
+      getDeviceIdentity,
+      getDeviceWatcher: vi
+        .fn()
+        .mockResolvedValue({
+          watcher: { id: "pass", name: "Pass", runsPass: true, active: true },
+          orders: [],
+        }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-1", queue: [], notices: [], printersDown: [] } }),
+    });
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-card-grid")!, "enrolled");
+    await flush(el);
+    expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+    const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+    expect(grid.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
+    expect(grid.shadowRoot!.querySelector("till-expo-screen")).toBeNull();
+  });
   it("keeps a made-here instruction through navigation and restores it for the same device", async () => {
     setLocale("en-GB");
     localStorage.removeItem("waitron.makeNow.till-dev");
