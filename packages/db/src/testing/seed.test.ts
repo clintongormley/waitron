@@ -4,14 +4,19 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { useVenueDb } from "./venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
+import { deviceProfiles } from "../schema/device-profiles.js";
+import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";
 import { locations } from "../schema/tenants.js";
-import { freshNif, seedKitchenStation, seedNode, seedTenant } from "./seed.js";
+import { freshNif, seedDevice, seedKitchenStation, seedNode, seedTenant } from "./seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 // Each case gets empty mutable fixture tables while sharing the migrated database.
 afterEach(async () => {
+  await suite.db.execute(sql`delete from devices`);
+  await suite.db.execute(sql`delete from tills`);
+  await suite.db.execute(sql`delete from device_profiles`);
   await suite.db.execute(sql`delete from kitchen_stations`);
   await suite.db.execute(sql`delete from nodes`);
   await suite.db.execute(sql`delete from locations`);
@@ -129,5 +134,70 @@ describe("seedKitchenStation", () => {
       .from(kitchenStations)
       .where(eq(kitchenStations.id, id));
     expect(rows[0]).toEqual({ name: "Barra", isDefault: false });
+  });
+});
+
+describe("seedDevice", () => {
+  let db: Database;
+
+  beforeEach(async () => {
+    db = suite.db;
+  });
+
+  async function seedLocation(database: Database) {
+    const [loc] = await database
+      .insert(locations)
+      .values({
+        name: "Test location",
+        invoiceLocales: ["es"],
+        operationDescription: "Restaurant",
+      })
+      .returning({ id: locations.id });
+    return brandLocationId(loc!.id);
+  }
+
+  it("seedDevice pairs an active device on a new till profile at the location", async () => {
+    await seedTenant(db);
+    const location = await seedLocation(db);
+    const { deviceId, profileId } = await seedDevice(db, { locationId: location, label: "Barra" });
+    const [row] = await db
+      .select({
+        label: devices.label,
+        active: devices.active,
+        locationId: devices.locationId,
+        formFactor: deviceProfiles.formFactor,
+        capabilities: deviceProfiles.capabilities,
+      })
+      .from(devices)
+      .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+      .where(eq(devices.id, deviceId));
+    expect(row).toEqual({
+      label: "Barra",
+      active: true,
+      locationId: location,
+      formFactor: "till",
+      capabilities: [],
+    });
+    expect(profileId).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("seedDevice reuses a given profile and takes the form factor and capabilities asked for", async () => {
+    await seedTenant(db);
+    const location = await seedLocation(db);
+    const first = await seedDevice(db, {
+      locationId: location,
+      formFactor: "phone-portrait",
+      capabilities: ["take-cash"],
+    });
+    const second = await seedDevice(db, { locationId: location, profileId: first.profileId });
+    expect(second.profileId).toBe(first.profileId);
+    expect(second.deviceId).not.toBe(first.deviceId);
+    const profiles = await db
+      .select({
+        formFactor: deviceProfiles.formFactor,
+        capabilities: deviceProfiles.capabilities,
+      })
+      .from(deviceProfiles);
+    expect(profiles).toEqual([{ formFactor: "phone-portrait", capabilities: ["take-cash"] }]);
   });
 });

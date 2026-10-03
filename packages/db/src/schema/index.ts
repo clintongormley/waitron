@@ -1,4 +1,5 @@
 // `Database` is typed on this barrel (`../client.ts`).
+export * from "./origin.js";
 export * from "./tenants.js";
 export * from "./nodes.js";
 export * from "./series.js";

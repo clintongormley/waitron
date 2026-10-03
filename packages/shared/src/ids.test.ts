@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "./errors.js";
 import type { LocationId, SaleId } from "./ids.js";
 import {
+  deviceId,
   fiscalRecordId,
   isUuid,
   locationId,
@@ -22,6 +23,7 @@ const UUID_B = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
 const ALL_ID_CONSTRUCTORS: ReadonlyArray<[string, string, (value: string) => string]> = [
   ["locationId", "LocationId", locationId],
   ["tillId", "TillId", tillId],
+  ["deviceId", "DeviceId", deviceId],
   ["nodeId", "NodeId", nodeId],
   ["seriesId", "SeriesId", seriesId],
   ["workingOrderId", "WorkingOrderId", workingOrderId],

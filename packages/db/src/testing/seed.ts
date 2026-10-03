@@ -1,9 +1,11 @@
-import { nodeId as brandNodeId } from "@waitron/shared";
-import type { LocationId, NodeId } from "@waitron/shared";
+import { deviceId as brandDeviceId, nodeId as brandNodeId } from "@waitron/shared";
+import type { DeviceId, LocationId, NodeId } from "@waitron/shared";
 import type { Database } from "../client.js";
+import { deviceProfiles } from "../schema/device-profiles.js";
+import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";
 import { nodes } from "../schema/nodes.js";
-import { tenants } from "../schema/tenants.js";
+import { tenants, tills } from "../schema/tenants.js";
 
 // The taxpayer row is a singleton keyed on id = 1, so a suite has at most one NIF in play and a
 // second seed is a no-op. The counter survives because other fixtures still mint their own NIFs for
@@ -51,4 +53,52 @@ export async function seedKitchenStation(
     .values({ locationId, name, isDefault })
     .returning({ id: kitchenStations.id });
   return row!.id;
+}
+
+let deviceCounter = 0;
+
+/**
+ * Pairs one active device at `locationId`, on `profileId` or on a new profile of `formFactor` (till
+ * by default).
+ */
+export async function seedDevice(
+  db: Database,
+  opts: {
+    locationId: LocationId;
+    label?: string;
+    formFactor?: "till" | "phone-portrait" | "tablet-landscape";
+    capabilities?: string[];
+    profileId?: string;
+  },
+): Promise<{ deviceId: DeviceId; profileId: string }> {
+  deviceCounter += 1;
+  const label = opts.label ?? `Device ${deviceCounter}`;
+  const profileId =
+    opts.profileId ??
+    (
+      await db
+        .insert(deviceProfiles)
+        .values({
+          name: `Profile ${deviceCounter}`,
+          formFactor: opts.formFactor ?? "till",
+          capabilities: opts.capabilities ?? [],
+        })
+        .returning({ id: deviceProfiles.id })
+    )[0]!.id;
+  // `device_binding_rule_insert` refuses a device that is not a kds screen unless it names a till.
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId: opts.locationId, name: label })
+    .returning({ id: tills.id });
+  const [row] = await db
+    .insert(devices)
+    .values({
+      locationId: opts.locationId,
+      deviceProfileId: profileId,
+      tillId: till!.id,
+      label,
+      tokenHash: "seeded",
+    })
+    .returning({ id: devices.id });
+  return { deviceId: brandDeviceId(row!.id), profileId };
 }
