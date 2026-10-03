@@ -30,6 +30,7 @@ import {
   type DashboardRequest,
   type DashboardScreenHandle,
   type DashboardScreenPlacement,
+  type DashboardSettingsPanel,
   type NavGroupId,
 } from "@waitron/dashboard-kit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
@@ -54,7 +55,7 @@ import "./screens/content-languages-screen.js";
 import "./screens/service-status-screen.js";
 import "./screens/floor-screen.js";
 import "./screens/kitchen-screen.js";
-import "./screens/venue-settings-screen.js";
+import { VENUE_SETTINGS_TABS } from "./screens/venue-settings-screen.js";
 import type { VenueSettingsPanel, VenueSettingsTab } from "./screens/venue-settings-screen.js";
 import "./screens/roster-screen.js";
 import "./screens/approvals-screen.js";
@@ -640,6 +641,7 @@ export class DashboardApp extends LitElement {
     { screen: DashboardScreenPlacement; handle: DashboardScreenHandle }
   >();
   #navGroups = new Map<NavGroupId, DashboardScreenPlacement[]>();
+  #activePanels: { panel: DashboardSettingsPanel; handle: DashboardScreenHandle }[] = [];
 
   #sessionPermissions: string[] = [];
 
@@ -1083,6 +1085,7 @@ export class DashboardApp extends LitElement {
     this.#sessionPermissions = [];
     this.#activeScreens.clear();
     this.#navGroups.clear();
+    this.#activePanels = [];
     this.drawerOpen = false;
     this.navSearch = "";
     this.#broadcastSessionDeadline(0);
@@ -1098,15 +1101,17 @@ export class DashboardApp extends LitElement {
 
   /**
    * Runs on every probe/login and rebuilds the maps from scratch, so a module disabled server-side
-   * since the last session stops showing. A screen naming an unknown nav group id, or repeating
-   * another screen's id or a built-in screen's, THROWS rather than silently dropping or replacing a
-   * screen.
+   * since the last session stops showing. Unknown nav groups or settings tabs, and repeated screen
+   * or panel ids, throw rather than silently dropping or replacing a contribution.
    */
   #activate(enabled: readonly string[]): void {
     const knownGroups = new Set<NavGroupId>(NAV_GROUPS.map((g) => g.id));
+    const knownTabs = new Set<string>(VENUE_SETTINGS_TABS);
     const ids = new Set<string>(CORE_SCREENS);
+    const panelIds = new Set<string>(CORE_SETTINGS_PANELS.map((panel) => panel.key));
     this.#activeScreens.clear();
     this.#navGroups.clear();
+    this.#activePanels = [];
     for (const c of DASHBOARD_MODULES) {
       if (!enabled.includes(c.module)) continue;
       const screens: readonly DashboardFurtherScreen[] = [c, ...(c.moreScreens ?? [])];
@@ -1119,12 +1124,22 @@ export class DashboardApp extends LitElement {
           throw new Error(`dashboard module "${c.module}" repeats screen id "${screen.id}"`);
         ids.add(screen.id);
       }
+      for (const panel of c.settingsPanels ?? []) {
+        if (!knownTabs.has(panel.tab))
+          throw new Error(
+            `dashboard module "${c.module}" names unknown settings tab "${panel.tab}"`,
+          );
+        if (panelIds.has(panel.id))
+          throw new Error(`dashboard module "${c.module}" repeats settings panel id "${panel.id}"`);
+        panelIds.add(panel.id);
+      }
       registerCatalogue(c.strings);
+      const ctx = { request: this.request, liveData: this.api.liveData };
       for (const contributed of screens) {
         const { screen } = contributed;
         this.#activeScreens.set(screen.id, {
           screen,
-          handle: contributed.create({ request: this.request, liveData: this.api.liveData }),
+          handle: contributed.create(ctx),
         });
         if (this.#sessionPermissions.includes(screen.requiresPermission)) {
           const group = this.#navGroups.get(screen.group) ?? [];
@@ -1132,6 +1147,8 @@ export class DashboardApp extends LitElement {
           this.#navGroups.set(screen.group, group);
         }
       }
+      for (const panel of c.settingsPanels ?? [])
+        this.#activePanels.push({ panel, handle: panel.create(ctx) });
     }
     for (const list of this.#navGroups.values())
       list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -1440,12 +1457,21 @@ export class DashboardApp extends LitElement {
   }
 
   #settingsPanels(): (VenueSettingsPanel & { order: number })[] {
-    return CORE_SETTINGS_PANELS.filter((panel) => this.#mayOpen(panel)).map((panel) => ({
+    const core = CORE_SETTINGS_PANELS.filter((panel) => this.#mayOpen(panel)).map((panel) => ({
       key: panel.key,
       tab: panel.tab,
       order: 0,
       render: () => panel.render(this.api),
     }));
+    const modules = this.#activePanels
+      .filter(({ panel }) => this.#sessionPermissions.includes(panel.requiresPermission))
+      .map(({ panel, handle }) => ({
+        key: panel.id,
+        tab: panel.tab as VenueSettingsTab,
+        order: panel.order ?? 0,
+        render: () => handle.render(),
+      }));
+    return [...core, ...modules].sort((a, b) => a.order - b.order);
   }
 
   /** The module permission check here matches the one `#activate` applies to the nav. */

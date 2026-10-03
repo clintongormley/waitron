@@ -36,6 +36,20 @@ export interface DashboardFurtherScreen {
   create(ctx: DashboardModuleContext): DashboardScreenHandle;
 }
 
+/** A Venue settings tab key; the app validates each contributed panel's tab against its own list. */
+export type SettingsTabId = string;
+
+/** A panel a module adds to a Venue settings tab. The page owns the h1. */
+export interface DashboardSettingsPanel {
+  /** Unique across core and module panels. */
+  id: string;
+  tab: SettingsTabId;
+  /** Core panels count as 0 and come first on a tie. */
+  order?: number;
+  requiresPermission: string;
+  create(ctx: DashboardModuleContext): DashboardScreenHandle;
+}
+
 /** One module's dashboard contribution: its identity, its first screen's placement and factory, any
  * further screens, and its localised strings. */
 export interface DashboardContribution extends DashboardFurtherScreen {
@@ -43,4 +57,5 @@ export interface DashboardContribution extends DashboardFurtherScreen {
   strings: { en: Record<string, string>; es: Record<string, string> };
   /** Mounted, listed, searched and permission-gated exactly as `screen` is. */
   moreScreens?: readonly DashboardFurtherScreen[];
+  settingsPanels?: readonly DashboardSettingsPanel[];
 }
