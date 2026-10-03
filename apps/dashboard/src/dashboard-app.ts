@@ -130,12 +130,12 @@ const DRAWER_BREAKPOINT = "(max-width: 48rem)";
 const WAITRON_LOGO_URL = new URL("../../../packages/ui/brand/waitron-lockup.svg", import.meta.url)
   .href;
 
-type NavItem = {
+type ScreenRule = {
   screen: ScreenId;
-  labelKey: StringKey;
   requiresManager?: boolean;
   requiresPermission?: string;
 };
+type NavItem = ScreenRule & { labelKey: StringKey };
 type NavGroup = { id: NavGroupId; headerKey?: StringKey; icon?: string; items: NavItem[] };
 /** A nav row as shown: a core item or a module's screen, labelled in the current language. */
 type NavPage = { screen: ScreenId; label: string };
@@ -209,10 +209,12 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "backup", labelKey: "nav.backup", requiresManager: true },
       { screen: "servers", labelKey: "nav.servers", requiresPermission: "mirror.create" },
       { screen: "cloud", labelKey: "nav.cloud", requiresManager: true },
-      { screen: "email", labelKey: "nav.email", requiresManager: true },
     ],
   },
 ];
+
+/** Who may open a screen is read from its sidebar entry; a screen with none keeps its rule here. */
+const UNLISTED_SCREENS: ScreenRule[] = [{ screen: "email", requiresManager: true }];
 
 /**
  * Owns session discovery, permitted URL navigation and language preferences.
@@ -1284,7 +1286,8 @@ export class DashboardApp extends LitElement {
             }
           </span>
           ${
-            this.onboardingIntent === "demo" && (!authenticated || this.#canOpenScreen("email"))
+            (this.onboardingIntent === "demo" || this.onboardingIntent === "prepare") &&
+            (!authenticated || this.#canOpenScreen("email"))
               ? html`<a class="inbox-link" data-test="email-inbox-link" href="/manage/email"
                   >${t("nav.email_inbox")}</a
                 >`
@@ -1371,7 +1374,7 @@ export class DashboardApp extends LitElement {
     this.#url.write({ product: event.detail.productId }, true);
   }
 
-  #mayOpen(item: NavItem): boolean {
+  #mayOpen(item: ScreenRule): boolean {
     if (item.requiresManager && this.sessionRole !== "manager" && this.sessionRole !== "admin")
       return false;
     return (
@@ -1384,7 +1387,7 @@ export class DashboardApp extends LitElement {
   #permittedScreen(requested: string | null): ScreenId {
     if (this.sessionRole === "staff") return requested === "orders" ? "orders" : "my-schedule";
     if (requested === "alerts") return "alerts";
-    const item = NAV_GROUPS.flatMap((group) => group.items).find(
+    const item = [...NAV_GROUPS.flatMap((group) => group.items), ...UNLISTED_SCREENS].find(
       (entry) => entry.screen === requested,
     );
     if (item && this.#mayOpen(item)) return item.screen;

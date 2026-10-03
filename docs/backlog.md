@@ -953,6 +953,22 @@ signed out always, and signed in only to a session that may open the Test inbox 
 or an admin). Outside a demo there is no link. At 48rem wide or less it moves to the banner's second
 row, after the mode pill, because on the first row it squeezed the Waitron lockup to nothing at
 360px wide.
+(2026-10-03: A227, below, shows the link in a venue preparing to go live too.)
+
+**The sidebar no longer lists the email inbox; the top-bar link is the way in (A227, owner
+2026-10-03) — DONE (#PR).** The sidebar's "Test inbox" entry is gone, and with it the `nav.email`
+string. The top bar's "Email inbox" link now shows in a demo AND in a venue preparing to go live:
+the server's practice mode covers both (`apps/server/src/boot.ts`), and in practice mode with no
+SMTP set up, account email is captured on the box (`apps/server/src/email-delivery.ts`). The
+screen keeps its rule — a manager or an admin — in the dashboard's list of screens with no sidebar
+entry, so its address still opens for them and no one else. A live venue shows no link, and there
+the screen only says how email is sent; a development server (`WAITRON_ENV=dev`) captures email in
+every mode, so in a live dev venue the address is the only way in.
+
+**A venue preparing to go live sends real email through SMTP (owner 2026-10-03) — OPEN.** "Later
+prepare should use a real SMTP server": a prepare venue would send invitations and password resets
+through SMTP instead of capturing them on the box, and the top bar's inbox link (A227) would become
+demo-only again. Not built.
 
 **The sign-in screen's chosen email is drawn as a read-only field (A189, owner 2026-10-02) — DONE
 (#1048).** On every sign-in step after the email, on the passkey offer after sign-in, and on the
