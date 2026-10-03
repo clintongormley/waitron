@@ -165,6 +165,32 @@ describe("loading", () => {
     expect(api.listCourses).toHaveBeenCalledTimes(3);
     expect(alertLine(el)!.textContent!.trim()).toBe(codeMessage("course.not_found"));
   });
+
+  it("keeps a removal's connection failure through a failed re-read and the reads' recovery", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({ deactivateCourse: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      { liveData },
+    );
+    const { el } = await mount(api);
+    vi.mocked(api.listCourses).mockRejectedValue({ code: "connection.failed" });
+    liveData.refresh();
+    await vi.waitFor(() =>
+      expect(alertLine(el)?.textContent?.trim()).toBe(codeMessage("connection.failed")),
+    );
+    q(el, '[data-test="remove-c1"]')!.click();
+    await vi.waitFor(() => expect(api.deactivateCourse).toHaveBeenCalledTimes(1));
+    await settle(el);
+    liveData.refresh();
+    await vi.waitFor(() => expect(api.listCourses).toHaveBeenCalledTimes(3));
+    await settle(el);
+
+    vi.mocked(api.listCourses).mockResolvedValue(copy(COURSES.slice(1)));
+    liveData.refresh();
+    await vi.waitFor(() => expect(rowIds(el)).toEqual(["c2", "c3"]));
+    await settle(el);
+    expect(alertLine(el)?.textContent?.trim()).toBe(codeMessage("connection.failed"));
+  });
 });
 
 describe("renaming", () => {

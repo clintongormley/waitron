@@ -106,6 +106,8 @@ export class CatalogueScreen extends LitElement {
   @state() private editorValue: ProductEditorValue | null = null;
   @state() private busy = false;
   @state() private errorKey: string | null = null;
+  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
   @state() private refusedLists: string[] = [];
   @state() private deletingProduct: { id: string; name: string; isVariant: boolean } | null = null;
   @state() private deleteErrorKey: string | null = null;
@@ -139,11 +141,9 @@ export class CatalogueScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.errorKey = codeOf(error);
-    },
-    (error) => {
-      if (this.errorKey === codeOf(error)) this.errorKey = null;
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
       if (this.#loadFailed) void this.#load();
     },
   );
@@ -186,15 +186,13 @@ export class CatalogueScreen extends LitElement {
       this.#editor()?.selectRelated(kind, value.id);
     },
     refresh: (kind) => this.#refreshRelated(kind),
-    loadError: (error) => {
-      this.errorKey = codeOf(error);
-    },
+    loadError: (error) => this.#showReadError(error),
     focus: (kind) => this.#editor()?.returnRelatedFocus(kind),
   });
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.errorKey = null;
+    this.#showError(null);
     void this.#load();
   }
 
@@ -238,8 +236,18 @@ export class CatalogueScreen extends LitElement {
       this.productsLoaded = true;
     } catch (error) {
       this.#loadFailed = true;
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
+  }
+
+  #showError(code: string | null, fromRead = false): void {
+    this.errorKey = code;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
   }
 
   async #reloadProducts(): Promise<void> {
@@ -287,7 +295,7 @@ export class CatalogueScreen extends LitElement {
     this.#editorGeneration++;
     this.#resetEditorState();
     this.editorValue = null;
-    this.errorKey = null;
+    this.#showError(null);
     this.editorOpen = true;
   }
 
@@ -305,7 +313,7 @@ export class CatalogueScreen extends LitElement {
     this.#resetEditorState();
     this.editorOpen = false;
     this.editorValue = null;
-    this.errorKey = null;
+    this.#showError(null);
     const generation = ++this.#editorGeneration;
     try {
       const value = await this.api.getProductEditor(productId);
@@ -314,7 +322,7 @@ export class CatalogueScreen extends LitElement {
       this.editorOpen = true;
       this.#url.write({ product: productId }, true);
     } catch (error) {
-      if (generation === this.#editorGeneration) this.errorKey = codeOf(error);
+      if (generation === this.#editorGeneration) this.#showReadError(error);
     }
   }
 
@@ -335,7 +343,7 @@ export class CatalogueScreen extends LitElement {
       ? { id: found.id, name: found.name, isVariant: product === undefined }
       : null;
     this.deleteErrorKey = null;
-    this.errorKey = null;
+    this.#showError(null);
   }
 
   #closeDelete(): void {
@@ -347,7 +355,7 @@ export class CatalogueScreen extends LitElement {
     const product = this.deletingProduct;
     if (!product || this.busy) return;
     this.busy = true;
-    this.errorKey = null;
+    this.#showError(null);
     this.deleteErrorKey = null;
     try {
       const value = await this.api.getProductEditor(product.id);
@@ -361,7 +369,7 @@ export class CatalogueScreen extends LitElement {
     try {
       await this.#reloadProducts();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     } finally {
       this.busy = false;
     }
@@ -370,12 +378,12 @@ export class CatalogueScreen extends LitElement {
   async #restoreProduct(productId: string): Promise<void> {
     if (this.busy || !this.#knows(productId)) return;
     this.busy = true;
-    this.errorKey = null;
+    this.#showError(null);
     try {
       const value = await this.api.getProductEditor(productId);
       await this.api.updateProductEditor(productId, { ...value, active: true });
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
       this.refusedLists = extraListNames(error);
       this.busy = false;
       return;
@@ -383,7 +391,7 @@ export class CatalogueScreen extends LitElement {
     try {
       await this.#reloadProducts();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     } finally {
       this.busy = false;
     }
@@ -402,13 +410,15 @@ export class CatalogueScreen extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     this.busy = true;
-    this.errorKey = null;
+    this.#showError(null);
     this.editorFieldErrors = {};
+    let written = false;
     try {
       let created: ProductEditorValue | null = null;
       if (this.editorValue === null)
         created = await this.api.createProductEditor(this.selectedCatalogueId, event.detail.value);
       else await this.api.updateProductEditor(this.editorValue.id, event.detail.value);
+      written = true;
       this.#closeEditor();
       if (created) void this.#openPlacement(created);
       await this.#reloadProducts();
@@ -423,7 +433,8 @@ export class CatalogueScreen extends LitElement {
       // one, which also opens the section the field is folded into, else in the message above Save.
       // Only a refusal with nothing to point at falls back to this screen's own banner, so the same
       // problem is never said twice.
-      this.errorKey = Object.keys(fieldErrors).length ? null : codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(Object.keys(fieldErrors).length ? null : codeOf(error));
       this.refusedLists = extraListNames(error);
     } finally {
       this.busy = false;
@@ -558,7 +569,7 @@ export class CatalogueScreen extends LitElement {
     try {
       this.courses = await this.api.background.listCourses();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
       return;
     }
     if (generation !== this.#editorGeneration) return;

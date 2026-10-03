@@ -169,11 +169,9 @@ export class DevicesScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.errorKey = codeOf(error);
-    },
-    (error) => {
-      if (this.errorKey === codeOf(error)) this.errorKey = null;
+    (error) => this.#showReadError(error),
+    () => {
+      if (this.#readErrorShown) this.#showError(null);
     },
   );
 
@@ -203,6 +201,8 @@ export class DevicesScreen extends LitElement {
   @state() private armedDenyId: string | null = null;
   @state() private armedRevokeId: string | null = null;
   @state() private errorKey: string | null = null;
+  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
+  #readErrorShown = false;
   @state() private madeHereRefusals: Record<string, string> = {};
   @state() private madeHerePending: Record<string, string[]> = {};
   readonly #madeHereSaving = new Set<string>();
@@ -215,7 +215,7 @@ export class DevicesScreen extends LitElement {
   }
 
   async #load(): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     this.armedRevokeId = null;
     this.armedDenyId = null;
     try {
@@ -257,8 +257,18 @@ export class DevicesScreen extends LitElement {
         }),
       ]);
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
+  }
+
+  #showError(code: string | null, fromRead = false): void {
+    this.errorKey = code;
+    this.#readErrorShown = fromRead;
+  }
+
+  /** A read's failure never replaces an action's message. */
+  #showReadError(error: unknown): void {
+    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
   }
 
   async #reloadJoins(): Promise<void> {
@@ -273,28 +283,34 @@ export class DevicesScreen extends LitElement {
 
   /** Open and Extend are the same call: the route moves an open window's lapse rather than adding one. */
   async #openPairing(): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await this.api.openPairingMode();
+      written = true;
       await this.#reloadJoins();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(codeOf(error));
     }
   }
 
   async #closePairing(): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await this.api.closePairingMode();
+      written = true;
       await this.#reloadJoins();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(codeOf(error));
     }
   }
 
   /** Fetches the three numbers the FIRST time only: the server fixes the set at join. */
   async #openRequest(id: string): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     this.openRequestId = id;
     this.chosenProfileId = "";
     this.chosenBinding = "";
@@ -304,7 +320,7 @@ export class DevicesScreen extends LitElement {
       const { choices } = await this.api.joinChallenge(id);
       this.challenges = { ...this.challenges, [id]: choices };
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showReadError(error);
     }
   }
 
@@ -319,13 +335,16 @@ export class DevicesScreen extends LitElement {
   }
 
   async #deny(id: string): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await this.api.denyJoinRequest(id);
+      written = true;
       if (this.openRequestId === id) this.openRequestId = null;
       await this.#reloadJoins();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(codeOf(error));
     }
   }
 
@@ -353,8 +372,9 @@ export class DevicesScreen extends LitElement {
     const profile = this.#chosenProfile();
     if (this.submitting || profile === undefined || !this.#bindingReady()) return;
     const binding = bindingOf(profile.formFactor);
-    this.errorKey = null;
+    this.#showError(null);
     this.submitting = true;
+    let written = false;
     try {
       await this.api.acceptDeviceJoinRequest(request.id, {
         choice,
@@ -367,17 +387,19 @@ export class DevicesScreen extends LitElement {
           : {}),
         ...(binding === "register" ? { registerId: this.chosenRegisterId } : {}),
       });
+      written = true;
       this.openRequestId = null;
       await Promise.all([this.#reloadJoins(), this.#reloadDevices()]);
     } catch (error) {
       const code = codeOf(error);
-      this.errorKey = code;
+      if (written) this.#showReadError(error);
+      else this.#showError(code);
       if (code === "device.join_mismatch") {
         this.openRequestId = null;
         try {
           await this.#reloadJoins();
         } catch (reloadError) {
-          this.errorKey = codeOf(reloadError);
+          this.#showError(codeOf(reloadError), true);
         }
       }
     } finally {
@@ -400,22 +422,28 @@ export class DevicesScreen extends LitElement {
   }
 
   async #revoke(id: string): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await this.api.revokeDevice(id);
+      written = true;
       await this.#reloadDevices();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(codeOf(error));
     }
   }
 
   async #onReassign(id: string, deviceProfileId: string | null): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
+    let written = false;
     try {
       await this.api.reassignDeviceProfile(id, deviceProfileId);
+      written = true;
       await this.#reloadDevices();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (written) this.#showReadError(error);
+      else this.#showError(codeOf(error));
     }
   }
 
@@ -431,7 +459,7 @@ export class DevicesScreen extends LitElement {
   }
 
   async #saveHardware(id: string): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     const hw = this.#hardwareFor(id);
     try {
       const updated = await this.api.patchDeviceHardware(id, {
@@ -444,7 +472,7 @@ export class DevicesScreen extends LitElement {
         },
       };
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     }
   }
 
@@ -464,13 +492,13 @@ export class DevicesScreen extends LitElement {
   /** Written immediately, not staged. A rejection leaves `deviceReaders` untouched, so the control
    * shows the stored default again. */
   async #onReaderChange(id: string, value: string): Promise<void> {
-    this.errorKey = null;
+    this.#showError(null);
     const readerId = value === "" ? null : value;
     try {
       await this.api.setDeviceReader(id, readerId);
       this.deviceReaders = { ...this.deviceReaders, [id]: readerId };
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#showError(codeOf(error));
     }
   }
 

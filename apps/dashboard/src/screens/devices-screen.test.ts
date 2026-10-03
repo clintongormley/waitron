@@ -1482,3 +1482,32 @@ it("shows a localized alert and keeps the row when a deny is rejected", async ()
   expect(q(el, "[data-test=join-row-j1]")).not.toBeNull();
   expect(api.joinRequests).toHaveBeenCalledTimes(1);
 });
+
+describe("devices-screen keeps an action's message while the reads recover", () => {
+  it("keeps a failed pairing open's connection failure through a failed re-read and the reads' recovery", async () => {
+    const api = Object.assign(
+      stubApi({ openPairingMode: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await vi.waitFor(() => expect(q(el, "[data-test=pairing-open]")).not.toBeNull());
+    vi.mocked(api.listDevices).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[role=alert]")).not.toBeNull());
+
+    q(el, "[data-test=pairing-open]")!.click();
+    await vi.waitFor(() => expect(api.openPairingMode).toHaveBeenCalledTimes(1));
+    await flush(el);
+    const reads = vi.mocked(api.listDevices).mock.calls.length;
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.listDevices).toHaveBeenCalledTimes(reads + 1));
+    await flush(el);
+
+    const added: DeviceRow = { ...devices[0]!, id: "d3", label: "Pantalla nueva" };
+    vi.mocked(api.listDevices).mockResolvedValue([...devices, added]);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[data-test=device-row-d3]")).not.toBeNull());
+    await flush(el);
+    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed"));
+  });
+});

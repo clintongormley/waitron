@@ -405,3 +405,33 @@ describe("service-status row edges", () => {
     expect(errorKey(el)).toBeNull();
   });
 });
+
+describe("service-status keeps a save's message while the reads recover", () => {
+  it("keeps a save's connection failure through a failed re-read and the reads' recovery", async () => {
+    const api = Object.assign(
+      stubApi({ updateStatus: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<ServiceStatusScreen>("dashboard-service-status-screen", {
+      api,
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=row-s1]")).not.toBeNull());
+    vi.mocked(api.listStatuses).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[role=alert]")).not.toBeNull());
+
+    q(el, "[data-test=save-s1]")!.click();
+    await vi.waitFor(() => expect(api.updateStatus).toHaveBeenCalledTimes(1));
+    await flush(el);
+    const reads = vi.mocked(api.listStatuses).mock.calls.length;
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.listStatuses).toHaveBeenCalledTimes(reads + 1));
+    await flush(el);
+
+    vi.mocked(api.listStatuses).mockResolvedValue(TWO_SEED.map((s) => ({ ...s })));
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[data-test=row-s2]")).not.toBeNull());
+    await flush(el);
+    expect(q(el, "[role=alert]")?.textContent?.trim()).toBe(codeMessage("connection.failed"));
+  });
+});
