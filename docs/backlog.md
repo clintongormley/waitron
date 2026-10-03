@@ -4832,9 +4832,10 @@ characters. Left open:
   database advisory lock around guard→stamp→apply is the obvious home — and prove it with two
   concurrent provisions against a real database, not with the row-level check alone.
 - **DONE — a short `dayCutover` and its long form now identify the same venue (W6).**
-  `planVenue` turns `"06:00"` into `"06:00:00"` before creating the location action. The
-  real-database retry test first applied the long form, then observed the short form fail with
-  `provisioning.second_venue` before the fix and pass afterwards. The old note's claim that the
+  `planVenue` turns `"06:00"` into `"06:00:00"` before creating the location action, and
+  `applyVenue` normalizes both values when comparing a stored location with the plan. Real-database
+  retry tests saw `provisioning.second_venue` before each fix and success afterwards in both
+  directions: long stored then short planned, and short stored then long planned. The old note's claim that the
   database always reads a time value back in the long form was wrong: `timeOfDay` is a text column
   (`packages/db/src/schema/columns.ts`), and a repeated short-form plan succeeded before this
   change. The venue-plan test also checks the normalized action directly.

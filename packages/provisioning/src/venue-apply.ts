@@ -17,6 +17,7 @@ import { AppError, locationId as brandLocationId, nodeId as brandNodeId } from "
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import type { SeedReport, WaitronModule } from "@waitron/module";
 import type { VenueAction } from "./venue-plan.js";
+import { normalizeDayCutover } from "./venue-plan.js";
 import "./errors.js";
 
 export interface VenueApplyDeps {
@@ -160,7 +161,7 @@ export async function applyVenue(
               row.city === action.city &&
               row.province === action.province &&
               row.timeZone === action.timeZone &&
-              row.dayCutover === action.dayCutover;
+              normalizeDayCutover(row.dayCutover) === normalizeDayCutover(action.dayCutover);
             if (!matches) {
               throw new AppError("provisioning.second_venue", {});
             }

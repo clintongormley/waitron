@@ -90,6 +90,23 @@ describe("applyVenue: the one taxpayer row", () => {
     expect(rows.rows).toEqual([{ day_cutover: "06:00:00" }]);
   });
 
+  it("reuses a venue whose stored day cutover has no seconds", async () => {
+    const first = await applyVenue(planVenue(request("B10000006"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await suite.db.execute(
+      sql`update locations set day_cutover = '06:00' where id = ${first.locationId}`,
+    );
+
+    await expect(
+      applyVenue(planVenue(request("B10000006"), ALL_MODULES), {
+        db: suite.db,
+        modules: ALL_MODULES,
+      }),
+    ).resolves.toMatchObject({ locationId: first.locationId });
+  });
+
   it("refuses a re-run whose tax id differs, by name", async () => {
     await applyVenue(planVenue(request("B10000003"), ALL_MODULES), {
       db: suite.db,
