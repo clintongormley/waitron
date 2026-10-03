@@ -20,7 +20,7 @@ export interface ComboboxOption {
    * item of the list. */
   primary?: true;
   /** A second, muted line under the label in the open list, and the row's accessible description.
-   * The closed field shows the label alone. */
+   * Never shown on the closed trigger. */
   description?: string;
   /** Shown, matched by the search and reachable by the arrows, but never chosen or run. */
   disabled?: boolean;
@@ -35,6 +35,8 @@ export interface ComboboxOption {
 function closedText(option: ComboboxOption): string {
   return option.valueLabel ?? option.label;
 }
+
+export type WtComboboxAppearance = "field" | "link";
 
 /** With `search="auto"`, the search box shows only when there are more options than this. */
 export const SEARCH_THRESHOLD = 7;
@@ -356,7 +358,8 @@ export class WtCombobox extends LitElement {
   @property() value = "";
   /** Treat an offered empty-string option as a selection, while its value remains empty. */
   @property({ type: Boolean, attribute: "show-empty-option" }) showEmptyOption = false;
-  /** Reserve each option label's width when every possible trigger text is an offered label. */
+  /** Reserve the width of each option's closed-trigger text (`valueLabel`, else `label`) when every
+   * possible trigger text is one of them. Ignored with `appearance="link"`. */
   @property({ type: Boolean, reflect: true, attribute: "stable-width" }) stableWidth = false;
   @property({ attribute: false }) values: string[] = [];
   @property() placeholder = "";
@@ -373,8 +376,9 @@ export class WtCombobox extends LitElement {
   /** Names the trigger by `label` without drawing it, and makes the field compact. */
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
   /** `"link"` draws the trigger as inline text, the chosen value followed by `actionLabel`, with no
-   * field box, drawn label or chevron; `label` still names it, as hidden text before the value. */
-  @property({ reflect: true }) appearance: "field" | "link" = "field";
+   * field box, drawn label or chevron; `label` still names it, as hidden text before the value.
+   * `required` draws no marker in the link appearance. */
+  @property({ reflect: true }) appearance: WtComboboxAppearance = "field";
   /** The action word a link trigger shows after its value, such as "Change". */
   @property({ attribute: "action-label" }) actionLabel = "";
 
@@ -439,7 +443,8 @@ export class WtCombobox extends LitElement {
     return options.findIndex((option) => this.isSelected(option));
   }
 
-  /** The closed-state trigger text: the chosen label, or a count once more than one is chosen. */
+  /** The closed-state trigger text: the chosen option's `valueLabel`, else its `label`, or a count
+   * once more than one is chosen. */
   private get selectedText(): string {
     if (this.multiple) {
       if (this.values.length === 0) return "";
@@ -511,9 +516,13 @@ export class WtCombobox extends LitElement {
     this.trigger.focus();
   }
 
-  private onSearchInput(event: Event): void {
+  /** Places the panel again for the matched rows, keeping its top, so the search box being typed
+   * into stays where it is unless the panel would now cross the bottom gutter. */
+  private async onSearchInput(event: Event): Promise<void> {
     this.searchText = (event.target as HTMLInputElement).value;
     this.activeIndex = this.firstRowIndex;
+    await this.updateComplete;
+    this.positionPopup(true);
   }
 
   /** The list scrolls, so a moved active row has to be brought back into view once Lit has drawn it. */
@@ -698,7 +707,7 @@ export class WtCombobox extends LitElement {
     }
   }
 
-  private positionPopup(): void {
+  private positionPopup(keepTop = false): void {
     const anchor = this.trigger.getBoundingClientRect();
     // The width is applied before the panel is measured: it changes how the labels wrap, and so the
     // height the vertical clamp below depends on. An explicit max-content, because the popover's
@@ -711,7 +720,8 @@ export class WtCombobox extends LitElement {
     // viewport's 8px right gutter.
     const maxLeft = Math.max(0, innerWidth - popup.width - 8);
     this.popup.style.left = `${Math.max(0, Math.min(anchor.left, maxLeft))}px`;
-    this.popup.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - popup.height - 8))}px`;
+    const top = keepTop ? popup.top : anchor.bottom;
+    this.popup.style.top = `${Math.max(8, Math.min(top, innerHeight - popup.height - 8))}px`;
   }
 
   /** Set while a render runs with focus in the panel. A render can swap the panel's control

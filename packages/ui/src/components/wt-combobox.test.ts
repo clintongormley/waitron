@@ -3100,6 +3100,54 @@ test("while searching, a row matches on its valueLabel and shows it, with no ind
   expect(startPaddings(el)).toEqual(["10px", "10px", "17px", "24px", "10px"]);
 });
 
+test("at phone width, a panel near the right edge that widens for a search's full paths stays inside the gutter", async () => {
+  const [viewportWidth, viewportHeight] = [innerWidth, innerHeight];
+  await page.viewport(390, 844);
+  try {
+    const el = await mountWith('<wt-combobox label="Category" hide-label></wt-combobox>', TREE);
+    el.style.cssText = "position: fixed; left: 230px; top: 40px; width: 150px";
+    await el.updateComplete;
+    const { trigger, popup } = fieldParts(el);
+    await userEvent.click(trigger);
+    await new Promise(requestAnimationFrame);
+    const opened = popup.getBoundingClientRect();
+    expect(opened.right).toBeLessThanOrEqual(innerWidth - 8);
+    await userEvent.type(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "drinks ›");
+    await new Promise(requestAnimationFrame);
+    expect(rowTexts(el)).toEqual([
+      "Drinks › Alcoholic drinks",
+      "Drinks › Alcoholic drinks › Cocktails",
+    ]);
+    const searched = popup.getBoundingClientRect();
+    // Wider than when it opened, or the panel never had to move to stay on screen.
+    expect(searched.width).toBeGreaterThan(opened.width);
+    expect(searched.left).toBeGreaterThanOrEqual(8);
+    expect(searched.right).toBeLessThanOrEqual(innerWidth - 8);
+  } finally {
+    await page.viewport(viewportWidth, viewportHeight);
+  }
+});
+
+test("a panel opened near the bottom keeps its search box where it was while a search shrinks the list", async () => {
+  const el = await mountWith('<wt-combobox label="Category" hide-label></wt-combobox>', TREE);
+  el.style.cssText = `position: fixed; left: 20px; top: ${innerHeight - 60}px; width: 250px`;
+  await el.updateComplete;
+  const { trigger, popup } = fieldParts(el);
+  await userEvent.click(trigger);
+  await new Promise(requestAnimationFrame);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  const before = search.getBoundingClientRect().top;
+  // Pulled up above the trigger, or a shrinking list could not have moved it down.
+  expect(popup.getBoundingClientRect().top).toBeLessThan(trigger.getBoundingClientRect().bottom);
+  await userEvent.type(search, "cocktails");
+  await new Promise(requestAnimationFrame);
+  expect(rowTexts(el)).toEqual(["Drinks › Alcoholic drinks › Cocktails"]);
+  expect(search.getBoundingClientRect().top).toBeCloseTo(before, 0);
+  const box = popup.getBoundingClientRect();
+  expect(box.top).toBeGreaterThanOrEqual(8);
+  expect(box.bottom).toBeLessThanOrEqual(innerHeight - 8);
+});
+
 test("a search matching an option's label but not its valueLabel does not find it", async () => {
   const el = await mountWith('<wt-combobox label="Category"></wt-combobox>', [
     { value: "a", label: "Leaf", valueLabel: "Branch › Twig" },
