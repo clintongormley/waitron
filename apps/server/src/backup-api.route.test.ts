@@ -463,7 +463,7 @@ describe("backup admin routes", () => {
       }),
     });
     expect(applied.status).toBe(200);
-    expect((await applied.json()).keyRotatedAt ?? null).toBeNull(); // apply does not stamp a rotation
+    expect((await applied.json()).keyRotatedAt ?? null).toBeNull();
 
     const rot = await app.request("/api/backup/rotate", {
       method: "POST",
@@ -487,7 +487,7 @@ describe("backup admin routes", () => {
     });
   }, 60_000);
 
-  it("apply keeps the recovery key's rotation date after archives are turned on", async () => {
+  it("apply keeps the date of a key rotated before archives were enabled", async () => {
     const stateDir = await makeStateDir();
     await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
     const sc: Scenario = { stateDir, base: {}, role: "primary" };

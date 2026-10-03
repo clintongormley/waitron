@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import type { BackupSchedule } from "./backup-config.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
+import { isUnset } from "./env-value.js";
 import { writeFileAtomic } from "./fs-atomic.js";
 import "./errors.js";
 
@@ -72,7 +73,8 @@ export async function writeBackupEnv(stateDir: string, input: BackupEnvInput): P
 export async function readBackupKeyRotatedAt(stateDir: string): Promise<string | undefined> {
   try {
     const record = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
-    return record.WAITRON_BACKUP_KEY_ROTATED_AT;
+    const value = record.WAITRON_BACKUP_KEY_ROTATED_AT;
+    return isUnset(value) ? undefined : value;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw err;

@@ -7,6 +7,7 @@ import { assertStorableKey } from "./backup-api.js";
 import {
   assertStorableRecord,
   backupEnvRecord,
+  readBackupKeyRotatedAt,
   writeBackupEnv,
   writeRecoveryKey,
 } from "./backup-env-writer.js";
@@ -94,6 +95,12 @@ describe("writeBackupEnv", () => {
     ).rejects.toMatchObject({ code: "backup.destinations_invalid" });
     await expect(readFile(join(dir, "backup.env"), "utf8")).rejects.toThrow();
   });
+});
+
+it("reads an empty stored rotation date as never rotated", async () => {
+  const dir = tempDir();
+  await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_KEY_ROTATED_AT=\n");
+  expect(await readBackupKeyRotatedAt(dir)).toBeUndefined();
 });
 
 describe("assertStorableRecord", () => {
