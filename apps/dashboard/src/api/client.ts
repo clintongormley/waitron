@@ -1443,10 +1443,6 @@ export class DashboardApi {
   }
   readonly #request: DashboardRequest;
   readonly #baseUrl: string;
-  /**
-   * Read into a local before calling, so it is called as a free function: called as a method of
-   * `this`, the browser's native `fetch` throws "Illegal invocation".
-   */
   readonly #fetch: FetchLike;
   #localesPromise?: Promise<{
     locales: Array<{ code: string; label: string }>;
@@ -3068,26 +3064,13 @@ export class DashboardApi {
     );
   }
 
-  /** Not yet moved onto the request helper's `as: "blob"` option: docs/backlog.md A236. */
-  async exportConfiguration(passphrase: string): Promise<Blob> {
-    const fetchImpl = this.#fetch;
-    const response = await fetchImpl(`${this.#baseUrl}/management-api/configuration-export`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ passphrase }),
-    });
-    if (!response.ok) {
-      // Rejects with the shared request helper's `{ code, status }` shape, without its `params`.
-      const parsed: unknown = await response.json().catch(() => undefined);
-      const isRecord = (v: unknown): v is Record<string, unknown> =>
-        typeof v === "object" && v !== null && !Array.isArray(v);
-      const envelope = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : undefined;
-      const rawCode = envelope?.code;
-      const code = typeof rawCode === "string" ? rawCode : "server.internal";
-      throw { code, status: response.status };
-    }
-    return response.blob();
+  exportConfiguration(passphrase: string): Promise<Blob> {
+    return this.#request<Blob>(
+      "/management-api/configuration-export",
+      "POST",
+      { passphrase },
+      { as: "blob" },
+    );
   }
 
   mintBackupKey(): Promise<{ key: string }> {

@@ -3753,16 +3753,11 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   may not be reachable; next action is to find out whether it is, then either fix the test or drop
   the correction and its test.
 
-- **The configuration export does not tell the shell about an expired session (A236) — OPEN
-  (found 2026-10-03).** `exportConfiguration` in `apps/dashboard/src/api/client.ts` makes its own
-  `fetch` instead of going through the request helper, so it never calls the session-expiry and
-  activity hooks `apps/dashboard/src/main.ts` passes to the client: an expired session is not
-  reported to the shell (no `waitron-session-invalid` event), and an export does not count as
-  activity (no `waitron-session-active` event). Run 2026-10-03 with a stub client: a 401
-  answering `management_session.expired` and a successful export each called neither hook, while
-  `downloadVatReturnFile` on the same 401 called the expiry hook once. It also drops a refusal's
-  `params`. It came in with #296 (`fabdb224d`). Fix: move it onto the request helper's
-  `as: "blob"` option, which the VAT return download uses.
+- **The configuration export does not tell the shell about an expired session (A236) — DONE (W19;
+  found 2026-10-03).** `exportConfiguration` in `apps/dashboard/src/api/client.ts` now goes through
+  the request helper with its `as: "blob"` option, as the VAT return download does: an expired
+  session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
+  `params`. It came in with #296 (`fabdb224d`).
 
 - **Remove the till that setup creates (A238) — OPEN, design not started (owner, 2026-10-03).** Every setup
   creates one till: Demo names it "Caja 1" itself, and Prepare and Live ask for a "Till name"

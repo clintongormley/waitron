@@ -142,6 +142,45 @@ describe("DashboardApi", () => {
     });
   });
 
+  it("tells the shell when a configuration export finds the session expired", async () => {
+    const response = new Response(
+      JSON.stringify({ error: { code: "management_session.expired" } }),
+      { status: 401, headers: { "content-type": "application/json" } },
+    );
+    const onError = vi.fn();
+    const onSuccess = vi.fn();
+    const api = new DashboardApi("", vi.fn().mockResolvedValue(response), onError, onSuccess);
+    await expect(api.exportConfiguration("a strong passphrase")).rejects.toMatchObject({
+      code: "management_session.expired",
+      status: 401,
+    });
+    expect(onError.mock.calls).toEqual([["management_session.expired"]]);
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it("counts a successful configuration export as session activity", async () => {
+    const response = new Response(new Blob(["encrypted"]), { status: 200 });
+    const onSuccess = vi.fn();
+    const api = new DashboardApi("", vi.fn().mockResolvedValue(response), undefined, onSuccess);
+    await api.exportConfiguration("a strong passphrase");
+    expect(onSuccess.mock.calls).toEqual([["/management-api/configuration-export"]]);
+  });
+
+  it("keeps a refused configuration export's params", async () => {
+    const response = new Response(
+      JSON.stringify({
+        error: { code: "management.request_invalid", params: { field: "passphrase" } },
+      }),
+      { status: 400, headers: { "content-type": "application/json" } },
+    );
+    const api = new DashboardApi("", vi.fn().mockResolvedValue(response));
+    await expect(api.exportConfiguration("short")).rejects.toEqual({
+      code: "management.request_invalid",
+      params: { field: "passphrase" },
+      status: 400,
+    });
+  });
+
   it("falls back to server.internal (with the status) when the export error body is not JSON", async () => {
     const response = new Response("Bad Gateway", {
       status: 502,
