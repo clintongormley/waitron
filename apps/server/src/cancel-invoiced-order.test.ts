@@ -1,4 +1,3 @@
-import { AsyncResource } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -49,65 +48,11 @@ import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { payWorkingOrderIntegrated } from "./till-sale.js";
 import "./errors.js";
+import { watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
 
-// Each key derivation of the watched PIN runs the next `during` action (another writer, or a change
-// to a person) and holds its key back until that action has committed or a second has passed. A
-// derivation outside the write lock lets the action commit first ("writer", "derived"); inside it,
-// the action waits for the lock and "derived" comes first.
-const derivations = vi.hoisted(() => ({
-  pin: null as string | null,
-  during: [] as (() => Promise<unknown>)[],
-  /** Runs an action in the test's own async context, not the route's: a writer inside the route's
-   * context would read as the route asking again for a lock it holds. */
-  start: (action: () => Promise<unknown>) => action(),
-  order: [] as string[],
-  writes: [] as Promise<unknown>[],
-}));
-
-vi.mock("node:crypto", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:crypto")>();
-  type Done = (error: Error | null, key: Buffer) => void;
-  return {
-    ...actual,
-    scrypt: (secret: string, salt: Buffer, keyLength: number, done: Done) => {
-      const during = secret === derivations.pin ? derivations.during.shift() : undefined;
-      if (during === undefined) {
-        actual.scrypt(secret, salt, keyLength, done);
-        return;
-      }
-      const write = derivations.start(during).then(
-        () => derivations.order.push("writer"),
-        (error: unknown) => derivations.order.push(`writer failed: ${String(error)}`),
-      );
-      derivations.writes.push(write);
-      actual.scrypt(secret, salt, keyLength, (error, key) => {
-        const waited = new Promise((resolve) => setTimeout(resolve, 1_000));
-        void Promise.race([write, waited]).then(() => {
-          derivations.order.push("derived");
-          done(error, key);
-        });
-      });
-    },
-  };
-});
-
-function watchDerivations(pin: string, ...during: (() => Promise<unknown>)[]): void {
-  derivations.pin = pin;
-  derivations.during = during;
-  const scope = new AsyncResource("watched derivation");
-  derivations.start = (action) => scope.runInAsyncScope(action);
-}
-
-/** What the watched derivations recorded, once every action they started has finished. */
-async function watchedOrder(): Promise<string[]> {
-  await Promise.all(derivations.writes);
-  const order = derivations.order;
-  derivations.pin = null;
-  derivations.during = [];
-  derivations.order = [];
-  derivations.writes = [];
-  return order;
-}
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 // Cancelling a placed order whose invoice was issued credits the whole invoice (an R5 corrective
 // invoice) and settles the original owing nothing, in the cancel's one transaction (owner decision

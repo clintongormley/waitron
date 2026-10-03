@@ -21,6 +21,7 @@ import type { TillConfig } from "./till-config.js";
 import { mountManagementApi } from "./management-api.js";
 import { generateSync } from "otplib";
 import { enrolAuthenticator, TOTP_KEY_RING, wrongTotpCode } from "./testing/authenticator.js";
+import { writerBesideRequest, whileSuspendingOnLockRequest } from "./testing/watched-scrypt.js";
 
 /**
  * Floor zones, dining tables, table placement, kitchen stations and kitchen courses on the
@@ -31,19 +32,9 @@ import { enrolAuthenticator, TOTP_KEY_RING, wrongTotpCode } from "./testing/auth
  * row for a malformed id, so none of them tells its screen from its absence.
  */
 
-// Counts the key derivations a request makes while it holds the write lock; otherwise the real
-// `scrypt`.
-const derivation = vi.hoisted(() => ({ inRequestTransaction: false, order: [] as string[] }));
-vi.mock("node:crypto", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:crypto")>();
-  return {
-    ...actual,
-    scrypt: (...args: unknown[]) => {
-      if (derivation.inRequestTransaction) derivation.order.push("key derived in a transaction");
-      return (actual.scrypt as (...forwarded: unknown[]) => void)(...args);
-    },
-  };
-});
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse";
@@ -599,7 +590,7 @@ describe("POST /management-api/session (email login)", () => {
   });
 
   it("lets another writer commit while it derives the key", async () => {
-    const { result, order } = await writerBesideRequest(async () =>
+    const { result, order } = await writerBesideRequest(suite.db, async () =>
       app.request("/management-api/session", {
         method: "POST",
         headers: json,
@@ -627,7 +618,7 @@ describe("POST /management-api/session (email login)", () => {
       return person!.id;
     });
 
-    const res = await whileSuspendingOnLockRequest(personId, async () =>
+    const res = await whileSuspendingOnLockRequest(suite.db, personId, async () =>
       app.request("/management-api/session", {
         method: "POST",
         headers: json,
@@ -646,81 +637,6 @@ describe("POST /management-api/session (email login)", () => {
     });
   });
 });
-
-/**
- * Runs `request` while, on the next turn of the event loop, another writer commits a transaction.
- * Returns the request's result and, in order: when the writer committed, when each of the request's
- * transactions committed, and each key the request derived while holding the write lock.
- */
-async function writerBesideRequest<T>(
-  request: () => Promise<T>,
-): Promise<{ result: T; order: string[] }> {
-  const order: string[] = [];
-  derivation.order = order;
-  let writerAsking = false;
-  const original = suite.db.withWriteLock;
-  const spy = vi.spyOn(suite.db, "withWriteLock").mockImplementation((body) =>
-    writerAsking
-      ? original(body)
-      : original(async () => {
-          derivation.inRequestTransaction = true;
-          try {
-            return await body();
-          } finally {
-            derivation.inRequestTransaction = false;
-            order.push("request's transaction");
-          }
-        }),
-  );
-  const writer = new Promise<void>((resolve, reject) => {
-    setImmediate(() => {
-      writerAsking = true;
-      const committed = withTransaction(suite.db, (tx) => tx.execute(sql`select 1`));
-      writerAsking = false;
-      committed.then(() => {
-        order.push("writer");
-        resolve();
-      }, reject);
-    });
-  });
-  try {
-    const [result] = await Promise.all([request(), writer]);
-    return { result, order };
-  } finally {
-    spy.mockRestore();
-  }
-}
-
-/**
- * Holds the write lock, runs `request`, and suspends `personId` in the held transaction once the
- * request asks for the lock — so a check taken before that saw the person active.
- */
-async function whileSuspendingOnLockRequest<T>(
-  personId: string,
-  request: () => Promise<T>,
-): Promise<T> {
-  let lockRequested!: () => void;
-  const requested = new Promise<void>((resolve) => {
-    lockRequested = resolve;
-  });
-  const held = withTransaction(suite.db, async (tx) => {
-    await requested;
-    await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId));
-  });
-  const original = suite.db.withWriteLock;
-  const spy = vi.spyOn(suite.db, "withWriteLock").mockImplementation((body) => {
-    const queued = original(body);
-    lockRequested();
-    return queued;
-  });
-  try {
-    return await request();
-  } finally {
-    spy.mockRestore();
-    lockRequested();
-    await held;
-  }
-}
 
 describe("/management-api/tables", () => {
   it("POST creates (201 { id }) + GET lists it (manager)", async () => {

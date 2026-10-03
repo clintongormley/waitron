@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   readNodeMembership,
@@ -17,6 +17,7 @@ import { ALL_MODULES } from "./modules.js";
 import { mountManagementApi } from "./management-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
+import { writerBesideRequest, whileSuspendingOnLockRequest } from "./testing/watched-scrypt.js";
 
 /**
  * GET /management-api/membership returns this node's held signed membership chart to a peer
@@ -24,19 +25,9 @@ import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/auth
  * `x-waitron-peer-credential` header.
  */
 
-// Counts the key derivations a request makes while it holds the write lock; otherwise the real
-// `scrypt`.
-const derivation = vi.hoisted(() => ({ inRequestTransaction: false, order: [] as string[] }));
-vi.mock("node:crypto", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:crypto")>();
-  return {
-    ...actual,
-    scrypt: (...args: unknown[]) => {
-      if (derivation.inRequestTransaction) derivation.order.push("key derived in a transaction");
-      return (actual.scrypt as (...forwarded: unknown[]) => void)(...args);
-    },
-  };
-});
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 const ADMIN_PASSWORD = "dashPass123";
 const STAFF_PASSWORD = "staffPass123";
@@ -274,7 +265,7 @@ describe("GET /management-api/membership", () => {
     const { designated, adminPersonId } = await setupVenue();
     const app = mountApp(designated);
 
-    const { result, order } = await writerBesideRequest(() =>
+    const { result, order } = await writerBesideRequest(suite.db, () =>
       getMembership(app, { personId: adminPersonId, password: ADMIN_PASSWORD }),
     );
 
@@ -286,7 +277,7 @@ describe("GET /management-api/membership", () => {
     const { designated, adminPersonId } = await setupVenue();
     const app = mountApp(designated);
 
-    const res = await whileSuspendingOnLockRequest(adminPersonId, () =>
+    const res = await whileSuspendingOnLockRequest(suite.db, adminPersonId, () =>
       getMembership(app, { personId: adminPersonId, password: ADMIN_PASSWORD }),
     );
 
@@ -294,78 +285,3 @@ describe("GET /management-api/membership", () => {
     expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
   });
 });
-
-/**
- * Runs `request` while, on the next turn of the event loop, another writer commits a transaction.
- * Returns the request's result and, in order: when the writer committed, when each of the request's
- * transactions committed, and each key the request derived while holding the write lock.
- */
-async function writerBesideRequest<T>(
-  request: () => Promise<T>,
-): Promise<{ result: T; order: string[] }> {
-  const order: string[] = [];
-  derivation.order = order;
-  let writerAsking = false;
-  const original = suite.db.withWriteLock;
-  const spy = vi.spyOn(suite.db, "withWriteLock").mockImplementation((body) =>
-    writerAsking
-      ? original(body)
-      : original(async () => {
-          derivation.inRequestTransaction = true;
-          try {
-            return await body();
-          } finally {
-            derivation.inRequestTransaction = false;
-            order.push("request's transaction");
-          }
-        }),
-  );
-  const writer = new Promise<void>((resolve, reject) => {
-    setImmediate(() => {
-      writerAsking = true;
-      const committed = withTransaction(suite.db, (tx) => tx.execute(sql`select 1`));
-      writerAsking = false;
-      committed.then(() => {
-        order.push("writer");
-        resolve();
-      }, reject);
-    });
-  });
-  try {
-    const [result] = await Promise.all([request(), writer]);
-    return { result, order };
-  } finally {
-    spy.mockRestore();
-  }
-}
-
-/**
- * Holds the write lock, runs `request`, and suspends `personId` in the held transaction once the
- * request asks for the lock — so a check taken before that saw the person active.
- */
-async function whileSuspendingOnLockRequest<T>(
-  personId: string,
-  request: () => Promise<T>,
-): Promise<T> {
-  let lockRequested!: () => void;
-  const requested = new Promise<void>((resolve) => {
-    lockRequested = resolve;
-  });
-  const held = withTransaction(suite.db, async (tx) => {
-    await requested;
-    await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId));
-  });
-  const original = suite.db.withWriteLock;
-  const spy = vi.spyOn(suite.db, "withWriteLock").mockImplementation((body) => {
-    const queued = original(body);
-    lockRequested();
-    return queued;
-  });
-  try {
-    return await request();
-  } finally {
-    spy.mockRestore();
-    lockRequested();
-    await held;
-  }
-}

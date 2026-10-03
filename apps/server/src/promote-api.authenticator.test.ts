@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -8,24 +7,15 @@ import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { generateSync } from "otplib";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
+import { writerBesideRequest } from "./testing/watched-scrypt.js";
 
 // The admin-login path of `POST /management-api/promote` on a real database — for an admin who has
 // an authenticator, and beside another writer: the sign-in, not the promote itself, so `run` is a
 // stub.
 
-// Counts the key derivations a request makes while it holds the write lock; otherwise the real
-// `scrypt`.
-const derivation = vi.hoisted(() => ({ inRequestTransaction: false, order: [] as string[] }));
-vi.mock("node:crypto", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:crypto")>();
-  return {
-    ...actual,
-    scrypt: (...args: unknown[]) => {
-      if (derivation.inRequestTransaction) derivation.order.push("key derived in a transaction");
-      return (actual.scrypt as (...forwarded: unknown[]) => void)(...args);
-    },
-  };
-});
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 const ADMIN_PASSWORD = "promotePass123";
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -137,7 +127,7 @@ describe("POST /management-api/promote — the admin login beside another writer
     const personId = await seedAdmin();
     const run = vi.fn(async () => ({ alreadyPrimary: false, restarting: true }));
 
-    const { result, order } = await writerBesideRequest(() =>
+    const { result, order } = await writerBesideRequest(suite.db, () =>
       post(appWith(run), { personId, password: ADMIN_PASSWORD }),
     );
 
@@ -145,47 +135,3 @@ describe("POST /management-api/promote — the admin login beside another writer
     expect(order.slice(0, 2)).toEqual(["writer", "request's transaction"]);
   });
 });
-
-/**
- * Runs `request` while, on the next turn of the event loop, another writer commits a transaction.
- * Returns the request's result and, in order: when the writer committed, when each of the request's
- * transactions committed, and each key the request derived while holding the write lock.
- */
-async function writerBesideRequest<T>(
-  request: () => Promise<T>,
-): Promise<{ result: T; order: string[] }> {
-  const order: string[] = [];
-  derivation.order = order;
-  let writerAsking = false;
-  const original = suite.db.withWriteLock;
-  const spy = vi.spyOn(suite.db, "withWriteLock").mockImplementation((body) =>
-    writerAsking
-      ? original(body)
-      : original(async () => {
-          derivation.inRequestTransaction = true;
-          try {
-            return await body();
-          } finally {
-            derivation.inRequestTransaction = false;
-            order.push("request's transaction");
-          }
-        }),
-  );
-  const writer = new Promise<void>((resolve, reject) => {
-    setImmediate(() => {
-      writerAsking = true;
-      const committed = withTransaction(suite.db, (tx) => tx.execute(sql`select 1`));
-      writerAsking = false;
-      committed.then(() => {
-        order.push("writer");
-        resolve();
-      }, reject);
-    });
-  });
-  try {
-    const [result] = await Promise.all([request(), writer]);
-    return { result, order };
-  } finally {
-    spy.mockRestore();
-  }
-}

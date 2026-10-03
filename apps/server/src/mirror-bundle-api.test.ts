@@ -36,20 +36,11 @@ import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { clearRemovedMachine, removeUnjoinedStandby } from "./membership-removal.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
+import { writerBesideRequest } from "./testing/watched-scrypt.js";
 
-// Counts the key derivations a request makes while it holds the write lock; otherwise the real
-// `scrypt`.
-const derivation = vi.hoisted(() => ({ inRequestTransaction: false, order: [] as string[] }));
-vi.mock("node:crypto", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:crypto")>();
-  return {
-    ...actual,
-    scrypt: (...args: unknown[]) => {
-      if (derivation.inRequestTransaction) derivation.order.push("key derived in a transaction");
-      return (actual.scrypt as (...forwarded: unknown[]) => void)(...args);
-    },
-  };
-});
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 // Pause points for the cases that land a removal part-way through a request. Each runs once and
 // clears itself; unset, the wrapped function behaves as the real one.
@@ -1105,7 +1096,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const { designated, adminPersonId } = await setupVenue();
     const app = mountApp(designated, "https://relay.example:9000/");
 
-    const { result, order } = await writerBesideRequest(() =>
+    const { result, order } = await writerBesideRequest(db, () =>
       post(app, { personId: adminPersonId, password: ADMIN_PASSWORD, ...validStandby() }),
     );
 
@@ -1113,47 +1104,3 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(order.slice(0, 2)).toEqual(["writer", "request's transaction"]);
   });
 });
-
-/**
- * Runs `request` while, on the next turn of the event loop, another writer commits a transaction.
- * Returns the request's result and, in order: when the writer committed, when each of the request's
- * transactions committed, and each key the request derived while holding the write lock.
- */
-async function writerBesideRequest<T>(
-  request: () => Promise<T>,
-): Promise<{ result: T; order: string[] }> {
-  const order: string[] = [];
-  derivation.order = order;
-  let writerAsking = false;
-  const original = db.withWriteLock;
-  const spy = vi.spyOn(db, "withWriteLock").mockImplementation((body) =>
-    writerAsking
-      ? original(body)
-      : original(async () => {
-          derivation.inRequestTransaction = true;
-          try {
-            return await body();
-          } finally {
-            derivation.inRequestTransaction = false;
-            order.push("request's transaction");
-          }
-        }),
-  );
-  const writer = new Promise<void>((resolve, reject) => {
-    setImmediate(() => {
-      writerAsking = true;
-      const committed = withTransaction(db, (tx) => tx.execute(sql`select 1`));
-      writerAsking = false;
-      committed.then(() => {
-        order.push("writer");
-        resolve();
-      }, reject);
-    });
-  });
-  try {
-    const [result] = await Promise.all([request(), writer]);
-    return { result, order };
-  } finally {
-    spy.mockRestore();
-  }
-}

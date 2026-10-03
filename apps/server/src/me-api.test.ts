@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { generateSync } from "otplib";
-import { CORE_MIGRATIONS, locations, withTransaction, type Transaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -33,28 +33,15 @@ import type { AccountEmail } from "./account-email.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { wrongTotpCode } from "./testing/authenticator.js";
 import "./errors.js";
+import {
+  watchingDerivations,
+  writerBesideRequest,
+  whileChangingOnLockRequest,
+} from "./testing/watched-scrypt.js";
 
-// Records each key derivation while a test watches: inside one of the request's transactions in
-// `order`, outside them in `outside`. Otherwise the real `scrypt`.
-const derivation = vi.hoisted(() => ({
-  watching: false,
-  inRequestTransaction: false,
-  order: [] as string[],
-  outside: 0,
-}));
-vi.mock("node:crypto", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:crypto")>();
-  return {
-    ...actual,
-    scrypt: (...args: unknown[]) => {
-      if (derivation.watching) {
-        if (derivation.inRequestTransaction) derivation.order.push("key derived in a transaction");
-        else derivation.outside += 1;
-      }
-      return (actual.scrypt as (...forwarded: unknown[]) => void)(...args);
-    },
-  };
-});
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 // The route mechanics: whoami, the happy paths, the request-shape 400s and the not-logged-in 401.
 // The cross-person identity property is pinned in `me-api.cross-person.test.ts`.
@@ -1305,7 +1292,7 @@ describe("mountMeApi — the current password is checked before the write lock i
       const cookie = await cookieFor(personId);
       const url = await path(personId);
 
-      const { result, order, outside } = await writerBesideRequest(() =>
+      const { result, order, outside } = await writerBesideRequest(suite.db, () =>
         send(app, method, url, { cookie, body: body(personId) }),
       );
 
@@ -1321,6 +1308,7 @@ describe("mountMeApi — the current password is checked before the write lock i
     const cookie = await cookieFor(personId);
 
     const res = await whileChangingOnLockRequest(
+      suite.db,
       async (tx) => {
         await tx
           .update(persons)
@@ -1471,93 +1459,3 @@ describe("mountMeApi — the current password is checked before the write lock i
     expect({ order, outside }).toEqual({ order: [], outside: 0 });
   });
 });
-
-/** Runs `request`, recording each key it derives, inside or outside a transaction. */
-async function watchingDerivations<T>(
-  request: () => Promise<T>,
-): Promise<{ result: T; order: string[]; outside: number }> {
-  const order: string[] = [];
-  Object.assign(derivation, { watching: true, order, outside: 0 });
-  try {
-    const result = await request();
-    return { result, order, outside: derivation.outside };
-  } finally {
-    derivation.watching = false;
-  }
-}
-
-/**
- * Runs `request` while, on the next turn of the event loop, another writer commits a transaction.
- * Returns the request's result and, in order: when the writer committed, when each of the request's
- * transactions committed, and each key the request derived while holding the write lock; and how
- * many keys it derived outside its transactions.
- */
-async function writerBesideRequest<T>(
-  request: () => Promise<T>,
-): Promise<{ result: T; order: string[]; outside: number }> {
-  let writerAsking = false;
-  const original = suite.db.withWriteLock;
-  const spy = vi.spyOn(suite.db, "withWriteLock").mockImplementation((body) =>
-    writerAsking
-      ? original(body)
-      : original(async () => {
-          derivation.inRequestTransaction = true;
-          try {
-            return await body();
-          } finally {
-            derivation.inRequestTransaction = false;
-            derivation.order.push("request's transaction");
-          }
-        }),
-  );
-  try {
-    return await watchingDerivations(async () => {
-      const writer = new Promise<void>((resolve, reject) => {
-        setImmediate(() => {
-          writerAsking = true;
-          const committed = withTransaction(suite.db, (tx) => tx.execute(sql`select 1`));
-          writerAsking = false;
-          committed.then(() => {
-            derivation.order.push("writer");
-            resolve();
-          }, reject);
-        });
-      });
-      const [result] = await Promise.all([request(), writer]);
-      return result;
-    });
-  } finally {
-    spy.mockRestore();
-  }
-}
-
-/**
- * Holds the write lock, runs `request`, and makes `change` in the held transaction once the request
- * asks for the lock — so a check the request took before that saw the row as it was.
- */
-async function whileChangingOnLockRequest<T>(
-  change: (tx: Transaction) => Promise<void>,
-  request: () => Promise<T>,
-): Promise<T> {
-  let lockRequested!: () => void;
-  const requested = new Promise<void>((resolve) => {
-    lockRequested = resolve;
-  });
-  const held = withTransaction(suite.db, async (tx) => {
-    await requested;
-    await change(tx);
-  });
-  const original = suite.db.withWriteLock;
-  const spy = vi.spyOn(suite.db, "withWriteLock").mockImplementation((body) => {
-    const queued = original(body);
-    lockRequested();
-    return queued;
-  });
-  try {
-    return await request();
-  } finally {
-    spy.mockRestore();
-    lockRequested();
-    await held;
-  }
-}
