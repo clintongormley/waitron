@@ -95,6 +95,7 @@ async function line(
   opts: {
     name: string;
     quantity?: string;
+    priceQuantity?: string;
     unit: string;
     list?: string;
     creditedTo: string | null;
@@ -110,6 +111,7 @@ async function line(
     name: opts.name,
     descriptions: { es: opts.name },
     quantity: stringToThousandths(quantity),
+    priceQuantity: stringToThousandths(opts.priceQuantity ?? "1"),
     unitPriceGross: decimalToCents(decimal(opts.unit)),
     listUnitPriceGross: opts.list === undefined ? null : decimalToCents(decimal(opts.list)),
     vatClass: "general",
@@ -671,6 +673,24 @@ describe("which bills and lines a range holds", () => {
       addDecimal(grossOf("12.99", "2.5"), grossOf("0.01", "0.5")),
     );
     expect(personRow(read, bea).sales).toBe(grossOf("0.03", "-1.5"));
+  });
+
+  it("credits three measured extra portions at their frozen price basis", async () => {
+    const ana = await person("Ana");
+    const visit = await bill();
+    await line(visit.id, { name: "Dish", unit: "1.00", creditedTo: ana });
+    await line(visit.id, {
+      name: "Ham",
+      quantity: "0.150",
+      priceQuantity: "0.050",
+      unit: "0.01",
+      creditedTo: ana,
+    });
+
+    const read = await report();
+
+    expect(personRow(read, ana).sales).toBe("1.03");
+    expect(read.overall.sales).toBe("1.03");
   });
 
   it("answers an empty range with no people, zero sales and no rate", async () => {

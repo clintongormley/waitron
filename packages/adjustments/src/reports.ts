@@ -313,21 +313,21 @@ async function namesOf(tx: Transaction, ids: Set<string>): Promise<Map<string, s
 
 /**
  * The sales credited to each person (null: to nobody) on the bills opened in the range, abandoned
- * bills aside (their lines were never sold): each line at its first price times its quantity,
- * rounded to the cent half away from zero as `grossOf` rounds a line total, then summed. A price
- * is whole cents and a quantity whole thousandths, so their product is in thousandths of a cent;
- * integer division truncates toward zero, hence the sign-dependent half.
+ * bills aside (their lines were never sold): each line at its first price times its number of
+ * priced portions, rounded to the cent half away from zero, then summed. Physical quantity and
+ * price quantity use the same thousandths scale; integer division truncates toward zero.
  */
 async function readCreditedSales(
   tx: Transaction,
   window: SQL,
 ): Promise<{ creditedTo: string | null; sales: Decimal }[]> {
   const value = sql`coalesce(${workingOrderLines.listUnitPriceGross}, ${workingOrderLines.unitPriceGross}) * ${workingOrderLines.quantity}`;
+  const basis = workingOrderLines.priceQuantity;
   const rows = await tx
     .select({
       creditedTo: workingOrderLines.creditedTo,
-      cents: sql<string>`cast(sum(case when ${value} >= 0 then (${value} + 500) / 1000
-        else -((500 - ${value}) / 1000) end) as text)`,
+      cents: sql<string>`cast(sum(case when ${value} >= 0 then (${value} + ${basis} / 2) / ${basis}
+        else -((${basis} / 2 - ${value}) / ${basis}) end) as text)`,
     })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
