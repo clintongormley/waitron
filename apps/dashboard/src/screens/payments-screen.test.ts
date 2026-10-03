@@ -1721,17 +1721,35 @@ describe("the readers' status reads", () => {
   const readers = (count: number): ReaderRow[] =>
     Array.from({ length: count }, (_, i) => ({ ...READERS[0]!, id: `r-${i + 1}` }));
 
+  // The limit is shared by every Payments screen, so a read a case leaves waiting would hold a slot
+  // in the next case.
+  const unanswered: (() => void)[] = [];
+  afterEach(() => {
+    cleanupWidgets();
+    for (const answer of unanswered.splice(0)) answer();
+  });
+
   function heldStatuses(): {
     readerStatus: Mock<(id: string) => Promise<ReaderStatusView>>;
     answer: (id: string) => void;
   } {
-    const waiting = new Map<string, (status: ReaderStatusView) => void>();
+    const waiting: { id: string; resolve: () => void }[] = [];
     const readerStatus = vi.fn(
-      (id: string) => new Promise<ReaderStatusView>((resolve) => waiting.set(id, resolve)),
+      (id: string) =>
+        new Promise<ReaderStatusView>((resolve) => {
+          const entry = { id, resolve: () => resolve({ online: true } as ReaderStatusView) };
+          waiting.push(entry);
+          unanswered.push(entry.resolve);
+        }),
     );
     return {
       readerStatus,
-      answer: (id) => waiting.get(id)!({ online: true } as ReaderStatusView),
+      answer: (id) => {
+        for (const entry of waiting.filter((e) => e.id === id)) {
+          waiting.splice(waiting.indexOf(entry), 1);
+          entry.resolve();
+        }
+      },
     };
   }
 
@@ -1785,6 +1803,27 @@ describe("the readers' status reads", () => {
 
     api.liveData.refresh();
     await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(held.readerStatus).toHaveBeenCalledTimes(2);
+
+    held.answer("r-1");
+    held.answer("r-2");
+    await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledTimes(4));
+    await flush(el);
+    expect(held.readerStatus.mock.calls.map(([id]) => id)).toEqual(["r-1", "r-2", "r-1", "r-2"]);
+  });
+
+  it("starts no third read when the screen is closed and opened again while two are still waiting", async () => {
+    const held = heldStatuses();
+    const api = stubApi({
+      listReaders: vi.fn().mockResolvedValue(readers(4)),
+      readerStatus: held.readerStatus,
+    });
+    const first = await mount(api);
+    expect(held.readerStatus).toHaveBeenCalledTimes(2);
+
+    first.host.remove();
+    const { el } = await mount(api);
     await flush(el);
     expect(held.readerStatus).toHaveBeenCalledTimes(2);
 
