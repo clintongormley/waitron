@@ -1730,7 +1730,7 @@ of a variant's `unitId` first. A203 (extras as a fixed portion) allows for a var
 noted the Products list shows no unit in its price column; A208 builds it ("€19.00 each",
 "€48.00 / kg").
 
-**A product with variants is not offered in an extras list's product dropdown (A223, owner
+**An extras list's product dropdown greys a product with variants and says why (A223, owner
 2026-10-02) — DONE.** Before this, the dropdown (`extra-list-form.ts`, `#itemsSection`) offered every
 top-level product, but saving a list that names one with an Active variant is refused with
 `extras.product_has_variants` (`assertNoParentsWithVariants`, `packages/catalogue/src/extras.ts`),
@@ -1739,7 +1739,7 @@ because the till never offers such a product as an extra (`readExtraProducts`,
 variants themselves as choices. **Wanted:** such a product is left out of the dropdown, or shown
 greyed and unpickable. **Decided (owner, 2026-10-02):** greyed, with A210's second line saying
 why ("Has variants, so it can't be an extra"; Spanish to match), so a search for it does not just
-come up empty. That needs `wt-combobox` to draw a disabled option, which it cannot today. **Also:** a
+come up empty. That needs `wt-combobox` to draw a disabled option, which it could not before A223. **Also:** a
 product already on a list that later gains its first Active variant is silently dropped by the
 till; the list form should mark that row.
 **Run before building:** the existing cases pin both refusals and the till's omission, and pass:
@@ -1753,10 +1753,10 @@ an Active variant, from the parent's editor or by making a variant Active, answe
 `packages/catalogue/src/product-editor.test.ts` and the second of those server cases). Reading
 every write of `products` outside tests found no other path that sets a parent or makes a row
 Active, so the row mark is for rows written some other way (as the tests above write them).
-Built: `ComboboxOption` gained `disabled`: marked `aria-disabled="true"`, label in
-`--wt-color-text-muted`, no hover background, still matched by the search and reached by the arrows
-(the WAI-ARIA practice for a listbox's disabled options), but never chosen by a click, Enter or
-Space, nor by type-ahead on the closed trigger. The extras picker offers a product with an Active
+Built: `ComboboxOption` gained `disabled`: marked `aria-disabled="true"`, label and icon in
+`--wt-color-text-muted` (a primary row too), no hover background, still matched by the search and
+reached by the arrows (the WAI-ARIA practice for a listbox's disabled options), but never chosen by
+a click, Enter or Space, nor by type-ahead on the closed trigger. The extras picker offers a product with an Active
 variant that way, with "Has variants, so it can't be an extra" ("Tiene variantes, así que no puede
 ser un extra") as its second line. A listed row whose product has an Active variant says the same
 under its name, plus "Remove it from this list." ("Quítalo de esta lista."), from the moment the
