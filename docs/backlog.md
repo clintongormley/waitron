@@ -3090,10 +3090,11 @@ The original walkthrough is retained under *Detail → Setup wizard*.
         new sentence, `cancel_credit.unconfirmed_counter`). The dialog shows this first, and then the
         till reads the waiting list again.
       - **Done by A232: cancelling a counter order clears its open basket.** After a successful
-        cancel, the till empties the basket only when it holds that order and returns its pay
-        controls to the order stage before refreshing the lists. A basket for another order stays
-        intact. The Chromium cases in `apps/till/src/till-app-counter-cancel-credit.test.ts`
-        cover both outcomes; the matching-order case holds the next kitchen-queue read open.
+        cancel, the till empties the basket when it holds that order, returns its pay controls to
+        the order stage, and drops a Pay read already loading that order. A basket or pending Pay
+        read for another order stays intact. The Chromium cases in
+        `apps/till/src/till-app-counter-cancel-credit.test.ts` cover those outcomes, including a
+        kitchen-queue read held open after the cancel.
       - **Two defects in other counter paths, found by reading the code, not reproduced; out of
         B34's scope and not fixed here.** Both are in `apps/till/src/till-app.ts`. First, after a
         sale, place, collect or hand-over at the counter, the till reads one to three lists one
