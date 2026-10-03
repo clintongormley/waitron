@@ -187,10 +187,10 @@ Track C.
   PF3b (#1009); a station's ticket shows the rest of the order, and dishes made at the till, slice
   3c-1 (#1013).
 - Sales classification, Tasks 1–3 (#645, #648, #738); the category report at time of sale
-  ignores catalogue edits (lane A's W10). The menus plan, Tasks 1–9 (#651, #654, #659, #664,
-  #670, #680, #677, #683, #696, #710, #719, #722, #729), with M6c (#705), M7b2 (#702), M7b3 (#713,
-  since retired) and M7v (#720); a line keeps its frozen VAT class and the rate is looked up by the
-  day of issue, A68 (#726).
+  ignores catalogue edits (lane A's W10, #1110). The menus plan, Tasks 1–9 (#651, #654, #659,
+  #664, #670, #680, #677, #683, #696, #710, #719, #722, #729), with M6c (#705), M7b2 (#702), M7b3
+  (#713, since retired) and M7v (#720); a line keeps its frozen VAT class and the rate is looked up
+  by the day of issue, A68 (#726).
 - Extras and Options replaced modifiers (#412, #436, #445, #449, #452, #456, #462, #465, #469,
   #471, #476, #478, #480); variants as products (#511, #517, #528, #532, #537, #539, #545, #551,
   #556); a sale needs a zone (lane B's B4, #571).
