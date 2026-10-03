@@ -13,6 +13,7 @@ export { archiveTo } from "./archive.js";
 export type { CommitListener } from "./connections.js";
 export { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
 export type { NodeSqliteDatabase, RawResult } from "./node-sqlite-adapter.js";
+export { openLock } from "./migration-lock.js";
 export { isLocked, lockVenueDirectory, VENUE_LOCK_FILE, VenueInUseError } from "./venue-lock.js";
 export type { VenueLock } from "./venue-lock.js";
 export {

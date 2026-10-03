@@ -1,10 +1,9 @@
 import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { openVenueDatabase, removeChangeFeed, runMigrations, type Database } from "@waitron/db";
 import { AppError, sqliteFailureOf } from "@waitron/shared";
-import { installAppendOnlyTriggers } from "@waitron/store";
+import { installAppendOnlyTriggers, openLock } from "@waitron/store";
 import type { VenueMigrationOptions } from "./manifest.js";
 import { appliedSchemaVersion } from "./schema-version.js";
 import "./errors.js";
@@ -48,15 +47,12 @@ export async function applyMigrations(
   // Before the venue file is opened, not after: the store's open takes `venue.lock`, which refuses a
   // second process at once instead of making it wait.
   await mkdir(directory, { recursive: true });
-  const lock = new DatabaseSync(join(directory, LOCK_FILE));
+  const lock = openLock(join(directory, LOCK_FILE), LOCK_WAIT_MS);
   try {
-    // The timeout is set FIRST, because a statement issued before it has none and fails at once.
-    lock.exec(`pragma busy_timeout = ${LOCK_WAIT_MS}`);
-    lock.exec("begin immediate");
     await migrateEverySet(directory, options);
   } finally {
     // No commit: nothing was written, and closing releases the lock.
-    lock.close();
+    lock.release();
   }
 }
 

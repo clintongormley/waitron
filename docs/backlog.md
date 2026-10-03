@@ -6586,12 +6586,14 @@ package cannot import an app — is true and skips the third option: `@waitron/d
 input. This decides whether a box files against the real AEAT or the test one (`CLAUDE.md` §5), so
 two copies held together by hand is the wrong shape for it.
 
-**`packages/migrations` opens its own raw `node:sqlite` connection — OPEN (found 2026-09-23, task
-F1's review wave).** `apply.ts` imports `DatabaseSync` directly and re-does `openConnection`'s
-"busy_timeout first" discipline by hand. It is the only non-test file outside `packages/store` that
-names the engine, which is the thing `packages/store` exists to prevent — the same argument
-`columns.ts` makes for column types. The lock file does need a connection the store does not offer
-today, so the fix is a small `openLock(path)` export, not a restructure. Nothing guards this.
+**`packages/migrations` opened its own raw `node:sqlite` connection — DONE (W45).** `apply.ts`
+now takes its `migrations.lock` through `@waitron/store`'s `openLock(path, waitMs)`, which sets the
+busy timeout before trying the lock. `apply.concurrency.test.ts` checks the two-process migration
+order and `packages/store/src/migration-lock.test.ts` checks refusal and release. The earlier claim
+that this was the only non-test raw engine import outside `packages/store` was too broad: a 2026-10-03
+search of non-test files under `apps/` and `packages/` also found `apps/server/src/recovery-lock.ts` and
+`apps/server/scripts/cloud-backup-fixture.ts`. Their uses are outside W45's scope. **Next action:**
+review each remaining raw connection separately before deciding whether a shared store API fits.
 
 **Files that still spell the store's file names themselves (left by #757, which exported them
 from `@waitron/store`).** Outside test files and `bench/`: `apps/server/src/cloud-snapshot-archive.ts`
