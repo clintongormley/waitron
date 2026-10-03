@@ -2915,11 +2915,6 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     through each, with ids made to sort against the writing order, and add the `rowid` tie-break
     wherever the order can come back different (as A123 and A136 did elsewhere).
   - **Task 15 (#956, several payments on the till).** Open:
-    - **The generic "received more than the bill" text also answers a comp or discount.** The
-      till's `bill.received_exceeds_total` text (`apps/till/src/i18n/codes.ts`, "Move fewer items,
-      or refund the difference first") is what the adjustment dialog shows when a comp or discount
-      is refused for that code, where nothing is being moved. No assertion pins its wording.
-      **Next action:** word it so it also fits a comp or discount.
     - **Owner call on wording:** the table's button is labelled with the whole sentence "Part of
       this bill is already paid: take the rest as a bill payment", while the counter's says "Take
       the rest". Left as it is.
