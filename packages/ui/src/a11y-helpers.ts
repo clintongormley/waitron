@@ -32,13 +32,40 @@ export function formatViolations(violations: axe.Result[]): string {
     .join("\n\n");
 }
 
+// The reasons in axe's colour-contrast messages (`locales/_template.json`) counted as being about
+// the colours themselves. axe 4.13.0 never sets `fgAlpha`.
+const UNDECIDED_COLOUR_READINGS = new Set(["equalRatio", "fgAlpha", "colorParse"]);
+
+function undecidedColourReadings(incomplete: axe.Result[]): string[] {
+  return incomplete
+    .filter((result) => result.id === "color-contrast")
+    .flatMap((result) =>
+      result.nodes.flatMap((node) =>
+        node.any
+          .filter((check) =>
+            UNDECIDED_COLOUR_READINGS.has(
+              (check.data as { messageKey?: string } | null)?.messageKey ?? "",
+            ),
+          )
+          .map(
+            (check) =>
+              `${result.id} [undecided]: ${check.message}\n  targets: ${node.target.join(" ")}`,
+          ),
+      ),
+    );
+}
+
 /**
  * Runs axe's full default ruleset. Pass the themed `host` rather than the component, so axe also sees
  * the theme root's attributes. Excluding a rule is a decision for the call site, never this helper.
+ * Fails on any violation, and on a colour-contrast check axe left undecided for a reason about the
+ * colours themselves (`equalRatio`, `fgAlpha`, `colorParse`).
  */
 export async function expectNoA11yViolations(context: Element): Promise<void> {
   const results = await axe.run(context);
   expect(results.violations, formatViolations(results.violations)).toEqual([]);
+  const colourReadings = undecidedColourReadings(results.incomplete);
+  expect(colourReadings, colourReadings.join("\n\n")).toEqual([]);
 }
 
 /**

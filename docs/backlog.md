@@ -1387,14 +1387,31 @@ row is named by its label (`aria-labelledby`) and the description is its `aria-d
 long description wraps inside the list rather than widening it. A refusal of `ordering` shows
 under the field as the other dropdowns' do, and the field is disabled while the product saves or
 another of the editor's windows is open, as the radio buttons were.
-**Open, raised while reviewing #1070:** `expectNoA11yViolations` (`packages/ui/src/a11y-helpers.ts`)
-fails only on axe's `violations` list, never its `incomplete` one. On the #1070 branch the
-review set the description's text to exactly the background colour; axe filed it under
-`incomplete` and every a11y test still passed (finish-branch's receipt, 2026-10-03; not re-run
-since). So `docs/developers/design-system.md`'s "zero contrast violations" statement is weaker than
-it reads: a colour axe cannot judge is not checked. Next step: decide whether the helper should
-also fail on `incomplete` contrast results (and measure how many current suites that reddens), or
-narrow the design-system sentence to say so.
+**Raised while reviewing #1070, settled by A226 (below):** `expectNoA11yViolations` failed only on
+axe's `violations` list, so text set to exactly its background colour, which axe files under
+`incomplete`, passed every a11y test.
+
+**The accessibility checks fail when axe cannot confirm a colour contrast because of the colours
+themselves (A226, owner 2026-10-03) — DONE (branch `fix/a11y-incomplete-contrast`).** All five copies
+of `expectNoA11yViolations` (`packages/ui/src/a11y-helpers.ts`, `packages/ui-core/src/a11y-helpers.ts`,
+and `src/widgets/test-helpers.ts` in `apps/dashboard`, `apps/setup` and `apps/till`) now also fail on a
+`color-contrast` result axe 4.13.0 left undecided with the reason `equalRatio`, `fgAlpha` or
+`colorParse` — the three of its reasons that are about the colours themselves (4.13.0 never sets
+`fgAlpha`; it is only in axe's message table). Measured on main
+e0911d714 before deciding: failing on EVERY undecided contrast result would have turned 658 passing
+tests in 84 files red, with 2,555 undecided readings (`bgOverlap` 1,804, `nonBmp` 314,
+`shortTextContent` 198, `elmPartiallyObscured` 128, `elmPartiallyObscuring` 111) and none of the three
+colour reasons; the owner chose to fail on the colour reasons only. Each helper's tests (new files
+`test-helpers.a11y.test.ts` in the three apps) show: text the same colour as its background is
+undecided (`equalRatio`, no violation) and now fails, in both themes; readable text passes; an
+empty `wt-input`, which axe leaves undecided with `bgOverlap`, still passes; and `fgAlpha` and
+`colorParse`, fed through a stubbed `axe.run`, fail — stubbed because axe 4.13.0 never sets
+`fgAlpha`, and none of the colour syntax tried in Chromium produced `colorParse`. Every test file
+calling the helper passed with this helper code (2026-10-03, run per file in each package that
+calls it).
+**Still not checked:** contrast that axe leaves undecided for any other reason — among them an
+overlapping element (such as an empty `wt-input`), a background image or gradient, content too
+short or not text — passes, so contrast in those places is checked by nobody.
 
 **A folded section says what is missing, not only what is filled in (A211) — OPEN.** The owner:
 _"we should show the missing values under kitchen and descriptors and nutritional info when
