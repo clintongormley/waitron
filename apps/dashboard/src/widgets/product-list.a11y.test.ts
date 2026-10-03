@@ -184,6 +184,21 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  it("renders accessibly with a product's variants opened on their band", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      { products },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="p4"] .tree-toggle')!.click();
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelector('tr[data-row-key="p4:v1"].joined')).not.toBeNull();
+    expect(table.shadowRoot!.querySelector('[data-test="variant-count"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders accessibly with a removed variant shown under its Active product", async () => {
     const { el, host } = await mountWidget<ProductList>(
       "dashboard-product-list",

@@ -105,11 +105,14 @@ You cannot add or restore an Active variant on a product that an extras list off
 product with Active variants cannot be an extra. The save is refused, and the dashboard names the
 extras lists to take the product off first.
 
-The products list shows each variant under its product, with its own name, the price it sells at,
-and its main category (its own, or the product's when it has none). If a
-variant's VAT differs from its product's, the list notes it under the variant's price. A variant's
-row menu offers **Remove** or **Restore** there too, and an Inactive variant is listed once you
-change the **Status** filter from **Active**.
+The products list keeps each product's variants folded away under it. A product with Active
+variants says how many under its name, such as **2 variants**, and the small arrow just before
+its drag handle opens them.
+Each variant's row shows its own name, the price it sells at, its status and its
+row menu, plus its main category when that differs from its product's. If a variant's VAT differs
+from its product's, the list notes it under the variant's price. A variant's row menu offers
+**Remove** or **Restore** there too, and an Inactive variant is listed once you change the
+**Status** filter from **Active**.
 
 A variant follows its product onto every menu the product is on, including a variant you add later.
 On the menu you can give it a price of its own, switch it off, or let it follow the menus it comes
