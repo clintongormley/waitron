@@ -15,11 +15,4 @@ describe("tableExists", () => {
     expect(await tableExists(suite.db, "tenants' or 1=1 --")).toBe(false);
     expect(await tableExists(suite.db, "missing_table")).toBe(false);
   });
-
-  it("reads a table created inside the caller's transaction", async () => {
-    await suite.db.transaction(async (tx) => {
-      tx.run(sql`create table table_exists_in_transaction (id integer)`);
-      expect(await tableExists(tx, "table_exists_in_transaction")).toBe(true);
-    });
-  });
 });

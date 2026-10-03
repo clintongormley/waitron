@@ -5963,8 +5963,12 @@ decision, not a cleanup. **Next action:** decide whether a read-only body should
 all.
 
 **Three copies of one SQL identifier validator and two cause-chain walkers — OPEN (found
-2026-09-23, task F1's review wave).** W8 replaced the hand-rolled table-existence probes with
-`@waitron/db`'s `tableExists`. The identifier validator is in
+2026-09-23, task F1's review wave).** W8 replaced the probes in
+`packages/db/src/deployment.ts`, `packages/db/src/node-membership.ts`,
+`packages/db/src/mirror-config.ts`, `packages/migrations/src/schema-version.ts`,
+`packages/migrations/src/journal-hashes.ts` and `packages/catalogue/src/categories.ts` with
+`@waitron/db`'s `tableExists`. `apps/server/src/restore-stream.ts` still has a one-table probe;
+`apps/server/scripts/dev-setup.ts` checks two table names in one query. The identifier validator is in
 `packages/db/src/testing/identifiers.ts`, `packages/db/src/change-feed.ts` and
 `packages/store/src/append-only.ts` — the first two are in the SAME package. The cause-chain walk is
 in `packages/shared/src/engine-failure.ts` and again in `packages/db/src/constraint-target.ts`, and

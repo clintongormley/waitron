@@ -56,6 +56,7 @@ export async function appliedSchemaVersion(
     throw new AppError("migrations.invalid_table", { table: set.table });
   }
   if (!(await tableExists(db, set.table))) return 0;
+  // SQL cannot bind an identifier; the guard above confines this one to [a-z_].
   const result = await db.execute<{ n: number }>(
     sql.raw(`select cast(count(*) as int) as n from "${set.table}"`),
   );

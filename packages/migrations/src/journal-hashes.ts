@@ -49,6 +49,7 @@ export async function journalHashes(
     throw new AppError("migrations.invalid_table", { table: set.table });
   }
   if (!(await tableExists(db, set.table))) return null;
+  // SQL cannot bind an identifier; the guard above confines this one to [a-z_].
   const result = await db.execute<{ hash: string }>(sql.raw(`select "hash" from "${set.table}"`));
   return result.rows.map((row) => row.hash);
 }
