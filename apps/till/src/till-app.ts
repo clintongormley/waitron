@@ -6014,14 +6014,10 @@ export class TillApp extends LitElement {
     }
   }
 
-  /**
-   * Not permitted, with no approver's PIN sent, opens the approvers' PIN prompt; a refusal of the
-   * PIN shows there. Any other refusal stays in the dialog, after the party's bills are read again
-   * unless the operator has left the party; a bill that then reads abandoned after a refusal
-   * {@link CANCEL_MAY_HAVE_LANDED} names is shown cancelled. A counter order's refusal shows first and
-   * its waiting list is read after it; the list never shows the order cancelled, as an order gone
-   * from it may have been paid.
-   */
+  /** A permission refusal opens the approver prompt, and approver refusals stay there. Other refusals
+   * show before the bills or waiting list refresh. A bill that then reads abandoned after a refusal
+   * {@link CANCEL_MAY_HAVE_LANDED} names is shown cancelled. A counter order missing from its waiting
+   * list cannot establish that its cancel succeeded. */
   async #onCancelCreditRefused(
     open: CancelCrediting,
     error: unknown,
