@@ -6,6 +6,7 @@ import {
   roleHasPermission,
   verifyThrottledCredential,
   type PinAttempts,
+  type SecretCheck,
 } from "@waitron/identity";
 import type { Override } from "@waitron/identity";
 import {
@@ -38,6 +39,7 @@ import {
 } from "./bill-payments.js";
 import type { Attestation, BillBalance, BillRefundView } from "./bill-payments.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
+import { checkOverrideAhead, withCheck } from "./pin-check-ahead.js";
 import { enqueueBillRefundDrawer } from "./receipt-print.js";
 import type { TillConfig } from "./till-config.js";
 import { fingerprint } from "./parties.js";
@@ -458,6 +460,38 @@ export async function attestCardRefund(
 }
 
 /**
+ * The override's PIN checked before the refund's transaction opens, when that transaction will check
+ * it: `authorize` does for an operator lacking `sale.refund`, and a hand-keyed card refund confirmed
+ * done checks it as the confirmer otherwise. Read without writing; the transaction decides again.
+ */
+async function checkRefundPinAhead(
+  db: Database,
+  workingOrderId: string,
+  paymentId: string,
+  req: BillRefundRequest,
+  operator: { sessionId: string; attempts: PinAttempts },
+): Promise<SecretCheck | undefined> {
+  if (req.override === undefined) return undefined;
+  let confirmsHandKeyedCard = false;
+  if (req.manualConfirmed === true) {
+    const [payment] = await db
+      .select({ method: billPayments.method })
+      .from(billPayments)
+      .where(and(eq(billPayments.id, paymentId), eq(billPayments.workingOrderId, workingOrderId)));
+    confirmsHandKeyedCard =
+      payment?.method === "card" &&
+      (await findPaymentByBillPayment(db, paymentId))?.provider === MANUAL_PROVIDER;
+  }
+  return checkOverrideAhead(
+    db,
+    { sessionId: operator.sessionId, permission: "sale.refund" },
+    req.override,
+    operator.attempts,
+    confirmsHandKeyedCard,
+  );
+}
+
+/**
  * Give money back from one bill payment of an open bill, needing `sale.refund` from the operator or
  * the override. A payment gives back up to its net applied money; its tip comes back only with the
  * whole of what is left of it; an item payment only whole, which frees its lines.
@@ -480,12 +514,16 @@ export async function refundBillPayment(
 ): Promise<BillRefundResult> {
   const applied = money(decimal(req.appliedAmount));
   const tip = money(decimal(req.tipAmount));
+  const override = withCheck(
+    req.override,
+    await checkRefundPinAhead(deps.db, workingOrderId, paymentId, req, operator),
+  );
   let release = (): void => {};
   try {
     const begun = await withTransaction(deps.db, async (tx) => {
       const authorization = await authorize(
         tx,
-        { sessionId: operator.sessionId, permission: "sale.refund", override: req.override },
+        { sessionId: operator.sessionId, permission: "sale.refund", override },
         operator.attempts,
       );
       const [payment] = await tx
@@ -575,19 +613,20 @@ export async function refundBillPayment(
       if (provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true) {
         let confirmedBy = authorization.authorizedBy;
         if (!authorization.viaOverride) {
-          if (req.override === undefined) {
+          if (override === undefined) {
             throw new AppError("bill.manual_refund_pin_required", { paymentId });
           }
           const confirmer = await verifyThrottledCredential(
             tx,
-            req.override.personId,
-            req.override.pin,
+            override.personId,
+            override.pin,
             operator.attempts,
+            override.checked,
           );
           if (!roleHasPermission(confirmer.role, "sale.refund")) {
             throw new AppError("authorization.not_permitted", { permission: "sale.refund" });
           }
-          confirmedBy = req.override.personId;
+          confirmedBy = override.personId;
         }
         const [refund] = await tx
           .insert(billPaymentRefunds)

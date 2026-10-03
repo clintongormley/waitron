@@ -31,13 +31,15 @@ export async function checkPinAhead(
 
 /**
  * {@link checkPinAhead} on an override `authorize` will check: one sent by a session whose operator
- * lacks `permission`. Undefined otherwise, deriving nothing.
+ * lacks `permission`, or, with `checkedAnyway`, by any open session (the caller checks the same PIN
+ * itself when `authorize` does not). Undefined otherwise, deriving nothing.
  */
 export async function checkOverrideAhead(
   db: Database,
   authz: { sessionId: string; permission: Permission },
   override: { personId: string; pin: string } | undefined,
   attempts: PinAttempts,
+  checkedAnyway = false,
 ): Promise<SecretCheck | undefined> {
   if (override === undefined) return undefined;
   const [operator] = await db
@@ -47,7 +49,7 @@ export async function checkOverrideAhead(
     .where(and(eq(sessions.id, authz.sessionId), isNull(sessions.endedAt)));
   if (
     operator === undefined ||
-    roleHasPermission(operator.role as PersonRoleValue, authz.permission)
+    (!checkedAnyway && roleHasPermission(operator.role as PersonRoleValue, authz.permission))
   ) {
     return undefined;
   }

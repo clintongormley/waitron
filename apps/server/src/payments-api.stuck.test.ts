@@ -1,10 +1,11 @@
+import { AsyncResource } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPayments, withTransaction, workingOrders } from "@waitron/db";
+import { billPayments, withTransaction, workingOrders, type Database } from "@waitron/db";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -63,6 +64,97 @@ import { payWorkingOrderIntegrated } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+
+// Each key derivation of the watched PIN runs the next `during` action (another writer, or a change
+// to a person) and holds its key back until that action has committed or a second has passed. A
+// derivation outside the write lock lets the action commit first ("writer", "derived"); inside it,
+// the action waits for the lock and "derived" comes first. A derivation of the watched PIN made
+// while one of the request's own transactions holds the lock is also recorded, so a second
+// derivation inside the transaction is seen even after an early one.
+const derivations = vi.hoisted(() => ({
+  pin: null as string | null,
+  during: [] as (() => Promise<unknown>)[],
+  /** Runs an action in the test's own async context, not the route's: a writer inside the route's
+   * context would read as the route asking again for a lock it holds. */
+  start: (action: () => Promise<unknown>) => action(),
+  order: [] as string[],
+  writes: [] as Promise<unknown>[],
+  requestHoldsLock: 0,
+  stopWatchingLock: () => {},
+}));
+
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  type Done = (error: Error | null, key: Buffer) => void;
+  return {
+    ...actual,
+    scrypt: (secret: string, salt: Buffer, keyLength: number, done: Done) => {
+      const watched = secret === derivations.pin;
+      if (watched && derivations.requestHoldsLock > 0) {
+        derivations.order.push("derived under the request's lock");
+      }
+      const during = watched ? derivations.during.shift() : undefined;
+      if (during === undefined) {
+        actual.scrypt(secret, salt, keyLength, done);
+        return;
+      }
+      const write = derivations.start(during).then(
+        () => derivations.order.push("writer"),
+        (error: unknown) => derivations.order.push(`writer failed: ${String(error)}`),
+      );
+      derivations.writes.push(write);
+      actual.scrypt(secret, salt, keyLength, (error, key) => {
+        const waited = new Promise((resolve) => setTimeout(resolve, 1_000));
+        void Promise.race([write, waited]).then(() => {
+          derivations.order.push("derived");
+          done(error, key);
+        });
+      });
+    },
+  };
+});
+
+function watchDerivations(db: Database, pin: string, ...during: (() => Promise<unknown>)[]): void {
+  derivations.pin = pin;
+  derivations.during = during;
+  const scope = new AsyncResource("watched derivation");
+  let starting = false;
+  derivations.start = (action) => {
+    starting = true;
+    try {
+      return scope.runInAsyncScope(action);
+    } finally {
+      starting = false;
+    }
+  };
+  const original = db.withWriteLock;
+  const spy = vi.spyOn(db, "withWriteLock").mockImplementation((body) =>
+    starting
+      ? original(body)
+      : original(async () => {
+          derivations.requestHoldsLock += 1;
+          try {
+            return await body();
+          } finally {
+            derivations.requestHoldsLock -= 1;
+          }
+        }),
+  );
+  derivations.stopWatchingLock = () => spy.mockRestore();
+}
+
+/** What the watched derivations recorded, once every action they started has finished. */
+async function watchedOrder(): Promise<string[]> {
+  await Promise.all(derivations.writes);
+  derivations.stopWatchingLock();
+  const order = derivations.order;
+  derivations.pin = null;
+  derivations.during = [];
+  derivations.order = [];
+  derivations.writes = [];
+  derivations.stopWatchingLock = () => {};
+  return order;
+}
 
 /**
  * The manager's way out of a card payment a crash left `attempting`: the stuck list and the
@@ -1569,5 +1661,121 @@ describe("POST /management-api/payments/bill-payments/:id/attest", () => {
       params: { paymentId: id },
     });
     expect((await billPaymentOf(id)).state).toBe("failed");
+  });
+});
+
+describe("the bill payment attestation checks the manager's PIN before the write lock is taken", () => {
+  const NOTE = "SumUp dashboard shows transaction TX-1 successful";
+
+  afterEach(async () => {
+    await watchedOrder();
+  });
+
+  const anotherWriter = () => withTransaction(suite.db, (tx) => tx.execute(sql`select 1`));
+
+  async function strandedBillPayment(v: Venue): Promise<string> {
+    return strandBillPayment(v, await openOrder(v), { kind: "failed" });
+  }
+
+  it("records the outcome while another writer commits during the PIN check", async () => {
+    const v = await setup();
+    const id = await strandedBillPayment(v);
+    watchDerivations(suite.db, "1234", anotherWriter, anotherWriter, anotherWriter);
+
+    const res = await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: "1234" });
+
+    expect(res.status).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(await billPaymentOf(id)).toEqual({
+      state: "failed",
+      attestedBy: v.managerId,
+      attestationNote: NOTE,
+    });
+  });
+
+  it("refuses the outcome when the manager's PIN changes while its key is being derived", async () => {
+    const v = await setup();
+    const id = await strandedBillPayment(v);
+    watchDerivations(suite.db, "1234", () =>
+      withTransaction(suite.db, (tx) =>
+        tx
+          .update(persons)
+          .set({ pinHash: hashPin("4321") })
+          .where(eq(persons.id, v.managerId)),
+      ),
+    );
+
+    const res = await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: "1234" });
+
+    // The row changed after the early check, so the transaction derives the key again.
+    expect(await watchedOrder()).toEqual(["writer", "derived", "derived under the request's lock"]);
+    expect(res.status).toBe(401);
+    expect(await errorOf(res)).toEqual({ code: "pin.invalid", params: {} });
+    expect(await billPaymentOf(id)).toEqual({
+      state: "pending",
+      attestedBy: null,
+      attestationNote: null,
+    });
+  });
+
+  it("derives no key for a session without payments.manage", async () => {
+    const v = await setup();
+    const id = await strandedBillPayment(v);
+    watchDerivations(suite.db, "1234", anotherWriter);
+
+    const res = await post(
+      v,
+      attestPath(id),
+      { outcome: "failed", note: NOTE, pin: "1234" },
+      v.staffCookie,
+    );
+
+    expect(res.status).toBe(403);
+    expect(await watchedOrder()).toEqual([]);
+  });
+
+  it("derives no key for a PIN that is not text", async () => {
+    const v = await setup();
+    const id = await strandedBillPayment(v);
+    watchDerivations(suite.db, "1234", anotherWriter);
+
+    const res = await post(v, attestPath(id), { outcome: "failed", note: NOTE, pin: 1234 });
+
+    expect(res.status).toBe(401);
+    expect(await errorOf(res)).toEqual({ code: "pin.invalid", params: {} });
+    expect(await watchedOrder()).toEqual([]);
+  });
+
+  it("derives no key once the wrong-PIN limit refuses", async () => {
+    const v = await setup();
+    const id = await strandedBillPayment(v);
+    const wrong = { outcome: "failed", note: NOTE, pin: "9999" };
+    for (let i = 0; i <= PIN_THROTTLE_FREE_ATTEMPTS; i += 1) {
+      expect((await post(v, attestPath(id), wrong)).status).toBe(401);
+    }
+    watchDerivations(suite.db, "1234", anotherWriter);
+
+    const res = await post(v, attestPath(id), { ...wrong, pin: "1234" });
+
+    expect(res.status).toBe(429);
+    expect(await watchedOrder()).toEqual([]);
+  });
+
+  it("counts wrong PINs sent at once as it counts them sent in turn", async () => {
+    const v = await setup();
+    const id = await strandedBillPayment(v);
+    const wrong = { outcome: "failed", note: NOTE, pin: "9999" };
+
+    const answers = await Promise.all(
+      Array.from({ length: PIN_THROTTLE_FREE_ATTEMPTS + 2 }, () => post(v, attestPath(id), wrong)),
+    );
+    const right = await post(v, attestPath(id), { ...wrong, pin: "1234" });
+
+    expect(answers.map((res) => res.status).sort()).toEqual([
+      ...Array.from({ length: PIN_THROTTLE_FREE_ATTEMPTS + 1 }, () => 401),
+      429,
+    ]);
+    expect(right.status).toBe(429);
+    expect((await billPaymentOf(id)).state).toBe("pending");
   });
 });

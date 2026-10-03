@@ -1,7 +1,8 @@
+import { AsyncResource } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -20,7 +21,7 @@ import {
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -57,6 +58,97 @@ import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { cancelBody } from "./testing/cancel-line.js";
+
+// Each key derivation of the watched PIN runs the next `during` action (another writer, or a change
+// to a person) and holds its key back until that action has committed or a second has passed. A
+// derivation outside the write lock lets the action commit first ("writer", "derived"); inside it,
+// the action waits for the lock and "derived" comes first. A derivation of the watched PIN made
+// while one of the request's own transactions holds the lock is also recorded, so a second
+// derivation inside the transaction is seen even after an early one.
+const derivations = vi.hoisted(() => ({
+  pin: null as string | null,
+  during: [] as (() => Promise<unknown>)[],
+  /** Runs an action in the test's own async context, not the route's: a writer inside the route's
+   * context would read as the route asking again for a lock it holds. */
+  start: (action: () => Promise<unknown>) => action(),
+  order: [] as string[],
+  writes: [] as Promise<unknown>[],
+  requestHoldsLock: 0,
+  stopWatchingLock: () => {},
+}));
+
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  type Done = (error: Error | null, key: Buffer) => void;
+  return {
+    ...actual,
+    scrypt: (secret: string, salt: Buffer, keyLength: number, done: Done) => {
+      const watched = secret === derivations.pin;
+      if (watched && derivations.requestHoldsLock > 0) {
+        derivations.order.push("derived under the request's lock");
+      }
+      const during = watched ? derivations.during.shift() : undefined;
+      if (during === undefined) {
+        actual.scrypt(secret, salt, keyLength, done);
+        return;
+      }
+      const write = derivations.start(during).then(
+        () => derivations.order.push("writer"),
+        (error: unknown) => derivations.order.push(`writer failed: ${String(error)}`),
+      );
+      derivations.writes.push(write);
+      actual.scrypt(secret, salt, keyLength, (error, key) => {
+        const waited = new Promise((resolve) => setTimeout(resolve, 1_000));
+        void Promise.race([write, waited]).then(() => {
+          derivations.order.push("derived");
+          done(error, key);
+        });
+      });
+    },
+  };
+});
+
+function watchDerivations(db: Database, pin: string, ...during: (() => Promise<unknown>)[]): void {
+  derivations.pin = pin;
+  derivations.during = during;
+  const scope = new AsyncResource("watched derivation");
+  let starting = false;
+  derivations.start = (action) => {
+    starting = true;
+    try {
+      return scope.runInAsyncScope(action);
+    } finally {
+      starting = false;
+    }
+  };
+  const original = db.withWriteLock;
+  const spy = vi.spyOn(db, "withWriteLock").mockImplementation((body) =>
+    starting
+      ? original(body)
+      : original(async () => {
+          derivations.requestHoldsLock += 1;
+          try {
+            return await body();
+          } finally {
+            derivations.requestHoldsLock -= 1;
+          }
+        }),
+  );
+  derivations.stopWatchingLock = () => spy.mockRestore();
+}
+
+/** What the watched derivations recorded, once every action they started has finished. */
+async function watchedOrder(): Promise<string[]> {
+  await Promise.all(derivations.writes);
+  derivations.stopWatchingLock();
+  const order = derivations.order;
+  derivations.pin = null;
+  derivations.during = [];
+  derivations.order = [];
+  derivations.writes = [];
+  derivations.stopWatchingLock = () => {};
+  return order;
+}
 
 // The bill payment routes (bill payments design §8 tests 2, 4, 5, 6, 7, 8, 9, 11, 14 and 15, and plan
 // D8), driven over HTTP against a provisioned venue that files real Veri*Factu records. Each case
@@ -3108,5 +3200,228 @@ describe("a till switched off from opening the drawer it prints to", () => {
     expect(await refundRows(paymentId)).toMatchObject([{ state: "completed" }]);
     expect(await refundDrawerOpens(paymentId)).toEqual([]);
     expect(drawerJobCount()).toBe(before);
+  });
+});
+
+describe("a refund's supervisor PIN is checked before the write lock is taken", () => {
+  afterEach(async () => {
+    await watchedOrder();
+  });
+
+  const anotherWriter = () => withTransaction(suite.db, (tx) => tx.execute(sql`select 1`));
+  const byAdmin = (pin: string) => ({ override: { personId: venue.adminId, pin } });
+  const ask = { appliedAmount: "1.00", tipAmount: "0.00" };
+
+  /** The till routes with a wrong-PIN limit of their own, on a clock that does not move. */
+  function refundsWithOwnLimit() {
+    const app = new Hono();
+    mountTillApi(
+      app,
+      {
+        db: suite.db,
+        backend,
+        clock,
+        cfg: venue.cfg,
+        secureCookies: false,
+        venueLocale: LOCALE,
+        cardProvider: new SimulatorPaymentProvider(suite.db),
+        pinThrottle: createPinThrottle({ now: () => 1_000_000 }),
+      },
+      quiet,
+    );
+    return async (billId: string, paymentId: string, body: RefundBody, cookie = venue.cookie) => {
+      const res = await app.request(`/api/working-orders/${billId}/payments/${paymentId}/refunds`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ submissionId: randomUUID(), reason: "El cliente lo pide", ...body }),
+      });
+      const json = (await res.json()) as Record<string, unknown>;
+      return { status: res.status, json: (json.error as Record<string, unknown>) ?? json };
+    };
+  }
+
+  /** The admin, who holds `sale.refund`, signed in on the staff session's till and device. */
+  async function adminCookie(): Promise<string> {
+    const adminSession = await inTx((tx) =>
+      loginWithPin(tx, { tillId: venue.cfg.tillId, personId: venue.adminId, pin: "1234" }),
+    );
+    const deviceCookie = venue.cookie
+      .split("; ")
+      .find((part) => part.startsWith(`${DEVICE_COOKIE}=`));
+    return `${SESSION_COOKIE}=${adminSession.token}; ${deviceCookie}`;
+  }
+
+  /** A bill paid €40.00 by a card keyed into a terminal Waitron does not talk to. */
+  async function handKeyedCard(): Promise<{ billId: string; paymentId: string }> {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(
+      await pay(billId, {
+        kind: "contribution",
+        amount: "40.00",
+        method: "card",
+        entry: "manual",
+        applied: "40.00",
+        tip: "0.00",
+      }),
+    );
+    return { billId, paymentId };
+  }
+
+  function setAdmin(values: { status?: "active" | "suspended"; pin?: string }) {
+    return withTransaction(suite.db, (tx) =>
+      tx
+        .update(persons)
+        .set({
+          ...(values.status === undefined ? {} : { status: values.status }),
+          ...(values.pin === undefined ? {} : { pinHash: hashPin(values.pin) }),
+        })
+        .where(eq(persons.id, venue.adminId)),
+    );
+  }
+
+  it("refunds on a supervisor's override while another writer commits during the PIN check", async () => {
+    const refundOn = refundsWithOwnLimit();
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    watchDerivations(suite.db, "1234", anotherWriter, anotherWriter, anotherWriter);
+
+    const res = await refundOn(billId, paymentId, { ...ask, ...byAdmin("1234") });
+
+    expect(res.status).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(await refundRows(paymentId)).toMatchObject([{ authorizedBy: venue.adminId }]);
+  });
+
+  it("confirms a hand-keyed card refund while another writer commits during the confirmer's PIN check", async () => {
+    const refundOn = refundsWithOwnLimit();
+    const { billId, paymentId } = await handKeyedCard();
+    const admin = await adminCookie();
+    watchDerivations(suite.db, "1234", anotherWriter, anotherWriter, anotherWriter);
+
+    const res = await refundOn(
+      billId,
+      paymentId,
+      { ...ask, manualConfirmed: true, ...byAdmin("1234") },
+      admin,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(await refundRows(paymentId)).toMatchObject([
+      { state: "completed", authorizedBy: venue.adminId },
+    ]);
+  });
+
+  it("refuses an override whose supervisor is suspended while the PIN's key is being derived, writing nothing", async () => {
+    const refundOn = refundsWithOwnLimit();
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    watchDerivations(suite.db, "1234", () => setAdmin({ status: "suspended" }));
+
+    try {
+      const res = await refundOn(billId, paymentId, { ...ask, ...byAdmin("1234") });
+
+      // The row changed after the early check, so the transaction derives the key again.
+      expect(await watchedOrder()).toEqual([
+        "writer",
+        "derived",
+        "derived under the request's lock",
+      ]);
+      expect(res.status).toBe(401);
+      expect(res.json).toEqual({ code: "pin.invalid", params: {} });
+      expect(await refundRows(paymentId)).toEqual([]);
+    } finally {
+      await setAdmin({ status: "active" });
+    }
+  });
+
+  it("refuses a hand-keyed card refund whose confirmer's PIN changes while its key is being derived, writing nothing", async () => {
+    const refundOn = refundsWithOwnLimit();
+    const { billId, paymentId } = await handKeyedCard();
+    const admin = await adminCookie();
+    watchDerivations(suite.db, "1234", () => setAdmin({ pin: "4321" }));
+
+    try {
+      const res = await refundOn(
+        billId,
+        paymentId,
+        { ...ask, manualConfirmed: true, ...byAdmin("1234") },
+        admin,
+      );
+
+      // The row changed after the early check, so the transaction derives the key again.
+      expect(await watchedOrder()).toEqual([
+        "writer",
+        "derived",
+        "derived under the request's lock",
+      ]);
+      expect(res.status).toBe(401);
+      expect(res.json).toEqual({ code: "pin.invalid", params: {} });
+      expect(await refundRows(paymentId)).toEqual([]);
+    } finally {
+      await setAdmin({ pin: "1234" });
+    }
+  });
+
+  it("derives no key for an override sent by an operator who may refund the payment", async () => {
+    const refundOn = refundsWithOwnLimit();
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    const admin = await adminCookie();
+    watchDerivations(suite.db, "0000", anotherWriter);
+
+    const res = await refundOn(billId, paymentId, { ...ask, ...byAdmin("0000") }, admin);
+
+    expect(res.status).toBe(200);
+    expect(await watchedOrder()).toEqual([]);
+  });
+
+  it("derives no key for a confirmation sent with a payment that was not a hand-keyed card", async () => {
+    const refundOn = refundsWithOwnLimit();
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    const admin = await adminCookie();
+    watchDerivations(suite.db, "0000", anotherWriter);
+
+    const res = await refundOn(
+      billId,
+      paymentId,
+      { ...ask, manualConfirmed: true, ...byAdmin("0000") },
+      admin,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await watchedOrder()).toEqual([]);
+  });
+
+  it("derives no key for an override the wrong-PIN limit refuses", async () => {
+    const refundOn = refundsWithOwnLimit();
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    for (let i = 0; i < 4; i += 1) {
+      expect((await refundOn(billId, paymentId, { ...ask, ...byAdmin("9999") })).status).toBe(401);
+    }
+    watchDerivations(suite.db, "1234", anotherWriter);
+
+    const res = await refundOn(billId, paymentId, { ...ask, ...byAdmin("1234") });
+
+    expect(res.status).toBe(429);
+    expect(await watchedOrder()).toEqual([]);
+    expect(await refundRows(paymentId)).toEqual([]);
+  });
+
+  it("counts wrong override PINs sent at once as it counts them sent in turn", async () => {
+    const refundOn = refundsWithOwnLimit();
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+
+    const wrong = await Promise.all(
+      Array.from({ length: 5 }, () => refundOn(billId, paymentId, { ...ask, ...byAdmin("9999") })),
+    );
+    const right = await refundOn(billId, paymentId, { ...ask, ...byAdmin("1234") });
+
+    expect(wrong.map((res) => res.status).sort()).toEqual([401, 401, 401, 401, 429]);
+    expect(right.status).toBe(429);
+    expect(await refundRows(paymentId)).toEqual([]);
   });
 });

@@ -1,12 +1,24 @@
+import { AsyncResource } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPaymentRefunds, incidents, printJobs, withTransaction } from "@waitron/db";
+import {
+  billPaymentRefunds,
+  incidents,
+  printJobs,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
-import { PIN_THROTTLE_FREE_ATTEMPTS, startManagementSession } from "@waitron/identity";
+import {
+  hashPin,
+  persons,
+  PIN_THROTTLE_FREE_ATTEMPTS,
+  startManagementSession,
+} from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
 import type { PaymentProvider, RefundAnswer, RefundLookup } from "@waitron/payments";
 import { SumUpCloudProvider } from "@waitron/payments-sumup";
@@ -40,6 +52,96 @@ import { systemClock } from "./till-backend.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import "./errors.js";
 import { cancelBody } from "./testing/cancel-line.js";
+// Each key derivation of the watched PIN runs the next `during` action (another writer, or a change
+// to a person) and holds its key back until that action has committed or a second has passed. A
+// derivation outside the write lock lets the action commit first ("writer", "derived"); inside it,
+// the action waits for the lock and "derived" comes first. A derivation of the watched PIN made
+// while one of the request's own transactions holds the lock is also recorded, so a second
+// derivation inside the transaction is seen even after an early one.
+const derivations = vi.hoisted(() => ({
+  pin: null as string | null,
+  during: [] as (() => Promise<unknown>)[],
+  /** Runs an action in the test's own async context, not the route's: a writer inside the route's
+   * context would read as the route asking again for a lock it holds. */
+  start: (action: () => Promise<unknown>) => action(),
+  order: [] as string[],
+  writes: [] as Promise<unknown>[],
+  requestHoldsLock: 0,
+  stopWatchingLock: () => {},
+}));
+
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  type Done = (error: Error | null, key: Buffer) => void;
+  return {
+    ...actual,
+    scrypt: (secret: string, salt: Buffer, keyLength: number, done: Done) => {
+      const watched = secret === derivations.pin;
+      if (watched && derivations.requestHoldsLock > 0) {
+        derivations.order.push("derived under the request's lock");
+      }
+      const during = watched ? derivations.during.shift() : undefined;
+      if (during === undefined) {
+        actual.scrypt(secret, salt, keyLength, done);
+        return;
+      }
+      const write = derivations.start(during).then(
+        () => derivations.order.push("writer"),
+        (error: unknown) => derivations.order.push(`writer failed: ${String(error)}`),
+      );
+      derivations.writes.push(write);
+      actual.scrypt(secret, salt, keyLength, (error, key) => {
+        const waited = new Promise((resolve) => setTimeout(resolve, 1_000));
+        void Promise.race([write, waited]).then(() => {
+          derivations.order.push("derived");
+          done(error, key);
+        });
+      });
+    },
+  };
+});
+
+function watchDerivations(db: Database, pin: string, ...during: (() => Promise<unknown>)[]): void {
+  derivations.pin = pin;
+  derivations.during = during;
+  const scope = new AsyncResource("watched derivation");
+  let starting = false;
+  derivations.start = (action) => {
+    starting = true;
+    try {
+      return scope.runInAsyncScope(action);
+    } finally {
+      starting = false;
+    }
+  };
+  const original = db.withWriteLock;
+  const spy = vi.spyOn(db, "withWriteLock").mockImplementation((body) =>
+    starting
+      ? original(body)
+      : original(async () => {
+          derivations.requestHoldsLock += 1;
+          try {
+            return await body();
+          } finally {
+            derivations.requestHoldsLock -= 1;
+          }
+        }),
+  );
+  derivations.stopWatchingLock = () => spy.mockRestore();
+}
+
+/** What the watched derivations recorded, once every action they started has finished. */
+async function watchedOrder(): Promise<string[]> {
+  await Promise.all(derivations.writes);
+  derivations.stopWatchingLock();
+  const order = derivations.order;
+  derivations.pin = null;
+  derivations.during = [];
+  derivations.order = [];
+  derivations.writes = [];
+  derivations.stopWatchingLock = () => {};
+  return order;
+}
 
 // A card refund of a bill payment that survives an interruption (bill payments design §6b, §8 tests
 // 17–23): the refund row is written before the provider is asked, the call is keyed to the row,
@@ -1841,5 +1943,69 @@ describe("manual confirmation on a connected card", () => {
     expect(await providerRefundsOf(card.id)).toEqual([
       { amount: 500, providerRefundRef: row.providerRefundRef },
     ]);
+  });
+});
+
+describe("the refund attestation checks the manager's PIN before the write lock is taken", () => {
+  const NOTE = "El panel de SumUp muestra la devolución 11233372107 como REFUNDED";
+
+  afterEach(async () => {
+    await watchedOrder();
+  });
+
+  const anotherWriter = () => withTransaction(venue.db, (tx) => tx.execute(sql`select 1`));
+  const attest = (refundId: string, pin: string) =>
+    send(
+      managerApp(),
+      managerCookie,
+      "POST",
+      `/management-api/payments/bill-refunds/${refundId}/attest`,
+      {
+        outcome: "failed",
+        note: NOTE,
+        pin,
+      },
+    );
+  const setAdminPin = (pin: string) =>
+    withTransaction(venue.db, (tx) =>
+      tx
+        .update(persons)
+        .set({ pinHash: hashPin(pin) })
+        .where(eq(persons.id, venue.adminId)),
+    );
+
+  it("records the outcome while another writer commits during the PIN check", async () => {
+    const { paymentId, refundId } = await pendingRefund();
+    watchDerivations(venue.db, "1234", anotherWriter, anotherWriter, anotherWriter);
+
+    const attested = await attest(refundId, "1234");
+
+    expect(attested.status).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(await onlyRefundOf(paymentId)).toMatchObject({
+      state: "failed",
+      attestedBy: venue.adminId,
+    });
+  });
+
+  it("refuses the outcome when the manager's PIN changes while its key is being derived", async () => {
+    const { paymentId, refundId } = await pendingRefund();
+    watchDerivations(venue.db, "1234", () => setAdminPin("4321"));
+
+    try {
+      const attested = await attest(refundId, "1234");
+
+      // The row changed after the early check, so the transaction derives the key again.
+      expect(await watchedOrder()).toEqual([
+        "writer",
+        "derived",
+        "derived under the request's lock",
+      ]);
+      expect(attested.status).toBe(401);
+      expect(attested.json).toEqual({ code: "pin.invalid", params: {} });
+      expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending", attestedBy: null });
+    } finally {
+      await setAdminPin("1234");
+    }
   });
 });
