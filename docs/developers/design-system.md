@@ -1272,7 +1272,7 @@ visible here because the sidebar itself sits on `--wt-color-bg`, unlike `wt-butt
 variant (see `--wt-opacity-hover` above). A `.nav-group` header takes a small-caps treatment
 (uppercase, `letter-spacing: 0.04em`) so it reads as a label, not a fainter link.
 
-A headed group (the pinned first group — Overview, Sales — has no header and is never collapsible)
+A headed group (the pinned first group — Overview alone — has no header and is never collapsible)
 is also its own disclosure toggle, except while a search term is typed (below): the header is a
 `<button>` with `aria-expanded` and `aria-controls` pointing at its item list, a `chevron-down`
 `wt-icon` that rotates 180° when expanded (pointing down at rest — "expand this way" — up when open

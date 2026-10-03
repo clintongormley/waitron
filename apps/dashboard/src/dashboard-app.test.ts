@@ -321,6 +321,7 @@ const NAV_SCREENS = [
 ] as const;
 
 const NAV_GROUP_KEYS = [
+  "nav.group.reports",
   "nav.group.menu",
   "nav.group.service",
   "nav.group.team",
@@ -1827,6 +1828,60 @@ describe("dashboard-app", () => {
     expect(currentLocale()).toBe(locale);
     const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-menu"]')!;
     expect(header.textContent!.replace(/\s+/g, " ").trim()).toBe(heading);
+  });
+
+  it.each([
+    ["es-ES", "Informes"],
+    ["en-GB", "Reporting"],
+  ])("puts the report screens under a Reporting section (%s)", async (locale, heading) => {
+    const me = {
+      ...meResponse,
+      venueLocale: locale,
+      sessionDefault: locale,
+      permissions: ["report.export", "report.view"],
+      modules: ["adjustments"],
+    };
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe: vi.fn().mockResolvedValue(me) }),
+    });
+    await flush(el);
+    const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-reports"]')!;
+    expect(header.textContent!.replace(/\s+/g, " ").trim()).toBe(heading);
+    const panel = el.shadowRoot!.querySelector("#nav-group-panel-reports")!;
+    expect(
+      [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test),
+    ).toEqual(["nav-sales", "nav-vat-return", "nav-adjustment-report", "nav-orders"]);
+  });
+
+  it("opens Orders from its URL inside an expanded Reporting section", async () => {
+    history.replaceState(null, "", "/manage/orders");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-orders-screen")).not.toBeNull();
+    expect(location.pathname).toBe("/manage/orders");
+    const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-reports"]')!;
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    expect(navItem(el, "orders")!.getAttribute("aria-current")).toBe("page");
+    expect(navItem(el, "orders")!.checkVisibility()).toBe(true);
+  });
+
+  it("keeps Overview above the Reporting section, under no heading", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const overview = navItem(el, "overview")!;
+    const reporting = el.shadowRoot!.querySelector('[data-test="nav-group-reports"]')!;
+    expect(overview.closest("#nav-group-panel-reports")).toBeNull();
+    expect(
+      overview.compareDocumentPosition(reporting) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const headers = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".nav-group")];
+    expect(
+      headers.filter((h) => h.compareDocumentPosition(overview) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toEqual([]);
   });
 
   it("collapses the current page's group when its header is clicked, and opens it on a second click", async () => {
@@ -4920,13 +4975,14 @@ describe("the nav search", () => {
     await search(el, "");
     expect(expandedHeaders(el)).toEqual([]);
     expect(shownHeaders(el)).toEqual([
+      "nav-group-reports",
       "nav-group-menu",
       "nav-group-service",
       "nav-group-team",
       "nav-group-purchasing",
       "nav-group-configuration",
     ]);
-    expect(shownItems(el)).toEqual(["nav-overview", "nav-sales", "nav-orders"]);
+    expect(shownItems(el)).toEqual(["nav-overview"]);
   });
 
   it("never offers a page the person may not open, typed with its exact label", async () => {
@@ -5001,6 +5057,20 @@ describe("the nav search", () => {
     expect(new URL(location.href).pathname).toBe("/manage/catalogue");
     expect(expandedHeaders(el)).toEqual(["nav-group-menu"]);
     expect(navItem(el, "catalogue")!.checkVisibility()).toBe(true);
+  });
+
+  it("opens Orders, chosen by a search, inside an expanded Reporting section", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    expect(expandedHeaders(el)).toEqual([]);
+
+    await search(el, "Orders");
+    await press(el, "Enter");
+
+    expect(el.shadowRoot!.querySelector("dashboard-orders-screen")).not.toBeNull();
+    expect(new URL(location.href).pathname).toBe("/manage/orders");
+    expect(expandedHeaders(el)).toEqual(["nav-group-reports"]);
+    expect(navItem(el, "orders")!.getAttribute("aria-current")).toBe("page");
+    expect(navItem(el, "orders")!.checkVisibility()).toBe(true);
   });
 
   it("does nothing on Enter when no page matches", async () => {
