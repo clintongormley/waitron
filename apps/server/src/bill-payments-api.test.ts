@@ -91,6 +91,8 @@ interface Venue {
   sessionCookie: string;
   /** The operator's session on a handheld, which never opens a cash drawer. */
   handheldCookie: string;
+  /** The operator's session on a handheld whose profile does not take cash. */
+  noCashCookie: string;
   /** The till the enrolled device rings on. */
   deviceTillId: string;
   printerId: string;
@@ -217,12 +219,16 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       .values({
         name: "Counter till",
         formFactor: "till",
-        capabilities: ["integrated-card-payment", "open-cash-drawer"],
+        capabilities: ["integrated-card-payment", "open-cash-drawer", "take-cash"],
       })
       .returning({ id: deviceProfiles.id });
     const [handheldProfile] = await tx
       .insert(deviceProfiles)
-      .values({ name: "Handheld", formFactor: "phone-portrait" })
+      .values({ name: "Handheld", formFactor: "phone-portrait", capabilities: ["take-cash"] })
+      .returning({ id: deviceProfiles.id });
+    const [noCashProfile] = await tx
+      .insert(deviceProfiles)
+      .values({ name: "Handheld without cash", formFactor: "phone-portrait" })
       .returning({ id: deviceProfiles.id });
     const printer = await createPrinter(
       tx,
@@ -240,6 +246,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       personId: person!.id,
       profileId: profile!.id,
       handheldProfileId: handheldProfile!.id,
+      noCashProfileId: noCashProfile!.id,
       printerId: printer.id,
     };
   });
@@ -254,6 +261,11 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   const handheld = await enrolDeviceForTest(db, cfg, {
     name: "Terraza",
     profileId: seeded.handheldProfileId,
+    registerId: deviceRow!.till_id,
+  });
+  const noCash = await enrolDeviceForTest(db, cfg, {
+    name: "Patio",
+    profileId: seeded.noCashProfileId,
     registerId: deviceRow!.till_id,
   });
   const [admin] = db.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
@@ -281,6 +293,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
     sessionCookie: `${SESSION_COOKIE}=${session.token}`,
     handheldCookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`,
+    noCashCookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${noCash.deviceId}.${noCash.token}`,
     deviceTillId: deviceRow!.till_id,
     printerId: seeded.printerId,
     staffId: seeded.personId,
@@ -648,6 +661,65 @@ describe("a contribution (design §8 test 2)", () => {
       tx.select().from(drawerOpens).where(eq(drawerOpens.billPaymentId, paymentId)),
     );
     expect(opens).toEqual([]);
+  });
+
+  it("refuses cash from a device whose profile does not take cash, writing nothing", async () => {
+    const billId = await bill120();
+
+    const refused = await request(
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "10.00",
+        method: "cash",
+        tendered: "10.00",
+        applied: "10.00",
+        tip: "0.00",
+      },
+      venue.noCashCookie,
+    );
+
+    expect(refused).toMatchObject({ status: 403, json: { code: "device.cash_not_allowed" } });
+    expect(await paymentRows(billId)).toEqual([]);
+  });
+
+  it("takes the whole bill by card on a device that does not take cash, after refusing its cash part", async () => {
+    const billId = await tabWith("Pulpo");
+    const ask = { kind: "contribution", tip: "0.00" } as const;
+
+    const cashPart = await request(
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        ...ask,
+        submissionId: randomUUID(),
+        amount: "5.00",
+        method: "cash",
+        tendered: "5.00",
+        applied: "5.00",
+      },
+      venue.noCashCookie,
+    );
+    expect(cashPart).toMatchObject({ status: 403, json: { code: "device.cash_not_allowed" } });
+
+    const cardPart = await request(
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        ...ask,
+        submissionId: randomUUID(),
+        amount: "20.00",
+        method: "card",
+        entry: "manual",
+        applied: "20.00",
+      },
+      venue.noCashCookie,
+    );
+    expect(cardPart.status).toBe(200);
+    expect(await paymentRows(billId)).toHaveLength(1);
+    expect(await statusOf(billId)).toBe("settled");
   });
 
   it("records a hand-keyed card with its manual payment row, linked to the bill payment", async () => {

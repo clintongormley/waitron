@@ -37,7 +37,8 @@ export type CapabilityFlag =
   | "print-receipt"
   | "show-station"
   | "show-expo"
-  | "show-schedule";
+  | "show-schedule"
+  | "take-cash";
 
 export type CardType =
   | "product-grid"

@@ -355,7 +355,7 @@ async function enrolTillCookie(cfg: TillConfig): Promise<string> {
   const n = tillDeviceCounter;
   const [profile] = await suite.db
     .insert(deviceProfiles)
-    .values({ name: `Counter till profile ${n}`, formFactor: "till" })
+    .values({ name: `Counter till profile ${n}`, formFactor: "till", capabilities: ["take-cash"] })
     .returning({ id: deviceProfiles.id });
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: `Counter till ${n}`,
@@ -373,7 +373,7 @@ async function enrolConfiguredTillCookie(cfg: TillConfig): Promise<string> {
     .values({
       name: `Configured till profile ${n}`,
       formFactor: "till",
-      capabilities: ["open-cash-drawer"],
+      capabilities: ["open-cash-drawer", "take-cash"],
     })
     .returning({ id: deviceProfiles.id });
   const dev = await enrolDeviceForTest(suite.db, cfg, {

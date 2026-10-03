@@ -32,6 +32,7 @@ export const en = {
   "action.authorize": "Authorize",
   // Tenders
   "tender.cash": "Cash",
+  "tender.cash_at_till": "This device does not take cash. Take cash at a till.",
   "tender.card": "Card",
   "tender.card_ref": "Operation number (optional)",
   "card.simulation_result": "Test payment result",
@@ -999,6 +1000,7 @@ export const es: Record<StringKey, string> = {
   "action.hold": "Aparcar",
   "action.authorize": "Autorizar",
   "tender.cash": "Efectivo",
+  "tender.cash_at_till": "Este dispositivo no cobra en efectivo. Cobra en efectivo en una caja.",
   "tender.card": "Tarjeta",
   "tender.card_ref": "Número de operación (opcional)",
   "card.simulation_result": "Resultado del pago de prueba",

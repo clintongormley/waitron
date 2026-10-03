@@ -691,6 +691,8 @@ declare module "@waitron/shared" {
      * enforced on the server. `action` names the refused operation, a symbol the route passes.
      */
     "device.forbidden_action": { action: string };
+    /** A cash payment from a device whose profile does not take cash (`assertTakesCash`). */
+    "device.cash_not_allowed": Record<string, never>;
     /**
      * The device-management surface named a device id that matches nothing. Unlike
      * `device.unauthorized`, this surface is for an authenticated manager, so the id is echoed.

@@ -264,7 +264,7 @@ async function setupLunch(): Promise<Lunch> {
   });
   const [profile] = await suite.db
     .insert(deviceProfiles)
-    .values({ name: `Till ${randomUUID()}`, formFactor: "till", capabilities: [] })
+    .values({ name: `Till ${randomUUID()}`, formFactor: "till", capabilities: ["take-cash"] })
     .returning({ id: deviceProfiles.id });
   const device = await enrolDeviceForTest(suite.db, cfg, {
     name: `Counter till ${randomUUID()}`,

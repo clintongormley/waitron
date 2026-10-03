@@ -248,6 +248,30 @@ describe("device-profiles-screen editor form", () => {
     );
   });
 
+  it("draws a Takes cash switch whose save sends take-cash", async () => {
+    const api = stubApi();
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await el.updateComplete;
+    change(el, "profile-name", "Waiter");
+    selectFormFactor(el, "phone-portrait");
+    await el.updateComplete;
+    const cashSwitch = el.shadowRoot!.querySelector("[data-test=cap-take-cash]")!;
+    // Shipped locale is es-ES.
+    expect(cashSwitch.getAttribute("label")).toBe("Cobra en efectivo");
+    toggle(el, "cap-take-cash", true);
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await flush(el);
+    expect(api.createDeviceProfile).toHaveBeenCalledWith(
+      "Waiter",
+      null,
+      ["take-cash"],
+      "phone-portrait",
+      null,
+    );
+  });
+
   it("New profile defaults the form factor to the cash register (till) when unchanged", async () => {
     const api = stubApi();
     const el = await mount(api);

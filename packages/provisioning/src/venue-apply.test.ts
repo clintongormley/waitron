@@ -294,6 +294,7 @@ describe("applyVenue", () => {
           "show-station",
           "show-expo",
           "show-schedule",
+          "take-cash",
         ],
         inactivity_timeout_seconds: 300,
       },

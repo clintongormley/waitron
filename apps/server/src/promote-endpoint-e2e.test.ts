@@ -239,7 +239,7 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
       id: DEVICE_PROFILE_ID,
       name: "Counter",
       formFactor: "till",
-      capabilities: [],
+      capabilities: ["take-cash"],
     })
     .onConflictDoNothing();
   await admin

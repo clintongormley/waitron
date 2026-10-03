@@ -476,7 +476,7 @@ describe("a split-off check after the till that made it has forgotten it", () =>
         .returning({ id: persons.id });
       const [profile] = await tx
         .insert(deviceProfiles)
-        .values({ name: "Counter till", formFactor: "till", capabilities: [] })
+        .values({ name: "Counter till", formFactor: "till", capabilities: ["take-cash"] })
         .returning({ id: deviceProfiles.id });
       return { tabId: tab.tabId, personId: person!.id, profileId: profile!.id };
     });

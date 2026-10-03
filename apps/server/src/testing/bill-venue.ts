@@ -179,9 +179,9 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
         {
           name: "Counter till",
           formFactor: "till",
-          capabilities: ["integrated-card-payment", "open-cash-drawer"],
+          capabilities: ["integrated-card-payment", "open-cash-drawer", "take-cash"],
         },
-        { name: "Cash till", formFactor: "till", capabilities: ["open-cash-drawer"] },
+        { name: "Cash till", formFactor: "till", capabilities: ["open-cash-drawer", "take-cash"] },
       ])
       .returning({ id: deviceProfiles.id });
     const printer = await createPrinter(

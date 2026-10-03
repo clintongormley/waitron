@@ -389,6 +389,9 @@ export class TillBillPayDialog extends LitElement {
   /** The provider of this device's card reader, which a card is charged on; `none` takes a card on
    * a separate terminal, keyed by hand. */
   @property() cardReader: CardProvider = "none";
+  /** False on a device whose profile does not take cash: card is the only method, with a line
+   * saying where to take cash. */
+  @property({ type: Boolean }) takesCash = true;
   /** The venue's readers a card can be sent to; offered only when there is more than one. */
   @property({ attribute: false }) readers: TillActiveReader[] = [];
   /** The device's own reader, shown chosen until another is picked; it is never sent. */
@@ -414,6 +417,7 @@ export class TillBillPayDialog extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("way")) this.chosenWay = this.way;
+    if (changed.has("takesCash")) this.method = this.takesCash ? "cash" : "card";
     if (changed.has("amount")) this.typedAmountValue = this.amount;
     if (changed.has("refusal")) this.shownRefusal = this.refusal;
     if (changed.has("taken") && this.taken !== null) this.#startAgain();
@@ -986,13 +990,18 @@ export class TillBillPayDialog extends LitElement {
     return html`<fieldset class="choice" data-pay-method ?disabled=${this.busy}>
         <legend>${t("bill_pay.method")}</legend>
         <div class="options">
-          ${this.#radio("method", "cash", t("tender.cash"), this.method === "cash", () => {
-            this.method = "cash";
-          })}
+          ${
+            this.takesCash
+              ? this.#radio("method", "cash", t("tender.cash"), this.method === "cash", () => {
+                  this.method = "cash";
+                })
+              : nothing
+          }
           ${this.#radio("method", "card", t("tender.card"), this.method === "card", () => {
             this.method = "card";
           })}
         </div>
+        ${this.takesCash ? nothing : html`<p class="muted cash-at-till">${t("tender.cash_at_till")}</p>`}
       </fieldset>
       ${
         this.method === "cash"

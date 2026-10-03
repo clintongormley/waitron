@@ -1127,6 +1127,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) busy = false;
   /** `false` hides the pay section. */
   @property({ type: Boolean }) canSettle = true;
+  /** See the tender card's `takesCash`. */
+  @property({ type: Boolean }) takesCash = true;
   /** Mounted inside a card host, which supplies the header; the drawer handle and its badge stay. */
   @property({ type: Boolean }) embedded = false;
   /** The move and join target lists read this; merge and transfer offer {@link bills}. */
@@ -3019,7 +3021,11 @@ export class TillTableOrderScreen extends LitElement {
         @park-order=${(event: Event) => this.#onTenderPark(event)}
       >
         <h2>${t("table.pay_title")}</h2>
-        <till-tender-pay .store=${this.#payStore} .busy=${this.busy}></till-tender-pay>
+        <till-tender-pay
+          .store=${this.#payStore}
+          .busy=${this.busy}
+          .takesCash=${this.takesCash}
+        ></till-tender-pay>
         ${this.#payWays()}
       </section>`;
     const received = this.#balanceShown()?.received;

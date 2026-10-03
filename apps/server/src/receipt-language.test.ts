@@ -165,7 +165,7 @@ async function venueWith(
       .where(eq(locations.id, cfg.locationId));
     const [profile] = await tx
       .insert(deviceProfiles)
-      .values({ name: "Barra", formFactor: "till" })
+      .values({ name: "Barra", formFactor: "till", capabilities: ["take-cash"] })
       .returning({ id: deviceProfiles.id });
     return {
       menuItemId: offers.offerFor(product.id),

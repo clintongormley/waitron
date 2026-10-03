@@ -60,7 +60,7 @@ let catalogueId: string;
 async function enrolTill(): Promise<string> {
   const [profile] = await suite.db
     .insert(deviceProfiles)
-    .values({ name: `Till ${randomUUID()}`, formFactor: "till", capabilities: [] })
+    .values({ name: `Till ${randomUUID()}`, formFactor: "till", capabilities: ["take-cash"] })
     .returning({ id: deviceProfiles.id });
   const dev = await enrolDeviceForTest(suite.db, v.cfg, {
     name: `Counter till ${randomUUID()}`,

@@ -296,6 +296,7 @@ describe("devSetup against a real venue directory", () => {
           "show-station",
           "show-expo",
           "show-schedule",
+          "take-cash",
         ],
       },
       { name: "Handheld", canvasId: null, capabilities: [] },

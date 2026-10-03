@@ -153,7 +153,8 @@ export class TillTenderPay extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .reader-name {
+      .reader-name,
+      .cash-at-till {
         margin: 0;
         color: var(--wt-color-text-muted);
       }
@@ -175,6 +176,9 @@ export class TillTenderPay extends LitElement {
   @property() stage: "order" | "collect" = "order";
   @property() cardProvider: CardProvider = "none";
   @property({ type: Boolean }) tipsEnabled = false;
+  /** False on a device whose profile does not take cash: no Cash button, and a line saying where to
+   * take it. */
+  @property({ type: Boolean }) takesCash = true;
   @property() cardOutcome?: CardOutcome;
   /** Bumped by the app when no card attempt is still running, after any retry and any
    * kitchen-station question an attempt asks, whether or not it produced a {@link cardOutcome}. */
@@ -530,6 +534,11 @@ export class TillTenderPay extends LitElement {
   }
 
   #renderTenderButtons(disabled: boolean) {
+    if (!this.takesCash)
+      return html`
+        <p class="cash-at-till">${t("tender.cash_at_till")}</p>
+        <div class="tenders">${this.#renderCardButton(disabled)}</div>
+      `;
     return html`
       <div class="tenders">
         <wt-button

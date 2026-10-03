@@ -145,7 +145,7 @@ async function seedVenue(db: Database): Promise<Venue> {
       name: "Card till",
       formFactor: "till",
       canvasId: null,
-      capabilities: ["integrated-card-payment"],
+      capabilities: ["integrated-card-payment", "take-cash"],
     })
     .returning({ id: deviceProfiles.id });
   const device = await enrolDeviceForTest(db, cfg, { name: "Card till", profileId: profile!.id });

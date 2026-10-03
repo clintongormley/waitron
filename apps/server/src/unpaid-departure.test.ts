@@ -410,7 +410,7 @@ describe("who may record it", () => {
     const [profile] = await inTx(venue, (tx) =>
       tx
         .insert(deviceProfiles)
-        .values({ name: "Handheld", formFactor: "phone-portrait" })
+        .values({ name: "Handheld", formFactor: "phone-portrait", capabilities: ["take-cash"] })
         .returning({ id: deviceProfiles.id }),
     );
     const handheld = await enrolDeviceForTest(venue.db, venue.cfg, {

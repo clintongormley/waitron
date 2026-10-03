@@ -269,8 +269,16 @@ const suite = useVenueDb({
 
 // Enrolled fresh in each `beforeEach` that needs it, because the `GET /api/till` canvas tests
 // `delete from devices`, so a once-only device would not survive to a later describe.
+let saleTillProfiles = 0;
 async function enrolSaleTillDevice(): Promise<void> {
-  tillDeviceCookie = await enrolTillDeviceCookie(suite.db);
+  saleTillProfiles += 1;
+  const profileId = await seedDeviceProfile(
+    suite.db,
+    `Sale till profile ${saleTillProfiles}`,
+    ["take-cash"],
+    null,
+  );
+  tillDeviceCookie = await enrolTillDeviceCookie(suite.db, profileId);
 }
 
 /** A collecting logger for asserting the structured lines the routes emit. */

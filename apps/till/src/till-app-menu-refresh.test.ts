@@ -205,7 +205,7 @@ const till = {
   cardProvider: "none" as const,
   tipsEnabled: false,
   canvas,
-  capabilities: ["print-receipt"] as CapabilityFlag[],
+  capabilities: ["print-receipt", "take-cash"] as CapabilityFlag[],
   inactivityTimeoutSeconds: null,
   nodeId: "n1",
   servers: [],

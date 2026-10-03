@@ -79,6 +79,7 @@ describe("planVenue", () => {
             "show-station",
             "show-expo",
             "show-schedule",
+            "take-cash",
           ],
           inactivityTimeoutSeconds: 300,
         },

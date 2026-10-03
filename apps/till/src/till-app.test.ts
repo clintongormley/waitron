@@ -212,7 +212,13 @@ const till = {
       },
     ],
   } satisfies CanvasDef,
-  capabilities: ["print-receipt", "show-station", "show-expo", "show-schedule"] as CapabilityFlag[],
+  capabilities: [
+    "print-receipt",
+    "show-station",
+    "show-expo",
+    "show-schedule",
+    "take-cash",
+  ] as CapabilityFlag[],
   inactivityTimeoutSeconds: null as number | null,
   nodeId: "n1",
   servers: [] as {
@@ -1955,7 +1961,7 @@ describe("till-app", () => {
       const el = await toHandheld(
         withSaleTab,
         {
-          capabilities: withReader,
+          capabilities: [...withReader, "take-cash"],
           cardProvider: "stripe_terminal",
           activeReaders: readers,
           defaultReaderId: readers[0]!.id,
@@ -6744,7 +6750,11 @@ describe("till-app", () => {
           getTill: vi.fn().mockResolvedValue({
             ...till,
             cardProvider: "stripe_terminal",
-            capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+            capabilities: [
+              "print-receipt",
+              "integrated-card-payment",
+              "take-cash",
+            ] as CapabilityFlag[],
           }),
           pay,
         });

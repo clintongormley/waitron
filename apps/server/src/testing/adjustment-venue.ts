@@ -397,7 +397,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
       .returning({ id: persons.id });
     const [profile] = await tx
       .insert(deviceProfiles)
-      .values({ name: "Counter till", formFactor: "till", capabilities: [] })
+      .values({ name: "Counter till", formFactor: "till", capabilities: ["take-cash"] })
       .returning({ id: deviceProfiles.id });
     const reasonId = {} as Record<keyof typeof REASONS, string>;
     for (const [key, input] of Object.entries(REASONS)) {

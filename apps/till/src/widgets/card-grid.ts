@@ -109,6 +109,8 @@ export class TillCardGrid extends LitElement {
   @property() orderFlow: OrderFlow = "prepay";
   @property() stage: "order" | "collect" = "order";
   @property() cardProvider: CardProvider = "none";
+  /** See the tender card's `takesCash`. */
+  @property({ type: Boolean }) takesCash = true;
   @property({ type: Boolean }) tipsEnabled = false;
   @property() cardOutcome?: CardOutcome;
   @property({ attribute: false }) cardAttemptsOver = 0;
@@ -176,7 +178,7 @@ export class TillCardGrid extends LitElement {
    * (apps/server/src/device-api.ts), so `kds-board`'s capability is checked here alone.
    */
   #capable(card: CardInstance): boolean {
-    if (card.type === "tender-pay") return true; // cash path — never gated absent
+    if (card.type === "tender-pay") return true; // it hides cash itself, and always offers card
     const required = CARD_REQUIRED_CAPABILITY[card.type];
     return required === undefined || this.capabilities.includes(required);
   }
@@ -260,6 +262,7 @@ export class TillCardGrid extends LitElement {
             .mode=${this.orderFlow}
             .stage=${this.stage}
             .cardProvider=${this.cardProvider}
+            .takesCash=${this.takesCash}
             .tipsEnabled=${this.tipsEnabled}
             .cardOutcome=${this.cardOutcome}
             .cardAttemptsOver=${this.cardAttemptsOver}
@@ -348,6 +351,7 @@ export class TillCardGrid extends LitElement {
           .busy=${this.busy}
           .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheld}
+          .takesCash=${this.takesCash}
         ></till-table-order-screen>`;
       case "notifications":
         return nothing;

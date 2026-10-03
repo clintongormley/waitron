@@ -40,6 +40,7 @@ import {
   DEVICE_COOKIE,
   assertDeviceCapability,
   assertNotHandheld,
+  assertTakesCash,
   clearDeviceCookie,
   cookieDomainFor,
   readDeviceCookie,
@@ -705,6 +706,28 @@ async function enrolDevDevices(): Promise<{
     deviceBId: devB.deviceId,
   };
 }
+
+describe("assertTakesCash", () => {
+  const binding = (capabilities: CapabilityFlag[]): DeviceBinding => ({
+    deviceId: randomUUID(),
+    formFactor: "phone-portrait",
+    label: "Waiter phone",
+    stationId: null,
+    watcherId: null,
+    tillId: null,
+    deviceProfileId: randomUUID(),
+    receiptPrinterId: null,
+    capabilities,
+  });
+
+  it("refuses a device whose profile lacks take-cash, and passes one that has it and no device", () => {
+    expect(() => assertTakesCash(binding(["open-cash-drawer"]))).toThrow(
+      expect.objectContaining({ code: "device.cash_not_allowed" }),
+    );
+    expect(() => assertTakesCash(binding(["take-cash"]))).not.toThrow();
+    expect(() => assertTakesCash(null)).not.toThrow();
+  });
+});
 
 describe("dev-override header (venue database)", () => {
   it("is IGNORED when devMode is false (fail-closed) — cookie wins", async () => {

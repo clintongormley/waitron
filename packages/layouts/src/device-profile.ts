@@ -43,6 +43,7 @@ export const DEFAULT_PROFILE_CAPABILITIES: Record<FormFactor, CapabilityFlag[]> 
     "show-station",
     "show-expo",
     "show-schedule",
+    "take-cash",
   ],
   "phone-portrait": [],
   "tablet-landscape": [],

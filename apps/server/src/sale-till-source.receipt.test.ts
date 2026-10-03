@@ -221,7 +221,11 @@ async function seedHandheldProfile(): Promise<string> {
   // raw SQL.
   const [profile] = await suite.db
     .insert(deviceProfiles)
-    .values({ name: `Handheld ${profileCounter}`, formFactor: "phone-portrait" })
+    .values({
+      name: `Handheld ${profileCounter}`,
+      formFactor: "phone-portrait",
+      capabilities: ["take-cash"],
+    })
     .returning({ id: deviceProfiles.id });
   return profile!.id;
 }

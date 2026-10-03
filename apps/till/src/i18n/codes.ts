@@ -358,6 +358,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This device isn't set up — ask to join this venue",
     es: "Este dispositivo no está configurado. Solicita el alta en este local",
   },
+  "device.cash_not_allowed": {
+    en: "This device does not take cash. Take cash at a till.",
+    es: "Este dispositivo no cobra en efectivo. Cobra en efectivo en una caja.",
+  },
   "device.till_required": {
     en: "This device is not set up as a till. Enrol it as a till first",
     es: "Este dispositivo no está dado de alta como caja. Dalo de alta como caja primero",

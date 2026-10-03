@@ -165,6 +165,7 @@ import {
 import {
   assertDeviceCapability,
   assertNotHandheld,
+  assertTakesCash,
   deviceTillCfg,
   requireDevice,
   requireSaleTillId,
@@ -305,6 +306,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.not_found": 401,
   // Authenticated device lacks the action capability or is excluded from the workflow.
   "device.forbidden_action": 403,
+  "device.cash_not_allowed": 403,
   // The same codes and statuses `device-api.ts`'s map assigns.
   "device.unauthorized": 401,
   "device.till_required": 400,
@@ -1315,9 +1317,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/sales", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c, { permission: "sale.take_payment" });
-      // Not fenced against a handheld: cash and manual-card sales file under the submitting node's
-      // SIF, not the till, and a manual card is charged on a terminal the POS never talks to. Only
-      // the integrated reader (`POST /api/pay`) is fenced, by capability.
+      // Not fenced against a handheld: a sale files under the submitting node's SIF, not the till,
+      // and a manual card is charged on a terminal the POS never talks to. Cash is fenced by the
+      // `take-cash` capability, the integrated reader (`POST /api/pay`) by its own.
       const body = await readJsonBody<TillSaleRequest>(c);
       if (body.workingOrderId !== undefined) {
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
@@ -1333,6 +1335,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         sendingDeviceId: device?.deviceId,
         madeHereSink: madeHereSinkFor(c),
       };
+      if (body.tender?.method === "cash") assertTakesCash(device);
       const result = await recordTillSale(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         saleCfg,
@@ -1810,8 +1813,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = await requireSession(deps, c, { permission: "sale.take_payment" });
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await readJsonBody<{ tender: TillTender }>(c);
+      const device = await tryReadDevice(deps, c);
       // The device supplies `tillId`; `nodeId`/`seriesId`, the SIF and chain key, stay `deps.cfg`.
-      const saleCfg = await deviceTillCfg(deps, c);
+      const saleCfg = await deviceTillCfg(deps, c, device);
+      if (body.tender?.method === "cash") assertTakesCash(device);
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         saleCfg,

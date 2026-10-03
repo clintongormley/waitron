@@ -351,3 +351,10 @@ export async function assertDeviceCapability(
     throw new AppError("device.forbidden_action", { action });
   }
 }
+
+/** A device whose profile does not take cash is refused a cash payment. No device passes, as in {@link assertDeviceCapability}. */
+export function assertTakesCash(device: DeviceBinding | null): void {
+  if (device !== null && !device.capabilities.includes("take-cash")) {
+    throw new AppError("device.cash_not_allowed", {});
+  }
+}

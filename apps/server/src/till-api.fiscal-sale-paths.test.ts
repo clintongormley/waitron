@@ -357,8 +357,8 @@ async function readerIdOnPayment(workingOrderId: string): Promise<string | null>
 
 /**
  * Enrol a `till` device and return its `waitron_device=<id>.<token>` cookie; a sale route resolves
- * its `till_id` from it (`requireSaleTillId`). The `/api/pay` cases pass a profile declaring
- * `integrated-card-payment`.
+ * its `till_id` from it (`requireSaleTillId`). Its default profile takes cash; the `/api/pay` cases
+ * pass a profile declaring `integrated-card-payment`.
  */
 let tillDeviceCounter = 0;
 async function enrolTillCookie(
@@ -368,7 +368,7 @@ async function enrolTillCookie(
   tillDeviceCounter += 1;
   // `resolveDeviceBinding` creates a register for a `till` device at accept, named after the device,
   // so each call names the device uniquely.
-  const profileId = deviceProfileId ?? (await seedProfileFF("till"));
+  const profileId = deviceProfileId ?? (await seedProfileFF("till", ["take-cash"]));
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: `Counter till ${tillDeviceCounter}`,
     profileId,
@@ -389,7 +389,7 @@ async function loginSession(app: Hono, cfg: TillConfig, operatorId: string): Pro
   return login.headers.get("set-cookie")!;
 }
 
-/** Create a till profile with the reader and drawer capabilities needed by payment tests. */
+/** Create a till profile with the reader, drawer and cash capabilities needed by payment tests. */
 async function createTillProfile(): Promise<string> {
   // Through the table definition, not raw SQL: `device_profiles.id` is a `$defaultFn` generator,
   // which a raw insert never runs.
@@ -398,7 +398,7 @@ async function createTillProfile(): Promise<string> {
     .values({
       name: "Counter till",
       formFactor: "till",
-      capabilities: ["integrated-card-payment", "open-cash-drawer"],
+      capabilities: ["integrated-card-payment", "open-cash-drawer", "take-cash"],
     })
     .returning({ id: deviceProfiles.id });
   return prof!.id;
@@ -1689,10 +1689,11 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
 });
 
 describe("handheld sales and device capability gates", () => {
-  /** Enrol a handheld device and return its `waitron_device=<id>.<token>` cookie. */
+  /** Enrol a handheld device and return its `waitron_device=<id>.<token>` cookie. Its default
+   * profile takes cash and nothing else. */
   async function enrolHandheldCookie(
     cfg: TillConfig,
-    capabilities: string[] = [],
+    capabilities: string[] = ["take-cash"],
   ): Promise<string> {
     // A handheld binds an EXISTING register at enrol — here the venue's own till.
     const profileId = await seedProfileFF("phone-portrait", capabilities);
@@ -2107,6 +2108,86 @@ describe("handheld sales and device capability gates", () => {
     expect(await saleTillOf(byTill)).toBe(await deviceTillOf(tillDeviceCookie));
   });
 
+  describe("a device takes cash only when its profile says so", () => {
+    async function saleCount(): Promise<number> {
+      const rows = await suite.db.execute<{ n: number }>(sql`select count(*) as n from sales`);
+      return Number(rows.rows[0]!.n);
+    }
+
+    async function postSale(app: Hono, cookie: string, menuItemId: string, method: string) {
+      return app.request("/api/sales", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({
+          lines: [{ menuItemId, quantity: "2" }],
+          tender: { method, amount: "5.00" },
+        }),
+      });
+    }
+
+    it("refuses a cash sale from a device whose profile lacks take-cash, filing nothing, and takes its card sale", async () => {
+      const { cfg, available, operatorId } = await setupVenue();
+      const each = available.find((p) => p.pricingUnit === "each")!;
+      const app = new Hono();
+      mountTillApi(app, apiDeps(cfg), noopLog);
+      const deviceCookie = await enrolTillCookie(cfg, await seedProfileFF("till"));
+      const both = `${await loginOperator(app, cfg, operatorId)}; ${deviceCookie}`;
+
+      const before = await saleCount();
+      const refused = await postSale(app, both, each.menuItemId, "cash");
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toMatchObject({ error: { code: "device.cash_not_allowed" } });
+      expect(await saleCount()).toBe(before);
+
+      const card = await postSale(app, both, each.menuItemId, "card");
+      expect(card.status).toBe(200);
+      expect(await saleCount()).toBe(before + 1);
+    });
+
+    it("takes a cash sale from a handheld whose profile has take-cash", async () => {
+      const { cfg, available, operatorId } = await setupVenue();
+      const each = available.find((p) => p.pricingUnit === "each")!;
+      const app = new Hono();
+      mountTillApi(app, apiDeps(cfg), noopLog);
+      const deviceCookie = await enrolHandheldCookie(cfg, ["take-cash"]);
+      const both = `${await loginOperator(app, cfg, operatorId)}; ${deviceCookie}`;
+
+      const before = await saleCount();
+      const res = await postSale(app, both, each.menuItemId, "cash");
+      expect(res.status).toBe(200);
+      expect(await saleCount()).toBe(before + 1);
+    });
+
+    it("refuses a cash collect from a device whose profile lacks take-cash, leaving the order placed", async () => {
+      const { cfg, available, operatorId } = await setupVenue();
+      await suite.db.execute(
+        sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
+      );
+      const modeCfg: TillConfig = { ...cfg, orderFlow: "ticket_then_pay" };
+      const each = available.find((p) => p.pricingUnit === "each")!;
+      const app = new Hono();
+      mountTillApi(app, apiDeps(modeCfg), noopLog);
+      const deviceCookie = await enrolHandheldCookie(cfg, []);
+      const sessionPair = await loginOperator(app, cfg, operatorId);
+      const both = `${sessionPair}; ${deviceCookie}`;
+      const id = await parkOrder(app, sessionPair, each.menuItemId);
+      const placed = await app.request(`/api/working-orders/${id}/place`, {
+        method: "POST",
+        headers: { cookie: both },
+      });
+      expect(placed.status).toBe(200);
+
+      const collect = await app.request(`/api/working-orders/${id}/collect`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: both },
+        body: JSON.stringify({ tender: { method: "cash", amount: "5.00" } }),
+      });
+      expect(collect.status).toBe(403);
+      expect(await collect.json()).toMatchObject({ error: { code: "device.cash_not_allowed" } });
+      expect(await statusOf(id)).toBe("placed");
+    });
+  });
+
   it("a handheld cancels a placed order for an operator holding only the payment permission, appending the reasoned amendment, as a till does", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
@@ -2226,7 +2307,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
   const app = new Hono();
   mountTillApi(app, apiDeps(cfg), noopLog);
   const cookie = await loginSession(app, cfg, operatorId);
-  const profileId = await seedProfileFF("till", ["print-receipt"]);
+  const profileId = await seedProfileFF("till", ["print-receipt", "take-cash"]);
   const deviceCookie = await enrolTillCookie(cfg, profileId);
   const headers = { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` };
   const printerId = await withTransaction(suite.db, async (tx) => {
@@ -2768,6 +2849,7 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
       const profileId = await seedProfileFF("phone-portrait", [
         "open-cash-drawer",
         "print-receipt",
+        "take-cash",
       ]);
       const handheld = await enrolDeviceForTest(suite.db, cfg, {
         name: "Waiter phone",
@@ -2883,7 +2965,7 @@ describe("a hand-keyed card payment opens the drawer of the till that took it, f
     async (orderFlow, method) => {
       const { cfg, each, app, cookie } = await venueWithTill(orderFlow);
       await receiptPrinterFor(cfg, cfg.tillId, true);
-      const profileId = await seedProfileFF("phone-portrait");
+      const profileId = await seedProfileFF("phone-portrait", ["take-cash"]);
       const handheld = await enrolDeviceForTest(suite.db, cfg, {
         name: "Waiter phone",
         profileId,

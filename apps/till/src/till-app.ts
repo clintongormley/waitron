@@ -3575,6 +3575,7 @@ export class TillApp extends LitElement {
         .busy=${open.busy}
         .tipsEnabled=${this.tipsEnabled}
         .cardReader=${this.#cardReader()}
+        .takesCash=${this.#takesCash()}
         .readers=${this.activeReaders}
         .defaultReaderId=${this.defaultReaderId}
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
@@ -3677,6 +3678,10 @@ export class TillApp extends LitElement {
     } catch {
       // Non-fatal: the last-known floor stays.
     }
+  }
+
+  #takesCash(): boolean {
+    return this.capabilities.includes("take-cash");
   }
 
   #cardReader(): TillInfo["cardProvider"] {
@@ -7025,6 +7030,7 @@ export class TillApp extends LitElement {
         .payRest=${this.#basketPaidInPart()?.outstanding ?? null}
         .counterTab=${tab}
         .cardProvider=${this.#cardReader()}
+        .takesCash=${this.#takesCash()}
         .tipsEnabled=${this.tipsEnabled}
         .cardOutcome=${this.cardOutcome}
         .cardAttemptsOver=${this.cardAttemptsOver}
@@ -7058,6 +7064,7 @@ export class TillApp extends LitElement {
       .orderFlow=${this.#basketFlow()}
       .stage=${this.stage}
       .cardProvider=${this.#cardReader()}
+      .takesCash=${this.#takesCash()}
       .tipsEnabled=${this.tipsEnabled}
       .cardOutcome=${this.cardOutcome}
       .cardAttemptsOver=${this.cardAttemptsOver}
@@ -7143,6 +7150,7 @@ export class TillApp extends LitElement {
           .busy=${this.submitting}
           .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheldMode}
+          .takesCash=${this.#takesCash()}
         ></till-table-order-screen>`;
       }
       case "ticket":

@@ -266,6 +266,35 @@ describe("till-bill-pay-dialog: contributing and splitting equally", () => {
   });
 });
 
+describe("till-bill-pay-dialog: on a device that does not take cash", () => {
+  it("offers card only, says to take cash at a till, and asks for a card", async () => {
+    const el = await mount({ way: "contribution", takesCash: false });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    const methods = [...root(el).querySelectorAll<HTMLInputElement>('input[name="method"]')];
+    expect(methods.map((radio) => [radio.value, radio.checked])).toEqual([["card", true]]);
+    expect(text(root(el).querySelector(".cash-at-till"))).toBe(t("tender.cash_at_till"));
+    expect(field(el, "tendered")).toBeNull();
+
+    await type(el, "amount", "20");
+    await click(el, "[data-pay-continue]");
+
+    expect(asked).toEqual([
+      {
+        choice: { kind: "contribution", amount: "20" },
+        pay: { method: "card" },
+        card: { entry: "manual" },
+      },
+    ]);
+  });
+
+  it("offers cash by default, with no line about taking it at a till", async () => {
+    const el = await mount();
+    const methods = [...root(el).querySelectorAll<HTMLInputElement>('input[name="method"]')];
+    expect(methods.map((radio) => radio.value)).toEqual(["cash", "card"]);
+    expect(root(el).querySelector(".cash-at-till")).toBeNull();
+  });
+});
+
 describe("till-bill-pay-dialog: its own checks", () => {
   it("marks the required fields", async () => {
     const el = await mount({ way: "contribution" });

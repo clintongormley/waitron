@@ -14,7 +14,12 @@ import {
 import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
 import { refundBillPayment, refundProvidersOf } from "./bill-refunds.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
-import { assertDeviceCapability, deviceTillCfg, tryReadDevice } from "./device-session.js";
+import {
+  assertDeviceCapability,
+  assertTakesCash,
+  deviceTillCfg,
+  tryReadDevice,
+} from "./device-session.js";
 import type { DeviceBinding } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import {
@@ -252,7 +257,9 @@ export function mountBillPaymentsApi(
       const body = asObject(await readRawJsonBody<unknown>(c));
       const request = parseRequest(body);
       if (request.entry !== "reader") {
-        const saleCfg = await deviceSaleCfg(deps, c);
+        const device = await tryReadDevice(deps, c);
+        const saleCfg = await deviceSaleCfg(deps, c, device);
+        if (request.method === "cash") assertTakesCash(device);
         return c.json(await takeBillPayment(fiscal, saleCfg, id, request, personId));
       }
       // The guards `/api/pay` runs before a reader is asked, in its order. A card outcome is data,

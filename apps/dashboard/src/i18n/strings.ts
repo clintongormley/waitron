@@ -1634,6 +1634,7 @@ export const en = {
   "device_profiles.capability.show-station": "Kitchen button",
   "device_profiles.capability.show-expo": "Pass button",
   "device_profiles.capability.show-schedule": "My schedule button",
+  "device_profiles.capability.take-cash": "Takes cash",
   // The `till` form factor is the cash register, the owner's chosen word.
   "device_profiles.form_factor": "Form factor",
   "device_profiles.form_factor.till": "Cash register",
@@ -3769,6 +3770,7 @@ export const es: Record<StringKey, string> = {
   "device_profiles.capability.show-station": "Botón Cocina",
   "device_profiles.capability.show-expo": "Botón Pase",
   "device_profiles.capability.show-schedule": "Botón Mi horario",
+  "device_profiles.capability.take-cash": "Cobra en efectivo",
   "device_profiles.form_factor": "Formato",
   "device_profiles.form_factor.till": "Caja registradora",
   "device_profiles.form_factor.phone-portrait": "Teléfono de mano",
