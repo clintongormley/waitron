@@ -817,7 +817,7 @@ describe("a variant's names are not part of the huella", () => {
   // recorded and read back inside a transaction that is then ROLLED BACK, as the parent_line_id block
   // above does, so the second re-allocates the same `A/1` against the same empty chain.
   const ROLLBACK = new Error("rollback: huella captured");
-  const PINNED_NIF = "29999998K";
+  const PINNED_NIF = "29999998V";
 
   async function huellaFor(variant: {
     name: string;
