@@ -1591,7 +1591,9 @@ owner 2026-10-03) — DONE.** The working line context saves whether its unit is
 is added. Each shows its pick count per dish, while weight and volume retain the total physical amount and saved abbreviation.
 This amends the display decision in the [A203 design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md);
 the filed sale amount and fiscal record are unchanged. The new context column defaults to false on
-existing rows; reset pre-production venues before using W53 to reprint their older sales.
+existing rows, including open orders. Reset pre-production venues before using W53 with orders
+recorded before this migration; otherwise their live tickets and settled reprints can show the old
+unit wording.
 
 **Decided (owner, 2026-10-02):**
 

@@ -87,7 +87,7 @@ function shown(receipt: Awaited<ReturnType<typeof receiptOf>>) {
 }
 
 describe("receiptLines", () => {
-  it("carries a stored Each identity to the filed extra's display line", async () => {
+  it("carries an Each context flag to the filed extra's display line", async () => {
     const billId = await bill([{ name: "Pizza", olives: 1 }]);
     const childId = await lineIdOf(venue, billId, 2);
     await inTx(venue, async (tx) => {

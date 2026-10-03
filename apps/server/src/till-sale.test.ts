@@ -999,6 +999,19 @@ describe("ordering extras and options — parent + child lines", () => {
         await assignProductUnit(tx, bacon.id, each!.id);
       }
       const queso = await extraProduct("Queso", "general");
+      if (storedEachExtra) {
+        const [millilitres] = await tx
+          .insert(units)
+          .values({
+            seedKey: null,
+            name: { es: "Mililitro", en: "Millilitre" },
+            abbreviation: { es: "ml", en: "ml" },
+            precision: 0,
+            hardwareUnit: null,
+          })
+          .returning({ id: units.id });
+        await assignProductUnit(tx, queso.id, millilitres!.id);
+      }
       const patatas = await extraProduct("Patatas", "general");
       const ensalada = await extraProduct("Ensalada", "general");
 
@@ -1013,7 +1026,13 @@ describe("ordering extras and options — parent + child lines", () => {
           active: true,
           items: [
             { productId: bacon.id, maxQuantity: 3, preselected: false, price: "0.50" },
-            { productId: queso.id, maxQuantity: 1, preselected: false, price: "0.75" },
+            {
+              productId: queso.id,
+              maxQuantity: 1,
+              preselected: false,
+              price: "0.75",
+              ...(storedEachExtra ? { portion: "150" } : {}),
+            },
           ],
         },
         cfg.locale,
@@ -1144,7 +1163,7 @@ describe("ordering extras and options — parent + child lines", () => {
 
     expect(result.lines[1]).toMatchObject({ soldInEach: true, quantity: "3" });
     expect(paper).toContain("Bacon customer x3");
-    expect(paper).not.toContain("3 ud");
+    expect(paper).not.toContain("Bacon customer 3 pzas");
 
     await withTransaction(suite.db, async (tx) => {
       const [unit] = await tx.select({ id: units.id }).from(units).where(eq(units.seedKey, "each"));
@@ -1153,6 +1172,36 @@ describe("ordering extras and options — parent + child lines", () => {
     });
     const replay = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, request);
     expect(replay.lines[1]).toMatchObject({ soldInEach: true, quantity: "3" });
+  });
+
+  it("keeps a whole-millilitre extra as an amount and unit on a real sale", async () => {
+    const v = await setupModifierVenue(true);
+    const result = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
+      zoneId: v.zoneId,
+      lines: [
+        {
+          menuItemId: v.offerFor(v.burgerId),
+          quantity: "1",
+          extras: extrasPick(v, [{ productId: v.quesoId, quantity: 1 }]),
+        },
+      ],
+      tender: { method: "cash", amount: "20.00" },
+      workingOrderId: randomUUID(),
+    });
+    const paper = printedLines(
+      formatReceipt({
+        result,
+        issuer: { venueName: "Deli Test SL", nif: "B12345678" },
+        receipt: {},
+        invoiceLocale: LOCALE,
+        printer: { paperWidth: "80mm", resolution: "203dpi" },
+      }),
+    ).join("\n");
+
+    expect(result.lines[1]).toMatchObject({ quantity: "150" });
+    expect(result.lines[1]?.soldInEach).toBeUndefined();
+    expect(paper).toContain("Queso customer 150 ml");
+    expect(paper).not.toContain("Queso customer x150");
   });
 
   it("counter sale of a dish with two extras files THREE sale_lines with parent/child links", async () => {

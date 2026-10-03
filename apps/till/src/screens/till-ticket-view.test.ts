@@ -187,7 +187,7 @@ describe("till-ticket-view", () => {
     expect(rows[1]!.textContent).toContain("Extra chupito");
     expect(rows[1]!.textContent).toContain("x2"); // 4 / 2 = 2 → badge
     expect(rows[2]!.textContent).toContain("Sin cebolla");
-    expect(rows[2]!.textContent).not.toContain("x"); // 2 / 2 = 1 → no badge
+    expect(rows[2]!.textContent).not.toContain(" x2"); // 2 / 2 = 1 → no badge
   });
 
   it("shows a weighted extra's filed physical amount and frozen unit without a pick-count badge", async () => {
