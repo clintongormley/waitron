@@ -35,7 +35,22 @@ import {
 } from "../login-preference.js";
 import waitronLockup from "../../../../packages/ui/brand/waitron-lockup.svg?raw";
 
+// Attribution: Google and the Google "G" logo are trademarks of Google LLC. Google Sans is Copyright
+// 2025 The Google Sans Project Authors, licensed under the SIL Open Font License, Version 1.1. The
+// image carries both notices in /app/third-party/README.md, the licence in google-sans/OFL.txt.
 const GOOGLE_G_URL = new URL("../assets/google-g.svg", import.meta.url).href;
+const GOOGLE_SANS_URL = new URL("../assets/google-sans-medium-latin.woff2", import.meta.url).href;
+
+// On the document: Chromium does not apply a @font-face rule declared inside a shadow root.
+document.fonts.add(
+  new FontFace("Google Sans", `url(${GOOGLE_SANS_URL}) format("woff2")`, {
+    weight: "500",
+    style: "normal",
+    display: "swap",
+    unicodeRange:
+      "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD",
+  }),
+);
 
 interface CompletedLogin {
   personId: string;
@@ -143,6 +158,22 @@ export class LoginScreen extends LitElement {
         stroke-linejoin: round;
       }
 
+      /* Google's sign-in branding guidelines set this button's colours, font and G. */
+      wt-button.google::part(button) {
+        gap: var(--wt-google-mark-gap);
+        background: var(--wt-color-google-button-fill);
+        border-color: var(--wt-color-google-button-line);
+        color: var(--wt-color-google-button-text);
+        font-family: var(--wt-font-family-google);
+        font-weight: var(--wt-font-weight-medium);
+        font-size: var(--wt-font-size-md);
+        line-height: var(--wt-google-button-line-height);
+      }
+      wt-button.google img {
+        width: var(--wt-google-mark-size);
+        height: var(--wt-google-mark-size);
+      }
+
       /* Pulled up into the field's bottom margin, so the link's tap area starts at the field. */
       .field-link {
         display: flex;
@@ -166,7 +197,8 @@ export class LoginScreen extends LitElement {
       wt-button.method {
         display: block;
       }
-      wt-button.method[variant="primary"] {
+      wt-button.method[variant="primary"],
+      wt-button.method.own-way {
         margin-top: var(--wt-space-4);
       }
 
@@ -966,7 +998,7 @@ export class LoginScreen extends LitElement {
 
   #otherWay(id: string, label: string, icon: TemplateResult, action: () => void) {
     return html`<wt-button
-      class="method"
+      class=${id === "google-login" ? "method google" : "method"}
       variant="secondary"
       data-test=${id}
       ?disabled=${this.busy}
@@ -1291,12 +1323,12 @@ export class LoginScreen extends LitElement {
                     <p class="alternative-hint">${t("login.google_hint")}</p>
                     ${this.#methodActions(
                       html`<wt-button
-                        class="method"
-                        variant="primary"
+                        class="method google own-way"
+                        variant="secondary"
                         data-test="google-login"
                         ?disabled=${this.busy || !this.googleConfigured}
                         @click=${() => void this.#googleLogin()}
-                        >${t("login.with_google")}</wt-button
+                        ><img src=${GOOGLE_G_URL} alt="" />${t("login.with_google")}</wt-button
                       >`,
                       form.bottom,
                     )}

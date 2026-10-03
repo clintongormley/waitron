@@ -593,7 +593,8 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
 10. **Login** — `login-screen.ts`, which already carries the owner's own review from 2026-09-09
     (CLAUDE.md §3, the `ui-login` findings). Fold those corrections in rather than restyle it twice.
     A191 (#1074, 2026-10-03) put every sign-in step in a card; the email, password, passkey and Google
-    steps put their one primary button outside the action row (design-system.md, login section).
+    steps put their own way in outside the action row (design-system.md, login section). Since A228
+    the Google step's is Google's own button, not a primary one.
 
 The till (`apps/till`) and the setup wizard (`apps/setup`) are separate apps drawing on the same
 shared components. Whether they follow in this pass or later is open — decide it before the
@@ -974,14 +975,14 @@ profile accepted a saved test password through `navigator.credentials.store`, bu
 it after a reload or restart under automation; that saved-password visual check remains unverified.
 
 **The dashboard's sign-in pages: a card, one blue button, every other way in under "or" (A191,
-owner 2026-10-02) — DONE (#1074).** The owner, on the passkey page: _"this page also looks a bit messy"_;
+owner 2026-10-02) — DONE (#1074).** (Google page and its "G" changed by A228, 2026-10-03, below.) The owner, on the passkey page: _"this page also looks a bit messy"_;
 layout A of three mockups was approved ("i love it"), replacing C96's single bulleted list. Every
 step of `apps/dashboard/src/screens/login-screen.ts` now sits in a card drawn like the setup
 wizard's, with the Waitron logo first (decorative there: the banner above already names Waitron, so
 the page shows the logo twice). On the email, password, passkey and Google pages the page's own way
 in is one full-width blue button, with the form's message on its own line directly above it; every
 other way in follows under an "or" line as a full-width outlined button with an icon — a key for
-"Use your password", a person with a key for "Log in with passkey", and Google's four-colour "G" for
+"Use your password", a person with a key for "Log in with passkey", and Google's four-colour "G" (replaced by A228) for
 "Continue with Google". "I've forgotten my password" is a small link at the right under the password
 field, on the password page only. On the code step the code switch is the same kind of link under
 its field, the heading comes before the email, and Back and Log in are the ordinary action row. The
@@ -992,7 +993,7 @@ email (`POST /management-api/google/login` reads no body, `apps/server/src/manag
 and whether it shows depends only on the venue's settings, so the first page still shows everyone
 the same choices. The Google "G" (`apps/dashboard/src/assets/google-g.svg`) is the commonly
 reproduced four-colour mark; neither the drawing nor Google's branding terms were checked against
-Google's own sources. Sign in with Apple does not exist; the mockup only showed where it would go. **Left open by #1074 (owner to decide):** the new key and passkey icons draw lines at width 2 while the change-account icon beside them uses 1; the card copies the setup wizard's card styles rather than sharing `wt-card`, and nothing keeps the two in step; the Google "G" is not listed in `deploy/third-party/README.md`. Two races it reasoned about but did not reproduce were reproduced and fixed by A229 (below).
+Google's own sources (2026-10-03: checked and replaced by A228, below). Sign in with Apple does not exist; the mockup only showed where it would go. **Left open by #1074 (owner to decide):** the new key and passkey icons draw lines at width 2 while the change-account icon beside them uses 1; the card copies the setup wizard's card styles rather than sharing `wt-card`, and nothing keeps the two in step; the Google "G" is not listed in `deploy/third-party/README.md` (done by A228, below). Two races it reasoned about but did not reproduce were reproduced and fixed by A229 (below).
 
 **Pressing Google stops a passkey autofill that is still starting, and an autofill failure before a
 passkey is picked keeps Google's message (A229, owner 2026-10-03) — DONE (#1080).** The two sign-in
@@ -1029,6 +1030,24 @@ prompt); turning the keep-the-message rule back into a plain assignment failed c
 the connection message instead of Google's; and deleting the line that clears the old message when
 a passkey is picked failed the picked-passkey refusal case, which showed Google's message instead
 of the passkey refusal.
+
+**The "Continue with Google" button follows Google's branding rules (A228, 2026-10-03) — DONE
+(branch `fix/google-sign-in-branding`).** Google's sign-in branding guidelines
+(<https://developers.google.com/identity/branding-guidelines>) require a custom Google button to
+carry the standard gradient "G" (the download bundle's), and give its light and dark fill, line and
+text colours and its font, Google Sans Medium. The flat four-colour "G" was the kind the guidelines call
+outdated, and the Google page's own button was blue with no "G". Now the button, on every page it
+appears, carries the bundle's gradient "G" at 20px, reads `--wt-color-google-button-fill`, `-line`
+and `-text` and `--wt-font-family-google`, and the dashboard bundles Google Sans Medium (latin,
+weight 500), registered on `document.fonts`. The Google page's own button is that same button, so
+that page has no blue button. `deploy/third-party/README.md` carries the font's SIL Open Font
+License notice (`google-sans/OFL.txt`) and Google's trademark line for the "G". It changed two
+existing assertions in `apps/dashboard/src/screens/login-screen.test.ts`, both approved by the owner on 2026-10-03: the
+Google page now has 0 primary buttons, not 1, and the Google icon among the other ways in is
+`--wt-google-mark-size` wide, not `--wt-font-size-lg`. Kept from the house rather than Google's
+drawing: the 44px tap height (Google's drawing is 40px; its text allows scaling), the full card
+width and `wt-button`'s corner radius. Checked in Chromium only (the vitest browser suites and
+screenshots); Firefox and Safari not looked at.
 
 **A focused table search box turns its own border blue, with no second ring (A192, owner
 2026-10-02) — DONE (A192).** The owner, on two screenshots of the Modifiers screen's "Search extras
@@ -6559,8 +6578,8 @@ notices; the server bundles (`scripts/bundle-node.mjs`, esbuild), the three SPAs
 copied to `/app/web/`) and the print-agent bundle (copied to `/app/print-agent.js` in
 `deploy/Dockerfile`'s `print-agent` stage) carry npm packages whose `LICENSE` files are left behind
 by bundling. The app image's `/app/third-party/` holds notices for libvips, Litestream, the Iosevka
-font, the Moby template the print agent's AppArmor profile is copied from, and the Material Symbols
-icons; the print-agent image's holds only `python3-minimal/` (since A140; bluez's copyright files are
+font, the Moby template the print agent's AppArmor profile is copied from, the Material Symbols
+icons, the Google Sans font, and Google's "G" mark (its trademark line in the notice); the print-agent image's holds only `python3-minimal/` (since A140; bluez's copyright files are
 not copied). Measured 2026-09-24: `apps/server/src/bin.ts` bundled with `bundle-node.mjs`'s options
 took in 81 npm packages, 76 of which have a `LICENSE` file, and the output kept one block of legal
 comments covering 9 source files from 8 of those packages; `apps/till` built with `vite build`

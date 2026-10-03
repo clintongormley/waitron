@@ -6,7 +6,7 @@ letters in those pictures are drawn from the font Iosevka Term Bold, release 34.
 
 ## What the box carries
 
-No font file. The box carries a table of letter pictures made from the font once, on a developer's
+No Iosevka font file. The box carries a table of letter pictures made from the font once, on a developer's
 machine, and committed to this repository as `packages/printing/src/glyphs.ts`: one picture per
 character, 12 dots wide and 28 dots tall, the font drawn at 24 pixels with its baseline 22 dots
 below the top of the picture, a dot inked when at least half of its area is inside the letter's

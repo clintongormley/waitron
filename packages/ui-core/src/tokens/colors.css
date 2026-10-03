@@ -27,6 +27,10 @@
   --wt-color-field-value: #000000;
   --wt-color-stepper-button: #e8f0ff;
   --wt-color-stepper-button-hover: #dce8ff;
+  /* Google's sign-in button colours: developers.google.com/identity/branding-guidelines */
+  --wt-color-google-button-fill: #ffffff;
+  --wt-color-google-button-line: #747775;
+  --wt-color-google-button-text: #1f1f1f;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -56,6 +60,9 @@
     --wt-color-field-value: #ffffff;
     --wt-color-stepper-button: #172946;
     --wt-color-stepper-button-hover: #233757;
+    --wt-color-google-button-fill: #131314;
+    --wt-color-google-button-line: #8e918f;
+    --wt-color-google-button-text: #e3e3e3;
   }
 }
 
@@ -85,6 +92,9 @@
   --wt-color-field-value: #000000;
   --wt-color-stepper-button: #e8f0ff;
   --wt-color-stepper-button-hover: #dce8ff;
+  --wt-color-google-button-fill: #ffffff;
+  --wt-color-google-button-line: #747775;
+  --wt-color-google-button-text: #1f1f1f;
 }
 
 :where([data-wt-theme-root][data-theme="dark"]) {
@@ -113,4 +123,7 @@
   --wt-color-field-value: #ffffff;
   --wt-color-stepper-button: #172946;
   --wt-color-stepper-button-hover: #233757;
+  --wt-color-google-button-fill: #131314;
+  --wt-color-google-button-line: #8e918f;
+  --wt-color-google-button-text: #e3e3e3;
 }
