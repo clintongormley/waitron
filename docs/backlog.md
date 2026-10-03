@@ -2542,15 +2542,17 @@ enrol screen's language chooser was visible at 1280 and 390 pixels in both theme
 true inside Demo's device setup dialog. Screenshots: `~/waitron-campaign/w35-shots/`. The owner's
 earlier missing chooser was not reproduced; no separate chooser change was made.
 
-**A Demo bar on every page, so a new user can find their way (A246, owner 2026-10-03) — OPEN,
-queued as lane A's W36.** Clicking Till first after setup lands on the device setup screen with no
-word on what to do next or how to reach the dashboard. The till shows a Demo bar at the top
-(`mode-indicator` in `apps/till/src/till-app.ts`); the dashboard shows the mode as a pill beside the
-venue name, with an Email inbox link in its banner (`apps/dashboard/src/dashboard-app.ts`). The owner
-wants the same bar on the dashboard too, with the email inbox moved into it, and links in it to the
-dashboard, the device page and the pretend demo printer (A241, not built yet), so the user always
-knows where they are. And the device setup screen should say that a manager approves the device in
-the dashboard under Settings → Devices, ideally with a link straight there.
+**A Demo bar on the till and dashboard (A246, owner 2026-10-03) — DONE in W36.** In Demo and
+Preparation, the shared bar links to the dashboard, device page and Email inbox. The dashboard's
+Email inbox link lives there, and the till's device setup and approval screens link directly to
+Settings → Devices so a manager can approve the device. Live keeps its existing mode label. The
+pretend printer link follows when A241 adds its page in W37.
+
+**Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
+apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A
+request for `/manage/devices` on 5190 returned the till HTML, while the same path on 5191 returned
+the dashboard HTML (measured 2026-10-03 with `curl`). Make cross-app links reach the other dev
+server without changing their deployed same-origin paths; this also affects setup's existing links.
 
 **Table filters move into a Filters panel, and vanish on an empty table (A248, owner 2026-10-03) —
 DONE in W39.** `wt-data-table` (`packages/ui/src/components/wt-data-table.ts`)

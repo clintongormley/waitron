@@ -35,6 +35,7 @@ import {
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { LocaleChangeController } from "./state/locale-controller.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
+import "@waitron/ui/src/components/wt-demo-bar.js";
 import "./screens/login-screen.js";
 import "./screens/profile-screen.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
@@ -454,18 +455,6 @@ export class DashboardApp extends LitElement {
         gap: var(--wt-space-3);
       }
 
-      .inbox-link {
-        flex: 0 0 auto;
-        display: inline-flex;
-        align-items: center;
-        min-height: var(--wt-tap-min);
-        margin-inline-start: auto;
-        color: var(--wt-color-primary);
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
-        white-space: nowrap;
-      }
-
       .venue-name {
         /* A floor, not zero: unbounded, this flex item was the only shrinkable thing in
            .brand-identity, so a narrow banner could squeeze it down to a couple of pixels wide —
@@ -569,12 +558,6 @@ export class DashboardApp extends LitElement {
           display: flex;
           align-items: center;
           gap: var(--wt-space-3);
-        }
-        .inbox-link {
-          flex: 0 1 auto;
-          justify-content: flex-end;
-          white-space: normal;
-          text-align: end;
         }
         .venue-name {
           padding-inline-start: 0;
@@ -1201,7 +1184,7 @@ export class DashboardApp extends LitElement {
           class="login-page"
           @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
         >
-          ${this.#banner(false, false)}
+          ${this.#demoBar(false)} ${this.#banner(false, false)}
           <div class="body">
             <dashboard-login-screen
               .api=${this.api}
@@ -1219,6 +1202,7 @@ export class DashboardApp extends LitElement {
         @keydown=${(e: KeyboardEvent) => this.#onLayoutKeydown(e)}
         @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
       >
+        ${this.#demoBar(true)}
         <div class="banner-row">
           ${this.#banner(true, true)}
           <wt-toast
@@ -1288,6 +1272,23 @@ export class DashboardApp extends LitElement {
     `;
   }
 
+  #demoBar(authenticated: boolean): TemplateResult | typeof nothing {
+    if (this.onboardingIntent !== "demo" && this.onboardingIntent !== "prepare") return nothing;
+    const links = [
+      { label: t("demo_bar.dashboard"), href: "/manage", current: true },
+      { label: t("demo_bar.device"), href: "/" },
+      ...(!authenticated || this.#canOpenScreen("email")
+        ? [{ label: t("nav.email_inbox"), href: "/manage/email" }]
+        : []),
+    ];
+    return html`<wt-demo-bar
+      data-test="demo-bar"
+      .modeLabel=${t(`mode.${this.onboardingIntent}`)}
+      .navigationLabel=${t("demo_bar.navigation")}
+      .links=${links}
+    ></wt-demo-bar>`;
+  }
+
   #banner(authenticated: boolean, hasNav: boolean): TemplateResult {
     return html`<header class="brand-banner" data-test="brand-banner">
       <div class="brand-identity">
@@ -1307,26 +1308,18 @@ export class DashboardApp extends LitElement {
           <source media="(prefers-color-scheme: dark)" srcset=${WAITRON_LOGO_DARK_URL} />
           <img class="brand-logo" src=${WAITRON_LOGO_URL} alt="Waitron" />
         </picture>
-        <span class="venue-row">
-          <span class="venue">
+        <span class="venue-row"
+          ><span class="venue">
             <span class="venue-name" data-test="venue-name">${this.venueName}</span>
             ${
-              this.onboardingIntent === undefined
-                ? nothing
-                : html`<span class="mode-indicator" data-test="mode-indicator">
-                    ${t(`mode.${this.onboardingIntent}`)}
-                  </span>`
+              this.onboardingIntent === "live"
+                ? html`<span class="mode-indicator" data-test="mode-indicator"
+                    >${t("mode.live")}</span
+                  >`
+                : nothing
             }
-          </span>
-          ${
-            (this.onboardingIntent === "demo" || this.onboardingIntent === "prepare") &&
-            (!authenticated || this.#canOpenScreen("email"))
-              ? html`<a class="inbox-link" data-test="email-inbox-link" href="/manage/email"
-                  >${t("nav.email_inbox")}</a
-                >`
-              : nothing
-          }
-        </span>
+          </span></span
+        >
       </div>
       <div class="banner-actions">
         <wt-language-chooser

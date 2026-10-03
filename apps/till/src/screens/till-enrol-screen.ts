@@ -172,6 +172,7 @@ export class TillEnrolScreen extends LitElement {
     return html`
       <h1 class="title">${t("device.join_name_title")}</h1>
       <p class="hint">${t("device.join_name_hint")}</p>
+      ${this.#approvalGuide()}
       <wt-input
         @keydown=${(e: KeyboardEvent) =>
           submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-submit]"))}
@@ -204,6 +205,7 @@ export class TillEnrolScreen extends LitElement {
     return html`
       <h1 class="title">${t("device.join_waiting_title")}</h1>
       <p class="hint">${t("device.join_waiting_hint")}</p>
+      ${this.#approvalGuide()}
       <p
         class="number"
         data-number
@@ -213,6 +215,13 @@ export class TillEnrolScreen extends LitElement {
         ${this.verificationNumber}
       </p>
     `;
+  }
+
+  #approvalGuide(): TemplateResult {
+    return html`<p class="hint">
+      ${t("device.join_approval_guide")}
+      <a data-approval-guide href="/manage/devices">${t("device.join_approval_link")}</a>.
+    </p>`;
   }
 
   #renderRefused(): TemplateResult {

@@ -733,7 +733,9 @@ describe("dashboard-app", () => {
     expect(brandBanner(el)).toBeTruthy();
     expect(brandBanner(el)!.querySelector<HTMLImageElement>('img[alt="Waitron"]')).toBeTruthy();
     expect(venueName(el)!.textContent?.trim()).toBe("Deli Test SL");
-    expect(modeIndicator(el)?.textContent?.trim()).toBe("Preparación");
+    expect(
+      el.shadowRoot!.querySelector("wt-demo-bar")?.shadowRoot!.querySelector("strong")?.textContent,
+    ).toBe("Preparación");
     expect(logoutBtn(el)).toBeNull();
   });
 
@@ -842,8 +844,8 @@ describe("dashboard-app", () => {
     const hostBox = el.getBoundingClientRect();
     const bannerBox = banner.getBoundingClientRect();
 
-    // The banner shares its first row only with the pop-up that hangs below it.
-    expect(shell.firstElementChild!.firstElementChild).toBe(banner);
+    expect(shell.firstElementChild).toBe(el.shadowRoot!.querySelector("wt-demo-bar"));
+    expect(shell.querySelector(".banner-row")!.firstElementChild).toBe(banner);
     expect(bannerBox.left).toBeCloseTo(hostBox.left, 0);
     expect(bannerBox.right).toBeCloseTo(hostBox.right, 0);
     expect(sidebar.getBoundingClientRect().top).toBeGreaterThanOrEqual(bannerBox.bottom);
@@ -2320,6 +2322,16 @@ describe("dashboard-app", () => {
     },
   );
 
+  it("opens the Devices page from the approval link's URL for a manager", async () => {
+    history.replaceState(null, "", "/manage/devices");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe: vi.fn().mockResolvedValue(meResponse) }),
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-devices-screen")).not.toBeNull();
+    expect(location.pathname).toBe("/manage/devices");
+  });
+
   it("offers the VAT return under Sales to a session holding report.export, and opens its page", async () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["report.export"] }),
@@ -3704,10 +3716,43 @@ describe.each([
 });
 
 describe("the banner's email inbox link", () => {
-  const inboxLink = (el: DashboardApp) =>
-    el.shadowRoot!.querySelector<HTMLAnchorElement>(
-      "[data-test=brand-banner] [data-test=email-inbox-link]",
+  it("shows Demo navigation above the public login page", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+        getLocales: vi.fn().mockResolvedValue({
+          locales: [{ code: "es-ES", label: "Español" }],
+          venueDefault: "es-ES",
+          loginDefault: "es-ES",
+          venueName: "Deli Test SL",
+          onboardingIntent: "demo",
+        }),
+      }),
+    });
+    await flush(el);
+    const bar = el.shadowRoot!.querySelector("wt-demo-bar");
+    expect(bar).not.toBeNull();
+    expect(brandBanner(el)!.querySelector("[data-test=mode-indicator]")).toBeNull();
+    expect(brandBanner(el)!.querySelector("[data-test=email-inbox-link]")).toBeNull();
+    expect(bar!.shadowRoot!.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe(
+      "Panel",
     );
+    expect(bar!.shadowRoot!.querySelector('a[href="/"]')).not.toBeNull();
+  });
+
+  it("keeps the Live label in the banner without a Demo bar", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: withIntent(false, "live"),
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("wt-demo-bar")).toBeNull();
+    expect(modeIndicator(el)?.textContent?.trim()).toBe("En vivo");
+  });
+
+  const inboxLink = (el: DashboardApp) =>
+    el
+      .shadowRoot!.querySelector("wt-demo-bar")
+      ?.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/manage/email"]') ?? null;
   const withIntent = (signedIn: boolean, intent: string | undefined) =>
     signedIn
       ? stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, onboardingIntent: intent }) })
@@ -3728,7 +3773,7 @@ describe("the banner's email inbox link", () => {
     ["signed in", "prepare", true],
     ["signed out", "prepare", false],
   ] as const)(
-    "%s, when the intent is %s, links to the inbox just before the language chooser",
+    "%s, when the intent is %s, links to the inbox from the shared bar",
     async (_state, intent, signedIn) => {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: withIntent(signedIn, intent),
@@ -3777,7 +3822,7 @@ describe("the banner's email inbox link", () => {
       });
       await flush(el);
       expect(login(el)).toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-test=mode-indicator]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("wt-demo-bar")).not.toBeNull();
       expect(inboxLink(el) !== null).toBe(shown);
     },
   );
@@ -3931,7 +3976,6 @@ describe("alerts in the shell", () => {
           "[data-test=nav-toggle]",
           ".brand-logo",
           "[data-test=venue-name]",
-          "[data-test=mode-indicator]",
           "[data-test=alerts-bell]",
           "[data-test=account-menu]",
           "[data-test=language-chooser]",
@@ -3957,7 +4001,7 @@ describe("alerts in the shell", () => {
           }
         }
         expect(banner.scrollWidth).toBeLessThanOrEqual(banner.clientWidth);
-        const [, logo, , , , menu, chooser] = items;
+        const [, logo, , , menu, chooser] = items;
         expect(menu!.box.top, "the account menu shares the lockup's row").toBeLessThan(
           logo!.box.bottom,
         );
@@ -3974,7 +4018,7 @@ describe("alerts in the shell", () => {
     ["prepare", "en-GB"],
     ["prepare", "es-ES"],
   ] as const)(
-    "when the intent is %s, in %s at 1280px, puts the email inbox link on the lockup's row just before the language chooser",
+    "when the intent is %s, in %s at 1280px, puts the email inbox link in the shared bar above the banner",
     async (intent, locale) => {
       const api = alertsApi({
         getMe: vi
@@ -3988,27 +4032,18 @@ describe("alerts in the shell", () => {
       });
       await flush(el);
       await atViewport(host, 1280, async () => {
-        const box = (selector: string) =>
-          el.shadowRoot!.querySelector(selector)!.getBoundingClientRect();
-        const link = box("[data-test=email-inbox-link]");
-        const chooser = box("[data-test=language-chooser]");
-        const pill = box("[data-test=mode-indicator]");
+        const bar = el.shadowRoot!.querySelector("wt-demo-bar")!;
+        const link = bar
+          .shadowRoot!.querySelector('a[href="/manage/email"]')!
+          .getBoundingClientRect();
+        const current = bar
+          .shadowRoot!.querySelector('[aria-current="page"]')!
+          .getBoundingClientRect();
+        const banner = brandBanner(el)!.getBoundingClientRect();
         expect(link.width).toBeGreaterThan(0);
-        expect(link.left, "the inbox link follows the mode pill").toBeGreaterThan(pill.right);
-        expect(link.right, "the inbox link ends before the chooser").toBeLessThanOrEqual(
-          chooser.left,
-        );
-        expect(
-          chooser.left - link.right,
-          "nothing fits between the link and the chooser",
-        ).toBeLessThanOrEqual(8);
-        expect(
-          Math.abs((link.top + link.bottom) / 2 - (chooser.top + chooser.bottom) / 2),
-          "the inbox link is centred on the chooser",
-        ).toBeLessThanOrEqual(1);
-        expect(link.height, "the inbox link meets the minimum tap size").toBeGreaterThanOrEqual(
-          tapMin(el),
-        );
+        expect(link.left).toBeGreaterThan(current.right);
+        expect(link.bottom).toBeLessThanOrEqual(banner.top);
+        expect(bar.scrollWidth).toBeLessThanOrEqual(bar.clientWidth);
       });
     },
   );
@@ -4020,7 +4055,7 @@ describe("alerts in the shell", () => {
       ),
     ),
   )(
-    "when the intent is %s, in %s, fits every banner item without overlap at %ipx, the email inbox link included",
+    "when the intent is %s, in %s, fits banner items and the shared bar at %ipx",
     async (intent, locale, width) => {
       const api = alertsApi({
         getMe: vi
@@ -4039,8 +4074,6 @@ describe("alerts in the shell", () => {
           "[data-test=nav-toggle]",
           ".brand-logo",
           "[data-test=venue-name]",
-          "[data-test=mode-indicator]",
-          "[data-test=email-inbox-link]",
           "[data-test=language-chooser]",
           "[data-test=alerts-bell]",
           "[data-test=account-menu]",
@@ -4067,20 +4100,25 @@ describe("alerts in the shell", () => {
         }
         expect(banner.scrollWidth).toBeLessThanOrEqual(banner.clientWidth);
         const logo = items[1]!.box;
-        const pill = items[3]!.box;
-        const link = items[4]!.box;
+        const bar = el.shadowRoot!.querySelector("wt-demo-bar")!;
+        const link = bar
+          .shadowRoot!.querySelector('a[href="/manage/email"]')!
+          .getBoundingClientRect();
+        const current = bar
+          .shadowRoot!.querySelector('[aria-current="page"]')!
+          .getBoundingClientRect();
         expect(logo.width, "the lockup keeps a readable width").toBeGreaterThanOrEqual(60);
-        expect(link.top, "the inbox link takes the second row").toBeGreaterThanOrEqual(logo.bottom);
-        expect(link.left, "the inbox link follows the mode pill").toBeGreaterThan(pill.right);
-        expect(
-          Math.abs((link.top + link.bottom) / 2 - (pill.top + pill.bottom) / 2),
-          "the inbox link is centred on the mode pill",
-        ).toBeLessThanOrEqual(1);
+        expect(link.width, "the inbox link is visible").toBeGreaterThan(0);
+        const overlapX = Math.min(link.right, current.right) - Math.max(link.left, current.left);
+        const overlapY = Math.min(link.bottom, current.bottom) - Math.max(link.top, current.top);
+        expect(overlapX > 0.5 && overlapY > 0.5, "the bar links do not overlap").toBe(false);
+        expect(link.bottom, "the bar stays above the banner").toBeLessThanOrEqual(outer.top);
         expect(link.height, "the inbox link meets the minimum tap size").toBeGreaterThanOrEqual(
           tapMin(el),
         );
-        const chooser = items[5]!.box;
-        const menu = items[7]!.box;
+        expect(bar.scrollWidth).toBeLessThanOrEqual(bar.clientWidth);
+        const chooser = items[3]!.box;
+        const menu = items[5]!.box;
         expect(menu.top, "the account menu shares the lockup's row").toBeLessThan(logo.bottom);
         expect(chooser.top, "the language chooser shares the lockup's row").toBeLessThan(
           logo.bottom,

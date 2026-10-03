@@ -132,7 +132,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     ["prepare", "signed in", true],
     ["prepare", "signed out", false],
   ] as const)(
-    "when the intent is %s, the banner, with its email inbox link, renders accessibly %s",
+    "when the intent is %s, the shared bar and banner render accessibly %s",
     async (intent, _state, signedIn) => {
       const api = signedIn
         ? stubApi({
@@ -160,7 +160,11 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
           });
       const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
       await flush(el);
-      expect(el.shadowRoot!.querySelector("[data-test=email-inbox-link]")).toBeTruthy();
+      expect(
+        el
+          .shadowRoot!.querySelector("wt-demo-bar")
+          ?.shadowRoot!.querySelector('a[href="/manage/email"]'),
+      ).toBeTruthy();
       await expectNoA11yViolations(host);
     },
   );
