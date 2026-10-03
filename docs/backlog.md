@@ -1446,6 +1446,17 @@ in `apps/dashboard/src/widgets/variant-table.ts`. **Wanted:** the switch drawn w
 still named for screen readers. Do it with A262 and A264: dropping the text changes how wide the
 Preselected column needs to be.
 
+**An extra's maximum quantity can be left blank for no limit (A266, owner 2026-10-03) — OPEN,
+queued in lane D as W54, after A263 lands.** While designing A263 the owner asked for the extras
+table's per-item Maximum quantity to work like Maximum choices: blank means no limit, and − goes
+2 → 1 → blank. Today it cannot be blank anywhere: the column is `not null`, defaults to 1 and has a
+CHECK of at least 1 (`max_quantity`, `packages/catalogue/src/schema/extras.ts`), the request
+contract fills an absent value with 1 (`packages/catalogue/src/extra-contract.ts`), and the server's
+modifier check and the till's picker read it as a number (`apps/server/src/modifier-selection.ts`,
+`apps/till/src/widgets/modifier-picker.ts`). So this is a migration on catalogue plus the contract,
+the server check, the till and the menu document, not only the form. It uses A263's
+clear-at-lowest setting on the stepper.
+
 **The option form opens with its names section expanded (A199, owner 2026-10-02) — DONE by A170
 (#1040):** the option window no longer folds its names at all, so they show on open on Add and Edit;
 "can still be collapsed" no longer applies, because nothing folds. The
