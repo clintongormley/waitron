@@ -957,7 +957,7 @@ row, after the mode pill, because on the first row it squeezed the Waitron locku
 sidebar's Test inbox entry.)
 
 **The sidebar no longer lists the email inbox; the top-bar link is the way in (A227, owner
-2026-10-03) — DONE (#PR).** The sidebar's "Test inbox" entry is gone, and with it the `nav.email`
+2026-10-03) — DONE (#1094).** The sidebar's "Test inbox" entry is gone, and with it the `nav.email`
 string. The top bar's "Email inbox" link now shows in a demo AND in a venue preparing to go live:
 the server's practice mode covers both (`apps/server/src/boot.ts`), and in practice mode with no
 SMTP set up, account email is captured on the box (`apps/server/src/email-delivery.ts`). The
