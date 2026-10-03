@@ -260,10 +260,10 @@ it("words the refusals a bill move to a table or away from its party can meet, i
     }
   }
   expect(codeMessage("party.main_bill_stays", "en")).toBe(
-    "This is the table's main bill, and the table has other unpaid bills. Move one of those instead",
+    "This is the table's main bill, and the table has other unpaid bills. Move the other bills first, or merge them into this one",
   );
   expect(codeMessage("party.main_bill_stays", "es")).toBe(
-    "Es la cuenta principal de la mesa, y la mesa tiene otras cuentas sin pagar. Mueve una de esas",
+    "Es la cuenta principal de la mesa, y la mesa tiene otras cuentas sin pagar. Mueve antes las otras cuentas o júntalas con esta",
   );
   expect(codeMessage("table.already_in_party", "en")).toBe(
     "Those guests already have that table. Choose another table",

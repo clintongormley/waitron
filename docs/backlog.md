@@ -3555,9 +3555,6 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     chip spill past the token's edge; the map's token sizes (`sizeForCapacity`, `wt-floor-canvas`)
     decide that (owner, 2026-09-30, on C82's question: "wait on this"; not queued). A tab total
     does not fit either: see the entry below on a four-digit total.
-  - **Task 12 (#888).** `party.main_bill_stays` still reads "Move one of those instead" (pinned in
-    `apps/till/src/i18n/codes.test.ts`); the plan asked for "move the other bills first or merge
-    them".
   - **Open, from C84's review (#913):** when a void or line change gets no answer,
     `#rereadAmounts()` can put on screen what the party still owes, taken from its bills after its
     own floor read failed, while the revision on screen stays where it was. A later floor read that

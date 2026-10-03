@@ -56,8 +56,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esa mesa ya es de estos clientes. Elige otra mesa",
   },
   "party.main_bill_stays": {
-    en: "This is the table's main bill, and the table has other unpaid bills. Move one of those instead",
-    es: "Es la cuenta principal de la mesa, y la mesa tiene otras cuentas sin pagar. Mueve una de esas",
+    en: "This is the table's main bill, and the table has other unpaid bills. Move the other bills first, or merge them into this one",
+    es: "Es la cuenta principal de la mesa, y la mesa tiene otras cuentas sin pagar. Mueve antes las otras cuentas o júntalas con esta",
   },
   "service_zone.join_mismatch": {
     en: "Those tables are in different service areas, so they cannot be joined",
