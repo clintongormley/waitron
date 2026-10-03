@@ -7,12 +7,12 @@ import "./printers-screen.js";
 import type { PrintersScreen } from "./printers-screen.js";
 import type {
   DashboardApi,
-  DeviceProfile,
   DiscoveredPrinter,
   JoinRequestRow,
   PrintAgentRow,
   PrintJobRow,
   Printer,
+  PrinterProfileOffer,
 } from "../api/client.js";
 
 const agents: PrintAgentRow[] = [
@@ -105,37 +105,10 @@ const jobs: PrintJobRow[] = [
   },
 ];
 
-const deviceProfiles: DeviceProfile[] = [
-  {
-    id: "dp1",
-    name: "Mostrador",
-    canvasId: null,
-    capabilities: [],
-    formFactor: "till",
-    inactivityTimeoutSeconds: null,
-    receiptPrinterIds: ["p1"],
-    paymentSlipPrinterIds: [],
-  },
-  {
-    id: "dp2",
-    name: "Camareros",
-    canvasId: null,
-    capabilities: [],
-    formFactor: "phone-portrait",
-    inactivityTimeoutSeconds: null,
-    receiptPrinterIds: ["p2"],
-    paymentSlipPrinterIds: ["p2", "p1"],
-  },
-  {
-    id: "dp3",
-    name: "Cocina",
-    canvasId: null,
-    capabilities: [],
-    formFactor: "kds",
-    inactivityTimeoutSeconds: null,
-    receiptPrinterIds: [],
-    paymentSlipPrinterIds: [],
-  },
+const printerProfiles: PrinterProfileOffer[] = [
+  { printerId: "p1", profileId: "dp1", profileName: "Camareros" },
+  { printerId: "p2", profileId: "dp1", profileName: "Camareros" },
+  { printerId: "p1", profileId: "dp2", profileName: "Mostrador" },
 ];
 
 // An unregistered USB device, a disabled registration offered for adding again, and an office printer.
@@ -210,7 +183,7 @@ function stubApi(pairingOpen = false, overrides: Partial<DashboardApi> = {}): Da
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
     renewPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 180_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
-    listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
+    listPrinterProfiles: vi.fn().mockResolvedValue(printerProfiles),
     ...overrides,
   } as unknown as DashboardApi;
 }

@@ -1353,6 +1353,43 @@ describe("device-profiles-screen printer lists", () => {
     });
   });
 
+  it("ends the move buttons at the printers drawn, past an undelivered one", async () => {
+    const button = (el: DeviceProfilesScreen, test: string) =>
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test=${test}]`)!;
+    const trailing = await editListed({
+      getDeviceProfile: vi.fn().mockResolvedValue({
+        ...listedProfile,
+        receiptPrinterIds: ["pr2", "pr1", "pr-new"],
+      }),
+    });
+    expect(button(trailing.el, "receipt-printers-down-pr1").disabled).toBe(true);
+    cleanupWidgets();
+    const leading = await editListed({
+      getDeviceProfile: vi.fn().mockResolvedValue({
+        ...listedProfile,
+        receiptPrinterIds: ["pr-new", "pr2", "pr1"],
+      }),
+    });
+    expect(button(leading.el, "receipt-printers-up-pr2").disabled).toBe(true);
+  });
+
+  it("swaps a moved printer with the printer drawn next to it, past an undelivered one", async () => {
+    const { api, el } = await editListed({
+      getDeviceProfile: vi.fn().mockResolvedValue({
+        ...listedProfile,
+        receiptPrinterIds: ["pr2", "pr-new", "pr1"],
+      }),
+    });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=receipt-printers-up-pr1]")!.click();
+    await el.updateComplete;
+    expect(switchedOn(el, "receipt-printers")).toEqual(["pr1", "pr2"]);
+    await save(el);
+    expect(savedLists(api)).toEqual({
+      receiptPrinterIds: ["pr1", "pr-new", "pr2"],
+      paymentSlipPrinterIds: ["pr3"],
+    });
+  });
+
   it("says to add a printer first when the venue has none", async () => {
     const api = stubApi();
     const el = await mount(api);

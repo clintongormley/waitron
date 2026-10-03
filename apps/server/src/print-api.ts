@@ -9,6 +9,8 @@ import { AppError } from "@waitron/shared";
 import type { SupportedLocale } from "@waitron/shared";
 import type { ReceiptQrText } from "@waitron/fiscal";
 import {
+  deviceProfilePrinters,
+  deviceProfiles,
   drawerOpenPolicy,
   drawerOpens,
   locations,
@@ -1243,6 +1245,25 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           })
           .from(tills)
           .orderBy(tills.name),
+      );
+      return c.json(rows);
+    }),
+  );
+
+  // The printer detail page's "offered on profiles", under the printers screen's own permission.
+  app.get("/management-api/printer-profiles", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const rows = await gated(sessionId, (tx) =>
+        tx
+          .selectDistinct({
+            printerId: deviceProfilePrinters.printerId,
+            profileId: deviceProfiles.id,
+            profileName: deviceProfiles.name,
+          })
+          .from(deviceProfilePrinters)
+          .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
+          .orderBy(deviceProfiles.name, deviceProfilePrinters.printerId),
       );
       return c.json(rows);
     }),

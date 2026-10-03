@@ -36,7 +36,6 @@ import { SETTING_WIDTHS, textGrid } from "@waitron/printing/src/layout.js";
 import type {
   BluetoothCommandStatus,
   DashboardApi,
-  DeviceProfile,
   DiscoveredPrinter,
   JoinRequestRow,
   PairingModeState,
@@ -49,6 +48,7 @@ import type {
   Printer,
   PrinterPatch,
   PrinterAddressProbe,
+  PrinterProfileOffer,
 } from "../api/client.js";
 
 interface PrinterDraft {
@@ -520,7 +520,7 @@ export class PrintersScreen extends LitElement {
   /** The last print the edit or calibration dialog sent. */
   @state() private calibrationJobId: string | null = null;
 
-  @state() private deviceProfiles: DeviceProfile[] = [];
+  @state() private printerProfiles: PrinterProfileOffer[] = [];
 
   @state() private armedRevokeId: string | null = null;
 
@@ -671,8 +671,8 @@ export class PrintersScreen extends LitElement {
         this.#queries.watch("listRecentJobs", [], (jobs) => {
           this.jobs = jobs;
         }),
-        this.#queries.watch("listDeviceProfiles", [], (deviceProfiles) => {
-          this.deviceProfiles = deviceProfiles;
+        this.#queries.watch("listPrinterProfiles", [], (printerProfiles) => {
+          this.printerProfiles = printerProfiles;
         }),
         this.#queries.watch("pairingMode", [], (pairing) => {
           this.pairing = pairing;
@@ -2050,12 +2050,9 @@ export class PrintersScreen extends LitElement {
         <dt>${label}</dt>
         <dd data-test=${test}>${value}</dd>
       </div>`;
-    const offeredOn = this.deviceProfiles
-      .filter(
-        (profile) =>
-          profile.receiptPrinterIds.includes(p.id) || profile.paymentSlipPrinterIds.includes(p.id),
-      )
-      .map((profile) => profile.name);
+    const offeredOn = this.printerProfiles
+      .filter((offer) => offer.printerId === p.id)
+      .map((offer) => offer.profileName);
     return html`<section data-test="printer-status">
       ${back}
       <div class="status-heading">

@@ -113,6 +113,9 @@ it.each([
     ["menu-1"],
     ["menu_details", "sections", "section_members", "products", "catalogues"],
   ],
+  // `/management-api/printer-profiles` (apps/server/src/print-api.ts): the list rows, joined to
+  // their profile. Not `devices`, which a device's heartbeat changes every minute.
+  ["listPrinterProfiles", [], ["device_profile_printers", "device_profiles"]],
   // `deviceHomeLayouts` (the same file): every menu by name, each menu's layouts, and the choices.
   [
     "getDeviceHomeLayouts",

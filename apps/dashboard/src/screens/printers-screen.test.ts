@@ -11,12 +11,12 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
 import type {
   DashboardApi,
-  DeviceProfile,
   DiscoveredPrinter,
   JoinRequestRow,
   PrintAgentRow,
   PrintJobRow,
   Printer,
+  PrinterProfileOffer,
 } from "../api/client.js";
 import {
   AGENT_SCAN_LISTEN_MS,
@@ -197,37 +197,10 @@ const jobs: PrintJobRow[] = [
   },
 ];
 
-const deviceProfiles: DeviceProfile[] = [
-  {
-    id: "dp1",
-    name: "Mostrador",
-    canvasId: null,
-    capabilities: [],
-    formFactor: "till",
-    inactivityTimeoutSeconds: null,
-    receiptPrinterIds: ["p1"],
-    paymentSlipPrinterIds: [],
-  },
-  {
-    id: "dp2",
-    name: "Camareros",
-    canvasId: null,
-    capabilities: [],
-    formFactor: "phone-portrait",
-    inactivityTimeoutSeconds: null,
-    receiptPrinterIds: ["p2"],
-    paymentSlipPrinterIds: ["p2", "p1"],
-  },
-  {
-    id: "dp3",
-    name: "Cocina",
-    canvasId: null,
-    capabilities: [],
-    formFactor: "kds",
-    inactivityTimeoutSeconds: null,
-    receiptPrinterIds: [],
-    paymentSlipPrinterIds: [],
-  },
+const printerProfiles: PrinterProfileOffer[] = [
+  { printerId: "p1", profileId: "dp1", profileName: "Camareros" },
+  { printerId: "p2", profileId: "dp1", profileName: "Camareros" },
+  { printerId: "p1", profileId: "dp2", profileName: "Mostrador" },
 ];
 
 const pending: JoinRequestRow[] = [
@@ -278,7 +251,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
     renewPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 180_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue([] as DiscoveredPrinter[]),
-    listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
+    listPrinterProfiles: vi.fn().mockResolvedValue(printerProfiles),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -1266,7 +1239,7 @@ describe("printers-screen", () => {
     expect((q(el, "[data-test=printer-name-p1]") as import("@waitron/ui").WtInput).value).toBe(
       "Unsaved name",
     );
-    expect(api.listDeviceProfiles).toHaveBeenCalledTimes(1);
+    expect(api.listPrinterProfiles).toHaveBeenCalledTimes(1);
   });
   it("loads agents, printers and jobs on connect and renders a row for each", async () => {
     const api = stubApi();
@@ -3560,7 +3533,7 @@ it("shows the saved drawer independently of the profiles offering it, and the de
         lastPrintAt: "2026-09-26T14:00:00.000Z",
       },
     ]),
-    listDeviceProfiles: vi.fn().mockResolvedValue([]),
+    listPrinterProfiles: vi.fn().mockResolvedValue([]),
   });
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
@@ -3573,7 +3546,7 @@ it("shows the saved drawer independently of the profiles offering it, and the de
   expect(text(el, "[data-test=printer-status]")).toContain("2026-09-26 14:00");
 });
 
-it("lists the profiles that offer a printer on either list, following their changes", async () => {
+it("lists the profiles that offer a printer, following their changes but not a device's", async () => {
   const liveData = new LiveData();
   const api = Object.assign(stubApi(), { liveData });
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
@@ -3582,14 +3555,15 @@ it("lists the profiles that offer a printer on either list, following their chan
   q(el, "[data-test=printer-row-p1]")!.click();
   await flush(el);
   const profilesField = q(el, "[data-test=printer-profiles]")!;
-  expect(profilesField.textContent!.trim()).toBe("Mostrador, Camareros");
+  expect(profilesField.textContent!.trim()).toBe("Camareros, Mostrador");
   expect(profilesField.closest("div")!.querySelector("dt")!.textContent!.trim()).toBe(
     t("printers.profiles"),
   );
-  vi.mocked(api.listDeviceProfiles).mockResolvedValue([
-    { ...deviceProfiles[0]!, receiptPrinterIds: [] },
-    deviceProfiles[1]!,
-  ]);
+  // A device's heartbeat changes `devices`; the offers do not read it.
+  liveData.invalidate([{ type: "devices", id: "seen" }]);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(api.listPrinterProfiles).toHaveBeenCalledTimes(1);
+  vi.mocked(api.listPrinterProfiles).mockResolvedValue([printerProfiles[0]!]);
   liveData.invalidate([{ type: "device_profile_printers", id: "changed" }]);
   await vi.waitFor(() => expect(text(el, "[data-test=printer-profiles]")).toBe("Camareros"));
 });

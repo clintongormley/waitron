@@ -2404,6 +2404,18 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     });
   });
 
+  it("listPrinterProfiles GETs /management-api/printer-profiles with credentials", async () => {
+    const offers = [{ printerId: "p1", profileId: "dp1", profileName: "Mostrador" }];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(offers));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listPrinterProfiles()).toEqual(offers);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printer-profiles", {
+      method: "GET",
+      credentials: "include",
+      signal: expect.any(AbortSignal),
+    });
+  });
+
   it("createPrinter POSTs the input and returns the created id (201)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "p9" }, true, 201));
     const api = new DashboardApi("", fetchImpl);

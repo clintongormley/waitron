@@ -797,6 +797,13 @@ export interface Printer {
   active: boolean;
 }
 
+/** One profile offering one printer, on either of its lists. */
+export interface PrinterProfileOffer {
+  printerId: string;
+  profileId: string;
+  profileName: string;
+}
+
 export interface PrinterInput {
   name: string;
   transport: PrintTransport;
@@ -2548,6 +2555,10 @@ export class DashboardApi {
 
   listPrinters(): Promise<Printer[]> {
     return this.#request<Printer[]>("/management-api/printers", "GET");
+  }
+
+  listPrinterProfiles(): Promise<PrinterProfileOffer[]> {
+    return this.#request<PrinterProfileOffer[]>("/management-api/printer-profiles", "GET");
   }
 
   createPrinter(input: PrinterInput): Promise<{ id: string }> {

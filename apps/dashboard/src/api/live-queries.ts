@@ -41,6 +41,7 @@ export const QUERY_DEPENDENCIES = {
     "units",
   ],
   listPrinters: ["printers", "print_jobs", "watcher_printers"],
+  listPrinterProfiles: ["device_profile_printers", "device_profiles"],
   listRecentJobs: ["print_jobs", "printers", "print_agents"],
   listAgents: ["print_agents"],
   listTills: ["tills"],

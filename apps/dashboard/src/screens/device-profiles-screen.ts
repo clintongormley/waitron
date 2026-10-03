@@ -426,10 +426,14 @@ export class DeviceProfilesScreen extends LitElement {
     };
   }
 
-  #movePrinter(key: PrinterListKey, printerId: string, by: -1 | 1): void {
+  /** Swaps with the neighbour on screen, so an id the printer list has not delivered is passed
+   * over rather than swapped with unseen. */
+  #movePrinter(key: PrinterListKey, drawn: readonly string[], printerId: string, by: -1 | 1): void {
+    const neighbour = drawn[drawn.indexOf(printerId) + by]!;
     const list = [...this.draftPrinterLists[key]];
     const from = list.indexOf(printerId);
-    [list[from], list[from + by]] = [list[from + by]!, list[from]!];
+    const to = list.indexOf(neighbour);
+    [list[from], list[to]] = [neighbour, printerId];
     this.draftPrinterLists = { ...this.draftPrinterLists, [key]: list };
   }
 
@@ -723,8 +727,11 @@ export class DeviceProfilesScreen extends LitElement {
     ];
   }
 
-  #renderPrinterList(list: (typeof PRINTER_LISTS)[number]): TemplateResult {
-    const ids = this.draftPrinterLists[list.key];
+  #renderPrinterList(
+    list: (typeof PRINTER_LISTS)[number],
+    choices: { printer: Printer; listed: boolean }[],
+  ): TemplateResult {
+    const drawn = choices.filter((choice) => choice.listed).map((choice) => choice.printer.id);
     return html`<div
       class="field"
       role="group"
@@ -733,8 +740,8 @@ export class DeviceProfilesScreen extends LitElement {
     >
       <span class="panel-subtitle" id="${list.test}-heading">${t(list.heading)}</span>
       <div class="toggles">
-        ${this.#printerChoices(list.key).map(({ printer, listed }) => {
-          const position = ids.indexOf(printer.id);
+        ${choices.map(({ printer, listed }) => {
+          const position = drawn.indexOf(printer.id);
           const name = printer.active
             ? printer.name
             : `${printer.name} (${t("printers.status_inactive")})`;
@@ -756,7 +763,7 @@ export class DeviceProfilesScreen extends LitElement {
                       data-test="${list.test}-up-${printer.id}"
                       aria-label="${t("device_profiles.move_up")} ${printer.name}"
                       ?disabled=${position === 0}
-                      @click=${() => this.#movePrinter(list.key, printer.id, -1)}
+                      @click=${() => this.#movePrinter(list.key, drawn, printer.id, -1)}
                       >${t("device_profiles.move_up")}</wt-button
                     >
                     <wt-button
@@ -764,8 +771,8 @@ export class DeviceProfilesScreen extends LitElement {
                       size="sm"
                       data-test="${list.test}-down-${printer.id}"
                       aria-label="${t("device_profiles.move_down")} ${printer.name}"
-                      ?disabled=${position === ids.length - 1}
-                      @click=${() => this.#movePrinter(list.key, printer.id, 1)}
+                      ?disabled=${position === drawn.length - 1}
+                      @click=${() => this.#movePrinter(list.key, drawn, printer.id, 1)}
                       >${t("device_profiles.move_down")}</wt-button
                     ></span
                   >`
@@ -778,10 +785,10 @@ export class DeviceProfilesScreen extends LitElement {
   }
 
   #renderPrinterLists(): TemplateResult {
-    const offered = PRINTER_LISTS.some((list) => this.#printerChoices(list.key).length > 0);
-    if (!offered)
+    const lists = PRINTER_LISTS.map((list) => ({ list, choices: this.#printerChoices(list.key) }));
+    if (lists.every(({ choices }) => choices.length === 0))
       return html`<p class="field" data-test="no-printers">${t("device_profiles.no_printers")}</p>`;
-    return html`${PRINTER_LISTS.map((list) => this.#renderPrinterList(list))}`;
+    return html`${lists.map(({ list, choices }) => this.#renderPrinterList(list, choices))}`;
   }
 
   #renderEditor(): TemplateResult {

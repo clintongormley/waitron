@@ -4,6 +4,8 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  deviceProfilePrinters,
+  deviceProfiles,
   kitchenStations,
   locations,
   nowIso,
@@ -804,6 +806,59 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
     expect(staff.status).toBe(403);
     expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
     const manager = await send(app, "GET", "/management-api/tills", { cookie: managerCookie });
+    expect(manager.status).toBe(200);
+  });
+
+  it("GET /management-api/printer-profiles names each profile offering a printer on either list, once, ordered by profile name then printer id", async () => {
+    const app = mountApp(tenantA);
+    const agent = await joinAndAccept(app, "Offers agent");
+    const counter = await createPrinter(app, agent.agentId, "Counter");
+    const portable = await createPrinter(app, agent.agentId, "Portable");
+    const profileRows = await suite.db
+      .insert(deviceProfiles)
+      .values([
+        { name: `Waiters ${randomUUID()}`, formFactor: "phone-portrait" },
+        { name: `Bar ${randomUUID()}`, formFactor: "till" },
+        { name: `Kitchen ${randomUUID()}`, formFactor: "kds" },
+      ])
+      .returning({ id: deviceProfiles.id, name: deviceProfiles.name });
+    const [waiters, bar] = profileRows;
+    await suite.db.insert(deviceProfilePrinters).values([
+      { deviceProfileId: bar!.id, printerId: counter, role: "receipt", position: 0 },
+      // The same printer on both of one profile's lists is one offer.
+      { deviceProfileId: bar!.id, printerId: counter, role: "payment_slip", position: 0 },
+      { deviceProfileId: waiters!.id, printerId: portable, role: "payment_slip", position: 0 },
+      { deviceProfileId: waiters!.id, printerId: counter, role: "payment_slip", position: 1 },
+    ]);
+
+    const res = await send(app, "GET", "/management-api/printer-profiles", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    const mine = new Set([counter, portable]);
+    const offers = ((await res.json()) as { printerId: string }[]).filter((o) =>
+      mine.has(o.printerId),
+    );
+    expect(offers).toEqual([
+      { printerId: counter, profileId: bar!.id, profileName: bar!.name },
+      ...[counter, portable]
+        .sort()
+        .map((printerId) => ({ printerId, profileId: waiters!.id, profileName: waiters!.name })),
+    ]);
+  });
+
+  it("GET /management-api/printer-profiles requires printer.manage — 401 unauth, 403 staff, 200 manager", async () => {
+    const app = mountApp(tenantA);
+    const unauth = await send(app, "GET", "/management-api/printer-profiles");
+    expect(unauth.status).toBe(401);
+    const staff = await send(app, "GET", "/management-api/printer-profiles", {
+      cookie: staffCookie,
+    });
+    expect(staff.status).toBe(403);
+    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    const manager = await send(app, "GET", "/management-api/printer-profiles", {
+      cookie: managerCookie,
+    });
     expect(manager.status).toBe(200);
   });
 
