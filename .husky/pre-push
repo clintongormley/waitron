@@ -73,7 +73,7 @@ run_step() {
     echo ""
     echo "pre-push BLOCKED: '$step_name' failed."
     echo "  Reproduce:      $step_repro"
-    echo "  Skip this once: git push --no-verify"
+    echo "  Skip this once (owner only, in an emergency; agents never): git push --no-verify"
     echo ""
     exit 1
   fi

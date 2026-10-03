@@ -3910,7 +3910,10 @@ consumer, and a standby that has fallen behind.
     until a manager acts, so it is the owner's call.
   - Flaky: `packages/payments-sumup/src/dashboard/sumup-add-reader.test.ts`, "calls onClose when
     the dialog is dismissed with Escape", failed once in a run beside two coverage runs and passed
-    three times alone (2026-09-26). Not investigated yet; the owner's rule is to fix it at the root.
+    three times alone (2026-09-26); its Stripe twin, `stripe-add-reader.test.ts`, was logged failing
+    about one whole-package run in three (2026-09-27). #721 (2026-09-27) made both wait for the native
+    dialog's `close` event before counting `onClose` — the late close report #1075 measured in the
+    variant window. Neither has been re-measured since; on a recurrence, keep the log.
 - **Slice 2 — the handheld NFC/QR link.** Owner decisions 2026-09-18
   ([2026-09-18-handheld-and-till-hardware-decisions.md](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)
   §2–§3): the waiter carries the reader to the table and settles there; pairing is an NFC sticker, a
@@ -5630,9 +5633,7 @@ characters. Left open:
     settles it now), "rebuilds every lookup index without the tenant" (`src/migrations.test.ts`).
   - Found by #602 (`scripts/`), each in a file a comments-only change cannot carry.
     `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in
-    `.husky/pre-push` beside the same loop; it is not there. `CLAUDE.md` §3 says
-    `scripts/no-tenant-column.test.ts` exempts the core migration files that historically carried
-    the column, whole; its `HISTORICAL_TENANT_SQL` list is empty.
+    `.husky/pre-push` beside the same loop; it is not there.
     `docs/developers/modifiers.md` (about lines 469-472) calls the `catalogue-engine-neutral`
     header paragraph "the receipt" for not checking `pgEnum` in the order and sale files;
     #602 deleted that paragraph because those columns are now
@@ -7093,9 +7094,10 @@ Open:
   1b), not through the supervisor.
 
 **A130, A133 and A135 — a sale can wait behind Litestream's own checkpoint (DONE: A130 #868, A133
-#889, A135 #907 and #917).** The pause test's one failure on `main` (run 36559470238) was the CI
-runner's disk, not the bucket, and the stream tests' CI step now sets `TMPDIR=/dev/shm`. The figures
-are in [testing-guide.md](developers/testing-guide.md), "A sale can wait behind Litestream's own
+#889, A135 #907 and #917).** A probe that reproduced the pause test's one failure on `main` (run
+36559470238) on one runner in 20 found the CI runner's disk stalling, not the bucket, and the stream
+tests' CI step now sets `TMPDIR=/dev/shm`. The figures are in
+[testing-guide.md](developers/testing-guide.md), "A sale can wait behind Litestream's own
 checkpoint".
 - **How A133's probe ran** (a throwaway branch, since deleted; workflow run 36615242523, 12
   GitHub-hosted runners): it booted the real server on a provisioned venue and sold through
@@ -7264,10 +7266,9 @@ conflict.
   column** (2026-09-14; #378). A tenant is one taxpayer (`country` + `tax_id`), held as the single
   row of `tenants` with its `id` pinned to 1, owning all of its locations. Nothing filters a query
   by a tenant; a query that wants "this tenant's rows" reads the table. Guard:
-  `scripts/no-tenant-column.test.ts` (text-matching, and blind to test files and to the historical
-  core migrations it exempts). The cloud is a dedicated instance per tenant, hosted in Spain — a
-  server process and a SQLite file streamed to object storage. Density comes from many isolated
-  instances per host. The only multi-tenant pieces are a small control plane and the preproduction
+  `scripts/no-tenant-column.test.ts` (text-matching, and blind to test files). The cloud is a
+  dedicated instance per tenant, hosted in Spain — a server process and a SQLite file streamed to
+  object storage. Density comes from many isolated instances per host. The only multi-tenant pieces are a small control plane and the preproduction
   trial demo.
 - **Warm standby plus human promotion; active-active is shelved.** Nothing was deleted for it: branch
   **`shelved/active-active`** (= `main` at `c65d3cbe`, 2026-09-05) is the snapshot to return to.

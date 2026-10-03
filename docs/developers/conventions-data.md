@@ -152,7 +152,8 @@ has the steps to regenerate it.
 
 What the guards leave open. The third-party blocks in `scripts/deploy-image-env.test.ts` read
 text and cover libvips, Litestream, the print agent's python3-minimal, the Iosevka font, the
-dashboard's Google Sans and the Google "G" trademark line in the notice only; for Google Sans they check the copyright line in the notice and in
+dashboard's Google Sans, the bundled npm notices in the two images, and the Google "G" trademark
+line in the notice only; for Google Sans they check the copyright line in the notice and in
 `deploy/third-party/google-sans/OFL.txt`, that the font file in the dashboard's source matches the
 SHA-256 the notice records, and that image-smoke looks for `google-sans/OFL.txt`, never that a
 build emits the font or that the built image serves it;
@@ -220,8 +221,11 @@ sets. On this engine that constraint is the only thing between the column and an
 makes drizzle rebuild it.
 
 Guarded by `scripts/column-vocabulary.test.ts`, whose own header says what it reads and where it is
-blind — read that before changing it, rather than this. Two things about it belong here, because they
-are decisions rather than mechanism:
+blind — read that before changing it, rather than this. It forbids only the builders the vocabulary
+itself imports, so one it does not import passes anywhere: measured 2026-09-23, a file importing
+`blob` and a file importing `text` added side by side under `packages/fiscal-verifactu/src`, and
+the guard reported only the `text` one. Two things about it belong here, because they are decisions
+rather than mechanism:
 
 - **It is a ROOT guard, not a case in `packages/db`'s own suite**, which is where the plan put it. CI
   runs a package's suite only when the scoping selects it, and the expansion is to a changed
@@ -968,7 +972,10 @@ a promise of them (`packages/store/src/node-sqlite-adapter.ts`) — and a venue 
 transaction at a time, because `withTransaction` runs its body inside `db.withWriteLock`
 (`packages/db/src/tenancy.ts`, `packages/store/src/write-queue.ts`). So `Promise.all` over a
 transaction's queries buys nothing and hides the order the statements really run in. **No timing has
-been taken on this engine**, and none is claimed here.
+been taken on this engine**, and none is claimed here. What was measured is an outcome, not a
+timing — 2026-09-22: two reads and two `create table`s issued with `Promise.all` inside one
+`withTransaction` all completed, so the hazard is ORDER, not loss. Re-run 2026-10-03 on
+`node:sqlite`, Node v26.7.0, through the real `withTransaction`: both tables existed afterwards.
 
 **No test or guard enforces this rule anywhere.** The `fireLines` single-call test and the
 preparation-route read-count test count calls and queries; neither can tell whether queries overlap.
@@ -1335,7 +1342,8 @@ running caught it (§1, §4).
 
 ## No backwards-compatibility or data-migration code until Waitron is in production
 
-Nothing is deployed; schema changes drop and recreate. A backfill for an empty database is code to
+No real venue is live, so any installation may be reset at any time instead of carrying its data
+forward (owner, 2026-10-03). A backfill for an empty database is code to
 maintain that buys nothing — and the first draft of the settlement design carried one that could only
 ever GUESS which tender a tip belonged to, which is worse than discarding. This rule expires the day a
 real venue is live; add its replacement in the same change.
@@ -1361,7 +1369,7 @@ At the paused rebase, reset the migrations dir to main's exact state
 pasting back any hand-written SQL you saved first — a regeneration DROPS it, which is exactly how
 core's nine behavioural triggers and media's two image foreign keys were lost at the flip; both
 replacement files record it in their own headers). Stage only your migrations, `rebase --continue`,
-and verify by RUNNING `scripts/append-only-triggers.test.ts`,
+and verify by RUNNING `scripts/schema-constraints.test.ts`, `scripts/append-only-triggers.test.ts`,
 `scripts/behavioural-triggers.test.ts` (it pins every hand-written trigger by name, so it is what
 notices one dropped), `scripts/migrations-match-schema.test.ts` and
 `packages/fiscal-verifactu/src/inmutabilidad.test.ts`.
@@ -1467,7 +1475,7 @@ against such an edit: the 2026-10-02 one passed `scripts/migrations-match-schema
 
 Never from a position in the journal file, so an entry whose `when` sits AT OR BELOW one the database
 already recorded never runs, and DRIZZLE raises nothing — it applies part of a set and returns
-cleanly. The dialect that runs is `sqlite-core`: in `drizzle-orm@0.45.2/sqlite-core/dialect.js`,
+cleanly. The dialect that runs is `sqlite-core`: in `drizzle-orm@0.45.3/sqlite-core/dialect.js`,
 `SQLiteSyncDialect.migrate` takes the watermark with
 `SELECT id, hash, created_at FROM <table> ORDER BY created_at DESC LIMIT 1` at lines 653-655 and
 applies a migration only when
@@ -1495,13 +1503,30 @@ being the strong state rather than an unfinished one.
 
 Guard: `scripts/journal-monotonic.test.ts`, and what it can prove today is worth knowing. A ONE-entry
 journal cannot be out of order, so a per-set case over one such set is true by construction and is not
-evidence that any `when` in the tree is right; most sets are in that state. The sets that carry more
-than one entry are the ones whose case compares something — `packages/db`, `packages/identity` and
-`packages/media` when counted on 2026-09-23; count again rather than trusting that list. What is really
-exercised is `outOfOrder` itself, pinned by a synthetic negative control, plus the anti-vacuity anchor
-that every journal is on disk. The tree-scanning half becomes a real check again at the first
-`drizzle-kit generate` after a baseline, which is why it is in place now rather than written
-afterwards.
+evidence that any `when` in the tree is right. The sets that carry more than one entry are the ones
+whose case compares something — seven of fourteen when counted on 2026-10-03 (`db`, `catalogue`,
+`venue-service`, `media`, `identity`, `adjustments` and `payments`); count again rather than trusting
+that list. `outOfOrder` itself is pinned by a synthetic negative control, plus the anti-vacuity anchor
+that every journal is on disk.
+
+## A migration file's last statement takes no trailing `--> statement-breakpoint`
+
+Drizzle's migrator splits each file on `--> statement-breakpoint` and keeps every piece, empty ones
+included (`drizzle-orm` 0.45.3, `migrator.js`, the `query.split(...)` in `readMigrationFiles`), and
+this engine refuses an empty statement: measured 2026-10-03 on `node:sqlite`, Node v26.7.0,
+`prepare("").run()` and `prepare("\n").run()` each threw `statement has been finalized`, while
+`prepare("create table t(a)\n").run()` ran. So a hand-written migration whose last statement ends in a
+breakpoint fails with that message, which names nothing in the file (2026-10-01).
+
+## A generated table rebuild can copy a new column out of the old table
+
+For a new `not null` column with a CHECK, a single drizzle-kit generation wrote a rebuild whose
+`INSERT … SELECT` copied the new column out of the old table, which does not have it, and every
+migrate failed with `no such column` (2026-09-27). #750 (commit 4a4ca65c9,
+`service_settings.kitchen_ticket_grouping`) split it into two generations: `0005` adds the column
+and `0006` rebuilds `service_settings` to add the CHECK. #721 hit the same rebuild copy with a
+nullable column: "drizzle's single-step rebuild copied bill_payment_id FROM the old table". Read
+generated SQL before trusting it.
 
 ## `applyMigrations` refuses to report success on a short set
 
@@ -1512,6 +1537,16 @@ with 10 of 15 applied and no error, and the wrong schema surfaced later as an un
 failure. Pointer: `packages/migrations/src/apply-complete.test.ts`.
 
 **Provisioning and boot**
+
+## A restore re-registers a filing node; the working-time chain continues
+
+A cold restore, or a rebuild from the bucket, of a node that was filing floors the installation
+counter by the clock (the counter is in the backup, so an older artifact would otherwise re-mint a
+number a previous restore used), retires the node's invoice series and opens disjoint ones, and
+writes the box's identity only after that commits — #248. The working-time chain is not reset: a
+survivor's forked row is refused by `time_entries_chain_position_uq`, reported by this engine as
+`UNIQUE constraint failed: time_entries.node_id, …`, errcode 2067 — it names the COLUMNS, never the
+index. Guard: `packages/workforce/src/restore-continuation.test.ts`.
 
 ## The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating path does, and `waitron.sh install <ref>` is a one-way door
 

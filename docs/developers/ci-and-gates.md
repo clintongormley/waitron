@@ -96,8 +96,9 @@ head. A green hook proves only its own checks; it is not evidence of package tes
 Owner decision 2026-09-12: stop duplicating mandatory package coverage locally before waiting for CI.
 The shell regressions in `scripts/pre-push.test.mjs` exercise scope and failure behavior.
 
-Bypassing the hook with `--no-verify` is for emergencies; the failure still has to be fixed because
-CI runs the same checks. A hook failure the PR does not reproduce is a check CI has deferred to the
+**Claude never pushes with `--no-verify`**; the owner may, in an emergency (owner decision
+2026-10-03), and the failure still has to be fixed because CI runs the same checks. The hook's
+failure message says so beside its skip hint, pinned by `scripts/pre-push.test.mjs`. A hook failure the PR does not reproduce is a check CI has deferred to the
 unfiltered `main` run, not a wrong hook.
 
 ## Coverage thresholds: one bar for every package
@@ -262,9 +263,11 @@ file into a package where its coverage would count.
 
 A mutation run makes one small change to a source file at a time and reruns the tests; a change
 nothing notices is behaviour no test is checking. `thresholds.break` turns that score into a gate.
-Three packages carry `"thresholds": { "high": 95, "low": 90, "break": 90 }` —
+Four packages carry `"thresholds": { "high": 95, "low": 90, "break": 90 }` —
 `packages/shared` since July 2026, `packages/fiscal` and `packages/ui`
-under the owner's 2026-09-19 decision that the target is 90 everywhere. `packages/db` carries none
+under the owner's 2026-09-19 decision that the target is 90 everywhere, and `packages/ui-core`
+since its extraction (#519, 2026-09-23).
+`packages/db` carries none
 in its own config, deliberately: CI splits its run into ten shards, each passed its own `--mutate`
 list, so a `thresholds.break` there would gate one slice rather than the package. Its bar lives in
 the `mutation-db-aggregate` job instead, which merges the ten shard reports and scores them once.
@@ -339,9 +342,12 @@ whatever else the machine is running — 8 to 13 across those four runs.
 ## Moving harness code out of a `.test.ts` changes what gates it
 
 Test files are not measured for coverage and are not mutated. Ordinary source files under `src/`
-are both. So moving a block of test-support code out of a `.test.ts` and into a `src/testing/`
-module — a perfectly sensible thing to do when several packages need it — quietly hands that code
-to two gates it was never under. Neither shows up in the diff.
+are measured for coverage where the package's `coverage.include` names them and its
+`coverage.exclude` does not (several configs, `apps/server` among them, exclude `src/testing/**`),
+and mutated where the package's Stryker `mutate` list reaches them. So moving a block of
+test-support code out of a `.test.ts` and into a `src/testing/` module — a perfectly sensible thing
+to do when several packages need it — can quietly hand that code to as many as two gates it was
+never under. Neither shows up in the diff.
 
 The first half of that is a measurement, not an assumption: the `coverage-summary.json` a
 `pnpm --filter @waitron/db test:coverage` run writes under that package's `coverage/` directory
@@ -865,11 +871,6 @@ Root config (`vitest.config.ts`, `scripts/`) is linted but never typechecked, an
 `eslint.config.js` is not type-aware. Proven by mutation: an exported `const x: number = "no"` in
 root config passes lint, typecheck and vitest.
 
-### `--frozen-lockfile` is not in the four-command gate
-
-Moving a dependency between `dependencies` and `devDependencies` fails CI at install. The hook
-runs `--frozen-lockfile`; the shallow gate does not.
-
 ### A name-filtered test run does not load the package's guard suites
 
 Not the schema-ownership or error-code-reachability guard suites, nor any e2e suite pinning a
@@ -921,11 +922,6 @@ Mechanism unconfirmed (plausibly the stale remote SHA git feeds a force-update).
 changed with `git diff --name-only origin/main..HEAD`, check that the hook typechecked the actual
 changed packages, and run any missing typechecks. Verify CI’s package scope and coverage results
 on the current head; the PR’s own CI scopes off the PR diff.
-
-### The pre-push log file can be days stale
-
-`/tmp/waitron-root-test-run.log` once named a test the branch had deleted. Reproduce; do not read
-it.
 
 ## Concurrency and machine-resource rules
 
@@ -1148,6 +1144,17 @@ about 14 MiB and the test passed; after a 56 MiB file was written into `/dev/shm
 temporary directory, and so do the root suites `scripts/append-only-triggers.test.ts` and
 `scripts/behavioural-triggers.test.ts`, so they still pay the disk; whether they would gain is not
 measured (`docs/backlog.md`, B9).
+
+## `prettier --check` on an ignored path prints the same line as a clean one
+
+`docs/` is ignored whole (`.prettierignore`), so a format check over it reports
+`All matched files use Prettier code style!` and exits 0 having checked nothing — CLAUDE.md §1's
+"both answers look alike" with a command attached, and the same two lines a genuinely clean path
+prints. Re-run 2026-10-03: `pnpm exec prettier --check docs/backlog.md` printed that line and
+exited 0, and `pnpm exec prettier --file-info docs/backlog.md` printed
+`{ "ignored": true, "inferredParser": null }`. Cost: a dated pointer scripted into a plan matched a
+line-wrapped `**Run`, split the bold span and left the paragraph rendering wrong; a format check over
+that directory reported clean, and a review seat found it by reading.
 
 ## Check every command's exit status
 

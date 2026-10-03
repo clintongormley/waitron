@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
  * or below one a database has already recorded is a migration that will never run — silently, with
  * no error.
  *
- * In `drizzle-orm@0.45.2`, `sqlite-core/dialect.js` is the dialect that runs
+ * In `drizzle-orm@0.45.3`, `sqlite-core/dialect.js` is the dialect that runs
  * (`packages/db/src/migrate.ts` imports `drizzle-orm/better-sqlite3/migrator`).
  * `SQLiteSyncDialect.migrate` takes the watermark with
  * `SELECT id, hash, created_at FROM <table> ORDER BY created_at DESC LIMIT 1` (lines 653-655)
@@ -17,11 +17,10 @@ import { describe, expect, it } from "vitest";
  * `!lastDbMigration || Number(lastDbMigration[2]) < migration.folderMillis` (line 660).
  * `SQLiteAsyncDialect.migrate` carries the same two statements at lines 690-692 and 696.
  *
- * WEAKER THAN ITS NAME: most sets are a single baseline entry, and a one-entry journal can never be
- * out of order, so those sets' cases hold BY CONSTRUCTION and are not evidence that any `when`
- * value is right. What is really exercised is `outOfOrder` itself, through the synthetic negative
- * control, the sets that carry more than one entry, and the anchor that every set's journal is on
- * disk.
+ * WEAKER THAN ITS NAME: a set with a single baseline entry can never be out of order, so its case
+ * holds BY CONSTRUCTION and is not evidence that its `when` value is right. What is really
+ * exercised is `outOfOrder` itself, through the synthetic negative control, the sets that carry more
+ * than one entry, and the anchor that every set's journal is on disk.
  */
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -74,8 +73,8 @@ describe("every migration set's journal is strictly increasing", () => {
         true,
       );
     }
-    // Loose floors, under today's numbers. The entry floor is a total over every set because most
-    // sets carry a single entry.
+    // Loose floors, under today's numbers. The entry floor is a total over every set because a set may
+    // carry a single entry or none.
     expect(MANIFEST.length).toBeGreaterThanOrEqual(10);
     const entryTotal = MANIFEST.reduce((total, set) => total + journalEntries(set.from).length, 0);
     expect(entryTotal).toBeGreaterThanOrEqual(8);
