@@ -4049,7 +4049,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   needs a spec: brainstorm what each section's page says.
 
 - **The report screens get their own sidebar section, Reporting (A251, owner 2026-10-03) — DONE
-  (lane A's W41).** Sales & takings, the VAT return, the adjustments module's Adjustment report and
+  (#1146, lane A's W41).** Sales & takings, the VAT return, the adjustments module's Adjustment report and
   Orders, in that order, sit in a collapsible section headed Reporting ("Informes"); Overview stays
   on top in a group of its own with no heading, and a staff session's short list (My schedule,
   Orders) sits in that headless group, unchanged. The section keeps the id `reports`, so the module
