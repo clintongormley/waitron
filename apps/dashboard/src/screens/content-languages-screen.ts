@@ -552,6 +552,11 @@ export class ContentLanguagesScreen extends LitElement {
                   searchable
                   searchLabel=${t("content_gaps.search")}
                   columnsLabel=${t("table.columns")}
+                  filtersLabel=${t("table.filters")}
+                  filteredColumnLabel=${t("table.filtered_column")}
+                  filterClearLabel=${t("table.filter_clear")}
+                  filtersClearAllLabel=${t("table.filters_clear_all")}
+                  filtersCloseLabel=${t("table.filters_close")}
                   viewKey=${`waitron.content-languages.gaps.${language}`}
                   sortKey="name"
                   sortDirection="ascending"

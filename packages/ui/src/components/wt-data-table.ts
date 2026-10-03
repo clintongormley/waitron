@@ -3,7 +3,10 @@ import type { PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
 import { baseStyles } from "../base-styles.js";
+import { registerIcons } from "./wt-icon.js";
 import "./wt-combobox.js";
+
+registerIcons({ "table-filter": "M1.5 3h13L9.5 8.5v3.5l-3 1.5v-5Z" });
 
 export interface DataTableColumn<Row> {
   key: string;
@@ -190,6 +193,23 @@ export class WtDataTable<Row = unknown> extends LitElement {
         text-align: center;
       }
 
+      .filter-mark {
+        display: inline-flex;
+        align-items: center;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2);
+        border: 0;
+        background: transparent;
+        color: var(--wt-color-primary);
+        cursor: pointer;
+      }
+
+      .filter-mark:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+
       th.select,
       td.select {
         width: var(--wt-tap-min);
@@ -232,10 +252,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
         margin-bottom: var(--wt-space-3);
       }
 
-      /* The basis is the narrowest the search box may be while sharing its line with the filters;
-         any narrower and the filters wrap below it and the search box fills its own line. A media
-         or container query cannot read a token, so the wrap is sized by the controls, not by a
-         breakpoint. */
       .table-search {
         flex: 1 1 calc(var(--wt-tap-min) * 8);
         min-width: 0;
@@ -256,9 +272,87 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
       .table-filters {
         display: flex;
-        flex-wrap: wrap;
+        flex-direction: column;
         gap: var(--wt-space-2);
-        max-width: 100%;
+      }
+
+      .filters-trigger,
+      .filters-clear-all,
+      .filter-clear,
+      .filters-close {
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .filters-trigger:focus-visible,
+      .filters-clear-all:focus-visible,
+      .filter-clear:focus-visible,
+      .filters-close:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+
+      .filters-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: var(--wt-space-5);
+        min-height: var(--wt-space-5);
+        margin-inline-start: var(--wt-space-2);
+        padding-inline: var(--wt-space-1);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .filters-panel {
+        position: fixed;
+        margin: 0;
+        width: min(calc(var(--wt-tap-min) * 8), calc(100dvw - var(--wt-space-4)));
+        max-height: calc(100dvh - 2 * var(--wt-space-2));
+        overflow-y: auto;
+        padding: var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        box-shadow: var(--wt-shadow-2);
+      }
+
+      .filters-panel[data-fullscreen] {
+        inset: 0;
+        width: 100dvw;
+        height: 100dvh;
+        max-height: none;
+        border-radius: 0;
+      }
+
+      .filter-section {
+        border-bottom: 1px solid var(--wt-color-border);
+        padding-block: var(--wt-space-2);
+      }
+
+      .filter-section summary {
+        cursor: pointer;
+      }
+
+      .filters-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-2);
+      }
+
+      .filters-panel h2 {
+        margin: 0 0 var(--wt-space-2);
+        font-size: var(--wt-font-size-md);
       }
 
       .table-end {
@@ -420,9 +514,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   @property() sortKey: string | null = null;
   @property() sortDirection: SortDirection = "ascending";
-  /** When set, a search box is drawn above the table and only rows whose text contains the typed
-   * term are shown. Which text a row exposes is each column's searchValue, or its sortValue. A
-   * column's filter dropdown is drawn whether or not this is set. */
   @property({ type: Boolean }) searchable = false;
   @property() searchLabel = "Search";
   /** Placeholder text for the search box; empty means it repeats `searchLabel`. */
@@ -432,6 +523,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property() filterSearchPlaceholder = "Search";
   /** What a column filter's open list says when its search matches no option. */
   @property() filterNoResultsLabel = "No results";
+  @property() filtersLabel = "Filters";
+  @property() filteredColumnLabel = "Filtered";
+  @property() filterClearLabel = "Clear";
+  @property() filtersClearAllLabel = "Clear all";
+  @property() filtersCloseLabel = "Close filters";
   /** The column chooser's button text and the accessible name of its list. */
   @property() columnsLabel = "Columns";
   /** When set, the tab's session storage remembers this table's sort and filter choices under this
@@ -459,6 +555,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * choice filters rows only while its column offers it (see #activeFilter), and #judgeFilters
    * removes one its column's options no longer include. */
   @state() private filterSelections: Record<string, string> = {};
+  @state() private filtersOpen = false;
+  @query(".filters-trigger") private filtersTrigger!: HTMLButtonElement;
+  @query(".filters-panel") private filtersPanel!: HTMLElement;
   @state() private collapsed = new Set<string>();
   /** Each column's shown state, chosen or restored; it applies only while its column is choosable. */
   @state() private columnChoices: Record<string, boolean> = {};
@@ -475,6 +574,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
   });
   #observedScroll: Element | null = null;
   #remembered: Set<string> | null = null;
+  readonly #resizeFilters = (): void => {
+    if (this.filtersPanel?.matches(":popover-open")) this.#positionFilters();
+  };
 
   #rememberedOpen(): Set<string> {
     if (this.#remembered) return this.#remembered;
@@ -504,11 +606,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    window.addEventListener("resize", this.#resizeFilters);
     if (this.hasUpdated) this.#observeScroll();
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    window.removeEventListener("resize", this.#resizeFilters);
     this.#scrollObserver.disconnect();
     this.#observedScroll = null;
   }
@@ -697,6 +801,73 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (chosen !== undefined) return chosen;
     const initial = column.filter?.initial;
     return options.some((option) => option.value === initial) ? initial! : "";
+  }
+
+  #chooseFilter(column: DataTableColumn<Row>, value: string): void {
+    if (
+      value === this.#activeFilter(column) &&
+      (value !== "" ||
+        this.filterSelections[column.key] === undefined ||
+        this.filterSelections[column.key] === "")
+    )
+      return;
+    const next = { ...this.filterSelections };
+    if (value === "" && column.filter?.initial === undefined) delete next[column.key];
+    else next[column.key] = value;
+    this.filterSelections = next;
+    this.#persistView();
+    this.dispatchEvent(
+      new CustomEvent("wt-filter-change", {
+        detail: { filters: { ...next } },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  #clearAllFilters(): void {
+    const next = Object.fromEntries(
+      this.columns
+        .filter((column) => column.filter?.initial !== undefined)
+        .map((column) => [column.key, ""]),
+    );
+    if (
+      Object.keys(next).length === Object.keys(this.filterSelections).length &&
+      Object.entries(next).every(([key, value]) => this.filterSelections[key] === value)
+    )
+      return;
+    this.filterSelections = next;
+    this.#persistView();
+    this.dispatchEvent(
+      new CustomEvent("wt-filter-change", {
+        detail: { filters: { ...next } },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  #positionFilters(): void {
+    this.filtersPanel.style.left = "";
+    this.filtersPanel.style.top = "";
+    this.filtersPanel.toggleAttribute("data-fullscreen", innerWidth <= NARROW_TREE_WIDTH);
+    if (innerWidth <= NARROW_TREE_WIDTH) return;
+    const anchor = this.getBoundingClientRect();
+    const box = this.filtersPanel.getBoundingClientRect();
+    this.filtersPanel.style.left = `${Math.max(8, Math.min(anchor.right + 8, innerWidth - box.width - 8))}px`;
+    this.filtersPanel.style.top = `${Math.max(8, Math.min(anchor.top, innerHeight - box.height - 8))}px`;
+  }
+
+  #toggleFilters(): void {
+    if (this.filtersPanel.matches(":popover-open")) {
+      this.filtersPanel.hidePopover();
+      this.filtersOpen = false;
+      return;
+    }
+    this.filtersPanel.showPopover();
+    this.filtersOpen = true;
+    this.filtersPanel.querySelector<HTMLButtonElement>(".filters-clear-all")?.focus();
+    this.#positionFilters();
   }
 
   #persistView(): void {
@@ -1110,6 +1281,31 @@ export class WtDataTable<Row = unknown> extends LitElement {
                         >
                       </button>`
                 }
+                ${
+                  column.filter && this.#activeFilter(column) !== ""
+                    ? html`<button
+                        type="button"
+                        class="filter-mark"
+                        data-filter-mark=${column.key}
+                        aria-label=${`${column.filter.label}: ${this.filteredColumnLabel}`}
+                        @click=${() => {
+                          if (!this.filtersPanel.matches(":popover-open")) this.#toggleFilters();
+                          this.filtersPanel
+                            .querySelector<HTMLDetailsElement>(
+                              `[data-section="${CSS.escape(column.key)}"]`,
+                            )
+                            ?.setAttribute("open", "");
+                          this.filtersPanel
+                            .querySelector<HTMLElement>(
+                              `[data-section="${CSS.escape(column.key)}"] summary`,
+                            )
+                            ?.focus();
+                        }}
+                      >
+                        <wt-icon name="table-filter"></wt-icon>
+                      </button>`
+                    : nothing
+                }
               </th>
             `,
           )}
@@ -1166,6 +1362,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   #renderToolbar() {
     const hasFilters = this.columns.some((column) => column.filter);
+    const activeCount = this.columns.filter(
+      (column) => column.filter && this.#activeFilter(column) !== "",
+    ).length;
     const choosable = this.columns.filter((column) => column.choosable !== undefined);
     const slotted = (name: string) => this.querySelector(`:scope > [slot="${name}"]`) !== null;
     const start = slotted("toolbar-start");
@@ -1200,50 +1399,98 @@ export class WtDataTable<Row = unknown> extends LitElement {
       }
       ${
         hasFilters
-          ? html`<div class="table-filters">
-              ${this.columns.map((column) => {
-                const active = this.#activeFilter(column);
-                return column.filter
-                  ? html`<wt-combobox
-                      class="table-filter"
-                      name=${`${column.key}-filter`}
-                      data-filter=${column.key}
-                      label=${column.filter.label}
-                      hide-label
-                      search="auto"
-                      placeholder=${column.filter.allLabel}
-                      show-empty-option
-                      stable-width
-                      searchPlaceholder=${this.filterSearchPlaceholder}
-                      noResultsLabel=${this.filterNoResultsLabel}
-                      .options=${[
-                        { value: "", label: column.filter.allLabel },
-                        ...column.filter.options,
-                      ]}
-                      .value=${active}
-                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                        event.stopPropagation();
-                        const value = event.detail.value;
-                        // The combobox sends a change for a click on its already-chosen row too.
-                        if (value === this.#activeFilter(column)) return;
-                        const next = { ...this.filterSelections };
-                        if (value === "" && column.filter!.initial === undefined)
-                          delete next[column.key];
-                        else next[column.key] = value;
-                        this.filterSelections = next;
-                        this.#persistView();
-                        this.dispatchEvent(
-                          new CustomEvent("wt-filter-change", {
-                            detail: { filters: { ...this.filterSelections } },
-                            bubbles: true,
-                            composed: true,
-                          }),
-                        );
-                      }}
-                    ></wt-combobox>`
-                  : nothing;
-              })}
-            </div>`
+          ? html`<button
+                type="button"
+                class="filters-trigger"
+                aria-expanded=${this.filtersOpen}
+                @click=${this.#toggleFilters}
+              >
+                ${this.filtersLabel}${
+                  activeCount ? html`<span class="filters-count">${activeCount}</span>` : nothing
+                }
+              </button>
+              <div
+                class="filters-panel"
+                popover
+                role="group"
+                aria-label=${this.filtersLabel}
+                @toggle=${(event: ToggleEvent) => {
+                  this.filtersOpen = event.newState === "open";
+                }}
+                @keydown=${(event: KeyboardEvent) => {
+                  if (
+                    event.key !== "Escape" ||
+                    event.defaultPrevented ||
+                    !this.filtersPanel.matches(":popover-open")
+                  )
+                    return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  this.filtersPanel.hidePopover();
+                  this.filtersOpen = false;
+                  this.filtersTrigger.focus();
+                }}
+              >
+                <h2>${this.filtersLabel}</h2>
+                <div class="filters-panel-header">
+                  <button type="button" class="filters-clear-all" @click=${this.#clearAllFilters}>
+                    ${this.filtersClearAllLabel}
+                  </button>
+                  <button
+                    type="button"
+                    class="filters-close"
+                    @click=${() => {
+                      this.filtersPanel.hidePopover();
+                      this.filtersOpen = false;
+                      this.filtersTrigger.focus();
+                    }}
+                  >
+                    ${this.filtersCloseLabel}
+                  </button>
+                </div>
+                <div class="table-filters">
+                  ${this.columns.map((column) => {
+                    const active = this.#activeFilter(column);
+                    return column.filter
+                      ? html`<details class="filter-section" data-section=${column.key} open>
+                          <summary>
+                            ${column.filter.label} (${column.filter.options.length})
+                          </summary>
+                          <button
+                            type="button"
+                            class="filter-clear"
+                            data-clear-filter=${column.key}
+                            @click=${() => this.#chooseFilter(column, "")}
+                          >
+                            ${this.filterClearLabel}
+                          </button>
+                          <wt-combobox
+                            class="table-filter"
+                            name=${`${column.key}-filter`}
+                            data-filter=${column.key}
+                            label=${column.filter.label}
+                            hide-label
+                            search="auto"
+                            placeholder=${column.filter.allLabel}
+                            show-empty-option
+                            stable-width
+                            searchPlaceholder=${this.filterSearchPlaceholder}
+                            noResultsLabel=${this.filterNoResultsLabel}
+                            .options=${[
+                              { value: "", label: column.filter.allLabel },
+                              ...column.filter.options,
+                            ]}
+                            .value=${active}
+                            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                              event.stopPropagation();
+                              this.#chooseFilter(column, event.detail.value);
+                            }}
+                          ></wt-combobox>
+                        </details>`
+                      : nothing;
+                  })}
+                </div>
+              </div>`
           : nothing
       }
       ${
@@ -1306,11 +1553,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
       return html`<p class="message error" role="alert">${this.errorMessage}</p>`;
     const visible = this.#visibleRows();
     if (this.rows.length === 0)
-      return html`${this.#renderToolbar()}
-        <div class="empty">
-          <p class="message" role="status">${this.emptyMessage}</p>
-          <slot name="empty-action"></slot>
-        </div>`;
+      return html`<div class="empty">
+        <p class="message" role="status">${this.emptyMessage}</p>
+        <slot name="empty-action"></slot>
+      </div>`;
 
     const label = this.ariaLabel || undefined;
     const isTree = this.rowParent !== undefined;

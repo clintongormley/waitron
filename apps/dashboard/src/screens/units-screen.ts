@@ -117,6 +117,7 @@ export class UnitsScreen extends LitElement {
   @state() private inUseProducts: ProductUsingUnit[] = [];
   @state() private inUseSearch = "";
   @state() private selectedProducts: string[] = [];
+  @state() private selectingProducts = false;
   @state() private reassignTarget = "";
   private focusTarget: HTMLElement | null = null;
 
@@ -269,6 +270,7 @@ export class UnitsScreen extends LitElement {
     this.inUseProducts = products;
     this.inUseSearch = "";
     this.selectedProducts = [];
+    this.selectingProducts = false;
     this.reassignTarget = "";
   }
 
@@ -277,6 +279,7 @@ export class UnitsScreen extends LitElement {
     this.inUseProducts = [];
     this.inUseSearch = "";
     this.selectedProducts = [];
+    this.selectingProducts = false;
     this.reassignTarget = "";
     requestAnimationFrame(() => this.focusTarget?.focus());
   }
@@ -461,6 +464,11 @@ export class UnitsScreen extends LitElement {
         searchLabel=${t("units.search")}
         viewKey="waitron.units.table"
         columnsLabel=${t("table.columns")}
+        filtersLabel=${t("table.filters")}
+        filteredColumnLabel=${t("table.filtered_column")}
+        filterClearLabel=${t("table.filter_clear")}
+        filtersClearAllLabel=${t("table.filters_clear_all")}
+        filtersCloseLabel=${t("table.filters_close")}
         sortKey="name"
         sortDirection="ascending"
         .rows=${this.units}
@@ -499,6 +507,15 @@ export class UnitsScreen extends LitElement {
           this.inUseProducts.length > 0
             ? html`
                 <div class="in-use-toolbar">
+                  <wt-button
+                    data-test="select-products"
+                    variant="secondary"
+                    @click=${() => {
+                      this.selectingProducts = !this.selectingProducts;
+                      if (!this.selectingProducts) this.selectedProducts = [];
+                    }}
+                    >${t(this.selectingProducts ? "units.done_selecting" : "units.select")}</wt-button
+                  >
                   <wt-input
                     class="in-use-search"
                     data-test="in-use-search"
@@ -553,7 +570,7 @@ export class UnitsScreen extends LitElement {
                   .rows=${inUseRows}
                   .columns=${this.#productColumns()}
                   .rowKey=${(product: ProductUsingUnit) => product.id}
-                  .selectable=${true}
+                  .selectable=${this.selectingProducts}
                   .selected=${this.selectedProducts}
                   .selectionLabel=${(product: ProductUsingUnit) =>
                     `${t("units.select_product")}: ${product.name}`}

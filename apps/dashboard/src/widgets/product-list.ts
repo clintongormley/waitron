@@ -1185,6 +1185,11 @@ export class ProductList extends LitElement {
         rememberExpanded
         searchOpensPath
         columnsLabel=${t("table.columns")}
+        filtersLabel=${t("table.filters")}
+        filteredColumnLabel=${t("table.filtered_column")}
+        filterClearLabel=${t("table.filter_clear")}
+        filtersClearAllLabel=${t("table.filters_clear_all")}
+        filtersCloseLabel=${t("table.filters_close")}
         sortKey="name"
         sortDirection="ascending"
         collapseLabel=${t("categories.collapse")}
