@@ -2916,7 +2916,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     sold separately; Staff only behaves exactly as Public until guest ordering exists.
   - **Task 14 (#721, several payments against one bill, the server).** The owner's rulings at
     landing are recorded in the design. **Its payment and refund reads ordered by a timestamp alone
-    now break a same-millisecond tie with `rowid` — DONE (W2, 2026-10-03).**
+    now break a same-millisecond tie with `rowid` — DONE (W2, #1121, 2026-10-03).**
     - **Open:** `apps/server/src/orders-list.ts` (#1027) sorts bill payments and their refunds by
       `created_at, id` and tenders by `id` alone; ids are `randomUUID()`, so a tie, and the tenders'
       whole order, comes out random. The plan asked for `created_at, rowid` in `readBillPayments`.
