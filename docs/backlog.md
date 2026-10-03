@@ -1464,7 +1464,7 @@ calls it).
 overlapping element (such as an empty `wt-input`), a background image or gradient, content too
 short or not text — passes, so contrast in those places is checked by nobody.
 
-**A folded section says what is missing, not only what is filled in (A211) — DONE.** The owner:
+**A folded section says what is missing, not only what is filled in (A211) — DONE (#1096).** The owner:
 _"we should show the missing values under kitchen and descriptors and nutritional info when
 collapsed"_. Before A211, each folded section's line listed only the filled
 values (`renderKitchen`, `renderNutrition` and the Descriptors section), so a product with no
