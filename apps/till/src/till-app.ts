@@ -1105,7 +1105,7 @@ export class TillApp extends LitElement {
   #loginPending = false;
 
   #preLoginLocale(): string {
-    return this.#browserLocaleVenue === this.#venueLocale
+    return !this.deviceMode && this.#browserLocaleVenue === this.#venueLocale
       ? (this.#browserLocale ?? this.#venueLocale)
       : this.#venueLocale;
   }
@@ -1763,6 +1763,7 @@ export class TillApp extends LitElement {
         else this.initialDeviceStation = await this.api.getDeviceStation();
         if (!this.isConnected) return;
         this.deviceMode = true;
+        if (localeChoiceGeneration === this.#localeChoiceGeneration) setLocale(this.#venueLocale);
         this.#setScreen("station");
         this.#onHistory();
       }

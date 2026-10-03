@@ -2433,7 +2433,8 @@ or fallback values.
 in W35.** The public till locales response now uses the dashboard's `resolveLoginLocale` match of
 `Accept-Language`, with the venue's language as fallback. The till applies that match on the enrol
 and lock screens and after logout; a person's choice or saved language wins over a late response.
-The receipt language still comes from the location. In the Demo stack's fresh browser, the direct
+An enrolled kitchen display stays in the venue language. The receipt language still comes from the
+location. In the Demo stack's fresh browser, the direct
 enrol screen's language chooser was visible at 1280 and 390 pixels in both themes, and the same was
 true inside Demo's device setup dialog. Screenshots: `~/waitron-campaign/w35-shots/`. The owner's
 earlier missing chooser was not reproduced; no separate chooser change was made.

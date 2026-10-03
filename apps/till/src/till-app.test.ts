@@ -1630,10 +1630,7 @@ describe("till-app", () => {
   // by the "Device front door" suite below.
   it("boots an ENROLLED kds_station device straight into the station screen in device mode", async () => {
     const { el } = await mountApp({
-      // Drive the venue default to en-GB (≠ the es-ES starting point) so the device path's venue-default
-      // `setLocale` is observable: an enrolled display has NO operator, so `#boot`'s
-      // `if (this.operatorPersonId === "")` guard passes and the venue default is applied — the login-race
-      // guard must never withhold the venue default from the operator-less device path.
+      // The enrolled display has no operator, so boot applies the venue language.
       getTill: vi.fn().mockResolvedValue({
         ...till,
         locale: "en-GB",
@@ -1656,6 +1653,30 @@ describe("till-app", () => {
     expect(s).not.toBeNull();
     expect(s!.deviceMode).toBe(true);
     expect(currentLocale()).toBe("en-GB");
+  });
+
+  it("keeps an enrolled kitchen display in the venue language when its browser prefers another", async () => {
+    const { el } = await mountApp({
+      getLocales: vi.fn().mockResolvedValue({
+        locales: [],
+        venueDefault: "es-ES",
+        loginDefault: "en-GB",
+      }),
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        canvas: kdsCanvasDef,
+        capabilities: ["act-as-kds"],
+      }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
+    });
+    await flush(el);
+    expect(station(el)).not.toBeNull();
+    expect(currentLocale()).toBe("es-ES");
   });
 
   it("boots a HANDHELD device into the phone shell (stays on lock) and lands on the floor after login", async () => {

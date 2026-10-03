@@ -242,6 +242,7 @@ the browser asks for nothing Waitron ships. It is derived per request and never 
 language still wins. Account emails have no browser to ask, so a person with no saved language gets
 the venue default there. Before till login, `GET /api/locales` uses the same browser match; after
 logout the till returns to it. A till operator with no saved language still gets the venue default.
+An enrolled kitchen display that skips login also stays on the venue default.
 Returning to login after logout or session expiry uses the last browser match, or the venue default
 until that match is available. Guard late locale responses so they cannot overwrite a newly
 authenticated person's language or an explicit choice on sign-in
