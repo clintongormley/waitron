@@ -1358,7 +1358,7 @@ Descriptors line one row per field), which this extends to the empty case. Choos
 "nothing set" once, in both languages; on a variant's page an empty value shows the parent's
 value, as the fields themselves do (A172).
 
-**An Add course button beside the course dropdown (A212) — DECIDED, ready to build.** The owner:
+**An Add course button beside the course dropdown (A212) — DONE.** The owner:
 _"perhaps we should add an "Add course" button under Courses, which would open a modal to edit
 and order the course list. Currently this lives on the kitchen page, not as a modal. need to
 figure that out"_. The course list is edited, added to and reordered on the Kitchen screen
@@ -1373,6 +1373,21 @@ drag to reorder, click a name to rename it, ⋮ to remove one (today's deactivat
 at the bottom. The Kitchen screen shows the same list, replacing its one-card-per-course layout
 with its own Save buttons and typed-in order numbers — so the list is one widget both use.
 Closing the window selects a course just added, and the product's unsaved edits survive it.
+Built: one widget, `dashboard-course-list` (`apps/dashboard/src/widgets/course-list.ts`), on
+the Kitchen screen and in the window the product editor's "Edit courses…" opens (from
+`catalogue-screen.ts`). Each change saves as it is made, so the window has one button, Done, where
+the mockup drew Cancel and Done; Done waits for saves still being answered, including changes made
+while it waits (a second Done during the wait does nothing), and stays open with the reason under
+the field when a typed name is refused. A drag is saved in one request,
+`PUT /management-api/courses/:id/position` (`moveCourse`, `apps/server/src/kitchen.ts`), which
+renumbers the active courses. A new course is created after the last one shown, where the old form
+created it at order 0. Closing the window selects the last course added in it if it is still there;
+otherwise a chosen course removed in the window is cleared (on a variant: the parent's course);
+otherwise the choice stays.
+**Left open:** a removed course keeps its name, because `kitchen_courses_name_key` covers inactive
+rows too, so adding a course with a removed course's name is refused as taken (measured
+2026-10-03 with a throwaway case in `apps/server/src/kitchen.test.ts`: create "Mains", deactivate
+it, create "Mains" again → `course.name_taken`).
 
 **Allergens and dietary preferences are edited in place (A213) — DONE (#1079).** The owner:
 _"for nutritional info, we can show: Allergens: Nuts, Seeds / Dietary preferences: None specified.

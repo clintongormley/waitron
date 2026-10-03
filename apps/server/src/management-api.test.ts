@@ -1666,6 +1666,57 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     expect(malformed.status).toBe(404);
   });
 
+  it("PUT /courses/:id/position moves a course and answers the venue's active courses renumbered", async () => {
+    const id = await createCourse(unique("Moved"), { displayOrder: 1_000_000 });
+    const res = await req(
+      `/courses/${id}/position`,
+      { method: "PUT", body: JSON.stringify({ to: 0 }) },
+      managerCookie,
+    );
+    expect(res.status).toBe(200);
+    const moved = (await res.json()) as { id: string; displayOrder: number }[];
+    expect(moved[0]!.id).toBe(id);
+    expect(moved.map((c) => c.displayOrder)).toEqual(moved.map((_, index) => index));
+    expect(moved).toEqual(await listCourses());
+  });
+
+  it("PUT /courses/:id/position refuses a `to` that is not a non-negative integer, or a non-object body, leaving the order as it was", async () => {
+    const id = await createCourse(unique("Unmoved"));
+    const before = await listCourses();
+    for (const [body, field] of [
+      [JSON.stringify({ to: -1 }), "to"],
+      [JSON.stringify({ to: 1.5 }), "to"],
+      [JSON.stringify({ to: "1" }), "to"],
+      [JSON.stringify({}), "to"],
+      ["null", "to"],
+      ["[]", "body"],
+      ["5", "body"],
+    ] as const) {
+      const res = await req(`/courses/${id}/position`, { method: "PUT", body }, managerCookie);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    expect(await listCourses()).toEqual(before);
+  });
+
+  it("PUT /courses/:id/position on an unknown, retired or malformed :id → 404 course.not_found", async () => {
+    const retired = await createCourse(unique("Retired"));
+    await req(`/courses/${retired}`, { method: "DELETE" }, managerCookie);
+    for (const id of [randomUUID(), retired, "not-a-uuid"]) {
+      const res = await req(
+        `/courses/${id}/position`,
+        { method: "PUT", body: JSON.stringify({ to: 0 }) },
+        managerCookie,
+      );
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({
+        error: { code: "course.not_found", params: { courseId: id } },
+      });
+    }
+  });
+
   it("PUT /products/:id/course sets + clears the product's default course; bad body → 400; a bad/retired course → 404; a malformed product is a no-op", async () => {
     const courseId = await createCourse(unique("Course"));
     const { productId } = await withTransaction(suite.db, async (tx) => {
@@ -1783,6 +1834,11 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
       ),
       req(`/courses/${someId}`, { method: "DELETE" }, staffCookie),
       req(
+        `/courses/${someId}/position`,
+        { method: "PUT", body: JSON.stringify({ to: 0 }) },
+        staffCookie,
+      ),
+      req(
         `/products/${someId}/course`,
         { method: "PUT", body: JSON.stringify({ courseId: null }) },
         staffCookie,
@@ -1811,6 +1867,11 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
         undefined,
       ),
       req(`/courses/${someId}`, { method: "DELETE" }, undefined),
+      req(
+        `/courses/${someId}/position`,
+        { method: "PUT", body: JSON.stringify({ to: 0 }) },
+        undefined,
+      ),
       req(
         `/products/${someId}/course`,
         { method: "PUT", body: JSON.stringify({ courseId: null }) },

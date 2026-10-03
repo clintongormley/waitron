@@ -90,6 +90,7 @@ import {
   deactivateStation,
   getFireControl,
   listCourses,
+  moveCourse,
   listStations,
   setBumpMode,
   setDefaultStation,
@@ -1876,6 +1877,23 @@ export function mountManagementApi(
       const cfg = requireVenueCfg(deps);
       await withVenueAuth(deps, sessionId, (tx) => deactivateCourse(tx, cfg, id));
       return c.body(null, 204);
+    }),
+  );
+
+  app.put("/management-api/courses/:id/position", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireCourseId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      const body = await readJsonBody<{ to?: unknown }>(c);
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      const { to } = body;
+      if (typeof to !== "number" || !Number.isInteger(to) || to < 0) {
+        throw new AppError("management.request_invalid", { field: "to" });
+      }
+      return c.json(await withVenueAuth(deps, sessionId, (tx) => moveCourse(tx, cfg, id, to)));
     }),
   );
 

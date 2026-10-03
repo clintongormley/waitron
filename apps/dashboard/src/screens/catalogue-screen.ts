@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { ContentLanguages } from "@waitron/shared";
 import type { RoutingModel } from "@waitron/venue-service/routing";
-import { baseStyles, setContentLanguages, UrlStateController } from "@waitron/ui";
+import { baseStyles, setContentLanguages, UrlStateController, type WtModal } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -43,6 +43,8 @@ import "../widgets/extra-list-form.js";
 import "../widgets/option-list-form.js";
 import "../widgets/product-editor.js";
 import "../widgets/catalogue-browser.js";
+import "../widgets/course-list.js";
+import type { CourseList } from "../widgets/course-list.js";
 import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js";
 
 /** The staff names of the extras lists a `product.offered_as_extra` refusal carries. */
@@ -133,6 +135,10 @@ export class CatalogueScreen extends LitElement {
   /** Rebuilt only when a new refusal arrives: a form takes a new `fieldErrors` object as a new
    * refusal and shows again the ones the operator had since dismissed. */
   #childRefusals: { error: unknown; errors: ChildRefusals } | null = null;
+  /** The last course the open courses window added. */
+  #addedCourse: string | null = null;
+  /** The editor generation whose courses window is waiting on its saves to close. */
+  #closingCourses: number | null = null;
 
   readonly #queries = new DashboardQueries(
     this,
@@ -266,6 +272,11 @@ export class CatalogueScreen extends LitElement {
     this.#child.reset();
     this.editingList = null;
     this.editorFieldErrors = {};
+    this.#addedCourse = null;
+  }
+
+  #coursesWindow(): WtModal {
+    return this.shadowRoot!.querySelector<WtModal>("[data-test=courses-dialog]")!;
   }
 
   #editor(): ProductEditor | null {
@@ -536,6 +547,34 @@ export class CatalogueScreen extends LitElement {
     if (kind === "options") this.optionLists = await this.api.background.listOptionLists();
   }
 
+  /** The window saves each change as it is made; closing waits for the last of them, then brings the
+   * product's course in line. The editor is not reseeded, so the product's unsaved edits survive. */
+  async #closeCourses(): Promise<void> {
+    const generation = this.#editorGeneration;
+    if (this.#child.kind !== "courses" || this.#closingCourses === generation) return;
+    const list = this.shadowRoot!.querySelector<CourseList>("dashboard-course-list")!;
+    this.#closingCourses = generation;
+    await list.settled();
+    if (this.#closingCourses === generation) this.#closingCourses = null;
+    if (generation !== this.#editorGeneration) return;
+    // A refused name stays on screen to be fixed, unless Escape has already shut the window.
+    if (list.unsaved && this.#coursesWindow().open) return;
+    const added = this.#addedCourse;
+    this.#addedCourse = null;
+    this.#child.cancel();
+    try {
+      this.courses = await this.api.background.listCourses();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+      return;
+    }
+    if (generation !== this.#editorGeneration) return;
+    const editor = this.#editor()!;
+    const exists = (id: string | null) => this.courses.some((course) => course.id === id);
+    if (added !== null && exists(added)) editor.selectRelated("courses", added);
+    else if (!exists(editor.currentValue.courseId)) editor.clearCourse();
+  }
+
   /** Every submission is a new refusal, even one the API answers with an identical error object. */
   #submitChild(write: () => Promise<{ id: string }>): Promise<void> {
     this.#childRefusals = null;
@@ -739,6 +778,33 @@ export class CatalogueScreen extends LitElement {
             .loading=${this.busy}
             @click=${() => void this.#deleteProduct()}
             >${t(this.deletingProduct?.isVariant ? "action.remove" : "action.delete")}</wt-button
+          ></wt-form-actions
+        >
+      </wt-modal>
+      <wt-modal
+        data-test="courses-dialog"
+        .open=${this.#child.kind === "courses"}
+        heading=${t("kitchen.courses_title")}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          void this.#closeCourses();
+        }}
+        @course-added=${(event: CustomEvent<{ id: string }>) => {
+          event.stopPropagation();
+          this.#addedCourse = event.detail.id;
+        }}
+      >
+        ${
+          this.#child.kind === "courses"
+            ? html`<dashboard-course-list .api=${this.api}></dashboard-course-list>`
+            : nothing
+        }
+        <wt-form-actions slot="footer"
+          ><wt-button
+            slot="cancel"
+            data-test="courses-done"
+            @click=${() => void this.#closeCourses()}
+            >${t("action.done")}</wt-button
           ></wt-form-actions
         >
       </wt-modal>

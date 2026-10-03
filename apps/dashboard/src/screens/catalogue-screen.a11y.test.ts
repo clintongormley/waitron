@@ -179,6 +179,37 @@ describe.each(["light", "dark"] as const)("catalogue-screen a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
+  it("renders the courses window over the product editor accessibly", async () => {
+    const { el, host } = await mountWidget<CatalogueScreen>(
+      "dashboard-catalogue-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector("dashboard-catalogue-browser")!.dispatchEvent(
+      new CustomEvent("add-product", {
+        detail: { categoryId: null },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    el.shadowRoot!.querySelector("dashboard-product-editor")!.dispatchEvent(
+      new CustomEvent("wt-create-related", {
+        detail: { kind: "courses" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    await vi.waitFor(() => {
+      const list = el.shadowRoot!.querySelector("[data-test=courses-dialog] dashboard-course-list");
+      if (!list?.shadowRoot!.querySelector('[data-course="k1"]'))
+        throw new Error("the window is not open");
+    });
+    await expectNoA11yViolations(host);
+  });
+
   it("renders the Add to menus step that follows a create accessibly", async () => {
     const { el, host } = await mountWidget<CatalogueScreen>(
       "dashboard-catalogue-screen",

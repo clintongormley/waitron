@@ -1793,6 +1793,22 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     });
   });
 
+  it("moveCourse PUTs { to } to the course's position and returns the renumbered list", async () => {
+    const rows = [
+      { id: "k2", name: "Principales", displayOrder: 0, active: true },
+      { id: "k1", name: "Entrantes", displayOrder: 1, active: true },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.moveCourse("k1", 1)).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/courses/k1/position", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ to: 1 }),
+    });
+  });
+
   it("getFireControl GETs /management-api/fire-control and returns { mode }", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ mode: "kitchen" }));
     const api = new DashboardApi("", fetchImpl);

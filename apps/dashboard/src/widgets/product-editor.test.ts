@@ -3224,6 +3224,7 @@ it("picks the default course from a shared dropdown, with none as a chosen value
     { value: "", label: t("product.no_course") },
     { value: "course-1", label: "Starters" },
     { value: "course-2", label: "Mains" },
+    { value: "edit-courses", label: t("editor.edit_courses"), action: true, primary: true },
   ]);
   expect(course.value).toBe("course-2");
   expect(await shownIn(el, "product-course")).toBe("Mains");
@@ -3237,6 +3238,96 @@ it("picks the default course from a shared dropdown, with none as a chosen value
   el.fieldErrors = { "product-course": "That one is gone" };
   await el.updateComplete;
   expect(course.error).toBe("That one is gone");
+});
+
+async function mountCourses(value: ProductEditorDraft = { ...product, courseId: "course-2" }) {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+    courses: [
+      { id: "course-1", name: "Starters" },
+      { id: "course-2", name: "Mains" },
+    ],
+  });
+  await openSection(el, "kitchen");
+  return el;
+}
+/** Opens the course dropdown and clicks the row with this label, the way a person does. */
+async function clickCourseRow(el: ProductEditor, label: string) {
+  const box = sharedField(el, "wt-combobox", "product-course");
+  await box.updateComplete;
+  box.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+  await box.updateComplete;
+  [...box.shadowRoot!.querySelectorAll<HTMLElement>("li[role=option]")]
+    .find((option) => option.textContent!.trim() === label)!
+    .click();
+  await box.updateComplete;
+  await el.updateComplete;
+  return box;
+}
+
+it("ends the course dropdown with Edit courses…, a command row drawn in the primary colour with no icon", async () => {
+  const el = await mountCourses();
+  const last = sharedField(el, "wt-combobox", "product-course").options.at(-1)!;
+  expect(last).toEqual({
+    value: "edit-courses",
+    label: t("editor.edit_courses"),
+    action: true,
+    primary: true,
+  });
+});
+
+it("asks for the courses window when Edit courses… is chosen, keeping the product's course", async () => {
+  const el = await mountCourses();
+  const create = vi.fn();
+  el.addEventListener("wt-create-related", create);
+  const box = await clickCourseRow(el, t("editor.edit_courses"));
+  expect(create.mock.calls.map((call) => call[0].detail)).toEqual([{ kind: "courses" }]);
+  expect(el.currentValue.courseId).toBe("course-2");
+  expect(box.value).toBe("course-2");
+  expect(await shownIn(el, "product-course")).toBe("Mains");
+});
+
+it("keeps no course when Edit courses… is chosen on a product with none", async () => {
+  const el = await mountCourses({ ...product, courseId: null });
+  const box = await clickCourseRow(el, t("editor.edit_courses"));
+  expect(el.currentValue.courseId).toBeNull();
+  expect(box.value).toBe("");
+  expect(await shownIn(el, "product-course")).toBe(t("product.no_course"));
+});
+
+it("selects the course the courses window hands back, and clears a course it removed", async () => {
+  const el = await mountCourses();
+  el.selectRelated("courses", "course-1");
+  await el.updateComplete;
+  expect(el.currentValue.courseId).toBe("course-1");
+  expect(await shownIn(el, "product-course")).toBe("Starters");
+  el.clearCourse();
+  await el.updateComplete;
+  expect(el.currentValue.courseId).toBeNull();
+  expect(await shownIn(el, "product-course")).toBe(t("product.no_course"));
+});
+
+it("returns focus to the course dropdown after the courses window", async () => {
+  const el = await mountCourses();
+  (el.shadowRoot!.activeElement as HTMLElement | null)?.blur();
+  el.returnRelatedFocus("courses");
+  expect(el.shadowRoot!.activeElement).toBe(sharedField(el, "wt-combobox", "product-course"));
+});
+
+it("offers Edit courses… on a variant's page too", async () => {
+  const el = await mountVariant();
+  const options = sharedField(el, "wt-combobox", "product-course").options;
+  expect(options.map(({ value }) => value)).toEqual(["", "mains", "desserts", "edit-courses"]);
+  expect(options.at(-1)).toEqual({
+    value: "edit-courses",
+    label: t("editor.edit_courses"),
+    action: true,
+    primary: true,
+  });
 });
 
 it("describes the product in a shared text area per language, the language in its label", async () => {
