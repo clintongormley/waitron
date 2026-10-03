@@ -1376,8 +1376,9 @@ Closing the window selects a course just added, and the product's unsaved edits 
 Built: one widget, `dashboard-course-list` (`apps/dashboard/src/widgets/course-list.ts`), on
 the Kitchen screen and in the window the product editor's "Edit courses…" opens (from
 `catalogue-screen.ts`). Each change saves as it is made, so the window has one button, Done, where
-the mockup drew Cancel and Done; Done waits for saves still being answered, and stays open with the
-reason under the field when a typed name is refused. A drag is saved in one request,
+the mockup drew Cancel and Done; Done waits for saves still being answered, including changes made
+while it waits (a second Done during the wait does nothing), and stays open with the reason under
+the field when a typed name is refused. A drag is saved in one request,
 `PUT /management-api/courses/:id/position` (`moveCourse`, `apps/server/src/kitchen.ts`), which
 renumbers the active courses. A new course is created after the last one shown, where the old form
 created it at order 0. Closing the window selects the last course added in it if it is still there;
@@ -1386,7 +1387,7 @@ otherwise the choice stays.
 **Left open:** a removed course keeps its name, because `kitchen_courses_name_key` covers inactive
 rows too, so adding a course with a removed course's name is refused as taken (measured
 2026-10-03 with a throwaway case in `apps/server/src/kitchen.test.ts`: create "Mains", deactivate
-it, create "Mains" again → `course.name_taken`). `kitchen.course_order` is no longer used.
+it, create "Mains" again → `course.name_taken`).
 
 **Allergens and dietary preferences are edited in place (A213) — DONE (#1079).** The owner:
 _"for nutritional info, we can show: Allergens: Nuts, Seeds / Dietary preferences: None specified.

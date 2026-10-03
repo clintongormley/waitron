@@ -1,5 +1,5 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
-/** What the product editor can create without leaving itself. */
+/** What the product editor can create or edit without leaving itself. */
 export type ProductChildKind = "unit" | "category" | "extras" | "options" | "courses";
 interface Effects {
   /** The row that was written. Only its `id` is read here. */
@@ -9,7 +9,7 @@ interface Effects {
   focus(kind: ProductChildKind): void;
 }
 
-/** The composing screen owns lookups and child forms; this controller owns only the create lifecycle. */
+/** The composing screen owns lookups and child forms; this controller owns only the open, cancel and create lifecycle. */
 export class ProductChildCreate implements ReactiveController {
   kind: ProductChildKind | null = null;
   busy = false;
