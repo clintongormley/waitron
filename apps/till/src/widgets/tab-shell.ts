@@ -44,6 +44,7 @@ export class TillTabShell extends LitElement {
 
       .head {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-3);
@@ -58,6 +59,7 @@ export class TillTabShell extends LitElement {
 
       .tabs {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-2);
       }
@@ -85,6 +87,7 @@ export class TillTabShell extends LitElement {
 
       .session {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-3);
       }
