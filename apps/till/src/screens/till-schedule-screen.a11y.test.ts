@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-schedule-screen.js";
+import { t } from "../i18n/t.js";
 import type { TillScheduleScreen } from "./till-schedule-screen.js";
 import type { MyAbsence, MyShift, MySwap, StaffMember, TillApi } from "../api/client.js";
 
@@ -85,7 +86,9 @@ describe.each(["light", "dark"] as const)("till-schedule-screen a11y (%s theme)"
       theme,
     );
     await flush(el);
-    expect(el.shadowRoot?.querySelector(`[role="alert"]`)?.textContent).toContain("schedule");
+    expect(el.shadowRoot?.querySelector(`[role="alert"]`)?.textContent).toContain(
+      t("schedule.load_failed"),
+    );
     await expectNoA11yViolations(host);
   });
 });

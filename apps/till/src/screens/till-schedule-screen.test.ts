@@ -393,7 +393,7 @@ describe("till-schedule-screen", () => {
     const api = stubApi({ listMyShifts: vi.fn().mockRejectedValue(new Error("network")) });
     const { el } = await mount(api);
     const alert = root(el).querySelector<HTMLElement>('[role="alert"]')!;
-    expect(getComputedStyle(alert).marginBottom).not.toBe("0px");
+    expect(Number.parseFloat(getComputedStyle(alert).marginBottom)).toBeGreaterThan(0);
   });
 
   it("does not call a list that never loaded empty when the first load fails", async () => {
