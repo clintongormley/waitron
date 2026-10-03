@@ -3564,13 +3564,18 @@ describe("mountCatalogueApi — extras lists and products with variants", () => 
     const [each] = (
       await suite.db.execute<{ id: string }>(sql`select id from units where seed_key = 'each'`)
     ).rows;
-    const variant = await editor(app, variantId);
-    const assigned = await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
-      body: { ...variant, unitId: each!.id },
-    });
-    expect(assigned.status).toBe(200);
+    await suite.db.execute(
+      sql`insert into product_units (product_id, unit_id) values (${variantId}, ${each!.id})`,
+    );
     const after = await send(app, "GET", `/management-api/products/${parentId}/extra-usage`);
-    expect(await after.json()).toEqual([]);
+    expect(after.status).toBe(200);
+    expect(await after.json()).toEqual([
+      {
+        productId: variantId,
+        productName: "Copa",
+        lists: [{ id: extraList.id, name: "Wine extras", menus: [] }],
+      },
+    ]);
   });
 
   it("answers 409 extras.product_has_variants to a list naming a product with an Active variant, on create and on update", async () => {

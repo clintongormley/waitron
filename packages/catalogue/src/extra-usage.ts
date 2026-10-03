@@ -1,8 +1,7 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { buildMenuDocuments } from "./menu-document.js";
 import { extraListItems, extraLists } from "./schema/extras.js";
-import { productUnits } from "./schema/units.js";
 import { productsUsingUnit } from "./units.js";
 
 export interface ExtraOfferUsage {
@@ -74,8 +73,7 @@ export async function extraOfferUsageForUnitChange(
   const inherited = await tx
     .select({ id: products.id })
     .from(products)
-    .leftJoin(productUnits, eq(productUnits.productId, products.id))
-    .where(and(eq(products.parentId, productId), isNull(productUnits.productId)));
+    .where(eq(products.parentId, productId));
   return extraOfferUsage(tx, [productId, ...inherited.map((row) => row.id)]);
 }
 

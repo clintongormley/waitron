@@ -268,8 +268,7 @@ export interface SelectedOption {
   /** Absent or null leaves the child without a kitchen name — a child never borrows the dish's,
    * which names a different thing. */
   kitchenName?: string | null;
-  /** How many of THIS option, per dish; ABSENT means 1. The child is priced at
-   * `dishQuantity × quantity`, so a dish ×3 carrying an option ×2 prices the option 6 times. */
+  /** How many picks of THIS option per dish; ABSENT means 1. */
   quantity?: number;
   physicalQuantity?: string;
   priceQuantity?: string;

@@ -1793,8 +1793,8 @@ export interface TabLine {
   quantity: string;
   /** Physical amount represented by one priced portion, frozen when the line was added. */
   priceQuantity?: string;
-  /** How many decimal places the line's unit takes, frozen when it was rung (0 = sold by the unit), or
-   * null on an extras child. The split reads this, never the product: a line sold as a variant names
+  /** How many decimal places the line's unit takes, frozen when it was rung (0 = sold by the unit).
+   * The split reads this, never the product: a line sold as a variant names
    * the variant, which is not one of the till's products. Absent reads as three places. */
   unitPrecision?: number | null;
   unitPriceGross: string;
