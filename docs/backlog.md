@@ -1177,7 +1177,7 @@ expanded, on both Add and Edit, and can still be collapsed. Read as the single o
 the screenshots show; the options LIST form's section is left as it is — ask if both were meant.
 
 **A folded names section's line puts a colon after each field's name (A200, owner 2026-10-02) —
-DONE.** The owner: _"when rendering the names block "EN Medium, pink in the middle · ES Al punto,
+DONE (#1076).** The owner: _"when rendering the names block "EN Medium, pink in the middle · ES Al punto,
 rosado por dentro · Kitchen AL PUNTO", add a colon after each field: "EN: Medium, pink in the middle
 · ES: Al punto, rosado por dentro · Kitchen: AL PUNTO", and maybe make the field names bold"_. The
 line is built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`), used by the options
