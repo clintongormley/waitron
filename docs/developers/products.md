@@ -458,8 +458,9 @@ photo that exists was accepted.
 
 `dashboard-product-editor` (`apps/dashboard/src/widgets/product-editor.ts`) is one short form. The
 fields that change often are always visible; everything else is folded into a `wt-disclosure`
-section that shows a summary of what is inside it: what is filled in, cut short when it is long;
-opening the section shows every value. Top to bottom: Name, with the photo beside it as a small button that opens the image
+section that shows a summary built from what is filled in. The Descriptors rows are cut after one
+and two lines, which can hide a later language's value, so opening the section is what shows every
+value. Top to bottom: Name, with the photo beside it as a small button that opens the image
 library (absent when the editor is given no `api`), Category, Available, Standalone
 ordering (absent on a variant's page), ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info, Pricing (a ▸ fold once some variant is Active),
 Variants, Modifiers, then Cancel and Save. An Inactive product's editor also opens with a line

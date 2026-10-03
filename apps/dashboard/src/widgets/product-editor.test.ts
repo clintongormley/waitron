@@ -1855,7 +1855,7 @@ it("saves an Inactive product's other edits without restoring it", async () => {
   expect(submit.mock.calls[0]![0].detail.value.active).toBe(false);
 });
 
-it("summarises each collapsed section so nothing filled in is invisible", async () => {
+it("summarises each collapsed section from its filled-in values", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: {

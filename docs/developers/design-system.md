@@ -1114,8 +1114,10 @@ variant, and then folds too, with the base price and VAT on its closed line as n
 Three rules make the fold safe rather than merely tidy.
 
 **Every collapsed section carries a summary of what is inside it**, passed as `summary`, as named
-values in `summaryFields`, or as rows in `summaryRows`, so what a person has filled in shows, cut
-short when it is long; opening the section shows every value. Build it from the values themselves, skipping the empty ones, joined with a middot. The
+values in `summaryFields`, or as rows in `summaryRows`, built from what a person has filled in. Each
+`summaryRows` row is cut after its own number of lines, which can hide a later value in that row
+completely (a long English name hides the Spanish one), so opening the section is what shows every
+value. Build it from the values themselves, skipping the empty ones, joined with a middot. The
 product editor's Kitchen and Pricing sections give each value after its field's name in bold
 (`summaryFields`); its Nutritional info section still lists bare values (A211). The Kitchen section
 reads "**Kitchen name:** Café c/leche · **Course:** Drinks". The product editor's Descriptors section has one row per field, its languages

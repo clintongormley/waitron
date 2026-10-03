@@ -88,7 +88,12 @@ describe.each(["light", "dark"] as const)("image-upload a11y (%s theme)", (theme
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-image]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=remove-image]")).not.toBeNull();
-    // Without these the scan could pass on a window whose library never rendered.
+    // Without these the scan could pass on a closed window, or one whose library never rendered.
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!.open,
+      ).toBe(true),
+    );
     expect(customElements.get("media-image-picker")).toBeDefined();
     const picker = el.shadowRoot!.querySelector("media-image-picker")!;
     await vi.waitFor(() =>
