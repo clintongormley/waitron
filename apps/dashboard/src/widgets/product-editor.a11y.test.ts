@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -133,6 +133,10 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
     "variant-page",
     "ordering",
     "ordering-refused",
+    "photo",
+    "photo-none",
+    "photo-inherited",
+    "photo-refused",
   ])("renders %s", async (state) => {
     const { el, host } = await mountWidget<ProductEditor>(
       "dashboard-product-editor",
@@ -156,7 +160,11 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
                       ? { ...coffee, primaryCategoryId: "food" }
                       : state === "ordering"
                         ? { ...coffee, ordering: "staff_only" }
-                        : coffee,
+                        : state === "photo"
+                          ? { ...coffee, image: "coffee.png" }
+                          : state === "photo-inherited"
+                            ? variantPage
+                            : coffee,
         extraLists,
         optionLists,
         categories: [
@@ -165,7 +173,14 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
         ],
         courses: [{ id: "starters", name: "Starters" }],
         fieldErrors:
-          state === "ordering-refused" ? { ordering: "The server rejected this value." } : {},
+          state === "ordering-refused"
+            ? { ordering: "The server rejected this value." }
+            : state === "photo-refused"
+              ? { image: "The photo is gone." }
+              : {},
+        ...(state.startsWith("photo")
+          ? { api: { imageLibraryRequest: vi.fn().mockResolvedValue({}) } as never }
+          : {}),
       },
       theme,
     );
@@ -184,6 +199,16 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
         const lines = [...field.shadowRoot!.querySelectorAll<HTMLElement>(".option-description")];
         expect(lines.map((line) => line.checkVisibility())).toEqual([true, true, true]);
       }
+    }
+    if (state.startsWith("photo")) {
+      // Without these the scan could pass on an editor that drew no photo beside Name.
+      const upload = el.shadowRoot!.querySelector("[data-section=name] dashboard-image-upload")!;
+      await (upload as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(upload.shadowRoot!.querySelector("button[data-test=choose-image]")).not.toBeNull();
+      if (state === "photo-inherited")
+        expect(upload.shadowRoot!.querySelector("[data-test=inherited-caption]")).not.toBeNull();
+      if (state === "photo-refused")
+        expect(el.shadowRoot!.querySelector("[data-test=image-error]")).not.toBeNull();
     }
     if (state === "errors") el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     if (state === "categories") {

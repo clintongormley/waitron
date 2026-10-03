@@ -101,9 +101,11 @@ exception: it joins two searches, as in **summer or winter**, so typing **or** d
 **Name** to scan names. Date starts with the newest uploads; switch to **Oldest first** when you
 need the earliest ones. Name starts with **A–Z** and also offers **Z–A**. Use the page controls when more photographs match than fit on the current page.
 
-In a product editor, select **Choose image** to open the same library, then select **Use image** on
-the photograph you want. Save the product to keep the association. You can reuse one photograph on
-several products. Uploading the same file again finds the existing image and keeps its existing
+On a product's or a variant's own page, select the photo beside the name to open the same library.
+With no photo it is an empty square; on a variant's page with no photo of its own, it shows the main
+product's photo with a dashed border. In a variant's small window or a section's editor, select
+**Choose image**. Then select **Use image** on the photograph you want, and save to keep the
+association. You can reuse one photograph on several products. Uploading the same file again finds the existing image and keeps its existing
 names, as long as Waitron's image library has not been upgraded in between: a newer version may make
 a slightly different copy, which is then stored as a new image. A notice identifies the reused image
 and lets you open it for editing.
@@ -113,8 +115,10 @@ Editing this shared record changes the metadata wherever that photograph is reus
 
 ## Remove a use before deleting the photograph
 
-**Remove image** in a product editor clears that product's association when you save the product.
-The photograph stays in the library for your other products.
+**Remove image** clears the association when you save. On a product's or a variant's own page it is
+at the bottom of the library window the photo opens, shown when there is a photo of its own; in a
+variant's small window it sits beside **Choose image**, shown when there is a photo. The photograph
+stays in the library for your other products.
 
 To remove the photograph itself, choose **Delete** in the library and confirm. If any product,
 product variant or section still uses it, deletion is blocked. You see links to those products,

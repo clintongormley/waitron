@@ -1,12 +1,28 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./image-upload.js";
+// The app registers `media-image-picker` through the module registry, as dashboard-app.ts does.
+import "@waitron/dashboard-modules";
 import type { ImageUpload } from "./image-upload.js";
 import type { DashboardApi } from "../api/client.js";
 
 function stubApi(): DashboardApi {
   return {
     imageLibraryRequest: vi.fn().mockResolvedValue({ image: "abc.png" }),
+  } as unknown as DashboardApi;
+}
+
+function stubLibraryApi(): DashboardApi {
+  const image = {
+    id: "bread",
+    filename: "bread.png",
+    names: { es: "Pan", en: "Bread" },
+    createdAt: "2026-09-12T10:00:00Z",
+    updatedAt: "2026-09-12T10:00:00Z",
+    usageCount: 1,
+  };
+  return {
+    imageLibraryRequest: vi.fn().mockResolvedValue({ images: [image], total: 1 }),
   } as unknown as DashboardApi;
 }
 
@@ -42,6 +58,51 @@ describe.each(["light", "dark"] as const)("image-upload a11y (%s theme)", (theme
     );
     expect(el.shadowRoot!.querySelector("[data-test=inherited-preview]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=inherited-hint]")).toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([
+    ["with its own photo", { image: "abc.png" }],
+    ["with no photo", {}],
+    ["with the inherited photo", { inheritedImage: "parent.png" }],
+    ["marked invalid", { invalid: true }],
+  ] as const)("renders accessibly as a thumbnail %s", async (_, props) => {
+    const { el, host } = await mountWidget<ImageUpload>(
+      "dashboard-image-upload",
+      { api: stubApi(), thumbnail: true, ...props },
+      theme,
+    );
+    // Without this the scan could pass on a thumbnail that drew no button.
+    expect(el.shadowRoot!.querySelector("button[data-test=choose-image]")).not.toBeNull();
+    if ("inheritedImage" in props)
+      expect(el.shadowRoot!.querySelector("[data-test=inherited-caption]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly as a thumbnail with its library open", async () => {
+    const { el, host } = await mountWidget<ImageUpload>(
+      "dashboard-image-upload",
+      { api: stubLibraryApi(), thumbnail: true, image: "abc.png" },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-image]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=remove-image]")).not.toBeNull();
+    // Without these the scan could pass on a closed window, or one whose library never rendered.
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!.open,
+      ).toBe(true),
+    );
+    expect(customElements.get("media-image-picker")).toBeDefined();
+    const picker = el.shadowRoot!.querySelector("media-image-picker")!;
+    await vi.waitFor(() =>
+      expect(
+        picker.shadowRoot
+          ?.querySelector("dashboard-image-library")
+          ?.shadowRoot?.querySelector("[data-image=bread]"),
+      ).toBeTruthy(),
+    );
     await expectNoA11yViolations(host);
   });
 });

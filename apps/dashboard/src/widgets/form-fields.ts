@@ -36,17 +36,16 @@ export const priceText = (value: string) =>
 export const priceSearchText = (shown: string, raw: readonly string[]) =>
   [shown, shown.replace(/\u00a0/g, " "), ...raw].join(" ");
 
-/** A folded names section's closed line: each language's customer-facing name after its code, blank
- * ones left out. */
+/** Each language's text after its upper-case code, blank ones left out: a folded names section's
+ * closed line as `wt-disclosure`'s `summaryFields`, and the product editor's Descriptors rows. */
 export function namesLine(
   locales: readonly string[],
-  customerName: Record<string, string>,
-): string {
-  return locales
-    .map((locale) => [locale.toUpperCase(), customerName[locale]?.trim()])
-    .filter(([, name]) => name)
-    .map((parts) => parts.join(" "))
-    .join(" · ");
+  text: Record<string, string>,
+): { label: string; value: string }[] {
+  return locales.flatMap((locale) => {
+    const value = text[locale]?.trim();
+    return value ? [{ label: locale.toUpperCase(), value }] : [];
+  });
 }
 
 export const nonBlankNames = (value: Record<string, string>) =>

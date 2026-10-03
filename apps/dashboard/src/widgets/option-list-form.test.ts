@@ -332,9 +332,12 @@ it("folds the list's customer-facing names into a closed section that lists them
   for (const name of ["customer-name-en", "customer-name-es"])
     expect(field(el, name).closest("wt-disclosure"), name).toBe(section);
   expect(field(el, "name").closest("wt-disclosure")).toBeNull();
-  expect(section.summary).toBe("ES ¿En qué punto?");
+  expect(section.summaryFields).toEqual([{ label: "ES", value: "¿En qué punto?" }]);
   await type(el, "customer-name-en", "How would you like it?");
-  expect(section.summary).toBe("EN How would you like it? · ES ¿En qué punto?");
+  expect(section.summaryFields).toEqual([
+    { label: "EN", value: "How would you like it?" },
+    { label: "ES", value: "¿En qué punto?" },
+  ]);
 });
 
 it.each([
@@ -415,7 +418,25 @@ it("never hints a customer-facing name with the kitchen name, which keeps its ow
 it("lists the customer-facing names in the closed section's line, but not the kitchen name", async () => {
   const { el } = await mount({ value: cooked });
 
-  expect(namesSection(el).summary).toBe("EN How would you like it? · ES ¿En qué punto?");
+  expect(namesSection(el).summaryFields).toEqual([
+    { label: "EN", value: "How would you like it?" },
+    { label: "ES", value: "¿En qué punto?" },
+  ]);
+});
+
+it("draws each language's code in bold with a colon, before its name, on the closed line", async () => {
+  const { el } = await mount({ value: cooked });
+  const section = namesSection(el);
+  await section.updateComplete;
+  const line = section.shadowRoot!.querySelector(".summary")!;
+  expect(line.textContent!.replace(/\s+/g, " ").trim()).toBe(
+    "EN: How would you like it? · ES: ¿En qué punto?",
+  );
+  const codes = [...line.querySelectorAll(".summary-label")];
+  expect(codes.map((code) => code.textContent)).toEqual(["EN:", "ES:"]);
+  const bold = Number(getComputedStyle(codes[0]!).fontWeight);
+  expect(bold).toBeGreaterThan(Number(getComputedStyle(line).fontWeight));
+  expect(Number(getComputedStyle(codes[1]!).fontWeight)).toBe(bold);
 });
 
 it("shows a kitchen-name refusal under the kitchen field without marking the names section", async () => {

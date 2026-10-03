@@ -812,7 +812,9 @@ show the parent's value itself, and the variant table shows the product's price,
 italic; where the parent names nothing they show what will be used ("Uncategorised", the course's
 "— none —", "Each" for the unit, "None", or "Not yet reviewed" for allergens the parent has not had reviewed). The
 photo now shows without a "Same as" caption too (A172b — DONE, owner 2026-10-02); its alt text still
-names the main product's photo.
+names the main product's photo. (Since A200, 2026-10-03, the product editor draws that photo with
+empty alt text and its photo button carries those words as a description that is not shown; a
+variant's small window still uses them as the photo's alt text.)
 The owner: _"the kitchen name hint should be the name field, unless it has its own value. The main
 language name hint should be the name field, and the secondary languages should be the main
 language name"_. A field's hint is its placeholder (CLAUDE.md §3, Forms), so it shows only while
@@ -1175,7 +1177,7 @@ expanded, on both Add and Edit, and can still be collapsed. Read as the single o
 the screenshots show; the options LIST form's section is left as it is — ask if both were meant.
 
 **A folded names section's line puts a colon after each field's name (A200, owner 2026-10-02) —
-OPEN.** The owner: _"when rendering the names block "EN Medium, pink in the middle · ES Al punto,
+DONE.** The owner: _"when rendering the names block "EN Medium, pink in the middle · ES Al punto,
 rosado por dentro · Kitchen AL PUNTO", add a colon after each field: "EN: Medium, pink in the middle
 · ES: Al punto, rosado por dentro · Kitchen: AL PUNTO", and maybe make the field names bold"_. The
 line is built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`), used by the options
@@ -1185,13 +1187,13 @@ in the summary's usual muted text. (C, the field names in full-strength text rat
 the runner-up.) Bold needs markup, and `wt-disclosure` takes its `summary` as a plain string; give
 the primitive a way to take the parts (a slot, or name/value pairs) rather than building markup in
 each screen. Since A171 the line holds only the customer-facing names, so it has no "Kitchen:" part.
-(2026-10-02: `summaryFields`, built for A219, is that way; the product editor's Kitchen and
-Descriptors lines and `namesLine` still pass plain strings.)
+(2026-10-02: `summaryFields`, built for A219, is that way; `namesLine` and the product editor's
+Kitchen line now use it, and the Descriptors line uses `summaryRows`, built for this item.)
 
 **The product editor's folded sections follow the same pattern, with real values (owner,
 2026-10-02):** _"regarding products, i think we should include the field values not just the fact
-that they're filled in, and we should show a thumbnail of the image too"_. Today
-`product-editor.ts` writes the Kitchen section as "SOLOMILLO · Mains" and the Descriptors section as
+that they're filled in, and we should show a thumbnail of the image too"_. Before A200,
+`product-editor.ts` wrote the Kitchen section as "SOLOMILLO · Mains" and the Descriptors section as
 "customer name (EN, ES) · description (EN) · image". **Decided (owner, 2026-10-02, from mockups):**
 
 - the Kitchen line gives each value after its bold field name: "**Kitchen name:** SOLOMILLO ·
@@ -1204,9 +1206,9 @@ that they're filled in, and we should show a thumbnail of the image too"_. Today
   of the editor, as the product list (`product-list.ts`) shows it beside each product's name (the
   owner's suggestion). **Clicking it opens the image picker, and the picker moves out of the
   Descriptors section** (owner, 2026-10-02: _"it should open the image picker, in fact the image
-  picker should move out of the descriptions box i think"_). Today `dashboard-image-upload` is
-  drawn inside that section, with its error under it, and `SECTION_FIELDS.descriptors` lists
-  `image`, so an image error forces the section open; both move with the picker, and an image
+  picker should move out of the descriptions box i think"_). Before A200, `dashboard-image-upload` was
+  drawn inside that section, with its error under it, and `SECTION_FIELDS.descriptors` listed
+  `image`, so an image error forced the section open; both move with the picker, and an image
   error then shows beside the photo. The picker is drawn only when the editor has an `api`; the
   photo's slot needs a state for that too. With no photo, the slot shows a placeholder that still
   opens the picker (the list's `thumb-placeholder` look). A variant with no photo of its own shows
@@ -1214,6 +1216,22 @@ that they're filled in, and we should show a thumbnail of the image too"_. Today
   target, a focus ring, and a name a screen reader reads ("Change photo" / "Add photo").
 
 LOOK at it at phone width, where a long English description leaves little room for the Spanish.
+
+**Built:** `wt-disclosure` gained `summaryRows` (one row per field, each cut with an ellipsis after
+its own number of lines). `namesLine` returns name and value pairs, so the extras and options lists'
+line reads "**EN:** Make it yours · **ES:** Añádele algo". The Kitchen line's labels are the field's
+own "Kitchen name" ("Nombre de cocina") and a new short "Course" ("Curso"). In the Descriptors rows
+only "Name:" and "Description:" are bold; the language codes are plain text, as the decision above
+writes them. The photo is the thumbnail form of `dashboard-image-upload` (`thumbnail`), beside Name
+and stopping where the other fields stop; it is named "Add photo" or "Change photo"; an inherited
+photo has a dashed border and no visible caption: "The main product's photo" describes the photo
+button to a screen reader only (owner, 2026-10-03, choosing that over a visible caption). In the editor,
+Remove moved into the image library window's footer, shown when the product has a photo of its own;
+the variant form and the section details form keep today's photo control. With no
+`api` there is no photo and Name takes the whole row. A refused photo shows its reason under the
+photo and leaves Descriptors closed. Looked at, 2026-10-03, at 1280 and 390 wide in both themes and
+both languages: at 390 a long English description fills both of its lines, so the Spanish one does
+not show at all on the closed line.
 
 **Choosing a product in an extras list adds it at once (A201, owner 2026-10-02) — DONE.** The
 owner, on a screenshot of the extras list form's "Choose a product" dropdown beside an "Add
@@ -3667,7 +3685,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `apps/dashboard/src/widgets/section-details-form.ts` puts `aria-describedby="section-image-error"`
   on the `dashboard-image-upload` host, and an id outside a shadow root describes nothing inside it
   (`docs/developers/design-system.md` → Forms); the Choose image button inside it carries
-  `aria-invalid` and takes focus, so a screen reader hears "invalid" with no reason;
+  `aria-invalid` and takes focus, so a screen reader hears "invalid" with no reason. Since A200 the
+  product editor's photo button (`apps/dashboard/src/widgets/product-editor.ts`) has the same
+  defect: it carries `aria-invalid` and takes focus, while the reason is a `data-test="image-error"`
+  line in the editor's own shadow root that nothing points to;
   (6) the till's schedule screen (`apps/till/src/screens/till-schedule-screen.ts`) does not follow
   the rule yet: its cover request keeps its button disabled until a shift and a colleague are
   chosen, and its absence request until both dates are filled, before any press; neither shows a

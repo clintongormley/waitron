@@ -454,7 +454,7 @@ export class OptionListForm extends LitElement {
     return html`<wt-disclosure
       data-test="names-section"
       heading=${t("options.customer_names")}
-      summary=${namesLine(locales, this.customerName)}
+      .summaryFields=${namesLine(locales, this.customerName)}
       .hasError=${hasError}
     >
       <div class="names">

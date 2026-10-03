@@ -45,4 +45,19 @@ describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (them
     expect(el.shadowRoot!.querySelectorAll(".summary-label")).toHaveLength(2);
     await expectNoA11yViolations(host);
   });
+
+  test("collapsed, with summary rows", async () => {
+    const el = (await mountThemed(
+      '<wt-disclosure heading="Descriptores"><p>cuerpo</p></wt-disclosure>',
+      theme,
+    )) as WtDisclosure;
+    el.summaryRows = [
+      { label: "Name", value: "EN: Beef tenderloin · ES: Solomillo de ternera", lines: 1 },
+      { label: "Description", value: "EN: Seared · ES: Sellado", lines: 2 },
+    ];
+    await el.updateComplete;
+    // Without this the scan could pass on a header that drew no rows.
+    expect(el.shadowRoot!.querySelectorAll(".summary-row .summary-label")).toHaveLength(2);
+    await expectNoA11yViolations(host);
+  });
 });

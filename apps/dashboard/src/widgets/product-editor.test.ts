@@ -100,6 +100,11 @@ function section(el: ProductEditor, name: string) {
     HTMLElement & { open: boolean; updateComplete: Promise<unknown> }
   >(`[data-section="${name}"]`)!;
 }
+function folded(el: ProductEditor, name: string) {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
+    `wt-disclosure[data-section="${name}"]`,
+  )!;
+}
 async function openSection(el: ProductEditor, name: string) {
   const disclosure = section(el, name);
   await disclosure.updateComplete;
@@ -1850,7 +1855,7 @@ it("saves an Inactive product's other edits without restoring it", async () => {
   expect(submit.mock.calls[0]![0].detail.value.active).toBe(false);
 });
 
-it("summarises each collapsed section so nothing filled in is invisible", async () => {
+it("summarises each collapsed section from its filled-in values", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: {
@@ -1864,11 +1869,16 @@ it("summarises each collapsed section so nothing filled in is invisible", async 
     taxChoices: reduced,
     courses: [{ id: "course-1", name: "Starters" }],
   });
-  expect(section(el, "kitchen").getAttribute("summary")).toBe("BAR · Starters");
+  expect(folded(el, "kitchen").summaryFields).toEqual([
+    { label: t("editor.kitchen_name"), value: "BAR" },
+    { label: t("editor.summary_course"), value: "Starters" },
+  ]);
+  // The image is not on the line: the photo sits beside Name.
+  expect(folded(el, "descriptors").summaryRows).toEqual([
+    { label: t("editor.name"), value: "EN: House coffee · ES: Café de la casa", lines: 1 },
+    { label: t("editor.description"), value: "EN: Freshly roasted", lines: 2 },
+  ]);
   // The dashboard's shipped locale is Spanish, so these summaries are the Spanish strings.
-  expect(section(el, "descriptors").getAttribute("summary")).toBe(
-    "nombre para el cliente (en, es) · descripción (en) · imagen",
-  );
   expect(section(el, "nutrition").getAttribute("summary")).toBe("Vegano");
 });
 
@@ -3718,7 +3728,7 @@ it("draws a variant's page with Pricing open, the price above VAT, and no Varian
   expect(el.shadowRoot!.querySelector('[data-section="variants"]')).toBeNull();
 });
 
-// --- The photo, in the Descriptors section ---
+// --- The photo, beside Name ---
 
 async function mountWithPhoto(props: Partial<ProductEditor> = {}) {
   return (
@@ -3770,7 +3780,7 @@ it("holds Save while the image picker is open", async () => {
   expect(saveButton(el).disabled).toBe(false);
 });
 
-it("opens Descriptors on a refused photo, says why under it, and puts focus on Choose", async () => {
+it("leaves Descriptors closed on a refused photo, says why beside it, and puts focus on the photo", async () => {
   const el = await mountWithPhoto();
   expect(section(el, "descriptors").open).toBe(false);
   el.fieldErrors = { image: "The photo is gone" };
@@ -3778,10 +3788,10 @@ it("opens Descriptors on a refused photo, says why under it, and puts focus on C
   expect(el.shadowRoot!.querySelector("[data-test=image-error]")!.textContent!.trim()).toBe(
     "The photo is gone",
   );
-  await expect.poll(() => section(el, "descriptors").open).toBe(true);
   await expect
     .poll(() => photoControl(el).shadowRoot!.activeElement?.getAttribute("data-test"))
     .toBe("choose-image");
+  expect(section(el, "descriptors").open).toBe(false);
 });
 
 it("asks the screen for a new category from Add category", async () => {
@@ -3803,4 +3813,214 @@ it("refuses a variant with no name on its row, and saves nothing", async () => {
   const table = variantTable(el)!;
   await table.updateComplete;
   expect(table.errors).toEqual({ 1: t("editor.variant_name_required") });
+});
+
+const photoButton = (el: ProductEditor) =>
+  photoControl(el).shadowRoot!.querySelector<HTMLButtonElement>("button[data-test=choose-image]")!;
+const nameGroup = (el: ProductEditor) =>
+  el.shadowRoot!.querySelector<HTMLElement>('[data-section="name"]')!;
+
+it("puts the photo beside Name, which takes the rest of the row, and not in Descriptors", async () => {
+  const el = await mountWithPhoto({ value: { ...saved, image: "own.png" } });
+  const upload = photoControl(el) as HTMLElementTagNameMap["dashboard-image-upload"];
+  expect(upload.thumbnail).toBe(true);
+  expect(nameGroup(el).contains(upload)).toBe(true);
+  expect(upload.closest("wt-disclosure")).toBeNull();
+  expect(photoButton(el).getAttribute("aria-label")).toBe(t("image.change_photo"));
+  expect(photoButton(el).querySelector("img")!.getAttribute("src")).toBe("/media/own.png");
+  const photo = photoButton(el).getBoundingClientRect();
+  const name = el.shadowRoot!.querySelector<HTMLElement>('[name="name"]')!.getBoundingClientRect();
+  expect(name.left).toBeGreaterThan(photo.right);
+  expect(name.right).toBe(nameGroup(el).getBoundingClientRect().right);
+  expect(Math.abs(name.top + name.height / 2 - (photo.top + photo.height / 2))).toBeLessThan(1);
+});
+
+it("keeps the photo and Name within the width the other fields stop at, on a desktop", async () => {
+  await atDesktopWidth(async () => {
+    const el = await mountWithPhoto({ value: { ...saved, image: "own.png" } });
+    await photoControl(el).updateComplete;
+    const right = (selector: string) =>
+      el.shadowRoot!.querySelector<HTMLElement>(selector)!.getBoundingClientRect().right;
+    expect(right('[name="primary"]')).toBeLessThan(nameGroup(el).getBoundingClientRect().right);
+    expect(right('[name="name"]')).toBe(right('[name="primary"]'));
+  });
+});
+
+it.each([
+  ["its own photo", "own.png"],
+  ["the placeholder", null],
+])("opens the image library from %s, and holds Save while it is open", async (_, image) => {
+  const el = await mountWithPhoto({ value: { ...saved, image } });
+  expect(photoButton(el).getAttribute("aria-label")).toBe(
+    t(image ? "image.change_photo" : "image.add_photo"),
+  );
+  photoButton(el).click();
+  await photoControl(el).updateComplete;
+  await el.updateComplete;
+  expect(photoControl(el).shadowRoot!.querySelector("media-image-picker")).not.toBeNull();
+  expect(saveButton(el).disabled).toBe(true);
+});
+
+it("removes the photo from the library window's footer, and saves none", async () => {
+  const el = await mountWithPhoto({ value: { ...saved, image: "own.png" } });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  photoButton(el).click();
+  await photoControl(el).updateComplete;
+  photoControl(el).shadowRoot!.querySelector<HTMLElement>("[data-test=remove-image]")!.click();
+  await photoControl(el).updateComplete;
+  await el.updateComplete;
+  expect(photoControl(el).shadowRoot!.querySelector("media-image-picker")).toBeNull();
+  expect(photoButton(el).getAttribute("aria-label")).toBe(t("image.add_photo"));
+  expect(saveButton(el).disabled).toBe(false);
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value.image).toBeNull();
+});
+
+it("shows a variant's inherited photo beside its Name, described as the main product's for a screen reader only", async () => {
+  const el = await mountVariant();
+  expect(photoButton(el).querySelector("img")!.getAttribute("src")).toBe("/media/coffee.png");
+  const caption = photoControl(el).shadowRoot!.querySelector("[data-test=inherited-caption]")!;
+  expect(caption.textContent!.trim()).toBe(t("editor.inherited_image_alt"));
+  expect(photoButton(el).getAttribute("aria-describedby")).toBe(caption.id);
+  expect(caption.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+});
+
+it("marks the photo invalid on a refused photo, with the reason under it", async () => {
+  const el = await mountWithPhoto();
+  el.fieldErrors = { image: "The photo is gone" };
+  await el.updateComplete;
+  await photoControl(el).updateComplete;
+  expect(photoButton(el).getAttribute("aria-invalid")).toBe("true");
+  const error = el.shadowRoot!.querySelector<HTMLElement>("[data-test=image-error]")!;
+  expect(nameGroup(el).contains(error)).toBe(true);
+  const photo = photoButton(el).getBoundingClientRect();
+  expect(error.getBoundingClientRect().top).toBeGreaterThanOrEqual(photo.bottom);
+  expect(error.getBoundingClientRect().left).toBe(photo.left);
+});
+
+it("draws no photo when the editor has no api, and Name takes the whole row", async () => {
+  const el = await mountPricing({ ...saved, image: "own.png" });
+  expect(el.shadowRoot!.querySelector("dashboard-image-upload")).toBeNull();
+  const name = el.shadowRoot!.querySelector<HTMLElement>('[name="name"]')!.getBoundingClientRect();
+  const group = nameGroup(el).getBoundingClientRect();
+  expect([name.left, name.right]).toEqual([group.left, group.right]);
+});
+
+it.each([
+  ["the kitchen name alone", { kitchenName: "BAR", courseId: null }, ["kitchen"]],
+  ["the course alone", { kitchenName: "  ", courseId: "course-1" }, ["course"]],
+])("names %s on the Kitchen line when only it is filled", async (_, value, shown) => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, ...value },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+    courses: [{ id: "course-1", name: "Starters" }],
+  });
+  const all = {
+    kitchen: { label: t("editor.kitchen_name"), value: "BAR" },
+    course: { label: t("editor.summary_course"), value: "Starters" },
+  };
+  expect(folded(el, "kitchen").summaryFields).toEqual(
+    shown.map((key) => all[key as keyof typeof all]),
+  );
+});
+
+it.each([
+  ["en-GB", "Kitchen name: BAR · Course: Starters"],
+  ["es-ES", "Nombre de cocina: BAR · Curso: Starters"],
+] as const)("draws the Kitchen line's field names in bold, in %s", async (locale, line) => {
+  setLocale(locale);
+  try {
+    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: { ...product, courseId: "course-1" },
+      locales: ["en"],
+      units: [unit],
+      taxChoices: reduced,
+      courses: [{ id: "course-1", name: "Starters" }],
+    });
+    const kitchen = folded(el, "kitchen");
+    await kitchen.updateComplete;
+    const summary = kitchen.shadowRoot!.querySelector(".summary")!;
+    expect(summary.textContent!.replace(/\s+/g, " ").trim()).toBe(line);
+    expect(summary.querySelectorAll(".summary-label")).toHaveLength(2);
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
+it("rows each language's customer-facing name and description in the languages' order, leaving blanks out", async () => {
+  const mountWith = async (value: Partial<ProductEditorDraft>) =>
+    (
+      await mountWidget<ProductEditor>("dashboard-product-editor", {
+        open: true,
+        value: { ...product, ...value },
+        locales: ["es", "en"],
+        units: [unit],
+        taxChoices: reduced,
+      })
+    ).el;
+  let el = await mountWith({
+    customerName: { en: "Beef tenderloin", es: "Solomillo de ternera" },
+    description: { es: " ", en: "Seared" },
+  });
+  expect(folded(el, "descriptors").summaryRows).toEqual([
+    { label: t("editor.name"), value: "ES: Solomillo de ternera · EN: Beef tenderloin", lines: 1 },
+    { label: t("editor.description"), value: "EN: Seared", lines: 2 },
+  ]);
+  el = await mountWith({ customerName: { es: " " }, description: { es: "Sellado" } });
+  expect(folded(el, "descriptors").summaryRows).toEqual([
+    { label: t("editor.description"), value: "ES: Sellado", lines: 2 },
+  ]);
+  el = await mountWith({ customerName: null, description: null });
+  expect(folded(el, "descriptors").summaryRows).toEqual([]);
+});
+
+it("cuts the Descriptors Name row after one line and the Description row after two, only the field name in bold", async () => {
+  const long = (word: string) => Array.from({ length: 60 }, () => word).join(" ");
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: {
+      ...product,
+      customerName: { en: long("tenderloin"), es: long("solomillo") },
+      description: { en: long("seared"), es: long("sellado") },
+    },
+    locales: ["en", "es"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const descriptors = folded(el, "descriptors");
+  await descriptors.updateComplete;
+  const rows = [...descriptors.shadowRoot!.querySelectorAll<HTMLElement>(".summary-row")];
+  expect(rows.map((row) => row.querySelector(".summary-label")!.textContent)).toEqual([
+    `${t("editor.name")}:`,
+    `${t("editor.description")}:`,
+  ]);
+  for (const [row, lines] of [
+    [rows[0]!, 1],
+    [rows[1]!, 2],
+  ] as const) {
+    // The language codes are plain text: only the field name is bold.
+    expect(row.querySelectorAll(".summary-label")).toHaveLength(1);
+    expect(row.textContent).toContain("EN: ");
+    expect(row.scrollHeight).toBeGreaterThan(row.clientHeight);
+    const label = document.createRange();
+    label.selectNodeContents(row.querySelector(".summary-label")!);
+    expect(Math.round(row.clientHeight / label.getBoundingClientRect().height)).toBe(lines);
+  }
+});
+
+it("starts another product with the image library closed", async () => {
+  const el = await mountWithPhoto();
+  photoButton(el).click();
+  await photoControl(el).updateComplete;
+  expect(photoControl(el).shadowRoot!.querySelector("media-image-picker")).not.toBeNull();
+  el.value = { ...saved, id: "tea", name: "Tea" };
+  await el.updateComplete;
+  await photoControl(el).updateComplete;
+  expect(photoControl(el).shadowRoot!.querySelector("media-image-picker")).toBeNull();
+  expect(saveButton(el).disabled).toBe(false);
 });

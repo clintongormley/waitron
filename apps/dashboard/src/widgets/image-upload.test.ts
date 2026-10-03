@@ -202,3 +202,180 @@ describe("image-upload", () => {
     expect(await focusFirstInvalid(el.shadowRoot!)).toBeNull();
   });
 });
+
+describe("image-upload as a thumbnail", () => {
+  async function thumbnail(props: Partial<ImageUpload> = {}) {
+    return mountWidget<ImageUpload>("dashboard-image-upload", {
+      api: stubApi(),
+      thumbnail: true,
+      ...props,
+    });
+  }
+  const button = (el: ImageUpload) =>
+    el.shadowRoot!.querySelector<HTMLButtonElement>("button[data-test=choose-image]")!;
+  const picture = (el: ImageUpload) => button(el).querySelector<HTMLImageElement>("img");
+
+  it("is one button showing the product's own photo, at the size of the product list's thumbnail", async () => {
+    const { el, host } = await thumbnail({ image: "own.png" });
+    host.style.setProperty("--wt-tap-min", "47px");
+    expect(el.shadowRoot!.querySelectorAll("button, wt-button")).toHaveLength(1);
+    expect(el.shadowRoot!.querySelector("[data-test=preview]")).toBeNull();
+    expect(el.shadowRoot!.textContent!.trim()).toBe("");
+    expect(picture(el)!.getAttribute("src")).toBe("/media/own.png");
+    const box = button(el).getBoundingClientRect();
+    expect([box.width, box.height]).toEqual([47, 47]);
+    const img = picture(el)!.getBoundingClientRect();
+    expect(img.width).toBeGreaterThan(40);
+    expect(img.height).toBeGreaterThan(40);
+    expect(getComputedStyle(picture(el)!).objectFit).toBe("cover");
+  });
+
+  it.each([
+    ["en-GB", "own.png", "Change photo"],
+    ["en-GB", null, "Add photo"],
+    ["es-ES", "own.png", "Cambiar foto"],
+    ["es-ES", null, "Añadir foto"],
+  ] as const)("in %s, a photo %s is named %s", async (locale, image, name) => {
+    setLocale(locale);
+    const { el } = await thumbnail({ image });
+    expect(button(el).getAttribute("aria-label")).toBe(name);
+    // The name is the button's; the photo inside it adds nothing to it.
+    if (picture(el)) expect(picture(el)!.alt).toBe("");
+  });
+
+  it("opens the library from the photo, and shows the photo chosen there", async () => {
+    const { el } = await thumbnail({ image: "own.png" });
+    const changed = vi.fn();
+    el.addEventListener("image-changed", changed);
+    button(el).click();
+    await el.updateComplete;
+    select(el.shadowRoot!.querySelector("media-image-picker")!, "new.png");
+    await el.updateComplete;
+    expect(changed.mock.calls[0]![0].detail).toEqual({ image: "new.png" });
+    expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
+    expect(picture(el)!.getAttribute("src")).toBe("/media/new.png");
+  });
+
+  it("draws an empty placeholder like the product list's when there is no photo, and it opens the library too", async () => {
+    const { el, host } = await thumbnail();
+    host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-color-surface", "rgb(4, 5, 6)");
+    host.style.setProperty("--wt-radius-md", "7px");
+    expect(picture(el)).toBeNull();
+    const style = getComputedStyle(button(el));
+    expect([style.borderTopStyle, style.borderTopColor]).toEqual(["solid", "rgb(1, 2, 3)"]);
+    expect(style.backgroundColor).toBe("rgb(4, 5, 6)");
+    expect(style.borderTopLeftRadius).toBe("7px");
+    const pending = vi.fn();
+    el.addEventListener("image-picker-state", pending);
+    button(el).click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("media-image-picker")).not.toBeNull();
+    expect(pending.mock.calls[0]![0].detail).toEqual({ open: true });
+  });
+
+  it("is a tap target with a visible focus ring", async () => {
+    const { el } = await thumbnail();
+    const box = button(el).getBoundingClientRect();
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    button(el).focus();
+    expect(el.shadowRoot!.activeElement).toBe(button(el));
+    expect(getComputedStyle(button(el)).outlineStyle).not.toBe("none");
+  });
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "marks a variant's inherited photo with a dashed border, and names it the main product's for a screen reader only, in %s",
+    async (locale) => {
+      setLocale(locale);
+      const { el, host } = await thumbnail({ inheritedImage: "parent.png" });
+      host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+      expect(picture(el)!.getAttribute("src")).toBe("/media/parent.png");
+      expect(button(el).getAttribute("aria-label")).toBe(t("image.add_photo"));
+      const style = getComputedStyle(button(el));
+      expect([style.borderTopStyle, style.borderTopColor]).toEqual(["dashed", "rgb(7, 8, 9)"]);
+      const caption = el.shadowRoot!.querySelector<HTMLElement>("[data-test=inherited-caption]")!;
+      expect(caption.textContent!.trim()).toBe(t("editor.inherited_image_alt"));
+      expect(button(el).contains(caption)).toBe(false);
+      expect(button(el).getAttribute("aria-describedby")).toBe(caption.id);
+      expect(el.shadowRoot!.getElementById(caption.id)).toBe(caption);
+      const hidden = getComputedStyle(caption);
+      expect([hidden.position, hidden.width, hidden.height, hidden.overflow, hidden.clip]).toEqual([
+        "absolute",
+        "1px",
+        "1px",
+        "hidden",
+        "rect(0px, 0px, 0px, 0px)",
+      ]);
+    },
+  );
+
+  it("drops the inherited marking once the variant has a photo of its own", async () => {
+    const { el } = await thumbnail({ image: "own.png", inheritedImage: "parent.png" });
+    expect(picture(el)!.getAttribute("src")).toBe("/media/own.png");
+    expect(el.shadowRoot!.querySelector("[data-test=inherited-caption]")).toBeNull();
+    expect(button(el).hasAttribute("aria-describedby")).toBe(false);
+    expect(getComputedStyle(button(el)).borderTopStyle).toBe("solid");
+  });
+
+  it("removes the photo from the library window's footer, and closes it", async () => {
+    const { el } = await thumbnail({ image: "own.png" });
+    const changed = vi.fn();
+    const pending = vi.fn();
+    el.addEventListener("image-changed", changed);
+    el.addEventListener("image-picker-state", pending);
+    await open(el);
+    const remove = el.shadowRoot!.querySelector<HTMLElement>(
+      'wt-modal wt-form-actions wt-button[data-test="remove-image"]',
+    )!;
+    expect(remove.textContent!.trim()).toBe(t("image.remove"));
+    remove.click();
+    await el.updateComplete;
+    expect(changed.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+      { image: null },
+    ]);
+    expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
+    expect(pending.mock.calls.at(-1)![0].detail).toEqual({ open: false });
+    expect(picture(el)).toBeNull();
+    expect(button(el).getAttribute("aria-label")).toBe(t("image.add_photo"));
+  });
+
+  it("offers no Remove in the library window when there is no photo of its own", async () => {
+    for (const props of [{}, { inheritedImage: "parent.png" }]) {
+      const { el } = await thumbnail(props);
+      expect(await open(el)).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=remove-image]")).toBeNull();
+      cleanupWidgets();
+    }
+  });
+
+  it("marks the photo invalid in the danger colour, where focusFirstInvalid finds it", async () => {
+    const { el, host } = await thumbnail({ invalid: true });
+    host.style.setProperty("--wt-color-danger", "rgb(200, 1, 2)");
+    expect(button(el).getAttribute("aria-invalid")).toBe("true");
+    expect(getComputedStyle(button(el)).borderTopColor).toBe("rgb(200, 1, 2)");
+    expect(await focusFirstInvalid(el.shadowRoot!)).toBe(button(el));
+    el.invalid = false;
+    await el.updateComplete;
+    expect(button(el).hasAttribute("aria-invalid")).toBe(false);
+  });
+
+  it("lays what it holds beside the photo, taking the rest of the row, with nothing under them for an inherited photo", async () => {
+    const { el, host } = await thumbnail({ inheritedImage: "parent.png" });
+    host.style.width = "390px";
+    const field = document.createElement("div");
+    field.style.height = "56px";
+    el.appendChild(field);
+    await el.updateComplete;
+    const photo = button(el).getBoundingClientRect();
+    const beside = field.getBoundingClientRect();
+    const row = el.getBoundingClientRect();
+    expect(beside.left).toBeGreaterThan(photo.right);
+    expect(beside.right).toBe(row.right);
+    // Centred on each other, so the photo lines up with the field's box.
+    expect(Math.abs(beside.top + beside.height / 2 - (photo.top + photo.height / 2))).toBeLessThan(
+      1,
+    );
+    expect(row.height).toBe(Math.max(photo.height, beside.height));
+  });
+});

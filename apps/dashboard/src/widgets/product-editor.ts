@@ -29,6 +29,7 @@ import { categoryPath } from "./category-form.js";
 import { categoryField } from "./classification-fields.js";
 import {
   defaultLanguageHint,
+  namesLine,
   nonBlankNames,
   optionalTextFields,
   priceLabel,
@@ -81,7 +82,7 @@ function kindLabel(name: string, kind: ProductModifierRef["kind"]): string {
  * error cannot stay collapsed, and this is what its `has-error` is computed from. */
 const SECTION_FIELDS = {
   kitchen: ["kitchen-name", "product-course"],
-  descriptors: ["customer-name-", "description-", "image"],
+  descriptors: ["customer-name-", "description-"],
   price: ["tax", "unit"],
 } as const;
 type SectionName = keyof typeof SECTION_FIELDS;
@@ -425,12 +426,10 @@ export class ProductEditor extends LitElement {
     field.focus();
   }
 
-  /** The photo control has no input of its own; its Choose button is where a refused photo puts
-   * focus, once the folded section holding it has opened. */
+  /** The photo control has no input of its own; its button is where a refused photo puts focus. */
   private async focusImage(): Promise<void> {
     const upload = this.shadowRoot?.querySelector<LitElement>("dashboard-image-upload");
     if (!upload) return;
-    await upload.closest<LitElement>("wt-disclosure")?.updateComplete;
     await upload.updateComplete;
     upload.shadowRoot?.querySelector<HTMLElement>("[data-test=choose-image]")?.focus();
   }
@@ -769,13 +768,14 @@ export class ProductEditor extends LitElement {
 
   private renderKitchen() {
     const course = this.courses.find(({ id }) => id === this.draft.courseId)?.name;
-    const summary = [this.draft.kitchenName?.trim(), course]
-      .filter((part): part is string => !!part)
-      .join(SUMMARY_SEPARATOR);
+    const summary = [
+      { label: t("editor.kitchen_name"), value: this.draft.kitchenName?.trim() },
+      { label: t("editor.summary_course"), value: course },
+    ].filter((field): field is { label: string; value: string } => !!field.value);
     return html`<wt-disclosure
       data-section="kitchen"
       heading=${t("editor.section_kitchen")}
-      summary=${summary}
+      .summaryFields=${summary}
       ?has-error=${this.sectionHasError("kitchen")}
     >
       <div class="group">
@@ -833,10 +833,49 @@ export class ProductEditor extends LitElement {
     ></wt-combobox>`;
   }
 
+  private languagesLine(value: LocalizedText | null): string {
+    return namesLine(this.locales, value ?? {})
+      .map(({ label, value: text }) => `${label}: ${text}`)
+      .join(SUMMARY_SEPARATOR);
+  }
+
+  private renderName(fields: FieldContext) {
+    const name = textField(
+      fields,
+      "name",
+      t("editor.name"),
+      this.draft.name,
+      (value) => this.change("name", value),
+      true,
+    );
+    if (!this.api) return html`<div class="group" data-section="name">${name}</div>`;
+    return html`<div class="group" data-section="name">
+      <dashboard-image-upload
+        thumbnail
+        .api=${this.api}
+        .image=${this.draft.image}
+        .inheritedImage=${this.inherited?.image ?? null}
+        .invalid=${!!this.error("image")}
+        @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
+          event.stopPropagation();
+          this.change("image", event.detail.image);
+        }}
+        @image-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
+          event.stopPropagation();
+          this.imageOpen = event.detail.open;
+        }}
+        >${name}</dashboard-image-upload
+      >
+      ${
+        this.error("image")
+          ? html`<span class="error" data-test="image-error">${this.error("image")}</span>`
+          : nothing
+      }
+    </div>`;
+  }
+
   private renderDescriptors() {
-    const named = (value: LocalizedText | null) => Object.keys(nonBlankNames(value ?? {}));
-    const customer = named(this.draft.customerName);
-    const described = named(this.draft.description);
+    const described = Object.keys(nonBlankNames(this.draft.description ?? {}));
     // Storage inherits a variant's description as one value across every language, so a parent's
     // text is a hint only while the variant describes itself in none of them.
     const hintSource =
@@ -850,20 +889,17 @@ export class ProductEditor extends LitElement {
         : defaultLanguageHint(hintSource, locale, this.language);
     };
     const summary = [
-      customer.length
-        ? t("editor.summary_customer_name").replace("{languages}", customer.join(", "))
-        : "",
-      described.length
-        ? t("editor.summary_description").replace("{languages}", described.join(", "))
-        : "",
-      this.draft.image ? t("editor.summary_image") : "",
-    ]
-      .filter(Boolean)
-      .join(SUMMARY_SEPARATOR);
+      { label: t("editor.name"), value: this.languagesLine(this.draft.customerName), lines: 1 },
+      {
+        label: t("editor.description"),
+        value: this.languagesLine(this.draft.description),
+        lines: 2,
+      },
+    ].filter((row) => row.value);
     return html`<wt-disclosure
       data-section="descriptors"
       heading=${t("editor.section_descriptors")}
-      summary=${summary}
+      .summaryRows=${summary}
       ?has-error=${this.sectionHasError("descriptors")}
     >
       <div class="group">
@@ -892,30 +928,6 @@ export class ProductEditor extends LitElement {
             }}
           ></wt-textarea>`;
         })}
-        ${
-          this.api
-            ? html`<dashboard-image-upload
-                  .api=${this.api}
-                  .image=${this.draft.image}
-                  .inheritedImage=${this.inherited?.image ?? null}
-                  @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
-                    event.stopPropagation();
-                    this.change("image", event.detail.image);
-                  }}
-                  @image-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
-                    event.stopPropagation();
-                    this.imageOpen = event.detail.open;
-                  }}
-                ></dashboard-image-upload>
-                ${
-                  this.error("image")
-                    ? html`<span class="error" data-test="image-error"
-                        >${this.error("image")}</span
-                      >`
-                    : nothing
-                }`
-            : nothing
-        }
       </div>
     </wt-disclosure>`;
   }
@@ -1466,17 +1478,7 @@ export class ProductEditor extends LitElement {
                   ${t("product.inactive_notice")}
                 </p>`
           }
-          <div class="group" data-section="name">
-            ${textField(
-              fields,
-              "name",
-              t("editor.name"),
-              this.draft.name,
-              (value) => this.change("name", value),
-              true,
-            )}
-          </div>
-          ${this.renderCategories()}
+          ${keyed(this.generation, this.renderName(fields))} ${this.renderCategories()}
           <div class="group" data-section="available">
             ${switchField(
               fields,

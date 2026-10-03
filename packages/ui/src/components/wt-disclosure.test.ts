@@ -247,3 +247,104 @@ test("summary fields win over a summary string given beside them", async () => {
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector(".summary")!.textContent!.trim()).toBe("plain");
 });
+
+async function withRows(
+  rows: readonly { label: string; value: string; lines: number }[],
+  attributes = "",
+) {
+  const el = (await mount(
+    `<wt-disclosure heading="Descriptors" ${attributes}><p>body</p></wt-disclosure>`,
+  )) as import("./wt-disclosure.js").WtDisclosure;
+  el.summaryRows = rows;
+  await el.updateComplete;
+  return el;
+}
+
+test("summary rows put each value after its bold name, one row under another, while closed", async () => {
+  const el = await withRows([
+    { label: "Name", value: "EN: Beef tenderloin · ES: Solomillo de ternera", lines: 1 },
+    { label: "Description", value: "EN: Seared · ES: Sellado", lines: 2 },
+  ]);
+  host.style.setProperty("--wt-font-weight-bold", "800");
+  const rows = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".summary-row")];
+  expect(rows.map((row) => row.textContent!.replace(/\s+/g, " ").trim())).toEqual([
+    "Name: EN: Beef tenderloin · ES: Solomillo de ternera",
+    "Description: EN: Seared · ES: Sellado",
+  ]);
+  const names = rows.map((row) => row.querySelector(".summary-label")!);
+  expect(names.map((name) => name.textContent)).toEqual(["Name:", "Description:"]);
+  expect(names.map((name) => getComputedStyle(name).fontWeight)).toEqual(["800", "800"]);
+  expect(getComputedStyle(rows[0]!).fontWeight).not.toBe("800");
+  expect(rows[1]!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    rows[0]!.getBoundingClientRect().bottom,
+  );
+  const heading = el.shadowRoot!.querySelector(".heading")!.getBoundingClientRect();
+  expect(rows[0]!.getBoundingClientRect().top).toBeGreaterThanOrEqual(heading.bottom);
+  expect(rows[0]!.getBoundingClientRect().left).toBe(heading.left);
+
+  el.open = true;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".summary-row")).toBeNull();
+  expect(el.shadowRoot!.querySelector(".summary")).toBeNull();
+});
+
+test("summary rows paint from the muted-text token", async () => {
+  const el = await withRows([{ label: "Name", value: "EN: Beef", lines: 1 }]);
+  host.style.setProperty("--wt-color-text-muted", "rgb(9, 9, 9)");
+  host.style.setProperty("--wt-font-size-sm", "11px");
+  const row = el.shadowRoot!.querySelector(".summary-row")!;
+  expect(getComputedStyle(row).color).toBe("rgb(9, 9, 9)");
+  expect(getComputedStyle(row).fontSize).toBe("11px");
+});
+
+test("each summary row is cut with an ellipsis after its own number of lines, never widening the header", async () => {
+  const long = Array.from({ length: 40 }, (_, i) => `word${i}`).join(" ");
+  const el = await withRows([
+    { label: "Name", value: long, lines: 1 },
+    { label: "Description", value: long, lines: 2 },
+  ]);
+  host.style.width = "320px";
+  const [name, description] = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".summary-row")];
+  const lineHeight = (row: HTMLElement) => {
+    const probe = document.createRange();
+    probe.selectNodeContents(row.querySelector(".summary-label")!);
+    return probe.getBoundingClientRect().height;
+  };
+  for (const [row, lines] of [
+    [name!, 1],
+    [description!, 2],
+  ] as const) {
+    const style = getComputedStyle(row);
+    expect(style.getPropertyValue("-webkit-line-clamp")).toBe(String(lines));
+    // The text needs far more lines than the row shows, so a row that is not cut grows past this.
+    expect(row.scrollHeight).toBeGreaterThan(row.clientHeight);
+    expect(Math.round(row.clientHeight / lineHeight(row))).toBe(lines);
+  }
+  const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
+  expect(header.scrollWidth).toBe(header.clientWidth);
+  expect(name!.getBoundingClientRect().right).toBeLessThanOrEqual(el.getBoundingClientRect().right);
+});
+
+test("an unbroken value is cut rather than widening a phone-width header", async () => {
+  const el = await withRows([{ label: "Name", value: "x".repeat(400), lines: 1 }]);
+  host.style.width = "320px";
+  const row = el.shadowRoot!.querySelector<HTMLElement>(".summary-row")!;
+  // Wrapped onto lines the clamp then cuts, so the ellipsis shows, rather than running off sideways.
+  expect(row.scrollHeight).toBeGreaterThan(row.clientHeight);
+  expect(row.scrollWidth).toBe(row.clientWidth);
+  const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
+  expect(header.scrollWidth).toBe(header.clientWidth);
+  expect(el.getBoundingClientRect().width).toBe(320);
+});
+
+test("summary rows win over summary fields and a summary string given beside them", async () => {
+  const el = await withRows([{ label: "Name", value: "EN: Beef", lines: 1 }], 'summary="plain"');
+  el.summaryFields = [{ label: "VAT", value: "Reduced (10%)" }];
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".summary")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
+    "Name: EN: Beef",
+  );
+  el.summaryRows = [];
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".summary")!.textContent!.trim()).toBe("VAT: Reduced (10%)");
+});
