@@ -1601,7 +1601,7 @@ it("passes whether products can be added to every menu", async () => {
   ).toBe(false);
 });
 
-it("draws the search box, the filters, Expand all, Select and Columns on one line of one toolbar, in that order", async () => {
+it("draws search, Filters, Expand all, Select and Columns on one toolbar line, in that order", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -1617,7 +1617,7 @@ it("draws the search box, the filters, Expand all, Select and Columns on one lin
     expect(select.parentElement!.assignedSlot!.assignedSlot!.closest(".table-end")).not.toBeNull();
     const boxes = [
       search,
-      table.shadowRoot!.querySelector(".table-filters")!,
+      table.shadowRoot!.querySelector(".filters-trigger")!,
       table.shadowRoot!.querySelector(".expand-all")!,
       select,
       table.shadowRoot!.querySelector(".columns-trigger")!,
