@@ -3,6 +3,7 @@ import type { SignedMembershipDocument } from "@waitron/membership";
 import type { Database, Transaction } from "./client.js";
 import { now } from "./schema/columns.js";
 import { nodeMembership } from "./schema/node-membership.js";
+import { tableExists } from "./table-exists.js";
 
 /**
  * The held membership document, or `null` when the table or the row is absent. Callers must not
@@ -42,10 +43,7 @@ export async function readNodeMembership(
 export async function readNodeMembershipRow(
   db: Database | Transaction,
 ): Promise<{ document: unknown } | null> {
-  const present = await db.execute<{ name: string }>(
-    sql`select name from sqlite_master where type = 'table' and name = ${"node_membership"}`,
-  );
-  if (present.rows.length === 0) return null;
+  if (!(await tableExists(db, "node_membership"))) return null;
 
   // Through the table object, not raw SQL: `document` is stored as JSON TEXT, and it is the column's
   // own read mapping (`json` in ./schema/columns.js) that parses it.

@@ -192,7 +192,6 @@ export interface ReconcileDeps {
   reverse: ReversalFn;
   incidents: IncidentSink;
   settlementLagMs: number;
-  nodeId: string;
 }
 
 const CODE = {

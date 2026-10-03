@@ -1,6 +1,6 @@
 import { categories, now, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { categoryDetails } from "./schema/categories.js";
 import { isTopLevelProduct, productWithId } from "./variant-fallback.js";
@@ -60,20 +60,6 @@ export async function validateParent(
     if (parent === undefined) throw new AppError("category.not_found", { categoryId: parentId });
     parentId = parent.parentId;
   }
-}
-/**
- * Has an optional module's table been migrated into this database?
- *
- * Optional module tables belong to modules a venue need not have, so every path that names one
- * in raw SQL asks first. The count is read rather than a boolean expression:
- * this is a raw statement, so no drizzle column mapping runs over the result and SQLite has no
- * boolean type — a `... is not null` expression comes back as the number 1 or 0.
- */
-export async function tablePresent(tx: Transaction, name: string): Promise<boolean> {
-  const found = await tx.execute<{ n: number }>(
-    sql`select count(*) as n from sqlite_master where type = 'table' and name = ${name}`,
-  );
-  return found.rows[0]!.n > 0;
 }
 function categoryName(name: unknown): string {
   const trimmed = typeof name === "string" ? name.trim() : "";

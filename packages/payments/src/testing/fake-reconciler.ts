@@ -31,7 +31,6 @@ export class FakeReconciler implements PaymentReconciler {
         },
         incidents: recordIncidentOnce,
         settlementLagMs: this.settlementLagMs,
-        nodeId: "00000000-0000-0000-0000-000000000000",
       },
       period,
       now,

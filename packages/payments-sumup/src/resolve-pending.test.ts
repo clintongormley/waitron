@@ -30,7 +30,6 @@ async function setup(incidentRecorded = true) {
   const provider = new SumUpCloudProvider({
     client: fake,
     db: suite.db,
-    nodeId: "11111111-1111-4111-8111-111111111111",
     incidents,
     poll: { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() },
     now: () => T0,

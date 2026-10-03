@@ -1291,7 +1291,6 @@ async function bootServer(
 
   const reconciler = new StripeReconciler({
     db,
-    nodeId: config.till.nodeId,
     resolveAccount: stripeAccountResolver({
       db,
       ring,
@@ -1365,7 +1364,6 @@ async function bootServer(
     providers: CARD_PROVIDERS,
     db,
     ring,
-    nodeId: till.nodeId,
     environment: config.environment,
     incidents: recordIncidentOnce,
   });

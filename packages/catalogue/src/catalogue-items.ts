@@ -1,4 +1,4 @@
-import { now, products, type Transaction } from "@waitron/db";
+import { now, products, tableExists, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { and, inArray, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
@@ -6,7 +6,6 @@ import { categoryDetails } from "./schema/categories.js";
 import {
   deleteCategory,
   listCategories,
-  tablePresent,
   vacateCategories,
   validateParent,
   type Category,
@@ -142,8 +141,8 @@ export async function summariseFolders(
 ): Promise<FolderSummary[]> {
   const tree = new FolderTree(await listCategories(tx));
   for (const id of categoryIds) tree.require(id);
-  const claimsPresent = await tablePresent(tx, "station_claims");
-  const exceptionsPresent = await tablePresent(tx, "route_exceptions");
+  const claimsPresent = await tableExists(tx, "station_claims");
+  const exceptionsPresent = await tableExists(tx, "route_exceptions");
   const summaries: FolderSummary[] = [];
   for (const id of categoryIds) {
     const subtree = tree.subtree(id);

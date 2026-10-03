@@ -219,14 +219,13 @@ async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
 /** The split-flow deps with a real `StripeTerminalProvider` over `FakeStripe`. A tips-on test
  * overrides `cfg.tipsEnabled`. */
 function integratedDeps(
-  cfg: TillConfig,
+  _cfg: TillConfig,
   app: Database,
   client = new FakeStripe(),
 ): { deps: IntegratedPayDeps; client: FakeStripe } {
   const provider = new StripeTerminalProvider({
     client,
     db: app,
-    nodeId: cfg.nodeId,
     poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
   });
   return { deps: { db: app, backend, clock, provider, readerRef: "reader_1" }, client };
@@ -918,7 +917,6 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const provider = new StripeTerminalProvider({
       client: new FakeStripe(),
       db: app,
-      nodeId: cfg.nodeId,
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
     const deps: IntegratedPayDeps = {
@@ -1808,7 +1806,6 @@ describe("an order being paid by card cannot be changed from another device (pla
       const provider = new SumUpCloudProvider({
         client,
         db: suite.db,
-        nodeId: t.cfg.nodeId,
         incidents: () => Promise.resolve(false),
         poll: { maxAttempts: 2, intervalMs: 0, sleep: () => Promise.resolve() },
       });

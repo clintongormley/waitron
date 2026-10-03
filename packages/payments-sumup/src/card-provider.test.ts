@@ -206,7 +206,6 @@ describe("SUMUP_CARD_PROVIDER.build", () => {
     const provider = SUMUP_CARD_PROVIDER.build({
       db: suite.db,
       ring,
-      nodeId: "node-1",
       environment: "preproduction",
       incidents,
     });

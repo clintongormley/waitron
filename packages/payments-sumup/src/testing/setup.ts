@@ -10,8 +10,6 @@ import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { FakeSumUp } from "./fake-sumup.js";
 import { SumUpCloudProvider } from "../provider.js";
 
-const NODE = "11111111-1111-4111-8111-111111111111";
-
 /** The fixture shared by the adapter suites (`provider.test.ts`, `reverse.test.ts`): a seeded
  * working order, a `FakeSumUp`, and a provider wired to the seeded venue. `makeProvider` builds another provider against the same db and fake. `row` reads a
  * payment back by ref (asserting the persisted state).
@@ -27,7 +25,6 @@ export async function setup(suite: { readonly db: Database }, tune?: (f: FakeSum
     new SumUpCloudProvider({
       client: fake,
       db: suite.db,
-      nodeId: NODE,
       incidents: () => Promise.resolve(true),
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });

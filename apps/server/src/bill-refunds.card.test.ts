@@ -760,7 +760,6 @@ describe("the provider refunds another refund of the payment already accounts fo
     let event: NonNullable<SumUpTransaction["refundEvents"]>[number] | undefined;
     const sumup = new SumUpCloudProvider({
       db: venue.db,
-      nodeId: venue.cfg.nodeId,
       incidents: () => Promise.resolve(true),
       client: {
         findTransaction: () => {
@@ -861,7 +860,6 @@ describe("the provider's refunds read before the first send", () => {
   function sumupOver(events: NonNullable<SumUpTransaction["refundEvents"]>) {
     const sumup = new SumUpCloudProvider({
       db: venue.db,
-      nodeId: venue.cfg.nodeId,
       incidents: () => Promise.resolve(true),
       client: {
         findTransaction: () =>

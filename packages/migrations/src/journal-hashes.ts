@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
-import { type Database } from "@waitron/db";
+import { tableExists, type Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { type MigrationSetSource, resolveExistingMigrationsFolder } from "./manifest.js";
 import "./errors.js";
@@ -48,11 +48,7 @@ export async function journalHashes(
   if (!DRIZZLE_MIGRATIONS_TABLE.test(set.table)) {
     throw new AppError("migrations.invalid_table", { table: set.table });
   }
-  // The table name is a VALUE here, so it binds; it is the `from "<table>"` below that cannot.
-  const present = await db.execute<{ n: number }>(
-    sql`select cast(count(*) as int) as n from sqlite_master where type = 'table' and name = ${set.table}`,
-  );
-  if (present.rows[0]!.n === 0) return null;
+  if (!(await tableExists(db, set.table))) return null;
   const result = await db.execute<{ hash: string }>(sql.raw(`select "hash" from "${set.table}"`));
   return result.rows.map((row) => row.hash);
 }

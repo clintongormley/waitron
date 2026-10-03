@@ -219,7 +219,6 @@ describe("SumUpCloudProvider default poll", () => {
     const provider = new SumUpCloudProvider({
       client: fake,
       db: suite.db,
-      nodeId: "11111111-1111-4111-8111-111111111111",
       incidents: () => Promise.resolve(true),
     });
     const find = vi.spyOn(fake, "findTransaction");
@@ -351,7 +350,6 @@ describe("SumUpCloudProvider.sendRefund and lookupRefund", () => {
         sendRefund: () => Promise.reject(new DOMException("aborted", "AbortError")),
       },
       db: suite.db,
-      nodeId: "n",
       incidents: () => Promise.resolve(true),
     });
     const lost = new SumUpCloudProvider({
@@ -360,7 +358,6 @@ describe("SumUpCloudProvider.sendRefund and lookupRefund", () => {
         sendRefund: () => Promise.reject(new TypeError("fetch failed")),
       },
       db: suite.db,
-      nodeId: "n",
       incidents: () => Promise.resolve(true),
     });
 

@@ -78,7 +78,6 @@ describe("on-device offline accept -> recordSale -> associate -> forward decline
     const provider = new StripeOnDeviceProvider({
       client,
       db: suite.db,
-      nodeId: "11111111-1111-4111-8111-111111111111",
     });
     const paid = await provider.collect({
       tillId: brandTillId(s.tillId),

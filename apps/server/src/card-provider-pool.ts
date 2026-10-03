@@ -25,7 +25,6 @@ export function createCardProviderPool(deps: {
   providers: readonly CardProviderContribution[];
   db: Database;
   ring: KeyRing;
-  nodeId: string;
   environment: DeploymentEnvironment;
   incidents: IncidentSink;
 }): CardProviderPool {
@@ -41,7 +40,6 @@ export function createCardProviderPool(deps: {
       const provider = contribution.build({
         db: deps.db,
         ring: deps.ring,
-        nodeId: deps.nodeId,
         environment: deps.environment,
         incidents: deps.incidents,
       });

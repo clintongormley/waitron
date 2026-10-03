@@ -5,11 +5,10 @@ import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { applyVenue, planVenue } from "@waitron/provisioning";
-import { ALL_MODULES } from "../../src/modules.js";
-import { hashPassword, hashPin, verifyPin, type PersonRoleValue } from "@waitron/identity";
+import { verifyPin, type PersonRoleValue } from "@waitron/identity";
 import { seedStaff } from "./seed-staff.js";
 import { DEMO_ADMIN_EMAIL, DEMO_PIN, DEMO_STAFF } from "./staff.js";
+import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 
 const LOCALE = "en-GB";
 
@@ -18,48 +17,11 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// One NIF per provisioned venue.
-let nifCounter = 0;
-function nextNif(): string {
-  nifCounter += 1;
-  return `${String(70_000_000 + nifCounter).padStart(8, "0")}K`;
-}
-
-async function provisionVenue(): Promise<void> {
-  await applyVenue(
-    planVenue(
-      {
-        country: "ES",
-        taxId: nextNif(),
-        legalName: "Casa Delgado SL",
-        location: {
-          name: "Sala principal",
-          fiscalTerritory: "ES-common",
-          invoiceLocales: [LOCALE],
-          operationDescription: "Venta en establecimiento",
-          addressLine1: "Calle Mayor 1",
-          addressLine2: null,
-          postalCode: "28013",
-          city: "Madrid",
-          province: "Madrid",
-          timeZone: "Europe/Madrid",
-          dayCutover: "05:00",
-        },
-        tillName: "Caja 1",
-        seriesCode: "A",
-        rectificativeSeriesCode: "R",
-        admin: {
-          displayName: "Administradora",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
-          email: DEMO_ADMIN_EMAIL,
-        },
-      },
-      ALL_MODULES,
-    ),
-    { db: suite.db, modules: ALL_MODULES },
-  );
-}
+const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
+  nifBase: 70_000_000,
+  invoiceLocale: LOCALE,
+  adminEmail: DEMO_ADMIN_EMAIL,
+});
 
 describe("seedStaff", () => {
   it("seeds staff across all roles, all on the demo PIN", async () => {

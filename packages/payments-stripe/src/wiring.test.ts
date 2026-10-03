@@ -86,7 +86,6 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
     const provider = new StripeTerminalProvider({
       client: new FakeStripe(),
       db: suite.db,
-      nodeId: "11111111-1111-4111-8111-111111111111",
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
 
@@ -132,7 +131,6 @@ describe("stripe idempotency key is derived from the working order, decoupled fr
     const provider = new StripeTerminalProvider({
       client,
       db: suite.db,
-      nodeId: "11111111-1111-4111-8111-111111111111",
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
     const args = {

@@ -200,7 +200,6 @@ describe("STRIPE_CARD_PROVIDER.build", () => {
     const provider = seat.build({
       db: suite.db,
       ring,
-      nodeId: "11111111-1111-4111-8111-111111111111",
       environment: "preproduction",
       incidents,
     });

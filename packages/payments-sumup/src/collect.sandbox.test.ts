@@ -61,7 +61,6 @@ d("SumUp live sandbox: collect against the paired Solo", () => {
     const provider = new SumUpCloudProvider({
       client,
       db: suite.db,
-      nodeId: "11111111-1111-4111-8111-111111111111",
       incidents: () => Promise.resolve(true),
       // Default poll (120 attempts × 1s = 2 minutes) — the real window a tap needs, not the
       // hermetic suites' near-zero one.

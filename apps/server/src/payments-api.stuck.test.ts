@@ -216,7 +216,6 @@ async function setup(
   const provider = new StripeTerminalProvider({
     client,
     db: suite.db,
-    nodeId: cfg.nodeId,
     poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
   });
   const served = opts.providerFor?.(provider) ?? provider;

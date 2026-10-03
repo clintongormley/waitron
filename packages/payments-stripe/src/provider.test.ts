@@ -37,8 +37,6 @@ import {
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
-const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";
-
 const noSleep = (): Promise<void> => Promise.resolve();
 /** For a hand-built client whose test never reads or cancels a PaymentIntent, nor refunds with a
  * key. */
@@ -55,7 +53,6 @@ function providerFor(client: StripeClient): StripeTerminalProvider {
   return new StripeTerminalProvider({
     client,
     db: suite.db,
-    nodeId: TEST_NODE_ID,
     poll: { maxAttempts: 3, intervalMs: 0, sleep: noSleep },
   });
 }
@@ -237,7 +234,6 @@ describe("StripeTerminalProvider.collect", () => {
     const provider = new StripeTerminalProvider({
       client,
       db: suite.db,
-      nodeId: TEST_NODE_ID,
       poll: { maxAttempts: 3, intervalMs: 0 },
     });
     const result = await provider.collect(p);
@@ -334,9 +330,7 @@ describe("reverseViaStripe's processor-ref resolution", () => {
     // The terminal and on-device providers supply no resolver.
     const client = new FakeStripe();
     const { paymentRef } = await capturedPayment("pi_plain");
-    await reverseViaStripe(suite.db, client, "stripe", paymentRef, "refund", undefined, {
-      nodeId: TEST_NODE_ID,
-    });
+    await reverseViaStripe(suite.db, client, "stripe", paymentRef, "refund", undefined);
     expect(client.lastRefund?.paymentIntentId).toBe("pi_plain");
   });
 
@@ -344,7 +338,6 @@ describe("reverseViaStripe's processor-ref resolution", () => {
     const client = new FakeStripe();
     const { paymentRef } = await capturedPayment("cs_hosted");
     await reverseViaStripe(suite.db, client, "stripe", paymentRef, "refund", undefined, {
-      nodeId: TEST_NODE_ID,
       resolveProcessorRef: (ref) => Promise.resolve(ref === "cs_hosted" ? "pi_resolved" : ref),
     });
     // A hosted payment stores the SESSION id; the refund API needs the PaymentIntent.
@@ -362,14 +355,12 @@ describe("reverseViaStripe's processor-ref resolution", () => {
       return Promise.resolve(ref);
     };
     await reverseViaStripe(suite.db, client, "stripe", paymentRef, "void", undefined, {
-      nodeId: TEST_NODE_ID,
       resolveProcessorRef: resolve,
     });
     expect(resolved).toBe(1);
     // Second void: `assertReversible` throws on the now-`voided` row before any resolution happens.
     await expect(
       reverseViaStripe(suite.db, client, "stripe", paymentRef, "void", undefined, {
-        nodeId: TEST_NODE_ID,
         resolveProcessorRef: resolve,
       }),
     ).rejects.toBeInstanceOf(AppError);
@@ -382,7 +373,6 @@ describe("StripeTerminalProvider.forward", () => {
     const provider = new StripeTerminalProvider({
       client: new FakeStripe(),
       db: suite.db,
-      nodeId: TEST_NODE_ID,
     });
     expect(await provider.forward(new Date("2026-07-24T10:00:00Z"))).toEqual({
       nextDueAt: null,
@@ -398,7 +388,6 @@ describe("StripeTerminalProvider.resolvePending", () => {
     const provider = new StripeTerminalProvider({
       client: new FakeStripe(),
       db: suite.db,
-      nodeId: TEST_NODE_ID,
     });
     expect(await provider.resolvePending(new Date("2026-07-24T10:00:00Z"))).toEqual({
       nextDueAt: null,
