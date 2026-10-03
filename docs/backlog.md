@@ -2417,7 +2417,7 @@ used to cover it was deleted on the owner's answer to the W33 question; the cert
 covers only the label's centring.
 
 **The "Setup complete" screen lacks the earlier screens' polish (A244, owner 2026-10-03) — DONE
-(W34, PR pending).** `apps/setup/src/screens/done-screen.ts`: "not terrible but it doesn't
+(W34, #1144).** `apps/setup/src/screens/done-screen.ts`: "not terrible but it doesn't
 have the polish of the previous pages" (owner). What reading it showed: a plain bulleted list of
 underlined links; two near-duplicate sentences ("restarting into trading mode" and "once the server
 is trading"); its own mode-pill style, separate from the review screen's; and `rem` sizes and hex
