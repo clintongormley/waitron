@@ -11,7 +11,7 @@ other than what we hold, Waitron starts a new chain by itself, keeps every sale 
 everything it owes, and tells the manager in plain words what happened and what needs their tax
 adviser.
 
-**Architecture:** Task 0 settles two facts at AEAT first. Then the two fixes that stop chains
+**Architecture:** Task 0 settles three facts at AEAT first. Then the two fixes that stop chains
 breaking for reasons of our own (strict order, Task 1) and make collisions visible (fingerprint on
 every duplicate, Task 2). Then the minting and stamping fixes that stop new installations colliding
 (Tasks 3–4). Then the enabler for a live new chain (the series read per sale, Task 5), the two
@@ -22,7 +22,8 @@ pointers. P5 and P6 (the bucket-pointer checks) wait for the topology work and a
 planned, in Task 13.
 
 **Order and dependencies:** 0 → 1 → 2 → (3, 4 in either order) → 5 (after A238 lands) → 6 (needs 0,
-1) → 7 (needs 0, 1, 2, 3, 5, 6) → 8, 9, 10 (each needs 7) → 11, 12 any time; 13 later.
+1) → 7 (needs 0, 1, 2, 3, 5, and 6 unless the owner declines D2) → 8, 9, 10 (each needs 7) → 11, 12
+any time; 13 later.
 
 **Tech stack:** TypeScript 7, drizzle-orm 0.45 + `node:sqlite`, Hono, Lit 3, Vitest 4 (real headless
 Chromium for the front ends), `@waitron/verifactu` 0.2.1 and its fake AEAT.
@@ -39,7 +40,7 @@ the spec's.
   `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and `inmutabilidad.test.ts` pass **unedited**
   in every task; run both in every fiscal task:
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts inmutabilidad`.
-- **Tasks 1, 2, 3, 6, 7 and 10 change what is filed, the order it is filed in, or the invoice
+- **Tasks 1, 2, 3, 6, 7, 9 and 10 change what is filed, the order it is filed in, or the invoice
   numbers.** Each runs the FULL review path (two Codex run-it seats + convention) and ends
   `needs-owner-review`: the owner lands it.
 - **Step 0 of every task** re-maps the files it touches on the `main` it starts from; a line number
@@ -66,7 +67,7 @@ the spec's.
 - **Coverage** 98/98/98/95 in every touched package, never by an exclude or ignore comment.
 - **Comments** only for an invariant or a non-obvious why.
 
-## Task 0 — Two probes at AEAT's pre-production service (spec §13)
+## Task 0 — Three probes at AEAT's pre-production service (spec §13)
 
 Repository: `waitron-io/verifactu` (the library), its `live-aeat.yml` workflow and
 `scripts/live-aeat.mjs`. No Waitron code changes.
@@ -78,15 +79,24 @@ Repository: `waitron-io/verifactu` (the library), its `live-aeat.yml` workflow a
 - [ ] Add a probe step that resends an invoice key AEAT already holds with a different amount. Record
   the code and whether the reply carries anything beyond the stored copy's state.
 - [ ] Run the workflow; read the log (`gh run view <id> --log`), not a summary.
+- [ ] Add a probe step for spec §13's third question: a first record under an installation number
+  that has already filed (control: expect 2007), and a first record under a NEW installation number
+  with the SAME `IdSistemaInformatico`. Run 36350894099 changed both at once.
 - [ ] Add the run ids and the answers to the spec as a dated pointer under §13. If (a) is refused or
-  flagged, D2 and D5 (Tasks 6 and 7) are re-decided with the owner before either starts.
+  flagged, D2 and D5 (Tasks 6 and 7) are re-decided with the owner before either starts. If the new
+  installation with the same software code gets 2007, Task 7 (its 2007 rule above all) is re-cut with
+  the owner before it starts.
 
 Review: light (library repo, test-only workflow change).
 
 ## Task 1 — Settle each chain strictly in order (P1, C1, C11)
 
 Files: `packages/fiscal-verifactu/src/drain.ts` (`claimBatch` ~363-370, `backoffBatch` ~473-487,
-`awaitReadableAnswer` ~644-672, the next-due bookkeeping `bumpNextDue`), `drain.test.ts`.
+`awaitReadableAnswer` ~644-672, the next-due bookkeeping `bumpNextDue`),
+`packages/fiscal-verifactu/src/schema/envios.ts` (add `retenido` to the estado CHECK — a table
+rebuild), `acks.ts` (`ackStateOf` ~30-43: give `retenido` an acknowledgement state so the
+unsent-count projection, `applyAck` ~158-171, sees it), `packages/fiscal/src/backend.ts` (`AckState`
+~136), `packages/fiscal-verifactu/src/schema/acks.ts` (~30, its CHECK), `drain.test.ts`.
 
 - [ ] **Failing case 1** (`drain.test.ts`): record sale A/1; run two passes whose client throws
   `ETIMEDOUT`; void A/1; restore the client; run the pass at `nextDueAt`. Assert the anulación is
@@ -99,9 +109,10 @@ Files: `packages/fiscal-verifactu/src/drain.ts` (`claimBatch` ~363-370, `backoff
   and the reply is lost, then a resend. Assert both end `aceptado`, no incident. With this task's
   rule the two can never share a batch; the case records today's failure (`detenido`,
   `fiscal.duplicado_anulado`) as its red.
-- [ ] **Failing case 4** (spec P1's planted key): plant at the fake AEAT a different record under
-  A/1's key; record A/1 and void it; run one pass. Assert the anulación was not sent (AEAT still holds
-  the planted alta, not `Anulado`). Today AEAT ends holding our anulación over the planted record.
+- [ ] **Failing case 4** (spec P1's planted key, first half): plant at the fake AEAT a different record
+  under A/1's key; record A/1 and void it; run ONE pass. Assert the two were not in one batch. (The
+  full protection needs Task 2: before it, the sale's resend is accepted on AEAT's `Correcta` and the
+  cancellation then goes; Task 2 carries the drain-to-the-end version.)
 - [ ] **Failing case 5**: after a two-pass outage, a sale made during it is not claimed while the
   earlier sale waits.
 - [ ] **Failing case 6**: one unreadable line (`awaitReadableAnswer`) holds the rest of its chain; a
@@ -109,16 +120,21 @@ Files: `packages/fiscal-verifactu/src/drain.ts` (`claimBatch` ~363-370, `backoff
 - [ ] **Failing case 7**: a credit note (`recordCorrection`) of A/1 is not claimed until A/1's alta is
   `aceptado`.
 - [ ] **Failing case 8**: a cancellation whose sale is on another `sif_id` (build it with
-  `registerSif`) and unsettled is not claimed.
+  `registerSif`; after a restore `recordVoid` uses the current installation, `backend.ts:335`) and
+  unsettled is not claimed.
+- [ ] **Failing case 8b**: such a cross-chain cancellation whose sale is `rechazado` or `detenido`
+  becomes `retenido`, is never sent, and does not hold the records after it on its own chain. (Today's
+  halt sees only the claimed row's own chain, `drain.ts:439-445`, so without `retenido` it would wait
+  for ever and, under strict order, hold its whole chain.)
 - [ ] **Failing case 9**: after a successful send while a backed-off row waits, the pass reports that
   row's due time as `nextDueAt` (today `null`).
 - [ ] Implement: `claimBatch` skips any row whose chain has an earlier unsettled row (`pendiente`, due
   or not, or `enviando`), and any cancellation, credit note or substitution whose named invoice's
   record is not yet `aceptado`/`aceptado_con_errores`; `backoffBatch` and `awaitReadableAnswer` back
-  off from each chain's first unsettled row; the next-due time covers every waiting row. Today a named
-  invoice that is `rechazado` or `detenido` already halts its chain, so this task needs no new state.
+  off from each chain's first unsettled row; the next-due time covers every waiting row; a record
+  naming an invoice whose record is `rechazado` or `detenido` becomes `retenido`.
 - [ ] Deletion proofs: removing the chain-order clause turns cases 1, 2, 5 red; removing the
-  named-invoice clause turns 3, 4, 7, 8 red.
+  named-invoice clause turns 3, 4, 7, 8, 8b red.
 - [ ] Gates: the drain suites, `drain.containment.test.ts`, golden huella, `inmutabilidad`.
 
 Review: FULL (fiscal, concurrency). Ends `needs-owner-review`.
@@ -137,8 +153,14 @@ its own release, as A230a was).
 - [ ] Same for `AceptadaConErrores`.
 - [ ] **Failing case**: an `Anulada` answer to our sale whose stored fingerprint equals OUR
   anulación's settles the sale as accepted; one whose stored fingerprint is not ours is a divergence.
-- [ ] **Failing case**: a lookup answer with no stored fingerprint backs the line off; it is never a
-  divergence.
+- [ ] **Failing case** (spec P1's planted key, in full): plant a different record under A/1's key;
+  record A/1 and void it; drain until nothing is left to send. Assert AEAT still holds the planted
+  alta (not `Anulado`), A/1 is stopped with `fiscal.huella_divergente`, and the anulación is
+  `retenido`. Today AEAT ends holding our anulación over the planted record.
+- [ ] **Failing case**: a duplicate whose month-and-installation lookup returns no record for our key
+  is a divergence (AEAT holds the key under another installation), not a retry.
+- [ ] **Failing case**: a lookup that returns our key's record with no stored fingerprint backs the
+  line off; it is never a divergence.
 - [ ] **Failing case**: a batch of many duplicate lines in one month makes one lookup (paged), not one
   per line — count the fake's calls.
 - [ ] `drain.test.ts:711` ("TEETH: a 3000 whose RegistroDuplicado is Correcta resolves to aceptado")
@@ -185,8 +207,11 @@ Files: `apps/server/src/deployment-guard.ts`, `deployment-guard.test.ts`, its ca
 `dev-setup` stays unstamped by design.
 
 - [ ] **Failing case**: boot with `WAITRON_ENV=production` refuses an unstamped database holding any
-  record whose `entorno` is not `production`, with a new code (name it by grepping the
-  `provisioning.*` siblings) that the recovery page gives a fixed title and action.
+  record whose `entorno` is not `production`, with a new code (name it beside its sibling
+  `deployment.environment_mismatch`, `deployment-guard.ts:20`) that the recovery page gives a fixed
+  title and action. The guard runs before `applyMigrations` (`deployment-guard.ts:10`), so a
+  database whose `registros_facturacion` is missing or older counts as holding no such record; add
+  a case for each.
 - [ ] The existing case "passes an unstamped database, which every existing deployment is" keeps
   passing unedited for a database holding no such record.
 - [ ] Deletion proof.
@@ -198,10 +223,13 @@ Review: FULL (boot). Lands autonomously.
 Starts after A238 (till is a device) lands: it rewrites `apps/server/src/till-config.ts` too.
 
 Files: `apps/server/src/till-config.ts` (~93), every reader and copy found by
-`grep -rn 'seriesId\|SERIES_ID' apps packages deploy --include=* | grep -v node_modules` — at least
-`till-sale.ts`, `bill-payments.ts`, `working-order.ts`, `trading-config.ts`, `adopt.ts`, `boot.ts`'s
-mirror bundle, the sealed state, `apps/server/src/restore.ts` (`rewriteTradingEnv`), `.env.example`,
-`apps/till/README.md` — and `packages/db/src/reserved-identity.ts` (`readStandardSeriesIdTx`).
+`grep -rn 'seriesId\|SERIES_ID' apps packages deploy --exclude-dir=node_modules` — at least
+`till-sale.ts`, `bill-payments.ts`, `working-order.ts`, `till-config.ts`'s required-key list,
+`trading-config.ts`, `adopt.ts`, `promote.ts` and `boot.ts` (`persistTradingEnv`), the mirror bundle
+and `mirror-bundle-fetch.ts`, the sealed state, `apps/server/src/restore.ts` (`rewriteTradingEnv`),
+`apps/server/scripts/dev-setup.ts`, `apps/server/scripts/cloud-integration-fixture.ts`,
+`.env.example`, `apps/till/README.md` — and `packages/db/src/reserved-identity.ts`
+(`readStandardSeriesIdTx`).
 
 - [ ] **Failing case** (`apps/server`): after the node's standard series is retired and a new one
   opened in one transaction (the `runRestoreHooks` sequence), the next till sale succeeds on the new
@@ -221,7 +249,7 @@ Needs Task 0's first probe answered "AEAT accepts a record linked to one it refu
 
 Files: `drain.ts` (`haltSuccessors` ~718-731, `haltOpenChainClaims` ~433-466 including its query at
 ~441-445, the `rechazado` branch ~606-627, `claimBatch`), `packages/fiscal-verifactu/src/schema/envios.ts`
-(add `retenido` to the CHECK), `submission-alerts.ts`, `apps/dashboard/src/i18n/alert-messages.ts`,
+`submission-alerts.ts`, `apps/dashboard/src/i18n/alert-messages.ts`,
 `drain.test.ts`, `submission-alerts.test.ts`.
 
 - [ ] **Failing case**: a record refused with a non-3000 code stays `rechazado`; the next record on its
@@ -229,8 +257,9 @@ Files: `drain.ts` (`haltSuccessors` ~718-731, `haltOpenChainClaims` ~433-466 inc
 - [ ] **Failing case**: a record made after the refusal is submitted (today halted at claim,
   `drain.test.ts:614`) — this needs `haltOpenChainClaims`' query narrowed to `detenido` only, not
   just the `haltSuccessors` call removed.
-- [ ] **Failing case**: a cancellation or credit note naming the refused invoice becomes `retenido`,
-  is never sent, and does not hold the records after it.
+- [ ] A cancellation or credit note naming the refused invoice still becomes `retenido` (Task 1's
+  rule), is never sent, and no longer has a halted chain behind it: add the case that the records
+  after it file.
 - [ ] The tests pinning today's halt after a refusal (`:553`, `:614`, and any other found) are listed
   in the PR as behaviour D2 changes.
 - [ ] `fiscal.registro_rechazado`'s wording (spec §8) names the invoice and says later records still
@@ -243,8 +272,10 @@ Review: FULL. Ends `needs-owner-review`.
 
 Needs Tasks 0, 1, 2, 3, 5 and 6.
 
-Files: `drain.ts`, `acks.ts` (~36-38, the `detenido` ack), `packages/fiscal-verifactu/src/schema/envios.ts`
-(add `divergente`; remove `detenido`), a new `chain_restarts` table in the fiscal-verifactu migration
+Files: `drain.ts`, `acks.ts` (`ackStateOf`: map `divergente`; the `detenido` case ~38-39),
+`packages/fiscal/src/backend.ts` (`AckState`), `packages/fiscal-verifactu/src/schema/acks.ts` (its
+CHECK), `packages/fiscal-verifactu/src/schema/envios.ts` (add `divergente`; remove `detenido` unless
+the owner declined D2), a new `chain_restarts` table in the fiscal-verifactu migration
 set declared `appendOnly()`, `classification.ts`, `errors.ts` (`fiscal.chain_restarted`,
 `fiscal.chain_restart_limit`; retire `fiscal.huella_divergente` and `fiscal.duplicado_anulado` as
 incidents, their cause moving to a param), `submission-alerts.ts`, `apps/dashboard/src/i18n/alert-messages.ts`,
@@ -267,13 +298,14 @@ incidents, their cause moving to a param), `submission-alerts.ts`, `apps/dashboa
   the new series.
 - [ ] **Failing case (loop guard)**: a divergence on the current installation within 24 hours of the
   last automatic start marks its record `divergente`, starts no chain, raises
-  `fiscal.chain_restart_limit` once; one 24 hours and one second after does start one.
+  `fiscal.chain_restart_limit` once; a new divergence 24 hours and one second after does start one;
+  the suppressed one never starts a chain by itself, even after the 24 hours.
 - [ ] **Failing case**: a cancellation or credit note naming a `divergente` invoice, recorded before
   the divergence was found, becomes `retenido` and is never sent.
 - [ ] **Failing case**: a cancellation of an old-chain invoice made after the switch is recorded on the
   new chain and waits until the old alta is accepted, then files.
-- [ ] Remove `haltSuccessors`, `haltOpenChainClaims`, the `detenido` value, its ack and
-  `fiscal.submission_stopped` (nothing writes `detenido` after Tasks 6–7, spec §6). If the owner
+- [ ] Remove `haltSuccessors`, `haltOpenChainClaims`, the `detenido` value, its `halted` ack state
+  and `fiscal.submission_stopped` (nothing writes `detenido` after Tasks 6–7, spec §6). If the owner
   declined D2, a refusal still halts: keep all four, and give `fiscal.submission_stopped` the link to
   Fiscal filing instead. Tests pinning a divergence halt are listed in the PR as behaviour D1 changes.
 - [ ] Deletion proofs: dropping the new-chain call leaves the next sale on the old series (case 1
@@ -321,7 +353,7 @@ put the choice to the owner in `questions.md` before building.
   alert row offers the manual start; the other fiscal alerts link to the section.
 - [ ] `scripts/live-subscriptions.test.ts` if the section subscribes to changes.
 
-Review: FULL (auth, permissions). Lands autonomously.
+Review: FULL (auth, permissions). Ends `needs-owner-review`: the manual start starts a chain.
 
 ## Task 10 — A box with no bucket checks AEAT on its first pass (spec §7.6)
 

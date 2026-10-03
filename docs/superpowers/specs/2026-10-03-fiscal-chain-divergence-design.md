@@ -36,7 +36,7 @@ how to recover, and how to put things right with AEAT.
   (`alta`) or a **cancellation record** (`anulación`, "this invoice should never have existed").
 - **Credit note** (`factura rectificativa`): a NEW invoice with its own number, in its own series,
   that amends an earlier one and names it. Waitron's `recordCorrection` builds one (an R5,
-  `packages/fiscal-verifactu/src/backend.ts:373-466`); it is filed as a new-invoice record and
+  `packages/fiscal-verifactu/src/backend.ts:373-468`); it is filed as a new-invoice record and
   replaces nothing at AEAT. A **substitution** (`recordSubstitution`, F3) is likewise a new invoice
   naming the ones it replaces.
 - **Correction record** (`alta de subsanación`): a record that REPLACES the data AEAT holds for one
@@ -163,7 +163,10 @@ holds four invoices; the only signal was warning 2007 on the second box's first 
 AEAT's «No debe informarse como primer registro, existen facturas emitidas con el obligado emisión y
 el sistema informático actual» — a first-record claim under an installation that has already filed.
 **[measured at AEAT]** In run 36350894099 a second first-record claim under one installation number
-got `AceptadoConErrores`/2007, and a first record under a new installation number got `Correcto`.
+got `AceptadoConErrores`/2007, and first records under a new installation number got `Correcto` —
+but each of those also used a new software code (`IdSistemaInformatico` `F2`, `F3`, against the
+repeated pair's `F1`), so the run does not show what a new installation number alone does. A new
+chain in this design keeps the software code; §13's third probe settles it.
 
 ### C4. A cloned box beside the original — LOW × HIGH
 
@@ -240,8 +243,10 @@ Each fix names the test that holds it; each guard is proven by deletion when bui
   - A cancellation, credit note or substitution is claimed only once the record of each invoice it
     names is `aceptado` or `aceptado_con_errores` — so never in the same batch as it, and across
     chains too. If a named invoice's record is `divergente` or `rechazado`, the referring record
-    becomes `retenido` (§6) instead of being sent: a cancellation sent for a key AEAT holds under
-    someone else's record would cancel THAT record, and the fake AEAT applied exactly that —
+    becomes `retenido` (§6) instead of being sent. A cancellation names only the invoice key
+    (`IDEmisorFacturaAnulada`, `NumSerieFacturaAnulada`, `FechaExpedicionFacturaAnulada` in
+    `SuministroInformacion.xsd`), not the fingerprint of the record it cancels, so one sent for a key
+    AEAT holds under someone else's record would cancel THAT record; the fake AEAT did exactly that —
     **[ran]** with another record planted under our sale's key, our sale and its void in one pass left
     AEAT holding `"anulacion","Anulado"` over the other copy's invoice, both our rows `aceptado`, no
     incident.
@@ -253,9 +258,11 @@ Each fix names the test that holds it; each guard is proven by deletion when bui
 - **P2 — Compare fingerprints on every duplicate answer (C2a, C11).** Every 3000, `Correcta` and
   `AceptadaConErrores` included, is checked against AEAT's stored fingerprint. An `Anulada` answer to
   a sale is compared with OUR cancellation of that invoice, if we have one: a match means AEAT holds
-  our sale and our cancellation, and the sale is settled. A reply whose stored fingerprint is missing
-  (the field is optional in `RespuestaConsultaLR.xsd`) means "look again next pass", never
-  "divergence". Duplicates come in bulk after a lost reply on a full batch (up to a thousand lines),
+  our sale and our cancellation, and the sale is settled. A lookup that returns our key's record without a
+  stored fingerprint (the field is optional in `RespuestaConsultaLR.xsd`) means "look again next
+  pass", never "divergence"; a lookup that returns no record under our installation for a key AEAT
+  has just reported as a duplicate means AEAT holds that key under another installation, which is a
+  divergence (as `routeB` already treats it, `drain.ts:776-777`). Duplicates come in bulk after a lost reply on a full batch (up to a thousand lines),
   so the drain makes one lookup per month and installation, read page by page, not one per line.
   Tests: "a 3000 whose stored copy is Correcta but carries another fingerprint is a divergence";
   "an Anulada answer whose stored fingerprint is our own cancellation's settles the sale".
@@ -346,7 +353,9 @@ AEAT never sends again, are kept whatever happens next — marking the record `d
 3. raises the `fiscal.chain_restarted` incident (§8).
 
 The step is idempotent: every pass first asks whether the current installation has a `divergente`
-record (or an unanswered 2007) newer than its last chain start, and starts the chain if so. A failure
+record (or an unanswered 2007) newer than its last chain start that the loop guard (§7.7) did not
+suppress, and starts the chain if so. A suppressed divergence never starts a chain by itself, even
+after the 24 hours pass; only the manual start acts on it. A failure
 (for example `series.code_collision` or `series.code_too_long`, both thrown by the series helpers)
 is logged and alerted and retried next pass; it never rolls back the saved reply.
 
@@ -358,8 +367,11 @@ untouched **[ran]**. A sale in flight serialises behind the transaction on the w
 
 Today the server holds the standard series id in memory (`config.till.seriesId`, from
 `WAITRON_TILL_SERIES_ID`, `apps/server/src/till-config.ts:93`), used by the sale paths (`till-sale.ts`,
-`bill-payments.ts`, `working-order.ts`) and copied by `trading-config.ts`, `adopt.ts`, `boot.ts`'s
-mirror bundle, the sealed state, `.env.example` and `apps/till/README.md`. **[ran]** After a live new
+`bill-payments.ts`, `working-order.ts`), required by `till-config.ts`'s key list, and written or
+copied by `trading-config.ts`, `adopt.ts`, `promote.ts` and `boot.ts` (which write it into
+`trading.env`), `restore.ts`'s `rewriteTradingEnv`, the mirror bundle and `mirror-bundle-fetch.ts`,
+the sealed state, `apps/server/scripts/dev-setup.ts`, `apps/server/scripts/cloud-integration-fixture.ts`,
+`.env.example` and `apps/till/README.md`. **[ran]** After a live new
 chain, a sale on that id was refused `sale.series_retired`, which no screen words. So this design
 reads the node's one live standard series inside each sale's transaction (`readStandardSeriesIdTx`;
 credit notes already read theirs that way, `cancel-credit.ts:51`), and `WAITRON_TILL_SERIES_ID`
@@ -450,8 +462,10 @@ no fiscal screen, and `fiscal.submission_stopped` has no action and can never cl
   and shown to the owner first), listing the current chain (installation number, series, last record
   accepted), the `chain_restarts`, and the **Needs your adviser** list: each `divergente` and
   `retenido` record with its invoice number, date, amount, and what AEAT holds instead where known;
-- rewords the three fiscal alerts that end "Contact support" today, and adds two. Proposed wording
-  (the plan's screen task refines it; `scripts/alert-codes.test.ts` holds both languages):
+- rewords `fiscal.registro_rechazado`, retires `fiscal.huella_divergente` and
+  `fiscal.duplicado_anulado`, and adds two; the other fiscal alerts that end "Contact support"
+  (the environment, flagged-record and reconcile ones) are unchanged. Proposed wording (the plan's
+  screen task refines it; `scripts/alert-codes.test.ts` holds both languages):
 
 | Code and cause                                  | English                                                                                                                                                                                                                                             | Spanish                                                                                                                                                                                                                                                                                       |
 | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -649,7 +663,7 @@ experiments **[ran]**. The correction record of §7.5 is a new builder and is NO
 
 ## 13. Probes to run on AEAT's pre-production service first
 
-The design rests on two things measured only against the fake AEAT. Both are cheap to settle with
+The design rests on three things not yet measured at AEAT. Both are cheap to settle with
 the `waitron-io/verifactu` library's live workflow (`live-aeat.yml`), and the plan runs them before
 the tasks that depend on them (D2, D5, the recovery):
 
@@ -660,6 +674,12 @@ the tasks that depend on them (D2, D5, the recovery):
 2. **What does AEAT answer for a duplicate with different content?** Send an invoice key AEAT holds,
    with another amount. Expected, by the validation annex: 3000 with the stored copy's state. P2
    assumes the reply does not reveal the stored fingerprint, so it always looks up.
+3. **Does a new installation number alone make a new chain for AEAT?** Send a first record under an
+   installation number that has already filed (the control: expect 2007), and one under a new
+   installation number with the SAME software code. If the second also gets 2007, AEAT identifies a
+   system by its software code, a new chain in this design would meet 2007 on its first record, and
+   §6's shared-installation rule would misfire — Task 7 is then re-cut with the owner. Run
+   36350894099 changed both at once (§4 C3).
 
 ## 14. Corrections the research found in the compliance notes
 
@@ -668,9 +688,11 @@ rewritten):
 
 - §1 "Required runtime check" calls the Orden art. 7.i check a legal duty; Orden art. 3 switches it
   off in Veri\*Factu mode. Doing it stays harmless and useful.
-- §1 calls warning 2007 a sign of accidental re-provisioning; measured, a first record under a new
-  installation number gets no warning (run 36350894099). 2007 means a **reused** installation number
-  — two copies of one node, or a second venue under the same tax id.
+- §1 calls warning 2007 a sign of accidental re-provisioning. Measured, a first-record claim under
+  an installation that already filed gets 2007, and first records under a new installation number
+  and a new software code get none (run 36350894099); whether a new installation number alone
+  avoids it is §13's third probe. So 2007 points at a **reused** installation — two copies of one
+  node, or a second venue under the same tax id.
 - AEAT's online FAQ pages are now dated 21 July 2026; the notes cite 5 December 2025.
 
 ## 15. Provenance
@@ -686,8 +708,8 @@ digits. A review seat re-checked every quotation against the extracted text.
 | AEAT, error list `errores.properties`                                                | undated; `06519ceb23422bd6`                                                                                          | https://prewww2.aeat.es/static_files/common/internet/dep/aplicaciones/es/aeat/tikeV1.0/cont/ws/errores.properties                           | codes 1174-1269, 2007, 3000-3003                                                                                                                               |
 | AEAT, *Descripción del servicio web*                                                 | v1.0.3, 2025-07-28; `b3570f6a308ce98a`                                                                               | https://sede.agenciatributaria.gob.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/Veri-Factu_Descripcion_SWeb.pdf                 | §3 p. 10; §6.4 p. 30; §9.1.3 pp. 60-61                                                                                                                         |
 | AEAT, *Especificaciones técnicas … huella o hash*                                    | v0.1.2, 2024-08-27; `f4334c254bb875b4`                                                                               | https://www.agenciatributaria.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/Veri-Factu_especificaciones_huella_hash_registros.pdf | §7 p. 13                                                                                                                                                       |
-| AEAT schemas `ConsultaLR.xsd`, `RespuestaConsultaLR.xsd`                             | v1.0                                                                                                                 | https://prewww2.aeat.es/static_files/common/internet/dep/aplicaciones/es/aeat/tikeV1.0/cont/ws/                                             | §3; §9.6                                                                                                                                                       |
+| AEAT schemas `ConsultaLR.xsd`, `RespuestaConsultaLR.xsd`, `SuministroInformacion.xsd` | v1.0                                                                                                                 | https://prewww2.aeat.es/static_files/common/internet/dep/aplicaciones/es/aeat/tikeV1.0/cont/ws/                                             | §3; §5 P1, P2; §9.6                                                                                                                                                  |
 | Orden HAC/1177/2024 (BOE-A-2024-22138), consolidated                                 | `a0090109d56c29c1`                                                                                                   | https://www.boe.es/buscar/pdf/2024/BOE-A-2024-22138-consolidado.pdf                                                                         | art. 3 p. 5; art. 7; art. 16 p. 13; annex L17 p. 31                                                                                                            |
 | Real Decreto 1007/2023 (BOE-A-2023-24840), consolidated                              | last modified 2025-12-03; `34418589f3c5684c`                                                                         | https://www.boe.es/buscar/pdf/2023/BOE-A-2023-24840-consolidado.pdf                                                                         | art. 8.2.a p. 14                                                                                                                                               |
 | Real Decreto 1619/2012 (BOE-A-2012-14696), consolidated                              | last modified 2026-03-31; `a1c2a0fdc4e936a3`                                                                         | https://www.boe.es/buscar/pdf/2012/BOE-A-2012-14696-consolidado.pdf                                                                         | art. 6.1.a p. 13; art. 7.1.a p. 15; art. 15.1 p. 19                                                                                                            |
-| Live pre-production run 36350894099, `waitron-io/verifactu` workflow `live-aeat.yml` | 2026-09-27                                                                                                           | https://github.com/waitron-io/verifactu/actions/runs/36350894099                                                                            | §4 C3 (2007 on a repeated first record; `Correcto` under a new installation); §7.5 (`S`/`X` correction `Correcto`); §9.6 (`SinDatos`). Read with `gh run view --log` |
+| Live pre-production run 36350894099, `waitron-io/verifactu` workflow `live-aeat.yml` | 2026-09-27                                                                                                           | https://github.com/waitron-io/verifactu/actions/runs/36350894099                                                                            | §4 C3 (2007 on a repeated first record; `Correcto` under a new installation number and software code); §7.5 (`S`/`X` correction `Correcto`); §9.6 (`SinDatos`); §14. Read with `gh run view --log` |
