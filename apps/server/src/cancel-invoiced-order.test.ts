@@ -16,7 +16,7 @@ import {
   unpaidDepartures,
   withTransaction,
 } from "@waitron/db";
-import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
+import { createExtraList, createProduct, units, writeProductModifiers } from "@waitron/catalogue";
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import {
@@ -64,6 +64,7 @@ let offerOf: (name: string) => string;
 let productIdOf: (name: string) => string;
 /** Café's extras list, offering Leche at 0.50. */
 let extraListId: string;
+let portionListId: string;
 let supervisorId: string;
 /** The supervisor's own session on the first till's device: holds `sale.rectify`. */
 let supervisorCookie: string;
@@ -79,6 +80,16 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     const productIds = await inTx(venue, async (tx) => {
+      const [kg] = await tx
+        .insert(units)
+        .values({
+          seedKey: "credit-test-kg",
+          name: { "es-ES": "kilogramo" },
+          abbreviation: { "es-ES": "kg" },
+          precision: 3,
+          hardwareUnit: "kg",
+        })
+        .returning({ id: units.id });
       const [catalogue] = db.all<{ id: string }>(
         sql`select id from catalogues where name = 'Carta'`,
       );
@@ -123,7 +134,38 @@ useVenueDb({
         venue.cfg.locale,
       );
       extraListId = extras.id;
+      const ham = await createProduct(tx, {
+        catalogueId: catalogue!.id,
+        categoryId: category!.id,
+        name: "Jamón",
+        unitId: kg!.id,
+        unitPrice: "0.27",
+        vatClass: "general",
+      });
+      const portions = await createExtraList(
+        tx,
+        {
+          name: "Porciones",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 3,
+          active: true,
+          items: [
+            {
+              productId: ham.id,
+              portion: "0.050",
+              maxQuantity: 3,
+              preselected: false,
+              price: null,
+            },
+          ],
+        },
+        venue.cfg.locale,
+      );
+      portionListId = portions.id;
       await writeProductModifiers(tx, created.get("Café")!, [{ kind: "extras", id: extras.id }]);
+      await writeProductModifiers(tx, created.get("Mosto")!, [{ kind: "extras", id: portions.id }]);
       return new Map(
         db
           .all<{ id: string; name: string }>(sql`select id, name from products`)
@@ -213,6 +255,7 @@ async function linesOf(saleId: string) {
           descriptions: saleLines.descriptions,
           kitchenName: saleLines.kitchenName,
           quantity: saleLines.quantity,
+          priceQuantity: saleLines.priceQuantity,
           unitPrice: saleLines.unitPrice,
           vatRate: saleLines.vatRate,
           lineTotal: saleLines.lineTotal,
@@ -423,6 +466,41 @@ describe("cancelling a placed order whose invoice was issued", () => {
       ["Café", 1000, null],
       ["Leche", 2000, 2],
     ]);
+    expect(await linesOf(credit!.id)).toEqual(
+      invoiced.map((line) => ({
+        ...line,
+        quantity: -line.quantity,
+        lineTotal: -line.lineTotal,
+        lineGross: -line.lineGross!,
+      })),
+    );
+  });
+
+  it("credits a three-pick physical extra with its frozen price basis and exact line total", async () => {
+    const id = await placed([
+      {
+        name: "Mosto",
+        quantity: "1",
+        extras: [
+          { listId: portionListId, picks: [{ productId: productIdOf("Jamón"), quantity: 3 }] },
+        ],
+      },
+    ]);
+    const original = await invoiceOf(id);
+    const invoiced = await linesOf(original.id);
+    expect(invoiced[1]).toMatchObject({
+      name: "Jamón",
+      quantity: 150,
+      priceQuantity: 50,
+      unitPrice: 1,
+      lineGross: 3,
+      lineTotal: 2,
+    });
+
+    expect((await cancel(id)).status).toBe(200);
+
+    const [credit] = await creditsOf(original.id);
+    expect(credit!.total).toBe(-original.total);
     expect(await linesOf(credit!.id)).toEqual(
       invoiced.map((line) => ({
         ...line,
