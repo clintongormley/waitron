@@ -3753,7 +3753,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   may not be reachable; next action is to find out whether it is, then either fix the test or drop
   the correction and its test.
 
-- **The configuration export does not tell the shell about an expired session (A236) — DONE (W19;
+- **The configuration export does not tell the shell about an expired session (A236) — DONE (W19, #1116;
   found 2026-10-03).** `exportConfiguration` in `apps/dashboard/src/api/client.ts` now goes through
   the request helper with its `as: "blob"` option, as the VAT return download does: an expired
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
