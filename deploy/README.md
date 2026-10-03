@@ -59,7 +59,11 @@ to a file another user owns in `/tmp`, so a copy you downloaded there is not upd
 `sudo bash waitron.sh install`, which reports that it could not fetch the script; download it to
 your home folder instead. Installing a ref whose
 `waitron.sh` predates this step leaves the box with a copy that does not update itself; download it
-again with the `curl` line above before the next install.
+again with the `curl` line above before the next install. With `--reset` (below), when `install`
+fetches the ref's `waitron.sh`, finds it differs from the copy you ran, and the fetched copy predates
+`--reset install`, it stops before anything on the box changes; run `waitron.sh reset`, then
+`waitron.sh install <ref>`, instead. Wherever it carries on with the copy you ran, that copy does the
+wipe and the install.
 
 On a box with AppArmor switched on, `install` also
 fetches the print agent's AppArmor profile from the same ref, `deploy/apparmor/waitron-print-agent`,
@@ -194,9 +198,9 @@ app).
 **It can migrate the box's database one way.** If the ref you install carries a database migration,
 running it changes the box's database, and there is no backward migration — installing an older ref
 afterwards (a plain `install` back to `main` included) can then fail to boot with
-`provisioning.database_ahead`. On a box you use for testing, `waitron.sh reset` (below) clears this
-by wiping the database; on a box holding a real venue's records, take a backup first and install a
-newer ref instead of resetting.
+`provisioning.database_ahead`. On a box you use for testing, `waitron.sh --reset install <ref>`
+(below) clears this by wiping the database and installing the ref in one run; on a box holding a
+real venue's records, take a backup first and install a newer ref instead of resetting.
 
 ### The health check accepts either endpoint
 
@@ -253,6 +257,31 @@ the installation number reserved for it there. To take the box off that list, op
 server's dashboard, then Settings, then Servers, and in the box's row menu choose Remove and then
 Clear from list (only Clear from list if the row already says Removed), before joining the box
 again.
+
+### Wiping and installing in one run
+
+`--reset` before `install` wipes the box the way `reset` does and installs a ref on it, in one run.
+It is the way to put a branch on a test box whose database that branch cannot use:
+
+```bash
+sudo bash waitron.sh --reset install <branch-or-ref>
+sudo bash waitron.sh --reset --all install <branch-or-ref>   # also wipe the certificate
+```
+
+The full form is `waitron.sh --reset [--all] [--yes] [--force-production] install [ref]`. The script
+may first update its own copy from the ref, as described under setting up a box. If it fetches the
+ref's `waitron.sh`, finds it differs from its own and predates `--reset install`, it stops there,
+before replacing its own copy, wiping or building anything, and tells you to run `waitron.sh reset`,
+then `waitron.sh install <ref>`. If it carries on with its own copy instead, for example because it
+could not fetch the ref's or runs from a git checkout, that copy does the wipe. It then
+checks for production and asks for confirmation, reading the box with its current `compose.yml` and
+image, before it fetches the box's other files or builds or pulls any image. Next it fetches the ref's files
+and builds or pulls its images while the old box keeps running. Those include every other image the
+ref's `compose.yml` names, such as Mailpit, pulled if missing, so an image it cannot get stops the
+run before anything is wiped, though by then the box's `compose.yml` and `.env` are already set for
+the ref; re-run the command. Only then does it take the box down, wipe it exactly as `reset` does,
+and start it on the new images. `--yes` and `--force-production` mean what they mean for `reset`.
+In a folder with no box installed there is nothing to wipe, so it says so and installs.
 
 ## The operator CLIs — two different invocation forms
 
