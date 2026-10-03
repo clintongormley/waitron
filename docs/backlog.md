@@ -1271,9 +1271,16 @@ beside the price and checks nothing about it.
   their own inherit — shows the extras lists that offer it, because the stored portion is a number
   in the old unit (50 in g becomes 50 kg). The units screen already lists the products using a
   unit (`ProductUsingUnit`, `packages/catalogue/src/unit-types.ts`); the same applies when a unit's
-  own precision changes under portions held to it. The save is
-  neither blocked nor are those portions cleared: it warns and saves (owner, 2026-10-02: _"it
-  should just warn and save"_).
+  own precision changes under portions held to it. Name both the affected extras lists and the
+  menus that offer them; warn and save without clearing portions. Each affected menu's pre-publish
+  changes list names the extra's unit change. The till sells that menu's published copy until you
+  republish it. No unit conversion (owner clarification, 2026-10-03).
+
+If precision falls from 3 to 2, a saved `0.055` portion remains 55 thousandths. Preview warns and
+publishing keeps `0.055` with the new unit and allows sales; amount labels show the exact value,
+without rounding it to `0.06`. A new or changed portion must meet current precision, while an
+unchanged saved value remains visible and may pass through an unrelated extras-list edit so you can
+correct it later. This is the warning-only publication behavior in the [A203 design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md).
 
 **For the builder:** the portion is a new column on `extra_list_items` (quantity scale) and a
 field in `parseExtraListInput` and the editor; the till's picker and the server must compute one
@@ -1286,8 +1293,7 @@ amounts reach a sale record, so this takes the full review path (risk trigger: f
 
 The [A203 design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md) and
 [implementation plan](superpowers/plans/2026-10-03-extra-fixed-portion.md) are drafted for owner
-review. The build remains open and awaits approval of those documents, including the plan's
-proposed behavior for an offer whose stored portion no longer fits a changed unit.
+review. The build remains open and awaits approval of those documents.
 
 **A menu's hours per location, and a publish date for a new version (A204, owner 2026-10-02) —
 OPEN, not designed.** The owner: _"we should be able to specify what times of of which days each
