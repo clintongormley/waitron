@@ -2304,6 +2304,23 @@ cards with buttons rather than `wt-choice-row` rows. The certificate help page t
 (`/setup/trust`, drawn by `apps/server/src/trust-page.ts`) still writes the browser's warning as
 “not secure” in quotes, where the wizard's first screen (#1107) now writes Not secure without them.
 
+**The setup review screen's "?" buttons (A243, owner 2026-10-03) — OPEN, queued as lane A's W33.**
+`apps/setup/src/screens/review-screen.ts` puts a `wt-help-tooltip` on all four section headings and on
+seven of its rows, and every explanation is one short sentence (`review.help.*` in
+`apps/setup/src/i18n/strings/venue.ts`). The owner called it messy. Two causes: the button's
+44-pixel tap area makes the rows that carry one taller than the rows that don't, so the row spacing
+looks random; and the many bold circles pull the eye away from the values. Agreed fix: no "?" on any
+row (the person entered each value a moment earlier, on a screen that explains it, and Edit goes
+back there); each section's explanation becomes one muted line under its heading.
+
+**The "Setup complete" screen lacks the earlier screens' polish (A244, owner 2026-10-03) — OPEN,
+queued as lane A's W34.** `apps/setup/src/screens/done-screen.ts`: "not terrible but it doesn't
+have the polish of the previous pages" (owner). What reading it shows: a plain bulleted list of
+underlined links; two near-duplicate sentences ("restarting into trading mode" and "once the server
+is trading"); its own mode-pill style, separate from the review screen's; and `rem` sizes and hex
+fallbacks in its styles, against the token rule. The owner also wants the Print agent link
+(`done.link.print_agent`) gone from the page: "i don't think we need the print agent anymore".
+
 The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
