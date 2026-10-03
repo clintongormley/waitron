@@ -89,6 +89,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
+  EACH_UNIT_ID,
   MAX_UNIT_PRECISION,
   assertQuantityPrecision,
   classifyLine,
@@ -604,8 +605,8 @@ export async function priceOrderLines(
         quantity: child.quantity,
         physicalQuantity: child.physicalQuantity,
         priceQuantity: child.priceQuantity,
-        unitName: child.unitName,
-        unitPrecision: child.unitPrecision,
+        unitName: child.unitContext?.id === EACH_UNIT_ID ? undefined : child.unitName,
+        unitPrecision: child.unitContext?.id === EACH_UNIT_ID ? undefined : child.unitPrecision,
       })),
     });
     // A CHILD row takes no course: kitchen coursing is per dish.

@@ -292,12 +292,11 @@ export class UnitForm extends LitElement {
                 ${this.precisionUsage.map((product) =>
                   product.lists.map(
                     (list) =>
-                      html`${product.productName}:
-                      ${list.name}${
-                        list.menus.length
-                          ? html` (${list.menus.map((menu) => menu.name).join(", ")})`
-                          : nothing
-                      } `,
+                      html`<span>${product.productName}: ${list.name}</span>${
+                          list.menus.length
+                            ? html` (${list.menus.map((menu) => menu.name).join(", ")})`
+                            : nothing
+                        } `,
                   ),
                 )}
               </p>`

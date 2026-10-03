@@ -3,7 +3,12 @@ import { withTransaction, type Transaction } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture } from "../test/menus-fixture.js";
 import { createExtraList } from "./extras.js";
-import { extraOfferUsage, extraOfferUsageForUnitPrecisionChange } from "./extra-usage.js";
+import {
+  extraOfferUsage,
+  extraOfferUsageForUnitChange,
+  extraOfferUsageForUnitPrecisionChange,
+} from "./extra-usage.js";
+import { productUnits } from "./schema/units.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { assignProductUnit, createUnit } from "./units.js";
 
@@ -78,6 +83,34 @@ it("includes a unit's direct extra and an inheriting variant with their offered 
       productId: f.large,
       productName: "Large",
       lists: [{ id: variantListId, name: "Sizes", menus: [{ id: f.lunch, name: "Lunch Menu" }] }],
+    },
+  ]);
+});
+
+it("still warns for a variant with a retained unit row when its parent's unit changes", async () => {
+  const f = await menusFixture(fx.db);
+  const listId = await run(async (tx) => {
+    const unit = await createUnit(
+      tx,
+      { name: { en: "kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+      "en",
+    );
+    await assignProductUnit(tx, f.lemonade, unit.id);
+    await tx.insert(productUnits).values({ productId: f.large, unitId: unit.id });
+    const list = await createExtraList(
+      tx,
+      { name: "Sizes", items: [{ productId: f.large, portion: "0.055" }] },
+      "en",
+    );
+    await writeProductModifiers(tx, f.soup, [{ kind: "extras", id: list.id }]);
+    return list.id;
+  });
+
+  expect(await run((tx) => extraOfferUsageForUnitChange(tx, f.lemonade))).toEqual([
+    {
+      productId: f.large,
+      productName: "Large",
+      lists: [{ id: listId, name: "Sizes", menus: [{ id: f.lunch, name: "Lunch Menu" }] }],
     },
   ]);
 });
