@@ -112,6 +112,7 @@ describe("venue operations URL navigation", () => {
     "/manage/venue-operations",
     "/manage/venue-operations/view/missing",
     "/manage/venue-operations/view/menus",
+    "/manage/venue-operations/view/kitchen",
   ])("replaces %s with the Status tab and preserves query parameters", async (path) => {
     navigate(path);
     const query = location.search;

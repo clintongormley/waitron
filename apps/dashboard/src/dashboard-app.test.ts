@@ -1628,6 +1628,65 @@ describe("dashboard-app", () => {
     expect(location.pathname).toBe("/manage/venue-settings/view/receipts");
   });
 
+  const panelsOn = (el: DashboardApp, tab: string) =>
+    [...venueSettings(el)!.shadowRoot!.querySelector(`[slot="${tab}"]`)!.children].map((child) =>
+      child.tagName.toLowerCase(),
+    );
+
+  it("puts venue service's Needs clearing switch above statuses on Tables and its kitchen panel after the core one", async () => {
+    history.replaceState(null, "", "/manage/venue-settings/view/tables");
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        modules: ["bookings", "venue-service"],
+        permissions: ["booking.manage", "venue_service.manage"],
+      }),
+    });
+    const request: DashboardRequest = async (path, method, body, options) =>
+      path === "/management-api/venue-service"
+        ? ({
+            departments: [],
+            zones: [],
+            deviceZones: [],
+            hours: [],
+            zoneMenus: [],
+            readiness: [],
+            settings: { editSentLines: true },
+            kitchenTicketGrouping: "combined",
+            printHeldWork: false,
+            releaseReminderMinutes: 10,
+            clearingWorkflow: false,
+          } as never)
+        : stubRequest(path, method, body, options);
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
+    await flush(el);
+    expect(panelsOn(el, "tables")).toEqual([
+      "dashboard-venue-service-settings",
+      "dashboard-service-status-screen",
+    ]);
+    expect(panelsOn(el, "kitchen")).toEqual([
+      "dashboard-kitchen-screen",
+      "dashboard-venue-service-settings",
+    ]);
+    expect(location.pathname).toBe("/manage/venue-settings/view/tables");
+  });
+
+  it("keeps Tables and Kitchen, each with only its core panel, when venue service is disabled", async () => {
+    history.replaceState(null, "", "/manage/venue-settings/view/tables");
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        modules: ["bookings"],
+        permissions: ["booking.manage", "venue_service.manage"],
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    expect(panelsOn(el, "tables")).toEqual(["dashboard-service-status-screen"]);
+    expect(panelsOn(el, "kitchen")).toEqual(["dashboard-kitchen-screen"]);
+    expect(location.pathname).toBe("/manage/venue-settings/view/tables");
+  });
+
   it("hands each core panel the shell's api", async () => {
     history.replaceState(null, "", "/manage/venue-settings/view/kitchen");
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });

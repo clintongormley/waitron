@@ -5,6 +5,7 @@ import "./prep-stations-screen.js";
 import { VenueServiceApi } from "./client.js";
 import { VENUE_SERVICE_STRINGS } from "./strings.js";
 import "./venue-operations-screen.js";
+import "./service-settings-panel.js";
 
 export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
   module: "venue-service",
@@ -35,6 +36,41 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
         return {
           render: () =>
             html`<dashboard-prep-stations-screen .api=${api}></dashboard-prep-stations-screen>`,
+        };
+      },
+    },
+  ],
+  settingsPanels: [
+    {
+      id: "venue-service-kitchen",
+      tab: "kitchen",
+      order: 10,
+      requiresPermission: "venue_service.manage",
+      create(ctx) {
+        const api = new VenueServiceApi(ctx.request, ctx.liveData);
+        return {
+          render: () =>
+            html`<dashboard-venue-service-settings
+              subject="kitchen"
+              .api=${api}
+            ></dashboard-venue-service-settings>`,
+        };
+      },
+    },
+    {
+      id: "venue-service-tables",
+      tab: "tables",
+      // Above the core Statuses panel, which counts as 0.
+      order: -10,
+      requiresPermission: "venue_service.manage",
+      create(ctx) {
+        const api = new VenueServiceApi(ctx.request, ctx.liveData);
+        return {
+          render: () =>
+            html`<dashboard-venue-service-settings
+              subject="tables"
+              .api=${api}
+            ></dashboard-venue-service-settings>`,
         };
       },
     },
