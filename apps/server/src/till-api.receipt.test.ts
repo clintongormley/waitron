@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
@@ -27,7 +27,7 @@ import { createPinThrottle, hashPassword, hashPin, persons } from "@waitron/iden
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { createPrinter, updatePrinter } from "@waitron/printing";
-import { stationClaims } from "@waitron/venue-service";
+import { departmentSalePolicies, departments, stationClaims } from "@waitron/venue-service";
 import type { PrintConfig } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -262,6 +262,19 @@ async function configureReceipt(
         .update(locations)
         .set({ receiptPrintMode: opts.mode })
         .where(eq(locations.id, cfg.locationId));
+      const scopedDepartments = await tx
+        .select({ id: departments.id })
+        .from(departments)
+        .where(eq(departments.locationId, cfg.locationId));
+      await tx
+        .update(departmentSalePolicies)
+        .set({ receiptPrintMode: opts.mode })
+        .where(
+          inArray(
+            departmentSalePolicies.departmentId,
+            scopedDepartments.map((row) => row.id),
+          ),
+        );
     }
     if (opts.printerId !== undefined) {
       venueReceiptPrinter = opts.printerId;

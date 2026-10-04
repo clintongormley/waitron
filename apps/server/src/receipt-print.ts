@@ -3,7 +3,7 @@
 // one running on the venue file, so a deactivation cannot land between that read and the enqueue.
 // Originals and duplicates are separate actions; a queue resend preserves the original job bytes.
 import { and, eq } from "drizzle-orm";
-import { deviceProfiles, devices, drawerOpens, locations, printers, readTenant } from "@waitron/db";
+import { deviceProfiles, devices, drawerOpens, printers, readTenant, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { EscSetting, PrintConfig } from "@waitron/printing";
@@ -135,18 +135,24 @@ async function resolvePrinterAndReceipt(
   return { printer, receiptBytes };
 }
 
-/** Automatic document printing follows the receipt setting and has no drawer side effects. */
+/** Unscoped sales default to automatic printing; a scoped sale follows its effective zone policy. */
 export async function enqueueSaleReceipt(
   tx: Transaction,
   cfg: OriginConfig,
   ticket: TillSaleResult,
   saleId: string,
 ): Promise<void> {
-  const [loc] = await tx
-    .select({ mode: locations.receiptPrintMode })
-    .from(locations)
-    .where(eq(locations.id, cfg.locationId));
-  if (loc?.mode !== "auto") return;
+  const [sale] = await tx
+    .select({ workingOrderId: sales.workingOrderId })
+    .from(sales)
+    .where(eq(sales.id, saleId));
+  const context = sale?.workingOrderId
+    ? await VENUE_SERVICE.findOrderContext(tx, cfg, sale.workingOrderId)
+    : null;
+  const mode = context
+    ? (await VENUE_SERVICE.resolveSalePolicy(tx, cfg, context.zoneId)).receiptPrintMode
+    : "auto";
+  if (mode !== "auto") return;
   await enqueueOriginalReceipt(tx, cfg, ticket, saleId);
 }
 
