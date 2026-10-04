@@ -348,4 +348,29 @@ describe("resolveDeviceBinding and insertDevice, called directly", () => {
       await suite.db.execute(sql`drop index devices_one_per_location`);
     }
   });
+
+  it("rethrows a duplicate on a unique index that names no key, untranslated", async () => {
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile("till", "Perfil Caja");
+    await enrolDeviceForTest(suite.db, cfg, { name: "Caja 1", profileId });
+    // An index over an expression: its refusal names the index, not a table and columns.
+    await suite.db.execute(
+      sql`create unique index devices_one_per_location_expr on devices (lower(location_id))`,
+    );
+    try {
+      const refusal = await withTransaction(suite.db, (tx) =>
+        insertDevice(tx, deviceValues(cfg.locationId, profileId, "Caja 2")),
+      ).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(refusal).toBeInstanceOf(Error);
+      expect(refusal).not.toHaveProperty("code", "device.name_taken");
+      expect(String(refusal)).toMatch(
+        /UNIQUE constraint failed: index 'devices_one_per_location_expr'/,
+      );
+    } finally {
+      await suite.db.execute(sql`drop index devices_one_per_location_expr`);
+    }
+  });
 });

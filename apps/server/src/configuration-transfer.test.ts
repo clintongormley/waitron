@@ -182,7 +182,7 @@ describe("configuration transfer archive", () => {
     ).toEqual(bundle);
   });
 
-  it("accepts a bundle that still carries a tillName, as it ignores every key it does not know", () => {
+  it("accepts a bundle that still carries a tillName, as it checks only the venue fields it names", () => {
     const older = { ...bundle, venue: { ...bundle.venue, tillName: "Till" } };
     expect(
       decodeConfigurationBundle(

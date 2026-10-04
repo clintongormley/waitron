@@ -43,8 +43,8 @@ const DEVICE_NAME_UNIQUE: ConstraintTarget = {
 };
 
 /**
- * Insert a device on the caller's transaction. A refusal on {@link DEVICE_NAME_UNIQUE}, or one naming
- * no key, becomes `device.name_taken`; any other refusal is rethrown raw.
+ * Insert a device on the caller's transaction. A refusal on {@link DEVICE_NAME_UNIQUE} becomes
+ * `device.name_taken`; any other refusal is rethrown raw.
  */
 export async function insertDevice(
   tx: Transaction,
@@ -55,9 +55,7 @@ export async function insertDevice(
   } catch (error) {
     if (isUniqueViolation(error)) {
       const target = constraintTarget(error);
-      // `undefined` means a unique index over an EXPRESSION, which names no key
-      // (`packages/db/src/constraint-target.ts`).
-      if (target === undefined || sameTarget(target, DEVICE_NAME_UNIQUE)) {
+      if (target !== undefined && sameTarget(target, DEVICE_NAME_UNIQUE)) {
         throw new AppError("device.name_taken", {});
       }
     }

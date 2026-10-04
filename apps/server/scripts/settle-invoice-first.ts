@@ -2,7 +2,8 @@
 // deferred sale, corrects it with a rectificativa, settles at the net, printing what is outstanding
 // after each step.
 //
-// Prerequisites: the taxpayer row, the node, the standard and rectificative series must exist, and the node's SIF be registered. The venue directory is resolved as the server resolves it
+// Prerequisites: the taxpayer row, the node, the standard and rectificative series must exist, and
+// the node's SIF be registered. The venue directory is resolved as the server resolves it
 // (`scripts/venue-dir.ts`). `WAITRON_ENV` is required: it stamps the unrecoverable `entorno` onto
 // the chain.
 //

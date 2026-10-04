@@ -932,7 +932,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     "invoice-first placement routes the original to the issuing device's printer in %s mode",
     async (mode) => {
       const base = await setupVenue("invoice_first");
-      const cfg = await deviceRequestCfg(suite.db, { ...base.cfg, orderFlow: "invoice_first" });
+      const { cfg } = base;
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode, printerId });
       const id = randomUUID();
@@ -960,7 +960,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
           .set({ orderFlow: "invoice_first" })
           .where(eq(locations.id, base.cfg.locationId));
       });
-      const cfg = await deviceRequestCfg(suite.db, { ...base.cfg, orderFlow: "invoice_first" });
+      const { cfg } = base;
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode, printerId });
 

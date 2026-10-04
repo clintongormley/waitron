@@ -1690,8 +1690,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     const venue = await setupVenue();
     await configureReceipt(venue.cfg, { mode: "never" });
     // No drawers, so a cash sale on these printers queues documents only.
-    const [r1, r2, s1, r3] = [
-      await makePrinter(venue.cfg, false),
+    const [r1, r2, s1] = [
       await makePrinter(venue.cfg, false),
       await makePrinter(venue.cfg, false),
       await makePrinter(venue.cfg, false),
@@ -1710,7 +1709,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     );
     const signIn = async (deviceCookie: string) =>
       (await loginOnDevice(app, deviceCookie, venue.operatorId)).split(";")[0]!;
-    return { ...venue, app, signIn, r1: r1!, r2: r2!, s1: s1!, r3: r3! };
+    return { ...venue, app, signIn, r1: r1!, r2: r2!, s1: s1! };
   }
 
   async function post(app: Hono, cookie: string, path: string): Promise<Response> {
@@ -1725,8 +1724,8 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     return id;
   }
 
-  it("prints each device's receipt on its own receipt printer, never the setup till's", async () => {
-    const { cfg, each, app, signIn, r1, r2, s1, r3 } = await venueWithPrinters();
+  it("prints each device's receipt on its own receipt printer", async () => {
+    const { cfg, each, app, signIn, r1, r2, s1 } = await venueWithPrinters();
     const a = await enrolPrintingDevice(cfg, {
       capabilities: [...CAPABILITY_FLAGS],
       receipt: [r1],
@@ -1749,7 +1748,6 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       [r1, "document"],
       [r2, "document"],
     ]);
-    expect(printed.some((job) => job.printerId === r3)).toBe(false);
   });
 
   it("prints a card sale's payment slip on the device's payment slip printer, not its receipt printer", async () => {

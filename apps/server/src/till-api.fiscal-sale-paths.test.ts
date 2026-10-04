@@ -1811,20 +1811,24 @@ describe("handheld sales and device capability gates", () => {
 
     const deviceCookie = await enrolHandheldCookie(cfg);
     const sessionPair = await loginOperator(app, cfg, operatorId, deviceCookie);
+    // The handheld's own receipt printer has a drawer; only its profile keeps that drawer shut.
     await withTransaction(suite.db, async (tx) => {
-      await createPrinter(tx, cfg, {
+      const printer = await createPrinter(tx, cfg, {
         name: "Counter",
         transport: "network_tcp",
         host: "192.0.2.1",
         hasCashDrawer: true,
       });
       await tx.execute(
+        sql`update devices set receipt_printer_id = ${printer.id} where id = ${deviceIdOf(deviceCookie)}`,
+      );
+      await tx.execute(
         sql`update locations set receipt_print_mode = 'auto' where id = ${cfg.locationId}`,
       );
     });
 
     // A handheld may settle a cash sale: the fiscal chain is keyed by the submitting node (`nodeId`),
-    // not the till, so a handheld files under its node's SIF exactly like a till.
+    // not the device, so a handheld files under its node's SIF exactly like a till.
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
@@ -1841,7 +1845,7 @@ describe("handheld sales and device capability gates", () => {
     expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/); // NumSerieFactura-shaped, e.g. "A/1"
 
     // Exactly one chained record, the same chain-opening shape a counter cash sale files, under
-    // `cfg.nodeId`: the SIF is the node, not the till.
+    // `cfg.nodeId`: the SIF is the node, not the device.
     const registros = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
@@ -2734,11 +2738,11 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
 
 // Owner decision 2026-10-01 (B30): card slips are kept in the cash drawer.
 describe("a hand-keyed card payment opens the drawer of the device that took it, for the slip", () => {
-  /** A new receipt printer, with or without a drawer, set on `deviceId` when one is named, printing
+  /** A new receipt printer, with or without a drawer, set as `deviceCookie`'s device's own, printing
    *  receipts automatically. */
-  async function receiptPrinter(
+  async function deviceReceiptPrinter(
     cfg: TillConfig,
-    deviceId: string | null,
+    deviceCookie: string,
     hasCashDrawer: boolean,
   ): Promise<string> {
     return withTransaction(suite.db, async (tx) => {
@@ -2748,10 +2752,9 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
         pollId: `poll-${randomUUID()}`,
         hasCashDrawer,
       });
-      if (deviceId !== null)
-        await tx.execute(
-          sql`update devices set receipt_printer_id = ${printer.id} where id = ${deviceId}`,
-        );
+      await tx.execute(
+        sql`update devices set receipt_printer_id = ${printer.id} where id = ${deviceIdOf(deviceCookie)}`,
+      );
       await tx.execute(
         sql`update locations set receipt_print_mode = 'auto' where id = ${cfg.locationId}`,
       );
@@ -2759,12 +2762,10 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     });
   }
 
-  /** The device's own receipt printer, the one its receipts and drawer use. */
-  const deviceReceiptPrinter = (cfg: TillConfig, deviceCookie: string, hasCashDrawer: boolean) =>
-    receiptPrinter(cfg, deviceIdOf(deviceCookie), hasCashDrawer);
-
-  /** A printer with a drawer that no device uses: the contrast a test sets beside a device's own. */
-  const spareDrawerPrinter = (cfg: TillConfig) => receiptPrinter(cfg, null, true);
+  /** Another device's receipt printer here, with a drawer that device may open: the printer a lookup
+   *  by location rather than by device would pick. */
+  const otherDevicesDrawerPrinter = async (cfg: TillConfig) =>
+    deviceReceiptPrinter(cfg, await enrolDrawerTill(cfg), true);
 
   /** A till device whose profile allows the drawer. */
   async function enrolDrawerTill(cfg: TillConfig): Promise<string> {
@@ -2878,7 +2879,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
 
   it("a card sale on a handheld whose profile does not allow the drawer opens none, although its receipt printer and another printer here have one", async () => {
     const { cfg, each, app, on } = await venueWithTill();
-    await spareDrawerPrinter(cfg);
+    await otherDevicesDrawerPrinter(cfg);
     const profileId = await seedProfileFF("phone-portrait");
     const handheld = await enrolDeviceForTest(suite.db, cfg, {
       name: `Waiter phone ${randomUUID()}`,
@@ -2949,8 +2950,8 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
 
   it("a card sale at a device whose receipt printer has no drawer opens nothing, while another printer here has one", async () => {
     const { cfg, each, app, on } = await venueWithTill();
+    await otherDevicesDrawerPrinter(cfg);
     const deviceCookie = await enrolDrawerTill(cfg);
-    await spareDrawerPrinter(cfg);
     await deviceReceiptPrinter(cfg, deviceCookie, false);
 
     const res = await cardSale(app, await on(deviceCookie), {
@@ -3031,7 +3032,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     "a handheld whose profile does not allow the drawer collecting a placed %s order by %s opens none, although its receipt printer and another printer here have one",
     async (orderFlow, method) => {
       const { cfg, each, app, cookie, on } = await venueWithTill(orderFlow);
-      await spareDrawerPrinter(cfg);
+      await otherDevicesDrawerPrinter(cfg);
       const profileId = await seedProfileFF("phone-portrait", ["take-cash"]);
       const handheld = await enrolDeviceForTest(suite.db, cfg, {
         name: `Waiter phone ${randomUUID()}`,

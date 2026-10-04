@@ -662,8 +662,9 @@ describe("acceptDeviceJoinRequest", () => {
         });
       }),
     ).rejects.toThrow();
-    // The consuming delete rides the SAME transaction as the device insert (accept's header comment) — a genuine retry must still find the request PENDING, not gone, once the
-    // blocker device row (a fixture artefact, not a real collision) is cleared.
+    // The consuming delete rides the SAME transaction as the device insert (accept's header
+    // comment) — a genuine retry must still find the request PENDING, not gone, once the blocker
+    // device row (a fixture artefact, not a real collision) is cleared.
     await suite.db.execute(sql`delete from devices where id = ${made.joinId}`);
     expect(await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token)).toBe("pending");
   });

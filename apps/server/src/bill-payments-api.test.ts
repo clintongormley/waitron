@@ -93,7 +93,7 @@ interface Venue {
   deviceId: string;
   /** `cookie`'s session, with no device cookie beside it. */
   sessionCookie: string;
-  /** The operator's session on a handheld, which never opens a cash drawer. */
+  /** The operator's session on a handheld whose profile does not allow the drawer. */
   handheldCookie: string;
   /** The handheld device `handheldCookie` names. */
   handheldDeviceId: string;
@@ -642,7 +642,7 @@ describe("a contribution (design §8 test 2)", () => {
     ]);
   });
 
-  it("opens no drawer for cash taken on a handheld", async () => {
+  it("opens no drawer for cash taken on a handheld whose profile does not allow the drawer", async () => {
     const billId = await bill120();
 
     const paid = await request(
@@ -1512,7 +1512,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
 
 describe("a line write that leaves the bill exactly paid (design §7)", () => {
   /** Issued in the write's own transaction, once, and filed under the device that wrote. */
-  async function expectInvoicedOnDeviceTill(billId: string, totalCents: number): Promise<void> {
+  async function expectInvoicedOnDevice(billId: string, totalCents: number): Promise<void> {
     expect(await statusOf(billId)).toBe("settled");
     expect(registroCount(billId)).toBe(1);
     const [sale] = await saleOf(billId);
@@ -1533,6 +1533,10 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     expect(raised.status).toBe(200);
   }
 
+  it("files on the device that asked, which is not the server's configured origin", () => {
+    expect(venue.deviceId).not.toBe(venue.cfg.origin.deviceId);
+  });
+
   it("issues the invoice when a void leaves the bill exactly paid", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
     expect((await contribute(billId, "25.00")).status).toBe(200);
@@ -1544,7 +1548,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     );
 
     expect(voided.status).toBe(200);
-    await expectInvoicedOnDeviceTill(billId, 2500);
+    await expectInvoicedOnDevice(billId, 2500);
   });
 
   it("issues the invoice when a split leaves the bill exactly paid", async () => {
@@ -1554,7 +1558,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     const split = await splitOff(billId, [{ lineNo: 2 }]);
 
     expect(split.status).toBe(200);
-    await expectInvoicedOnDeviceTill(billId, 2500);
+    await expectInvoicedOnDevice(billId, 2500);
   });
 
   it("issues the invoice when a line edit leaves the bill exactly paid", async () => {
@@ -1568,7 +1572,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     });
 
     expect(edited.status).toBe(200);
-    await expectInvoicedOnDeviceTill(billId, 2800);
+    await expectInvoicedOnDevice(billId, 2800);
   });
 
   it("issues the invoice when saving the whole order leaves the bill exactly paid", async () => {
@@ -1587,7 +1591,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     });
 
     expect(saved.status).toBe(200);
-    await expectInvoicedOnDeviceTill(billId, 2500);
+    await expectInvoicedOnDevice(billId, 2500);
   });
 
   it("refuses cutting part of a line when the rest would be less than the bill has received", async () => {
@@ -2077,7 +2081,7 @@ describe("a cash refund before the invoice (design §6)", () => {
     expect(await saleOf(billId)).toEqual([]);
   });
 
-  it("gives cash back on a handheld at a till that opens the drawer without opening it", async () => {
+  it("gives cash back on a handheld whose profile does not allow the drawer without opening it", async () => {
     const billId = await bill120();
     const paymentId = paymentIdOf(await contribute(billId, "50.00"));
     const before = drawerJobCount();
@@ -3091,7 +3095,7 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
     expect(drawerJobCount() - before).toBe(1);
   });
 
-  it("opens no drawer for a hand-keyed card taken on a handheld", async () => {
+  it("opens no drawer for a hand-keyed card taken on a handheld whose profile does not allow the drawer", async () => {
     const billId = await bill120();
     const before = drawerJobCount();
 
