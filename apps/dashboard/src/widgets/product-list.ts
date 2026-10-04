@@ -18,6 +18,19 @@ import {
   releasePageCursor,
 } from "@waitron/ui/src/reorder-table.js";
 import {
+  blockClickAfterDrag,
+  clearDragMarks,
+  dragGhost,
+  lastShownRow,
+  markDragging,
+  markGap,
+  placeDragGhost,
+  shownRow,
+  treeDragStyles,
+  type DragGhost,
+  type DropGap,
+} from "./tree-drag.js";
+import {
   modifierListName,
   modifierListNames,
   type ModifierListChoice,
@@ -91,6 +104,7 @@ export function acceptsCatalogueDrop(
 export class ProductList extends LitElement {
   static override styles = [
     baseStyles,
+    treeDragStyles,
     css`
       :host([sticky-header]) {
         display: flex;
@@ -118,45 +132,8 @@ export class ProductList extends LitElement {
       wt-data-table::part(product-cell) {
         display: block;
       }
-      wt-data-table::part(dragging) {
-        opacity: var(--wt-opacity-disabled);
-      }
       wt-data-table::part(drop-target) {
         border-inline-start: var(--wt-selected-ring);
-      }
-      wt-data-table::part(drop-gap-before) {
-        padding-block-start: calc(var(--wt-space-3) + var(--wt-tap-min));
-        border-block-start: var(--wt-field-line-width-active) dashed var(--wt-color-primary);
-      }
-      wt-data-table::part(drop-gap-after) {
-        padding-block-end: calc(var(--wt-space-3) + var(--wt-tap-min));
-        border-block-end: var(--wt-field-line-width-active) dashed var(--wt-color-primary);
-      }
-      /* Placed by a transform from the pointer's own coordinates, which are physical. */
-      .drag-ghost {
-        position: fixed;
-        top: 0;
-        left: 0;
-        z-index: 3;
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        margin: var(--wt-space-3) 0 0 var(--wt-space-3);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface-lifted);
-        color: var(--wt-color-text);
-        box-shadow: var(--wt-shadow-2);
-        pointer-events: none;
-      }
-      .drag-ghost img,
-      .ghost-thumb {
-        width: var(--wt-tap-min);
-        height: var(--wt-tap-min);
-        border-radius: var(--wt-radius-md);
-        object-fit: cover;
-        background: var(--wt-color-surface);
       }
       wt-data-table::part(drag-grip) {
         display: inline-flex;
@@ -314,7 +291,7 @@ export class ProductList extends LitElement {
   #target: string | undefined = undefined;
   #hover: { key: string; timer: ReturnType<typeof setTimeout> } | null = null;
   #pointer = { x: 0, y: 0 };
-  @state() private ghost: { label: string; image: string | null; folder: boolean } | null = null;
+  @state() private ghost: DragGhost | null = null;
 
   override disconnectedCallback(): void {
     if (this.#pointerDrag) this.#finishDrag();
@@ -370,13 +347,13 @@ export class ProductList extends LitElement {
       this.#send("drag-items", { keys: this.#dragged });
       void this.updateComplete
         .then(() => {
-          this.#placeGhost();
+          placeDragGhost(this.renderRoot, this.#pointer);
           return this.#table()?.updateComplete;
         })
         .then(() => this.#paint());
     }
     this.#pointer = { x: event.clientX, y: event.clientY };
-    this.#placeGhost();
+    placeDragGhost(this.renderRoot, this.#pointer);
     const over = pointerElementsAt(event.clientX, event.clientY).find(
       (item): item is HTMLElement =>
         item instanceof HTMLElement && item.matches("tr[data-row-key]"),
@@ -396,7 +373,7 @@ export class ProductList extends LitElement {
     const target = this.#target;
     this.#finishDrag();
     if (!drag.active || event.type !== "pointerup") return;
-    this.#blockNextClick(false);
+    blockClickAfterDrag(false);
     if (target !== undefined)
       this.#send("drop-items", { keys, folderId: target === ROOT_KEY ? null : target.slice(7) });
   };
@@ -406,18 +383,8 @@ export class ProductList extends LitElement {
     event.preventDefault();
     event.stopPropagation();
     this.#finishDrag();
-    this.#blockNextClick(true);
+    blockClickAfterDrag(true);
   };
-
-  /** A released drag still sends a click, which must not open the row it ends on. After Esc the
-   * release comes later, so the block lasts until it. */
-  #blockNextClick(untilRelease: boolean): void {
-    document.addEventListener("click", this.#blockPostDragClick, true);
-    const lift = () =>
-      setTimeout(() => document.removeEventListener("click", this.#blockPostDragClick, true), 0);
-    if (untilRelease) document.addEventListener("pointerup", lift, { once: true, capture: true });
-    else lift();
-  }
 
   #finishDrag(): void {
     const drag = this.#pointerDrag;
@@ -489,30 +456,18 @@ export class ProductList extends LitElement {
   #paint(): void {
     const root = this.#table()?.shadowRoot;
     if (!root) return;
-    for (const row of root.querySelectorAll('[part~="dragging"]'))
-      row.removeAttribute("aria-disabled");
-    for (const name of ["dragging", "drop-target", "drop-gap-before", "drop-gap-after"])
-      for (const element of root.querySelectorAll(`[part~="${name}"]`)) element.part.remove(name);
+    clearDragMarks(root);
     if (!this.#pointerDrag?.active) return;
-    const rowOf = (key: string) =>
-      root.querySelector<HTMLElement>(`tr[data-row-key="${CSS.escape(key)}"]`);
-    for (const key of this.#dragged) {
-      const row = rowOf(key);
-      row?.part.add("dragging");
-      // Faded text needs no contrast only as part of an inactive control, which the row is until the drop.
-      row?.setAttribute("aria-disabled", "true");
-    }
+    for (const key of this.#dragged) markDragging(shownRow(root, key));
     if (this.#target === undefined) return;
-    rowOf(this.#target)?.querySelector("td")?.part.add("drop-target");
+    shownRow(root, this.#target)?.querySelector("td")?.part.add("drop-target");
     const gap = this.#gap(this.#target);
-    if (!gap) return;
-    for (const cell of rowOf(gap.key)?.querySelectorAll(":scope > td") ?? [])
-      cell.part.add(gap.side === "before" ? "drop-gap-before" : "drop-gap-after");
+    if (gap) markGap(root, gap);
   }
 
   /** Where the first dragged row would land among the target's children, in the table's sort order:
    * products and categories have no order of their own. */
-  #gap(target: string): { key: string; side: "before" | "after" } | undefined {
+  #gap(target: string): DropGap | undefined {
     const table = this.#table()!;
     const root = table.shadowRoot!;
     const moving = this.#rowByKey.get(this.#dragged[0]!);
@@ -525,17 +480,10 @@ export class ProductList extends LitElement {
     const order = table.sortedSiblings([...siblings, moving]);
     const next = order[order.indexOf(moving) + 1];
     if (next) return { key: next.key, side: "before" };
-    const rows = [...root.querySelectorAll<HTMLElement>("tbody tr[data-row-key]")];
-    const at = rows.findIndex((row) => row.dataset.rowKey === target);
-    if (at === -1) return undefined;
-    const level = Number(rows[at]!.getAttribute("aria-level"));
-    let last = at;
-    while (last + 1 < rows.length && Number(rows[last + 1]!.getAttribute("aria-level")) > level)
-      last++;
-    return { key: rows[last]!.dataset.rowKey!, side: "after" };
+    return { key: lastShownRow(root, target), side: "after" };
   }
 
-  #ghostOf(keys: readonly string[]): { label: string; image: string | null; folder: boolean } {
+  #ghostOf(keys: readonly string[]): DragGhost {
     const first = this.#rowByKey.get(keys[0]!);
     const name =
       first?.kind === "folder"
@@ -551,17 +499,6 @@ export class ProductList extends LitElement {
     };
   }
 
-  #placeGhost(): void {
-    this.renderRoot
-      .querySelector<HTMLElement>(".drag-ghost")
-      ?.style.setProperty("transform", `translate(${this.#pointer.x}px, ${this.#pointer.y}px)`);
-  }
-
-  readonly #blockPostDragClick = (event: MouseEvent): void => {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    document.removeEventListener("click", this.#blockPostDragClick, true);
-  };
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("extraLists") || changed.has("optionLists"))
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
@@ -1313,19 +1250,7 @@ export class ProductList extends LitElement {
         @wt-expand-change=${this.#expandChange}
         ><slot name="toolbar-start" slot="toolbar-start"></slot
         ><slot name="toolbar-end" slot="toolbar-end"></slot></wt-data-table
-      >${
-        this.ghost
-          ? html`<div class="drag-ghost" data-test="drag-ghost" aria-hidden="true">
-              ${
-                this.ghost.image
-                  ? html`<img src=${`/media/${this.ghost.image}`} alt="" draggable="false" />`
-                  : this.ghost.folder
-                    ? html`<wt-icon name="folder" size="lg"></wt-icon>`
-                    : html`<span class="ghost-thumb"></span>`
-              }<span>${this.ghost.label}</span>
-            </div>`
-          : nothing
-      }`;
+      >${dragGhost(this.ghost)}`;
   }
 }
 
