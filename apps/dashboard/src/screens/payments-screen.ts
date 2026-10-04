@@ -86,15 +86,11 @@ function billRefusalText(error: unknown): string {
   return codeMessage(code);
 }
 
-/**
- * At most two reader status reads at once, shared by every Payments screen in this tab, open or
- * closed: a read can wait `CARD_PROVIDER_READ_LIMIT_MS` on a silent card provider, and the browser
- * opens only six connections to the box (backlog A260).
- */
+// Keep the per-tab gate for browsers without Web Locks.
 let statusSlotsFree = 2;
 const statusSlotWaiters: (() => void)[] = [];
 
-async function takeStatusSlot(): Promise<void> {
+async function takeLocalStatusSlot(): Promise<void> {
   if (statusSlotsFree > 0) {
     statusSlotsFree--;
     return;
@@ -102,10 +98,38 @@ async function takeStatusSlot(): Promise<void> {
   await new Promise<void>((resolve) => statusSlotWaiters.push(resolve));
 }
 
-function releaseStatusSlot(): void {
+function releaseLocalStatusSlot(): void {
   const next = statusSlotWaiters.shift();
   if (next) next();
   else statusSlotsFree++;
+}
+
+// Each lock is one place. A document that closes releases its held Web Lock even if its read hangs.
+async function takeStatusSlot(): Promise<() => void> {
+  if (!navigator.locks) {
+    await takeLocalStatusSlot();
+    return releaseLocalStatusSlot;
+  }
+
+  return new Promise<() => void>((resolve, reject) => {
+    const controllers = [new AbortController(), new AbortController()];
+    let acquired = false;
+    controllers.forEach((controller, index) => {
+      void navigator.locks
+        .request(`waitron.reader-status.${index}`, { signal: controller.signal }, async () => {
+          if (acquired) return;
+          acquired = true;
+          for (const other of controllers) if (other !== controller) other.abort();
+          await new Promise<void>((release) => resolve(release));
+        })
+        .catch((error: unknown) => {
+          if (controller.signal.aborted || acquired) return;
+          acquired = true;
+          for (const other of controllers) if (other !== controller) other.abort();
+          reject(error instanceof Error ? error : new Error(String(error)));
+        });
+    });
+  });
 }
 
 /** Provider forms come through CARD_PROVIDER_PANELS; this screen never imports a provider package. */
@@ -439,7 +463,7 @@ export class PaymentsScreen extends LitElement {
       readers
         .filter((r) => r.active)
         .map(async (reader) => {
-          await takeStatusSlot();
+          const releaseStatusSlot = await takeStatusSlot();
           try {
             if (version !== this.#statusVersion) return;
             const status = await client.readerStatus(reader.id);

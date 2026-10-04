@@ -99,7 +99,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
 async function flush(el: PaymentsScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 10));
   await el.updateComplete;
 }
 
@@ -1758,6 +1758,95 @@ describe("the readers' status reads", () => {
       },
     };
   }
+
+  async function mountInFrame(api: DashboardApi): Promise<HTMLIFrameElement> {
+    const frame = document.createElement("iframe");
+    frame.srcdoc = "<!doctype html><html><body></body></html>";
+    document.body.append(frame);
+    await new Promise<void>((resolve) =>
+      frame.addEventListener("load", () => resolve(), { once: true }),
+    );
+    const win = frame.contentWindow!;
+    await (win as Window & { eval: (code: string) => Promise<unknown> }).eval(
+      `import(${JSON.stringify(new URL("./payments-screen.js", import.meta.url).href)})`,
+    );
+    const screen = win.document.createElement("dashboard-payments-screen") as PaymentsScreen;
+    screen.api = api;
+    screen.request = vi.fn() as unknown as PaymentsScreen["request"];
+    screen.panels = PANELS;
+    win.document.body.append(screen);
+    return frame;
+  }
+
+  it("shares two status places between same-origin documents", async () => {
+    const frames: HTMLIFrameElement[] = [];
+    const answers: (() => void)[] = [];
+    let inFlight = 0;
+    let peak = 0;
+    const api = stubApi({
+      listReaders: vi.fn().mockResolvedValue(readers(3)),
+      readerStatus: vi.fn(
+        () =>
+          new Promise<ReaderStatusView>((resolve) => {
+            inFlight++;
+            peak = Math.max(peak, inFlight);
+            answers.push(() => {
+              inFlight--;
+              resolve({ online: true } as ReaderStatusView);
+            });
+          }),
+      ),
+    });
+
+    try {
+      for (let i = 0; i < 2; i++) {
+        frames.push(await mountInFrame(api));
+      }
+
+      await vi.waitFor(() =>
+        expect((api.readerStatus as Mock).mock.calls.length).toBeGreaterThanOrEqual(2),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(peak).toBe(2);
+      expect((await fetch(import.meta.url)).ok).toBe(true);
+      answers.shift()?.();
+      await vi.waitFor(() => expect((api.readerStatus as Mock).mock.calls.length).toBe(3));
+    } finally {
+      for (const frame of frames) frame.remove();
+      for (const answer of answers) answer();
+    }
+  });
+
+  it("releases a held status place when its document closes", async () => {
+    const frames: HTMLIFrameElement[] = [];
+    const answers: (() => void)[] = [];
+    const api = (ids: string[]): DashboardApi =>
+      stubApi({
+        listReaders: vi.fn().mockResolvedValue(ids.map((id) => ({ ...READERS[0]!, id }))),
+        readerStatus: vi.fn(
+          () =>
+            new Promise<ReaderStatusView>((resolve) => {
+              answers.push(() => resolve({ online: true } as ReaderStatusView));
+            }),
+        ),
+      });
+    const firstApi = api(["first-1", "first-2"]);
+    const secondApi = api(["second-1", "second-2"]);
+
+    try {
+      frames.push(await mountInFrame(firstApi));
+      await vi.waitFor(() => expect(firstApi.readerStatus).toHaveBeenCalledTimes(2));
+      frames.push(await mountInFrame(secondApi));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(secondApi.readerStatus).not.toHaveBeenCalled();
+
+      frames[0]!.remove();
+      await vi.waitFor(() => expect(secondApi.readerStatus).toHaveBeenCalledTimes(2));
+    } finally {
+      for (const frame of frames) frame.remove();
+      for (const answer of answers) answer();
+    }
+  });
 
   it("asks at most two readers at a time, so a silent card provider cannot hold every connection to the box", async () => {
     const held = heldStatuses();
