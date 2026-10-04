@@ -22,6 +22,8 @@ import {
   recordWorkingLineContexts,
   resolveNewOrderZone,
   resolveSalePolicy,
+  recordSaleReceiptHeader,
+  readSaleReceiptHeader,
   resolveZoneContext,
   menuState,
 } from "./operations.js";
@@ -48,6 +50,8 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   listServiceZones,
   resolveZoneContext,
   resolveSalePolicy,
+  recordSaleReceiptHeader,
+  readSaleReceiptHeader,
   resolveMakers,
   resolveExtraMakers,
   routingAt,

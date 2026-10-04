@@ -752,6 +752,8 @@ async function fileImmediateSale(
             ],
     },
   });
+  const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, workingOrderId);
+  await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
 
   // A manual card also gets a captured `payments` row, linked to the sale in this transaction.
   // `recordManualCardPayment` makes no network call, so it commits inline with the sale.

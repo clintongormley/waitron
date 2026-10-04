@@ -349,6 +349,20 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     zoneId: string,
   ): Promise<EffectiveSalePolicy>;
+  recordSaleReceiptHeader(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    saleId: string,
+    zoneId: string | null,
+  ): Promise<void>;
+  readSaleReceiptHeader(
+    tx: Transaction,
+    saleId: string,
+  ): Promise<{
+    departmentId: string | null;
+    tradingName: string;
+    printTradingName: boolean;
+  } | null>;
   /** Where each product is made, for an order in `zoneId` (null: an order with no service zone).
    *  An unknown product throws `route.subject_not_found`; an unknown zone `service_zone.not_found`.
    *  Keys are the caller's spelling of each id (the first, when two spellings name one product). */

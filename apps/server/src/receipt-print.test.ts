@@ -1364,6 +1364,39 @@ describe("a record with no device prints nothing", () => {
 });
 
 describe("receipt issuer", () => {
+  it("keeps a department's printed trading name on reprint after its settings change", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter(cfg) });
+    await withTransaction(suite.db, (tx) =>
+      tx.execute(
+        sql`update departments set trading_name = 'Deli Counter' where location_id = ${cfg.locationId}`,
+      ),
+    );
+    const filed = await recordTillSale(deps(), cfg, {
+      zoneId,
+      lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+      tender: { method: "card", amount: "1.50" },
+    });
+    const saleId = await onlySaleId(cfg);
+    const original = (await printJobsFor(cfg)).map((job) =>
+      printedLines(new Uint8Array(job.payload)).map((line) => line.trim()),
+    )[0]!;
+    expect(original.indexOf("Deli Counter")).toBeGreaterThanOrEqual(0);
+    expect(original.indexOf("Deli Counter")).toBeLessThan(original.indexOf("Deli Recibos SL"));
+
+    await withTransaction(suite.db, (tx) =>
+      tx.execute(
+        sql`update departments set trading_name = 'Renamed', active = 0 where location_id = ${cfg.locationId}`,
+      ),
+    );
+    await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, filed, saleId));
+    const jobs = await printJobsFor(cfg);
+    const reprint = printedLines(new Uint8Array(jobs.at(-1)!.payload)).map((line) => line.trim());
+    expect(reprint.indexOf("Deli Counter")).toBeGreaterThanOrEqual(0);
+    expect(reprint.indexOf("Deli Counter")).toBeLessThan(reprint.indexOf("Deli Recibos SL"));
+    expect(reprint).not.toContain("Renamed");
+  });
+
   it("leaves a manual till reprint unqueued when its taxpayer row is missing", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });

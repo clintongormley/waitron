@@ -10,6 +10,7 @@ import type { EscSetting, PrintConfig } from "@waitron/printing";
 import { getReceipt } from "@waitron/layouts";
 import type { Origin } from "@waitron/shared";
 import { formatReceipt } from "./receipt-ticket.js";
+import { VENUE_SERVICE } from "./modules.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import type { TillSaleResult } from "./till-sale.js";
 
@@ -86,6 +87,7 @@ async function buildReceiptBytes(
   tx: Transaction,
   cfg: Pick<TillConfig, "practiceMode">,
   ticket: TillSaleResult,
+  saleId: string,
   duplicate: boolean,
   printer: EscSetting,
   language?: string,
@@ -99,10 +101,12 @@ async function buildReceiptBytes(
   }
   /* v8 ignore stop */
   const receipt = await getReceipt(tx);
+  const receiptHeader = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
   return formatReceipt({
     result: ticket,
     issuer: ticket.issuer ?? { venueName: taxpayer.legalName, nif: taxpayer.taxId },
     receipt,
+    receiptHeader: receiptHeader ?? undefined,
     invoiceLocale: language ?? ticket.locale,
     namesLocale: ticket.locale,
     printer,
@@ -119,11 +123,12 @@ async function resolvePrinterAndReceipt(
   tx: Transaction,
   cfg: OriginConfig,
   ticket: TillSaleResult,
+  saleId: string,
   duplicate: boolean,
 ): Promise<{ printer: DevicePrinter; receiptBytes: Uint8Array } | undefined> {
   const printer = await resolveReceiptPrinter(tx, cfg.origin);
   if (printer === undefined) return undefined;
-  const receiptBytes = await buildReceiptBytes(tx, cfg, ticket, duplicate, printer);
+  const receiptBytes = await buildReceiptBytes(tx, cfg, ticket, saleId, duplicate, printer);
   /* v8 ignore start -- issuer row structurally always present (buildReceiptBytes); degrade, never throw (§5) */
   if (receiptBytes === undefined) return undefined;
   /* v8 ignore stop */
@@ -172,7 +177,7 @@ export async function enqueueReceiptCopy(
   printer: { id: string } & EscSetting,
   language?: string,
 ): Promise<{ jobId: string } | undefined> {
-  const bytes = await buildReceiptBytes(tx, cfg, ticket, true, printer, language);
+  const bytes = await buildReceiptBytes(tx, cfg, ticket, saleId, true, printer, language);
   if (bytes === undefined) return undefined;
   return enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document", { saleId });
 }
@@ -212,7 +217,7 @@ export async function enqueueOriginalReceipt(
   ticket: TillSaleResult,
   saleId: string,
 ): Promise<void> {
-  const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, false);
+  const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, saleId, false);
   if (resolved === undefined) return;
   await enqueuePrintJob(
     tx,
