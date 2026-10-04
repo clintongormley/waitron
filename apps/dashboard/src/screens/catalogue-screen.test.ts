@@ -233,6 +233,9 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       },
     }),
     getFolderRouting: vi.fn().mockResolvedValue({
+      stationTimes: [],
+      todayEnds: null,
+      clockReadable: true,
       claims: [],
       exceptions: [],
       unassigned: { folders: [], products: [] },
@@ -313,6 +316,43 @@ describe("catalogue-screen", () => {
     await flush(el);
     expect(list(el).products).toEqual(products);
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    expect(list(el).routing).toBeNull();
+  });
+
+  it("tells the browser the routing read failed, and clears that once a later read succeeds", async () => {
+    const api = Object.assign(
+      stubApi({ getFolderRouting: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    expect(list(el).routing).toBeNull();
+    expect(list(el).routingFailed).toBe(true);
+    const routing = await stubApi().getFolderRouting();
+    vi.mocked(api.getFolderRouting).mockResolvedValue(routing);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(list(el).routingFailed).toBe(false));
+    expect(list(el).routing).toEqual(routing);
+  });
+
+  it("counts a refused routing read as failed too", async () => {
+    const api = stubApi({
+      getFolderRouting: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    expect(list(el).routingFailed).toBe(true);
+  });
+
+  it("marks routing failed when a refresh after a good read fails, and not before", async () => {
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    expect(list(el).routingFailed).toBe(false);
+    expect(list(el).routing).not.toBeNull();
+    vi.mocked(api.getFolderRouting).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(list(el).routingFailed).toBe(true));
     expect(list(el).routing).toBeNull();
   });
 

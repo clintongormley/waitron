@@ -7,6 +7,7 @@ import { allergenStateName, vatClassName } from "../i18n/domain.js";
 import type { Product, Unit } from "../api/client.js";
 import type { ListedVariant } from "@waitron/catalogue/src/product-types.js";
 import { ProductList, ROOT_KEY } from "./product-list.js";
+import type { FolderMadeAt } from "./folder-made-at.js";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -1370,6 +1371,49 @@ it("keeps touch scrolling on the name cell and starts a drag from its grip", asy
 
 describe("the product list at phone width", () => {
   it.each(["en-GB", "es-ES"])(
+    "keeps a category's made-at link and its detail clear of pinned actions after scrolling at 390 px (%s)",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+          categories: [drinks],
+          folderMadeAt: new Map<string, FolderMadeAt>([
+            [
+              "d",
+              {
+                maker: { kind: "no_replacement", stationName: "Downstairs cocktail bar" },
+                source: { kind: "inherited", name: "Bebidas-y-cocteles-de-la-casa" },
+                someElsewhere: true,
+              },
+            ],
+          ]),
+        });
+        const root = await tableRoot(el);
+        const scroll = root.querySelector<HTMLElement>(".scroll")!;
+        const cell = cellUnder(root, "folder:d", t("product.made_at"));
+        scroll.scrollLeft = cell.offsetLeft;
+        const actions = root.querySelector<HTMLElement>(
+          'tr[data-row-key="folder:d"] td[data-pinned="end"]',
+        )!;
+        for (const part of [
+          cell.querySelector("a")!,
+          cell.querySelector('[part~="maker-detail"]')!,
+        ]) {
+          const box = part.getBoundingClientRect();
+          expect(box.left).toBeGreaterThanOrEqual(scroll.getBoundingClientRect().left);
+          expect(box.right).toBeLessThanOrEqual(actions.getBoundingClientRect().left);
+        }
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
+  it.each(["en-GB", "es-ES"])(
     "keeps the full made-at link clear of pinned actions after scrolling at 390 px (%s)",
     async (locale) => {
       const width = window.innerWidth,
@@ -2495,4 +2539,199 @@ describe("the Products tree's Name column", () => {
     expect(rowKeys(root)).toContain("ribs");
     expect(rowKeys(root)).not.toContain("chop");
   });
+});
+
+describe("a category's Made at", () => {
+  const bar = { kind: "station" as const, stationName: "Bar" };
+  type Entries = [string, FolderMadeAt][];
+  async function mountMadeAt(entries: Entries, props: Partial<ProductList> = {}) {
+    setLocale("en");
+    const mounted = await mountTree({ folderMadeAt: new Map(entries), ...props });
+    await openRow(mounted.el, "folder:d");
+    return mounted;
+  }
+  const madeAtCell = (root: ShadowRoot, key: string) => cellUnder(root, key, t("product.made_at"));
+  const detailOf = (root: ShadowRoot, key: string) =>
+    madeAtCell(root, key).querySelector('[part~="maker-detail"]')?.textContent?.trim();
+
+  it("names the station a claim on the category sends it to, set on that category, linked to the routing screen", async () => {
+    const { root } = await mountMadeAt([
+      ["d", { maker: bar, source: { kind: "own" }, someElsewhere: false }],
+    ]);
+    const link = madeAtCell(root, "folder:d").querySelector("a")!;
+    expect(link.textContent!.trim()).toBe("Bar");
+    expect(link.getAttribute("href")).toBe("/manage/prep-stations");
+    expect(detailOf(root, "folder:d")).toBe("set on this category");
+  });
+
+  it("names the category an inherited claim comes from", async () => {
+    const { root } = await mountMadeAt([
+      ["b", { maker: bar, source: { kind: "inherited", name: "Drinks" }, someElsewhere: false }],
+    ]);
+    expect(madeAtCell(root, "folder:b").querySelector("a")!.textContent!.trim()).toBe("Bar");
+    expect(detailOf(root, "folder:b")).toBe("from Drinks");
+  });
+
+  it("keeps a category name with a replacement pattern literal", async () => {
+    const { root } = await mountMadeAt([
+      ["b", { maker: bar, source: { kind: "inherited", name: "$& Co" }, someElsewhere: false }],
+    ]);
+    expect(detailOf(root, "folder:b")).toBe("from $& Co");
+  });
+
+  it("marks a route that falls to the default station", async () => {
+    const { root } = await mountMadeAt([
+      [
+        "f",
+        {
+          maker: { kind: "station", stationName: "Kitchen" },
+          source: { kind: "default" },
+          someElsewhere: false,
+        },
+      ],
+    ]);
+    expect(madeAtCell(root, "folder:f").querySelector("a")!.textContent!.trim()).toBe("Kitchen");
+    expect(detailOf(root, "folder:f")).toBe("default station");
+  });
+
+  it("marks a route an exception decides", async () => {
+    const { root } = await mountMadeAt([
+      ["f", { maker: bar, source: { kind: "exception" }, someElsewhere: false }],
+    ]);
+    expect(detailOf(root, "folder:f")).toBe("by an exception");
+  });
+
+  it("uses the product rows' words for no preparation, no replacement and nowhere", async () => {
+    const { root } = await mountMadeAt([
+      ["d", { maker: { kind: "no_preparation" }, source: { kind: "own" }, someElsewhere: false }],
+      [
+        "b",
+        {
+          maker: { kind: "no_replacement", stationName: "Cocktail bar" },
+          source: { kind: "own" },
+          someElsewhere: false,
+        },
+      ],
+      ["f", { maker: { kind: "nowhere" }, source: null, someElsewhere: false }],
+    ]);
+    expect(madeAtCell(root, "folder:d").querySelector("a")!.textContent!.trim()).toBe(
+      "No preparation",
+    );
+    expect(madeAtCell(root, "folder:b").querySelector("a")!.textContent!.trim()).toBe(
+      "No replacement (Cocktail bar is switched off)",
+    );
+    const nowhere = madeAtCell(root, "folder:f");
+    expect(nowhere.querySelector("a")!.textContent!.trim()).toBe("Nowhere");
+    expect(nowhere.querySelector('[part~="maker-detail"]')).toBeNull();
+  });
+
+  it("says some items are made elsewhere when the baseline is not a promise for everything inside", async () => {
+    const { root } = await mountMadeAt([
+      ["d", { maker: bar, source: { kind: "own" }, someElsewhere: true }],
+      ["f", { maker: { kind: "nowhere" }, source: null, someElsewhere: true }],
+    ]);
+    expect(detailOf(root, "folder:d")).toBe("set on this category · some items made elsewhere");
+    expect(detailOf(root, "folder:f")).toBe("some items made elsewhere");
+  });
+
+  it("draws the detail smaller and muted, under the station", async () => {
+    const { el, root } = await mountMadeAt([
+      ["d", { maker: bar, source: { kind: "own" }, someElsewhere: false }],
+    ]);
+    const detail = madeAtCell(root, "folder:d").querySelector<HTMLElement>(
+      '[part~="maker-detail"]',
+    )!;
+    const style = getComputedStyle(detail);
+    expect(style.display).toBe("block");
+    // Resolved against the mounted host, which carries the tokens.
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-text-muted)";
+    probe.style.fontSize = "var(--wt-font-size-sm)";
+    el.parentElement!.append(probe);
+    onTestFinished(() => probe.remove());
+    expect(style.color).toBe(getComputedStyle(probe).color);
+    expect(style.fontSize).toBe(getComputedStyle(probe).fontSize);
+  });
+
+  it("leaves a category's cell blank while routing has not loaded", async () => {
+    const { root } = await mountMadeAt([]);
+    const cell = madeAtCell(root, "folder:d");
+    expect(cell.textContent!.trim()).toBe("");
+    expect(cell.querySelector("a")).toBeNull();
+  });
+
+  it("says routing could not be read, without a link, when its read failed", async () => {
+    const { root } = await mountMadeAt([], { routingFailed: true });
+    const cell = madeAtCell(root, "folder:d");
+    expect(cell.textContent!.trim()).toBe("Kitchen routing unavailable");
+    expect(cell.querySelector("a")).toBeNull();
+    expect(cell.querySelector('[part~="maker-detail"]')).not.toBeNull();
+  });
+
+  it("leaves All products without a station in every state", async () => {
+    for (const props of [
+      { folderMadeAt: new Map<string, FolderMadeAt>() },
+      { routingFailed: true },
+    ]) {
+      const { root } = await mountMadeAt(
+        [["d", { maker: bar, source: { kind: "own" }, someElsewhere: false }]],
+        props,
+      );
+      expect(madeAtCell(root, ROOT_KEY).textContent!.trim()).toBe("");
+      cleanupWidgets();
+    }
+  });
+
+  it("keeps a product row's own value and its tester link beside the categories'", async () => {
+    const { root } = await mountMadeAt(
+      [["d", { maker: { kind: "no_preparation" }, source: { kind: "own" }, someElsewhere: true }]],
+      {
+        madeAt: {
+          cola: {
+            stationId: "kitchen",
+            stationName: "Kitchen",
+            noPreparation: false,
+            noReplacement: false,
+            variesByZone: true,
+          },
+        },
+      },
+    );
+    const cell = madeAtCell(root, "cola");
+    expect(cell.textContent!.trim()).toBe("Kitchen · varies by service zone");
+    expect(cell.querySelector("a")!.getAttribute("href")).toBe("/manage/prep-stations/test/cola");
+  });
+
+  it("speaks Spanish", async () => {
+    const { el, root } = await mountMadeAt([
+      ["d", { maker: bar, source: { kind: "own" }, someElsewhere: true }],
+    ]);
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+    expect(detailOf(root, "folder:d")).toBe(
+      "asignada a esta categoría · algunos productos se preparan en otro sitio",
+    );
+  });
+});
+
+it("falls back as product rows do when a switched-off station's or a category's name is not known", async () => {
+  setLocale("en");
+  const { el } = await mountTree({
+    folderMadeAt: new Map<string, FolderMadeAt>([
+      [
+        "d",
+        {
+          maker: { kind: "no_replacement", stationName: null },
+          source: { kind: "inherited", name: null },
+          someElsewhere: false,
+        },
+      ],
+    ]),
+  });
+  const root = await tableRoot(el);
+  expect(cellUnder(root, "folder:d", "Made at").textContent!.replace(/\s+/g, " ").trim()).toBe(
+    "No replacement (Nowhere is switched off) from Unavailable selection",
+  );
 });

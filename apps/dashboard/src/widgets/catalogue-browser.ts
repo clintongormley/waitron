@@ -25,6 +25,7 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import { acceptsCatalogueDrop, type CategoryNameDraft, type ProductList } from "./product-list.js";
+import { folderMadeAt, type FolderMadeAt } from "./folder-made-at.js";
 
 @customElement("dashboard-catalogue-browser")
 export class CatalogueBrowser extends LitElement {
@@ -90,6 +91,8 @@ export class CatalogueBrowser extends LitElement {
   @property({ attribute: false }) products: Product[] = [];
   @property({ attribute: false }) madeAt: Record<string, MadeAt> = {};
   @property({ attribute: false }) routing: RoutingModel | null = null;
+  /** Whether the routing read failed, as against not having answered yet. */
+  @property({ type: Boolean }) routingFailed = false;
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
@@ -118,6 +121,7 @@ export class CatalogueBrowser extends LitElement {
   @state() private operationError = "";
   @state() private dropError = "";
   #revealed: string | null = null;
+  #folderMadeAt: ReadonlyMap<string, FolderMadeAt> = new Map();
 
   async #drop(keys: string[], folderId: string | null): Promise<void> {
     if (
@@ -139,6 +143,11 @@ export class CatalogueBrowser extends LitElement {
   }
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("search")) this.selected = [];
+    // Worked out once per change of its inputs, not on every redraw of the browser.
+    if (changed.has("routing") || changed.has("categories") || changed.has("products"))
+      this.#folderMadeAt = this.routing
+        ? folderMadeAt(this.routing, this.categories, this.products)
+        : new Map();
   }
 
   override updated(changed: PropertyValues): void {
@@ -572,6 +581,8 @@ export class CatalogueBrowser extends LitElement {
         .search=${this.search}
         .madeAt=${this.madeAt}
         .unroutedFolderIds=${this.#unroutedFolderIds()}
+        .folderMadeAt=${this.#folderMadeAt}
+        .routingFailed=${this.routingFailed}
         .extraLists=${this.extraLists}
         .optionLists=${this.optionLists}
         .units=${this.units}
