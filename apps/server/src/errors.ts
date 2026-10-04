@@ -216,6 +216,7 @@ declare module "@waitron/shared" {
      * percentage; neither is a secret.
      */
     "reader.battery_low": { reader: string; percent: number };
+    "reader.status_unavailable": { reader: string };
     /** The till was asked to ring a sale with no lines; refused before any catalogue read or fiscal write. */
     "sale.empty_basket": Record<string, never>;
     /**

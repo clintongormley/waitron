@@ -390,7 +390,7 @@ export function batteryAlertSource(deps: {
     area: "card_reader",
     permission: "payments.manage",
     readOutsideTransaction: true,
-    async read({ tx }): Promise<readonly OngoingAlert[]> {
+    async read({ tx, now }): Promise<readonly OngoingAlert[]> {
       const readers = await tx
         .select({
           id: cardReaders.id,
@@ -400,33 +400,47 @@ export function batteryAlertSource(deps: {
         })
         .from(cardReaders)
         .where(and(eq(cardReaders.active, true), ne(cardReaders.id, DEMO_READER_ID)));
-      // Provider calls, not queries on `tx`, so they may run concurrently.
-      const pending = Promise.all(
-        readers.map((r) =>
-          deps.cache.get(r.id, async () => {
-            // An unknown provider throws, failing the whole source rather than dropping the reader.
-            const seat = cardProviderById(deps.providers, r.provider);
-            const status = await seat.readers.status(deps.runtimeDeps(), r.ref);
-            return status.batteryPercent ?? null;
-          }),
-        ),
-      );
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const deadline = new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(
-          () => reject(new Error("battery check timed out")),
-          BATTERY_CHECK_LIMIT_MS,
-        );
+      const deadline = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, BATTERY_CHECK_LIMIT_MS);
       });
-      let percents: (number | null)[];
+      let results: ({ kind: "reading"; percent: number | null } | { kind: "unavailable" })[];
       try {
-        percents = await Promise.race([pending, deadline]);
+        // One deadline bounds the whole batch while each reader retains its own result.
+        const pending = readers.map((r) => {
+          const seat = cardProviderById(deps.providers, r.provider);
+          return Promise.race([
+            deps.cache
+              .get(r.id, async () => {
+                const status = await seat.readers.status(deps.runtimeDeps(), r.ref);
+                return status.batteryPercent ?? null;
+              })
+              .then(
+                (percent) => ({ kind: "reading" as const, percent }),
+                () => ({ kind: "unavailable" as const }),
+              ),
+            deadline.then(() => ({ kind: "unavailable" as const })),
+          ]);
+        });
+        results = await Promise.all(pending);
       } finally {
         clearTimeout(timer);
       }
       const alerts: OngoingAlert[] = [];
       readers.forEach((r, i) => {
-        const percent = percents[i]!;
+        const result = results[i]!;
+        if (result.kind === "unavailable") {
+          alerts.push({
+            key: `reader.status_unavailable:${r.id}`,
+            code: "reader.status_unavailable",
+            params: { reader: r.name },
+            severity: "warning",
+            since: null,
+            screen: "payments",
+          });
+          return;
+        }
+        const percent = result.percent;
         if (percent === null || percent > BATTERY_WARN) return;
         alerts.push({
           key: `reader.battery_low:${r.id}`,
@@ -437,6 +451,15 @@ export function batteryAlertSource(deps: {
           screen: "payments",
         });
       });
+      if (readers.length > 0 && results.every((result) => result.kind === "unavailable")) {
+        alerts.push({
+          key: "alert.source_unavailable:card_reader",
+          code: "alert.source_unavailable",
+          params: { area: "card_reader" },
+          severity: "error",
+          since: now.toISOString(),
+        });
+      }
       return alerts;
     },
   };

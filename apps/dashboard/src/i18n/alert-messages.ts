@@ -225,4 +225,8 @@ export const ALERT_MESSAGES: Readonly<
     en: "Card reader “{reader}” battery is low ({percent}%). Charge it to avoid interruptions at the till.",
     es: "La batería del lector de tarjetas «{reader}» está baja ({percent} %). Cárgalo para evitar interrupciones en la caja.",
   },
+  "reader.status_unavailable": {
+    en: "Waitron could not check card reader “{reader}”. Check it on the Payments page.",
+    es: "Waitron no ha podido comprobar el lector de tarjetas «{reader}». Revísalo en la página de Pagos.",
+  },
 };
