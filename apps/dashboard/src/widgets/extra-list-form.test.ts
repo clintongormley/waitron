@@ -2206,3 +2206,281 @@ it("refuses to save a list holding a product with an Active variant, and saves o
   expect(submitted).toHaveLength(1);
   expect(submitted[0]!.items.map((item) => item.productId)).toEqual([EGG]);
 });
+
+// ---------------------------------------------------------------------------
+// Portion, in a column of its own beside Price
+
+/** The id a product read reports for a product sold by the unit (`EACH_UNIT_ID`,
+ * packages/catalogue/src/units.ts). */
+const EACH_ID = "00000000-0000-0000-0000-000000000001";
+const EACH = {
+  id: EACH_ID,
+  name: { en: "Each", es: "Unidad" },
+  precision: 0,
+  abbreviation: { en: "ea", es: "ud" },
+};
+/** Like GRAM above, this measure has no decimals, so only the unit's identity tells it from Each. */
+const MILLILITRE = {
+  id: "unit-ml",
+  name: { en: "Millilitre", es: "Mililitro" },
+  precision: 0,
+  abbreviation: { en: "ml" },
+};
+
+const eachBacon = product({ unitId: EACH_ID, unit: EACH });
+const eachEgg = product({
+  id: EGG,
+  name: "Fried egg",
+  unitPrice: "0.80",
+  unitId: EACH_ID,
+  unit: EACH,
+});
+
+function portionCell(el: ExtraListForm, index: number): HTMLTableCellElement {
+  return el.shadowRoot!.querySelector<HTMLTableCellElement>(
+    `[data-test="item-${index}-portion-cell"]`,
+  )!;
+}
+
+function headingTexts(el: ExtraListForm): string[] {
+  return [...el.shadowRoot!.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
+}
+
+it("heads Portion and Price as two columns, Portion first, even when every item is sold by the unit", async () => {
+  const { el } = await mount({ value: addons, products: [eachBacon, eachEgg] });
+  const headings = headingTexts(el);
+  const portionAt = headings.indexOf(t("extras.portion"));
+
+  expect(portionAt).toBeGreaterThan(-1);
+  expect(headings[portionAt + 1]).toBe(t("extras.price"));
+  const row = el.shadowRoot!.querySelector(`tr[data-item="${BACON_ITEM}"]`)!;
+  const cells = [...row.children];
+  expect(cells.indexOf(portionCell(el, 0))).toBe(portionAt);
+  expect(cells[portionAt + 1]!.querySelector("wt-price-input")).not.toBeNull();
+  expect(portionCell(el, 0).querySelector("wt-price-input")).toBeNull();
+});
+
+it("shows a saved unit-sold item's portion as a plain 1, and saves one unit", async () => {
+  const { el, host } = await mount({
+    value: { ...addons, items: addons.items.map((item) => ({ ...item, portion: "1.000" })) },
+    products: [eachBacon, eachEgg],
+  });
+  const submitted = record(host);
+
+  expect(portionCell(el, 1).textContent!.trim()).toBe("1");
+  expect(field(el, "item-1-portion")).toBeNull();
+  expect(portionCell(el, 1).querySelector("wt-input, input, .required")).toBeNull();
+  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-1-price").placeholder).toBe(
+    "0.80",
+  );
+
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]!.items.map((item) => item.portion)).toEqual([undefined, undefined]);
+});
+
+it("neither multiplies the inherited price by a stale saved portion nor sends it back", async () => {
+  const { el, host } = await mount({
+    value: { ...addons, items: [{ ...addons.items[1]!, portion: "2.000" }] },
+    products: [eachBacon, eachEgg],
+  });
+  const submitted = record(host);
+
+  expect(portionCell(el, 0).textContent!.trim()).toBe("1");
+  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price").placeholder).toBe(
+    "0.80",
+  );
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect("portion" in submitted[0]!.items[0]!).toBe(false);
+});
+
+it("shows a newly added unit-sold item's portion as 1 and saves it with no portion error", async () => {
+  const { el, host } = await mount({ products: [eachBacon, eachEgg] });
+  const submitted = record(host);
+  await type(el, "name", "Extras");
+  await addItem(el, "Fried egg");
+
+  expect(portionCell(el, 0).textContent!.trim()).toBe("1");
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect("portion" in submitted[0]!.items[0]!).toBe(false);
+});
+
+it.each([
+  ["a weighed product with decimals", KG],
+  ["a whole-gram product", GRAM],
+  ["a whole-millilitre product", MILLILITRE],
+])("asks for %s's portion in the Portion column as soon as it is added", async (_what, unit) => {
+  const { el, host } = await mount({
+    products: [product({ unitId: unit.id, unit, unitPrice: "100.00" })],
+  });
+  const submitted = record(host);
+  await type(el, "name", "Extras");
+  await addItem(el, "Bacon");
+
+  const portion = field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-portion");
+  expect(portion.closest("td")).toBe(portionCell(el, 0));
+  expect(portion.required).toBe(true);
+  expect(portion.value).toBe("");
+  await click(el, "save");
+  expect(submitted).toHaveLength(0);
+  expect(portion.error).toBe(t("extras.portion_required"));
+
+  await type(el, "item-0-portion", "2");
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]!.items[0]!.portion).toBe("2");
+});
+
+it("marks the Portion heading required only while a row asks for a portion", async () => {
+  const { el } = await mount({ value: addons, products: [eachBacon, eachEgg] });
+  const heading = () =>
+    [...el.shadowRoot!.querySelectorAll("thead th")].find(
+      (th) => th.textContent!.trim().replace("*", "").trim() === t("extras.portion"),
+    )!;
+  expect(heading().querySelector(".required")).toBeNull();
+
+  el.products = [product({ unitId: MILLILITRE.id, unit: MILLILITRE }), eachEgg];
+  await el.updateComplete;
+  expect(heading().querySelector(".required")).not.toBeNull();
+});
+
+it("holds a mixed list's two kinds of row apart", async () => {
+  const { el, host } = await mount({
+    value: {
+      ...addons,
+      items: [
+        { ...addons.items[0]!, portion: "250.000" },
+        { ...addons.items[1]!, portion: "1.000" },
+      ],
+    },
+    products: [product({ unitId: MILLILITRE.id, unit: MILLILITRE }), eachEgg],
+  });
+  const submitted = record(host);
+
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-portion").value).toBe("250.000");
+  expect(portionCell(el, 1).textContent!.trim()).toBe("1");
+  expect(field(el, "item-1-portion")).toBeNull();
+  await click(el, "save");
+  expect(submitted[0]!.items.map((item) => item.portion)).toEqual(["250.000", undefined]);
+  expect(submitted[0]!.items[0]!.price).toBe("2.00");
+});
+
+it("switches a row between an editable portion and a fixed 1 when its product's unit changes", async () => {
+  const { el, host } = await mount({ products: [eachBacon] });
+  const submitted = record(host);
+  await type(el, "name", "Extras");
+  await addItem(el, "Bacon");
+  expect(portionCell(el, 0).textContent!.trim()).toBe("1");
+
+  el.products = [product({ unitId: MILLILITRE.id, unit: MILLILITRE })];
+  await el.updateComplete;
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-portion").required).toBe(true);
+  await click(el, "save");
+  expect(submitted).toHaveLength(0);
+  expect(errorOf(el, "item-0-portion")).toBe(t("extras.portion_required"));
+
+  el.products = [eachBacon];
+  await el.updateComplete;
+  expect(field(el, "item-0-portion")).toBeNull();
+  expect(portionCell(el, 0).textContent!.trim()).toBe("1");
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect("portion" in submitted[0]!.items[0]!).toBe(false);
+});
+
+it("shows the same Portion cells before a save and after the list is reopened with what the server returns", async () => {
+  const { el, host } = await mount({
+    products: [product({ unitId: MILLILITRE.id, unit: MILLILITRE }), eachEgg],
+  });
+  const submitted = record(host);
+  await type(el, "name", "Extras");
+  await addItem(el, "Fried egg");
+  await addItem(el, "Bacon");
+  await type(el, "item-1-portion", "250");
+  const before = [
+    portionCell(el, 0).textContent!.trim(),
+    field<HTMLElementTagNameMap["wt-input"]>(el, "item-1-portion").value,
+  ];
+  await click(el, "save");
+  const sent = submitted[0]!;
+
+  el.open = false;
+  await el.updateComplete;
+  el.value = {
+    id: "55555555-5555-4555-8555-555555555555",
+    ...sent,
+    items: sent.items.map((item) => ({
+      id: item.id!,
+      productId: item.productId,
+      maxQuantity: item.maxQuantity,
+      preselected: item.preselected,
+      price: item.price,
+      portion: item.portion === undefined ? "1.000" : `${item.portion}.000`,
+    })),
+  } as ExtraList;
+  el.open = true;
+  await el.updateComplete;
+
+  expect(before).toEqual(["1", "250"]);
+  expect(portionCell(el, 0).textContent!.trim()).toBe("1");
+  expect(field(el, "item-0-portion")).toBeNull();
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-1-portion").value).toBe("250.000");
+});
+
+/** A text's FIRST line box, however many lines it wraps to. */
+function firstLine(node: Element): DOMRect {
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  return range.getClientRects()[0]!;
+}
+
+it.each([1280, 390])(
+  "draws the drag handle's icon within the first line of a tall row's product name at %ipx",
+  async (frame) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(frame, 844);
+    try {
+      const { el } = await mount({
+        value: { ...addons, items: [{ ...addons.items[0]!, portion: "0.055" }, addons.items[1]!] },
+        products: [
+          product({
+            name: "Smoked streaky bacon from the farm down the road, cut thick and fried until it is crisp at the edges",
+            unitId: KG.id,
+            unit: { ...KG, precision: 2 },
+          }),
+          products[1]!,
+        ],
+      });
+      const row = el.shadowRoot!.querySelector<HTMLElement>(`tr[data-item="${BACON_ITEM}"]`)!;
+      const name = row.querySelector('[data-test="item-0-product"]')!;
+      const handle = row.querySelector<HTMLElement>(`[data-test="drag-${BACON_ITEM}"]`)!;
+      const icon = handle.querySelector("wt-icon") ?? handle;
+      const box = icon.getBoundingClientRect();
+      const handleBox = handle.getBoundingClientRect();
+      const nameLines = (() => {
+        const range = document.createRange();
+        range.selectNodeContents(name);
+        return range.getClientRects().length;
+      })();
+
+      expect(window.innerWidth).toBe(frame);
+      // A row taller than its handle is what the centring got wrong.
+      expect(row.getBoundingClientRect().height).toBeGreaterThan(handleBox.height * 1.5);
+      expect(nameLines, "the name wraps").toBeGreaterThan(1);
+      const line = firstLine(name);
+      expect(
+        box.top >= line.top && box.bottom <= line.bottom,
+        JSON.stringify({ icon: box, line }),
+      ).toBe(true);
+      expect({ width: handleBox.width >= 44, height: handleBox.height >= 44 }).toEqual({
+        width: true,
+        height: true,
+      });
+    } finally {
+      await page.viewport(width, height);
+    }
+  },
+);

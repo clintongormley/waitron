@@ -1,8 +1,8 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
-import type { ProductUsingUnit } from "./unit-types.js";
+import { EACH_UNIT_ID, type ProductUsingUnit } from "./unit-types.js";
 
-export type { ProductUsingUnit };
+export { EACH_UNIT_ID, type ProductUsingUnit };
 import { AppError } from "@waitron/shared";
 import { findContentTranslationGap } from "./content-languages.js";
 import { productUnits, units } from "./schema/units.js";
@@ -20,7 +20,6 @@ export type { Unit, SellableUnit } from "./product-types.js";
 /** The unit a product reads as when it has NO stored unit. It is NEVER written to `units` or
  * `product_units`. Its id matches the till's own "each" fallback
  * (apps/till/src/widgets/product-name.ts) so server and till agree. */
-export const EACH_UNIT_ID = "00000000-0000-0000-0000-000000000001";
 export const EACH_UNIT: SellableUnit = {
   id: EACH_UNIT_ID,
   name: { en: "Each", es: "Unidad", ca: "Unitat", gl: "Unidade", eu: "Unitatea" },

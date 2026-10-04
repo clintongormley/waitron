@@ -6,6 +6,7 @@ import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { priceForExtraPortion } from "@waitron/catalogue/src/extra-contract.js";
 import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
+import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-types.js";
 import { resolveContentText, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -126,8 +127,8 @@ export class ExtraListForm extends LitElement {
         table-layout: fixed;
         min-width: calc(
           var(--wt-cell-name-max-width) + var(--wt-stepper-field-width) +
-            var(--wt-price-field-width) + var(--wt-tap-min) * 5 + var(--wt-space-5) +
-            var(--wt-space-4)
+            var(--wt-price-field-width) * 2 + var(--wt-tap-min) * 5 + var(--wt-space-5) +
+            var(--wt-space-4) * 2
         );
       }
       col:first-child,
@@ -141,6 +142,9 @@ export class ExtraListForm extends LitElement {
         width: var(--wt-tap-min);
       }
       col:nth-child(5) {
+        width: calc(var(--wt-price-field-width) + var(--wt-space-4));
+      }
+      col:nth-child(6) {
         width: calc(var(--wt-price-field-width) + var(--wt-tap-min) + var(--wt-space-5));
       }
       td:nth-child(2) {
@@ -171,7 +175,6 @@ export class ExtraListForm extends LitElement {
       }
       td wt-input[name$="-portion"] {
         display: block;
-        margin-bottom: var(--wt-space-2);
       }
       th:nth-child(4) {
         position: relative;
@@ -182,8 +185,11 @@ export class ExtraListForm extends LitElement {
         inset-block-start: var(--wt-space-2);
         white-space: nowrap;
       }
-      /* A row lines up its text, not its boxes (spec D6); the handle cell keeps its centring. */
+      /* A row lines up its text, not its boxes (spec D6). */
       tbody td:not(.handle-cell) {
+        vertical-align: baseline;
+      }
+      tbody td.handle-cell {
         vertical-align: baseline;
       }
     `,
@@ -297,6 +303,9 @@ export class ExtraListForm extends LitElement {
   }
 
   #inheritedPrice(item: DraftItem): string {
+    const unitPrice = this.#productById.get(item.productId)?.unitPrice;
+    if (this.#portionKind(item.productId) === "each")
+      return priceForExtraPortion({ price: null }, unitPrice) ?? "";
     if (item.portion === "") return "";
     if (item.portion) {
       try {
@@ -308,21 +317,29 @@ export class ExtraListForm extends LitElement {
     return (
       priceForExtraPortion(
         { price: null, ...(item.portion ? { portion: item.portion } : {}) },
-        this.#productById.get(item.productId)?.unitPrice,
+        unitPrice,
       ) ?? ""
     );
   }
 
-  #requiresPortion(productId: string): boolean {
+  /** Each is told from a measure by the unit's identity alone: a millilitre or a gram has no
+   * decimals either, and its portion still sets the price. Null for a product this form was given no
+   * row for. */
+  #portionKind(productId: string): "each" | "measured" | null {
     const product = this.#productById.get(productId);
-    return (
-      product !== undefined &&
-      (product.pricingUnit === "weight" || (product.unit?.precision ?? 0) > 0)
-    );
+    if (product === undefined) return null;
+    return !product.unit || product.unit.id === EACH_UNIT_ID ? "each" : "measured";
+  }
+
+  /** A unit-sold item is always one unit, whatever portion an earlier unit left saved on it. */
+  #asksPortion(item: DraftItem): boolean {
+    const kind = this.#portionKind(item.productId);
+    return kind === "measured" || (kind === null && item.portion !== undefined);
   }
 
   #savedPortionOverPrecision(item: DraftItem): boolean {
     if (
+      !this.#asksPortion(item) ||
       item.portion === undefined ||
       item.portion !== this.value?.items.find((saved) => saved.id === item.id)?.portion
     )
@@ -479,7 +496,7 @@ export class ExtraListForm extends LitElement {
         maxQuantity: "1",
         preselected: false,
         price: "",
-        ...(this.#requiresPortion(productId) ? { portion: "" } : {}),
+        ...(this.#portionKind(productId) === "measured" ? { portion: "" } : {}),
       };
       this.items = [...this.items, item];
       this.addedMessage = t("extras.product_added").replace("{name}", this.#productName(productId));
@@ -534,8 +551,8 @@ export class ExtraListForm extends LitElement {
       const price = item.price.trim();
       if (price !== "" && !isProductPrice(price))
         validation[`item-${index}-price`] = t("extras.price_invalid");
-      if (item.portion !== undefined) {
-        if (!item.portion.trim())
+      if (this.#asksPortion(item)) {
+        if (!item.portion?.trim())
           validation[`item-${index}-portion`] = t("extras.portion_required");
         else if (
           item.portion !== this.value?.items.find((saved) => saved.id === item.id)?.portion
@@ -591,7 +608,9 @@ export class ExtraListForm extends LitElement {
           item.maxQuantity.trim() === "" ? null : wholeWithin(item.maxQuantity.trim(), 1)!,
         preselected: item.preselected,
         price: item.price.trim() || null,
-        ...(item.portion === undefined ? {} : { portion: item.portion.trim() }),
+        ...(item.portion === undefined || !this.#asksPortion(item)
+          ? {}
+          : { portion: item.portion.trim() }),
       })),
     };
   }
@@ -705,12 +724,13 @@ export class ExtraListForm extends LitElement {
           }}
         ></wt-switch>
       </td>
-      <td>
+      <td data-test=${`item-${index}-portion-cell`}>
         ${
-          this.#requiresPortion(item.productId) || item.portion !== undefined
+          this.#asksPortion(item)
             ? html`<wt-input
                 name=${`item-${index}-portion`}
                 label=${t("extras.portion")}
+                hide-label
                 required
                 hint=${this.#unitLabel(item.productId)}
                 .disabled=${this.busy}
@@ -721,7 +741,11 @@ export class ExtraListForm extends LitElement {
                   this.#editItem(item.id, { portion: event.detail.value }, "portion");
                 }}
               ></wt-input>`
-            : nothing
+            : this.#portionKind(item.productId) === "each"
+              ? html`<span class="fixed-portion" data-test=${`item-${index}-portion-fixed`}
+                  >1</span
+                >`
+              : nothing
         }
         ${
           this.#savedPortionOverPrecision(item)
@@ -730,6 +754,8 @@ export class ExtraListForm extends LitElement {
               </p>`
             : nothing
         }
+      </td>
+      <td>
         <wt-price-input
           name=${`item-${index}-price`}
           label=${t("extras.price")}
@@ -781,6 +807,7 @@ export class ExtraListForm extends LitElement {
             <col />
             <col />
             <col />
+            <col />
           </colgroup>
           <thead>
             <tr>
@@ -791,6 +818,13 @@ export class ExtraListForm extends LitElement {
               </th>
               <th scope="col">
                 <span class="preselected-heading">${t("extras.preselected")}</span>
+              </th>
+              <th scope="col">
+                ${t("extras.portion")}${
+                  this.items.some((item) => this.#asksPortion(item))
+                    ? html`<span class="required" aria-hidden="true">*</span>`
+                    : nothing
+                }
               </th>
               <th scope="col" colspan="2">${t("extras.price")}</th>
             </tr>
