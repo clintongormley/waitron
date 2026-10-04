@@ -1,5 +1,5 @@
 import { html } from "lit";
-import { currentContentLanguages } from "@waitron/ui";
+import { currentContentLanguages, type SummaryField } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import { MAX_MODIFIER_INTEGER, isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -45,6 +45,23 @@ export function namesLine(
   return locales.flatMap((locale) => {
     const value = text[locale]?.trim();
     return value ? [{ label: locale.toUpperCase(), value }] : [];
+  });
+}
+
+/** {@link namesLine} with every blank language shown as the name it falls back to, marked as a
+ * placeholder: the default language's text, then `staffName`, as {@link optionalTextFields} hints it.
+ * A language with nothing to fall back to is left out. */
+export function effectiveNamesLine(
+  locales: readonly string[],
+  text: Record<string, string>,
+  defaultLanguage: string,
+  staffName: string,
+): SummaryField[] {
+  return locales.flatMap((locale) => {
+    const own = text[locale]?.trim();
+    if (own) return [{ label: locale.toUpperCase(), value: own }];
+    const inherited = defaultLanguageHint(text, locale, defaultLanguage) || staffName.trim();
+    return inherited ? [{ label: locale.toUpperCase(), value: inherited, placeholder: true }] : [];
   });
 }
 

@@ -439,6 +439,130 @@ it("draws each language's code in bold with a colon, before its name, on the clo
   expect(Number(getComputedStyle(codes[1]!).fontWeight)).toBe(bold);
 });
 
+/** The closed line beside what each blank field hints: the two must name the same fallback. */
+function namesShown(el: OptionListForm) {
+  const input = (locale: string) => field(el, `customer-name-${locale}`);
+  return {
+    line: namesSection(el).summaryFields,
+    hints: el.languages.languages.map((locale) =>
+      input(locale).value ? "" : input(locale).placeholder,
+    ),
+  };
+}
+
+it("shows the staff name, in italic, for every language on the closed line while each customer-facing name is blank", async () => {
+  const { el, host } = await mount({ value: { ...cooked, customerName: null } });
+  const submitted = record(host);
+
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "EN", value: "Cooked", placeholder: true },
+      { label: "ES", value: "Cooked", placeholder: true },
+    ],
+    hints: ["Cooked", "Cooked"],
+  });
+  const section = namesSection(el);
+  await section.updateComplete;
+  expect(
+    [...section.shadowRoot!.querySelectorAll(".summary-placeholder")].map(
+      (part) => part.textContent,
+    ),
+  ).toEqual(["Cooked", "Cooked"]);
+
+  await type(el, "name", "Doneness");
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "EN", value: "Doneness", placeholder: true },
+      { label: "ES", value: "Doneness", placeholder: true },
+    ],
+    hints: ["Doneness", "Doneness"],
+  });
+  for (const locale of ["en", "es"]) expect(field(el, `customer-name-${locale}`).value).toBe("");
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]!.customerName).toBeNull();
+});
+
+it("falls every blank language back to the default language's name on the closed line, and back to the staff name when it is cleared", async () => {
+  const { el, host } = await mount({
+    value: { ...cooked, customerName: { en: "How would you like it?" } },
+  });
+  const submitted = record(host);
+
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "EN", value: "How would you like it?" },
+      { label: "ES", value: "How would you like it?", placeholder: true },
+    ],
+    hints: ["", "How would you like it?"],
+  });
+  await click(el, "save");
+  expect(submitted[0]!.customerName).toEqual({ en: "How would you like it?" });
+
+  await type(el, "customer-name-en", "");
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "EN", value: "Cooked", placeholder: true },
+      { label: "ES", value: "Cooked", placeholder: true },
+    ],
+    hints: ["Cooked", "Cooked"],
+  });
+});
+
+it("never falls a blank default language back to another language's name on the closed line", async () => {
+  const { el, host } = await mount({
+    value: { ...cooked, customerName: { es: "¿En qué punto?" } },
+  });
+  const submitted = record(host);
+
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "EN", value: "Cooked", placeholder: true },
+      { label: "ES", value: "¿En qué punto?" },
+    ],
+    hints: ["Cooked", ""],
+  });
+  await click(el, "save");
+  expect(submitted[0]!.customerName).toEqual({ es: "¿En qué punto?" });
+});
+
+it("follows a change of default or content languages on the closed line, in the languages' order", async () => {
+  const { el } = await mount({ value: { ...cooked, customerName: { es: "¿En qué punto?" } } });
+
+  el.languages = { defaultLanguage: "es", languages: ["es", "en"] };
+  await el.updateComplete;
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "ES", value: "¿En qué punto?" },
+      { label: "EN", value: "¿En qué punto?", placeholder: true },
+    ],
+    hints: ["", "¿En qué punto?"],
+  });
+
+  el.languages = { defaultLanguage: "en", languages: ["en", "ca"] };
+  await el.updateComplete;
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "EN", value: "Cooked", placeholder: true },
+      { label: "CA", value: "Cooked", placeholder: true },
+    ],
+    hints: ["Cooked", "Cooked"],
+  });
+});
+
+it("leaves a language out of the closed line while nothing at all names the list", async () => {
+  const { el } = await mount();
+
+  expect(namesSection(el).summaryFields).toEqual([]);
+  await type(el, "customer-name-es", "¿En qué punto?");
+  expect(namesSection(el).summaryFields).toEqual([{ label: "ES", value: "¿En qué punto?" }]);
+  await type(el, "name", "Cooked");
+  expect(namesSection(el).summaryFields).toEqual([
+    { label: "EN", value: "Cooked", placeholder: true },
+    { label: "ES", value: "¿En qué punto?" },
+  ]);
+});
+
 it("shows a kitchen-name refusal under the kitchen field without marking the names section", async () => {
   const { el } = await mount({ value: cooked, fieldErrors: { kitchenName: "Too long." } });
   await namesSection(el).updateComplete;
