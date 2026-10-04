@@ -716,7 +716,7 @@ A tree also answers `isExpanded(key)`, opens or closes a branch with `setExpande
 
 **A menu's Structure tab is the second tree** (`dashboard-menu-structure-table`,
 `apps/dashboard/src/widgets/menu-structure-table.ts`; W88, owner 2026-10-04). Its first row,
-"Menu: <name>", has no grip and cannot be closed, and its ⋮ holds the adds: New section here,
+"Menu: <name>", has no grip, only the grip's blank space, and cannot be closed, and its ⋮ holds the adds: New section here,
 Include a menu and Add products. Under it the menu's members follow in menu order, with no sort.
 A row's key is the member ids from the top level down to it, so a section shown in two places is
 two rows. The ⋮ of a section the menu owns holds the same three adds, then Edit and Delete; an add
@@ -725,8 +725,10 @@ name is drawn bold and underlined with `aria-current="true"`. A product's ⋮ ho
 <list>", naming the list that holds it. An included menu's row reads "Menu: <name>" with
 "Read-only here" under it, and its ⋮ holds a link to that menu's own Structure tab and "Remove from
 this menu". The rows inside an included menu open and close for browsing but have no grip, no ⋮ and
-a muted name; each keeps an unseen grip-sized space, so names stay in line. Only an owned row has a
-grip. ArrowUp and ArrowDown on a grip move the member one place within its own list and announce
+a muted name; each keeps an unseen grip-sized space. Only an owned row has a grip. Every row draws
+the Products tree's three slots before its name (below): the table's arrow, the grip or its space,
+and a folder or the product's photo, so names at one level start at one x and the Name heading sits
+over the menu's name. ArrowUp and ArrowDown on a grip move the member one place within its own list and announce
 it; a pointer drag starts from the grip only, and offers only places among the member's siblings,
 with Products' ghost and gap (the shared `apps/dashboard/src/widgets/tree-drag.ts`). When a window
 opened from a row's ⋮ closes, focus goes back to that ⋮ once nothing is being saved or read, or to

@@ -549,6 +549,111 @@ it("names the root apart from its members", async () => {
   ]);
 });
 
+/** Every kind of row the tree draws, four levels deep: the menu, a product with a photo and ones
+ * without, owned sections, an included menu, and a section and products inside it. */
+const DEEP_ROWS = [
+  "root",
+  "m-burger",
+  "m-drinks",
+  "m-drinks/m-lager",
+  "m-drinks/m-beer",
+  "m-drinks/m-beer/m-lager-2",
+  "m-drinks/m-lemonade",
+  "m-fav",
+  "included-wine",
+  "included-wine/wine-red",
+  "included-wine/wine-red/wine-rioja",
+  "included-wine/wine-lager",
+];
+
+async function mountDeep() {
+  const el = await mount({ nodes: [...lunchNodes(), wines()] });
+  for (const key of ["m-drinks", "m-drinks/m-beer", "included-wine", "included-wine/wine-red"]) {
+    table(el).setExpanded(key, true);
+    await settle(el);
+  }
+  expect(shown(el)).toEqual(DEEP_ROWS);
+  return el;
+}
+
+/** Where a row's name text, grip slot and folder or photo slot start, and where their middles are. */
+function pieces(el: MenuStructureTable, key: string) {
+  const tr = row(el, key)!;
+  const box = (rect: DOMRect | undefined) =>
+    rect && { left: rect.left, middle: rect.top + rect.height / 2 };
+  const text = document.createRange();
+  text.selectNodeContents(tr.querySelector('[data-test="name"], [data-test="root-name"]')!);
+  return {
+    level: Number(tr.getAttribute("aria-level")),
+    grip: box(
+      tr.querySelector('[part~="drag-grip"], [part~="grip-space"]')?.getBoundingClientRect(),
+    ),
+    media: box(
+      tr
+        .querySelector('[part~="folder-frame"], [part~="thumb-frame"], [part~="thumb-placeholder"]')
+        ?.getBoundingClientRect(),
+    ),
+    name: box(text.getBoundingClientRect())!,
+    stack: box(tr.querySelector('[part~="name-stack"]')!.getBoundingClientRect())!,
+  };
+}
+
+it.each([1280, 390])(
+  "starts every name one even step further in per level, the menu, sections, included menus and products alike (%ipx)",
+  async (width) => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(width, 844);
+      const el = await mountDeep();
+      const rows = DEEP_ROWS.map((key) => ({ key, ...pieces(el, key) }));
+      const step = rows.find(({ level }) => level === 2)!.name.left - rows[0]!.name.left;
+      expect(step).toBeGreaterThan(0);
+      for (const { key, level, name } of rows)
+        expect(name.left, key).toBeCloseTo(rows[0]!.name.left + (level - 1) * step, 0);
+      for (const current of rows) {
+        const twin = rows.find(
+          (other) => other.level === current.level && other.key !== current.key,
+        );
+        if (!twin) continue;
+        expect(current.grip?.left, current.key).toBeCloseTo(twin.grip!.left, 0);
+        expect(current.media?.left, current.key).toBeCloseTo(twin.media!.left, 0);
+      }
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);
+
+it("keeps a blank grip slot on the menu's row, so its name starts where the Products tree's All products does", async () => {
+  const el = await mountDeep();
+  const tr = row(el, "root")!;
+  expect(tr.querySelector('[part~="grip-space"]')).not.toBeNull();
+  const tokens = getComputedStyle(el);
+  const tap = parseFloat(tokens.getPropertyValue("--wt-tap-min"));
+  const gap = parseFloat(tokens.getPropertyValue("--wt-space-3"));
+  expect(tap).toBeGreaterThan(0);
+  const start = tr.querySelector(".tree-cell")!.getBoundingClientRect().left;
+  // The table's arrow, the grip, the folder, then the gap before the name.
+  expect(pieces(el, "root").name.left - start).toBeCloseTo(3 * tap + gap, 0);
+});
+
+// The name and any note under it (an included menu's "read only here") are centred as one.
+it("lines each row's grip, folder or photo and name up on one middle", async () => {
+  const el = await mountDeep();
+  for (const key of DEEP_ROWS) {
+    const { grip, media, stack } = pieces(el, key);
+    expect(Math.abs(grip!.middle - media!.middle), key).toBeLessThanOrEqual(1);
+    expect(Math.abs(stack.middle - media!.middle), key).toBeLessThanOrEqual(3);
+  }
+});
+
+it("puts the Name heading over the menu's name", async () => {
+  const el = await mountDeep();
+  const heading = inTable(el, 'thead [part~="tree-heading"]')!;
+  expect(heading.textContent!.trim()).toBe(t("members.name"));
+  expect(heading.getBoundingClientRect().left).toBeCloseTo(pieces(el, "root").name.left, 0);
+});
+
 function grip(el: MenuStructureTable, key: string): HTMLButtonElement {
   return inTable<HTMLButtonElement>(el, `[data-test="drag-${CSS.escape(key)}"]`)!;
 }
@@ -898,9 +1003,10 @@ it("maps a row to the sibling holding it by whole member ids, not by a shared pr
   expect(moves).toEqual([{ path: [], memberId: "m-burger", to: 2 }]);
 });
 
-it("has no grip on the menu's own row", async () => {
+it("has no grip on the menu's own row, only the grip's blank space", async () => {
   const el = await mount();
-  expect(row(el, "root")!.querySelector('[part~="drag-grip"], [part~="grip-space"]')).toBeNull();
+  expect(row(el, "root")!.querySelector('[part~="drag-grip"]')).toBeNull();
+  expect(row(el, "root")!.querySelector('[part~="grip-space"]')).not.toBeNull();
 });
 
 it("starts no drag while busy or from a button other than the main one", async () => {

@@ -29,6 +29,13 @@ import type { MenuStructureNode, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
 const ROOT_KEY = "root";
+
+const folderIcon = html`<span part="folder-frame"
+  ><wt-icon name="folder" size="lg"></wt-icon
+></span>`;
+const gripSpace = html`<span part="grip-space" aria-hidden="true"
+  ><wt-icon name="grip"></wt-icon
+></span>`;
 const TOP_LIST = "";
 
 type RootRow = { kind: "root"; key: typeof ROOT_KEY; parentKey: null; path: string[] };
@@ -81,7 +88,18 @@ export class MenuStructureTable extends LitElement {
       wt-data-table::part(folder-cell) {
         display: flex;
         align-items: center;
-        gap: var(--wt-space-2);
+      }
+      /* As wide as a product's photo, so a section's name starts where a product's does. */
+      wt-data-table::part(folder-frame) {
+        display: inline-flex;
+        flex: none;
+        justify-content: center;
+        width: var(--wt-tap-min);
+        margin-inline-end: var(--wt-space-3);
+      }
+      /* The table's arrow, the grip and the folder come before the menu's own name. */
+      wt-data-table::part(tree-heading) {
+        margin-inline-start: calc(3 * var(--wt-tap-min) + var(--wt-space-3));
       }
       /* Inline, not flex: the table lines a row up by its cells' first baselines, and a flex row
          would give the cell the thumbnail's bottom edge as its baseline instead of the name's. */
@@ -93,7 +111,7 @@ export class MenuStructureTable extends LitElement {
         align-items: center;
         justify-content: center;
         vertical-align: middle;
-        min-width: var(--wt-tap-min);
+        width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
         padding: 0;
         border: 0;
@@ -565,8 +583,7 @@ export class MenuStructureTable extends LitElement {
   #nameCell(row: Row) {
     if (row.kind === "root")
       return html`<span part="folder-cell"
-        ><wt-icon name="folder" size="lg"></wt-icon
-        ><span part="name-stack"
+        >${gripSpace}${folderIcon}<span part="name-stack"
           >${this.#nameSpan(row)}${
             this.nodes.length === 0
               ? html`<span part="note" data-test="empty">${t("menus.structure_empty")}</span>`
@@ -576,7 +593,7 @@ export class MenuStructureTable extends LitElement {
       >`;
     const { node, key, name } = row;
     const grip = row.readOnly
-      ? html`<span part="grip-space" aria-hidden="true"><wt-icon name="grip"></wt-icon></span>`
+      ? gripSpace
       : html`<button
           part="drag-grip"
           type="button"
@@ -598,9 +615,7 @@ export class MenuStructureTable extends LitElement {
       }</span
     >`;
     if (node.ref.kind === "section")
-      return html`<span part="folder-cell"
-        >${grip}<wt-icon name="folder" size="lg"></wt-icon>${stack}</span
-      >`;
+      return html`<span part="folder-cell">${grip}${folderIcon}${stack}</span>`;
     const image = this.#productById.get(node.ref.productId)?.image ?? null;
     return html`<span part="product-cell"
       >${grip}${
