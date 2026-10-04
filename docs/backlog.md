@@ -1224,7 +1224,7 @@ changes. The drag handle now sits on the first line of the product's name rather
 a tall row. Open: the Price heading reads "Price per portion" also over a row sold by the unit.
 Left OPEN from its review, for the owner to decide: (1) the Products list decided "Each" by whether
 the product's unit is in the venue's saved unit list, the Extras editor by the unit's id, so the two
-could disagree (for example before the unit list had loaded) — DONE by W75a: the Products list now
+could disagree (for example before the unit list had loaded) — DONE by W75a (#1205): the Products list now
 uses `EACH_UNIT_ID` too, so a measured product shows its "/ kg" label even before the unit list
 loads. Still open from it: the list's `units` property is no longer read, though the Catalogue
 screen still passes it down through `apps/dashboard/src/widgets/catalogue-browser.ts` and existing
