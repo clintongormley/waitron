@@ -784,12 +784,17 @@ export class ExtraListForm extends LitElement {
               <th scope="col">${t("extras.product")}</th>
               <th scope="col">
                 <span class="quantity-heading"
-                  >${t("extras.max_quantity")}<span class="required" data-required aria-hidden="true"
+                  >${t("extras.max_quantity")}<span
+                    class="required"
+                    data-required
+                    aria-hidden="true"
                     >*</span
                   ></span
                 >
               </th>
-              <th scope="col"><span class="preselected-heading">${t("extras.preselected")}</span></th>
+              <th scope="col">
+                <span class="preselected-heading">${t("extras.preselected")}</span>
+              </th>
               <th scope="col" colspan="2">${t("extras.price")}</th>
             </tr>
           </thead>
