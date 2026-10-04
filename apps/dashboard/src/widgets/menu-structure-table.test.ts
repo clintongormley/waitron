@@ -1,4 +1,4 @@
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, expect, it } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
@@ -547,4 +547,145 @@ it("names the root apart from its members", async () => {
     "Drinks",
     "Favourites",
   ]);
+});
+
+function grip(el: MenuStructureTable, key: string): HTMLButtonElement {
+  return inTable<HTMLButtonElement>(el, `[data-test="drag-${CSS.escape(key)}"]`)!;
+}
+
+/** The data-test of what has focus inside the table. */
+function focusedInTable(el: MenuStructureTable): string | undefined {
+  return (table(el).shadowRoot!.activeElement as HTMLElement | null)?.dataset.test;
+}
+
+async function press(el: MenuStructureTable, key: string, which: "ArrowUp" | "ArrowDown") {
+  grip(el, key).focus();
+  await userEvent.keyboard(`{${which}}`);
+  await settle(el);
+}
+
+function announced(el: MenuStructureTable): string {
+  return el.shadowRoot!.querySelector('[role="status"]')!.textContent!;
+}
+
+const reordered = (item: string, index: number, total: number) =>
+  t("action.reordered")
+    .replace("{item}", item)
+    .replace("{index}", String(index))
+    .replace("{total}", String(total));
+
+it("moves a member a place with the arrow keys on its grip, shown at once and announced, keeping focus", async () => {
+  const el = await mount();
+  const moves = listen(el, "wt-member-move");
+  await press(el, "m-burger", "ArrowDown");
+  expect(moves).toEqual([{ path: [], memberId: "m-burger", to: 1 }]);
+  expect(shown(el)).toEqual(["root", "m-drinks", "m-burger", "m-fav"]);
+  expect(focusedInTable(el)).toBe("drag-m-burger");
+  expect(announced(el)).toBe(reordered("Burger", 2, 3));
+
+  // The second press works from the order on screen, not the order the host last sent.
+  await userEvent.keyboard("{ArrowDown}");
+  await settle(el);
+  expect(moves.at(-1)).toEqual({ path: [], memberId: "m-burger", to: 2 });
+  expect(shown(el)).toEqual(["root", "m-drinks", "m-fav", "m-burger"]);
+  expect(focusedInTable(el)).toBe("drag-m-burger");
+
+  await userEvent.keyboard("{ArrowUp}");
+  await settle(el);
+  expect(moves.at(-1)).toEqual({ path: [], memberId: "m-burger", to: 1 });
+  expect(announced(el)).toBe(reordered("Burger", 2, 3));
+  expect(moves).toHaveLength(3);
+});
+
+it("sends nothing for ArrowUp on the first member or ArrowDown on the last", async () => {
+  const el = await mount();
+  const moves = listen(el, "wt-member-move");
+  await press(el, "m-burger", "ArrowUp");
+  await press(el, "m-fav", "ArrowDown");
+  expect(moves).toEqual([]);
+  expect(shown(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
+});
+
+it("moves a member within its own section, leaving the top level alone", async () => {
+  const el = await mount();
+  const moves = listen(el, "wt-member-move");
+  await toggle(el, "m-drinks");
+  await press(el, "m-drinks/m-lager", "ArrowDown");
+  expect(moves).toEqual([{ path: ["m-drinks"], memberId: "m-lager", to: 1 }]);
+  expect(shown(el)).toEqual([
+    "root",
+    "m-burger",
+    "m-drinks",
+    "m-drinks/m-beer",
+    "m-drinks/m-lager",
+    "m-drinks/m-lemonade",
+    "m-fav",
+  ]);
+  expect(focusedInTable(el)).toBe("drag-m-drinks/m-lager");
+  expect(announced(el)).toBe(reordered("Lager", 2, 3));
+});
+
+it("shows a move in a section everywhere that section is shown", async () => {
+  const el = await mount();
+  await toggle(el, "m-drinks");
+  await press(el, "m-drinks/m-lager", "ArrowDown");
+  await toggle(el, "m-fav");
+  await toggle(el, "m-fav/m-fav-drinks");
+  expect(shown(el).filter((key) => key.startsWith("m-fav/m-fav-drinks/"))).toEqual([
+    "m-fav/m-fav-drinks/m-beer",
+    "m-fav/m-fav-drinks/m-lager",
+    "m-fav/m-fav-drinks/m-lemonade",
+  ]);
+});
+
+it("carries an open section's members with it when it moves", async () => {
+  const el = await mount();
+  await toggle(el, "m-drinks");
+  await press(el, "m-drinks", "ArrowUp");
+  expect(shown(el)).toEqual([
+    "root",
+    "m-drinks",
+    "m-drinks/m-lager",
+    "m-drinks/m-beer",
+    "m-drinks/m-lemonade",
+    "m-burger",
+    "m-fav",
+  ]);
+  expect(focusedInTable(el)).toBe("drag-m-drinks");
+});
+
+it("draws what a new nodes value says, dropping the moves it showed before", async () => {
+  const el = await mount();
+  await press(el, "m-burger", "ArrowDown");
+  expect(shown(el)).toEqual(["root", "m-drinks", "m-burger", "m-fav"]);
+  el.nodes = lunchNodes();
+  await settle(el);
+  expect(shown(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
+});
+
+function keyOn(el: MenuStructureTable, key: string, which: string): KeyboardEvent {
+  const event = new KeyboardEvent("keydown", {
+    key: which,
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+  });
+  grip(el, key).dispatchEvent(event);
+  return event;
+}
+
+it("keeps an arrow on a grip from scrolling the page, even at the end of the list", async () => {
+  const el = await mount();
+  expect(keyOn(el, "m-burger", "ArrowUp").defaultPrevented).toBe(true);
+  expect(keyOn(el, "m-burger", "ArrowDown").defaultPrevented).toBe(true);
+  expect(keyOn(el, "m-burger", "Tab").defaultPrevented).toBe(false);
+});
+
+it("moves nothing by key while busy", async () => {
+  const el = await mount({ busy: true });
+  const moves = listen(el, "wt-member-move");
+  keyOn(el, "m-burger", "ArrowDown");
+  await settle(el);
+  expect(moves).toEqual([]);
+  expect(shown(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
 });

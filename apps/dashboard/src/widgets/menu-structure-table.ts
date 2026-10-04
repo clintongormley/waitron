@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { baseStyles, type DataTableColumn, type WtDataTable } from "@waitron/ui";
+import { baseStyles, reorder, type DataTableColumn, type WtDataTable } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-icon.js";
@@ -11,6 +11,7 @@ import type { MenuStructureNode, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
 const ROOT_KEY = "root";
+const TOP_LIST = "";
 
 type RootRow = { kind: "root"; key: typeof ROOT_KEY; parentKey: null; path: string[] };
 
@@ -24,6 +25,8 @@ interface MemberRow {
   name: string;
   /** The name of the list holding this member: the menu's, or its section's. */
   holder: string;
+  /** Which list holds this member: TOP_LIST, or its section's id. */
+  list: string;
   /** Inside an included menu, which is edited only from its own page. */
   readOnly: boolean;
 }
@@ -157,6 +160,17 @@ export class MenuStructureTable extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
+      .reorder-status {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
     `,
   ];
 
@@ -180,6 +194,12 @@ export class MenuStructureTable extends LitElement {
   #revealing = 0;
   /** Set once the current section was reported hidden, until the host names another. */
   #lostReported = false;
+  /** Each list's order after moves the host has not answered yet, keyed by list, so every place a
+   * section is shown agrees. */
+  #order = new Map<string, string[]>();
+  /** The rows are not keyed, so a move leaves focus on whichever grip now sits where it was. */
+  #refocus: string | null = null;
+  @state() private announcement = "";
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("products")) {
@@ -197,13 +217,19 @@ export class MenuStructureTable extends LitElement {
       };
       walk(this.nodes);
       this.#sectionNames = names;
+      this.#order = new Map();
     }
     if (changed.has("current")) this.#lostReported = false;
   }
 
   protected override firstUpdated(): void {
     // Collapse all closes branches without telling anyone, so the table's own updates are watched.
-    this.#table()!.addController({ hostUpdated: () => this.#checkCurrentShown() });
+    this.#table()!.addController({
+      hostUpdated: () => {
+        this.#checkCurrentShown();
+        this.#restoreFocus();
+      },
+    });
   }
 
   protected override updated(changed: PropertyValues<this>): void {
@@ -252,6 +278,49 @@ export class MenuStructureTable extends LitElement {
     this.#send("wt-structure-edit", { path: row.path.slice(0, -1) });
   };
 
+  #restoreFocus(): void {
+    const key = this.#refocus;
+    if (key === null) return;
+    this.#refocus = null;
+    this.#table()
+      ?.shadowRoot?.querySelector<HTMLElement>(`[data-test="drag-${CSS.escape(key)}"]`)
+      ?.focus();
+  }
+
+  /** The member ids of the list holding the row, in the order shown. */
+  #siblings(row: MemberRow): string[] {
+    return [...this.#rowByKey.values()].flatMap((other) =>
+      other.kind === "member" && other.parentKey === row.parentKey ? [other.node.memberId] : [],
+    );
+  }
+
+  #move(row: MemberRow, to: number): void {
+    const siblings = this.#siblings(row);
+    this.#order.set(row.list, reorder(siblings, siblings.indexOf(row.node.memberId), to));
+    this.#send("wt-member-move", {
+      path: row.path.slice(0, -1),
+      memberId: row.node.memberId,
+      to,
+    });
+    this.requestUpdate();
+  }
+
+  #gripKey(event: KeyboardEvent, row: MemberRow): void {
+    const delta = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+    if (delta === 0 || this.busy) return;
+    // Without this the arrow scrolls the page, carrying the row out from under the grip.
+    event.preventDefault();
+    const siblings = this.#siblings(row);
+    const to = siblings.indexOf(row.node.memberId) + delta;
+    if (to < 0 || to >= siblings.length) return;
+    this.#move(row, to);
+    this.#refocus = row.key;
+    this.announcement = t("action.reordered")
+      .replace("{item}", row.name)
+      .replace("{index}", String(to + 1))
+      .replace("{total}", String(siblings.length));
+  }
+
   #ownedSection(row: MemberRow): boolean {
     return row.node.ref.kind === "section" && !row.readOnly && !row.node.includedMenuId;
   }
@@ -292,21 +361,35 @@ export class MenuStructureTable extends LitElement {
       parentPath: string[],
       parentKey: string,
       holder: string,
+      list: string,
       readOnly: boolean,
     ) => {
-      for (const node of nodes) {
+      for (const node of this.#ordered(nodes, list)) {
         const path = [...parentPath, node.memberId];
         const key = path.join("/");
         const staffName = memberName(node.ref, this.#productNames, this.#sectionNames);
         const name = node.includedMenuId
           ? t("menus.menu_prefix").replace("{name}", staffName)
           : staffName;
-        rows.push({ kind: "member", key, parentKey, path, node, name, holder, readOnly });
-        walk(node.children ?? [], path, key, staffName, readOnly || Boolean(node.includedMenuId));
+        rows.push({ kind: "member", key, parentKey, path, node, name, holder, list, readOnly });
+        walk(
+          node.children ?? [],
+          path,
+          key,
+          staffName,
+          node.ref.kind === "section" ? node.ref.sectionId : list,
+          readOnly || Boolean(node.includedMenuId),
+        );
       }
     };
-    walk(this.nodes, [], ROOT_KEY, this.menuName, false);
+    walk(this.nodes, [], ROOT_KEY, this.menuName, TOP_LIST, false);
     return rows;
+  }
+
+  #ordered(nodes: MenuStructureNode[], list: string): MenuStructureNode[] {
+    const order = this.#order.get(list);
+    if (!order) return nodes;
+    return order.flatMap((memberId) => nodes.filter((node) => node.memberId === memberId));
   }
 
   #isCurrent(row: Row): boolean {
@@ -346,6 +429,7 @@ export class MenuStructureTable extends LitElement {
           data-test=${`drag-${key}`}
           aria-label=${`${t("members.reorder")}: ${name}`}
           ?disabled=${this.busy}
+          @keydown=${(event: KeyboardEvent) => this.#gripKey(event, row)}
         >
           <wt-icon name="grip"></wt-icon>
         </button>`;
@@ -472,25 +556,26 @@ export class MenuStructureTable extends LitElement {
     const rows = this.#rows();
     this.#rowByKey = new Map(rows.map((row) => [row.key, row]));
     return html`<wt-data-table
-      aria-label=${t("menus.tree_heading")}
-      noMatchesMessage=${tableNoMatches()}
-      expandAllLabel=${t("folders.expand_all")}
-      collapseAllLabel=${t("folders.collapse_all")}
-      initiallyCollapsed
-      .rowCollapsible=${(row: Row) => row.kind !== "root"}
-      .rowActivation=${(row: Row) =>
-        row.kind === "member" && row.node.ref.kind === "section" ? "toggle" : "none"}
-      .rowToggleLabel=${(row: Row, expanded: boolean) =>
-        t(expanded ? "menus.collapse" : "menus.expand").replace(
-          "{name}",
-          row.kind === "root" ? this.#rootName() : row.name,
-        )}
-      .rows=${rows}
-      .columns=${this.#columns()}
-      .rowKey=${(row: Row) => row.key}
-      .rowParent=${(row: Row) => row.parentKey}
-      @wt-expand-change=${this.#expandChange}
-    ></wt-data-table>`;
+        aria-label=${t("menus.tree_heading")}
+        noMatchesMessage=${tableNoMatches()}
+        expandAllLabel=${t("folders.expand_all")}
+        collapseAllLabel=${t("folders.collapse_all")}
+        initiallyCollapsed
+        .rowCollapsible=${(row: Row) => row.kind !== "root"}
+        .rowActivation=${(row: Row) =>
+          row.kind === "member" && row.node.ref.kind === "section" ? "toggle" : "none"}
+        .rowToggleLabel=${(row: Row, expanded: boolean) =>
+          t(expanded ? "menus.collapse" : "menus.expand").replace(
+            "{name}",
+            row.kind === "root" ? this.#rootName() : row.name,
+          )}
+        .rows=${rows}
+        .columns=${this.#columns()}
+        .rowKey=${(row: Row) => row.key}
+        .rowParent=${(row: Row) => row.parentKey}
+        @wt-expand-change=${this.#expandChange}
+      ></wt-data-table>
+      <div role="status" aria-live="polite" class="reorder-status">${this.announcement}</div>`;
   }
 }
 
