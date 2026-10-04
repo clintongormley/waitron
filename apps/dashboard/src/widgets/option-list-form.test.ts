@@ -332,7 +332,10 @@ it("folds the list's customer-facing names into a closed section that lists them
   for (const name of ["customer-name-en", "customer-name-es"])
     expect(field(el, name).closest("wt-disclosure"), name).toBe(section);
   expect(field(el, "name").closest("wt-disclosure")).toBeNull();
-  expect(section.summaryFields).toEqual([{ label: "ES", value: "¿En qué punto?" }]);
+  expect(section.summaryFields).toEqual([
+    { label: "EN", value: "Cooked", placeholder: true },
+    { label: "ES", value: "¿En qué punto?" },
+  ]);
   await type(el, "customer-name-en", "How would you like it?");
   expect(section.summaryFields).toEqual([
     { label: "EN", value: "How would you like it?" },
