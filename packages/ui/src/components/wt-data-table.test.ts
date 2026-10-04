@@ -6079,3 +6079,14 @@ test("rows that share a key are each drawn with their own content, through a reo
   await el.updateComplete;
   expect(rowText(el)).toEqual(["P0Edit", "R0Edit", "Q0Edit", "U0Edit", "W0Edit"]);
 });
+
+test("rows that share a key three at a time are each drawn, through a reorder", async () => {
+  const row = (id: string): Row => ({ id, name: id.toUpperCase(), count: 0 });
+  const el = await table({
+    rowKey: (r) => ("pqr".includes(r.id) ? "pqr" : "stu".includes(r.id) ? "stu" : r.id),
+    rows: ["v", "q", "p", "w", "u"].map(row),
+  });
+  el.rows = ["p", "w", "r", "q", "u", "s"].map(row);
+  await el.updateComplete;
+  expect(rowText(el)).toEqual(["P0Edit", "W0Edit", "R0Edit", "Q0Edit", "U0Edit", "S0Edit"]);
+});
