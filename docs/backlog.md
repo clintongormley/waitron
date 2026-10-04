@@ -2691,9 +2691,11 @@ separates development from production-enablement gates: prevention and evidence 
 proceed while adviser answers are pending; disputed remedies retain explicit gates. It includes
 an allocation-contract checkpoint, live AEAT probes, offline recovery, corrective workflows and
 a separately owned Cloud registry workstream. The owner approved the revised plan on 2026-10-04;
-it replaces the 2026-10-03 task list while W41s remains the backlog item. **Next action:** lane E
-starts eligible dependent queue items under the plan and its scope gates. No implementation or new
-live probe is claimed by this approval update. The following paragraph records the 2026-10-03 state;
+it replaces the 2026-10-03 task list while W41s remains the backlog item. **Next action:** review
+the proposed allocation and recovery contract in the revised design's §9, then record any narrow
+H2 scope exception before its dependent identity work. Independent queue items may proceed under
+the plan. No implementation or new live probe is claimed by this checkpoint. The following
+paragraph records the 2026-10-03 state;
 its old next action and allocation assumptions are superseded by this update.
 
 The owner asked (2026-10-03, on W21's review) how a chain AEAT disagrees with can happen, how to

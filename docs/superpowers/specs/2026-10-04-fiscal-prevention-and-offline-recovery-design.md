@@ -191,3 +191,182 @@ records the official wording checked on 2026-10-04. In particular, Q40(c)'s abse
 cancellation is documented in service specification §9.2.3, and developer FAQ §17 addresses
 corrective operations. Neither source validates our recovery allocation algorithm or resolves
 every legal scenario above. The source review and a live-service experiment are separate evidence.
+
+## 9. Proposed allocation and recovery contract (W41s-0; owner review pending)
+
+This appendix is a proposed implementation contract. It does not describe a shipped recovery
+feature or establish a legal remedy. An allocation names a *set* of fresh fiscal identities for
+one activation, not permission to resume a number found in an old database. The external register
+is authoritative for whether a name was reserved or consumed. A restored database is evidence of
+past use, never evidence that an absent name is free.
+
+### 9.1 Names, scope and bounds
+
+For one taxpayer NIF, `IdSistemaInformatico` and environment, use four disjoint ASCII spaces:
+
+| Source | Installation identity | Example | Authority |
+| --- | --- | --- | --- |
+| Initial short allocation | `S` and six decimal digits | `S000001` | The taxpayer's paper allocation custodian or registry |
+| Paper recovery allocation | `P` and six decimal digits | `P000042` | The taxpayer's current master paper register |
+| Cloud reservation | `C` and six decimal digits | `C000042` | The subscription registry |
+| Emergency recovery | `E` and 26 Crockford Base32 characters | `E3K4N2Q8R5T9V3W6X1Y0ZAHJPM` | Fresh operating-system cryptographic randomness and the administrator's incident record |
+
+The prefixes separate the sources even if their counters coincide. A six-digit short space has a
+finite capacity; exhaustion refuses another short allocation in that space. The custodian assigns
+short serials monotonically within the full `(NIF, IdSistemaInformatico, environment, prefix)`
+scope, across all of that taxpayer's venues and nodes. A second venue never starts its own `P000001`
+book. Environments keep separate registers; copying a preproduction allocation to production is
+refused. A taxpayer using another fiscal system must reserve its series outside this policy too;
+Waitron cannot infer that system's history from its own database.
+
+Each allocation lists every series to activate, with an explicit purpose. For example, a venue
+whose configured bases are `A`, `R` and `FF` receives `A-P000042` (standard), `R-P000042`
+(rectificative) and `FF-P000042` (standard). The list is frozen when the allocation is issued;
+changing the configured bases requires a new allocation. It must contain exactly the category
+set the venue needs, with no duplicate code. The activation binds all of them to the installation
+identity in one transaction. The emergency example uses the same suffix rule. A later short
+allocation retires the emergency series; it does not rename or renumber their invoices.
+
+The proposed local format is stricter than the current wire format: uppercase ASCII letters,
+digits and hyphen for the installation identity, and `[A-Za-z0-9/_.-]` for invoice numbers.
+The installation identity is at most 27 characters. A series base is at most 21 characters:
+`21 + 1 + 27 + 1 + 10 = 60` for `<base>-<installation>/<counter>`.
+The counter is 1 through 9,999,999,999; reaching the bound refuses further issuance from that
+series and requires a newly allocated identity. A candidate and a boundary-value record must pass
+the actual `@waitron/verifactu` validator before the allocation is issued; no pack is printed from
+an unvalidated candidate. The library checks `NumSerieFactura` for 1–60 characters and the stated
+character set (`verifactu/src/validate.ts:583–591`), while it treats `NumeroInstalacion` as text
+up to 100 characters (`verifactu/src/validate.ts:694`). The `IdSistemaInformatico` validator
+requires exactly two uppercase letters or digits (`verifactu/src/validate.ts:650–661`). These
+are library checks, not a claim that AEAT has accepted these example values.
+
+Generate an emergency suffix from 128 unbiased random bits with the operating system's
+cryptographic generator. Encode it as 26 Crockford Base32 characters using
+`0123456789ABCDEFGHJKMNPQRSTVWXYZ`; the first symbol must be `0`–`3`, so a decoded value outside
+the 128-bit range is refused. Do not use the wall clock, a device identifier or the restored counter as
+entropy. Distinct independent draws collide with probability about `n(n-1)/2^129` after `n`
+emergency allocations; they provide a probability, never a uniqueness guarantee. A manual entry
+shows the grouped identity and a checksum *outside* the fiscal identity, then verifies the
+checksum before removing display separators. A checksum catches transcription mistakes, not an
+allocation collision or a forged claim. The display checksum is four uppercase hexadecimal digits
+of CRC-16/CCITT-FALSE over the 27 ASCII identity bytes; it is checked separately and never filed
+as part of the identity. The administrator records the emergency name in the outside register
+immediately. If a known name matches any outside evidence, discard it and draw
+another. If the outside history is missing, the emergency route remains available after the
+administrator records that uncertainty and confirms old-machine isolation; it makes no claim of
+certain uniqueness.
+
+### 9.2 Authority and consumption
+
+Before printing a paper block, its custodian reserves its exact serials in the master register
+and records the block ID, taxpayer, software ID, environment, allowed series bases, recipient
+venue and pack version. A venue receives a signed snapshot of that block; the master remains
+outside every venue backup. A paper block can be transferred only through the custodian, who
+records the transfer before either venue can use it. The master has one named custodian and one
+writable original; duplicate paper copies carry no claim authority. A venue cannot mint new short
+paper serials from a restored pack. When connectivity exists, subscribers register their paper blocks with the
+cloud registry before it can allocate in the same `P` space; the registry never generates `P`
+names. Its own `C` space remains disjoint. Importing existing paper history is monotonic: the
+registry accepts consumed and reserved entries, refuses contradictory ownership, and never turns a
+missing entry in an old upload into a free name. A subscription transition preserves the paper
+custodian and its register; it does not reset either namespace.
+
+To claim a paper entry, an administrator marks it consumed on the current outside register,
+with the recovery event and operator, *before* local activation. A crossed-out paper entry is
+consumed even if setup fails or the box never trades. A cloud reservation is claimed through a
+single registry operation that returns the same receipt on an idempotent retry; the offline box
+may receive that receipt by manual entry from a phone. It checks the taxpayer, software,
+environment, exact names, source and signed reservation evidence before activation. Merely seeing
+a name in the cloud or in AEAT is not a reservation. A subscriber using pre-reserved paper during
+an outage still marks the outside paper copy consumed first and later reports it to the registry;
+a second administrator online can allocate only from `C`, never that paper name.
+
+Every printed pack bears its generation and block IDs and says that its snapshot may be stale.
+Reprinting an old pack cannot erase crossed-out entries or replace the master register. If the
+current register is lost, damaged or exhausted, stop short-name allocation; retrieve a verified
+new block or use the emergency procedure. Do not search a restored database for an apparently
+unused short serial. If all outside evidence is unavailable, an incident record says so and the
+emergency route uses a new random name with the uncertainty stated above.
+
+### 9.3 Interrupted activation and selling authority
+
+A recovery event gets an unpredictable event ID before claiming an allocation. Its outside
+record contains the backup/source identifier, restored node, allocation ID, complete identity
+set, operator, time, paper mark or registry receipt, and each activation attempt/result. The
+record is kept with the current paper register or registry, not solely in the restored database.
+The recovery pack contains the secret-bearing key separately from this incident record. Neither
+`FiscalAllocation` nor `RecoveryApproval` carries that key.
+
+On retry, read the outside event and the local activation result. Reuse the allocation only when
+both bind the *same* event, backup/source, node and exact identity set, and the local committed
+result can be shown. Return that committed result without activating again. If the local result
+was lost, the outside record is uncertain, or the attempt could have committed on another box,
+leave the allocation consumed and claim a different one. A restored event ID alone grants no
+replay. Before any new claim, check the current outside register so two attempts restoring the
+same old backup use different allocations. A failed validation before outside consumption writes
+nothing; once an allocation is marked consumed, a later local rollback does not free it.
+
+The administrator records that the former selling machine is offline and that no parallel
+recovery is running, then re-authenticates. This is an operational assertion, not a network
+fence. A declared restore always requires it. For an unexpected conflict, automatic switching is
+allowed only if the node has an authenticated, unexpired outside grant of sole selling authority,
+the previous seller has acknowledged fencing, and the node can consume an independently reserved
+allocation with a durable receipt. A role bit copied in the restored database is insufficient.
+Without an outside grant and fencing acknowledgement, including when offline, use the
+administrator path.
+Without those facts, stop new issuance on the colliding identity and ask an administrator to
+isolate the old machine and perform this procedure. Staff may inspect existing orders and
+incident evidence while it waits; neither a queued fiscal record nor an attempted new sale may
+quietly take a known-colliding number. An unreachable AEAT service alone is not proof of conflict.
+
+Keep the previous design's limit of at most one automatic switch in any rolling 24 hours, measured
+from durable switch events. A second conflict inside that window is recorded and requires the
+administrator path; the clock passing 24 hours does not retroactively activate a held switch.
+A backward clock does not clear the limit. If durable outside switch history is absent, the
+24-hour test is only a local warning, so automatic switching is refused and an administrator must
+resolve the uncertainty. The administrator path may consume a distinct allocation after
+isolation without waiting 24 hours. A new identity does not fence an old machine or fill missing
+invoice history.
+
+### 9.4 Shared values, refusals and migration boundary
+
+`FiscalAllocation` is a versioned, immutable value containing `allocationId`, `taxpayerNif`,
+`softwareId`, `environment`, `installationIdentity`, `series: [{code, purpose}]`, `source`
+(`initial-paper`, `paper`, `cloud` or `emergency`), `reservationEvidence` and `issuedAt`.
+`RecoveryApproval` contains `eventId`, `operatorId`, the backup/source and target node IDs,
+`oldMachineOffline`, `noParallelRecovery`, `confirmedAt` and a reference to the outside incident
+evidence. For an initial setup, the approval names the setup event and the absence of an old
+machine. Neither value embeds the break-the-glass key. A generic module restore seat carries
+these values as opaque module state into the fiscal hook; the host validates the envelope and the
+fiscal module validates the contents. The host never imports a Veri*Factu type to interpret them.
+
+Refuse with distinct typed causes: malformed candidate or checksum; taxpayer, software or
+environment mismatch; missing or untrusted reservation evidence; already consumed or retired
+allocation; stale pack without current outside authority; missing series purpose or code
+collision; backup/event mismatch; absent operator confirmation; parallel recovery or old machine
+still active; uncertain prior activation; and exhausted short space. Each refusal leaves issuance
+disabled and preserves the incident evidence. A network failure during a cloud claim is an
+unknown claim outcome to reconcile with the registry, never an invitation to spend the same name
+on paper. Error-code names are proposals for the implementing item, not existing API codes.
+
+This contract changes an existing representation, not just a parser. Today `SifRegistration` and
+`registro_sif.numero_instalacion` are numeric (`packages/fiscal-verifactu/src/registro-sif.ts`,
+`schema/sif.ts`), the reservation state and standby establishment parse a number
+(`provisioning.ts`), restore raises a clock-derived numeric floor (`restore.ts`), and
+`reserved-series.ts` derives and strips numeric suffixes. `backend.ts` converts that number to
+wire text and includes it in `registrationId`. `contadores_instalacion` is a local numeric
+allocator. The new contract needs a generated schema change, a text installation identity in
+all those consumers and in `registro_sif`'s uniqueness key, and an allocation ledger whose local
+copy is audit evidence rather than the outside authority. The issued fiscal records and hashes
+remain untouched. The restore hook (`packages/module/src/restore.ts`) currently returns series
+for the host's one transaction (`apps/server/src/restore.ts`); that seat needs the opaque
+allocation and approval. The staged request, cold restore, promotion and adoption paths must all
+carry or deliberately refuse a missing allocation before they can create a selling identity.
+There is no compatibility promise for preproduction venues under `CLAUDE.md` §3; a reset may be
+required, but the implementation must report the exact migration outcome rather than infer it.
+
+The next implementation task must trace the complete call chain again on its starting `main` and
+run the library validator over boundary examples, including the longest emergency series and
+10-digit counter. Changing `registerSif`, `restoreFiscal`, an alta builder or the hash path is
+outside RUNNER H2 until the owner records a narrow, item-specific exception. Approval of this
+appendix alone does not grant that exception or enable issuance after recovery.
