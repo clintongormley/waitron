@@ -38,7 +38,7 @@ describe("DashboardApi", () => {
     );
   });
   it("reads ordered folder summaries using encoded repeated query parameters", async () => {
-    const summaries = [{ id: "a&b", folders: 2, products: 3, routes: 1 }];
+    const summaries = [{ id: "a&b", folders: 2, products: 3, activeProducts: 3, routes: 1 }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(summaries));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.summariseFolders(["a&b", "c d"])).toEqual(summaries);
