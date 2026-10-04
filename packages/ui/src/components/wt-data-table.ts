@@ -706,7 +706,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     window.addEventListener("resize", this.#resizeFilters);
-    this.#hostResizeObserver.observe(this);
+    if (this.filterColumnWidths) this.#hostResizeObserver.observe(this);
     if (this.hasUpdated) this.#observeScroll();
   }
 
@@ -1094,6 +1094,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     else next[column.key] = value;
     this.filterSelections = next;
     this.filterColumnWidths = widths;
+    if (widths) this.#hostResizeObserver.observe(this);
     this.#persistView();
     this.dispatchEvent(
       new CustomEvent("wt-filter-change", {
@@ -1118,6 +1119,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       return;
     this.filterSelections = next;
     this.filterColumnWidths = widths;
+    if (widths) this.#hostResizeObserver.observe(this);
     this.#persistView();
     this.dispatchEvent(
       new CustomEvent("wt-filter-change", {
@@ -1139,6 +1141,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   #releaseColumnWidths(): void {
     this.filterColumnWidths = null;
     this.filterHostWidth = null;
+    this.#hostResizeObserver.disconnect();
   }
 
   #positionFilters(): void {
