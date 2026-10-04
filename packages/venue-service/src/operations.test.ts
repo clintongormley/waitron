@@ -78,11 +78,14 @@ import {
   replaceDepartmentHours,
   resolveNewOrderZone,
   resolveSalePolicy,
+  recordSaleReceiptHeader,
+  readSaleReceiptHeader,
   resolveZoneContext,
   retargetOrderServiceContext,
   setDeviceDefaultZone,
   setDepartmentSalePolicyField,
   setZoneSalePolicyOverride,
+  updateDepartment,
   clearDeviceDefaultZone,
   listDeviceDefaultZones,
   menuState,
@@ -1346,6 +1349,54 @@ async function seedSellingVenue() {
 }
 
 type SellingVenue = Awaited<ReturnType<typeof seedSellingVenue>>;
+
+it("keeps the receipt's department heading after the department is renamed and its switch changes", async () => {
+  const venue = await seedSellingVenue();
+  const saleId = await scoped(async (tx) => {
+    await updateDepartment(tx, venue.cfg, venue.barId, {
+      name: "Bar",
+      tradingName: "Bar La Buena",
+      defaultServiceMode: "table_tab",
+    });
+    const [series] = await tx
+      .insert(invoiceSeries)
+      .values({ nodeId: venue.nodeId, code: `H${randomUUID().slice(0, 6)}` })
+      .returning({ id: invoiceSeries.id });
+    const [sale] = await tx
+      .insert(sales)
+      .values({
+        source: "readiness_test",
+        seriesId: series!.id,
+        nodeId: venue.nodeId,
+        invoiceNumber: 1,
+        issuedAt: new Date().toISOString(),
+        issuedOffsetMinutes: 0,
+        total: 0,
+        vatBreakdown: [],
+        locale: "en-GB",
+        invoiceLocales: ["en-GB"],
+        fiscalBackend: "none",
+        fiscalState: "not_applicable",
+      })
+      .returning({ id: sales.id });
+    await recordSaleReceiptHeader(tx, venue.cfg, sale!.id, venue.barZone);
+    return sale!.id;
+  });
+
+  await scoped(async (tx) => {
+    await updateDepartment(tx, venue.cfg, venue.barId, {
+      name: "Renamed bar",
+      tradingName: "New sign",
+      defaultServiceMode: "table_tab",
+    });
+    await setDepartmentSalePolicyField(tx, venue.cfg, venue.barId, "printTradingName", false);
+  });
+  await expect(scoped((tx) => readSaleReceiptHeader(tx, saleId))).resolves.toEqual({
+    departmentId: venue.barId,
+    tradingName: "Bar La Buena",
+    printTradingName: true,
+  });
+});
 
 describe("retired and moved zones", () => {
   it("keeps an existing order and sale after their department is removed", async () => {

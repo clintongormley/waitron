@@ -33,6 +33,7 @@ import {
   departmentHours,
   deviceZoneDefaults,
   orderServiceContexts,
+  saleReceiptHeaders,
   workingLineContexts,
   zoneMenus,
   zoneSalePolicies,
@@ -596,6 +597,33 @@ export async function resolveSalePolicy(
     receiptPrintMode: row.zoneReceiptMode ?? row.departmentReceiptMode,
     printTradingName: row.printTradingName,
   };
+}
+
+export async function recordSaleReceiptHeader(
+  tx: Transaction,
+  cfg: VenueScope,
+  saleId: string,
+  zoneId: string | null,
+): Promise<void> {
+  const policy = zoneId === null ? null : await resolveSalePolicy(tx, cfg, zoneId);
+  await tx.insert(saleReceiptHeaders).values({
+    saleId,
+    departmentId: policy?.departmentId ?? null,
+    tradingName: policy?.tradingName ?? "",
+    printTradingName: policy?.printTradingName ?? false,
+  });
+}
+
+export async function readSaleReceiptHeader(tx: Transaction, saleId: string) {
+  const [row] = await tx
+    .select({
+      departmentId: saleReceiptHeaders.departmentId,
+      tradingName: saleReceiptHeaders.tradingName,
+      printTradingName: saleReceiptHeaders.printTradingName,
+    })
+    .from(saleReceiptHeaders)
+    .where(eq(saleReceiptHeaders.saleId, saleId));
+  return row ?? null;
 }
 
 type DepartmentPolicyField = Pick<
