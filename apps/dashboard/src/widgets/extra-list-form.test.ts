@@ -2342,7 +2342,7 @@ it("marks the Portion heading required only while a row asks for a portion", asy
   const { el } = await mount({ value: addons, products: [eachBacon, eachEgg] });
   const heading = () =>
     [...el.shadowRoot!.querySelectorAll("thead th")].find(
-      (th) => th.textContent!.trim().replace("*", "").trim() === t("extras.portion"),
+      (th) => th.textContent!.trim().replaceAll("*", "").trim() === t("extras.portion"),
     )!;
   expect(heading().querySelector(".required")).toBeNull();
 
