@@ -1221,6 +1221,43 @@ it("deletes a folder through its own row action", async () => {
     ),
   );
 });
+it("deleting an empty category from its menu acts on that category alone, and leaves no menu open on another", async () => {
+  const mains = [
+    folder("m1", "Mains", null),
+    folder("m2", "Mains", null),
+    folder("m3", "Mains", null),
+  ];
+  const el = await mountBrowser({
+    categories: mains,
+    products: [product("steak", "Steak", "m2"), product("stew", "Stew", "m3", false)],
+  });
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "m1", folders: 0, products: 0, routes: 0 },
+  ]);
+  const table = await tableOf(el);
+  const menus = () => [...table.shadowRoot!.querySelectorAll("wt-row-actions")];
+  const isOpen = (menu: Element) =>
+    menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open");
+  const menu = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+    '[data-test="actions-folder-m1"]',
+  )!;
+  menu.show();
+  menu.querySelector<HTMLElement>('[data-test="delete-folder-m1"]')!.click();
+  await vi.waitFor(() =>
+    expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+      { productIds: [], categoryIds: ["m1"] },
+      "move_up",
+    ),
+  );
+  expect(el.api.summariseFolders).toHaveBeenCalledExactlyOnceWith(["m1"]);
+  expect(dialog(el)).toBeNull();
+  expect(menus().filter(isOpen)).toEqual([]);
+  el.categories = mains.slice(1);
+  await tableOf(el);
+  expect(await rowKeys(el)).toEqual(["folder:m2", "folder:m3"]);
+  expect(menus().filter(isOpen)).toEqual([]);
+  expect(menu.isConnected).toBe(false);
+});
 it.each([1, 2])("confirms %i product deletion with inactive and sales wording", async (number) => {
   const el = await mountBrowser();
   await toggleCategory(el, "d");
