@@ -164,7 +164,7 @@ export type ZoneOfferedModifier =
           readonly hardwareUnit: "kg" | "g" | "mg" | null;
         };
         readonly vatClass: string;
-        readonly maxQuantity: number;
+        readonly maxQuantity: number | null;
         readonly preselected: boolean;
         readonly available: boolean;
       }[];

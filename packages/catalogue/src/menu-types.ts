@@ -207,7 +207,7 @@ export interface OfferedExtraItem {
   price: string;
   /** Always the extra PRODUCT's effective rate, never the dish's. */
   vatClass: VatClass;
-  maxQuantity: number;
+  maxQuantity: number | null;
   preselected: boolean;
   addAllergens: ProductAllergens | null;
   suitableFor: DietaryLabel[];

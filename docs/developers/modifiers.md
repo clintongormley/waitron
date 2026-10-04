@@ -71,7 +71,7 @@ An **extras list** bounds how many picks it takes — `minPicks` 0 makes it opti
 it required, `maxPicks` null leaves it uncapped; the request check refuses a `maxPicks` of 0, but
 the database CHECK allows it and configuration transfer copies rows without the parser, so a reader
 has to accept a stored 0 — and each item bounds its own product with
-`maxQuantity` (at least 1, where 1 means "one or none"). An item names a product and adds only the
+`maxQuantity` (at least 1, where 1 means "one or none", or null for no item limit). An item names a product and adds only the
 terms of the offer: it duplicates none of the product's names, VAT class, allergens, dietary labels
 or photo, which all come from the product. Each item stores the amount one pick adds in the
 product's unit; an Each item stores one. A product may appear at most once in
@@ -197,7 +197,7 @@ the basket resolved, and decides what is stored:
   and dietary marks; paper prints cross-references on `> ` lines (`readQueueSubItems`,
   `apps/server/src/working-order.ts`; `buildTicketItems`, `apps/server/src/kitchen-print.ts`).
 - A list's own counts are enforced per list: too few picks for `minPicks`, too many for `maxPicks`,
-  or more of one product than its `maxQuantity` is `extras.limit_exceeded` carrying the list id. A
+  or more of one product than a non-null `maxQuantity` is `extras.limit_exceeded` carrying the list id. A
   malformed pick is `extras.invalid` naming the field.
 - A pick on a dish that is not priced `each` is refused with `extras.unsupported_product`: a child
   priced dish × pick would bill a fraction of an extra on a weighed dish. An options answer on a

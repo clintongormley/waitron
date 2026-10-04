@@ -270,7 +270,11 @@ export class TillModifierPicker extends LitElement {
       return (
         total >= entry.minPicks &&
         (entry.maxPicks === null || total <= entry.maxPicks) &&
-        entry.items.every((item) => this.#countOf(entry.id, item.productId) <= item.maxQuantity)
+        entry.items.every(
+          (item) =>
+            item.maxQuantity === null ||
+            this.#countOf(entry.id, item.productId) <= item.maxQuantity,
+        )
       );
     });
   }
@@ -350,11 +354,19 @@ export class TillModifierPicker extends LitElement {
    */
   #step(list: OfferedExtrasList, item: OfferedExtraItem, delta: number): void {
     const current = this.#countOf(list.id, item.productId);
+    const listRoom =
+      list.maxPicks === null ? null : current + list.maxPicks - this.#listTotal(list);
     const room =
-      list.maxPicks === null
-        ? item.maxQuantity
-        : Math.min(item.maxQuantity, current + list.maxPicks - this.#listTotal(list));
-    this.#setCount(list.id, item.productId, Math.max(0, Math.min(room, current + delta)));
+      item.maxQuantity === null
+        ? listRoom
+        : listRoom === null
+          ? item.maxQuantity
+          : Math.min(item.maxQuantity, listRoom);
+    this.#setCount(
+      list.id,
+      item.productId,
+      Math.max(0, room === null ? current + delta : Math.min(room, current + delta)),
+    );
   }
 
   #confirm(e?: Event): void {
@@ -488,7 +500,7 @@ export class TillModifierPicker extends LitElement {
           ${total}${list.maxPicks === null ? "" : ` / ${list.maxPicks}`}
         </p>
         ${list.items.map((item) =>
-          item.maxQuantity > 1
+          item.maxQuantity === null || item.maxQuantity > 1
             ? this.#renderStepper(list, item, atListMax)
             : this.#renderPick(list, item, atListMax),
         )}
@@ -554,7 +566,7 @@ export class TillModifierPicker extends LitElement {
             size="sm"
             data-test="${test}-inc"
             aria-label=${`${t("modifier.increase")} ${item.name}`}
-            ?disabled=${count >= item.maxQuantity || atListMax}
+            ?disabled=${(item.maxQuantity !== null && count >= item.maxQuantity) || atListMax}
             @click=${() => this.#step(list, item, 1)}
           >
             +

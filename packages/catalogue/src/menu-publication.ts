@@ -212,6 +212,7 @@ function changeSubject({ change, section }: DiffEntry): string {
       return `${change.kind}:${change.productId}`;
     case "extra_unit_changed":
     case "extra_portion_changed":
+    case "extra_max_quantity_changed":
       return `${change.kind}:${change.listId}:${change.productId}`;
     case "section_added":
     case "section_removed":

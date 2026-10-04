@@ -1018,6 +1018,42 @@ describe("diffMenuDocuments", () => {
     ]);
   });
 
+  it("names an extra item's change to and from no quantity limit", async () => {
+    const f = await menusFixture(fx.db);
+    const limited = await build(f.dinner);
+    await fx.db
+      .update(extraListItems)
+      .set({ maxQuantity: null })
+      .where(
+        and(eq(extraListItems.listId, f.extrasList), eq(extraListItems.productId, f.extraLemon)),
+      );
+    const unlimited = await build(f.dinner);
+    expect(diffMenuDocuments(limited, unlimited)).toEqual([
+      {
+        kind: "extra_max_quantity_changed",
+        productId: f.extraLemon,
+        name: "Extra lemon",
+        listId: f.extrasList,
+        listName: "Extras",
+        from: 1,
+        to: null,
+        source: "shared_product",
+      },
+    ]);
+    expect(diffMenuDocuments(unlimited, limited)).toEqual([
+      {
+        kind: "extra_max_quantity_changed",
+        productId: f.extraLemon,
+        name: "Extra lemon",
+        listId: f.extrasList,
+        listName: "Extras",
+        from: null,
+        to: 1,
+        source: "shared_product",
+      },
+    ]);
+  });
+
   it("names a unit change on both lists when the extra is also sold as a dish", async () => {
     const f = await menusFixture(fx.db);
     const secondList = await app(async (tx) => {

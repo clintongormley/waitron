@@ -248,7 +248,10 @@ export function editLineExtras<
       });
     } else {
       const item = list.items[index]!;
-      list.items[index] = { ...item, maxQuantity: Math.max(item.maxQuantity, perDish) };
+      list.items[index] = {
+        ...item,
+        maxQuantity: item.maxQuantity === null ? null : Math.max(item.maxQuantity, perDish),
+      };
     }
     const keptOnList = [...kept.values()]
       .filter((entry) => entry.child.extraListId === list.id)

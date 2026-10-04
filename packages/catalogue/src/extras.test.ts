@@ -84,6 +84,19 @@ const breadList = () => ({
 });
 
 describe("extra list CRUD", () => {
+  it("stores and reads an item with no quantity limit", async () => {
+    const created = await run((tx) =>
+      createExtraList(
+        tx,
+        { name: "Bread", items: [{ productId: breads.focaccia, maxQuantity: null }] },
+        "en",
+      ),
+    );
+    expect(created.items[0]!.maxQuantity).toBeNull();
+    const read = await run((tx) => getExtraList(tx, created.id));
+    expect(read.items[0]!.maxQuantity).toBeNull();
+  });
+
   it("refuses a new portion finer than the extra product's unit", async () => {
     const productId = await run(async (tx) => {
       const unit = await createUnit(

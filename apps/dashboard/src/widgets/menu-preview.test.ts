@@ -325,6 +325,32 @@ it("names an extra's list and old and new portions with their units in both lang
   ]);
 });
 
+it("names an extra's change to no quantity limit in both languages", async () => {
+  const el = await mount({
+    preview: preview([
+      {
+        kind: "extra_max_quantity_changed",
+        productId: "p-ham",
+        name: "Jamón",
+        listId: "l-extras",
+        listName: "Extras",
+        from: 2,
+        to: null,
+        source: "shared_product",
+      },
+    ]),
+  });
+  expect(items(el, "changes")).toEqual([
+    "Extras: Jamón maximum quantity changed from 2 to no limit — shared product",
+  ]);
+  setLocale("es-ES");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(items(el, "changes")).toEqual([
+    "Extras: la cantidad máxima de Jamón ha cambiado de 2 a sin límite — producto compartido",
+  ]);
+});
+
 /** A dish's VAT change, a variant's own (named in the variants too), and an extra's. */
 const VAT_CHANGES: MenuChange[] = [
   {

@@ -150,7 +150,7 @@ export class ExtraListForm extends LitElement {
         display: inline-block;
         max-width: var(--wt-stepper-field-width);
         position: relative;
-        inset-inline-end: var(--wt-space-6);
+        inset-inline-end: calc(var(--wt-space-6) + var(--wt-space-1));
       }
       /* The grip and the bin are each a tap-target-wide button that already centres its icon. */
       th:first-child,
@@ -274,7 +274,7 @@ export class ExtraListForm extends LitElement {
     this.items = (value?.items ?? []).map((item) => ({
       id: item.id,
       productId: item.productId,
-      maxQuantity: String(item.maxQuantity),
+      maxQuantity: item.maxQuantity === null ? "" : String(item.maxQuantity),
       preselected: item.preselected,
       price: item.price ?? "",
       ...(item.portion === undefined ? {} : { portion: item.portion }),
@@ -529,7 +529,7 @@ export class ExtraListForm extends LitElement {
 
     const offered = new Set<string>();
     this.items.forEach((item, index) => {
-      if (wholeWithin(item.maxQuantity.trim(), 1) === null)
+      if (item.maxQuantity.trim() !== "" && wholeWithin(item.maxQuantity.trim(), 1) === null)
         validation[`item-${index}-max-quantity`] = t("extras.quantity_invalid");
       const price = item.price.trim();
       if (price !== "" && !isProductPrice(price))
@@ -587,7 +587,8 @@ export class ExtraListForm extends LitElement {
       items: this.items.map((item) => ({
         id: item.id,
         productId: item.productId,
-        maxQuantity: wholeWithin(item.maxQuantity.trim(), 1)!,
+        maxQuantity:
+          item.maxQuantity.trim() === "" ? null : wholeWithin(item.maxQuantity.trim(), 1)!,
         preselected: item.preselected,
         price: item.price.trim() || null,
         ...(item.portion === undefined ? {} : { portion: item.portion.trim() }),
@@ -675,7 +676,8 @@ export class ExtraListForm extends LitElement {
           name=${`item-${index}-max-quantity`}
           label=${t("extras.max_quantity")}
           hide-label
-          required
+          placeholder="∞"
+          clearable
           .min=${1}
           .decreaseLabel=${decreaseLabel}
           .increaseLabel=${increaseLabel}
@@ -785,14 +787,7 @@ export class ExtraListForm extends LitElement {
               <th scope="col"><span class="visually-hidden">${t("extras.reorder")}</span></th>
               <th scope="col">${t("extras.product")}</th>
               <th scope="col">
-                <span class="quantity-heading"
-                  >${t("extras.max_quantity")}<span
-                    class="required"
-                    data-required
-                    aria-hidden="true"
-                    >*</span
-                  ></span
-                >
+                <span class="quantity-heading">${t("extras.max_quantity")}</span>
               </th>
               <th scope="col">
                 <span class="preselected-heading">${t("extras.preselected")}</span>

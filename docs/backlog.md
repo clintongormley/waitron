@@ -1449,16 +1449,15 @@ following column's position.
 **Each extras row's Preselected switch repeats its column heading beside it (A265, owner
 2026-10-03) — DONE (W49).** The row switch hides the repeated text and keeps its accessible name.
 
-**An extra's maximum quantity can be left blank for no limit (A266, owner 2026-10-03) — OPEN,
-queued in lane D as W54 (A263 landed as #1151).** While designing A263 the owner asked for the extras
-table's per-item Maximum quantity to work like Maximum choices: blank means no limit, and − goes
-2 → 1 → blank. Today it cannot be blank anywhere: the column is `not null`, defaults to 1 and has a
-CHECK of at least 1 (`max_quantity`, `packages/catalogue/src/schema/extras.ts`), the request
-contract fills an absent value with 1 (`packages/catalogue/src/extra-contract.ts`), and the server's
-modifier check and the till's picker read it as a number (`apps/server/src/modifier-selection.ts`,
-`apps/till/src/widgets/modifier-picker.ts`). So this is a migration on catalogue plus the contract,
-the server check, the till and the menu document, not only the form. It uses A263's
-clear-at-lowest setting on the stepper.
+**An extra's maximum quantity can be left blank for no limit (A266, owner 2026-10-03) — DONE
+(W54).** The editor sends null for a blank item maximum; an absent maximum still defaults to one.
+The server and till enforce the list's Maximum choices independently of the item's limit. The menu
+changes list names a change to or from no limit. Catalogue migration 0023 makes the column nullable.
+
+**Update the root null-exception rule after W54 — OPEN (owner rule-file maintenance).**
+`CLAUDE.md` §3 still names only `maxPicks` and `guestCount` as fields where explicit null is a value.
+An item's `maxQuantity` is now another; `packages/catalogue/src/extra-contract.test.ts` pins both
+its absent default and explicit null. Lane D RUNNER §7 bars this campaign from editing the rule file.
 
 **The option form opens with its names section expanded (A199, owner 2026-10-02) — DONE by A170
 (#1040):** the option window no longer folds its names at all, so they show on open on Add and Edit;

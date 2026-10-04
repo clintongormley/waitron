@@ -25,7 +25,7 @@ function offeredItem(
   productId: string,
   staff: string,
   price: string,
-  maxQuantity = 1,
+  maxQuantity: number | null = 1,
   preselected = false,
 ) {
   return {
@@ -382,6 +382,19 @@ describe("till-modifier-picker", () => {
     expect(incButton(picker, "list-extras", "p-cheese")!.disabled).toBe(true);
     // An uncapped list leaves every other item takeable.
     expect(pickBox(picker, "list-extras", "p-bacon")!.disabled).toBe(false);
+  });
+
+  it("lets an uncapped item increase past three while respecting the list maximum", async () => {
+    const offered = offeredItem("p-cheese", "Queso", "1.00", null);
+    const roomy: TillProduct = {
+      ...burger,
+      offeredModifiers: [{ ...extrasList, maxPicks: 5, items: [offered] }],
+    };
+    const { picker } = await openPicker(roomy, "Burger", new WorkingOrderStore());
+    for (let i = 0; i < 5; i += 1) incButton(picker, "list-extras", "p-cheese")!.click();
+    await picker.updateComplete;
+    expect(stepCount(picker, "list-extras", "p-cheese")).toBe("5");
+    expect(incButton(picker, "list-extras", "p-cheese")!.disabled).toBe(true);
   });
 
   it("starts a preselected item picked once", async () => {

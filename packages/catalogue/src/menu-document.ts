@@ -714,10 +714,9 @@ function extrasTerms(offer: FrozenOffer) {
     entry.kind === "extras"
       ? {
           ...entry,
-          items: entry.items.map(({ productId, price, maxQuantity, preselected }) => ({
+          items: entry.items.map(({ productId, price, preselected }) => ({
             productId,
             price,
-            maxQuantity,
             preselected,
           })),
         }
@@ -1006,6 +1005,17 @@ export function diffEntries(
   for (const [key, { listId, listName, item }] of next.extraItemsByList) {
     const was = prev.extraItemsByList.get(key)?.item;
     if (was === undefined) continue;
+    if (was.maxQuantity !== item.maxQuantity)
+      push({
+        kind: "extra_max_quantity_changed",
+        productId: item.productId,
+        name: item.name,
+        listId,
+        listName,
+        from: was.maxQuantity,
+        to: item.maxQuantity,
+        source: "shared_product",
+      });
     if (was.portion !== item.portion)
       push({
         kind: "extra_portion_changed",
