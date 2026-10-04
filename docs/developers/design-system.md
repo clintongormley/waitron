@@ -287,9 +287,9 @@ A screen that styles its own native control reads the same variable on the eleme
 (the Departments and zones screen's Default checkbox label does). A screen whose own layout
 makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
 beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print width ruler"
-button beside the ruler's answer, and the section member list's `.add` row does, for its Add button
-(`apps/dashboard/src/widgets/member-list-editor.ts`, in the section editor's modal;
-the Menus screen shows the same editor on a page, where nothing changes). Guards: the form-width
+button beside the ruler's answer, and the member list editor's `.add` row does, for its Add button
+(`apps/dashboard/src/widgets/member-list-editor.ts`; the only screen drawing it is a menu's Home
+page tab, on a page through `home-layout-editor.ts`, where nothing changes). Guards: the form-width
 cases in `packages/ui/src/components/wt-modal.test.ts` (`wt-input`, `wt-textarea`, `wt-combobox`,
 `wt-price-input`, `wt-number-stepper` and `wt-switch`, and the message at 1280px; wide content and
 the footer row at full width; each field at the body's width at 390px; each field at its container's width outside a modal); the calibration case in
@@ -515,7 +515,9 @@ slot empty. A widget that draws a table with an Add button for a screen passes t
 `apps/dashboard/src/widgets/staff-list.ts` forwards the slot
 (`<slot name="empty-action" slot="empty-action">`), while the Products screen has no Add button in its table: its tree always shows the All products
 row, whose menu holds the screen's adds (spec `docs/superpowers/specs/2026-10-02-products-category-tree-design.md`
-§3), so its box appears only when a search matches nothing, holding the no-matches sentence. When the first item made from the slotted button empties the slot,
+§3), so its box appears only when a search matches nothing, holding the no-matches sentence. A
+menu's Structure tab works the same way: its tree always shows the menu's own row, whose menu holds
+the adds (below, after tree mode). When the first item made from the slotted button empties the slot,
 the screen moves focus to its other Add button rather than leaving it on the page. When rows exist
 but the table's own search or filters hide them all, the same box holds `noMatchesMessage` and the
 slot is not drawn.
@@ -711,6 +713,28 @@ box is that narrow; a flat table is not watched.
 A tree also answers `isExpanded(key)`, opens or closes a branch with `setExpanded(key, expanded)`
 (no event), reports the order it would draw a set of siblings in with `sortedSiblings(rows)`, and
 `revealRow(key)` opens every closed branch above a row and scrolls the row into view.
+
+**A menu's Structure tab is the second tree** (`dashboard-menu-structure-table`,
+`apps/dashboard/src/widgets/menu-structure-table.ts`; W88, owner 2026-10-04). Its first row,
+"Menu: <name>", has no grip and cannot be closed, and its ⋮ holds the adds: New section here,
+Include a menu and Add products. Under it the menu's members follow in menu order, with no sort.
+A row's key is the member ids from the top level down to it, so a section shown in two places is
+two rows. The ⋮ of a section the menu owns holds the same three adds, then Edit and Delete; an add
+acts on that section from whichever place it was chosen, and makes that row the current one, whose
+name is drawn bold and underlined with `aria-current="true"`. A product's ⋮ holds "Remove from
+<list>", naming the list that holds it. An included menu's row reads "Menu: <name>" with
+"Read-only here" under it, and its ⋮ holds a link to that menu's own Structure tab and "Remove from
+this menu". The rows inside an included menu open and close for browsing but have no grip, no ⋮ and
+a muted name; each keeps an unseen grip-sized space, so names stay in line. Only an owned row has a
+grip. ArrowUp and ArrowDown on a grip move the member one place within its own list and announce
+it; a pointer drag starts from the grip only, and offers only places among the member's siblings,
+with Products' ghost and gap (the shared `apps/dashboard/src/widgets/tree-drag.ts`). When a window
+opened from a row's ⋮ closes, focus goes back to that ⋮ once nothing is being saved or read, or to
+the ⋮ of the nearest row above it still drawn; a removal hands it to the ⋮ of the row that held the
+member. Guards: `apps/dashboard/src/widgets/menu-structure-table.test.ts`,
+`menu-structure-table.a11y.test.ts` beside it, and the "the Structure tree" cases in
+`apps/dashboard/src/screens/menus-screen.test.ts`. No case drags with a touch pointer, and a drag
+does not scroll the page near its edge, as in Products.
 
 ### Remembered, searchable, filterable tables
 
@@ -2156,10 +2180,25 @@ localized `label` for the tab group.
 Venue settings fills its tabs with panels from several owners. The page draws the only `h1`;
 each panel leaves it out because its tab already names the panel through `aria-labelledby`.
 
+A page that opens one item of a list heads itself "<list> › <name>": the list's name is a link
+back to the list, drawn underlined in `--wt-color-primary-text`, inside a `nav` landmark with its
+own name, and the item's name is the page's `h1`, outside the landmark, so no other heading repeats
+it. The line wraps at phone width, and a one-word name longer than the screen breaks inside the
+`h1`. A state shown under the heading that is resolved somewhere else links there: a menu with
+unpublished changes reads "Unpublished changes" as a link to its own Preview tab, in the same
+colour, and as plain words on the Preview tab itself; a click with a modifier key is left to the
+browser. The menu editor (`apps/dashboard/src/screens/menus-screen.ts`, W88) is the one dashboard page
+that does this today. Guards: `apps/dashboard/src/screens/menus-screen.heading.test.ts` and
+`menus-screen.heading.a11y.test.ts` beside it.
+
 If a tab has an Add or Create action, put it in the `actions` slot for the selected tab. This
 places the action beside the tabs and outside the tab list's accessibility role. At phone width,
 the tabs and a group of actions scroll separately, so the action area stays on screen when the tabs
-scroll. Keep actions for other tabs out of sight until their tab is selected.
+scroll. Keep actions for other tabs out of sight until their tab is selected. A tab whose list is a
+tree puts its adds in row menus instead, as the Products tree does in its All products row: a menu's
+Structure tab puts them in the ⋮ of the menu's own row and of each section the menu owns, and
+nothing in the `actions` slot (the "the Structure tree" cases in
+`apps/dashboard/src/screens/menus-screen.test.ts`).
 
 Put each list in `wt-data-table`. Use `wt-row-actions` for its kebab menu — three dots, not a
 hamburger; it opens a small menu of actions for one row, not the app's whole navigation, so it

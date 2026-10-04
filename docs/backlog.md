@@ -884,7 +884,8 @@ Left open: the Payments screen's readers table gets no button, because "Add read
 each connected provider (none, one or several), so there is no single Add to put there, and the
 list is pre-filtered by status; and the menu prices table on a menu's Prices tab gets none either,
 because its rows come from "Add products" on the Structure tab, shown for whichever menu or
-section is open. Found while building it, and fixed in the same change: on the
+section is open (since W88, 2026-10-05, Add products is in the ⋮ of the menu's own row and of each
+section it owns). Found while building it, and fixed in the same change: on the
 Departments and zones screen, adding a department, hours or a zone's menu from the top Add button left
 keyboard focus on the page, because the screen tried to focus the button while it was still
 greyed out (saving); it now waits until the list has reloaded.
@@ -1746,7 +1747,10 @@ on the dropdown after an add, so a keyboard user can
 add the next product, and the new row is announced (the form's live region). The owner extended the
 same behavior to the menu screen's members editor (`member-list-editor.ts`): choosing a product or
 section adds it immediately and announces it; replacing an existing member still requires explicit
-confirmation. The remaining single-choice add pickers are covered by A201b below.
+confirmation. (Since W88, 2026-10-05, the Menus screen no longer draws that editor or its product
+picker: a menu's Structure tab adds products through Add products in a row's ⋮, and the editor is
+drawn only for a menu's Home page tiles.) The remaining single-choice add pickers are covered by
+A201b below.
 
 **Choosing one thing to add acts at selection (A201b, owner 2026-10-03) — DONE.** In the
 dashboard, choosing a content language or a menu to include saves it immediately and closes
@@ -2976,7 +2980,9 @@ link on its own line under the state, so the link stays in view beside a long na
 the state and then the link stack under the name. With a second movable column the wide list now
 offers Customise columns, which W79 had left off; the list keeps its column choices under a new key,
 so a choice saved while Status was its only movable column is not read. Left open by W87: the editor
-heading still reads "Unpublished changes · Live: version <n>", which W88 redesigns. Between 30rem
+heading still reads "Unpublished changes · Live: version <n>", which W88 redesigns (done in W88,
+2026-10-05: the heading reads "Menus › <menu>", and "Unpublished changes" is a link to the Preview
+tab). Between 30rem
 and 50rem a long menu name can still make the table wider than its box (measured in Chromium,
 2026-10-04: by 20 px in English and 29 px in Spanish, at a 600 px window with hyphenated, spaced and
 unbroken names and at 700 px with spaced and unbroken ones, where a hyphenated one did not
@@ -2997,6 +3003,11 @@ not measured on the product list itself. Its "Made at" column also does not set 
 false`, so, judging by the code (not run), a click beside a short station name opens the product
 editor, which the `activatesRow` rule in `docs/developers/design-system.md` forbids. Both predate
 this branch (5b725d672, ca89633f1) and are left for an item of their own.
+Fixed in W88 (2026-10-05, its commit "Menus list: choose the phone or wide layout before the table is
+first drawn"): W87's list was first drawn in its wide layout and switched to the phone layout a
+frame later, which made two `menus-screen.test.ts` cases fail now and then ("offers Customise
+columns only where Status and Changes are columns (390 px)" and "opens the Preview tab from Enter on
+the focused link"). The list now measures its width before its table is first drawn.
 
 **Add products picker selects all listed — DONE (W81, owner 2026-10-04).** The Structure tab's
 "Add several products" button now reads "Add products" ("Añadir productos"). The picker's list has
@@ -3006,6 +3017,71 @@ category and search filters list, shows checked, unchecked or mixed from those a
 chosen products a filter hides chosen; Add still adds every chosen product. It is greyed out while
 the picker is busy or nothing matches the filters, and not drawn when there are no products or the
 section already holds them all.
+
+**A menu's Structure tab is one tree — DONE (W88, owner 2026-10-04).** The Structure tab draws the
+menu as one full-width tree table, like the Products tree. Its first row, "Menu: <name>", holds
+New section here, Include a menu and Add products in its ⋮; each section the menu owns holds the
+same three adds, then Edit and Delete, and an add acts on that section from whichever place it was
+chosen. The outline, the right-hand list panel with its own heading, note and bottom "Add a product"
+picker, the path above that panel, and the three buttons beside the tabs are gone; Add products in a
+row's ⋮ replaces the bottom picker, and there is no single-product add in the tree. Members keep
+menu order, and a member moves within its own list by ArrowUp or ArrowDown on its grip, or by
+dragging the grip, with Products' ghost and gap. An included menu opens for browsing; nothing inside
+it has a grip or a ⋮, and its own row reads "Read-only here" with a link to that menu's own editor
+and "Remove from this menu". Opening a section, or choosing an add from its ⋮, makes it the current
+row (bold and underlined); a refusal about another list still names it. After a window closes,
+focus goes back to the ⋮ it was opened from. The editor's heading now reads "Menus › <menu>", with
+Menus an underlined link to the list, and "Unpublished changes" under it is a link to the Preview
+tab (plain words on the Preview tab itself). Products' drag code moved into
+`apps/dashboard/src/widgets/tree-drag.ts`, shared by both trees. The owner approved the existing
+test edits on 2026-10-04 (the list is in the PR). Not checked: a drag with a touch pointer or on a
+real touch screen; a drag does not scroll the page near its edge (nor does Products'); in Spanish at
+390 px the Type column scrolls partly under the pinned Actions column, which is the table's own
+sideways scroll; the heading's height with "Checking…" or "Could not be checked" was not measured
+against the other states.
+
+**The Menus Structure tree: a folder's name starts left of a product's at the same level — OPEN
+(found 2026-10-05 by W88's look).** The tree copies the Products tree's Name cell as it was before W84
+(#1199): a section's folder icon is narrower than a product's photo frame, so at one level a
+section's name starts about 21 px left of a product's (measured on W88's 1280 px screenshots), and
+the root row draws no grip slot. W84 gave every Products row the same three slots before its name
+and a `tree-heading` part on `wt-data-table`; W88 was branched before W84 landed. Give the Menus tree
+the same slots.
+
+**Unused editing code in the two widgets the Menus screen no longer edits with — OPEN (W88, owner
+default 2026-10-04: leave and record).** `dashboard-member-list-editor`
+(`apps/dashboard/src/widgets/member-list-editor.ts`) is now drawn only by the Home page tab's layout
+editor, which sets `openable` off, so its section Open, Edit and Delete actions and its included-menu
+link and removal are reached by its own tests alone. `dashboard-menu-structure-tree`
+(`apps/dashboard/src/widgets/menu-structure-tree.ts`) is drawn only by the Preview tab, `readonly`,
+so its `current` path and its edit buttons are reached by its own tests alone. Pruning either
+deletes assertions in `member-list-editor.test.ts` or `menu-structure-tree.test.ts`, so it needs
+the owner's word.
+
+**Two copies of the tree pointer drag — OPEN (W88).** W88 moved what Products and the Menus tree
+draw during a drag into `apps/dashboard/src/widgets/tree-drag.ts` (the ghost, the row and gap marks,
+the click blocked after a release), but each widget still has its own copy of the drag itself: the
+press, the 5 px start, the target under the pointer, Escape, the release and the clean-up
+(`#pointerDown` to `#gap` in `apps/dashboard/src/widgets/product-list.ts`, `#gripDown` to `#gap` in
+`apps/dashboard/src/widgets/menu-structure-table.ts`). A shared helper, told how to map a row to a
+target, would serve both.
+
+**The Menus Structure tree notices Collapse all only by watching its table redraw — OPEN (W88).**
+`wt-data-table` sends no event when Expand all or Collapse all opens or closes branches (only
+`wt-expand-change` for one branch a person toggles), so `menu-structure-table.ts` adds a Lit
+controller to the table and checks after every table update whether the current row is still
+shown. An event from the table for "these branches changed" would be cleaner; it means a change in
+`packages/ui`.
+
+**"Edit <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88).** The
+other items in the tree's row menus are greyed out while a change is out; the link to the included
+menu's own editor is a link, which has no greyed-out state, so it stays live.
+
+**A menu's Preview tab is wider than a phone for a one-word menu name — OPEN (found by W88).** At
+390 px, with a menu named as one word longer than the screen, the page scrolls sideways on the
+Preview tab: the page measured 658 px wide on 2026-10-05 (a throwaway test with the heading suite's
+fixtures), while the Structure and Prices tabs measured 390 px. The editor's heading holds the word;
+the overflow is inside `dashboard-menu-preview` (`apps/dashboard/src/widgets/menu-preview.ts`).
 
 **Filtered table headings stay put — DONE (W64, owner 2026-10-04).** The conditional funnel button
 used to increase a header's height and width when its filter became active. A filtered heading now
