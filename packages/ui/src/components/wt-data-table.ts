@@ -422,10 +422,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
         outline-offset: calc(-1 * var(--wt-focus-offset));
       }
 
-      .column-choice[data-drag-source] {
-        opacity: 0.5;
-      }
-
       .column-drag-preview {
         position: fixed;
         z-index: 1;
@@ -1813,7 +1809,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 data-column-row=${column.key}
                 ?data-fixed=${fixed}
                 ?data-unchoosable=${column.choosable === undefined}
-                ?data-drag-source=${this.columnDragPreview?.key === column.key}
                 ?data-drop-target=${this.columnDragPreview?.target === column.key}
               >
                 ${

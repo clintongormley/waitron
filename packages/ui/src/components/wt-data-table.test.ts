@@ -3278,9 +3278,11 @@ test("a dragged column follows the pointer and shows its drop destination", asyn
   await el.updateComplete;
   const preview = panel(el).querySelector<HTMLElement>(".column-drag-preview");
   expect(preview?.textContent?.trim()).toBe("Extra");
-  expect(preview?.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(preview?.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })).toBe(true);
   expect(destination.hasAttribute("data-drop-target")).toBe(true);
   const before = preview!.getBoundingClientRect();
+  expect(before.left + before.width / 2).toBeCloseTo(x, 0);
+  expect(before.top + before.height / 2).toBeCloseTo(y, 0);
   document.dispatchEvent(
     new PointerEvent("pointermove", { pointerId: 11, clientX: x + 12, clientY: y + 8 }),
   );
