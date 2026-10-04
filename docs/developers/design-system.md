@@ -809,11 +809,14 @@ so a screen can size and colour it; the Products list makes it small and muted. 
 heading over the tree's column is wrapped in `part="tree-heading"`, so a screen can line it up with
 what its rows draw there.
 
-The Products tree draws the same three tap-target slots before every name: the table's arrow (or
-its blank space), a drag grip (blank on All products and on a category being added), and a folder
-icon centred in its slot or the product's photo, then `--wt-space-3` and the name. So names start
-one indent step apart per level whether the row is a category or a product, a variant's name starts
-under its product's, and the Name heading sits over the All products name.
+On the All products row, each category row, a category being added and each product row, the
+Products tree draws three tap-target slots before the name: the table's arrow (or its blank space),
+a drag grip (blank on All products and on a category being added), and a folder icon centred in its
+slot — on a product row, the product's photo, or its empty placeholder frame when it has none — then
+`--wt-space-3` and the name. So on those rows names step in by the table's indent per level whether
+the row is a category or a product, and the Name heading sits over the All products name. A
+variant's row draws no grip and no photo slot; its name is indented to start under its product's
+name.
 
 Use `wt-modal` for an add or edit form. Its fields stop at `--wt-form-max-width` (see "Structure"
 above). Its width is `--wt-modal-max-width` (`64rem`) bounded by the

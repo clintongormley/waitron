@@ -97,8 +97,6 @@ export class ProductList extends LitElement {
       }
       /* Cell templates are rendered in wt-data-table's shadow root, so ::part is the one boundary
          crossing used for their presentation. */
-      /* Every row of the tree draws the same slots before its name — the table's arrow, a grip and
-         a folder icon or photo, one tap target each — so names start one indent step apart. */
       wt-data-table::part(folder-cell) {
         display: flex;
         align-items: center;
@@ -174,7 +172,7 @@ export class ProductList extends LitElement {
         user-select: none;
         cursor: var(--reorder-drag-cursor, grab);
       }
-      /* A new category cannot be dragged, but its icon lines up with its siblings'. */
+      /* All products and a category being added cannot be dragged, but keep the grip's space. */
       wt-data-table::part(grip-space) {
         flex: none;
         width: var(--wt-tap-min);

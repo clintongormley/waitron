@@ -20,6 +20,7 @@ beforeEach(() => {
   sessionStorage.clear();
   localStorage.removeItem("waitron.products.table:columns");
   localStorage.removeItem("waitron.products.table:expanded");
+  localStorage.removeItem("waitron.products.table:column-order");
 });
 
 async function tableRoot(el: ProductList): Promise<ShadowRoot> {
@@ -516,7 +517,7 @@ describe("product-list", () => {
     expect(cell.textContent).not.toContain("Punto");
   });
 
-  it("shows a visible placeholder instead of blank cells for unresolved category and modifier ids", async () => {
+  it("shows a visible placeholder for an unresolved modifier list id, and none for a category the list does not hold", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({
@@ -856,8 +857,7 @@ describe("product-list", () => {
   });
 
   // Its name and price differ from its product's, and its three names differ from one another, so a
-  // row reading the product's values or the wrong name fails. A variant is always in its product's
-  // category, which only the product's row shows.
+  // row reading the product's values or the wrong name fails.
   it("shows a variant's own name and effective price", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -2266,9 +2266,7 @@ describe("the Products tree's Name column", () => {
       name: "Solomillo",
       primaryCategoryId: "m",
       image: "loin.png",
-      variants: [
-        { id: "s250", name: "Solomillo 250g", active: true, available: true, unitPrice: "12.00" },
-      ],
+      variants: [{ ...bunVariant, id: "s250", name: "Solomillo 250g", unitPrice: "12.00" }],
     });
 
   async function mountDeep(props: Partial<ProductList> = {}) {
@@ -2383,7 +2381,7 @@ describe("the Products tree's Name column", () => {
     expect(root.querySelector('input[data-column="reporting-category"]')).toBeNull();
   });
 
-  it("ignores a saved column choice and order that name the old Main category column", async () => {
+  it("ignores the old Main category column's key in a saved column choice and order, and applies the rest", async () => {
     localStorage.setItem(
       "waitron.products.table:columns",
       JSON.stringify({ "reporting-category": true, modifiers: false }),
@@ -2392,7 +2390,6 @@ describe("the Products tree's Name column", () => {
       "waitron.products.table:column-order",
       JSON.stringify(["reporting-category", "price", "made-at"]),
     );
-    onTestFinished(() => localStorage.removeItem("waitron.products.table:column-order"));
     const { root } = await mountDeep();
     const headings = [...root.querySelectorAll("thead th")].map((th) =>
       th.textContent!.replace(/[▲▼]/g, "").trim(),
