@@ -1092,7 +1092,8 @@ the Waitron logo any more; the banner above the card still shows it beside the b
 "session expired" and "account suspended" notices are now bold `--wt-color-danger` text in a box
 with a 1px `--wt-color-danger` border, `--wt-radius-md` corners and `--wt-space-2`/`--wt-space-3`
 padding, first in the card above the heading. They are named in an explicit list, so another notice
-stays plain unless it is added: "your password has been reset" keeps the text colour and no border.
+stays plain unless it is added: the notice after a completed password reset ("Your password has
+been changed…") keeps the text colour and no border.
 With the owner's approval it removed the logo assertions of the card test and the logo colour test
 in `apps/dashboard/src/screens/login-screen.test.ts`. Checked in Chromium only.
 
