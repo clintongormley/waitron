@@ -244,6 +244,37 @@ describe("venue operations screen", () => {
     expect(createZone).toHaveBeenCalledWith({ name: "Garden", departmentId: "d2" });
   });
 
+  it("refuses a blank new zone name before sending a create request", async () => {
+    const createZone = vi.fn();
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      createZone,
+    } as unknown as VenueServiceApi);
+    await action(el, "new-zone");
+    await action(el, "save-editor");
+    expect(fieldError(el, "new-zone-name")).toBe("This field is required.");
+    expect(createZone).not.toHaveBeenCalled();
+  });
+
+  it("shows a duplicate new zone name beside the field and keeps the draft", async () => {
+    const createZone = vi.fn().mockRejectedValue({ code: "zone.name_taken" });
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      createZone,
+    } as unknown as VenueServiceApi);
+    await action(el, "new-zone");
+    await type(el, "new-zone-name", "Garden");
+    const department = field(el, "new-zone-department") as HTMLElement & { value: string };
+    department.value = "d2";
+    department.dispatchEvent(
+      new CustomEvent("wt-change", { bubbles: true, detail: { value: "d2" } }),
+    );
+    await action(el, "save-editor");
+    expect(createZone).toHaveBeenCalledWith({ name: "Garden", departmentId: "d2" });
+    expect(fieldError(el, "new-zone-name")).toBeTruthy();
+    expect((field(el, "new-zone-name") as HTMLElement & { value: string }).value).toBe("Garden");
+  });
+
   it("renames a zone from its policy-tree cell", async () => {
     const updateZone = vi.fn().mockResolvedValue(undefined);
     const el = await mount({

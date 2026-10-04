@@ -137,7 +137,6 @@ export class FloorScreen extends LitElement {
   @state() private submitting = false;
   @state() private zones: EditableZone[] = [];
   @state() private tables: EditableTable[] = [];
-  @state() private newZone = "";
   @state() private newTable = "";
   @state() private errorKey: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
@@ -227,28 +226,6 @@ export class FloorScreen extends LitElement {
   }
 
   // ── Zonas ────────────────────────────────────────────────────────────────────────────────────────
-
-  #onNewZone(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.newZone = event.detail.value;
-  }
-
-  async #createZone(): Promise<void> {
-    if (this.submitting) return;
-    this.#showError(null);
-    const name = this.newZone.trim();
-    if (name === "") return;
-    this.submitting = true;
-    try {
-      await this.api.createZone({ name });
-      this.newZone = "";
-      await this.#load();
-    } catch (error) {
-      this.#showError(codeOf(error));
-    } finally {
-      this.submitting = false;
-    }
-  }
 
   #editZone(id: string, patch: Partial<EditableZone>): void {
     this.zones = this.zones.map((z) => (z.id === id ? { ...z, ...patch } : z));
@@ -580,22 +557,6 @@ export class FloorScreen extends LitElement {
                   ${this.zones.map((z) => this.#renderZone(z))}
                 </ol>`
           }
-          <div class="new">
-            <wt-input
-              @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-add-zone]"))}
-              label=${t("floor.new_zone")}
-              data-new-zone
-              .value=${this.newZone}
-              @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewZone(e)}
-            ></wt-input>
-            <wt-button
-              variant="primary"
-              data-add-zone
-              ?disabled=${this.submitting}
-              @click=${() => void this.#createZone()}
-              >${t("floor.add_zone")}</wt-button
-            >
-          </div>
         </section>
 
         <section class="panel" data-test="tables-panel">

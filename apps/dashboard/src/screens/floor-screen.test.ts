@@ -107,24 +107,14 @@ describe("floor-screen", () => {
     expect(el.shadowRoot!.querySelectorAll("h1").length).toBe(1);
   });
 
-  it("creates a zone from the new-zone form (createZone with the name), then reloads", async () => {
+  it("places tables in existing zones without offering zone creation on Floor", async () => {
     const api = stubApi();
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
-    type(el, "[data-new-zone]", "Comedor");
-    q(el, "[data-add-zone]")!.click();
-    await flush(el);
-    expect(api.createZone).toHaveBeenCalledWith({ name: "Comedor" });
-    expect(api.listZones).toHaveBeenCalledTimes(2);
-  });
 
-  it("does not create an empty-name zone", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
-    await flush(el);
-    q(el, "[data-add-zone]")!.click();
-    await flush(el);
-    expect(api.createZone).not.toHaveBeenCalled();
+    expect(q(el, "[data-new-zone]")).toBeNull();
+    expect(q(el, "[data-add-zone]")).toBeNull();
+    expect(q(el, "[data-test=table-zone-t1]")).not.toBeNull();
   });
 
   it("saves an edited zone row (updateZone with the row's current name + order), then reloads", async () => {
@@ -264,17 +254,17 @@ describe("floor-screen", () => {
     expect(api.listTables).toHaveBeenCalledTimes(2);
   });
 
-  it("surfaces a rejected zone create as a localised role=alert (never the raw code)", async () => {
-    const api = stubApi({ createZone: vi.fn().mockRejectedValue({ code: "zone.name_taken" }) });
+  it("surfaces a rejected table create as a localised role=alert (never the raw code)", async () => {
+    const api = stubApi({ createTable: vi.fn().mockRejectedValue({ code: "table.label_taken" }) });
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
-    type(el, "[data-new-zone]", "Comedor");
-    q(el, "[data-add-zone]")!.click();
+    type(el, "[data-new-table]", "4");
+    q(el, "[data-add-table]")!.click();
     await flush(el);
-    expect(errorKey(el)).toBe("zone.name_taken");
+    expect(errorKey(el)).toBe("table.label_taken");
     const banner = q(el, "[role=alert]")?.textContent;
-    expect(banner).toContain(codeMessage("zone.name_taken", "es-ES"));
-    expect(banner).not.toContain("zone.name_taken");
+    expect(banner).toContain(codeMessage("table.label_taken", "es-ES"));
+    expect(banner).not.toContain("table.label_taken");
   });
 
   it("surfaces a rejected table zone-assign as a localised role=alert", async () => {
@@ -366,11 +356,11 @@ describe("floor-screen", () => {
   });
 
   it("falls back to server.internal when a rejected mutation carries no code", async () => {
-    const api = stubApi({ createZone: vi.fn().mockRejectedValue({}) });
+    const api = stubApi({ createTable: vi.fn().mockRejectedValue({}) });
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
-    type(el, "[data-new-zone]", "Whatever");
-    q(el, "[data-add-zone]")!.click();
+    type(el, "[data-new-table]", "Whatever");
+    q(el, "[data-add-table]")!.click();
     await flush(el);
     expect(errorKey(el)).toBe("server.internal");
   });
@@ -388,7 +378,6 @@ describe("floor-screen", () => {
     await flush(el);
     let leaked = false;
     host.addEventListener("wt-change", () => (leaked = true));
-    type(el, "[data-new-zone]", "X");
     type(el, "[data-test=zone-name-z1]", "Y");
     type(el, "[data-new-table]", "Z");
     type(el, "[data-test=table-label-t1]", "W");
@@ -689,12 +678,6 @@ describe("floor URL tabs", () => {
 });
 
 it.each([
-  {
-    method: "createZone",
-    field: "[data-new-zone]",
-    button: "[data-add-zone]",
-    result: { id: "z9" },
-  },
   {
     method: "updateZone",
     field: "[data-test=zone-name-z1]",

@@ -115,14 +115,14 @@ describe.each(["light", "dark"] as const)("floor-screen a11y (%s theme)", (theme
   it("renders accessibly with the error banner shown", async () => {
     const api = {
       ...stubApi(ZONES, TABLES),
-      createZone: vi.fn().mockRejectedValue({ code: "zone.name_taken" }),
+      createTable: vi.fn().mockRejectedValue({ code: "table.label_taken" }),
     } as unknown as DashboardApi;
     const { el, host } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api }, theme);
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-new-zone]")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "Comedor" }, bubbles: true, composed: true }),
+    el.shadowRoot!.querySelector<HTMLElement>("[data-new-table]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "4" }, bubbles: true, composed: true }),
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-add-zone]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-add-table]")!.click();
     await flush(el);
     await expectNoA11yViolations(host);
   });
