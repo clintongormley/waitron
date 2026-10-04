@@ -1292,7 +1292,6 @@ it.each([
       .shadowRoot!.querySelector(`tr[data-item="${BACON_ITEM}"]`)!
       .querySelectorAll("td");
     const handle = cells[0]!.querySelector<HTMLElement>("[data-test^=drag-]")!;
-    const preselected = cells[3]!.querySelector("wt-switch")!;
     const remove = cells[5]!.querySelector("wt-button")!;
     expect(cells[0]!.getBoundingClientRect().width).toBeLessThanOrEqual(
       handle.getBoundingClientRect().width + 2,
@@ -1300,18 +1299,96 @@ it.each([
     expect(cells[1]!.getBoundingClientRect().width).toBeGreaterThan(
       cells[0]!.getBoundingClientRect().width,
     );
-    expect(cells[3]!.getBoundingClientRect().width, "Preselected column").toBeLessThanOrEqual(
-      preselected.getBoundingClientRect().width + 8,
+    const preselectedHeading = el.shadowRoot!.querySelectorAll("thead th")[3]!;
+    expect(preselectedHeading.scrollWidth, "Preselected heading").toBeLessThanOrEqual(
+      preselectedHeading.clientWidth,
     );
-    expect(
-      getComputedStyle(preselected.shadowRoot!.querySelector('[part~="label"]')!).whiteSpace,
-      "switch label keeps its wrapping behavior",
-    ).toBe("normal");
     expect(cells[5]!.getBoundingClientRect().width, "remove column").toBeLessThanOrEqual(
       remove.getBoundingClientRect().width + 2,
     );
   } finally {
     setLocale("en");
+    await page.viewport(width, height);
+  }
+});
+
+it.each([
+  [1280, "en"],
+  [1280, "es"],
+  [390, "en"],
+  [390, "es"],
+] as const)(
+  "keeps an empty extras table's Preselected heading readable at %ipx in %s",
+  async (frame, locale) => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    await page.viewport(frame, 844);
+    setLocale(locale);
+    try {
+      const { el } = await mount({ value: { ...addons, items: [] } });
+      const heading = el.shadowRoot!.querySelectorAll("thead th")[3]!;
+      const range = document.createRange();
+      range.selectNodeContents(heading);
+      expect(range.getClientRects().length, `${frame}px in ${locale}`).toBeLessThanOrEqual(2);
+    } finally {
+      setLocale("en");
+      await page.viewport(width, height);
+    }
+  },
+);
+
+it.each([
+  [1280, "en"],
+  [1280, "es"],
+  [390, "en"],
+  [390, "es"],
+] as const)(
+  "keeps extras columns in place when a longer product is added at %ipx in %s",
+  async (frame, locale) => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    await page.viewport(frame, 844);
+    setLocale(locale);
+    try {
+      const longer = "Croquetas caseras con jamón y queso";
+      const { el } = await mount({
+        value: { ...addons, items: [addons.items[0]!] },
+        products: [products[0]!, product({ ...products[1]!, name: longer })],
+      });
+      const starts = () =>
+        [...el.shadowRoot!.querySelectorAll("thead th")]
+          .slice(2)
+          .map((heading) => heading.getBoundingClientRect().left);
+      const before = starts();
+      await addItem(el, longer);
+      const after = starts();
+      for (let index = 0; index < before.length; index++) {
+        expect(after[index], `column ${index + 3} at ${frame}px in ${locale}`).toBeCloseTo(
+          before[index]!,
+          0,
+        );
+      }
+    } finally {
+      setLocale("en");
+      await page.viewport(width, height);
+    }
+  },
+);
+
+it.each([1280, 390])("keeps a long product name inside its fixed column at %ipx", async (frame) => {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  await page.viewport(frame, 844);
+  try {
+    const { el } = await mount({
+      value: { ...addons, items: [addons.items[0]!] },
+      products: [product({ name: "Supercalifragilisticexpialidociouscroquetas" })],
+    });
+    const productCell = el.shadowRoot!.querySelector(
+      `tr[data-item="${BACON_ITEM}"] td:nth-child(2)`,
+    ) as HTMLElement;
+    expect(productCell.scrollWidth, `${frame}px`).toBeLessThanOrEqual(productCell.clientWidth);
+  } finally {
     await page.viewport(width, height);
   }
 });
@@ -1519,36 +1596,24 @@ it.each([1280, 390])("lines up the text baselines across a product row at %ipx",
     const name = textBaseline(row.querySelector('[data-test="item-0-product"]')!);
     const quantity = inputBaseline(row.querySelector("wt-number-stepper")!);
     const price = inputBaseline(row.querySelector("wt-price-input")!);
-    // A phone draws no Preselected text beside the switch (see the case below), so there is none to
-    // line up there.
-    const label = row.querySelector("wt-switch")!.shadowRoot!.querySelector("label")!;
-    const preselected = label.getClientRects().length ? textBaseline(label) : name;
-
     expect(window.innerWidth).toBe(frame);
     expect(Math.abs(quantity - name), "quantity").toBeLessThanOrEqual(1);
     expect(Math.abs(price - name), "price").toBeLessThanOrEqual(1);
-    expect(Math.abs(preselected - name), "preselected").toBeLessThanOrEqual(1);
   } finally {
     await page.viewport(width, height);
   }
 });
 
-it("drops each row's Preselected text on a phone, where the column heading names it", async () => {
+it("drops each row's Preselected text, where the column heading names it", async () => {
   const width = window.innerWidth,
     height = window.innerHeight;
   try {
-    for (const [frame, drawn] of [
-      [1280, 1],
-      [390, 0],
-    ] as const) {
+    for (const frame of [1280, 390] as const) {
       await page.viewport(frame, 844);
       expect(window.innerWidth).toBe(frame);
       const { el } = await mount({ value: addons });
       const toggle = field(el, "item-0-preselected");
-      expect(
-        toggle.shadowRoot!.querySelector("label")!.getClientRects(),
-        `at ${frame}px`,
-      ).toHaveLength(drawn);
+      expect(toggle.shadowRoot!.querySelector("label"), `at ${frame}px`).toBeNull();
       expect(toggle.shadowRoot!.querySelector("input")!.getAttribute("aria-label")).toBe(
         t("extras.preselected"),
       );
@@ -1558,6 +1623,25 @@ it("drops each row's Preselected text on a phone, where the column heading names
     await page.viewport(width, height);
   }
 });
+
+it.each([1280, 390])(
+  "names a Preselected switch without drawing its repeated label at %ipx",
+  async (frame) => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    await page.viewport(frame, 844);
+    try {
+      const { el } = await mount({ value: addons });
+      const toggle = field<HTMLElementTagNameMap["wt-switch"]>(el, "item-0-preselected");
+      expect(toggle.shadowRoot!.querySelector("label")).toBeNull();
+      expect(toggle.shadowRoot!.querySelector("input")!.getAttribute("aria-label")).toBe(
+        t("extras.preselected"),
+      );
+    } finally {
+      await page.viewport(width, height);
+    }
+  },
+);
 
 it("on a phone the price's unit moves under the amount and keeps its inset in the field box", async () => {
   const width = window.innerWidth,

@@ -1285,6 +1285,35 @@ it.each([
   },
 );
 
+it.each([
+  [1280, "en"],
+  [1280, "es"],
+  [390, "en"],
+  [390, "es"],
+] as const)(
+  "keeps an empty options table's Default heading readable at %ipx in %s",
+  async (frame, locale) => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    await page.viewport(frame, 844);
+    setLocale(locale);
+    try {
+      const { el } = await mount({ value: { ...cooked, labels: [] } });
+      const heading = el.shadowRoot!.querySelectorAll("thead th")[2]!;
+      const range = document.createRange();
+      range.selectNodeContents(heading);
+      expect(range.getClientRects().length, `${frame}px in ${locale}`).toBeLessThanOrEqual(2);
+      const text = range.getBoundingClientRect();
+      const visible = el.shadowRoot!.querySelector(".table-wrap")!.getBoundingClientRect();
+      expect(text.left, `${frame}px in ${locale}`).toBeGreaterThanOrEqual(visible.left);
+      expect(text.right, `${frame}px in ${locale}`).toBeLessThanOrEqual(visible.right);
+    } finally {
+      setLocale("en");
+      await page.viewport(width, height);
+    }
+  },
+);
+
 it("clears a refusal held for an option once that option is saved in its editor, and only that option's", async () => {
   const { el } = await mount({
     value: cooked,
