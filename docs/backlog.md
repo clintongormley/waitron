@@ -3119,6 +3119,19 @@ with `main`. Seen in the same check, also not traced: in the product editor's va
 Unit button sits against the Price heading with no gap. Needs the owner to say whether either
 wants an item.
 
+**Products: the Move dialog lists destination categories by full path in name order — DONE (W82,
+owner 2026-10-04).** The bulk Move dialog's Destination list showed categories in the order they are
+stored. It now sorts them by the full path it shows ("Dinner / Mains"), with `byLabel`
+(`apps/dashboard/src/widgets/category-form.ts`, the comparison the tables sort text with), so
+"Menu 2" comes before "Menu 10" and case is ignored. "All products (top level)" stays first, the
+moved categories and everything under them are still left out, and each entry keeps its category
+id. Pinned in `apps/dashboard/src/widgets/catalogue-browser.test.ts`. No existing test assertion
+changed. Left open: two sibling categories with the same name still show as two identical entries
+(W72, queued, is to refuse such names); and the list's search box reads "Search" in Spanish too,
+because this dialog sets no `searchPlaceholder` where other screens pass
+`t("categories.combobox_search")` — on `main` before W82 (the dialog's combobox dates from
+2026-10-01, `5ffa5c633`). Needs the owner to say whether the search text wants an item.
+
 **Products: a category's Made at shows where its dishes are made — DONE (W86, #1203, owner 2026-10-04).**
 In the Products tree each category row's Made at cell now shows the category's baseline route, in
 the product rows' words (a station's name, No preparation, No replacement, Nowhere), linked to the
