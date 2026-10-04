@@ -1009,7 +1009,8 @@ profile accepted a saved test password through `navigator.credentials.store`, bu
 it after a reload or restart under automation; that saved-password visual check remains unverified.
 
 **The dashboard's sign-in pages: a card, one blue button, every other way in under "or" (A191,
-owner 2026-10-02) — DONE (#1074).** (Google page and its "G" changed by A228, 2026-10-03, below.) The owner, on the passkey page: _"this page also looks a bit messy"_;
+owner 2026-10-02) — DONE (#1074).** (Google page and its "G" changed by A228, 2026-10-03, below;
+the card's logo removed by W103, 2026-10-04, below.) The owner, on the passkey page: _"this page also looks a bit messy"_;
 layout A of three mockups was approved ("i love it"), replacing C96's single bulleted list. Every
 step of `apps/dashboard/src/screens/login-screen.ts` now sits in a card drawn like the setup
 wizard's, with the Waitron logo first (decorative there: the banner above already names Waitron, so
@@ -1082,6 +1083,18 @@ Google page now has 0 primary buttons, not 1, and the Google icon among the othe
 drawing: the 44px tap height (Google's drawing is 40px; its text allows scaling), the full card
 width and `wt-button`'s corner radius. Checked in Chromium only (the vitest browser suites and
 screenshots); Firefox and Safari not looked at.
+
+**The login card drops its logo, and a session-expired notice is drawn as a warning (W103, owner
+2026-10-04) — DONE.** The owner, on a login screenshot: _"Remove the waitron logo from the login
+box, and make the 'your session has expired' more prominent eg in red."_ No step of
+`apps/dashboard/src/screens/login-screen.ts`, nor the account set-up and password-reset page, draws
+the Waitron logo any more; the banner above the card still shows it beside the business name. The
+"session expired" and "account suspended" notices are now bold `--wt-color-danger` text in a box
+with a 1px `--wt-color-danger` border, `--wt-radius-md` corners and `--wt-space-2`/`--wt-space-3`
+padding, first in the card above the heading. They are named in an explicit list, so another notice
+stays plain unless it is added: "your password has been reset" keeps the text colour and no border.
+With the owner's approval it removed the logo assertions of the card test and the logo colour test
+in `apps/dashboard/src/screens/login-screen.test.ts`. Checked in Chromium only.
 
 **A focused table search box turns its own border blue, with no second ring (A192, owner
 2026-10-02) — DONE (A192).** The owner, on two screenshots of the Modifiers screen's "Search extras
@@ -1357,7 +1370,8 @@ Roster and Planned vs actual.
 The owner chose to keep the banner's `<img>` and let the browser swap in a dark-theme file by the
 computer's dark-mode setting: the banner is now a `<picture>` whose dark source is
 `packages/ui/brand/waitron-lockup-dark.svg`, written by `build-icons.mjs`. The login card and setup
-wizard were already readable; they paint their inline logo with the tokens.
+wizard were already readable; they paint their inline logo with the tokens. _2026-10-04 (W103): the
+login card no longer draws a logo._
 
 **The dark logo's colours are copies of the dark theme's (A253, 2026-10-03, from A225) — OPEN.**
 `waitron-lockup-dark.svg` is shown through an `<img>`, which cannot read CSS variables, so it carries
