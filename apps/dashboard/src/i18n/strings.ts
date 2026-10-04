@@ -1383,8 +1383,7 @@ export const en = {
   "product.ordering_staff_only": "Staff only",
   "product.ordering_not_sold_separately": "Not sold separately",
   "product.ordering_public_hint": "Can be ordered on its own.",
-  "product.ordering_staff_only_hint":
-    "Only staff can order it on its own. Until guests can order for themselves, this works like Public.",
+  "product.ordering_staff_only_hint": "Only staff can order it on its own.",
   "product.ordering_not_sold_separately_hint": "Only as an extra on another dish.",
   "product.filter_ordering_all": "Any ordering",
   "ingredient.new": "New ingredient",
@@ -3528,8 +3527,7 @@ export const es: Record<StringKey, string> = {
   "product.ordering_staff_only": "Solo personal",
   "product.ordering_not_sold_separately": "No se vende por separado",
   "product.ordering_public_hint": "Se puede pedir por sí solo.",
-  "product.ordering_staff_only_hint":
-    "Solo el personal puede pedirlo por sí solo. Mientras los clientes no puedan pedir por su cuenta, funciona igual que Público.",
+  "product.ordering_staff_only_hint": "Solo el personal puede pedirlo por sí solo.",
   "product.ordering_not_sold_separately_hint": "Solo como extra de otro plato.",
   "product.filter_ordering_all": "Cualquier pedido por separado",
   "ingredient.new": "Nuevo ingrediente",

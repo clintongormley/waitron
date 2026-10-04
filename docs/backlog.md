@@ -1758,6 +1758,8 @@ row is named by its label (`aria-labelledby`) and the description is its `aria-d
 long description wraps inside the list rather than widening it. A refusal of `ordering` shows
 under the field as the other dropdowns' do, and the field is disabled while the product saves or
 another of the editor's windows is open, as the radio buttons were.
+**W65 — DONE (2026-10-04):** The Staff only choice now says only “Only staff can order it on its own.”
+The Spanish choice has the equivalent single sentence.
 **Raised while reviewing #1070, settled by A226 (below):** `expectNoA11yViolations` failed only on
 axe's `violations` list, so text set to exactly its background colour, which axe files under
 `incomplete`, passed every a11y test.
