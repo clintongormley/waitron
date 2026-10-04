@@ -18,8 +18,9 @@ offer: **Maximum quantity**, how many of it one dish may take (1 means "one or n
 **Preselected**, whether it starts chosen; and **Price per portion**, what one pick costs.
 Press − from 2 to 1 and then to an empty box to remove the item's limit. The ∞ placeholder marks
 that empty value. The list's **Maximum choices** still limits the total picks when you set one.
-For a weighed or fractional product, also enter the **Portion** that one pick adds, in the product's
-own unit. A product counted as Each adds one, so it needs no portion field. An entered price replaces
+For a product sold in any unit except Each, also enter the **Portion** that one pick adds, in the
+product's own unit, in its own column between **Preselected** and the price. A product counted as
+Each always adds one, so its row shows a fixed 1 there. An entered price replaces
 the product's price for that portion: 1.50 means 1.50 per pick. Leave the price blank and Waitron
 multiplies the portion by the product's unit price, then rounds once to a cent for each pick; the
 field shows that calculated price while it is blank. The product's unit is shown with the price
@@ -77,7 +78,7 @@ build a list without abandoning the product you are editing.
 Every menu offer carries the product's extras and options lists in the order you set here.
 An extra uses its list entry's price per portion when you set one. With the price blank, its
 portion multiplied by the product's unit price sets the price per pick, rounded once to a cent.
-For a weighed or fractional unit, enter the amount one pick adds to a dish. An Each extra adds one.
+For every unit except Each, enter the amount one pick adds to a dish. An Each extra adds one.
 Publish each menu to make these changes available on the till.
 
 ## See what uses a list

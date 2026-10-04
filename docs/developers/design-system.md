@@ -968,7 +968,9 @@ Only the form's own checks ever disable the action; an error that comes back fro
 does (owner rule, 2026-09-29).
 
 - mark every required field with `required`; `wt-input` renders the visible asterisk and forwards
-  the native constraint;
+  the native constraint. A field with `hide-label` draws no asterisk, so where one sits in a table
+  column with a visible heading, that heading carries the `*` while any row's field is required (the
+  Extras list's Portion column);
 - the primary action works until the first submission. If that submission is invalid, pass a
   plain-language sentence to each invalid field's `error` property, pass ONE localized sentence to
   `wt-form-actions`'s `error` property (it shows on its own line at the bottom of the form, above

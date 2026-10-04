@@ -1200,7 +1200,7 @@ test for each, as W71's list cases do; fix only if it fails.
 column of its own between Preselected and Price, there even when every item is sold by the unit,
 and its heading carries the required star while any row asks for a portion. A product sold by the
 unit is told apart by its unit's id, `EACH_UNIT_ID` (moved to the browser-safe
-`packages/catalogue/src/unit-types.ts`), not by its decimals: its cell shows a plain 1, the form
+`packages/catalogue/src/unit-validation.ts`), not by its decimals: its cell shows a plain 1, the form
 sends no portion for it, so the server stores one, and its inherited price is the unit price
 whatever portion an earlier unit left saved. Every other unit — kg, g, ml, a venue's own — shows an
 editable, required Portion as soon as the product is added, before any save, which ended the owner's
@@ -1503,7 +1503,8 @@ token-painting tests, changed with it.
 - At 390px the extras table's Price column runs past its scroll area's right edge until scrolled;
   #1151's review measured it on main before the change (452px against a 373px area) and smaller
   after it (388px). OPEN, unqueued; W49 changed the table's column sizing, but horizontal scrolling
-  remains for the Price column at phone width.
+  remains for the Price column at phone width. (2026-10-04: W75 added a Portion column and widened
+  the table; not re-measured.)
 
 **The extras list editor's columns stay in place as products are added (A264, owner 2026-10-03)
 — DONE (W49).** Fixed table sizing leaves spare width with Product, and long names wrap inside it.
@@ -2345,8 +2346,10 @@ zone, and a venue with none is refused `service_zone.default_missing`.
   departments-and-menus row in A9, and whoever does it also cleans up the demo scripts and tests
   that use `pricingUnit` to pick a product.
 - **`createProduct` and `updateProduct` duplicate the legacy-`pricingUnit` fallback**, and the
-  synthetic `EACH_UNIT` id is a literal in both `packages/catalogue/src/units.ts` and the till's
-  `product-name.ts` with nothing pinning them equal.
+  synthetic `EACH_UNIT` id is a literal in both `packages/catalogue/src/unit-validation.ts` and the
+  till's `product-name.ts` with nothing pinning them equal. Since W75 (2026-10-04) `EACH_UNIT_ID`
+  lives in that module, which the till already imports (`apps/till/src/state/working-order.ts`), so
+  the till could import it instead of keeping its own literal.
 - **Only kilograms, grams and milligrams can ever come from a scale** — a fixed list enforced by a
   database check, separate from the editable name. A unit you invent, and the volume units, are
   typed, never weighed. Intended, not an oversight.
