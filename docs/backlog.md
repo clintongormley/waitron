@@ -1645,9 +1645,11 @@ The [A203 design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md) an
 2026-10-03. The implementation follows those decisions.
 
 **A portion-only edit now names the extras list, product, and old and new amounts in the
-pre-publish changes list (W51) — DONE.** The two new core `price_quantity` columns still have no
-positive-value CHECK (`packages/db/src/schema/orders.ts`, `sales.ts`); a zero would be a divisor in
-the pricing and report paths. Test the refusal and add a constraint in a separate migration (W52).
+pre-publish changes list (W51) — DONE.** The core `working_order_lines.price_quantity` and
+`sale_lines.price_quantity` columns now require a positive count of thousandths (W52) — DONE.
+The core `0092` migration rebuilds both tables. A retained venue with child rows must be reset
+before installing it: the one-step upgrade test records the foreign-key refusal when dropping the
+old `working_order_lines` table. The migration's `0093` step restores its seven behavioural triggers.
 
 **A menu's hours per location, and a publish date for a new version (A204, owner 2026-10-02) —
 OPEN, not designed.** The owner: _"we should be able to specify what times of of which days each

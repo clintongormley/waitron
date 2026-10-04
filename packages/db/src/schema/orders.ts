@@ -236,6 +236,7 @@ export const workingOrderLines = table(
     ),
     index("working_order_lines_order_idx").on(t.workingOrderId),
     check("working_order_lines_quantity_ck", sql`${t.quantity} <> 0`),
+    check("working_order_lines_price_quantity_ck", sql`${t.priceQuantity} > 0`),
     check(
       "working_order_lines_vat_class_ck",
       sql`${t.vatClass} in ('general','reduced','super_reduced','zero')`,

@@ -187,6 +187,35 @@ describe("working_orders", () => {
     expect(found.map((r) => r.total)).toEqual([260, 260]);
   });
 
+  it("stores a positive price quantity and refuses zero or negative price quantities", async () => {
+    const orderId = await openOrder(db);
+    for (const [lineNo, priceQuantity] of [
+      [1, 0],
+      [2, -1],
+    ] as const) {
+      const error = await captureError(() =>
+        db.insert(workingOrderLines).values({
+          ...LINE,
+          lineNo,
+          workingOrderId: orderId,
+          priceQuantity,
+        }),
+      );
+      expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+      expect(engineErrorMessage(error)).toMatch(/working_order_lines_price_quantity_ck/);
+    }
+    await db.insert(workingOrderLines).values({
+      ...LINE,
+      workingOrderId: orderId,
+      priceQuantity: 1,
+    });
+    const [stored] = await db
+      .select({ priceQuantity: workingOrderLines.priceQuantity })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, orderId));
+    expect(stored.priceQuantity).toBe(1);
+  });
+
   it("settles an open order and stamps settled_at", async () => {
     const id = await openOrder(db);
     await db
