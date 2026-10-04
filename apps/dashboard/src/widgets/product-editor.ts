@@ -322,6 +322,42 @@ export class ProductEditor extends LitElement {
       td:nth-child(2) {
         max-width: var(--wt-cell-name-max-width);
       }
+      /* The row's button lies over the whole row; the handle and the row menu are lifted above it
+         so they keep their own clicks, and a dragged row above them, because the reorder
+         controller's own lift of 1 would tie with them. */
+      tbody tr {
+        position: relative;
+      }
+      tbody tr:not([data-dragging]):hover td,
+      tbody tr:not([data-dragging]):focus-within td {
+        background: var(--wt-color-bg);
+      }
+      .row-activate {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+        z-index: 0;
+      }
+      .row-activate:disabled {
+        cursor: default;
+      }
+      .row-activate:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+      td :is(.handle, wt-row-actions) {
+        position: relative;
+        z-index: 1;
+      }
+      tbody tr[data-dragging] {
+        z-index: 2;
+      }
     `,
   ];
   @property({ type: Boolean }) open = false;
@@ -1474,13 +1510,33 @@ export class ProductEditor extends LitElement {
     return kindLabel(this.modifierListName(ref), ref.kind);
   }
 
+  private editRelated(ref: ProductModifierRef): void {
+    if (this.suspended) return;
+    this.dispatchEvent(
+      new CustomEvent("wt-edit-related", {
+        detail: { kind: ref.kind, id: ref.id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   private renderModifierRow(ref: ProductModifierRef) {
     const key = modifierKey(ref);
     const name = this.modifierListName(ref);
     const kind = t(KIND_TITLE[ref.kind]);
     return html`<tr data-test="attached-modifier" data-modifier=${key}>
       <td>${this.#reorder.handle(key)}</td>
-      <td data-test="modifier-name">${name}</td>
+      <td data-test="modifier-name">
+        <button
+          type="button"
+          class="row-activate"
+          aria-label=${`${t("action.edit")}: ${name}${SUMMARY_SEPARATOR}${kind}`}
+          .disabled=${this.suspended}
+          @click=${() => this.editRelated(ref)}
+        ></button
+        >${name}
+      </td>
       <td data-test="modifier-kind">${kind}</td>
       <td>
         <wt-row-actions
@@ -1492,14 +1548,7 @@ export class ProductEditor extends LitElement {
             .disabled=${this.suspended}
             @click=${(event: Event) => {
               event.stopPropagation();
-              if (this.suspended) return;
-              this.dispatchEvent(
-                new CustomEvent("wt-edit-related", {
-                  detail: { kind: ref.kind, id: ref.id },
-                  bubbles: true,
-                  composed: true,
-                }),
-              );
+              this.editRelated(ref);
             }}
             >${t("action.edit")}</wt-button
           ><wt-button

@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { registerIcons, type ComboboxOption } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
@@ -1419,6 +1419,146 @@ it("asks the screen to create a list of either kind, and to edit an attached one
   ]);
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-modifier-extras:sauces"]')!.click();
   expect(edit.mock.calls[0]![0].detail).toEqual({ kind: "extras", id: "sauces" });
+});
+
+// --- An attached row opens its list's editor ---
+
+const twoAttached: ProductEditorDraft = {
+  ...product,
+  modifiers: [
+    { kind: "extras", id: "sauces" },
+    { kind: "options", id: "cooked" },
+  ],
+};
+
+async function mountTwoAttached() {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: twoAttached,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+    extraLists,
+    optionLists,
+  });
+  const edits: unknown[] = [];
+  el.addEventListener("wt-edit-related", (event) => edits.push((event as CustomEvent).detail));
+  return { el, edits };
+}
+
+const attachedRow = (el: ProductEditor, key: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(
+    `[data-test=attached-modifier][data-modifier="${key}"]`,
+  )!;
+
+describe.each([
+  ["extras:sauces", { kind: "extras", id: "sauces" }, "Sauces", "extras.title"],
+  ["options:cooked", { kind: "options", id: "cooked" }, "Cooked", "options.title"],
+] as const)("the attached row %s", (key, detail, name, kindTitle) => {
+  it("names its activator by the list's name and kind", async () => {
+    const { el } = await mountTwoAttached();
+    const activator = attachedRow(el, key).querySelector<HTMLButtonElement>(".row-activate")!;
+    expect(activator.getAttribute("aria-label")).toBe(
+      `${t("action.edit")}: ${name} · ${t(kindTitle)}`,
+    );
+  });
+
+  // `force` skips Playwright's check that the cell itself is topmost, so the browser's own hit test
+  // decides what a real press at the cell's middle reaches.
+  it.each(["modifier-name", "modifier-kind"])(
+    "asks for its list's editor once when %s is clicked, leaving the draft alone",
+    async (cell) => {
+      const { el, edits } = await mountTwoAttached();
+      await userEvent.click(
+        attachedRow(el, key).querySelector<HTMLElement>(`[data-test=${cell}]`)!,
+        {
+          force: true,
+        },
+      );
+      await el.updateComplete;
+      expect(edits).toEqual([detail]);
+      expect(el.currentValue).toEqual(twoAttached);
+    },
+  );
+
+  it.each(["{Enter}", " "])(
+    "asks for its list's editor once from the keyboard (%s)",
+    async (press) => {
+      const { el, edits } = await mountTwoAttached();
+      attachedRow(el, key).querySelector<HTMLElement>(".row-activate")!.focus();
+      await userEvent.keyboard(press);
+      await el.updateComplete;
+      expect(edits).toEqual([detail]);
+      expect(el.currentValue).toEqual(twoAttached);
+    },
+  );
+
+  it("asks for nothing when its drag handle, row menu or Remove is clicked", async () => {
+    const { el, edits } = await mountTwoAttached();
+    const row = attachedRow(el, key);
+    await userEvent.click(row.querySelector<HTMLElement>(`[data-test="drag-${key}"]`)!, {
+      force: true,
+    });
+    await el.updateComplete;
+    expect(edits).toEqual([]);
+    const menu = row.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-row-actions",
+    )!;
+    await userEvent.click(menu.shadowRoot!.querySelector<HTMLElement>("button")!, { force: true });
+    await menu.updateComplete;
+    expect(edits).toEqual([]);
+    expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    expect(el.currentValue).toEqual(twoAttached);
+    await userEvent.click(row.querySelector<HTMLElement>(`[data-test="remove-modifier-${key}"]`)!);
+    await el.updateComplete;
+    expect(edits).toEqual([]);
+    expect(el.currentValue.modifiers).toEqual(
+      twoAttached.modifiers.filter((ref) => `${ref.kind}:${ref.id}` !== key),
+    );
+  });
+
+  it("asks once from its row menu's Edit", async () => {
+    const { el, edits } = await mountTwoAttached();
+    const row = attachedRow(el, key);
+    const menu = row.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-row-actions",
+    )!;
+    await userEvent.click(menu.shadowRoot!.querySelector<HTMLElement>("button")!);
+    await menu.updateComplete;
+    await userEvent.click(row.querySelector<HTMLElement>(`[data-test="edit-modifier-${key}"]`)!);
+    await el.updateComplete;
+    expect(edits).toEqual([detail]);
+  });
+
+  it("asks for nothing while the editor is suspended", async () => {
+    const { el, edits } = await mountTwoAttached();
+    el.childOpen = true;
+    await el.updateComplete;
+    const row = attachedRow(el, key);
+    const activator = row.querySelector<HTMLButtonElement>(".row-activate")!;
+    expect(activator.disabled).toBe(true);
+    await userEvent.click(row.querySelector<HTMLElement>("[data-test=modifier-kind]")!, {
+      force: true,
+    });
+    activator.focus();
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    expect(edits).toEqual([]);
+  });
+});
+
+it("still reorders attached rows from the drag handle's keyboard, asking for no editor", async () => {
+  const { el, edits } = await mountTwoAttached();
+  attachedRow(el, "options:cooked")
+    .querySelector<HTMLElement>('[data-test="drag-options:cooked"]')!
+    .focus();
+  await userEvent.keyboard("{ArrowUp}");
+  await el.updateComplete;
+  expect(el.currentValue.modifiers).toEqual([
+    { kind: "options", id: "cooked" },
+    { kind: "extras", id: "sauces" },
+  ]);
+  expect(edits).toEqual([]);
 });
 
 const addModifier = (el: ProductEditor) =>
