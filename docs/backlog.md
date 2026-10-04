@@ -1301,8 +1301,9 @@ language reads the text typed into the field. The Product editor's choice of whi
 too, as the server's check does. Still reading the plain code only: the unit form's names, the
 adjustment reasons' names (`packages/adjustments/src/dashboard/reasons-screen.ts`) and the image
 library's names (`packages/media/src/dashboard/image-library.ts`). Left from #1206's review, optional
-tidying: the Product editor keeps a private `text()` helper doing what `languageText` does, as two
-other screens do; folding them into the one helper was not part of W77a.
+tidying: the Product editor keeps a private `text()` helper doing what `languageText` does, and
+`product-list.ts` and `extra-list-form.ts` make the same `resolveContentText` call inline for unit
+names; folding them into the one helper was not part of W77a.
 
 **Clicking a product's row on the Products screen opens it (A205) — DONE in A208.**
 
