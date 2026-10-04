@@ -4409,13 +4409,15 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — SPEC FOR OWNER REVIEW.**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — SPEC APPROVED, PLANNED, QUEUED (lane C, W104–W106, 2026-10-05).**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
   list becomes a table, and it shows each device's battery. Retires the "tried to join" count and
   A5's pairing alert.
-  [Spec](superpowers/specs/2026-10-04-add-a-device-design.md).
+  [Spec](superpowers/specs/2026-10-04-add-a-device-design.md);
+  [plan](superpowers/plans/2026-10-04-add-a-device.md), three pull requests: W104 the window holds
+  and the Add a device dialog, W105 the device table and Edit dialog, W106 battery.
 - **A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN.**
   A268 discards a waiting device's request when the last Add dialog closes. An agent told
   `not_approved` stops and needs resetting on its own setup page (`packages/print-agent/src/agent.ts`,
