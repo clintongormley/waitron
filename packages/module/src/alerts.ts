@@ -29,7 +29,8 @@ export interface AlertReadContext {
 export interface AlertSource {
   readonly area: string;
   readonly permission: string;
-  /** A read that calls an external service runs after the route releases its write transaction. */
+  /** External reads receive the plain database as `tx`, with no rollback on failure. They must
+   * only read database rows; provider I/O runs after the route releases its write transaction. */
   readonly readOutsideTransaction?: boolean;
   read(ctx: AlertReadContext): Promise<readonly OngoingAlert[]>;
 }

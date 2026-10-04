@@ -10,7 +10,7 @@ import {
   readHandledAlerts,
   readOpenAlerts,
   readOutsideTransactionAlerts,
-  sortOpenAlerts,
+  sortAndDeduplicateOpenAlerts,
   type AlertRegistry,
 } from "./alerts.js";
 import "./errors.js";
@@ -58,7 +58,7 @@ export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): voi
       });
       const alerts =
         body.visible && includeExternal
-          ? sortOpenAlerts([
+          ? sortAndDeduplicateOpenAlerts([
               ...body.alerts,
               ...(await readOutsideTransactionAlerts(
                 deps.db,

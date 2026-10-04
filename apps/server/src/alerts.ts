@@ -87,7 +87,7 @@ function compareOpen(a: Alert, b: Alert): number {
   return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
 }
 
-export function sortOpenAlerts(alerts: Alert[]): Alert[] {
+export function sortAndDeduplicateOpenAlerts(alerts: Alert[]): Alert[] {
   const unavailable = new Set<string>();
   return alerts
     .filter((alert) => {
@@ -137,7 +137,7 @@ export async function readOpenAlerts(
       });
     }
   }
-  return sortOpenAlerts(alerts);
+  return sortAndDeduplicateOpenAlerts(alerts);
 }
 
 export async function readOutsideTransactionAlerts(
