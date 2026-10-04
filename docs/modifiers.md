@@ -50,8 +50,9 @@ list's or an option's customer-facing name left blank in another language uses t
 language's customer-facing name first, and the staff name only when no language has one; an extras
 list's own customer-facing name is not printed anywhere today. While a name is blank, its field
 shows, in place of the blank, the name it falls back to. The customer-facing names sit in a
-**Customer-facing names** section that stays folded until you open it; while it is folded, the names
-you have filled in show under its heading, and it opens by itself when one of them needs correcting.
+**Customer-facing names** section that stays folded until you open it. While it is folded, each
+language's name shows under its heading; for a language left blank, the name its field shows in its
+place appears in italic. The section opens by itself when one of the names needs correcting.
 An option carries the same three names, shown in its own window with nothing folded: **Name**, then
 **Kitchen name**, then the customer-facing names under their own heading. See
 [content languages](content-and-images.md).

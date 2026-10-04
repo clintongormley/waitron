@@ -18,7 +18,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import {
-  namesLine,
+  effectiveNamesLine,
   optionalTextFields,
   textField,
   translations,
@@ -650,7 +650,12 @@ export class ExtraListForm extends LitElement {
     return html`<wt-disclosure
       data-test="names-section"
       heading=${t("extras.customer_names")}
-      .summaryFields=${namesLine(locales, this.customerName)}
+      .summaryFields=${effectiveNamesLine(
+        locales,
+        this.customerName,
+        this.languages.defaultLanguage,
+        this.name,
+      )}
       .hasError=${hasError}
     >
       <div class="names">

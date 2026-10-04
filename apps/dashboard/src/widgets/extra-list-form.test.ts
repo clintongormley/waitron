@@ -887,7 +887,10 @@ it("folds the customer-facing names into a closed section that lists them", asyn
   for (const name of ["customer-name-en", "customer-name-es"])
     expect(field(el, name).closest("wt-disclosure"), name).toBe(section);
   expect(field(el, "name").closest("wt-disclosure")).toBeNull();
-  expect(section.summaryFields).toEqual([{ label: "ES", value: "Añádele algo" }]);
+  expect(section.summaryFields).toEqual([
+    { label: "EN", value: "Add-ons", placeholder: true },
+    { label: "ES", value: "Añádele algo" },
+  ]);
 
   await type(el, "customer-name-en", "Make it yours");
   expect(section.summaryFields).toEqual([
@@ -986,6 +989,129 @@ it("draws each language's code in bold with a colon, before its name, on the clo
   const bold = Number(getComputedStyle(codes[0]!).fontWeight);
   expect(bold).toBeGreaterThan(Number(getComputedStyle(line).fontWeight));
   expect(Number(getComputedStyle(codes[1]!).fontWeight)).toBe(bold);
+});
+
+/** The closed line beside what each blank field hints: the two must name the same fallback. */
+function namesShown(el: ExtraListForm) {
+  const input = (locale: string) =>
+    field<HTMLElementTagNameMap["wt-input"]>(el, `customer-name-${locale}`);
+  return {
+    line: disclosure(el).summaryFields,
+    hints: el.languages.languages.map((locale) =>
+      input(locale).value ? "" : input(locale).placeholder,
+    ),
+  };
+}
+
+it("shows the staff name, in italic, for every language on the closed line while each customer-facing name is blank", async () => {
+  const { el, host } = await mount({ value: { ...addons, customerName: null } });
+  const submitted = record(host);
+
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "EN", value: "Add-ons", placeholder: true },
+      { label: "ES", value: "Add-ons", placeholder: true },
+    ],
+    hints: ["Add-ons", "Add-ons"],
+  });
+  const section = disclosure(el);
+  await section.updateComplete;
+  const placeholders = [...section.shadowRoot!.querySelectorAll(".summary-placeholder")];
+  expect(placeholders.map((part) => part.textContent)).toEqual(["Add-ons", "Add-ons"]);
+  expect(placeholders.map((part) => getComputedStyle(part).fontStyle)).toEqual([
+    "italic",
+    "italic",
+  ]);
+
+  await type(el, "name", "Toppings");
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "EN", value: "Toppings", placeholder: true },
+      { label: "ES", value: "Toppings", placeholder: true },
+    ],
+    hints: ["Toppings", "Toppings"],
+  });
+  for (const locale of ["en", "es"])
+    expect(field<HTMLElementTagNameMap["wt-input"]>(el, `customer-name-${locale}`).value).toBe("");
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]!.customerName).toBeNull();
+});
+
+it("falls every blank language back to the default language's name on the closed line, and back to the staff name when it is cleared", async () => {
+  const { el, host } = await mount({ value: { ...addons, customerName: { en: "Make it yours" } } });
+  const submitted = record(host);
+
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "EN", value: "Make it yours" },
+      { label: "ES", value: "Make it yours", placeholder: true },
+    ],
+    hints: ["", "Make it yours"],
+  });
+  await click(el, "save");
+  expect(submitted[0]!.customerName).toEqual({ en: "Make it yours" });
+
+  await type(el, "customer-name-en", "");
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "EN", value: "Add-ons", placeholder: true },
+      { label: "ES", value: "Add-ons", placeholder: true },
+    ],
+    hints: ["Add-ons", "Add-ons"],
+  });
+});
+
+it("never falls a blank default language back to another language's name on the closed line", async () => {
+  const { el, host } = await mount({ value: { ...addons, customerName: { es: "Añádele algo" } } });
+  const submitted = record(host);
+
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "EN", value: "Add-ons", placeholder: true },
+      { label: "ES", value: "Añádele algo" },
+    ],
+    hints: ["Add-ons", ""],
+  });
+  await click(el, "save");
+  expect(submitted[0]!.customerName).toEqual({ es: "Añádele algo" });
+});
+
+it("follows a change of default or content languages on the closed line, in the languages' order", async () => {
+  const { el } = await mount({ value: { ...addons, customerName: { es: "Añádele algo" } } });
+
+  el.languages = { defaultLanguage: "es", languages: ["es", "en"] };
+  await el.updateComplete;
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "ES", value: "Añádele algo" },
+      { label: "EN", value: "Añádele algo", placeholder: true },
+    ],
+    hints: ["", "Añádele algo"],
+  });
+
+  el.languages = { defaultLanguage: "en", languages: ["en", "ca"] };
+  await el.updateComplete;
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "EN", value: "Add-ons", placeholder: true },
+      { label: "CA", value: "Add-ons", placeholder: true },
+    ],
+    hints: ["Add-ons", "Add-ons"],
+  });
+});
+
+it("leaves a language out of the closed line while nothing at all names the list", async () => {
+  const { el } = await mount();
+
+  expect(disclosure(el).summaryFields).toEqual([]);
+  await type(el, "customer-name-es", "Añádele algo");
+  expect(disclosure(el).summaryFields).toEqual([{ label: "ES", value: "Añádele algo" }]);
+  await type(el, "name", "Add-ons");
+  expect(disclosure(el).summaryFields).toEqual([
+    { label: "EN", value: "Add-ons", placeholder: true },
+    { label: "ES", value: "Añádele algo" },
+  ]);
 });
 
 it("shows a kitchen-name refusal under the kitchen field without marking the names section", async () => {
