@@ -3019,6 +3019,77 @@ it("keeps an attached row's name, type, grip and row menu on one line", async ()
   expect(textMiddle("[data-test=modifier-kind]")).toBeCloseTo(grip, 0);
 });
 
+/** The line boxes of the first text inside `cell`. A Range over the whole cell would also return
+ * the boxes of the elements in it, such as the row's button. */
+function textLines(cell: Element): DOMRectList {
+  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node && !node.textContent!.trim()) node = walker.nextNode();
+  const range = document.createRange();
+  range.selectNodeContents(node!);
+  return range.getClientRects();
+}
+
+it.each([
+  [1280, "light"],
+  [1280, "dark"],
+  [390, "light"],
+  [390, "dark"],
+] as const)(
+  "puts an attached row's grip, type and row menu on the first line of a wrapping list name at %ipx (%s)",
+  async (frame, theme) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(frame, 844);
+    try {
+      const { el } = await mountWidget<ProductEditor>(
+        "dashboard-product-editor",
+        {
+          open: true,
+          value: { ...product, modifiers: [{ kind: "extras", id: "sauces" }] },
+          locales: ["en"],
+          units: [unit],
+          taxChoices: reduced,
+          extraLists: [
+            {
+              ...extraLists[0]!,
+              name: "Sauces, dips and dressings made in the kitchen every morning from whatever the market had, served cold in small pots beside the plate, with more on request at no charge to the table",
+            },
+          ],
+          optionLists,
+        },
+        theme,
+      );
+      expect(el.parentElement!.getAttribute("data-theme")).toBe(theme);
+      const row = attachedRows(el)[0]!;
+      const name = row.querySelector("[data-test=modifier-name]")!;
+      const handle = row.querySelector<HTMLElement>(".handle")!;
+      const middle = (box: DOMRect) => (box.top + box.bottom) / 2;
+
+      expect(window.innerWidth).toBe(frame);
+      expect(row.getBoundingClientRect().height).toBeGreaterThan(
+        handle.getBoundingClientRect().height * 1.5,
+      );
+      expect(textLines(name).length, "the name wraps").toBeGreaterThan(1);
+      const line = textLines(name)[0]!;
+      // Middles, not whole boxes: line boxes differ by a pixel between machines' fonts.
+      const within = (box: DOMRect) => {
+        const at = middle(box);
+        return at >= line.top && at <= line.bottom;
+      };
+      const icon = (handle.querySelector("wt-icon") ?? handle).getBoundingClientRect();
+      const menu = row.querySelector("wt-row-actions")!.getBoundingClientRect();
+      const kind = textLines(row.querySelector("[data-test=modifier-kind]")!)[0]!;
+      expect(
+        { icon: within(icon), menu: within(menu), kind: within(kind) },
+        JSON.stringify({ line, icon, menu, kind }),
+      ).toEqual({ icon: true, menu: true, kind: true });
+    } finally {
+      await page.viewport(width, height);
+    }
+  },
+);
+
 // --- The parent's variants section ---
 
 function tableEvent(el: ProductEditor, name: string, detail: Record<string, unknown>) {

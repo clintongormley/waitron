@@ -1,5 +1,6 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WtInput, WtRowActions } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -973,3 +974,60 @@ describe("reordering", () => {
     expect(alertLine(el)!.textContent!.trim()).toBe(codeMessage("course.not_found"));
   });
 });
+
+/** The line boxes of the first text inside `cell`. A Range over the whole cell would also return
+ * the boxes of the elements in it, such as the name's button. */
+function textLines(cell: Element): DOMRectList {
+  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node && !node.textContent!.trim()) node = walker.nextNode();
+  const range = document.createRange();
+  range.selectNodeContents(node!);
+  return range.getClientRects();
+}
+
+it.each([
+  [1280, "light"],
+  [1280, "dark"],
+  [390, "light"],
+  [390, "dark"],
+] as const)(
+  "puts a course's grip and row menu on the first line of a wrapping name at %ipx (%s)",
+  async (frame, theme) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(frame, 844);
+    try {
+      // Long enough to wrap even across a desktop-wide table.
+      const long = "Small plates to share while the table decides, ".repeat(12).trim();
+      const api = stubApi({}, [{ ...COURSES[0]!, name: long }, ...COURSES.slice(1)]);
+      const { el } = await mountWidget<CourseList>("dashboard-course-list", { api }, theme);
+      await vi.waitFor(() => expect(rowIds(el).length).toBeGreaterThan(0));
+      expect(el.parentElement!.getAttribute("data-theme")).toBe(theme);
+      const row = q(el, 'tr[data-course="c1"]')!;
+      const name = nameButton(el, "c1")!;
+      const handle = q(el, '[data-test="drag-c1"]')!;
+      const middle = (box: DOMRect) => (box.top + box.bottom) / 2;
+
+      expect(window.innerWidth).toBe(frame);
+      expect(row.getBoundingClientRect().height).toBeGreaterThan(
+        handle.getBoundingClientRect().height * 1.5,
+      );
+      expect(textLines(name).length, "the name wraps").toBeGreaterThan(1);
+      const line = textLines(name)[0]!;
+      // Middles, not whole boxes: line boxes differ by a pixel between machines' fonts.
+      const within = (box: DOMRect) => {
+        const at = middle(box);
+        return at >= line.top && at <= line.bottom;
+      };
+      const icon = (handle.querySelector("wt-icon") ?? handle).getBoundingClientRect();
+      const menu = row.querySelector("wt-row-actions")!.getBoundingClientRect();
+      expect(
+        { icon: within(icon), menu: within(menu) },
+        JSON.stringify({ line, icon, menu }),
+      ).toEqual({ icon: true, menu: true });
+    } finally {
+      await page.viewport(width, height);
+    }
+  },
+);

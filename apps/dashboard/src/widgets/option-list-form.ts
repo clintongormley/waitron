@@ -88,11 +88,6 @@ export class OptionListForm extends LitElement {
       td:last-child {
         text-align: end;
       }
-      /* A row holds one line of text beside two tap-target-high controls, so all three are centred
-         on it; the shared table styles put a cell's content at its top. */
-      tbody td {
-        vertical-align: middle;
-      }
       tbody tr[data-label] {
         cursor: pointer;
       }

@@ -694,3 +694,75 @@ it("describes both tile choices in the Home mode and products alone in structura
   expect(prompt()).toBe(t("members.add_placeholder"));
   expect(memberBox(el).placeholder).toBe(t("members.add_placeholder"));
 });
+
+/** The line boxes of the first text inside `cell`. A Range over the whole cell would also return
+ * the boxes of the elements in it, such as the note under the name. */
+function textLines(cell: Element): DOMRectList {
+  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node && !node.textContent!.trim()) node = walker.nextNode();
+  const range = document.createRange();
+  range.selectNodeContents(node!);
+  return range.getClientRects();
+}
+
+it.each([
+  [1280, "light"],
+  [1280, "dark"],
+  [390, "light"],
+  [390, "dark"],
+] as const)(
+  "puts a member's grip, kind and row menu on the first line of a wrapping name with a note at %ipx (%s)",
+  async (frame, theme) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(frame, 844);
+    try {
+      const { el } = await mountWidget<MemberListEditor>(
+        "dashboard-member-list-editor",
+        {
+          members: members(),
+          products: [
+            {
+              id: "p-burger",
+              name: "Beef burger on a brioche bun with cheddar, pickles, lettuce, tomato and the house sauce, ".repeat(
+                4,
+              ),
+            },
+            ...products.slice(1),
+          ],
+          notes: new Map([["m-burger", "Not on this menu"]]),
+          label: "Members of Lunch specials",
+        },
+        theme,
+      );
+      expect(el.parentElement!.getAttribute("data-theme")).toBe(theme);
+      const row = q(el, 'tr[data-member="m-burger"]');
+      const name = row.querySelector('[data-test="name"]')!;
+      const handle = row.querySelector<HTMLElement>(".handle")!;
+      const middle = (box: DOMRect) => (box.top + box.bottom) / 2;
+
+      expect(window.innerWidth).toBe(frame);
+      expect(row.getBoundingClientRect().height).toBeGreaterThan(
+        handle.getBoundingClientRect().height * 1.5,
+      );
+      expect(textLines(name).length, "the name wraps").toBeGreaterThan(1);
+      expect(row.querySelector('[data-test="note"]')).not.toBeNull();
+      const line = textLines(name)[0]!;
+      // Middles, not whole boxes: line boxes differ by a pixel between machines' fonts.
+      const within = (box: DOMRect) => {
+        const at = middle(box);
+        return at >= line.top && at <= line.bottom;
+      };
+      const icon = (handle.querySelector("wt-icon") ?? handle).getBoundingClientRect();
+      const menu = row.querySelector("wt-row-actions")!.getBoundingClientRect();
+      const kind = textLines(row.querySelector('[data-test="kind"]')!)[0]!;
+      expect(
+        { icon: within(icon), menu: within(menu), kind: within(kind) },
+        JSON.stringify({ line, icon, menu, kind }),
+      ).toEqual({ icon: true, menu: true, kind: true });
+    } finally {
+      await page.viewport(width, height);
+    }
+  },
+);

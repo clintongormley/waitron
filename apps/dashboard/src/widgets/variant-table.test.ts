@@ -839,3 +839,85 @@ it.each(["light", "dark"] as const)(
     }
   },
 );
+
+/** The line boxes of the first text inside `cell`. A Range over the whole cell would also return
+ * the boxes of the elements in it, such as the row's button. */
+function textLines(cell: Element): DOMRectList {
+  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node && !node.textContent!.trim()) node = walker.nextNode();
+  const range = document.createRange();
+  range.selectNodeContents(node!);
+  return range.getClientRects();
+}
+
+it.each([
+  [1280, "light"],
+  [1280, "dark"],
+  [390, "light"],
+  [390, "dark"],
+] as const)(
+  "puts a row's grip, price, Available switch and row menu on the first line of a wrapping name at %ipx (%s)",
+  async (frame, theme) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(frame, 844);
+    try {
+      const [first, ...rest] = threeVariants();
+      const { el } = await mountWidget<VariantTable>(
+        "dashboard-variant-table",
+        {
+          variants: [
+            {
+              ...first!,
+              name: "Half a portion for sharing between two at the bar, served on the small board with bread and a little olive oil from the village, cut thin at the counter while you wait and finished with salt flakes and a twist of black pepper",
+            },
+            ...rest,
+          ],
+        },
+        theme,
+      );
+      expect(el.parentElement!.getAttribute("data-theme")).toBe(theme);
+      const row = rows(el)[0]!;
+      const name = row.children[1]!;
+      const handle = handles(el)[0]!;
+      const middle = (box: DOMRect) => (box.top + box.bottom) / 2;
+
+      expect(window.innerWidth).toBe(frame);
+      expect(row.getBoundingClientRect().height).toBeGreaterThan(
+        handle.getBoundingClientRect().height * 1.5,
+      );
+      expect(textLines(name).length, "the name wraps").toBeGreaterThan(1);
+      const line = textLines(name)[0]!;
+      // Middles, not whole boxes: line boxes differ by a pixel between machines' fonts.
+      const within = (box: DOMRect) => {
+        const at = middle(box);
+        return at >= line.top && at <= line.bottom;
+      };
+      const icon = (handle.querySelector("wt-icon") ?? handle).getBoundingClientRect();
+      const toggle = row
+        .querySelector('[data-test="available-0"]')!
+        .shadowRoot!.querySelector(".track")!
+        .getBoundingClientRect();
+      const menu = row.querySelector('[data-test="actions-0"]')!.getBoundingClientRect();
+      // A narrow table moves the price under the name and hides its column.
+      const price = textLines(row.children[2]!)[0];
+      expect(
+        {
+          icon: within(icon),
+          toggle: within(toggle),
+          menu: within(menu),
+          price: price ? within(price) : "hidden",
+        },
+        JSON.stringify({ line, icon, toggle, menu, price }),
+      ).toEqual({
+        icon: true,
+        toggle: true,
+        menu: true,
+        price: frame === 1280 ? true : "hidden",
+      });
+    } finally {
+      await page.viewport(width, height);
+    }
+  },
+);

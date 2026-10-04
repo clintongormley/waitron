@@ -1611,3 +1611,76 @@ it("starts again when reopened: no messages and Save working", async () => {
   expect(await bottomOf(el)).toBe("");
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
+
+/** The line boxes of the first text inside `cell`. A Range over the whole cell would also return
+ * the boxes of the elements in it, such as the name's button. */
+function textLines(cell: Element): DOMRectList {
+  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node && !node.textContent!.trim()) node = walker.nextNode();
+  const range = document.createRange();
+  range.selectNodeContents(node!);
+  return range.getClientRects();
+}
+
+it.each([
+  [1280, "light"],
+  [1280, "dark"],
+  [390, "light"],
+  [390, "dark"],
+] as const)(
+  "puts an option's grip, default and row menu on the first line of a wrapping name at %ipx (%s)",
+  async (frame, theme) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(frame, 844);
+    try {
+      const { el } = await mountWidget<OptionListForm>(
+        "dashboard-option-list-form",
+        {
+          open: true,
+          languages,
+          value: {
+            ...cooked,
+            labels: [
+              {
+                ...cooked.labels[0]!,
+                name: "Rare, seared hard on the outside and left cool and red in the middle, ".repeat(
+                  6,
+                ),
+              },
+              cooked.labels[1]!,
+            ],
+          },
+        },
+        theme,
+      );
+      expect(el.parentElement!.getAttribute("data-theme")).toBe(theme);
+      const row = el.shadowRoot!.querySelector<HTMLElement>(`tr[data-label="${RARE}"]`)!;
+      const name = row.querySelector('[data-test="label-0-name"]')!;
+      const handle = row.querySelector<HTMLElement>(".handle")!;
+      const middle = (box: DOMRect) => (box.top + box.bottom) / 2;
+
+      expect(window.innerWidth).toBe(frame);
+      expect(row.getBoundingClientRect().height).toBeGreaterThan(
+        handle.getBoundingClientRect().height * 1.5,
+      );
+      expect(textLines(name).length, "the name wraps").toBeGreaterThan(1);
+      const line = textLines(name)[0]!;
+      // Middles, not whole boxes: line boxes differ by a pixel between machines' fonts.
+      const within = (box: DOMRect) => {
+        const at = middle(box);
+        return at >= line.top && at <= line.bottom;
+      };
+      const icon = (handle.querySelector("wt-icon") ?? handle).getBoundingClientRect();
+      const radio = row.querySelector('[data-test="label-0-default"]')!.getBoundingClientRect();
+      const menu = row.querySelector("wt-row-actions")!.getBoundingClientRect();
+      expect(
+        { icon: within(icon), radio: within(radio), menu: within(menu) },
+        JSON.stringify({ line, icon, radio, menu }),
+      ).toEqual({ icon: true, radio: true, menu: true });
+    } finally {
+      await page.viewport(width, height);
+    }
+  },
+);
