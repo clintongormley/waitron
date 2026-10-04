@@ -701,6 +701,60 @@ describe("catalogue-screen", () => {
     expect(api.listOptionLists).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps the product's unsaved edits when its attached list's row opens the list editor", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    const product = editor(el);
+    await userEvent.fill(
+      product.shadowRoot!.querySelector('[name="name"]')!.shadowRoot!.querySelector("input")!,
+      "Croquetas fritas",
+    );
+    await userEvent.fill(
+      product.shadowRoot!.querySelector('[name="unit-price"]')!.shadowRoot!.querySelector("input")!,
+      "9.75",
+    );
+    await product.updateComplete;
+    const unsaved = () => {
+      const { name, unitPrice, modifiers } = product.currentValue;
+      return { name, unitPrice, modifiers };
+    };
+    const expected = {
+      name: "Croquetas fritas",
+      unitPrice: "9.75",
+      modifiers: [{ kind: "options", id: "opt-list-1" }],
+    };
+    expect(unsaved()).toEqual(expected);
+    const form = el.shadowRoot!.querySelector("dashboard-option-list-form")!;
+    const openFromRow = async () => {
+      await userEvent.click(
+        product.shadowRoot!.querySelector<HTMLElement>(
+          '[data-test=attached-modifier][data-modifier="options:opt-list-1"] .row-activate',
+        )!,
+      );
+      await el.updateComplete;
+      expect(form.open).toBe(true);
+      expect(form.value).toEqual(optionLists[0]);
+    };
+
+    await openFromRow();
+    emit(form, "wt-cancel", {});
+    await flush(el);
+    expect(form.open).toBe(false);
+    expect(product.open).toBe(true);
+    expect(unsaved()).toEqual(expected);
+
+    await openFromRow();
+    emit(form, "wt-submit", { value: optionInput });
+    await flush(el);
+    expect(api.updateOptionList).toHaveBeenCalledWith("opt-list-1", optionInput);
+    expect(form.open).toBe(false);
+    expect(product.open).toBe(true);
+    expect(unsaved()).toEqual(expected);
+  });
+
   it("edits an attached list of either kind through its own nested form", async () => {
     const api = stubApi();
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
