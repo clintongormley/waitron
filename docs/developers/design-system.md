@@ -1435,9 +1435,12 @@ that hidden input stays the only field named `email`. Ordinary login has no sepa
 Forget button.
 
 Every step sits in a card drawn like the setup wizard's: a 1px `--wt-color-border` border,
-`--wt-radius-lg` corners and the `--wt-color-surface-raised` background, with the Waitron lockup
-first, above any notice and the heading. The card's logo is decorative (`aria-hidden`), because the
-banner above the card already names Waitron. On the email, password and passkey screens the step's
+`--wt-radius-lg` corners and the `--wt-color-surface-raised` background. It draws no logo, because
+the banner above it carries the Waitron lockup; it starts with any notice, then the heading. A
+notice that reports a failure (session expired, account suspended) is drawn as an error: bold
+(`--wt-font-weight-bold`) `--wt-color-danger` text in a box with a 1px `--wt-color-danger` border,
+`--wt-radius-md` corners and `--wt-space-2` `--wt-space-3` padding. A success notice (password reset
+complete) is plain `--wt-color-text`. On the email, password and passkey screens the step's
 own way in is ONE full-width primary `wt-button`, and on the Google screen it is the Google button,
 each with the form's one message on its own line directly above it. When there is any other way
 in, an **or** line follows, then each other way in as a full-width outlined (`secondary`) button

@@ -1,6 +1,5 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import {
   browserSupportsWebAuthnAutofill,
   startAuthentication,
@@ -33,7 +32,6 @@ import {
   readLoginPreference,
   prepareGoogleLoginPreference,
 } from "../login-preference.js";
-import waitronLockup from "../../../../packages/ui/brand/waitron-lockup.svg?raw";
 
 // Attribution: Google and the Google "G" logo are trademarks of Google LLC. Google Sans is Copyright
 // 2025 The Google Sans Project Authors, licensed under the SIL Open Font License, Version 1.1. The
@@ -59,6 +57,12 @@ interface CompletedLogin {
   rememberEmail: boolean;
   rememberedEmail?: string;
 }
+
+/** Notices that report a failure; any other notice, such as a completed reset, stays plain. */
+const FAILURE_NOTICES: ReadonlySet<string> = new Set([
+  "management_session.expired",
+  "person.suspended",
+]);
 
 type AccountActionPurpose = "invitation" | "password_reset";
 
@@ -95,23 +99,6 @@ export class LoginScreen extends LitElement {
         background: var(--wt-color-surface-raised);
       }
 
-      .logo {
-        margin-bottom: var(--wt-space-4);
-      }
-      .logo svg {
-        display: block;
-        width: calc(var(--wt-space-6) * 5);
-        height: auto;
-      }
-      /* The brand file paints fixed light-theme ink; inlined, its two groups (the waiter, then the
-         word) follow the theme. */
-      .logo svg > g:first-of-type {
-        fill: var(--wt-color-primary);
-      }
-      .logo svg > g:last-of-type {
-        fill: var(--wt-color-text);
-      }
-
       .field {
         display: block;
         margin-bottom: var(--wt-space-4);
@@ -128,6 +115,13 @@ export class LoginScreen extends LitElement {
 
       .notice {
         color: var(--wt-color-text);
+      }
+      .notice[data-tone="error"] {
+        color: var(--wt-color-danger);
+        font-weight: var(--wt-font-weight-bold);
+        border: 1px solid var(--wt-color-danger);
+        border-radius: var(--wt-radius-md);
+        padding: var(--wt-space-2) var(--wt-space-3);
       }
 
       .remember-choice {
@@ -1057,13 +1051,6 @@ export class LoginScreen extends LitElement {
     return html`${formMessage(message)}${primary}${this.#otherWays()}`;
   }
 
-  /** Decorative: the banner above the card already names Waitron. */
-  #logo() {
-    return html`<div class="logo" data-test="login-logo" aria-hidden="true">
-      ${unsafeHTML(waitronLockup)}
-    </div>`;
-  }
-
   #privacyLink() {
     return this.privacyNoticeUrl === ""
       ? nothing
@@ -1105,7 +1092,6 @@ export class LoginScreen extends LitElement {
     if (this.token !== null) {
       return html`
         <div class="screen">
-          ${this.#logo()}
           <h1>
             ${this.actionPurpose === "password_reset" ? t("account.reset_title") : t("account.setup_title")}
           </h1>
@@ -1228,8 +1214,17 @@ export class LoginScreen extends LitElement {
       this.step === "email" ? "continue" : this.step === "factor" ? "submit-factor" : "submit";
     return html`
       <div class="screen">
-        ${this.#logo()}
-        ${this.noticeCode && this.noticeCode !== "management_session.required" ? html`<p class="notice" role="status">${codeMessage(this.noticeCode)}</p>` : nothing}
+        ${
+          this.noticeCode && this.noticeCode !== "management_session.required"
+            ? html`<p
+                class="notice"
+                role="status"
+                data-tone=${FAILURE_NOTICES.has(this.noticeCode) ? "error" : nothing}
+              >
+                ${codeMessage(this.noticeCode)}
+              </p>`
+            : nothing
+        }
         ${
           this.step === "setup-passkey"
             ? html`
