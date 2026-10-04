@@ -2712,6 +2712,40 @@ it("summarises each collapsed section from its filled-in values", async () => {
   ]);
 });
 
+it("reads customer-facing names and descriptions stored under regional codes, and saves an edited one under its plain code", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: {
+      ...product,
+      customerName: { "en-GB": "House coffee", "es-ES": "Café de la casa" },
+      description: { "en-GB": "Freshly roasted" },
+    },
+    locales: ["en", "es"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  expect(folded(el, "descriptors").summaryRows).toEqual([
+    { label: t("editor.name"), value: "EN: House coffee · ES: Café de la casa", lines: 1 },
+    {
+      label: t("editor.description"),
+      value: `EN: Freshly roasted · ES: ${t("modifiers.none_specified")}`,
+      lines: 2,
+    },
+  ]);
+  await openSection(el, "descriptors");
+  expect(control<HTMLInputElement>(el, "customer-name-en").value).toBe("House coffee");
+  expect(control<HTMLTextAreaElement>(el, "description-en").value).toBe("Freshly roasted");
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await input(el, "description-en", "Dark roast");
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value).toEqual({
+    ...product,
+    customerName: { "en-GB": "House coffee", "es-ES": "Café de la casa" },
+    description: { en: "Dark roast" },
+  });
+});
+
 it("reports a Cancel when its window is dismissed, never when the screen shuts it", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -3310,6 +3344,23 @@ it("points a refused translation at an Active variant only, as the server checks
       { customerName: { es: "Vaso" }, active: true },
     ],
   };
+  expect(productEditorTranslationField(value, "en")).toBe("variant-1-name");
+  expect(
+    productEditorTranslationField({ ...value, variants: [value.variants[0]!] }, "en"),
+  ).toBeNull();
+});
+
+it("reads a translation stored under a regional code as present, as the server does", () => {
+  const value: Parameters<typeof productEditorTranslationField>[0] = {
+    customerName: { "en-GB": "House coffee" },
+    variants: [
+      { customerName: { "en-US": "Small" }, active: true },
+      { customerName: { es: "Vaso" }, active: true },
+    ],
+  };
+  expect(productEditorTranslationField({ ...value, customerName: { en: "Coffee" } }, "en")).toBe(
+    "variant-1-name",
+  );
   expect(productEditorTranslationField(value, "en")).toBe("variant-1-name");
   expect(
     productEditorTranslationField({ ...value, variants: [value.variants[0]!] }, "en"),

@@ -1062,6 +1062,50 @@ it("falls every blank language back to the default language's name on the closed
   });
 });
 
+it("reads customer-facing names stored under regional codes into the fields, their hints and the closed line, and saves them back untouched", async () => {
+  const stored = { "en-GB": "Make it yours", "es-ES": "Añádele algo" };
+  const { el, host } = await mount({ value: { ...addons, customerName: stored } });
+  const submitted = record(host);
+
+  expect(
+    ["en", "es"].map(
+      (locale) => field<HTMLElementTagNameMap["wt-input"]>(el, `customer-name-${locale}`).value,
+    ),
+  ).toEqual(["Make it yours", "Añádele algo"]);
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "EN", value: "Make it yours" },
+      { label: "ES", value: "Añádele algo" },
+    ],
+    hints: ["", ""],
+  });
+  await click(el, "save");
+  expect(submitted[0]!.customerName).toEqual(stored);
+});
+
+it("falls a blank language back to a default-language name stored under a regional code", async () => {
+  const { el } = await mount({ value: { ...addons, customerName: { "en-GB": "Make it yours" } } });
+
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "EN", value: "Make it yours" },
+      { label: "ES", value: "Make it yours", placeholder: true },
+    ],
+    hints: ["", "Make it yours"],
+  });
+});
+
+it("saves an edited name under its language's plain code, dropping that language's regional key", async () => {
+  const { el, host } = await mount({
+    value: { ...addons, customerName: { "en-GB": "Make it yours", "es-ES": "Añádele algo" } },
+  });
+  const submitted = record(host);
+
+  await type(el, "customer-name-en", "Your way");
+  await click(el, "save");
+  expect(submitted[0]!.customerName).toEqual({ en: "Your way", "es-ES": "Añádele algo" });
+});
+
 it("never falls a blank default language back to another language's name on the closed line", async () => {
   const { el, host } = await mount({ value: { ...addons, customerName: { es: "Añádele algo" } } });
   const submitted = record(host);

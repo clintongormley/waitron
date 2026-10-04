@@ -513,6 +513,54 @@ it("falls every blank language back to the default language's name on the closed
   });
 });
 
+it("reads customer-facing names stored under regional codes into the fields, their hints and the closed line, and saves them back untouched", async () => {
+  const stored = { "en-GB": "How would you like it?", "es-ES": "¿En qué punto?" };
+  const { el, host } = await mount({ value: { ...cooked, customerName: stored } });
+  const submitted = record(host);
+
+  expect(["en", "es"].map((locale) => field(el, `customer-name-${locale}`).value)).toEqual([
+    "How would you like it?",
+    "¿En qué punto?",
+  ]);
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "EN", value: "How would you like it?" },
+      { label: "ES", value: "¿En qué punto?" },
+    ],
+    hints: ["", ""],
+  });
+  await click(el, "save");
+  expect(submitted[0]!.customerName).toEqual(stored);
+});
+
+it("falls a blank language back to a default-language name stored under a regional code", async () => {
+  const { el } = await mount({
+    value: { ...cooked, customerName: { "en-GB": "How would you like it?" } },
+  });
+
+  expect(namesShown(el)).toEqual({
+    line: [
+      { label: "EN", value: "How would you like it?" },
+      { label: "ES", value: "How would you like it?", placeholder: true },
+    ],
+    hints: ["", "How would you like it?"],
+  });
+});
+
+it("saves an edited name under its language's plain code, dropping that language's regional key", async () => {
+  const { el, host } = await mount({
+    value: {
+      ...cooked,
+      customerName: { "en-GB": "How would you like it?", "es-ES": "¿En qué punto?" },
+    },
+  });
+  const submitted = record(host);
+
+  await type(el, "customer-name-en", "How done?");
+  await click(el, "save");
+  expect(submitted[0]!.customerName).toEqual({ en: "How done?", "es-ES": "¿En qué punto?" });
+});
+
 it("never falls a blank default language back to another language's name on the closed line", async () => {
   const { el, host } = await mount({
     value: { ...cooked, customerName: { es: "¿En qué punto?" } },

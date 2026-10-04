@@ -1281,11 +1281,21 @@ stay blank and what is saved is unchanged.
 Audited: the only other folded section holding customer-facing names is the Product editor's
 Descriptors section, whose Name row says "None specified" for a blank language by A211's decision;
 left as it is (asked of the owner, 2026-10-04).
-Left OPEN from its review: a name stored under a regional code such as `en-GB` is accepted by the
-server's API and used by the customer-facing resolver for English, but the form's fields, their
-hints and this line read only the plain code (`en`), so for such a list the line shows the staff
-name. The dashboard never writes regional codes, and the fields behaved so before W77. Next step,
-for the owner: should the server refuse or normalise a regional key, or the form read it?
+A name stored under a regional code such as `en-GB`, which the server's API accepts, is read by
+the forms as the customer-facing resolver reads a request for that language's plain code (W77a,
+owner 2026-10-04 choosing the form reading it): the plain code first, then its regional ones
+(`languageText`, `apps/dashboard/src/widgets/form-fields.ts`). A till or receipt asking for `en-GB`
+reads `en-GB` before `en`, so a map holding both can show one name in the form and serve the
+other. Tested on the Extras and Options lists and the Product editor's Descriptors (fields,
+summary, description boxes); an option's label, a variant and a menu section reach the same helper
+through `optionalTextFields` but have no case of their own. Saving keeps an untouched language's
+non-blank regional keys; an edited language is saved under its plain code alone and its regional
+keys are dropped (`withLanguageText`), so after a non-empty edit every regional request for that
+language reads the text typed into the field. The Product editor's choice of which field a
+"translation required" refusal points at (`productEditorTranslationField`) reads regional keys
+too, as the server's check does. Still reading the plain code only: the unit form's names, the
+adjustment reasons' names (`packages/adjustments/src/dashboard/reasons-screen.ts`) and the image
+library's names (`packages/media/src/dashboard/image-library.ts`).
 
 **Clicking a product's row on the Products screen opens it (A205) — DONE in A208.**
 
