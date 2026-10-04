@@ -86,12 +86,13 @@ Each case below belongs in the owning task's failing test, not only in this list
 
 ### Task 4: Use profile zones in order paths and browsing state
 
-**Files:** `apps/server/src/till-api.ts` and its zone/order suites, `packages/venue-service/src/profile-access.ts`, `apps/till/src/till-app.ts`, `apps/till/src/screens/till-table-order-screen.ts`, focused browser suites.
+**Files:** `apps/server/src/till-api.ts` and its zone/order suites, `packages/venue-service/src/profile-access.ts`, `packages/venue-service/src/operations.ts`, `routes.ts`, `schema/service.ts` and migration, `packages/venue-service/src/dashboard/venue-operations-screen.ts` (created by A261-2), `apps/till/src/till-app.ts`, `apps/till/src/screens/till-table-order-screen.ts`, focused browser suites.
 
 **Interface:** `assertProfileZone(tx, cfg, profileId, zoneId): Promise<void>` uses Task 1's current active-zone resolution. Its refusal names the attempted zone without exposing another department's order. Existing-order reads and writes also check that the order's zone belongs to the active profile; opening a table uses the order's zone.
 
 - [ ] Red server tests: a Restaurant profile can order a menu item originating in Deli when it is offered to Restaurant, but cannot select the Deli zone or browse/manage a Deli order. A zone moved to Deli or deactivated after profile setup fails the same way. Check zone selection, order creation, saved-order read, payment and amendment routes; follow each route's actual call chain rather than assuming one gate covers all.
 - [ ] Red browser tests: new operator starts at the profile's starting zone and current default menu; same operator returning to the same device and zone retains a manual menu choice; changing zone and returning selects the destination's current default; opening an existing table uses its recorded zone; screen changes retain the manual choice. Use distinct menu names so the wrong selection is visible. The later timetable branch will add period-boundary cases.
+- [ ] Trace every `device_zone_defaults` reader and writer before replacing that value. Red tests must show a saved device default cannot override the active profile's starting zone. Once the profile setting and its screen work, retire the interim per-device default control, routes, operations, table and classification; update the affected venue-service, server and dashboard tests while preserving their other behavioral assertions. Check the migration against existing foreign keys and triggers; a pre-production venue reset is allowed.
 - [ ] Run focused `@waitron/server`, `@waitron/venue-service`, and `@waitron/till` suites and see the intended failures. Add the server checks before changing the UI. Keep an open order's recorded lines, prices and service context unchanged. Rerun and commit with sign-off.
 
 ### Task 5: Separate permitted actions from screens
