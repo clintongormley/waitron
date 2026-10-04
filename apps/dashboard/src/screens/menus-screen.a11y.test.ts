@@ -421,3 +421,27 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 });
+
+// Light only: the dark theme's link blue is below the text minimum on a highlighted row, a token
+// problem left open in docs/backlog.md (W87).
+it("accessible Unpublished changes link on a focused, highlighted list row (light)", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 900);
+  onTestFinished(() => page.viewport(width, height));
+  const { el, host } = await mount("populated", "light", "/manage/menus");
+  const table = q(el, 'wt-data-table[data-test="menus"]');
+  const row = () => table.shadowRoot!.querySelector('tr[data-row-key="menu-lunch"]')!;
+  await vi.waitFor(() =>
+    expect(row().querySelector('[data-test="changes-menu-lunch"]')).not.toBeNull(),
+  );
+  const probe = document.createElement("div");
+  probe.style.background = getComputedStyle(host).getPropertyValue("--wt-color-surface-lifted");
+  host.append(probe);
+  const lifted = getComputedStyle(probe).backgroundColor;
+  probe.remove();
+  row().querySelector<HTMLButtonElement>(".row-activate")!.focus();
+  const cell = row().querySelector('[data-test="changes-menu-lunch"]')!.closest("td")!;
+  expect(getComputedStyle(cell).backgroundColor).toBe(lifted);
+  await expectNoA11yViolations(host);
+});

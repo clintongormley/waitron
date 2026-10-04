@@ -361,7 +361,7 @@ export class MenusScreen extends LitElement {
         display: inline-flex;
         align-items: center;
         min-height: var(--wt-tap-min);
-        color: var(--wt-color-primary);
+        color: var(--wt-color-primary-text);
       }
       wt-data-table::part(changes-link):focus-visible {
         outline: var(--wt-focus-ring);
