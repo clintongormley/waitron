@@ -1728,9 +1728,28 @@ test("a filter on its initial choice counts in the panel badge and can be cleare
   await el.updateComplete;
   expect(root.querySelector(".filters-panel")!.matches(":popover-open")).toBe(true);
   expect(root.querySelector(".filters-panel h2")!.textContent).toBe("Filters");
-  root.querySelector<HTMLButtonElement>('[data-clear-filter="status"]')!.click();
+  await chooseOption(root.querySelector<WtCombobox>('[data-filter="status"]')!, "");
   await el.updateComplete;
   expect(trigger.textContent).not.toContain("1");
+  expect(rowKeysS(el)).toEqual(["1", "2"]);
+});
+
+test("Filters shows plain named sections with choices always available and no per-filter Clear", async () => {
+  const el = await tableS({ columns: withStatus });
+  const root = el.shadowRoot!;
+  root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+  await el.updateComplete;
+  const panel = root.querySelector<HTMLElement>(".filters-panel")!;
+  const section = panel.querySelector<HTMLElement>('[data-section="status"]')!;
+  expect(section.querySelector("h3")?.textContent?.trim()).toBe("Filter by status");
+  expect(section.querySelector("details, summary, .filter-clear")).toBeNull();
+  expect(section.textContent).not.toContain("(2)");
+  const filter = section.querySelector<WtCombobox>("wt-combobox")!;
+  await chooseOption(filter, "active");
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1"]);
+  await chooseOption(filter, "");
+  await el.updateComplete;
   expect(rowKeysS(el)).toEqual(["1", "2"]);
 });
 
@@ -1771,8 +1790,8 @@ test("a filtered heading marks only its active column and focuses that panel sec
   mark.click();
   await el.updateComplete;
   expect(root.querySelector(".filters-panel")!.matches(":popover-open")).toBe(true);
-  expect(root.querySelector<HTMLDetailsElement>('[data-section="status"]')!.open).toBe(true);
-  expect(root.activeElement).toBe(root.querySelector('[data-section="status"] summary'));
+  const filter = root.querySelector<WtCombobox>('[data-section="status"] .table-filter')!;
+  expect(filter.shadowRoot!.activeElement).toBe(filter.shadowRoot!.querySelector(".trigger"));
 });
 
 test("the Filters panel closes from its own button and returns focus to its trigger", async () => {
@@ -1863,10 +1882,8 @@ test("opening Filters moves focus inside; Escape closes it without reaching a su
   parent.append(el);
   host.append(parent);
   await userEvent.click(trigger);
-  const section = root.querySelector<HTMLDetailsElement>(".filter-section")!;
-  expect(root.activeElement).toBe(section.querySelector("summary"));
-  await userEvent.keyboard("{Enter}");
-  expect(section.open).toBe(false);
+  const filter = root.querySelector<WtCombobox>(".filter-section .table-filter")!;
+  expect(filter.shadowRoot!.activeElement).toBe(filter.shadowRoot!.querySelector(".trigger"));
   expect(rowKeysS(el)).toEqual(["1"]);
   await userEvent.keyboard("{Escape}");
   expect(root.querySelector(".filters-panel")!.matches(":popover-open")).toBe(false);
@@ -1927,10 +1944,10 @@ test("clear all removes a saved choice while its options are waiting", async () 
   expect(rowKeysS(el)).toEqual(["1", "2"]);
 });
 
-test("a column's Clear removes its saved choice while options are waiting", async () => {
+test("a column's Any choice removes its saved choice while options are waiting", async () => {
   sessionStorage.setItem("test.filter-waiting", JSON.stringify({ filters: { status: "off" } }));
   const el = await tableS({ columns: statusOffering([]), viewKey: "test.filter-waiting" });
-  el.shadowRoot!.querySelector<HTMLButtonElement>('[data-clear-filter="status"]')!.click();
+  await chooseOption(el.shadowRoot!.querySelector<WtCombobox>('[data-filter="status"]')!, "");
   await el.updateComplete;
   expect(JSON.parse(sessionStorage.getItem("test.filter-waiting")!).filters).toEqual({});
   el.columns = withStatus;
@@ -2047,7 +2064,8 @@ test("Tab stays inside the full-screen Filters panel on a phone", async () => {
     const root = el.shadowRoot!;
     root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
     const panel = root.querySelector<HTMLElement>(".filters-panel")!;
-    expect(root.activeElement).toBe(panel.querySelector(".filter-section summary"));
+    const first = panel.querySelector<WtCombobox>(".filter-section .table-filter")!;
+    expect(first.shadowRoot!.activeElement).toBe(first.shadowRoot!.querySelector(".trigger"));
     await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
     expect(root.activeElement).toBe(panel.querySelector(".filters-close"));
     const combobox = panel.querySelectorAll<WtCombobox>("wt-combobox")[1]!;
@@ -2058,26 +2076,6 @@ test("Tab stays inside the full-screen Filters panel on a phone", async () => {
     expect(root.activeElement).toBe(panel.querySelector(".filters-clear-all"));
     await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
     expect(root.activeElement).toBe(combobox);
-  } finally {
-    await page.viewport(previousWidth, previousHeight);
-  }
-});
-
-test("Tab wraps from a collapsed final filter section on a phone", async () => {
-  const previousWidth = innerWidth;
-  const previousHeight = innerHeight;
-  await page.viewport(390, 900);
-  try {
-    const el = await tableS({ columns: withStatus });
-    const root = el.shadowRoot!;
-    root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
-    const panel = root.querySelector<HTMLElement>(".filters-panel")!;
-    const section = panel.querySelector<HTMLDetailsElement>("details.filter-section")!;
-    section.open = false;
-    const summary = section.querySelector<HTMLElement>("summary")!;
-    summary.focus();
-    await userEvent.keyboard("{Tab}");
-    expect(root.activeElement).toBe(panel.querySelector(".filters-clear-all"));
   } finally {
     await page.viewport(previousWidth, previousHeight);
   }
@@ -2270,6 +2268,7 @@ test("the search box draws a primary border, and a filter dropdown the 2px prima
 test("the search box and filter dropdown paint from the theme tokens", async () => {
   const el = await tableS({ searchable: true, columns: withStatus });
   el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+  el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-close")!.focus();
   host.style.setProperty("--wt-tap-min", "52px");
   host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
   host.style.setProperty("--wt-color-bg", "rgb(4, 5, 6)");
