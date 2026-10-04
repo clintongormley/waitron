@@ -3049,6 +3049,35 @@ as a whole number, so a decimal weight sorts wrongly — "0,5 kg" before "0,25 k
 with the same comparison, not in the dashboard). The rest of the dashboard sorts names the same
 way.
 
+**Products: a category's Made at shows where its dishes are made — DONE (W86, owner 2026-10-04).**
+In the Products tree each category row's Made at cell now shows the category's baseline route, in
+the product rows' words (a station's name, No preparation, No replacement, Nowhere), linked to the
+prep stations screen (`/manage/prep-stations`), where claims and exceptions are managed, never to
+the single-product route tester. Under it, in smaller muted text, it says where the route comes
+from — set on this category, from a named parent category, the default station, or an exception
+that covers the category for every dish in every zone — and adds "some items made elsewhere" when
+the route is not a promise for everything inside: a product or zone exception sends a contained
+dish elsewhere, a subcategory routes somewhere else, or the station has opening hours or was
+opened or closed by hand today (the default station is always open, so it never gets this note).
+The route is worked out in the browser with the shared `chooseMaker`
+(`apps/dashboard/src/widgets/folder-made-at.ts`), as the server works out a product row's
+(`describeMakers`): no service zone, the time of day not applied, a switched-off station's fallback
+followed, inactive products left out. While routing has not loaded the cell stays blank; when the
+routing read fails it reads "Routing unavailable" (the catalogue screen now tells the two apart).
+All products stays blank. Product rows are unchanged, and no existing test assertion changed; the
+catalogue screen suite's routing stub gained the `stationTimes`, `todayEnds` and `clockReadable`
+fields the real answer carries. Left open: (1) a PRODUCT row reads "Nowhere" whenever the
+made-at read holds no entry for it (`apps/dashboard/src/widgets/product-list.ts`, the `made-at`
+cell, where `maker === undefined` falls to `product.nowhere`) — the same blank-read-as-no-route
+problem this item fixed for categories, not fixed here. Judged from the code, not run: the first
+load waits for `listMadeAt` before it lists products, and a failed first read fails the whole
+load, so the gap is a product listed after the last good made-at read — a refresh still on its way
+or one that failed, which keeps the old answer; (2) a category's link is the same
+`maker-link` as a product's, so the contrast concern and the missing `activatesRow: false` recorded
+under W87 apply to category rows too (there a click beside the link opens or closes the category;
+judged from the code, not run); (3) a person who may not read routing sees "Routing
+unavailable" on every category, because a refused read counts as a failed one.
+
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through
 that teaches a new user what to set up and in what order — devices, printers, device profiles, and
