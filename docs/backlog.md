@@ -3050,7 +3050,7 @@ as a whole number, so a decimal weight sorts wrongly — "0,5 kg" before "0,25 k
 with the same comparison, not in the dashboard). The rest of the dashboard sorts names the same
 way.
 
-**Products: a category's Made at shows where its dishes are made — DONE (W86, owner 2026-10-04).**
+**Products: a category's Made at shows where its dishes are made — DONE (W86, #1203, owner 2026-10-04).**
 In the Products tree each category row's Made at cell now shows the category's baseline route, in
 the product rows' words (a station's name, No preparation, No replacement, Nowhere), linked to the
 prep stations screen (`/manage/prep-stations`), where claims and exceptions are managed, never to
