@@ -290,6 +290,61 @@ describe("venue operations screen", () => {
     expect(rows[2].textContent).toContain("On request");
   });
 
+  it("switches receipt trading names on a department without offering the switch on a zone", async () => {
+    let printTradingName = false;
+    const save = vi.fn(async (departmentId: string, field: string, value: boolean) => {
+      expect([departmentId, field, value]).toEqual(["d1", "printTradingName", true]);
+      printTradingName = value;
+    });
+    const load = vi.fn(async () => ({
+      ...model,
+      departments: [model.departments[0]],
+      salePolicies: {
+        departments: [
+          {
+            departmentId: "d1",
+            paidWhen: "prepay" as const,
+            collectionNumber: "none" as const,
+            receiptPrintMode: "auto" as const,
+            printTradingName,
+          },
+        ],
+        zones: [
+          {
+            zoneId: "z1",
+            paidWhen: null,
+            collectionNumber: null,
+            receiptPrintMode: null,
+            effective: {
+              paidWhen: "prepay" as const,
+              collectionNumber: "none" as const,
+              receiptPrintMode: "auto" as const,
+              printTradingName,
+            },
+          },
+        ],
+      },
+    }));
+    const el = await mount({
+      load,
+      setDepartmentSalePolicyField: save,
+    } as unknown as VenueServiceApi);
+    const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
+    const control = rows[0].querySelector<HTMLElement>('wt-switch[name="printTradingName"]')!;
+    expect(control).not.toBeNull();
+    expect(rows[1].querySelector('wt-switch[name="printTradingName"]')).toBeNull();
+    expect(control.hasAttribute("checked")).toBe(false);
+    control.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+    await vi.waitFor(() =>
+      expect(
+        table(el, "policy-tree")
+          .shadowRoot!.querySelector('wt-switch[name="printTradingName"]')
+          ?.hasAttribute("checked"),
+      ).toBe(true),
+    );
+  });
+
   it("puts each tab's available Add actions beside the tablist", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),

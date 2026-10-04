@@ -24,6 +24,7 @@ import type {
   VenueServiceView,
 } from "./client.js";
 import { t } from "./strings.js";
+import "@waitron/ui/src/components/wt-switch.js";
 
 const format = (key: Parameters<typeof t>[0], values: Record<string, string>) =>
   Object.entries(values).reduce(
@@ -536,6 +537,30 @@ export class VenueOperationsScreen extends LitElement {
         key: "trading",
         label: t("venue.trading_name"),
         cell: (row) => (row.kind === "department" ? row.department.tradingName : nothing),
+      },
+      {
+        key: "printTradingName",
+        label: t("venue.print_it"),
+        cell: (row) => {
+          if (row.kind !== "department") return nothing;
+          const checked = policyFor(row)?.printTradingName ?? false;
+          return html`<wt-switch
+            name="printTradingName"
+            label=${t("venue.print_it")}
+            .checked=${live(checked)}
+            .disabled=${this.busy}
+            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+              event.stopPropagation();
+              void this.#save(() =>
+                this.api.setDepartmentSalePolicyField(
+                  row.department.id,
+                  "printTradingName",
+                  event.detail.checked,
+                ),
+              );
+            }}
+          ></wt-switch>`;
+        },
       },
       {
         key: "paid",
