@@ -4179,7 +4179,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 
 - **A till is a device (A238) — DONE: landed as #1164 (main `065354d26`, 2026-10-04); every
   venue needs a reset.** Follow-ups queued 2026-10-04: W56 (the Sales screen's section title reads
-  "Tender by device") and W57 (the two hand-run operator scripts record sales under a source of their
+  "Tender by device") is done; W57 (the two hand-run operator scripts record sales under a source of their
   own, not "Demo data"). Deferred in the PR: three refactors of sign-in-adjacent code, and renaming
   the `seedTill` test fixtures. The `tills` table is gone; every
   record names its source (usually the device; otherwise the dashboard or a named background job)
