@@ -2921,10 +2921,12 @@ under its column headings; the page title, the search, Filters, Expand all, Sele
 stay above it. `wt-data-table` gained an opt-in `stickyHeader` for this, set only by the Products
 screen. At every width the table's box is at least three tap targets tall. The dashboard shell
 test, with a stub catalogue of 40 uncategorised products, no category open and no message above the
-list, finds only the rows scrolling at 390×844 and 375×667, with about 27px to spare at 375×667, so
-longer toolbar labels, a wrapped banner or a message can still make the content column scroll. Not
-covered: in Select mode the toolbar wraps taller, and at 375×667 the content column was seen once by
-hand, not in a test, to scroll and carry the toolbar out of view. Other long tables (Orders, Staff, Payments and
+list, finds only the rows scrolling at 390×844 and 375×667, with about 27px to spare at 375×667
+before W83 (a temporary test, not kept, measured 83px after it on 2026-10-04;
+`docs/developers/design-system.md`, `stickyHeader`), so longer toolbar labels, a wrapped banner or a
+message can still make the content column scroll. Not covered: in Select mode the toolbar wraps
+taller and the content column overflows at 375×667 (figures below).
+Other long tables (Orders, Staff, Payments and
 the rest) keep scrolling with the content column until someone decides they should opt in too; each
 would need its screen to give the table a bounded height, as the Products screen does.
 Still open: at 375×667 the box gave few rows, short of the item's "enough rows to remain usable",
@@ -2933,13 +2935,15 @@ shortened the toolbar. Measured on 2026-10-04 with a temporary test in the shell
 setup (not kept), reading the rows' box below its headings: before W83, 117.5px of row area, which
 held the All products row and no whole product row (rows are 69px); after it, 173.5px, which holds
 the All products row and one whole product row. At 390×844 the whole rows, the All products row included, went from four to five.
-In Select mode the content column still overflows at 375×667, by 25px (129px before W83). Whether
+In Select mode at 375×667 the content column overflows: by 129px before W83 and 25px after, in the
+same temporary test; no kept test covers Select mode there. Whether
 that is enough rows is the owner's call.
 
 **Products: Filters and Select at the start of the table's toolbar — DONE (W83, owner
 2026-10-04).** On Products, Filters (a funnel with its count) and Select (a checklist mark) are icon
 buttons at the toolbar's leading edge, before the search. Each is named for screen readers, shows
-its name in a tooltip on hover and on keyboard focus that Escape hides, and reads as pressed while
+its name in a tooltip that Escape hides, on keyboard focus and, where the pointer can hover, on
+hover, and reads as pressed while
 its panel or Select mode is on. While the table is at least 768px wide, Filters opens a panel
 beside the rows at their left; it stays in view while the rows scroll, a press outside leaves it
 open, and closing it gives the rows their width back. Narrower, it opens full screen. Pressing
@@ -2950,9 +2954,18 @@ icon button and tooltip styles are shared from `@waitron/ui` (`iconButtonStyles`
 test assertion changed, for the owner to review: the catalogue browser's toolbar-order test pinned
 the old order (search, Filters, Expand all, Select, Customise) and now pins the new one (Filters,
 Select, search, Expand all, Customise). Left open: on a phone the search is drawn under Expand all
-and Customise while Tab reaches it before them; and a desktop window narrow enough to leave the
-table under 768px gets the full-screen panel — at which window width that happens with the sidebar
-shown was not measured.
+and Customise while Tab reaches it before them (two reviewers judged this not a WCAG 1.3.2 or 2.4.3
+failure, by stepping through with the keyboard and reading Chromium's accessibility tree; what a
+screen reader says was not checked); and a desktop window narrow enough to leave the table under
+768px gets the full-screen panel — at which window width that happens with the sidebar shown was
+not measured. Also left open by W83's review, none started: (1) the table's Customise columns
+button is icon-only beside these two but has neither their look nor a tooltip; (2) the icon button
+and its tooltip are a stylesheet and a handler each caller wires by hand, not a `wt-icon-button`
+component — Select is a native `<button>` because `wt-button` does not pass `aria-pressed` through;
+(3) the 768px side-panel threshold is tied by hand to token sizes (768 − 7×44 − 12 = 448, just
+above the table's 440px narrow-tree width); (4) the catalogue browser's phone layout switches on
+the window's width (`@media (max-width: 30rem)`), where the menus and modifiers screens use
+`@container (max-width: 30rem)`.
 
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through

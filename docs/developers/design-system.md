@@ -718,9 +718,10 @@ button do, and the first two return focus to the button. Under `stickyHeader` it
 height with `overflow-y: auto`, so it and its button stay put while the rows scroll. Narrower than
 768px, it opens as the full-screen popover the default panel uses on a phone, with Tab kept inside.
 A width change across 768px while it is open moves it to the other form, still open and with its
-choices. When the filters hide every row it stays beside the no-matches message, so they can be
-changed back. Only the Products table sets it. On that screen the catalogue browser puts its Select
-button next (Selection mode, below), and in a window up to 30rem wide moves its search to a line of
+choices. It stays open when a choice in it hides every row (beside the no-matches message from
+768px wide), so the choice can be changed back, and focus stays on the filter used, as it does when a choice brings rows back;
+the default Filters popover keeps focus on the filter the same way. Only the Products table sets
+`leadingFilters`. On that screen the catalogue browser puts its Select button next (Selection mode, below), and in a window up to 30rem wide moves its search to a line of
 its own under the buttons (CSS `order`), so the buttons and the table's Expand all and Customise
 share one line; Tab still reaches the search before Expand all. Guards: the leading cases in
 `packages/ui/src/components/wt-data-table.test.ts` and `wt-data-table.a11y.test.ts`, and the toolbar,
@@ -926,7 +927,8 @@ On Products, Select is an icon button (a checklist mark) at the toolbar's start,
 and before the search, named Select (Seleccionar in Spanish) and pressed (`aria-pressed`) while
 selecting; pressing it again clears the selection and leaves Select mode, as Cancel does. The
 count, Move to…, Delete and Cancel go to the toolbar's end, and each wraps on its own with the table's buttons, so at 390px
-they and the table's buttons fit on two lines. There is no separate selection header.
+those four and the table's Expand all and Customise fit on two lines; Filters, Select and the search
+are not part of that measurement. There is no separate selection header.
 
 For example, selecting Drinks and Bread shows **2 selected** and lets you move both in one
 step. Confirm destructive actions in a `wt-modal` with a `danger` button. Keep a refused
@@ -937,16 +939,21 @@ default, reversible choice.
 
 ### Icon buttons with a tooltip (`iconButtonStyles`, `trackIconTooltip`)
 
-An icon-only toolbar button takes the `icon-button` class from `iconButtonStyles`
-(`packages/ui/src/icon-button.ts`, exported by `@waitron/ui`): at least `--wt-tap-min` each way,
-with the toolbar's border and surface, and pressed — `--wt-color-primary` border,
-`--wt-color-surface-lifted` fill, `--wt-color-primary-text` icon — while its `aria-pressed` or
-`aria-expanded` is `true`. Its name is its `aria-label`. An `aria-hidden` `.icon-tooltip` inside it
-repeats that name on one line under the button, from its leading edge, on hover and on keyboard
-focus, drawn above a sticky table's headings. Bind `trackIconTooltip` to the button's
+The `leadingFilters` Filters button and the Products Select button each take the `icon-button`
+class from `iconButtonStyles` (`packages/ui/src/icon-button.ts`, exported by `@waitron/ui`): at
+least `--wt-tap-min` each way, with the toolbar's border and surface, and pressed —
+`--wt-color-primary` border, `--wt-color-surface-lifted` fill, `--wt-color-primary-text` icon —
+while the button's `aria-pressed` or `aria-expanded` is `true`. Its name is its `aria-label`. An
+`aria-hidden` `.icon-tooltip` inside it repeats that name on one line under the button, from its leading edge, on keyboard focus,
+and on hover where the primary pointer can hover (a touch screen leaves a tapped button in
+`:hover`), drawn above a sticky table's headings. It stays shown while the pointer is on the tooltip
+itself, and an invisible strip covers the gap between it and the button (WCAG 1.4.13's hoverable
+condition); a hidden tooltip is `display: none`. Bind `trackIconTooltip` to the button's
 `pointerenter`, `pointerleave`, `focus` and `blur`: while the pointer is on it or it has focus,
-Escape hides the tooltip, which can show again once both have left (WCAG 1.4.13). The
-`leadingFilters` Filters button and the Products Select button use it. Guards: the tooltip cases in
+Escape hides the tooltip, which can show again once both have left (WCAG 1.4.13). Binding it also
+means a click on a showing tooltip does not press its button. The table's
+Customise columns button, icon-only in the same toolbar, does not use it yet: it has no tooltip and
+no pressed look. Guards: `packages/ui/src/icon-button.test.ts`, and the tooltip cases in
 `packages/ui/src/components/wt-data-table.test.ts` and
 `apps/dashboard/src/widgets/catalogue-browser.test.ts`.
 
