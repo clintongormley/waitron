@@ -5,8 +5,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { priceForExtraPortion } from "@waitron/catalogue/src/extra-contract.js";
-import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
-import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-types.js";
+import { assertQuantityPrecision, EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
 import { resolveContentText, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -42,8 +41,9 @@ interface DraftItem {
 }
 
 /**
- * Every refusal answered here is one `parseExtraListInput` also refuses
- * (packages/catalogue/src/extra-contract.ts).
+ * A blank Portion is refused here for every unit but Each, though the server refuses a missing
+ * portion only on a new entry whose unit has decimals or a scale link, and stores 1 otherwise
+ * (`assertPortionPrecision` and `writeItems`, packages/catalogue/src/extras.ts).
  *
  * A blank price is emitted as `null`, which is what keeps "inherits" and "set to the same number"
  * different rows.
@@ -185,10 +185,8 @@ export class ExtraListForm extends LitElement {
         inset-block-start: var(--wt-space-2);
         white-space: nowrap;
       }
-      /* A row lines up its text, not its boxes (spec D6). */
-      tbody td:not(.handle-cell) {
-        vertical-align: baseline;
-      }
+      /* The handle cell is named so this outranks the shared reorder style's centring. */
+      tbody td,
       tbody td.handle-cell {
         vertical-align: baseline;
       }
@@ -323,8 +321,9 @@ export class ExtraListForm extends LitElement {
   }
 
   /** Each is told from a measure by the unit's identity alone: a millilitre or a gram has no
-   * decimals either, and its portion still sets the price. Null for a product this form was given no
-   * row for. */
+   * decimals either, and its portion still sets the price. A stored unit seeded as `each`, which the
+   * server's `isEachUnit` also counts as Each, reads here as a measure; setup seeds none. Null for a
+   * product this form was given no row for. */
   #portionKind(productId: string): "each" | "measured" | null {
     const product = this.#productById.get(productId);
     if (product === undefined) return null;

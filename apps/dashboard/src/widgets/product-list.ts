@@ -763,8 +763,7 @@ export class ProductList extends LitElement {
     return low === high ? text : `${text}–${formatMoney(String(high), locale)}`;
   }
 
-  /** A listed product with no stored unit still carries one, the server's Each, so only the stored
-   * list tells the two apart. */
+  /** A listed product with no stored unit still carries one, the server's Each. */
   #unitWord(product: Product): string {
     if (!this.units.some(({ id }) => id === product.unitId)) return t("product.price_each");
     const language = this.unitLanguage;
