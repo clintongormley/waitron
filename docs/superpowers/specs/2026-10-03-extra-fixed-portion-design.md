@@ -11,7 +11,7 @@ When you first add an extras list item for a weighed unit (`hardwareUnit` set) o
 
 **2026-10-04, W75:** the list editor now asks for a portion for every unit but Each, and shows an Each row's portion as a fixed 1 in its own Portion column; see the W75 entry in [the backlog](../../backlog.md).
 
-**2026-10-05, W75c:** the server now refuses a new item with no portion for every unit but Each, as the editor does; see the W75c entry in [the backlog](../../backlog.md).
+**2026-10-05, W75c:** the server now refuses a new item with no portion for every unit but Each; see the W75c entry in [the backlog](../../backlog.md).
 
 For example, put Jamón in grams at 0.10 €/g and set its portion to 50 g. Three picks add 150 g and cost 15.00 € on one dish; two of that dish add 300 g and cost 30.00 €. Alternatively put Jamón in kilograms at 100.00 €/kg and enter `0.050` kg: three picks add `0.150 kg` and cost 15.00 €. The amount is stored and printed in the product's own unit. There is no g↔kg conversion, and the per-gram price need not express every per-kilogram price exactly (A203).
 

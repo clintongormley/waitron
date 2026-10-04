@@ -1244,7 +1244,7 @@ and the section member list had their own centring rules: the section member lis
 the option list form's is replaced by the top alignment. See `docs/developers/design-system.md`,
 tables.
 
-**The server refuses an Extras item with no Portion for every unit but Each (W75c, owner
+**The server refuses a new Extras item with no Portion for every unit but Each (W75c, owner
 2026-10-04) — DONE.** `assertPortionPrecision` (`packages/catalogue/src/extras.ts`) used to refuse a
 new item with no portion only when its unit had decimals or a scale link, so a new item for ml or a
 venue's own whole unit was saved with no portion and stored as 1. It now refuses a new item with no
@@ -1789,7 +1789,7 @@ W53 changes the filed display surfaces.
   product's portion is one and the form asks for none; _2026-10-04 (W75): the list editor now asks
   for a portion for EVERY unit but Each, so whole grams, millilitres and a venue's own units too;
   the server still accepts a new item of a whole unit with no hardware link (ml, say) without one,
-  and stores 1._ _2026-10-05 (W75c): the server now refuses that too, as the editor does._
+  and stores 1._ _2026-10-05 (W75c): the server now refuses that too._
 - each pick adds one portion: three picks of 50 g are 150 g, and a dish × 2 doubles that, as the
   count does today;
 - the item's **Price is per portion**: blank, it is the portion × the product's unit price (50 g ×
