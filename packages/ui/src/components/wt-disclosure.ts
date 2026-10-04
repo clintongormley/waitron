@@ -36,6 +36,17 @@ export class WtDisclosure extends LitElement {
         padding-block: var(--wt-space-3);
       }
 
+      .body {
+        overflow: hidden;
+        transition: height var(--wt-duration-disclosure) ease;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .body {
+          transition: none;
+        }
+      }
+
       /* The first row is the heading and chevron alone, so the summary line below it, shown only
          while closed, never moves either of them. */
       .header {
@@ -120,11 +131,59 @@ export class WtDisclosure extends LitElement {
   @property({ type: Boolean, reflect: true, attribute: "has-error" }) hasError = false;
 
   private readonly bodyId = uniqueId("wt-disclosure-body");
+  private bodyHidden = true;
+  private openingFromHidden = false;
+  private firstRender = true;
+  private animationFrame = 0;
+  private animationGeneration = 0;
 
   override willUpdate(changed: PropertyValues<this>): void {
     // A cleared error leaves the section open: collapsing it the moment the last error is fixed would
     // hide the field being typed into.
     if (changed.has("hasError") && this.hasError) this.open = true;
+    if (this.open) {
+      this.openingFromHidden = this.bodyHidden;
+      this.bodyHidden = false;
+    } else this.openingFromHidden = false;
+  }
+
+  override updated(changed: PropertyValues<this>): void {
+    if (this.firstRender) {
+      this.firstRender = false;
+      return;
+    }
+    if (!changed.has("open")) return;
+    const body = this.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const generation = ++this.animationGeneration;
+    cancelAnimationFrame(this.animationFrame);
+    const height = this.openingFromHidden ? 0 : body.getBoundingClientRect().height;
+    if (
+      this.hasError ||
+      matchMedia("(prefers-reduced-motion: reduce)").matches ||
+      (!this.open && height === 0)
+    ) {
+      body.style.height = "";
+      this.bodyHidden = !this.open;
+      body.hidden = this.bodyHidden;
+      return;
+    }
+    body.style.height = `${height}px`;
+    void body.offsetHeight;
+    // Let the browser paint the starting height before changing it; the closed body was hidden.
+    this.animationFrame = requestAnimationFrame(() => {
+      if (generation !== this.animationGeneration) return;
+      body.style.height = this.open ? `${body.scrollHeight}px` : "0px";
+    });
+  }
+
+  private onBodyTransitionEnd(event: TransitionEvent): void {
+    if (event.propertyName !== "height" || event.target !== event.currentTarget) return;
+    const body = event.currentTarget as HTMLElement;
+    body.style.height = "";
+    if (!this.open) {
+      this.bodyHidden = true;
+      body.hidden = true;
+    }
   }
 
   private onToggle(event: Event): void {
@@ -171,7 +230,14 @@ export class WtDisclosure extends LitElement {
           ${this.open ? nothing : this.renderSummary()}
           <wt-icon class="chevron" name="chevron-down"></wt-icon>
         </button>
-        <div id=${this.bodyId} class="body" ?hidden=${!this.open}>
+        <div
+          id=${this.bodyId}
+          class="body"
+          ?hidden=${this.bodyHidden}
+          ?inert=${!this.open}
+          aria-hidden=${this.open ? "false" : "true"}
+          @transitionend=${this.onBodyTransitionEnd}
+        >
           <slot></slot>
         </div>
       </div>
