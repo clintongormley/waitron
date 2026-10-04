@@ -1295,9 +1295,10 @@ Name, not the parent's, so they read "None specified" as on a product. The Prici
 leaves a blank base price, and a VAT class the form does not offer, off its line. A names section
 (the Options and Extras editors' "Customer-facing names")
 puts each language's customer-facing name after its upper-case code in bold — "**ES:** ¿Cómo la
-quiere hecha? · **EN:** How would you like it cooked?" — leaving blank names out, so a section with
-every name blank shows no line. It is built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`)
-and passed as `summaryFields`. Those two editors keep the kitchen name out of the section, as a field
+quiere hecha? · **EN:** How would you like it cooked?" — and a blank one as the name it falls back
+to, in italic: the default language's name, then the list's staff name, as the open field hints it.
+A language with nothing to fall back to is left out. It is built by `effectiveNamesLine`
+(`apps/dashboard/src/widgets/form-fields.ts`) and passed as `summaryFields`. Those two editors keep the kitchen name out of the section, as a field
 of its own directly under Name.
 
 **A section holding a validation error opens itself and cannot be closed again while the error
