@@ -1085,7 +1085,7 @@ width and `wt-button`'s corner radius. Checked in Chromium only (the vitest brow
 screenshots); Firefox and Safari not looked at.
 
 **The login card drops its logo, and a session-expired notice is drawn as an error (W103, owner
-2026-10-04) — DONE.** The owner, on a login screenshot: _"Remove the waitron logo from the login
+2026-10-04) — DONE (#1190).** The owner, on a login screenshot: _"Remove the waitron logo from the login
 box, and make the 'your session has expired' more prominent eg in red."_ No step of
 `apps/dashboard/src/screens/login-screen.ts`, nor the account set-up and password-reset page, draws
 the Waitron logo any more; the banner above the card still shows it beside the business name. The
@@ -1095,7 +1095,10 @@ padding, first in the card above the heading. They are named in an explicit list
 stays plain unless it is added: the notice after a completed password reset ("Your password has
 been changed…") keeps the text colour and no border.
 With the owner's approval it removed the logo assertions of the card test and the logo colour test
-in `apps/dashboard/src/screens/login-screen.test.ts`. Checked in Chromium only.
+in `apps/dashboard/src/screens/login-screen.test.ts`. Checked in Chromium only. Left open for
+the owner: the error-styled notice keeps `role="status"` (read out politely, as the item asked),
+where the dashboard's other error text uses `role="alert"` (read out at once); switching it is a
+one-line change if wanted.
 
 **A focused table search box turns its own border blue, with no second ring (A192, owner
 2026-10-02) — DONE (A192).** The owner, on two screenshots of the Modifiers screen's "Search extras
