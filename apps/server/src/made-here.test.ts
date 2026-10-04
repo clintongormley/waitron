@@ -77,12 +77,7 @@ async function rawLine(
   return { id: line!.id, productId, parentLineId: null, courseId, note: null, quantity: 1000 };
 }
 
-async function deviceAt(
-  tx: Transaction,
-  locationId: string,
-  tillId: string,
-  stationId: string,
-): Promise<string> {
+async function deviceAt(tx: Transaction, locationId: string, stationId: string): Promise<string> {
   const [profile] = await tx
     .insert(deviceProfiles)
     .values({ name: "Till", formFactor: "till", capabilities: [] })
@@ -91,7 +86,6 @@ async function deviceAt(
     .insert(devices)
     .values({
       locationId,
-      tillId,
       deviceProfileId: profile!.id,
       label: "Bar till",
       tokenHash: "test",
@@ -110,7 +104,7 @@ describe("device made-here stations", () => {
       await routeProductTo(tx, venue.cfg, venue.cafeId, bar.id);
       await setStationFallback(tx, venue.cfg, bar.id, downstairs.id);
       const downstairsPrinter = await stationPrinter(tx, venue.cfg.locationId, downstairs.id);
-      const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.tillId, bar.id);
+      const deviceId = await deviceAt(tx, venue.cfg.locationId, bar.id);
       await setStationToday(tx, venue.cfg, bar.id, "closed", new Date());
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
@@ -137,12 +131,7 @@ describe("device made-here stations", () => {
       const grillPrinter = await stationPrinter(tx, venue.cfg.locationId, grill.id);
       const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
       const second = await createCourse(tx, venue.cfg, { name: "Second", displayOrder: 2 });
-      const deviceId = await deviceAt(
-        tx,
-        venue.cfg.locationId,
-        venue.tillId,
-        venue.defaultStationId,
-      );
+      const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
       const cfg = { ...venue.cfg, sendingDeviceId: deviceId };
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
@@ -193,12 +182,7 @@ describe("device made-here stations", () => {
     const venue = await setupVenue(suite.db);
     let lineId = "";
     await withTransaction(suite.db, async (tx) => {
-      const deviceId = await deviceAt(
-        tx,
-        venue.cfg.locationId,
-        venue.tillId,
-        venue.defaultStationId,
-      );
+      const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
       const line = await rawLine(tx, orderId, venue.cafeId, 1);
@@ -268,12 +252,7 @@ describe("device made-here stations", () => {
       await routeProductTo(tx, venue.cfg, venue.aguaId, grill.id);
       const barPrinter = await stationPrinter(tx, venue.cfg.locationId, venue.defaultStationId);
       const grillPrinter = await stationPrinter(tx, venue.cfg.locationId, grill.id);
-      const deviceId = await deviceAt(
-        tx,
-        venue.cfg.locationId,
-        venue.tillId,
-        venue.defaultStationId,
-      );
+      const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
       const bar = await rawLine(tx, orderId, venue.cafeId, 1);
@@ -308,12 +287,7 @@ describe("device made-here stations", () => {
       const downstairs = await createStation(tx, venue.cfg, { name: "Downstairs bar" });
       await routeProductTo(tx, venue.cfg, venue.cafeId, downstairs.id);
       const printer = await stationPrinter(tx, venue.cfg.locationId, downstairs.id);
-      const deviceId = await deviceAt(
-        tx,
-        venue.cfg.locationId,
-        venue.tillId,
-        venue.defaultStationId,
-      );
+      const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
       const line = await rawLine(tx, orderId, venue.cafeId, 1);
@@ -333,12 +307,7 @@ describe("device made-here stations", () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const printer = await stationPrinter(tx, venue.cfg.locationId, venue.defaultStationId);
-      const deviceId = await deviceAt(
-        tx,
-        venue.cfg.locationId,
-        venue.tillId,
-        venue.defaultStationId,
-      );
+      const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
       const ordinary = await rawLine(tx, orderId, venue.cafeId, 1);
@@ -378,7 +347,6 @@ describe("device made-here stations", () => {
         .insert(devices)
         .values({
           locationId: venue.cfg.locationId,
-          tillId: venue.tillId,
           deviceProfileId: profile!.id,
           label: "Other",
           tokenHash: "test",
@@ -405,12 +373,7 @@ describe("device made-here stations", () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const printer = await stationPrinter(tx, venue.cfg.locationId, venue.defaultStationId);
-      const barDeviceId = await deviceAt(
-        tx,
-        venue.cfg.locationId,
-        venue.tillId,
-        venue.defaultStationId,
-      );
+      const barDeviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
       const [profile] = await tx
         .insert(deviceProfiles)
         .values({ name: "Other till", formFactor: "till", capabilities: [] })
@@ -419,7 +382,6 @@ describe("device made-here stations", () => {
         .insert(devices)
         .values({
           locationId: venue.cfg.locationId,
-          tillId: venue.tillId,
           deviceProfileId: profile!.id,
           label: "Other",
           tokenHash: "test",
@@ -469,12 +431,7 @@ describe("device made-here stations", () => {
       const grillPrinter = await stationPrinter(tx, venue.cfg.locationId, grill.id);
       const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
       const second = await createCourse(tx, venue.cfg, { name: "Second", displayOrder: 2 });
-      const deviceId = await deviceAt(
-        tx,
-        venue.cfg.locationId,
-        venue.tillId,
-        venue.defaultStationId,
-      );
+      const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
       const drink = await rawLine(tx, orderId, venue.cafeId, 1, first.id);
@@ -521,12 +478,7 @@ describe("device made-here stations", () => {
       await routeProductTo(tx, venue.cfg, venue.aguaId, grill.id);
       const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
       const second = await createCourse(tx, venue.cfg, { name: "Second", displayOrder: 2 });
-      const deviceId = await deviceAt(
-        tx,
-        venue.cfg.locationId,
-        venue.tillId,
-        venue.defaultStationId,
-      );
+      const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
       const burger = await rawLine(tx, orderId, venue.aguaId, 1, first.id);
@@ -559,7 +511,6 @@ describe("device made-here stations", () => {
         .insert(devices)
         .values({
           locationId: venue.cfg.locationId,
-          tillId: venue.tillId,
           deviceProfileId: profile!.id,
           label: "Bar till",
           tokenHash: "test",
@@ -625,7 +576,6 @@ describe("device made-here stations", () => {
         .values({
           id: randomUUID(),
           locationId: venue.cfg.locationId,
-          tillId: venue.tillId,
           deviceProfileId: profile!.id,
           label: "Counter",
           tokenHash: "test",
@@ -662,7 +612,6 @@ describe("device made-here stations", () => {
         .values({
           id: randomUUID(),
           locationId: venue.cfg.locationId,
-          tillId: venue.tillId,
           deviceProfileId: profile!.id,
           label: "Counter",
           tokenHash: "test",
@@ -701,7 +650,6 @@ describe("device made-here stations", () => {
           ["A", "B"].map((label) => ({
             id: randomUUID(),
             locationId: venue.cfg.locationId,
-            tillId: venue.tillId,
             deviceProfileId: profile!.id,
             label,
             tokenHash: "test",

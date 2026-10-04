@@ -14,7 +14,6 @@ import {
   sales,
   tenantReceipts,
   tenants,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -1014,20 +1013,17 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 });
 
 describe("every device whose profile allows the drawer opens its receipt printer's drawer", () => {
-  /** Another till at the venue's location, a device on it, and the config a sale there runs under. */
+  /** Another till device at the venue's location, and the config a sale there runs under. */
   async function addTill(
     cfg: DeviceRequestConfig,
     name: string,
     capabilities: string[] = [...CAPABILITY_FLAGS],
   ): Promise<DeviceRequestConfig> {
-    const id = await withTransaction(suite.db, async (tx) => {
-      const [till] = await tx
-        .insert(tills)
-        .values({ locationId: cfg.locationId, name })
-        .returning({ id: tills.id });
-      return till!.id;
+    const { deviceId } = await seedDevice(suite.db, {
+      locationId: cfg.locationId,
+      label: name,
+      capabilities,
     });
-    const { deviceId } = await seedDevice(suite.db, { tillId: id, capabilities });
     return { ...cfg, origin: deviceOrigin(deviceId) };
   }
 

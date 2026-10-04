@@ -13,18 +13,16 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedDevice, seedNode } from "../testing/seed.js";
 import { sales } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 // Append-only links and sales retain their FK parents; each case uses a fresh fixture identity.
 beforeEach(() => {
   LOCATION_A = randomUUID();
-  TILL_A1 = randomUUID();
 });
 
 let LOCATION_A = randomUUID();
-let TILL_A1 = randomUUID();
 const AT = "2026-07-20T19:20:30+00:00";
 
 let seriesA = "";
@@ -48,9 +46,8 @@ async function seed(db: Database): Promise<void> {
       operationDescription: "Hostelería",
     },
   ]);
-  await db.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
   nodeA = await seedNode(db, brandLocationId(LOCATION_A));
-  ({ deviceId: deviceA } = await seedDevice(db, { tillId: TILL_A1 }));
+  ({ deviceId: deviceA } = await seedDevice(db, { locationId: LOCATION_A }));
   const [a] = await db
     .insert(invoiceSeries)
     .values({ nodeId: nodeA, code: "FA", purpose: "standard" })

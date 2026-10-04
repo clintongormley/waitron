@@ -88,8 +88,6 @@ export interface BillVenue {
   cookie2: string;
   /** A till whose profile does not declare `integrated-card-payment`. */
   cookieNoCard: string;
-  deviceTillId: string;
-  device2TillId: string;
   /** The second till's device: `cookie2`'s. */
   device2Id: string;
   operatorId: string;
@@ -219,10 +217,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     await db
       .insert(deviceCardReaders)
       .values({ deviceId: device.deviceId, readerId: seeded.readerIds[index]! });
-    const [row] = db.all<{ till_id: string }>(
-      sql`select till_id from devices where id = ${device.deviceId}`,
-    );
-    devices.push({ ...device, tillId: row!.till_id });
+    devices.push(device);
   }
   const cashOnlyDevice = await enrolDeviceForTest(db, cfg, {
     name: "Caja efectivo",
@@ -278,8 +273,6 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     deviceId: devices[0]!.deviceId,
     cookie2: await cookieFor(devices[1]!),
     cookieNoCard: await cookieFor(cashOnlyDevice),
-    deviceTillId: devices[0]!.tillId,
-    device2TillId: devices[1]!.tillId,
     device2Id: devices[1]!.deviceId,
     operatorId: seeded.personId,
     adminId: db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!.id,

@@ -58,7 +58,7 @@ describe("migration composition across packages", () => {
     const names = await tableNames(db);
     // Core's tables and the module's tables coexist, created by independent migration sets.
     expect(names).toContain("sales");
-    expect(names).toContain("tills");
+    expect(names).toContain("devices");
     expect(names).toContain("registros_facturacion");
     expect(names).toContain("cadenas");
     expect(names).toContain("registro_sif");

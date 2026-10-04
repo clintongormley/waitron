@@ -32,7 +32,7 @@ describe("cuota_total / importe_total round-trip the huella's literal hash input
         tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
         primer_registro, sistema_informatico,
         fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, creado_en
-      ) values (${newId()}, 'device', (select id from devices where till_id = ${TENANT_A.tillId}), ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
+      ) values (${newId()}, 'device', (select id from devices where location_id = ${TENANT_A.locationId}), ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
         1, 'alta',
         '89890001K', 'A/1', '2026-07-20', 'Waitron SL',
         'F2', 'Venta en establecimiento', '[]', ${cuotaTotal}, ${importeTotal},

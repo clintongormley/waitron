@@ -75,7 +75,6 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("tenants", "state", STATE),
   classify("locations", "state", STATE),
   classify("nodes", "state", STATE),
-  classify("tills", "state", STATE),
   classify("devices", "state", STATE),
   classify("device_made_here_stations", "state", STATE),
   classify("device_profiles", "state", STATE),

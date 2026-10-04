@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, tills, withTransaction, workingOrders } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction, workingOrders } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
@@ -65,11 +65,7 @@ async function seedInitiated(
     .insert(locations)
     .values({ name: "Counter", invoiceLocales: ["es"], operationDescription: "Retail" })
     .returning({ id: locations.id });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId: loc!.id, name: "Till 1" })
-    .returning({ id: tills.id });
-  const { deviceId } = await seedDevice(db, { tillId: till!.id });
+  const { deviceId } = await seedDevice(db, { locationId: loc!.id });
   const [wo] = await db
     .insert(workingOrders)
     .values({ source: "device", deviceId, locationId: loc!.id, orderNumber: 1 })

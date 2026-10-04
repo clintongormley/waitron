@@ -15,9 +15,8 @@ import type { DevDeviceList, TillApi } from "../api/client.js";
  * different device in each tab.
  *
  * "Set up a new device" embeds the {@link TillEnrolScreen}; in devMode the server auto-accepts that knock
- * with the venue's default `till` profile, so it can only mint a `till`, and a REPEATED name is refused
- * with `device.register_name_taken` because a till enrol creates a register named after the device.
- * Acceptable for a dev tool: `dev-setup` also seeds a phone-portrait handheld and a kitchen display, so
+ * with the venue's default `till` profile, so it can only mint a `till`, and the name of a device still
+ * active is refused with `device.name_taken`. Acceptable for a dev tool: `dev-setup` also seeds a phone-portrait handheld and a kitchen display, so
  * the chooser lists those without minting them.
  *
  * Its own chrome is DELIBERATELY plain English literals, not `t()` keys: no venue ever sees this tool.

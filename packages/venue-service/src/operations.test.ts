@@ -34,7 +34,6 @@ import {
   floorZones,
   kitchenStations,
   locations,
-  tills,
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
@@ -43,7 +42,7 @@ import type { Database, Transaction } from "@waitron/db";
 import type { ZoneMenu, ZoneMenuState } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
-import { AppError, locationId as brandLocationId, tillId as brandTillId } from "@waitron/shared";
+import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createException, resolveMakers, setClaim } from "./routing-store.js";
@@ -119,11 +118,6 @@ async function seedStation(locationId: LocationId, name: string, active = true):
     .insert(kitchenStations)
     .values({ locationId, name, active })
     .returning({ id: kitchenStations.id });
-  return row!.id;
-}
-
-async function seedTill(locationId: LocationId, name: string): Promise<string> {
-  const [row] = await db.insert(tills).values({ locationId, name }).returning({ id: tills.id });
   return row!.id;
 }
 
@@ -962,7 +956,6 @@ async function seedSellingVenue() {
   const cfg = { locationId };
   const diningZone = await seedZone(locationId, "Dining room");
   const barZone = await seedZone(locationId, "Bar");
-  const till = brandTillId(await seedTill(locationId, "Till"));
   const nodeId = await seedNode(db, locationId);
   return scoped(async (tx) => {
     const restaurant = await createDepartment(tx, cfg, {
@@ -1000,7 +993,6 @@ async function seedSellingVenue() {
       barId: bar.id,
       productId: product.id,
       menuItemId: offer.id,
-      till,
       nodeId,
     };
   });
@@ -1044,7 +1036,6 @@ async function seedDevice(venue: SellingVenue, label: string): Promise<string> {
     .values({
       locationId: venue.cfg.locationId,
       deviceProfileId: profile!.id,
-      tillId: venue.till,
       label,
       tokenHash: "scrypt$00$00",
     })

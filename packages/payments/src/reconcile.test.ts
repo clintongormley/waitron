@@ -98,28 +98,20 @@ async function forwardedOffline(seeded: Seeded, paymentRef: string, externalRef:
   });
 }
 
-/** Seeds a second till, node and open working order at the same location as `seeded`. */
+/** Seeds a second till device, node and open working order at the same location as `seeded`. */
 async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
-  const [till] = (
-    await suite.db.execute<{ location_id: string }>(
-      sql`select location_id from tills where id = ${seeded.tillId}`,
-    )
-  ).rows;
+  const { locationId } = seeded;
   // A raw insert runs no drizzle `$defaultFn`, so `id` and the timestamps are supplied by hand.
   const stamp = new Date().toISOString();
-  const till2 = await suite.db.execute<{ id: string }>(sql`
-    insert into tills (id, location_id, name, created_at)
-    values (${randomUUID()}, ${till.location_id}, 'Till 2', ${stamp}) returning id`);
-  const tillId = till2.rows[0].id;
   const node2 = await suite.db.execute<{ id: string }>(sql`
     insert into nodes (id, location_id, name, created_at)
-    values (${randomUUID()}, ${till.location_id}, 'Node 2', ${stamp}) returning id`);
-  const { deviceId } = await seedDevice(suite.db, { tillId });
+    values (${randomUUID()}, ${locationId}, 'Node 2', ${stamp}) returning id`);
+  const { deviceId } = await seedDevice(suite.db, { locationId });
   const wo2 = await suite.db.execute<{ id: string }>(sql`
     insert into working_orders (id, source, device_id, location_id, order_number, opened_at)
-    values (${randomUUID()}, 'device', ${deviceId}, ${till.location_id}, 1, ${stamp}) returning id`);
+    values (${randomUUID()}, 'device', ${deviceId}, ${locationId}, 1, ${stamp}) returning id`);
   return {
-    tillId,
+    locationId,
     deviceId,
     nodeId: node2.rows[0].id,
     workingOrderId: wo2.rows[0].id,

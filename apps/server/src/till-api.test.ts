@@ -117,10 +117,10 @@ let cervezaProduct: { id: string; catalogueId: string };
 let counterZoneId: string;
 let aguaOfferId: string;
 let hiddenAguaOfferId: string;
-// An enrolled `till` device's cookie: the sale routes resolve `till_id` from the device, so a
-// happy-path place/sale call carries it to reach the route body.
+// An enrolled `till` device's cookie, which a happy-path place/sale call carries to reach the
+// route body.
 let tillDeviceCookie: string;
-// The device `openSession` opens Ana's shift on: on `cfg`'s till, allowed every capability.
+// The device `openSession` opens Ana's shift on: at `cfg`'s location, allowed every capability.
 let sessionDeviceId: string;
 
 const suite = useVenueDb({
@@ -136,10 +136,9 @@ const suite = useVenueDb({
       sql`select tax_id from tenants where id = 1`,
     );
     venueTaxId = tenant.rows[0]!.tax_id;
-    // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row with
-    // a FK to `tills`, so the till `cfg.tillId` names must exist. The products are authored under the
-    // BARE `es` key; `priceOrderLines` re-keys their descriptions to the location's `es-ES` before
-    // the working-order-line insert fires `check_locales`, which demands the keys match EXACTLY.
+    // The products are authored under the BARE `es` key; `priceOrderLines` re-keys their
+    // descriptions to the location's `es-ES` before the working-order-line insert fires
+    // `check_locales`, which demands the keys match EXACTLY.
     const [loc] = await db
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
@@ -894,8 +893,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
     const { rows } = await suite.db.execute<{
       device_profile_id: string;
       label: string;
-      till_id: string;
-    }>(sql`select device_profile_id, label, till_id from devices where id = ${sessionDeviceId}`);
+    }>(sql`select device_profile_id, label from devices where id = ${sessionDeviceId}`);
     return {
       personId: ana.id,
       sessionId,
@@ -907,7 +905,6 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
         locationId: cfg.locationId,
         stationId: null,
         watcherId: null,
-        tillId: rows[0]!.till_id,
         deviceProfileId: rows[0]!.device_profile_id,
         receiptPrinterId: null,
         paymentSlipPrinterId: null,

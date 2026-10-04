@@ -85,7 +85,6 @@ export interface DeviceBinding {
   locationId: string;
   stationId: string | null;
   watcherId: string | null;
-  tillId: string | null;
   deviceProfileId: string;
   receiptPrinterId: string | null;
   paymentSlipPrinterId: string | null;
@@ -100,7 +99,6 @@ export const deviceBindingColumns = {
   locationId: devices.locationId,
   stationId: devices.stationId,
   watcherId: devices.watcherId,
-  tillId: devices.tillId,
   deviceProfileId: devices.deviceProfileId,
   receiptPrinterId: devices.receiptPrinterId,
   paymentSlipPrinterId: devices.paymentSlipPrinterId,
@@ -152,7 +150,6 @@ export function toDeviceBinding(
     locationId: row.locationId,
     stationId: row.stationId,
     watcherId: row.watcherId,
-    tillId: row.tillId,
     deviceProfileId: row.deviceProfileId,
     receiptPrinterId: row.receiptPrinterId,
     paymentSlipPrinterId: row.paymentSlipPrinterId,

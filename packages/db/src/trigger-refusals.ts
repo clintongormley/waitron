@@ -52,12 +52,11 @@ export const FORM_FACTOR_REFUSAL =
  */
 export const MISSING_PROFILE_REFUSAL = "device has no profile";
 
-/** `device_binding_rule_*`: a `kds` device must bind one station or watcher, and no register. */
-export const KDS_BINDING_REFUSAL = "a kds device binds a station or a watcher, and no register";
+/** `device_binding_rule_*`: a `kds` device must bind exactly one station or watcher. */
+export const KDS_BINDING_REFUSAL = "a kds device binds a station or a watcher";
 
-/** `device_binding_rule_*`: another form factor binds a register alone. */
-export const REGISTER_BINDING_REFUSAL =
-  "a non-kds device binds a register and no station or watcher";
+/** `device_binding_rule_*`: another form factor binds no station and no watcher. */
+export const NON_KDS_BINDING_REFUSAL = "a non-kds device binds no station or watcher";
 
 /**
  * `products_variant_one_level_insert`: the named parent is itself a variant, or is the row itself,

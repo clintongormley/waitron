@@ -135,7 +135,6 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listDevices: vi.fn().mockResolvedValue([]),
     listAgents: vi.fn().mockResolvedValue([]),
     listPrinters: vi.fn().mockResolvedValue([]),
-    listTills: vi.fn().mockResolvedValue([]),
     listRecentJobs: vi.fn().mockResolvedValue([]),
     listCanvases: vi.fn().mockResolvedValue([]),
     getRecentLogs: vi.fn().mockResolvedValue({ lines: [] }),

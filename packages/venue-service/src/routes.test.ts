@@ -16,7 +16,6 @@ import {
   floorZones,
   kitchenStations,
   locations,
-  tills,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -928,10 +927,6 @@ describe("venue service management routes", () => {
         )
       ).status,
     ).toBe(204);
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: fx.locationId, name: "Till 1" })
-      .returning({ id: tills.id });
     const [profile] = await db
       .insert(deviceProfiles)
       .values({ name: "Counter", formFactor: "till" })
@@ -941,7 +936,6 @@ describe("venue service management routes", () => {
       .values({
         locationId: fx.locationId,
         deviceProfileId: profile!.id,
-        tillId: till!.id,
         label: "Counter till",
         tokenHash: "scrypt$00$00",
       })

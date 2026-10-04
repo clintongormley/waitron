@@ -11,7 +11,6 @@ import {
   printJobs,
   saleLines,
   sales,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -56,7 +55,6 @@ const DAY3 = "2026-06-12"; // a product whose category today sits in a loop
 
 let nodeId: string;
 let locationId: string;
-let tillId: string;
 let deviceId: string;
 let seriesId: string;
 let managerCookie: string;
@@ -158,12 +156,7 @@ const suite = useVenueDb({
         operationDescription: "Venta en establecimiento",
       })
       .returning({ id: locations.id });
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId, name: "Caja 1" })
-      .returning({ id: tills.id });
-    tillId = till!.id;
-    ({ deviceId } = await seedDevice(db, { tillId }));
+    ({ deviceId } = await seedDevice(db, { locationId }));
     const [node] = await db
       .insert(nodes)
       .values({ locationId, name: "Nodo 1" })

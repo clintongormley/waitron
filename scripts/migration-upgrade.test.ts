@@ -343,6 +343,10 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "workforce/0002_time_entries_origin_drop_till": {
     refused: ["CHECK constraint failed: time_entries_captured_by_source_ck"],
   },
+  // Drops `tills`, refused while a device names one, then rebuilds `devices` without `till_id`.
+  "core/0088_devices_lose_till": {
+    refused: ["DROP TABLE `tills`", "FOREIGN KEY constraint failed"],
+  },
 };
 
 /** What a step's failure lacks against its RESETS entry, or `undefined` when it matches. */

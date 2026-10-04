@@ -407,18 +407,11 @@ it("words each refusal a cancel and credit can meet, in both languages, naming n
     "series.no_rectificative_for_node",
     "sale.correction_exceeds_total",
     "sale.correction_not_whole",
-    "device.till_required",
   ]) {
     expect(codeMessage(code, "en")).not.toBe(generic.en);
     expect(codeMessage(code, "es")).not.toBe(generic.es);
     expect(codeMessage(code, "en")).not.toContain(code);
   }
-});
-
-it("words a device that is not a till for any action, naming no cancel or credit", () => {
-  // Other routes receive it too, the unpaid departure and the shift sign-in among them.
-  expect(codeMessage("device.till_required", "en")).not.toMatch(/cancel|credit/i);
-  expect(codeMessage("device.till_required", "es")).not.toMatch(/cancel|anul|abon|rectific/i);
 });
 
 it("says in both languages that a printer cannot be chosen for this device, naming no identifier", () => {

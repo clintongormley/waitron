@@ -31,6 +31,11 @@ function callsOf(fetchImpl: ReturnType<typeof vi.fn>): Call[] {
 }
 
 describe("DashboardApi routes", () => {
+  it("offers no route that names tills", () => {
+    const methods = Object.getOwnPropertyNames(DashboardApi.prototype);
+    expect(methods.filter((name) => /tills/i.test(name))).toEqual([]);
+  });
+
   it("passes Orders filters and the chosen printer to the management routes", async () => {
     const page = { rows: [], next: null, from: null, to: null };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(page));

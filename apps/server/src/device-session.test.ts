@@ -17,7 +17,6 @@ import {
   devices,
   kitchenStations,
   locations,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -89,7 +88,7 @@ function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T>
 /**
  * Each database-backed test seeds its own venue, so the device state each case reads is its own.
  */
-async function setupStation(): Promise<{ cfg: TillConfig; stationId: string; tillId: string }> {
+async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
   const admin = suite.db;
   await seedTenant(admin);
   const [loc] = await admin
@@ -101,11 +100,6 @@ async function setupStation(): Promise<{ cfg: TillConfig; stationId: string; til
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
-  // A handheld rings into an existing till until the tills table goes; setup makes none.
-  const [till] = await admin
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
   const nodeId = await seedNode(admin, brandLocationId(locationId));
   const cfg: TillConfig = {
     nodeId: brandNodeId(nodeId),
@@ -120,7 +114,7 @@ async function setupStation(): Promise<{ cfg: TillConfig; stationId: string; til
   const st = await asApp(admin, (tx) =>
     createStation(tx, cfg, { name: "Cocina", isDefault: true }),
   );
-  return { cfg, stationId: st.id, tillId: till!.id };
+  return { cfg, stationId: st.id };
 }
 
 /** Enrol a REAL device via join-and-accept — the only way to obtain a `${deviceId}.${token}` whose
@@ -143,9 +137,8 @@ async function enrolDeviceFixture(): Promise<{
   return { cfg, deviceId: dev.deviceId, token: dev.token, stationId, deviceProfileId };
 }
 
-/** The bindings a station screen enrolled without a till, watcher, or hardware target carries. */
+/** The bindings a station screen enrolled without a watcher or hardware target carries. */
 const NO_BINDINGS = {
-  tillId: null,
   watcherId: null,
   receiptPrinterId: null,
   paymentSlipPrinterId: null,
@@ -178,7 +171,6 @@ async function enrolTillDeviceFixture(): Promise<{
   deviceId: string;
   token: string;
   deviceProfileId: string;
-  tillId: string;
 }> {
   const { cfg } = await setupStation();
   const [canvas] = await suite.db
@@ -187,7 +179,7 @@ async function enrolTillDeviceFixture(): Promise<{
     .returning({ id: canvases.id });
   const canvasId = canvas!.id;
   // This fixture explicitly grants reader and drawer access. The device binds the canvas SOLELY
-  // through this profile, and a `till` profile AUTO-CREATES the register the device rings against.
+  // through this profile.
   const deviceProfileId = await seedDeviceProfile(
     "Counter",
     "till",
@@ -198,15 +190,7 @@ async function enrolTillDeviceFixture(): Promise<{
     name: "Counter till",
     profileId: deviceProfileId,
   });
-  const { rows } = await suite.db.execute<{ till_id: string }>(sql`
-    select till_id from devices where id = ${dev.deviceId}`);
-  return {
-    cfg,
-    deviceId: dev.deviceId,
-    token: dev.token,
-    deviceProfileId,
-    tillId: rows[0]!.till_id,
-  };
+  return { cfg, deviceId: dev.deviceId, token: dev.token, deviceProfileId };
 }
 
 /**
@@ -283,18 +267,16 @@ async function enrolHandheldWithCanvasFixture(): Promise<{
   deviceId: string;
   token: string;
 }> {
-  const { cfg, tillId } = await setupStation();
+  const { cfg } = await setupStation();
   const [canvas] = await suite.db
     .insert(canvases)
     .values({ name: "Waiter phone", definition: DEFAULT_CANVASES["phone-portrait"] })
     .returning({ id: canvases.id });
   const canvasId = canvas!.id;
-  // A handheld (`phone-portrait`) binds an EXISTING register at enrol.
   const deviceProfileId = await seedDeviceProfile("Waiter", "phone-portrait", [], canvasId);
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: "Waiter phone",
     profileId: deviceProfileId,
-    registerId: tillId,
   });
   return { cfg, deviceId: dev.deviceId, token: dev.token };
 }
@@ -461,10 +443,9 @@ describe("requireDevice (venue database)", () => {
     expect(await lastSeenAt(deviceId)).not.toBeNull(); // the guard recorded the sighting
   });
 
-  it("carries the device's assigned profile + till + hardware bindings back on the binding (SP-A.2 §16, device-profile §5)", async () => {
-    const { cfg, deviceId, token, deviceProfileId, tillId } = await enrolTillDeviceFixture();
-    // The canvas is not a device field; it resolves THROUGH the profile at `/api/till`. The till is the
-    // register the `till` profile auto-created at enrol.
+  it("carries the device's assigned profile + hardware bindings back on the binding (SP-A.2 §16, device-profile §5)", async () => {
+    const { cfg, deviceId, token, deviceProfileId } = await enrolTillDeviceFixture();
+    // The canvas is not a device field; it resolves THROUGH the profile at `/api/till`.
     expect(await probe(`${deviceId}.${token}`)).toEqual({
       ok: true,
       binding: {
@@ -474,7 +455,6 @@ describe("requireDevice (venue database)", () => {
         locationId: cfg.locationId,
         stationId: null,
         watcherId: null,
-        tillId,
         deviceProfileId,
         receiptPrinterId: null,
         paymentSlipPrinterId: null,
@@ -660,7 +640,6 @@ describe("assertTakesCash on a resolved device", () => {
   const binding = (
     capabilities: CapabilityFlag[],
     formFactor: FormFactor = "phone-portrait",
-    tillId: string | null = null,
   ): DeviceBinding => ({
     deviceId: randomUUID(),
     formFactor,
@@ -668,7 +647,6 @@ describe("assertTakesCash on a resolved device", () => {
     locationId: randomUUID(),
     stationId: null,
     watcherId: null,
-    tillId,
     deviceProfileId: randomUUID(),
     receiptPrinterId: null,
     paymentSlipPrinterId: null,

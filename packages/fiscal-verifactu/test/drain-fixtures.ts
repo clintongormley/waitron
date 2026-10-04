@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
-import { invoiceSeries, locations, nodes, sales, tills, type Database } from "@waitron/db";
+import { invoiceSeries, locations, nodes, sales, type Database } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
-import { nodeId as brandNodeId, tillId as brandTillId } from "@waitron/shared";
-import type { NodeId, TillId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import { envios } from "../src/schema/envios.js";
 import { registrosFacturacion } from "../src/schema/registros.js";
 import { registroSif } from "../src/schema/sif.js";
@@ -33,7 +33,7 @@ const DEFAULT_ENTORNO: Entorno = "production";
 export interface SeededDrainOptions {
   count: number;
   /** Reuse an operational venue's fiscal identity instead of creating another venue. */
-  identity?: { tillId: string; nodeId: string; nif: string };
+  identity?: { locationId: string; nodeId: string; nif: string };
   /** Stamps a generation time after the fake AEAT's `serverNow`, which the fake answers with
    * warning 2004 (AceptadoConErrores). A future invoice date is refused outright (1112) instead. */
   futureDated?: boolean;
@@ -46,7 +46,7 @@ export interface SeededDrainOptions {
 }
 
 export interface SeededDrain {
-  tillId: TillId;
+  locationId: string;
   nodeId: NodeId;
   sifId: string;
   nif: string;
@@ -78,7 +78,7 @@ function toAeatDate(isoDate: string): string {
 export async function insertPendingAlta(
   db: Database,
   params: {
-    tillId: string;
+    locationId: string;
     nodeId: string;
     sifId: string;
     nif: string;
@@ -92,7 +92,7 @@ export async function insertPendingAlta(
   },
 ): Promise<{ registroId: string; numSerieFactura: string }> {
   const numSerieFactura = `S${String(params.secuencia)}/1`;
-  const { deviceId } = await seedDevice(db, { tillId: params.tillId });
+  const { deviceId } = await seedDevice(db, { locationId: params.locationId });
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId: params.nodeId, code: `S${String(params.secuencia)}` })
@@ -197,7 +197,7 @@ export async function insertPendingAlta(
 }
 
 /**
- * Seeds a till + live SIF identity (`seedTenantWithSif`), then `opts.count` pending altas, each
+ * Seeds a till device + live SIF identity (`seedTenantWithSif`), then `opts.count` pending altas, each
  * with its `pendiente` `envios` row due at the fake AEAT's `serverNow`.
  */
 export async function seedPendingEnvios(
@@ -208,10 +208,10 @@ export async function seedPendingEnvios(
     opts.identity === undefined
       ? await seedTenantWithSif(db)
       : {
-          tillId: brandTillId(opts.identity.tillId),
+          locationId: opts.identity.locationId,
           nodeId: brandNodeId(opts.identity.nodeId),
         };
-  const { tillId, nodeId } = seeded;
+  const { locationId, nodeId } = seeded;
   const sif = await db.transaction((tx) =>
     opts.identity === undefined
       ? currentSif(tx, nodeId)
@@ -237,7 +237,7 @@ export async function seedPendingEnvios(
     // Deterministic, distinct, and hex-valid for `registros_huella_ck` (`^[0-9A-F]{64}$`).
     const huella = String(sequence).padStart(64, "0");
     const { registroId, numSerieFactura } = await insertPendingAlta(db, {
-      tillId,
+      locationId,
       nodeId,
       sifId: sif.id,
       nif: sif.nif,
@@ -253,7 +253,7 @@ export async function seedPendingEnvios(
   }
 
   return {
-    tillId,
+    locationId,
     nodeId,
     sifId: sif.id,
     nif: sif.nif,
@@ -276,7 +276,7 @@ export async function appendPendingAlta(
   const huella = String(secuencia).padStart(64, "0");
   // `DEFAULT_ENTORNO`, so the appended row agrees with the chain it extends.
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
-    tillId: seeded.tillId,
+    locationId: seeded.locationId,
     nodeId: seeded.nodeId,
     sifId: seeded.sifId,
     nif: seeded.nif,
@@ -290,7 +290,7 @@ export async function appendPendingAlta(
 }
 
 /**
- * Adds a SECOND, independent chain — a new till and node with its own live SIF registration, so
+ * Adds a SECOND, independent chain — a new location and node with its own live SIF registration, so
  * its own `sif_id` — under an ALREADY-seeded venue, with one pending alta at `secuencia`.
  */
 export async function seedSecondChain(
@@ -306,11 +306,6 @@ export async function seedSecondChain(
       operationDescription: "Venta en establecimiento",
     })
     .returning({ id: locations.id });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId: location!.id, name: "Till B" })
-    .returning({ id: tills.id });
-  const tillId = brandTillId(till!.id);
   const [node] = await db
     .insert(nodes)
     .values({ locationId: location!.id, name: "Node B" })
@@ -325,7 +320,7 @@ export async function seedSecondChain(
 
   const huella = `B${String(secuencia).padStart(63, "0")}`;
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
-    tillId,
+    locationId: location!.id,
     nodeId,
     sifId: sif.id,
     nif: seeded.nif,
@@ -360,11 +355,6 @@ export async function seedIndependentChain(
       operationDescription: "Venta en establecimiento",
     })
     .returning({ id: locations.id });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId: location!.id, name: "Till Z" })
-    .returning({ id: tills.id });
-  const tillId = brandTillId(till!.id);
   const [node] = await db
     .insert(nodes)
     .values({ locationId: location!.id, name: "Node Z" })
@@ -386,7 +376,7 @@ export async function seedIndependentChain(
   // 64 hex digits for `registros_huella_ck`, prefixed apart from `seedSecondChain`'s "B".
   const huella = `E${String(params.secuencia).padStart(63, "0")}`;
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
-    tillId,
+    locationId: location!.id,
     nodeId,
     sifId: params.sifId,
     nif,

@@ -6,7 +6,6 @@ import {
   locations,
   nowIso,
   ticketItems,
-  tills,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -39,8 +38,6 @@ describe("rest of the order read", () => {
       invoiceLocales: ["en"],
       operationDescription: "Service",
     });
-    const tillId = randomUUID();
-    await db.insert(tills).values({ id: tillId, locationId, name: "Till" });
     const nodeId = await seedNode(db, brandLocationId(locationId));
     const stations = await db
       .insert(kitchenStations)

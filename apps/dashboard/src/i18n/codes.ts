@@ -488,17 +488,13 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This profile needs a station — choose one",
     es: "Este perfil necesita una estación. Elige una",
   },
-  "device.register_required": {
-    en: "This profile needs a register — choose one",
-    es: "Este perfil necesita una caja. Elige una",
-  },
-  "device.register_name_taken": {
-    en: "A register with that name already exists — rename the device and let it ask again",
-    es: "Ya existe una caja con ese nombre. Cambia el nombre del dispositivo y que lo solicite de nuevo",
+  "device.name_taken": {
+    en: "An active device here already has that name. Rename the device and let it ask again",
+    es: "Ya hay un dispositivo activo con ese nombre aquí. Cambia el nombre del dispositivo y que lo solicite de nuevo",
   },
   "device.binding_invalid": {
-    en: "That station or register is no longer available",
-    es: "Esa estación o caja ya no está disponible",
+    en: "That profile is no longer available",
+    es: "Ese perfil ya no está disponible",
   },
   "shared.invalid_id": {
     en: "That identifier isn't valid",

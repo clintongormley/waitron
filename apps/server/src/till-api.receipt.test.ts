@@ -10,10 +10,8 @@ import {
   printJobs,
   sales,
   tenantReceipts,
-  tills,
   withTransaction,
 } from "@waitron/db";
-import { venueTill } from "./testing/session-device.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -405,10 +403,6 @@ async function enrolConfiguredTillCookie(cfg: TillConfig): Promise<string> {
     name: `Configured till ${n}`,
     profileId: profile!.id,
   });
-  await suite.db
-    .update(devices)
-    .set({ tillId: await venueTill(suite.db, cfg.locationId) })
-    .where(eq(devices.id, dev.deviceId));
   await startOnVenuePrinter(dev.deviceId);
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
@@ -1664,7 +1658,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       receipt: string[];
       slip: string[];
     },
-  ): Promise<{ deviceId: string; cookie: string; tillId: string }> {
+  ): Promise<{ deviceId: string; cookie: string }> {
     tillDeviceCounter += 1;
     const n = tillDeviceCounter;
     const formFactor = opts.formFactor ?? "till";
@@ -1681,19 +1675,8 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     const dev = await enrolDeviceForTest(suite.db, cfg, {
       name: `Printing device ${n}`,
       profileId: profile!.id,
-      ...(formFactor === "phone-portrait"
-        ? { registerId: await venueTill(suite.db, cfg.locationId) }
-        : {}),
     });
-    const [row] = await suite.db
-      .select({ tillId: devices.tillId })
-      .from(devices)
-      .where(eq(devices.id, dev.deviceId));
-    return {
-      deviceId: dev.deviceId,
-      cookie: `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`,
-      tillId: row!.tillId!,
-    };
+    return { deviceId: dev.deviceId, cookie: `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}` };
   }
 
   async function jobs(): Promise<{ printerId: string; kind: string; payload: number[] }[]> {
@@ -1701,10 +1684,6 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       .select({ printerId: printJobs.printerId, kind: printJobs.kind, payload: printJobs.payload })
       .from(printJobs);
     return rows.map((row) => ({ ...row, payload: [...new Uint8Array(row.payload)] }));
-  }
-
-  async function setTillPrinter(tillId: string, printerId: string): Promise<void> {
-    await suite.db.update(tills).set({ receiptPrinterId: printerId }).where(eq(tills.id, tillId));
   }
 
   async function venueWithPrinters() {
@@ -1717,8 +1696,6 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       await makePrinter(venue.cfg, false),
       await makePrinter(venue.cfg, false),
     ];
-    // A till's own printer: a device printing here would be reading the till, not itself.
-    await setTillPrinter(await venueTill(suite.db, venue.cfg.locationId), r3!);
     const app = new Hono();
     mountTillApi(app, apiDeps(venue.cfg), noopLog);
     mountDeviceApi(
@@ -1826,16 +1803,15 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     expect((await jobs()).map((job) => job.printerId)).toEqual([r1]);
   });
 
-  it("opens no drawer on a cash sale when the device's receipt printer has none, whatever its till's printer has", async () => {
+  it("opens no drawer on a cash sale when the device's receipt printer has none, whatever another printer has", async () => {
     const { cfg, each, app, signIn } = await venueWithPrinters();
     const noDrawer = await makePrinter(cfg, false);
-    const drawer = await makePrinter(cfg);
+    await makePrinter(cfg);
     const device = await enrolPrintingDevice(cfg, {
       capabilities: ["open-cash-drawer", "take-cash"],
       receipt: [noDrawer],
       slip: [],
     });
-    await setTillPrinter(device.tillId, drawer);
 
     await ringSale(app, cfg, await signIn(device.cookie), each.menuItemId);
 
@@ -1871,7 +1847,6 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       receipt: [drawer],
       slip: [],
     });
-    await setTillPrinter(till.tillId, drawer);
 
     await ringSale(app, cfg, await signIn(till.cookie), each.menuItemId);
 

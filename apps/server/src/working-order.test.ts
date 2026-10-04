@@ -12,7 +12,6 @@ import {
   printJobs,
   products,
   ticketItems,
-  tills,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -43,7 +42,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
 import {
@@ -178,8 +176,6 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const tillId = randomUUID();
-  await db.insert(tills).values({ id: tillId, locationId, name: "Caja 1" });
   const nodeId = await seedNode(db, brandLocationId(locationId));
 
   const { cafeId, aguaId, catalogueId, zoneId, cafeOfferId, premiumCafeOfferId } =
@@ -256,7 +252,6 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     });
 
   const cfg = await deviceRequestCfg(suite.db, {
-    tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     // `parkOrder` reads neither series nor locale/invoiceLocales; fresh values keep the shape whole.
     seriesId: brandSeriesId(randomUUID()),

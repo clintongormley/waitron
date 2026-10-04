@@ -12,11 +12,10 @@ import { withTransaction } from "../tenancy.js";
 import { isRefusal } from "../unique-violation.js";
 import { orderGroupEvents, orderGroups } from "./order-groups.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 import { parties } from "./parties.js";
 
 const LOCATION = "bbbbbbbb-0000-4000-8000-000000000002";
-const TILL = "bbbbbbbb-1111-4000-8000-000000000002";
 /** An order opened from the dashboard at `LOCATION`, needing no device. */
 const DASHBOARD = { source: "dashboard", deviceId: null, locationId: LOCATION } as const;
 const OPERATOR = "bbbbbbbb-2222-4000-8000-000000000002";
@@ -39,7 +38,6 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await db.insert(tills).values({ id: TILL, locationId: LOCATION, name: "Till" });
     nodeId = await seedNode(db, brandLocationId(LOCATION));
   });
 

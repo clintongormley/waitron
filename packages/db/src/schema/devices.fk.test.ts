@@ -9,17 +9,16 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 import { printers } from "./printers.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL_A = "11111111-0000-4000-8000-0000000000a1";
 const PRINTER_A = "11111111-0000-4000-8000-0000000000a3";
 const PROFILE_A = "11111111-0000-4000-8000-0000000000a4";
 const TOKEN_HASH = "scrypt$00$00";
 
-// Every seed device points at a `till` profile and names a till, as the binding rule requires, so
-// the only constraint each case leaves violated is the FK under test.
-describe("devices FKs (till / receipt_printer / device_profile)", () => {
+// Every seed device points at a `till` profile and binds no station, as the binding rule requires,
+// so the only constraint each case leaves violated is the FK under test.
+describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let admin: Database;
 
@@ -40,10 +39,6 @@ describe("devices FKs (till / receipt_printer / device_profile)", () => {
         operationDescription: "Hostelería",
       })
       .onConflictDoNothing({ target: locations.id });
-    await admin
-      .insert(tills)
-      .values({ id: TILL_A, locationId: LOCATION_A, name: "Till A" })
-      .onConflictDoNothing({ target: tills.id });
     // cloud_poll needs only `poll_id` under `printers_transport_fields_ck`.
     await admin
       .insert(printers)
@@ -75,7 +70,6 @@ describe("devices FKs (till / receipt_printer / device_profile)", () => {
         stationId: null,
         label: "Bound till",
         tokenHash: TOKEN_HASH,
-        tillId: TILL_A,
         receiptPrinterId: PRINTER_A,
       })
       .returning({ id: devices.id });
@@ -89,10 +83,33 @@ describe("devices FKs (till / receipt_printer / device_profile)", () => {
         stationId: null,
         label: "Unbound printer",
         tokenHash: TOKEN_HASH,
-        tillId: TILL_A,
       })
       .returning({ receiptPrinterId: devices.receiptPrinterId });
     expect(row!.receiptPrinterId).toBeNull();
+  });
+
+  it("refuses to delete a printer a device names as its payment slip printer (ON DELETE RESTRICT)", async () => {
+    const slipPrinter = "11111111-0000-4000-8000-0000000000b3";
+    await admin.insert(printers).values({
+      id: slipPrinter,
+      locationId: LOCATION_A,
+      name: "Slip printer",
+      transport: "cloud_poll",
+      pollId: "poll-slip",
+    });
+    await admin.insert(devices).values({
+      locationId: LOCATION_A,
+      deviceProfileId: PROFILE_A,
+      label: "Slip device",
+      tokenHash: TOKEN_HASH,
+      paymentSlipPrinterId: slipPrinter,
+    });
+    const e = await captureError(() =>
+      admin.execute(sql`delete from printers where id = ${slipPrinter}`),
+    );
+    expect(isRefusal(e, RESTRICT_VIOLATION)).toBe(true);
+    await admin.execute(sql`delete from devices`);
+    await admin.execute(sql`delete from printers where id = ${slipPrinter}`);
   });
 
   it("has no card_provider / card_reader_id column (dropped in Task 13)", async () => {
@@ -111,7 +128,6 @@ describe("devices FKs (till / receipt_printer / device_profile)", () => {
         stationId: null,
         label: "Profile-bound",
         tokenHash: TOKEN_HASH,
-        tillId: TILL_A,
       })
       .returning({ id: devices.id });
     expect(bound).toHaveLength(1);
@@ -128,7 +144,6 @@ describe("devices FKs (till / receipt_printer / device_profile)", () => {
       stationId: null,
       label: "Restrict device",
       tokenHash: TOKEN_HASH,
-      tillId: TILL_A,
     });
     const e = await captureError(() =>
       admin.execute(sql`delete from device_profiles where id = ${profileC}`),

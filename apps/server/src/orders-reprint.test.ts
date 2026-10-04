@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { deviceProfiles, printJobs, printers, receiptReprints, sales, tenants } from "@waitron/db";
-import { venueTill } from "./testing/session-device.js";
 import { createPrinter } from "@waitron/printing";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { inTx, send } from "./testing/bill-venue.js";
@@ -204,7 +203,6 @@ describe("dashboard receipt reprint", () => {
     const device = await enrolDeviceForTest(venue.db, venue.cfg, {
       name: "No receipt",
       profileId: profile!.id,
-      registerId: await venueTill(venue.db, venue.cfg.locationId),
     });
     const cookie = `${venue.staffDashboard}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
     expect(await post(cookie, billId, venue.printerId)).toMatchObject({
@@ -224,7 +222,6 @@ describe("dashboard receipt reprint", () => {
     const device = await enrolDeviceForTest(venue.db, venue.cfg, {
       name: "No copy",
       profileId: profile!.id,
-      registerId: await venueTill(venue.db, venue.cfg.locationId),
     });
     const app = new Hono();
     mountOrdersApi(

@@ -104,8 +104,8 @@ interface Seeded {
 async function setupVenue(): Promise<Seeded> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
-  // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are
-  // `$defaultFn` generators, which a raw insert does not reach.
+  // Through the table definitions: `locations.id` is a `$defaultFn` generator,
+  // which a raw insert does not reach.
   const [location] = await db
     .insert(locations)
     .values({

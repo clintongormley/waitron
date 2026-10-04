@@ -15,7 +15,7 @@ import { floorZones } from "./floor-zones.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 import { printers } from "./printers.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 import { ticketItems } from "./ticket-items.js";
 import { watcherItemMarks } from "./watcher-item-marks.js";
 import { watchers } from "./watchers.js";
@@ -84,7 +84,6 @@ describe("watchers schema", () => {
     await suite.db
       .insert(printers)
       .values({ locationId: LOCATION, name: "Printer", transport: "usb", localKey: "printer-1" });
-    await suite.db.insert(tills).values({ id: "till", locationId: LOCATION, name: "Till" });
     const nodeId = await seedNode(suite.db, brandLocationId(LOCATION));
     const [catalogue] = await suite.db
       .insert(catalogues)

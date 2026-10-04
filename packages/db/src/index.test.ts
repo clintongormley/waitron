@@ -3,14 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getTableName, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  locations,
-  openVenueDatabase,
-  runMigrations,
-  tenants,
-  tills,
-  withTransaction,
-} from "./index.js";
+import { locations, openVenueDatabase, runMigrations, tenants, withTransaction } from "./index.js";
 
 const FOLDER_A = join(import.meta.dirname, "..", "test", "migrations-a");
 
@@ -53,6 +46,5 @@ describe("package public surface (./index.js)", () => {
     expect(withTransaction).toBeTypeOf("function");
     expect(getTableName(tenants)).toBe("tenants");
     expect(getTableName(locations)).toBe("locations");
-    expect(getTableName(tills)).toBe("tills");
   });
 });

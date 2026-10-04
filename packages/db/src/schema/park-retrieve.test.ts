@@ -12,10 +12,9 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { seedDevice, seedNode } from "../testing/seed.js";
 import { catalogues, products } from "./catalogue.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const BOGUS_PRODUCT = "99999999-9999-4999-8999-999999999999";
 const AT = "2026-07-20T19:20:30+00:00";
 // The trigger checks description KEYS against the venue's invoice_locales (es, ca).
@@ -61,9 +60,8 @@ describe("park & retrieve schema", () => {
         operationDescription: "Hostelería",
       },
     ]);
-    await admin.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
     nodeA = await seedNode(admin, brandLocationId(LOCATION_A));
-    ({ deviceId: deviceA } = await seedDevice(admin, { tillId: TILL_A1 }));
+    ({ deviceId: deviceA } = await seedDevice(admin, { locationId: LOCATION_A }));
     const [series] = await admin
       .insert(invoiceSeries)
       .values({ nodeId: nodeA, code: "FA", purpose: "standard" })

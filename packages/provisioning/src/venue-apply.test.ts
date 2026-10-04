@@ -138,10 +138,10 @@ describe("applyVenue", () => {
       default_stations: number;
       default_departments: number;
       counter_zones: number;
-      tills: number;
+      devices: number;
     }>(sql`
       select
-        (select count(*) from tills) as tills,
+        (select count(*) from devices) as devices,
         (select count(*) from tenants where id = 1) as tenants,
         (select count(*) from nodes where id = ${result.nodeId}) as nodes,
         (select count(*) from invoice_series where node_id = ${result.nodeId}) as series,
@@ -160,7 +160,7 @@ describe("applyVenue", () => {
       default_stations: 1,
       default_departments: 1,
       counter_zones: 1,
-      tills: 0,
+      devices: 0,
     });
     expect(result).not.toHaveProperty("tillId");
 
@@ -353,14 +353,14 @@ describe("applyVenue", () => {
     expect(second.nodeId).toBe(first.nodeId);
     const venueRows = await suite.db.execute<{
       locations: number;
-      tills: number;
+      devices: number;
       nodes: number;
     }>(sql`
       select
         (select count(*) from locations ) as locations,
-        (select count(*) from tills ) as tills,
+        (select count(*) from devices ) as devices,
         (select count(*) from nodes ) as nodes`);
-    expect(venueRows.rows[0]).toEqual({ locations: 1, tills: 0, nodes: 1 });
+    expect(venueRows.rows[0]).toEqual({ locations: 1, devices: 0, nodes: 1 });
   });
 
   it("refuses a different operational venue for the same tenant", async () => {

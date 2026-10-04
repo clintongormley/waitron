@@ -2741,21 +2741,6 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
   });
 
   // ── Receipt printer + print mode ───────────────────────────────────────────────────────────────
-  it("listTills GETs /management-api/tills and decodes the rows", async () => {
-    const tills = [
-      { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1" },
-      { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: null },
-    ];
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(tills));
-    const api = new DashboardApi("", fetchImpl);
-    expect(await api.listTills()).toEqual(tills);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/tills", {
-      method: "GET",
-      credentials: "include",
-      signal: expect.any(AbortSignal),
-    });
-  });
-
   it("setReceiptPrintMode PATCHes the location's print-mode route with { mode }", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);

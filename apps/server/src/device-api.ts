@@ -83,11 +83,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // A wrong number denies the request (the row is already gone), so this is a plain request fault.
   "device.join_mismatch": 400,
   "join_request.not_found": 404,
-  // `register_name_taken` is a conflict the operator resolves by renaming the device.
   "device.station_required": 400,
-  "device.register_required": 400,
-  "device.register_name_taken": 409,
-  "device.till_required": 400,
+  // A conflict the operator resolves by renaming the device.
+  "device.name_taken": 409,
   "device.binding_invalid": 400,
   "device_profile.not_found": 404,
   "device.not_found": 404,
@@ -145,8 +143,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const made = await withTransaction(deps.db, async (tx) => {
         const request = await createJoinRequest(tx, deps.cfg, { kind: "device", label: name });
         if (auto) {
-          // Accept in the SAME transaction, so a later throw (no till profile, or a register-name
-          // collision) rolls the just-minted request back rather than leaving a pending row nobody can
+          // Accept in the SAME transaction, so a later throw (no till profile, or a taken device
+          // name) rolls the just-minted request back rather than leaving a pending row nobody can
           // approve. `listDeviceProfiles` is name-ordered, so the first `till` is the default.
           const till = (await listDeviceProfiles(tx)).find(
             (profile) => profile.formFactor === "till",
@@ -203,7 +201,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         name: device.label,
         stationId: device.stationId,
         watcherId: device.watcherId,
-        tillId: device.tillId,
         receiptPrinterId: device.receiptPrinterId,
         paymentSlipPrinterId: device.paymentSlipPrinterId,
         printerChoices: choices,
@@ -474,7 +471,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
                 id: devices.id,
                 formFactor: deviceProfiles.formFactor,
                 label: devices.label,
-                tillId: devices.tillId,
                 stationId: devices.stationId,
                 active: devices.active,
               })

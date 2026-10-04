@@ -9,7 +9,6 @@ import {
   engineErrorMessage,
   nodes,
   refusalOn,
-  tills,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, deviceOrigin } from "@waitron/shared";
@@ -88,20 +87,11 @@ async function getRow(key: { provider: string; paymentRef: string }) {
 /** A second node, because `seedSale` always plants its `invoice_series` at code "A" for the node it
  * is given, and the series is keyed `(node_id, code)`. */
 async function seedSecondSale(seeded: Seeded): Promise<string> {
-  const [till] = (
-    await suite.db.execute<{ location_id: string }>(
-      sql`select location_id from tills where id = ${seeded.tillId}`,
-    )
-  ).rows;
-  const [till2] = await suite.db
-    .insert(tills)
-    .values({ locationId: till.location_id, name: "Till 2" })
-    .returning({ id: tills.id });
   const [node2] = await suite.db
     .insert(nodes)
-    .values({ locationId: till.location_id, name: "Node 2" })
+    .values({ locationId: seeded.locationId, name: "Node 2" })
     .returning({ id: nodes.id });
-  return seedSale(suite.db, { ...seeded, tillId: till2!.id, nodeId: node2!.id });
+  return seedSale(suite.db, { ...seeded, nodeId: node2!.id });
 }
 
 describe("insertCapturedPayment", () => {

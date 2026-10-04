@@ -4,7 +4,6 @@ import {
   count,
   enumCheck,
   enumType,
-  flag,
   id,
   label,
   labelList,
@@ -15,7 +14,6 @@ import {
   ts,
 } from "./columns.js";
 import { catalogues } from "./catalogue.js";
-import { printers } from "./printers.js";
 
 /** The venue time-zone default, shared with runtime fallbacks. */
 export const DEFAULT_TIME_ZONE = "Europe/Madrid";
@@ -131,39 +129,5 @@ export const locations = table(
     check("locations_fire_control_ck", enumCheck(t.fireControl)),
     check("locations_receipt_print_mode_ck", enumCheck(t.receiptPrintMode)),
     check("locations_drawer_open_policy_ck", enumCheck(t.drawerOpenPolicy)),
-  ],
-);
-
-/**
- * A point of sale. Deliberately REGIME-NEUTRAL: `NúmeroInstalación` and
- * `IdSistemaInformatico` do NOT live here.
- *
- * They are Veri*Factu concepts — a Spanish SIF identity, minted per (NIF,
- * IdSIF) and never reusable — and `packages/db` is English and regime-neutral.
- * Putting them here would mean every future regime either widens this table or
- * leaves columns null. They live in the module-owned `registro_sif` table,
- * keyed by node (the SIF is the node). A node has exactly one live SIF
- * identity per regime, so that join is 1:1; a till reaches its SIF through the
- * node that serves it.
- */
-export const tills = table(
-  "tills",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    locationId: id("location_id")
-      .notNull()
-      /* v8 ignore start */
-      .references(() => locations.id),
-    /* v8 ignore stop */
-    name: label("name").notNull(),
-    /* v8 ignore start */
-    receiptPrinterId: id("receipt_printer_id").references(() => printers.id),
-    /* v8 ignore stop */
-    opensDrawer: flag("opens_drawer").notNull().default(true),
-    createdAt: ts("created_at").notNull().$defaultFn(now),
-  },
-  (t) => [
-    // No two tills share a name within a venue. The index keeps the name it was created under.
-    uniqueIndex("tills_tenant_location_name_key").on(t.locationId, t.name),
   ],
 );

@@ -14,7 +14,6 @@ import type {
   Printer,
   ReaderRow,
   Station,
-  Till,
   Watcher,
 } from "../api/client.js";
 import { DevicesScreen } from "./devices-screen.js";
@@ -146,10 +145,6 @@ const deviceProfiles: DeviceProfile[] = [
   },
 ];
 
-const tills: Till[] = [
-  { id: "t1", label: "Caja 1", locationId: "l1", receiptPrinterId: null, opensDrawer: true },
-];
-
 const pending: JoinRequestRow[] = [
   { id: "j1", kind: "device", label: "Pantalla pase", createdAt: "2026-09-08T10:02:00.000Z" },
 ];
@@ -211,7 +206,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listWatchers: vi.fn().mockResolvedValue(watchers),
     listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
     listPrinters: vi.fn().mockResolvedValue(printers),
-    listTills: vi.fn().mockResolvedValue(tills),
     pairingMode: vi.fn().mockResolvedValue(SHUT),
     openPairingMode: vi.fn().mockResolvedValue({ openUntil: OPEN.openUntil }),
     closePairingMode: vi.fn().mockResolvedValue(undefined),
@@ -409,11 +403,10 @@ describe("devices-screen", () => {
 
     expect(api.listDevices).toHaveBeenCalledTimes(1);
     expect(api.listStations).toHaveBeenCalledTimes(1);
-    // Profiles and printers name what each row shows; stations and tills are also the accept
-    // dialog's binding pickers, so they are one load, not two.
+    // Profiles and printers name what each row shows; stations are also the accept dialog's
+    // binding picker, so they are one load, not two.
     expect(api.listDeviceProfiles).toHaveBeenCalledTimes(1);
     expect(api.listPrinters).toHaveBeenCalledTimes(1);
-    expect(api.listTills).toHaveBeenCalledTimes(1);
     expect(api.pairingMode).toHaveBeenCalledTimes(1);
     expect(api.joinRequests).toHaveBeenCalledTimes(1);
     expect(q(el, "[data-test=device-row-d1]")).toBeTruthy();
@@ -752,8 +745,7 @@ describe("devices-screen", () => {
     expect(el.shadowRoot!.querySelectorAll('[role="alert"]')).toHaveLength(1);
   });
 
-  // A till profile binds NEITHER picker — the server creates the register the device rings against.
-  it("shows no station or register picker for a till profile", async () => {
+  it("shows no station picker for a till profile", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
@@ -770,7 +762,7 @@ describe("devices-screen", () => {
     ).toBe(false);
   });
 
-  it("offers the register picker for a handheld profile and posts the chosen register", async () => {
+  it("accepting a handheld shows no till picker and sends no registerId", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
@@ -780,16 +772,33 @@ describe("devices-screen", () => {
     pickSelect(el, "join-profile", "dp2");
     await el.updateComplete;
     expect(q(el, "[data-test=join-binding]")).toBeNull();
-    pickSelect(el, "join-register", "t1");
-    await el.updateComplete;
+    expect(q(el, "[data-test=join-register]")).toBeNull();
     q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
     await flush(el);
 
     expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("j1", {
       choice: REAL_NUMBER,
       profileId: "dp2",
-      registerId: "t1",
     });
+  });
+
+  it("shows a taken device name at the bottom of the open dialog, in the person's language", async () => {
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi.fn().mockRejectedValue({ code: "device.name_taken" }),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    q(el, "[data-test=join-review-j1]")!.click();
+    await flush(el);
+    pickSelect(el, "join-profile", "dp1");
+    await el.updateComplete;
+    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+    await flush(el);
+
+    const alert = q(el, "[data-test=join-dialog]")!.querySelector("[role=alert]");
+    expect(alert?.textContent?.trim()).toBe(
+      "Ya hay un dispositivo activo con ese nombre aquí. Cambia el nombre del dispositivo y que lo solicite de nuevo",
+    );
   });
 
   it("accepts with the tapped number, then closes the dialog and reloads both lists", async () => {
@@ -1218,7 +1227,7 @@ describe("devices-screen fields", () => {
     expect(api.reassignDeviceProfile).toHaveBeenCalledWith("d1", "dp2");
   });
 
-  it("picks the joining device's profile, station and register from labelled dropdowns", async () => {
+  it("picks the joining device's profile and station from labelled dropdowns", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
@@ -1253,22 +1262,12 @@ describe("devices-screen fields", () => {
 
     await chooseOption(profile, "dp2");
     await el.updateComplete;
-    const register = box(el, "join-register");
-    expect(register.name).toBe("registerId");
-    expect(register.label).toBe(t("devices.till"));
-    expect(register.placeholder).toBe(t("devices.join_pick_register"));
-    expect(register.options).toEqual([
-      { value: "", label: t("devices.join_pick_register") },
-      { value: "t1", label: "Caja 1" },
-    ]);
-    await chooseOption(register, "t1");
-    await el.updateComplete;
+    expect(q(el, "[data-test=join-register]")).toBeNull();
     q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
     await flush(el);
     expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("j1", {
       choice: REAL_NUMBER,
       profileId: "dp2",
-      registerId: "t1",
     });
   });
 });

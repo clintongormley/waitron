@@ -68,8 +68,8 @@ beforeAll(() => {
 async function setupVenue(opts: { timeZone?: string } = {}): Promise<OriginConfig> {
   await seedTenant(db);
   const timeZone = opts.timeZone ?? DEFAULT_TIME_ZONE;
-  // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are
-  // `$defaultFn` generators, which a raw insert does not reach.
+  // Through the table definitions: `locations.id` is a `$defaultFn` generator,
+  // which a raw insert does not reach.
   const [location] = await db
     .insert(locations)
     .values({
@@ -478,8 +478,8 @@ async function setupTabVenue(): Promise<{
 }> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
-  // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are
-  // `$defaultFn` generators, which a raw insert does not reach.
+  // Through the table definitions: `locations.id` is a `$defaultFn` generator,
+  // which a raw insert does not reach.
   const [location] = await db
     .insert(locations)
     .values({

@@ -121,7 +121,7 @@ async function altaIdentityFor(saleId: string): Promise<{ id: string; facturaKey
  */
 async function fileThenVoid(options: { submitAnulacion: boolean }) {
   const period = { year: "2026", month: "03" };
-  const { tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db);
+  const { locationId, nodeId, seriesId } = await seedTenantWithSif(suite.db);
   // recordVoid requires `sale.void`: a manager session authorizes it.
   const { rows: mgr } = await suite.db.execute<{ id: string }>(
     // `id` and `created_at` have no SQL DEFAULT (drizzle's `$defaultFn` runs only for a builder
@@ -129,7 +129,7 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
     sql`insert into persons (id, created_at, display_name, pin_hash, role)
         values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
   );
-  const deviceId = (await seedDevice(suite.db, { tillId: tillId })).deviceId;
+  const deviceId = (await seedDevice(suite.db, { locationId })).deviceId;
   const voidSession = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
   );

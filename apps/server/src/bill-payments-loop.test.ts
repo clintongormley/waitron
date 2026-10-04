@@ -83,7 +83,7 @@ async function strandedPending(
   billId: string,
   applied: number,
   tip = 0,
-  device = { deviceId: venue.device2Id, tillId: venue.device2TillId },
+  device = { deviceId: venue.device2Id },
 ): Promise<string> {
   const [row] = await inTx(venue, (tx) =>
     tx
@@ -129,7 +129,7 @@ async function stateOf(billPaymentId: string): Promise<string> {
 async function capturedPending(
   billId: string,
   applied: number,
-  device?: { deviceId: string; tillId: string },
+  device?: { deviceId: string },
 ): Promise<string> {
   const id = await strandedPending(billId, applied, 0, device);
   await inTx(venue, (tx) =>
@@ -195,10 +195,7 @@ async function openMismatchIncidents() {
 }
 
 /** A pending card payment whose provider row captured 30.00 against the 35.00 it was for. */
-async function mismatchedPending(
-  billId: string,
-  device?: { deviceId: string; tillId: string },
-): Promise<string> {
+async function mismatchedPending(billId: string, device?: { deviceId: string }): Promise<string> {
   const id = await strandedPending(billId, 3000, 500, device);
   await inTx(venue, (tx) =>
     insertCapturedPayment(tx, {
@@ -316,7 +313,6 @@ describe("recovery after a crash (design §8 test 13)", () => {
     const first = await mismatchedPending(await tabWith(venue, "Paella"));
     const second = await mismatchedPending(await tabWith(venue, "Paella"), {
       deviceId: venue.deviceId,
-      tillId: venue.deviceTillId,
     });
 
     const pass = await settle();
@@ -470,8 +466,8 @@ describe("the invoice a finished card payment issues", () => {
       await createPrinter(tx, { locationId: venue.cfg.locationId }, receiptPrinter("R1")),
       await createPrinter(tx, { locationId: venue.cfg.locationId }, receiptPrinter("R2")),
     ]);
-    const a = { deviceId: venue.deviceId, tillId: venue.deviceTillId };
-    const b = { deviceId: venue.device2Id, tillId: venue.device2TillId };
+    const a = { deviceId: venue.deviceId };
+    const b = { deviceId: venue.device2Id };
     const held = venue.db.all<{ id: string; receipt_printer_id: string | null }>(
       sql`select id, receipt_printer_id from devices where id in (${a.deviceId}, ${b.deviceId})`,
     );

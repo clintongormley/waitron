@@ -59,7 +59,7 @@ async function insertRegistro(exec: Database, fields: RegistroFields = {}): Prom
       importe_rectificacion, descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, creado_en
-    ) values (${newId()}, 'device', (select id from devices where till_id = ${TENANT_A.tillId}), ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
+    ) values (${newId()}, 'device', (select id from devices where location_id = ${TENANT_A.locationId}), ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
       ${secuencia}, 'alta',
       '89890001K', ${"R/" + String(secuencia)}, '2026-07-20', 'Waitron SL',
       ${fields.tipoFactura === undefined ? "R5" : fields.tipoFactura},

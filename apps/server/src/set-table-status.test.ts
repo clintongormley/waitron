@@ -39,8 +39,8 @@ interface Seeded {
 
 async function setupVenue(): Promise<Seeded> {
   await seedTenant(db);
-  // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are NOT NULL
-  // `$defaultFn` generators a raw insert never reaches.
+  // Through the table definitions: `locations.id` is a NOT NULL `$defaultFn`
+  // generator a raw insert never reaches.
   const [location] = await db
     .insert(locations)
     .values({

@@ -187,17 +187,17 @@ describe("devSetup against a real venue directory", () => {
     }
   }
 
-  async function tillsCount(): Promise<number> {
+  async function devicesCount(): Promise<number> {
     return readVenue(async (db) => {
-      const { rows } = await db.execute<{ n: number }>(sql`select count(*) as n from tills`);
+      const { rows } = await db.execute<{ n: number }>(sql`select count(*) as n from devices`);
       return rows[0]!.n;
     });
   }
 
-  it("provisions a virgin directory, writing a .env with no till id, and makes no setup till", async () => {
+  it("provisions a virgin directory, writing a .env with no till id", async () => {
     expect(first.reused).toBe(false);
-    // Only the "Mostrador" register the till device makes when it pairs.
-    expect(await tillsCount()).toBe(1);
+    // The till, handheld and two kitchen displays it pairs.
+    expect(await devicesCount()).toBe(4);
 
     const written = parseEnvFile(readFileSync(envPath, "utf8"));
     expect(written).toEqual({ ...first.env });
@@ -260,7 +260,7 @@ describe("devSetup against a real venue directory", () => {
     });
 
     expect(second.reused).toBe(true);
-    expect(await tillsCount()).toBe(1);
+    expect(await devicesCount()).toBe(4);
     expect(second.env.WAITRON_TILL_NODE_ID).toBe(first.env.WAITRON_TILL_NODE_ID);
     expect(second.env.WAITRON_TILL_SERIES_ID).toBe(first.env.WAITRON_TILL_SERIES_ID);
     expect(second.env.WAITRON_TILL_LOCATION_ID).toBe(first.env.WAITRON_TILL_LOCATION_ID);
@@ -303,15 +303,13 @@ describe("devSetup against a real venue directory", () => {
       const result = await db.execute<{
         label: string;
         form_factor: string;
-        register_name: string | null;
         station_name: string | null;
         watcher_name: string | null;
       }>(
-        sql`select d.label, dp.form_factor, t.name as register_name, ks.name as station_name,
+        sql`select d.label, dp.form_factor, ks.name as station_name,
                    w.name as watcher_name
             from devices d
             join device_profiles dp on dp.id = d.device_profile_id
-            left join tills t on t.id = d.till_id
             left join kitchen_stations ks on ks.id = d.station_id
             left join watchers w on w.id = d.watcher_id
             order by d.label`,
@@ -322,28 +320,24 @@ describe("devSetup against a real venue directory", () => {
       {
         label: "Camarero 1",
         form_factor: "phone-portrait",
-        register_name: "Mostrador",
         station_name: null,
         watcher_name: null,
       },
       {
         label: "Mostrador",
         form_factor: "till",
-        register_name: "Mostrador",
         station_name: null,
         watcher_name: null,
       },
       {
         label: "Pantalla Cocina",
         form_factor: "kds",
-        register_name: null,
         station_name: "Kitchen",
         watcher_name: null,
       },
       {
         label: "Pantalla Pase",
         form_factor: "kds",
-        register_name: null,
         station_name: null,
         watcher_name: "Pass",
       },
@@ -356,7 +350,7 @@ describe("devSetup against a real venue directory", () => {
     await expect(devSetup({ venueDir, envPath, stateDir: workDir, log: () => {} })).rejects.toThrow(
       /already holds a venue/i,
     );
-    expect(await tillsCount()).toBe(1);
+    expect(await devicesCount()).toBe(4);
   });
 });
 

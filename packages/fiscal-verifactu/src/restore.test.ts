@@ -74,7 +74,7 @@ describe("restoreFiscal", () => {
   it("revokes the live SIF, mints a floored number, resets the chain head, keeps the ledger, returns disjoint series", async () => {
     const first = await seedLiveNode();
     await seedSoldRegistro(db, {
-      tillId: TENANT_A.tillId,
+      locationId: TENANT_A.locationId,
       nodeId: TENANT_A.nodeId,
       sifId: first.id,
       nif: SIF.nif,

@@ -4,7 +4,7 @@ import { codeOf } from "./error-code.js";
 
 describe("codeOf", () => {
   it("returns an AppError's own code", () => {
-    expect(codeOf(new AppError("shared.invalid_id", { kind: "TillId", value: "x" }))).toBe(
+    expect(codeOf(new AppError("shared.invalid_id", { kind: "DeviceId", value: "x" }))).toBe(
       "shared.invalid_id",
     );
   });

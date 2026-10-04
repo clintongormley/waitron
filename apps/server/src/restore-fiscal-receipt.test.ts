@@ -14,7 +14,6 @@ import {
   openVenueDatabase,
   sales,
   tenants,
-  tills,
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -29,7 +28,6 @@ const SQLITE_CONSTRAINT_TRIGGER = 1811;
 
 const F = {
   locationId: "c0000000-0000-4000-8000-000000000002",
-  tillId: "c0000000-0000-4000-8000-000000000003",
   seriesId: "c0000000-0000-4000-8000-000000000004",
   saleId: "c0000000-0000-4000-8000-000000000005",
   sifId: "c0000000-0000-4000-8000-000000000006",
@@ -50,14 +48,13 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     invoiceLocales: ["es"],
     operationDescription: "Venta en establecimiento",
   });
-  await db.insert(tills).values({ id: F.tillId, locationId: F.locationId, name: "Caja 1" });
-  await seedDevice(db, { tillId: F.tillId });
+  await seedDevice(db, { locationId: F.locationId });
   await db.insert(nodes).values({ id: F.nodeId, locationId: F.locationId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: F.seriesId, nodeId: F.nodeId, code: "A" });
   await db.insert(sales).values({
     id: F.saleId,
     source: "device",
-    deviceId: sql`(select id from devices where till_id = ${F.tillId})`,
+    deviceId: sql`(select id from devices where location_id = ${F.locationId})`,
     nodeId: F.nodeId,
     seriesId: F.seriesId,
     invoiceNumber: 1,
@@ -79,7 +76,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
   });
   await db.insert(registrosFacturacion).values({
     source: "device",
-    deviceId: sql`(select id from devices where till_id = ${F.tillId})`,
+    deviceId: sql`(select id from devices where location_id = ${F.locationId})`,
     nodeId: F.nodeId,
     sifId: F.sifId,
     saleId: F.saleId,
@@ -177,9 +174,11 @@ describe("a restored venue keeps its fiscal ledger immutable", () => {
         //    THE CONTROL IN THE OTHER DIRECTION, because a restored file that refused EVERY write
         //    would satisfy step 5 for the wrong reason: a table carrying no append-only trigger
         //    takes the same kind of UPDATE.
-        restored.venue.run(sql`update tills set name = 'Caja renombrada'`);
+        restored.venue.run(sql`update devices set label = 'Caja renombrada'`);
         expect(
-          restored.venue.all<{ name: string }>(sql`select name from tills`).map((row) => row.name),
+          restored.venue
+            .all<{ label: string }>(sql`select label from devices`)
+            .map((row) => row.label),
         ).toEqual(["Caja renombrada"]);
 
         // The fiscal record is untouched by the refused attempt.

@@ -33,8 +33,8 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
 async function setupTwoVenues(): Promise<{ a: TillConfig; b: TillConfig }> {
   await seedTenant(db);
   const make = async (name: string): Promise<TillConfig> => {
-    // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are
-    // `$defaultFn` generators, which a raw insert does not reach.
+    // Through the table definitions: `locations.id` is a `$defaultFn` generator,
+    // which a raw insert does not reach.
     const [location] = await db
       .insert(locations)
       .values({

@@ -6682,7 +6682,6 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     ["order.payment_in_flight", "cancel_credit.refused_payment_in_flight"],
     ["series.no_rectificative_for_node", null],
     ["device.unauthorized", null],
-    ["device.till_required", null],
     ["sale.correction_exceeds_total", null],
     ["sale.correction_not_whole", null],
     ["working_order.not_placed", null],

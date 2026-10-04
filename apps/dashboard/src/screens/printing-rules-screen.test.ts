@@ -114,7 +114,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listPrinterStations: vi.fn().mockResolvedValue([] as StationPrinter[]),
     attachPrinterToStation: vi.fn().mockResolvedValue(undefined),
     detachPrinterFromStation: vi.fn().mockResolvedValue(undefined),
-    listTills: vi.fn().mockResolvedValue([]),
     getLocations: vi.fn().mockResolvedValue(locations),
     setReceiptPrintMode: vi.fn().mockResolvedValue(undefined),
     setDrawerOpenPolicy: vi.fn().mockResolvedValue(undefined),
@@ -245,7 +244,7 @@ describe("printing rules", () => {
     expect(q(el, "[data-test=station-toggle-p1-s1]")).toBeNull();
   });
 
-  it("shows no per-till section and never asks for the tills", async () => {
+  it("shows no per-till section", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
       api,
@@ -260,7 +259,6 @@ describe("printing rules", () => {
     ]) {
       expect(q(el, selector)).toBeNull();
     }
-    expect(api.listTills).not.toHaveBeenCalled();
     expect(q(el, "[data-test=station-toggle-p1-s1]")).not.toBeNull();
     expect(q(el, "[data-test=print-mode-loc-1-auto]")).not.toBeNull();
     expect(q(el, "[data-test=drawer-policy-loc-1-gated]")).not.toBeNull();

@@ -1,8 +1,7 @@
 // Side-effect only: keeps the `device.*` codes (errors.ts) reachable from the file that throws them.
 import "./errors.js";
-import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { constraintTarget, isUniqueViolation, sameTarget, tills } from "@waitron/db";
+import { constraintTarget, devices, isUniqueViolation, sameTarget } from "@waitron/db";
 import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { getDeviceProfile, kindOfFormFactor } from "@waitron/layouts";
 import type { DeviceKind, FormFactor } from "@waitron/layouts";
@@ -37,25 +36,29 @@ export async function requireDeviceBinding(
   }
 }
 
-/** `tills_tenant_location_name_key`, as the table and columns a refusal on it names. */
-const TILL_NAME_UNIQUE: ConstraintTarget = { table: "tills", columns: ["location_id", "name"] };
+/** `devices_location_label_active_key`, as the table and columns a refusal on it names. */
+const DEVICE_NAME_UNIQUE: ConstraintTarget = {
+  table: "devices",
+  columns: ["location_id", "label"],
+};
 
 /**
- * Runs on the caller's transaction (never its own), so the enclosing enrolment's throw discards the
- * register with the device. A refusal on {@link TILL_NAME_UNIQUE}, or one naming no key, becomes
- * `device.register_name_taken`; any other unique violation is rethrown raw.
+ * Insert a device on the caller's transaction. A refusal on {@link DEVICE_NAME_UNIQUE}, or one naming
+ * no key, becomes `device.name_taken`; any other refusal is rethrown raw.
  */
-async function createRegister(tx: Transaction, locationId: string, name: string): Promise<string> {
+export async function insertDevice(
+  tx: Transaction,
+  row: typeof devices.$inferInsert,
+): Promise<void> {
   try {
-    const [till] = await tx.insert(tills).values({ locationId, name }).returning({ id: tills.id });
-    return till!.id;
+    await tx.insert(devices).values(row);
   } catch (error) {
     if (isUniqueViolation(error)) {
       const target = constraintTarget(error);
       // `undefined` means a unique index over an EXPRESSION, which names no key
       // (`packages/db/src/constraint-target.ts`).
-      if (target === undefined || sameTarget(target, TILL_NAME_UNIQUE)) {
-        throw new AppError("device.register_name_taken", {});
+      if (target === undefined || sameTarget(target, DEVICE_NAME_UNIQUE)) {
+        throw new AppError("device.name_taken", {});
       }
     }
     throw error;
@@ -63,46 +66,20 @@ async function createRegister(tx: Transaction, locationId: string, name: string)
 }
 
 /**
- * Scoped by `location_id`, so another location's register is refused here; the `devices` FK sees no
- * location.
- */
-async function requireLiveRegister(
-  tx: Transaction,
-  cfg: TillConfig,
-  locationId: string,
-  registerId: string,
-): Promise<string> {
-  void cfg;
-  const [till] = await tx
-    .select({ id: tills.id })
-    .from(tills)
-    .where(and(eq(tills.locationId, locationId), eq(tills.id, registerId)));
-  if (till === undefined) throw new AppError("device.binding_invalid", { field: "tillId" });
-  return till.id;
-}
-
-/**
- * Resolve which binding a device with this profile must carry, creating the register a counter till
- * owns. The ADMIN supplies the profile and binding, when accepting a join request — never the joining
- * device on an unauthenticated route, which matters because this WRITES (a `till` form factor inserts a
- * `tills` row). Its one caller is `acceptDeviceJoinRequest` (`join-requests.ts`), on that caller's
- * transaction, so a later failure discards the register with the device.
+ * Resolve which station or watcher a device with this profile binds. The ADMIN supplies the profile
+ * and binding when accepting a join request, never the joining device on an unauthenticated route.
  */
 export async function resolveDeviceBinding(
   tx: Transaction,
   cfg: TillConfig,
-  locationId: string,
   input: {
     profileId: string;
-    name: string;
     stationId?: string | null;
     watcherId?: string | null;
-    registerId?: string | null;
   },
 ): Promise<{
   stationId: string | null;
   watcherId: string | null;
-  tillId: string | null;
   formFactor: FormFactor;
 }> {
   const profile = await getDeviceProfile(tx, input.profileId);
@@ -110,37 +87,24 @@ export async function resolveDeviceBinding(
   // or deleted meanwhile — is a client-recoverable refusal, not a server fault.
   if (profile === undefined) throw new AppError("device_profile.not_found", {});
 
-  // A kitchen screen carries one station or watcher; other form factors carry a till.
+  // A kitchen screen carries one station or watcher; other form factors carry neither.
   let stationId: string | null = null;
   let watcherId: string | null = null;
-  let tillId: string | null = null;
-  switch (kindOfFormFactor(profile.formFactor)) {
-    case "kds_station":
-      if (input.stationId != null && input.watcherId != null)
-        throw new AppError("management.request_invalid", { field: "watcherId" });
-      if (input.stationId == null && input.watcherId == null)
-        throw new AppError("device.station_required", {});
-      if (input.stationId != null) {
-        await requireLiveStation(tx, cfg, input.stationId);
-        stationId = input.stationId;
-      } else if (input.watcherId != null) {
-        const watcher = await readWatcher(tx, cfg, input.watcherId);
-        if (!watcher?.active)
-          throw new AppError("watcher.not_found", { watcherId: input.watcherId });
-        watcherId = input.watcherId;
-      }
-      break;
-    case "till":
-      if (input.watcherId != null)
-        throw new AppError("management.request_invalid", { field: "watcherId" });
-      tillId = await createRegister(tx, locationId, input.name);
-      break;
-    case "handheld":
-      if (input.watcherId != null)
-        throw new AppError("management.request_invalid", { field: "watcherId" });
-      if (input.registerId == null) throw new AppError("device.register_required", {});
-      tillId = await requireLiveRegister(tx, cfg, locationId, input.registerId);
-      break;
+  if (kindOfFormFactor(profile.formFactor) === "kds_station") {
+    if (input.stationId != null && input.watcherId != null)
+      throw new AppError("management.request_invalid", { field: "watcherId" });
+    if (input.stationId == null && input.watcherId == null)
+      throw new AppError("device.station_required", {});
+    if (input.stationId != null) {
+      await requireLiveStation(tx, cfg, input.stationId);
+      stationId = input.stationId;
+    } else if (input.watcherId != null) {
+      const watcher = await readWatcher(tx, cfg, input.watcherId);
+      if (!watcher?.active) throw new AppError("watcher.not_found", { watcherId: input.watcherId });
+      watcherId = input.watcherId;
+    }
+  } else if (input.watcherId != null) {
+    throw new AppError("management.request_invalid", { field: "watcherId" });
   }
-  return { stationId, watcherId, tillId, formFactor: profile.formFactor };
+  return { stationId, watcherId, formFactor: profile.formFactor };
 }

@@ -638,41 +638,17 @@ describe("acceptDeviceJoinRequest", () => {
     expect(row).toEqual({ receiptPrinterId: p2!.id, paymentSlipPrinterId: p3!.id });
   });
 
-  it("auto-creates the register for a till form factor, in the SAME transaction as the device", async () => {
-    const venue = await setupVenue(suite.db);
-    const profileId = await seedProfile("till");
-    const label = "Bar till";
-    const accepted = await withTransaction(suite.db, async (tx) => {
-      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label });
-      return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
-        choice: made.verificationNumber,
-        profileId,
-      });
-    });
-    if (!accepted.ok) throw new Error("expected accept to succeed");
-    const { rows } = await suite.db.execute<{ id: string; till_id: string | null }>(sql`
-      select t.id, d.till_id from tills t
-      join devices d on d.till_id = t.id
-      where t.name = ${label} and d.id = ${accepted.deviceId}
-    `);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.till_id).toBe(rows[0]!.id);
-  });
-
-  it("rolls the register back when the device insert fails", async () => {
+  it("rolls the consumption back when the device insert fails", async () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("till");
     const made = await withTransaction(suite.db, async (tx) => {
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Blocked till" });
     });
     // Plant a devices row under the request's OWN id first: acceptDeviceJoinRequest reuses that id, so
-    // its device INSERT collides on the primary key AFTER resolveDeviceBinding has already
-    // auto-created the till-form-factor register. The binding trigger demands a till_id for this
-    // profile's form factor, so the blocker borrows the venue's own provisioned register.
+    // its device INSERT collides on the primary key after the request has been consumed.
     await suite.db.insert(devices).values({
       id: made.joinId,
       locationId: venue.cfg.locationId,
-      tillId: venue.tillId,
       deviceProfileId: profileId,
       label: "blocker",
       tokenHash: "x",
@@ -686,12 +662,7 @@ describe("acceptDeviceJoinRequest", () => {
         });
       }),
     ).rejects.toThrow();
-    const { rows } = await suite.db.execute<{ id: string }>(
-      sql`select id from tills where name = 'Blocked till'`,
-    );
-    expect(rows).toHaveLength(0);
-    // The consuming delete rides the SAME transaction as the register and device inserts (accept's
-    // header comment) — a genuine retry must still find the request PENDING, not gone, once the
+    // The consuming delete rides the SAME transaction as the device insert (accept's header comment) — a genuine retry must still find the request PENDING, not gone, once the
     // blocker device row (a fixture artefact, not a real collision) is cleared.
     await suite.db.execute(sql`delete from devices where id = ${made.joinId}`);
     expect(await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token)).toBe("pending");
@@ -777,11 +748,10 @@ describe("acceptDeviceJoinRequest", () => {
     expect(rows[0]!.n).toBe(1);
   });
 
-  it("two concurrent accepts of a TILL profile: exactly one wins, the loser never reaches register creation", async () => {
+  it("two concurrent accepts of a TILL profile: exactly one wins, the loser never reaches the device insert", async () => {
     const venue = await setupVenue(suite.db);
-    // A `till` profile: resolveDeviceBinding WRITES a `tills` row named after the device before the
-    // device INSERT. A loser that reached it would fail on `device.register_name_taken`, the wrong
-    // code; delete-first must stop the loser before it writes anything at all.
+    // A loser that reached the device INSERT would fail on the primary key or the device name, the
+    // wrong code; delete-first must stop the loser before it writes anything at all.
     const profileId = await seedProfile("till");
     const made = await withTransaction(suite.db, async (tx) => {
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Till racer" });
@@ -810,12 +780,6 @@ describe("acceptDeviceJoinRequest", () => {
       where id = ${made.joinId}
     `);
     expect(deviceRows[0]!.n).toBe(1);
-    // No orphan register from the loser: exactly the one the winner's accept created.
-    const { rows: tillRows } = await suite.db.execute<{ n: number }>(sql`
-      select count(*) as n from tills
-      where name = 'Till racer'
-    `);
-    expect(tillRows[0]!.n).toBe(1);
   });
 });
 

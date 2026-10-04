@@ -11,10 +11,9 @@ import { printJobs } from "./print-jobs.js";
 import { printers } from "./printers.js";
 import { sales } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL = "aaaaaaaa-0000-4000-8000-000000000011";
 let deviceA = "";
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
 
@@ -32,9 +31,8 @@ describe("receipt reprint record", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await db.insert(tills).values({ id: TILL, locationId: LOCATION, name: "Till" });
     const nodeId = await seedNode(db, brandLocationId(LOCATION));
-    ({ deviceId: deviceA } = await seedDevice(db, { tillId: TILL }));
+    ({ deviceId: deviceA } = await seedDevice(db, { locationId: LOCATION }));
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "A" })

@@ -14,7 +14,6 @@ export async function enrolDeviceForTest(
     profileId: string;
     stationId?: string;
     watcherId?: string;
-    registerId?: string;
   },
 ): Promise<{ deviceId: string; token: string }> {
   return withTransaction(db, async (tx) => {
@@ -24,7 +23,6 @@ export async function enrolDeviceForTest(
       profileId: input.profileId,
       stationId: input.stationId ?? null,
       watcherId: input.watcherId ?? null,
-      registerId: input.registerId ?? null,
     });
     /* v8 ignore start -- the fixture always passes the request's own number */
     if (!accepted.ok) throw new Error("enrolDeviceForTest: mismatch");

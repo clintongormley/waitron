@@ -21,7 +21,6 @@ import {
   printers,
   printTransport,
   receiptPrintMode,
-  tills,
   withTransaction,
   type Database,
   type Transaction,
@@ -1227,25 +1226,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const printerId = requireUuidParam(c.req.param("pid"), "PrinterId");
       const rows = await gated(sessionId, (tx) => listStationPrinters(tx, deps.cfg, { printerId }));
-      return c.json(rows);
-    }),
-  );
-
-  app.get("/management-api/tills", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) =>
-        tx
-          .select({
-            id: tills.id,
-            label: tills.name,
-            locationId: tills.locationId,
-            receiptPrinterId: tills.receiptPrinterId,
-            opensDrawer: tills.opensDrawer,
-          })
-          .from(tills)
-          .orderBy(tills.name),
-      );
       return c.json(rows);
     }),
   );

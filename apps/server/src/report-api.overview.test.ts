@@ -13,7 +13,6 @@ import {
   saleLines,
   sales,
   tenders,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -30,7 +29,6 @@ import "./errors.js";
 // Keep current-day sales in this fixture separate from the fixed-period VAT-return fixture.
 const noopLog: Logger = () => {};
 
-let tillId: string;
 let deviceId: string;
 let nodeId: string;
 let secondNodeId: string;
@@ -147,12 +145,7 @@ const suite = useVenueDb({
       })
       .returning({ id: locations.id });
     locationId = loc!.id;
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId, name: "Caja 1" })
-      .returning({ id: tills.id });
-    tillId = till!.id;
-    ({ deviceId } = await seedDevice(db, { tillId }));
+    ({ deviceId } = await seedDevice(db, { locationId }));
     const [node] = await db
       .insert(nodes)
       .values({ locationId, name: "Nodo 1" })

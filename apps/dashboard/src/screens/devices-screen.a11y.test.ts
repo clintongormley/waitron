@@ -12,7 +12,6 @@ import type {
   JoinRequestRow,
   Printer,
   Station,
-  Till,
   Watcher,
 } from "../api/client.js";
 
@@ -125,10 +124,6 @@ const deviceProfiles: DeviceProfile[] = [
   },
 ];
 
-const tills: Till[] = [
-  { id: "t1", label: "Caja 1", locationId: "l1", receiptPrinterId: null, opensDrawer: true },
-];
-
 const pending: JoinRequestRow[] = [
   { id: "j1", kind: "device", label: "Pantalla pase", createdAt: "2026-09-08T10:02:00.000Z" },
 ];
@@ -162,7 +157,6 @@ function stubApi(pairingOpen = false): DashboardApi {
     listWatchers: vi.fn().mockResolvedValue(watchers),
     listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
     listPrinters: vi.fn().mockResolvedValue(printers),
-    listTills: vi.fn().mockResolvedValue(tills),
     pairingMode: vi.fn().mockResolvedValue({
       open: pairingOpen,
       openUntil: pairingOpen ? "2026-09-08T10:20:00.000Z" : null,

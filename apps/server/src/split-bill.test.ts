@@ -7,7 +7,6 @@ import {
   printJobs,
   tableServiceStatuses,
   ticketItems,
-  tills,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -98,8 +97,6 @@ async function setupVenue(): Promise<Seeded> {
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const tillId = randomUUID();
-  await db.insert(tills).values({ id: tillId, locationId, name: "Caja 1" });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),

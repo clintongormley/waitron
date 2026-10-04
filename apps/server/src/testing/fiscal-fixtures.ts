@@ -5,7 +5,6 @@ import {
   nodes,
   sales,
   tenants,
-  tills,
   type Database,
   type Transaction,
 } from "@waitron/db";
@@ -28,7 +27,6 @@ export type Entorno = "production" | "preproduction";
 /** The FK closure a `registros_facturacion` row hangs off. */
 export interface FiscalIds {
   locationId: string;
-  tillId: string;
   nodeId: string;
   seriesId: string;
   saleId: string;
@@ -52,7 +50,6 @@ let seedSeq = 0;
 export function freshFiscalIds(overrides: Partial<FiscalIds> = {}): FiscalIds {
   return {
     locationId: overrides.locationId ?? randomUUID(),
-    tillId: overrides.tillId ?? randomUUID(),
     nodeId: overrides.nodeId ?? randomUUID(),
     seriesId: overrides.seriesId ?? randomUUID(),
     saleId: overrides.saleId ?? randomUUID(),
@@ -67,7 +64,7 @@ export interface SeedParentsOptions {
   numeroInstalacion?: number;
   /** Skip the `sales` insert, leaving the rest of the closure; {@link insertFiscalSale} plants it later. */
   skipSale?: boolean;
-  /** The supplied ids already name a tenant, venue, till, node and series in this database. */
+  /** The supplied ids already name a tenant, venue, node and series in this database. */
   reuseExistingParents?: boolean;
 }
 
@@ -75,10 +72,10 @@ export interface SeedParentsOptions {
 export async function insertFiscalSale(db: Database, ids: FiscalIds): Promise<void> {
   await db.insert(sales).values({
     id: ids.saleId,
-    // A provisioned venue's till reused here carries no device: its sale is a Demo seed one.
-    source: sql`case when exists (select 1 from devices where till_id = ${ids.tillId})
+    // A reused venue with no device paired: its sale is a Demo seed one.
+    source: sql`case when exists (select 1 from devices where location_id = ${ids.locationId})
       then 'device' else 'demo_seed' end`,
-    deviceId: sql`(select id from devices where till_id = ${ids.tillId})`,
+    deviceId: sql`(select id from devices where location_id = ${ids.locationId} limit 1)`,
     nodeId: ids.nodeId,
     seriesId: ids.seriesId,
     invoiceNumber: 1,
@@ -94,7 +91,7 @@ export async function insertFiscalSale(db: Database, ids: FiscalIds): Promise<vo
 }
 
 /**
- * Seeds the FK closure `registros_facturacion` needs — tenant, location, till, node, invoice series,
+ * Seeds the FK closure `registros_facturacion` needs — tenant, location, device, node, invoice series,
  * sale, registro_sif — through `db`, and returns the ids. It stops SHORT of the registro itself.
  */
 export async function seedFiscalParents(
@@ -117,8 +114,7 @@ export async function seedFiscalParents(
       invoiceLocales: ["es"],
       operationDescription: "Venta en establecimiento",
     });
-    await db.insert(tills).values({ id: ids.tillId, locationId: ids.locationId, name: "Caja 1" });
-    await seedDevice(db, { tillId: ids.tillId });
+    await seedDevice(db, { locationId: ids.locationId });
     await db.insert(nodes).values({ id: ids.nodeId, locationId: ids.locationId, name: "Node 1" });
     await db.insert(invoiceSeries).values({ id: ids.seriesId, nodeId: ids.nodeId, code: "A" });
   }

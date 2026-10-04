@@ -10,7 +10,6 @@ import {
   saleLines,
   sales,
   tenders,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -34,7 +33,6 @@ import "./errors.js";
 // fixtures seed FIXED historical business days and nothing depends on the wall clock.
 const noopLog: Logger = () => {};
 
-let tillId: string;
 let deviceId: string;
 let nodeId: string;
 let locationId: string;
@@ -212,12 +210,7 @@ const suite = useVenueDb({
       })
       .returning({ id: locations.id });
     locationId = loc!.id;
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId, name: "Caja 1" })
-      .returning({ id: tills.id });
-    tillId = till!.id;
-    ({ deviceId } = await seedDevice(db, { tillId, label: "Barra 1" }));
+    ({ deviceId } = await seedDevice(db, { locationId, label: "Barra 1" }));
     const [node] = await db
       .insert(nodes)
       .values({ locationId, name: "Nodo 1" })

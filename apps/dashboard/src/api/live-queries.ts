@@ -44,7 +44,6 @@ export const QUERY_DEPENDENCIES = {
   listPrinterProfiles: ["device_profile_printers", "device_profiles"],
   listRecentJobs: ["print_jobs", "printers", "print_agents"],
   listAgents: ["print_agents"],
-  listTills: ["tills"],
   // The venue's card readers, plus the per-reader device count aggregated over `device_card_readers`,
   // so a reader added/retired OR a device re-pointed refreshes the list.
   listReaders: ["card_readers", "device_card_readers"],
@@ -234,7 +233,6 @@ export const QUERY_DEPENDENCIES = {
     "devices",
     "watchers",
     "device_profiles",
-    "tills",
     "kitchen_stations",
     "device_made_here_stations",
   ],

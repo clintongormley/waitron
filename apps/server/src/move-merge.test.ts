@@ -5,7 +5,6 @@ import {
   kitchenStations,
   locations,
   printJobs,
-  tills,
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
@@ -71,11 +70,11 @@ interface Seeded {
   baconId: string;
 }
 
-/** A fresh tenant/location/till/node + a three-product catalogue (Café 1.50, Agua 2.00, both general;
+/** A fresh tenant/location/node + a three-product catalogue (Café 1.50, Agua 2.00, both general;
  *  Bacon 0.50, reduced). */
 async function setupVenue(): Promise<Seeded> {
   await seedTenant(db);
-  // Through the table definitions rather than raw SQL: `units.id` and `locations.id`/`tills.id` are
+  // Through the table definitions rather than raw SQL: `units.id` and `locations.id` are
   // `$defaultFn` generators a raw insert never reaches.
   await db.insert(units).values([
     {
@@ -100,8 +99,6 @@ async function setupVenue(): Promise<Seeded> {
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const tillId = randomUUID();
-  await db.insert(tills).values({ id: tillId, locationId, name: "Caja 1" });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),

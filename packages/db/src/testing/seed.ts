@@ -1,4 +1,3 @@
-import { eq } from "drizzle-orm";
 import { deviceId as brandDeviceId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceId, LocationId, NodeId } from "@waitron/shared";
 import type { Database } from "../client.js";
@@ -6,7 +5,7 @@ import { deviceProfiles } from "../schema/device-profiles.js";
 import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";
 import { nodes } from "../schema/nodes.js";
-import { tenants, tills } from "../schema/tenants.js";
+import { tenants } from "../schema/tenants.js";
 
 // The taxpayer row is a singleton keyed on id = 1, so a suite has at most one NIF in play and a
 // second seed is a no-op. The counter survives because other fixtures still mint their own NIFs for
@@ -58,13 +57,12 @@ export async function seedKitchenStation(
 
 let deviceCounter = 0;
 
-/**
- * Pairs one active device at `locationId`, or on the existing till `tillId` at that till's location,
- * on `profileId` or on a new profile of `formFactor` (till by default).
- */
+/** Pairs one active device at `locationId`, on `profileId` or on a new profile of `formFactor` (till
+ * by default). */
 export async function seedDevice(
   db: Database,
-  opts: ({ locationId: LocationId; tillId?: never } | { tillId: string; locationId?: never }) & {
+  opts: {
+    locationId: LocationId | string;
     label?: string;
     formFactor?: "till" | "phone-portrait" | "tablet-landscape";
     capabilities?: string[];
@@ -85,23 +83,11 @@ export async function seedDevice(
         })
         .returning({ id: deviceProfiles.id })
     )[0]!.id;
-  // `device_binding_rule_insert` refuses a device that is not a kds screen unless it names a till.
-  const [till] =
-    opts.tillId === undefined
-      ? await db
-          .insert(tills)
-          .values({ locationId: opts.locationId, name: label })
-          .returning({ id: tills.id, locationId: tills.locationId })
-      : await db
-          .select({ id: tills.id, locationId: tills.locationId })
-          .from(tills)
-          .where(eq(tills.id, opts.tillId));
   const [row] = await db
     .insert(devices)
     .values({
-      locationId: till!.locationId,
+      locationId: opts.locationId,
       deviceProfileId: profileId,
-      tillId: till!.id,
       label,
       tokenHash: "seeded",
     })

@@ -9,10 +9,9 @@ import { deviceProfiles } from "./device-profiles.js";
 import { deviceMadeHereStations } from "./device-made-here-stations.js";
 import { devices } from "./devices.js";
 import { kitchenStations } from "./kitchen-stations.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL = "aaaaaaaa-0000-4000-8000-000000000002";
 const DEVICE = "aaaaaaaa-0000-4000-8000-000000000003";
 const STATION = "aaaaaaaa-0000-4000-8000-000000000004";
 const GHOST = "aaaaaaaa-0000-4000-8000-000000000099";
@@ -34,7 +33,6 @@ describe("device made-here stations schema", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await suite.db.insert(tills).values({ id: TILL, locationId: LOCATION, name: "Till A" });
     await suite.db
       .insert(kitchenStations)
       .values({ id: STATION, locationId: LOCATION, name: "Kitchen A" });
@@ -44,7 +42,6 @@ describe("device made-here stations schema", () => {
     await suite.db.insert(devices).values({
       id: DEVICE,
       locationId: LOCATION,
-      tillId: TILL,
       deviceProfileId: PROFILE,
       label: "Till device",
       tokenHash: "scrypt$00$00",

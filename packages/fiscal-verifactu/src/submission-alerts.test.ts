@@ -12,7 +12,7 @@ const NOW = new Date("2026-09-15T12:00:00Z");
 const hoursAgo = (h: number): Date => new Date(NOW.getTime() - h * 3_600_000);
 
 interface Identity {
-  tillId: string;
+  locationId: string;
   nodeId: string;
   sifId: string;
   nif: string;
@@ -21,11 +21,11 @@ interface Identity {
 // Each test mints its own node/SIF identity; the suite empties every data table after each test,
 // so one test's rows never reach another's read.
 async function seedIdentity(db: Database): Promise<Identity> {
-  const { tillId, nodeId } = await seedTenantWithSif(db);
+  const { locationId, nodeId } = await seedTenantWithSif(db);
   const { rows } = await db.execute<{ id: string; nif: string }>(sql`
     select id, nif from registro_sif where node_id = ${nodeId}
   `);
-  return { tillId, nodeId, sifId: rows[0]!.id, nif: rows[0]!.nif };
+  return { locationId, nodeId, sifId: rows[0]!.id, nif: rows[0]!.nif };
 }
 
 // Distinct per row: `secuencia`, `num_serie_factura` and the sale's `invoice_number` are all unique
@@ -44,7 +44,7 @@ async function seedRegistro(db: Database, id: Identity, genTime: Date): Promise<
     returning id
   `);
   const sale = await db.execute<{ id: string }>(sql`
-    insert into sales (id, source, device_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${newId()}, 'device', (select id from devices where till_id = ${id.tillId}), ${id.nodeId}, ${series.rows[0]!.id}, ${s},
+    insert into sales (id, source, device_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${newId()}, 'device', (select id from devices where location_id = ${id.locationId}), ${id.nodeId}, ${series.rows[0]!.id}, ${s},
       '2026-07-20T19:20:30+01:00', 60, 0, '[]',
       'es', '["es"]', 'verifactu', 'recorded'
     ) returning id
@@ -56,7 +56,7 @@ async function seedRegistro(db: Database, id: Identity, genTime: Date): Promise<
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, creado_en
-    ) values (${newId()}, 'device', (select id from devices where till_id = ${id.tillId}), ${id.nodeId}, ${id.sifId}, ${sale.rows[0]!.id}, ${s}, 'alta',
+    ) values (${newId()}, 'device', (select id from devices where location_id = ${id.locationId}), ${id.nodeId}, ${id.sifId}, ${sale.rows[0]!.id}, ${s}, 'alta',
       ${id.nif}, ${"W" + String(s) + "/1"}, '2026-07-20', 'Waitron SL',
       true, '{}',
       ${genTime.toISOString()}, 60, '01', ${huella}, ${genTime.toISOString()}

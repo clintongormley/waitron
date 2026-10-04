@@ -12,11 +12,10 @@ import { withTransaction } from "../tenancy.js";
 import { catalogues, products } from "./catalogue.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 import { ticketItems } from "./ticket-items.js";
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 // The locale trigger checks description KEYS against the venue's invoice_locales (['es'] here).
 const DESCRIPTIONS_A = { es: "Café solo" };
@@ -42,7 +41,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
         operationDescription: "Hostelería",
       },
     ]);
-    await db.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
     nodeA = await seedNode(db, brandLocationId(LOCATION_A));
     const [catA] = await db
       .insert(catalogues)

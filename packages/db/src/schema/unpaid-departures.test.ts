@@ -14,11 +14,10 @@ import { workingOrders } from "./orders.js";
 import { parties } from "./parties.js";
 import { sales } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 import { unpaidDepartures } from "./unpaid-departures.js";
 
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL = "aaaaaaaa-1111-4000-8000-000000000001";
 /** An order opened from the dashboard at `LOCATION`, needing no device. */
 const DASHBOARD = { source: "dashboard", deviceId: null, locationId: LOCATION } as const;
 const STAFF = "cccccccc-0000-4000-8000-000000000001";
@@ -49,14 +48,13 @@ describe("unpaid_departures", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await db.insert(tills).values({ id: TILL, locationId: LOCATION, name: "Till" });
     nodeId = await seedNode(db, brandLocationId(LOCATION));
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "FA", purpose: "standard" })
       .returning({ id: invoiceSeries.id });
     seriesId = series!.id;
-    ({ deviceId } = await seedDevice(db, { tillId: TILL }));
+    ({ deviceId } = await seedDevice(db, { locationId: LOCATION }));
   });
 
   /** A party, one bill of it and that bill's unsettled invoice. */

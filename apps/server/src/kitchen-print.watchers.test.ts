@@ -13,7 +13,6 @@ import {
   workingOrderLines,
   withTransaction,
 } from "@waitron/db";
-import { fixtureTill } from "./testing/session-device.js";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createProduct } from "@waitron/catalogue";
@@ -420,7 +419,6 @@ describe("watcher paper", () => {
         .insert(devices)
         .values({
           locationId: cfg.locationId,
-          tillId: await fixtureTill(tx, cfg.locationId),
           deviceProfileId: profile!.id,
           label: "Fryer till",
           tokenHash: `here-${randomUUID()}`,

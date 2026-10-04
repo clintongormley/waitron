@@ -111,7 +111,6 @@ export const PRIVILEGES: Record<string, string> = {
   tenants: "S",
   tenders: "SI",
   ticket_items: "SIU",
-  tills: "SIU",
   time_entries: "SI",
   totp_enrollments: "SIUD",
   unit_seed_states: "SIUD",

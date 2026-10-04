@@ -3,18 +3,16 @@ import {
   nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   stringToCents,
 } from "@waitron/shared";
-import type { DeviceId, LocationId, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
-import { invoiceSeries, locations, nodes, sales, tenants, tills } from "@waitron/db";
+import type { DeviceId, LocationId, NodeId, SaleId, SeriesId } from "@waitron/shared";
+import { invoiceSeries, locations, nodes, sales, tenants } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
 export interface SeededTenant {
   locationId: LocationId;
-  tillId: TillId;
-  /** A device on that till: the origin of the sales a test records. */
+  /** A till device at that location: the origin of the sales a test records. */
   deviceId: DeviceId;
   nodeId: NodeId;
   seriesId: SeriesId;
@@ -28,7 +26,7 @@ function freshNif(): string {
 }
 
 /**
- * Makes sure the one taxpayer row is there, then seeds location -> till (with a device) -> node ->
+ * Makes sure the one taxpayer row is there, then seeds location -> till device -> node ->
  * invoice series.
  * Each call mints its own node, so a second call gives a series owned by a different node.
  */
@@ -48,12 +46,7 @@ export async function seedTenant(db: Database): Promise<SeededTenant> {
     .returning({ id: locations.id });
   const locationId = location!.id;
 
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
-  const tillId = brandTillId(till!.id);
-  const { deviceId } = await seedDevice(db, { tillId });
+  const { deviceId } = await seedDevice(db, { locationId });
 
   const [node] = await db
     .insert(nodes)
@@ -67,7 +60,7 @@ export async function seedTenant(db: Database): Promise<SeededTenant> {
     .returning({ id: invoiceSeries.id });
   const seriesId = brandSeriesId(series!.id);
 
-  return { locationId: brandLocationId(locationId), tillId, deviceId, nodeId, seriesId };
+  return { locationId: brandLocationId(locationId), deviceId, nodeId, seriesId };
 }
 
 /**

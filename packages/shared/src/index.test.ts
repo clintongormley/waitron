@@ -54,7 +54,6 @@ import {
   SUPPORTED_LOCALE_CODES,
   SUPPORTED_LOCALES,
   tenderId,
-  tillId,
   toScale,
   workingOrderId,
   workingOrderLineId,
@@ -67,7 +66,7 @@ import {
 
 describe("package public surface (./index.js)", () => {
   it("re-exports AppError, isAppError and hasCode", () => {
-    const error = new AppError("shared.invalid_id", { kind: "TillId", value: "x" });
+    const error = new AppError("shared.invalid_id", { kind: "DeviceId", value: "x" });
     expect(isAppError(error)).toBe(true);
     expect(hasCode(error, "shared.invalid_id")).toBe(true);
   });
@@ -77,7 +76,6 @@ describe("package public surface (./index.js)", () => {
     expect(isUuid(uuid)).toBe(true);
     expect(normaliseUuid(uuid.toUpperCase(), "ProductId")).toBe(uuid);
     expect(locationId(uuid)).toBe(uuid);
-    expect(tillId(uuid)).toBe(uuid);
     expect(deviceId(uuid)).toBe(uuid);
     expect(nodeId(uuid)).toBe(uuid);
     expect(seriesId(uuid)).toBe(uuid);

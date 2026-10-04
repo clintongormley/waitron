@@ -38,7 +38,13 @@ import {
   listAvailableProducts,
   readReceiptLanguage,
 } from "@waitron/catalogue";
-import { getReceipt, getCanvas, getCanvasForFormFactor, getDeviceProfile } from "@waitron/layouts";
+import {
+  getReceipt,
+  getCanvas,
+  getCanvasForFormFactor,
+  getDeviceProfile,
+  kindOfFormFactor,
+} from "@waitron/layouts";
 import type { CanvasDef, CapabilityFlag } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { CardProviderContribution, PaymentProvider } from "@waitron/payments";
@@ -301,7 +307,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.cash_not_allowed": 403,
   // The same codes and statuses `device-api.ts`'s map assigns.
   "device.unauthorized": 401,
-  "device.till_required": 400,
   "session.not_open": 401,
   "session.required": 401,
   "locale.unsupported": 400,
@@ -898,8 +903,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // Not throttled: this id never reaches the lookup, so no PIN is being tried against anyone.
       if (personId === null) throw new AppError("pin.invalid", {});
       const device = await requireDevice(deps, c);
-      // A till-less device (a kds display) holds no shift.
-      if (device.tillId === null) throw new AppError("device.till_required", {});
+      // A kitchen display holds no shift.
+      if (kindOfFormFactor(device.formFactor) === "kds_station")
+        throw new AppError("device.forbidden_action", { action: "sign_in" });
       pinThrottle.check(device.deviceId, personId);
       const checked = await checkPin(deps.db, personId, pin);
       let session;
@@ -1454,7 +1460,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         revision?: unknown;
       }>(c);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const saleCfg = sendingCfg(cfg, c, session.device);
       const revision = await updateHeldOrder(
         { db: deps.db },
         sendCfg,
@@ -1465,7 +1470,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           revision: requireRevision(body.revision),
           operatorId: personId,
         },
-        { fiscal, saleCfg },
+        { fiscal, saleCfg: sendCfg },
       );
       return c.json({ revision });
     }),
@@ -2487,10 +2492,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { revision, ...patch } = await readJsonBody<OrderLinePatch & { revision?: unknown }>(c);
       const copy = requireRevision(revision);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const saleCfg = sendingCfg(cfg, c, session.device);
       const saved = await withTransaction(deps.db, async (tx) => {
         const revision = await updateOrderLine(tx, sendCfg, id, lineNo, patch, copy, personId);
-        await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
+        await issueIfFullyPaid(tx, fiscal, sendCfg, id, personId);
         return { revision, party: await partyRevisionOfOrder(tx, id) };
       });
       return c.json(saved);

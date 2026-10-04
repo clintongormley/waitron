@@ -20,11 +20,11 @@ import {
   KDS_BINDING_REFUSAL,
   LOCALES_REFUSAL,
   MISSING_PROFILE_REFUSAL,
+  NON_KDS_BINDING_REFUSAL,
   OPEN_PARENT_REFUSAL,
   PRODUCT_ORDERING_REFUSAL,
   POST_SETTLEMENT_REFUSAL,
   PRODUCT_ID_FIXED_REFUSAL,
-  REGISTER_BINDING_REFUSAL,
   TRANSITION_REFUSAL,
   VARIANT_LOCALES_REFUSAL,
   VARIANT_ONE_LEVEL_REFUSAL,
@@ -36,7 +36,7 @@ import {
  * against a database the PRODUCT migrated: a settlement's tender coverage, a tender
  * after settlement, a working order's status transitions, lines written against an order that is
  * not open, a line's description maps matching the venue's invoice locales, a device profile's form
- * factor while an active device uses it, and a device's station, watcher or register binding against its
+ * factor while an active device uses it, and a device's station or watcher binding against its
  * profile's form factor. A trigger cannot be declared in the TypeScript schema, so a regenerated
  * migration set does not carry it.
  *
@@ -58,6 +58,8 @@ import {
  * `packages/db/drizzle/0050_line_list_price_frozen.sql`, with `list_unit_price_gross` in its
  * unchanged-column lists, and by `packages/db/drizzle/0053_line_sent_after_close.sql`, which lets a
  * presented or paid bill's line take a first `sent_at`.
+ * The device binding pair and `device_profile_form_factor_locked` are re-created by
+ * `packages/db/drizzle/0089_devices_recreate_triggers.sql`, the pair with no register in it.
  * `packages/db/drizzle/0064_line_locale_triggers_text_only.sql` re-creates the two locale update
  * triggers to fire only when an update changes the name map each one checks or moves the line.
  * Some triggers ACT rather than refuse.
@@ -302,8 +304,6 @@ function seed(connection) {
     // wrong about in both directions.
     `insert into locations (id, name, invoice_locales, operation_description) ` +
       `values ('loc', 'Venue', '["es","ca"]', 'Restaurante')`,
-    `insert into tills (id, location_id, name, created_at) values ('till', 'loc', 'Till 1', '${STAMP}')`,
-    `insert into tills (id, location_id, name, created_at) values ('till-2', 'loc', 'Till 2', '${STAMP}')`,
 
     // Working orders, one per case that changes an order's state.
     workingOrder("wo-open", "open"),
@@ -402,15 +402,13 @@ function seed(connection) {
     `insert into kitchen_stations (id, location_id, name, created_at) ` +
       `values ('station', 'loc', 'Pase', '${STAMP}')`,
 
-    // Device profiles and one active device. The device carries `till_id` because its profile's
-    // form factor is `till` and device_binding_rule_insert refuses that shape without one — this
-    // seed row is itself the rule's first accepting control.
+    // Device profiles and one active device.
     `insert into device_profiles (id, name, form_factor, created_at, updated_at) ` +
       `values ('dp-used', 'Counter', 'till', '${STAMP}', '${STAMP}')`,
     `insert into device_profiles (id, name, form_factor, created_at, updated_at) ` +
       `values ('dp-free', 'Spare', 'till', '${STAMP}', '${STAMP}')`,
-    `insert into devices (id, location_id, device_profile_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
-      `values ('dev-active', 'loc', 'dp-used', 'till', 'Counter 1', 'hash', 1, '${STAMP}', '${STAMP}')`,
+    `insert into devices (id, location_id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
+      `values ('dev-active', 'loc', 'dp-used', 'Counter 1', 'hash', 1, '${STAMP}', '${STAMP}')`,
 
     // The binding rule's own profiles, separate from the two above so that attaching a device to
     // one never changes what the form-factor drift guard's cases see.
@@ -419,14 +417,12 @@ function seed(connection) {
     `insert into device_profiles (id, name, form_factor, created_at, updated_at) ` +
       `values ('dp-bind-till', 'Caja', 'till', '${STAMP}', '${STAMP}')`,
     // Valid rows to UPDATE into a bad shape, and one deactivated row for the reactivation case.
-    `insert into devices (id, location_id, device_profile_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
-      `values ('dev-rebind', 'loc', 'dp-bind-till', 'till', 'Caja 2', 'hash', 1, '${STAMP}', '${STAMP}')`,
-    `insert into devices (id, location_id, device_profile_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
-      `values ('dev-heartbeat', 'loc', 'dp-bind-till', 'till', 'Caja 3', 'hash', 1, '${STAMP}', '${STAMP}')`,
+    `insert into devices (id, location_id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
+      `values ('dev-rebind', 'loc', 'dp-bind-till', 'Caja 2', 'hash', 1, '${STAMP}', '${STAMP}')`,
     `insert into device_profiles (id, name, form_factor, created_at, updated_at) ` +
       `values ('dp-drift', 'Caja que deriva', 'till', '${STAMP}', '${STAMP}')`,
-    `insert into devices (id, location_id, device_profile_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
-      `values ('dev-off', 'loc', 'dp-drift', 'till', 'Caja 4', 'hash', 0, '${STAMP}', '${STAMP}')`,
+    `insert into devices (id, location_id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
+      `values ('dev-off', 'loc', 'dp-drift', 'Caja 4', 'hash', 0, '${STAMP}', '${STAMP}')`,
 
     // Lines for the served exception, written while their orders are open; the orders leave open
     // below. `loc-relocale` is a venue of its own so its invoice locales can change without moving
@@ -1515,14 +1511,14 @@ describe("device_binding_rule_insert", () => {
     ).toBe(KDS_BINDING_REFUSAL);
   });
 
-  it("refuses a non-kds device bound to a register and a watcher", () => {
+  it("refuses a non-kds device bound to a watcher", () => {
     expect(
       refusalFor(
         connection,
-        `insert into devices (id, location_id, device_profile_id, till_id, watcher_id, label, token_hash, active, enrolled_at, created_at) ` +
-          `values ('dev-register-watcher', 'loc', 'dp-bind-till', 'till', 'watcher', 'Till', 'hash', 1, '${STAMP}', '${STAMP}')`,
+        `insert into devices (id, location_id, device_profile_id, watcher_id, label, token_hash, active, enrolled_at, created_at) ` +
+          `values ('dev-till-watcher', 'loc', 'dp-bind-till', 'watcher', 'Till', 'hash', 1, '${STAMP}', '${STAMP}')`,
       ),
-    ).toBe(REGISTER_BINDING_REFUSAL);
+    ).toBe(NON_KDS_BINDING_REFUSAL);
   });
 
   it("refuses a kds device that binds no station", () => {
@@ -1535,34 +1531,14 @@ describe("device_binding_rule_insert", () => {
     ).toBe(KDS_BINDING_REFUSAL);
   });
 
-  it("refuses a kds device that also binds a register", () => {
+  it("refuses a non-kds device bound to a station", () => {
     expect(
       refusalFor(
         connection,
-        `insert into devices (id, location_id, device_profile_id, station_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
-          `values ('dev-kds-both', 'loc', 'dp-bind-kds', 'station', 'till', 'Pase 2', 'hash', 1, '${STAMP}', '${STAMP}')`,
+        `insert into devices (id, location_id, device_profile_id, station_id, label, token_hash, active, enrolled_at, created_at) ` +
+          `values ('dev-till-station', 'loc', 'dp-bind-till', 'station', 'Caja 10', 'hash', 1, '${STAMP}', '${STAMP}')`,
       ),
-    ).toBe(KDS_BINDING_REFUSAL);
-  });
-
-  it("refuses a non-kds device that binds no register", () => {
-    expect(
-      refusalFor(
-        connection,
-        `insert into devices (id, location_id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
-          `values ('dev-till-bare', 'loc', 'dp-bind-till', 'Caja 9', 'hash', 1, '${STAMP}', '${STAMP}')`,
-      ),
-    ).toBe(REGISTER_BINDING_REFUSAL);
-  });
-
-  it("refuses a non-kds device that also binds a station", () => {
-    expect(
-      refusalFor(
-        connection,
-        `insert into devices (id, location_id, device_profile_id, station_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
-          `values ('dev-till-both', 'loc', 'dp-bind-till', 'station', 'till', 'Caja 10', 'hash', 1, '${STAMP}', '${STAMP}')`,
-      ),
-    ).toBe(REGISTER_BINDING_REFUSAL);
+    ).toBe(NON_KDS_BINDING_REFUSAL);
   });
 
   // Reachable here and nowhere else: this file runs with `pragma foreign_keys = off`, and in the
@@ -1572,8 +1548,8 @@ describe("device_binding_rule_insert", () => {
     expect(
       refusalFor(
         connection,
-        `insert into devices (id, location_id, device_profile_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
-          `values ('dev-ghost', 'loc', 'dp-missing', 'till', 'Fantasma', 'hash', 1, '${STAMP}', '${STAMP}')`,
+        `insert into devices (id, location_id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
+          `values ('dev-ghost', 'loc', 'dp-missing', 'Fantasma', 'hash', 1, '${STAMP}', '${STAMP}')`,
       ),
     ).toBe(MISSING_PROFILE_REFUSAL);
   });
@@ -1588,7 +1564,7 @@ describe("device_binding_rule_insert", () => {
     ).toBe(1811);
   });
 
-  it("accepts a kds device bound to a station and no register", () => {
+  it("accepts a kds device bound to a station and no watcher", () => {
     expect(
       refusalFor(
         connection,
@@ -1598,12 +1574,12 @@ describe("device_binding_rule_insert", () => {
     ).toBeUndefined();
   });
 
-  it("accepts a non-kds device bound to a register and no station", () => {
+  it("accepts a till device bound to neither a station nor a watcher", () => {
     expect(
       refusalFor(
         connection,
-        `insert into devices (id, location_id, device_profile_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
-          `values ('dev-till-ok', 'loc', 'dp-bind-till', 'till', 'Caja 11', 'hash', 1, '${STAMP}', '${STAMP}')`,
+        `insert into devices (id, location_id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
+          `values ('dev-till-ok', 'loc', 'dp-bind-till', 'Caja 11', 'hash', 1, '${STAMP}', '${STAMP}')`,
       ),
     ).toBeUndefined();
   });
@@ -1612,7 +1588,7 @@ describe("device_binding_rule_insert", () => {
 describe("device_binding_rule_update", () => {
   it("refuses a watcher added to a station-bound kds device", () => {
     connection.exec(
-      `insert into devices (id, location_id, device_profile_id, station_id, label, token_hash, active, enrolled_at, created_at) values ('dev-add-watcher', 'loc', 'dp-bind-kds', 'station', 'Pass', 'hash', 1, '${STAMP}', '${STAMP}')`,
+      `insert into devices (id, location_id, device_profile_id, station_id, label, token_hash, active, enrolled_at, created_at) values ('dev-add-watcher', 'loc', 'dp-bind-kds', 'station', 'Pass add', 'hash', 1, '${STAMP}', '${STAMP}')`,
     );
     expect(
       refusalFor(
@@ -1624,7 +1600,7 @@ describe("device_binding_rule_update", () => {
 
   it("accepts moving a kds device from station to watcher in one update", () => {
     connection.exec(
-      `insert into devices (id, location_id, device_profile_id, station_id, label, token_hash, active, enrolled_at, created_at) values ('dev-move-watcher', 'loc', 'dp-bind-kds', 'station', 'Pass', 'hash', 1, '${STAMP}', '${STAMP}')`,
+      `insert into devices (id, location_id, device_profile_id, station_id, label, token_hash, active, enrolled_at, created_at) values ('dev-move-watcher', 'loc', 'dp-bind-kds', 'station', 'Pass move', 'hash', 1, '${STAMP}', '${STAMP}')`,
     );
     expect(
       refusalFor(
@@ -1639,10 +1615,10 @@ describe("device_binding_rule_update", () => {
     ).toMatchObject({ station_id: null, watcher_id: "watcher" });
   });
 
-  it("refuses a stray station added to a register device", () => {
+  it("refuses a stray station added to a till device", () => {
     expect(
       refusalFor(connection, `update devices set station_id = 'station' where id = 'dev-rebind'`),
-    ).toBe(REGISTER_BINDING_REFUSAL);
+    ).toBe(NON_KDS_BINDING_REFUSAL);
   });
 
   it("refuses a rebind onto a profile the binding contradicts", () => {
@@ -1652,12 +1628,6 @@ describe("device_binding_rule_update", () => {
         `update devices set device_profile_id = 'dp-bind-kds' where id = 'dev-rebind'`,
       ),
     ).toBe(KDS_BINDING_REFUSAL);
-  });
-
-  it("accepts a rebind onto another register", () => {
-    expect(
-      refusalFor(connection, `update devices set till_id = 'till-2' where id = 'dev-heartbeat'`),
-    ).toBeUndefined();
   });
 
   // The three cases below run in order: the drift is set up, then reactivation is refused, then the

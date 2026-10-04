@@ -509,16 +509,10 @@ describe("approval through the route (plan D6)", () => {
         name: "Bucket till device",
         profileId: tillProfile!.id,
       });
-      const { rows } = await inTx(venue, async (tx) =>
-        tx.execute<{ till_id: string }>(
-          sql`select till_id from devices where id = ${till.deviceId}`,
-        ),
-      );
-      // A handheld on the same till as `till`, so only the device tells their counts apart.
+      // A handheld at the same location as `till`, so only the device tells their counts apart.
       const handheld = await enrolDeviceForTest(venue.db, venue.cfg, {
         name: "Bucket phone device",
         profileId: handheldProfile!.id,
-        registerId: rows[0]!.till_id,
       });
       const sessionOn = async (deviceId: string) => {
         const session = await inTx(venue, (tx) =>

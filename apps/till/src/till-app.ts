@@ -1343,7 +1343,7 @@ export class TillApp extends LitElement {
   /** The schedule screen leaves the operator out of the colleague picker. */
   @state() private operatorPersonId = "";
   @state() private staff: StaffMember[] = [];
-  /** Every open working order in the venue, across tills. */
+  /** Every open working order in the venue, across devices. */
   @state() private heldOrders: HeldOrderSummary[] = [];
   @state() private counterWaiting: CounterWaitingOrder[] = [];
   @state() private findingBill = false;

@@ -18,7 +18,6 @@ import {
   openVenueDatabase,
   stampDeployment,
   tenants,
-  tills,
   withTransaction,
   writeMirrorConfig,
   writeNodeMembership,
@@ -54,8 +53,6 @@ vi.mock("undici", async (importOriginal) => {
   };
 });
 
-// The till row the suite's fixtures name until the tills table goes; the environment names none.
-const BOOT_TILL_ID = "22222222-2222-4222-8222-222222222222";
 const TILL_ENV = {
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
@@ -116,14 +113,6 @@ async function seedTillIdentity(db: Database): Promise<void> {
       id: TILL_ENV.WAITRON_TILL_NODE_ID,
       locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
       name: "Promote node",
-    })
-    .onConflictDoNothing();
-  await db
-    .insert(tills)
-    .values({
-      id: BOOT_TILL_ID,
-      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
-      name: "Promote till",
     })
     .onConflictDoNothing();
   await establishNodeIdentity({ ownerDb: db, ring: PROMOTE_RING }, TILL_ENV.WAITRON_TILL_NODE_ID);
@@ -187,7 +176,7 @@ async function seedFiscalWork(): Promise<{ registroIds: string[] }> {
   const seeded = await seedPendingEnvios(appDb, {
     count: 1,
     identity: {
-      tillId: BOOT_TILL_ID,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
       nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
       nif: "90111111H",
     },

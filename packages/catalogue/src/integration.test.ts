@@ -77,8 +77,8 @@ const clock: TrustedClock = {
 
 describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
   it("rings a sale entirely from catalogue data", async () => {
-    const { locationId, tillId, nodeId, seriesId } = await seedVenue(suite.db);
-    const { deviceId } = await seedDevice(suite.db, { tillId });
+    const { locationId, nodeId, seriesId } = await seedVenue(suite.db);
+    const { deviceId } = await seedDevice(suite.db, { locationId });
     const backend = new CapturingFakeBackend(suite.db);
 
     let priced: ReturnType<typeof priceBasket>;

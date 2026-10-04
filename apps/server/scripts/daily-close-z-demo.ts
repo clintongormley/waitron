@@ -34,7 +34,6 @@ import {
   nodes,
   openVenueDatabase,
   tenants,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -108,15 +107,12 @@ async function seedVenue(db: Database): Promise<Venue> {
     .insert(deviceProfiles)
     .values({ name: "Till", formFactor: "till", capabilities: ["take-cash"] })
     .returning({ id: deviceProfiles.id });
-  // A till device still names a till until the tills table goes (`device_binding_rule_insert`).
   const tillDevice = async (name: string): Promise<DeviceId> => {
-    const [till] = await db.insert(tills).values({ locationId, name }).returning({ id: tills.id });
     const [device] = await db
       .insert(devices)
       .values({
         locationId,
         deviceProfileId: profile!.id,
-        tillId: till!.id,
         label: name,
         tokenHash: "demo",
       })

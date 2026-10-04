@@ -40,7 +40,6 @@ it("notifies subscribers on setLocale and stops after unsubscribe", () => {
 
 it("uses the cash-register wording for the register-meaning strings", () => {
   // The device-KIND label (devices.kind_till) means the device, and is deliberately not swept here.
-  expect(en["devices.till"]).toBe("Cash register");
   expect(en["sales.tender_title"]).toBe("Tender by cash register");
   expect(en["device_profiles.form_factor.till"]).toBe("Cash register");
 });

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { devices, locations, printers, readTenant, tills, withTransaction } from "@waitron/db";
+import { devices, locations, printers, readTenant, withTransaction } from "@waitron/db";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { validateReceiptConfig } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -107,7 +107,7 @@ async function withPrinters(
         })
         .returning({ id: printers.id });
       const { deviceId } = await seedDevice(suite.db, {
-        tillId: venue.tillId,
+        locationId: venue.cfg.locationId,
         label: row.device,
       });
       await suite.db
@@ -118,7 +118,6 @@ async function withPrinters(
     }
     await fn();
   } finally {
-    await suite.db.execute(sql`update tills set receipt_printer_id = null`);
     for (const { deviceId, printerId } of created) {
       await suite.db.execute(sql`delete from devices where id = ${deviceId}`);
       await suite.db.execute(sql`delete from printers where id = ${printerId}`);
@@ -282,7 +281,7 @@ describe("GET /management-api/receipt-preview", () => {
             .from(devices)
             .where(eq(devices.label, "Caja 1"));
           const { deviceId } = await seedDevice(suite.db, {
-            tillId: venue.tillId,
+            locationId: venue.cfg.locationId,
             label: "Caja 2",
           });
           try {
@@ -311,15 +310,15 @@ describe("GET /management-api/receipt-preview", () => {
       );
     });
 
-    it("reads each device's receipt printer, not a till's", async () => {
+    it("reads each device's receipt printer, not every printer at the location", async () => {
       await withPrinters(
         [{ device: "Caja 1", paperWidth: "80mm", resolution: "203dpi" }],
         async () => {
-          const [tillPrinter] = await suite.db
+          const [unusedPrinter] = await suite.db
             .insert(printers)
             .values({
               locationId: venue.cfg.locationId,
-              name: "Printer of the till",
+              name: "Printer no device uses",
               transport: "network_tcp",
               host: "192.0.2.11",
               paperWidth: "58mm",
@@ -327,15 +326,10 @@ describe("GET /management-api/receipt-preview", () => {
             })
             .returning({ id: printers.id });
           try {
-            await suite.db
-              .update(tills)
-              .set({ receiptPrinterId: tillPrinter!.id })
-              .where(eq(tills.id, venue.tillId));
             const result = await at("");
             expect([result.paperWidths, result.paperWidth]).toEqual([["80mm"], "80mm"]);
           } finally {
-            await suite.db.execute(sql`update tills set receipt_printer_id = null`);
-            await suite.db.execute(sql`delete from printers where id = ${tillPrinter!.id}`);
+            await suite.db.execute(sql`delete from printers where id = ${unusedPrinter!.id}`);
           }
         },
       );

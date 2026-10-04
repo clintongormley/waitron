@@ -704,22 +704,10 @@ declare module "@waitron/shared" {
      */
     "device.station_required": Record<string, never>;
     /**
-     * A device whose binding carries no `till_id` tried to sign in (the roster-login guard in
-     * `till-api.ts`). In practice a `kds_station`: the `device_binding_rule_insert`/`_update`
-     * triggers refuse a null `till_id` for every other form factor.
+     * Accepting a device under a name an active device at its location already has
+     * (`devices_location_label_active_key`). The admin renames the device.
      */
-    "device.till_required": Record<string, never>;
-    /**
-     * A join request was accepted under a register-binding (handheld) profile with NO register. A
-     * handheld must name the `tills` row it files against; a `till`-form-factor device mints its own.
-     */
-    "device.register_required": Record<string, never>;
-    /**
-     * Accepting a `till`-form-factor device tried to create its register under a name another
-     * register at the venue already uses (`tills_tenant_location_name_key`). The admin renames the
-     * device.
-     */
-    "device.register_name_taken": Record<string, never>;
+    "device.name_taken": Record<string, never>;
     /** The venue's region fixes its receipt language; `language` is that fixed language, never the
      * caller's value. */
     "receipt.language_fixed": { field: "receiptLanguage"; language: string };
@@ -732,7 +720,7 @@ declare module "@waitron/shared" {
      * where the read is taken. `field` carries the FIELD NAME only, never the id value.
      */
     "device.binding_invalid": {
-      field: "tillId" | "receiptPrinterId" | "paymentSlipPrinterId" | "deviceProfileId";
+      field: "receiptPrinterId" | "paymentSlipPrinterId" | "deviceProfileId";
     };
     /**
      * A knock arrived at `POST /api/device/join` while pairing mode is shut — the ordinary state, not

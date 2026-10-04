@@ -32,11 +32,13 @@ describe("AppError", () => {
   });
 
   it("reports its name as AppError", () => {
-    expect(new AppError("shared.invalid_id", { kind: "TillId", value: "x" }).name).toBe("AppError");
+    expect(new AppError("shared.invalid_id", { kind: "DeviceId", value: "x" }).name).toBe(
+      "AppError",
+    );
   });
 
   it("does not mutate the params object it was given", () => {
-    const params = { kind: "TillId", value: "x" };
+    const params = { kind: "DeviceId", value: "x" };
     const error = new AppError("shared.invalid_id", params);
     expect(error.params).toEqual(params);
     expect(Object.isFrozen(error.params)).toBe(true);
@@ -45,20 +47,20 @@ describe("AppError", () => {
   it("carries a log-only reason when one is given", () => {
     const error = new AppError(
       "shared.invalid_id",
-      { kind: "TillId", value: "x" },
+      { kind: "DeviceId", value: "x" },
       { reason: "r" },
     );
     expect(error.reason).toBe("r");
   });
 
   it("has no reason property at all when none is given", () => {
-    const error = new AppError("shared.invalid_id", { kind: "TillId", value: "x" });
+    const error = new AppError("shared.invalid_id", { kind: "DeviceId", value: "x" });
     expect(error.reason).toBeUndefined();
     expect(Object.hasOwn(error, "reason")).toBe(false);
   });
 
   it("keeps the reason out of every serialisation that walks its own enumerable keys", () => {
-    const params = { kind: "TillId", value: "x" };
+    const params = { kind: "DeviceId", value: "x" };
     const withReason = new AppError("shared.invalid_id", params, { reason: "secret-cause" });
     const without = new AppError("shared.invalid_id", params);
     expect(JSON.stringify(withReason)).toBe(JSON.stringify(without));
@@ -71,7 +73,7 @@ describe("AppError", () => {
   it("cannot have its reason reassigned", () => {
     const error = new AppError(
       "shared.invalid_id",
-      { kind: "TillId", value: "x" },
+      { kind: "DeviceId", value: "x" },
       { reason: "r" },
     );
     expect(() => {
@@ -81,7 +83,7 @@ describe("AppError", () => {
   });
 
   it("keeps params frozen and unchanged when a reason is given", () => {
-    const params = { kind: "TillId", value: "x" };
+    const params = { kind: "DeviceId", value: "x" };
     const error = new AppError("shared.invalid_id", params, { reason: "r" });
     expect(error.params).toEqual(params);
     expect(Object.isFrozen(error.params)).toBe(true);
@@ -98,7 +100,7 @@ describe("AppError", () => {
 
 describe("isAppError", () => {
   it("accepts an AppError", () => {
-    expect(isAppError(new AppError("shared.invalid_id", { kind: "TillId", value: "x" }))).toBe(
+    expect(isAppError(new AppError("shared.invalid_id", { kind: "DeviceId", value: "x" }))).toBe(
       true,
     );
   });
@@ -131,26 +133,26 @@ describe("param-shape discrimination", () => {
 
 describe("narrowing by code", () => {
   it("does not narrow .params from a bare `.code` check — see the class doc comment", () => {
-    const error: AppError = new AppError("shared.invalid_id", { kind: "TillId", value: "x" });
+    const error: AppError = new AppError("shared.invalid_id", { kind: "DeviceId", value: "x" });
     if (error.code === "shared.invalid_id") {
       // @ts-expect-error `.params` is not narrowed by a bare `.code` check; use `hasCode` instead
-      expect(error.params.kind).toBe("TillId");
+      expect(error.params.kind).toBe("DeviceId");
     } else {
       expect.unreachable("the code check above should have matched");
     }
   });
 
   it("narrows .params together with .code via hasCode", () => {
-    const error: AppError = new AppError("shared.invalid_id", { kind: "TillId", value: "x" });
+    const error: AppError = new AppError("shared.invalid_id", { kind: "DeviceId", value: "x" });
     if (hasCode(error, "shared.invalid_id")) {
-      expect(error.params.kind).toBe("TillId");
+      expect(error.params.kind).toBe("DeviceId");
     } else {
       expect.unreachable("hasCode should have matched");
     }
   });
 
   it("hasCode rejects a non-matching code", () => {
-    const error: AppError = new AppError("shared.invalid_id", { kind: "TillId", value: "x" });
+    const error: AppError = new AppError("shared.invalid_id", { kind: "DeviceId", value: "x" });
     expect(hasCode(error, "shared.invalid_decimal")).toBe(false);
   });
 });

@@ -20,7 +20,7 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedDevice, seedNode } from "../testing/seed.js";
 import { catalogues, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -52,7 +52,6 @@ afterEach(async () => {
     await tx.execute(sql`delete from nodes`);
     await tx.execute(sql`delete from ${devices}`);
     await tx.execute(sql`delete from ${deviceProfiles}`);
-    await tx.execute(sql`delete from tills`);
     await tx.execute(sql`delete from locations`);
     await tx.execute(sql`delete from tenants`);
     await tx.execute(sql.raw(guard.sql));
@@ -60,7 +59,6 @@ afterEach(async () => {
 });
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 /** An order opened from the dashboard at location A: no device to seed. */
 const DASHBOARD_ORDER = { source: "dashboard", deviceId: null, locationId: LOCATION_A } as const;
@@ -87,7 +85,6 @@ async function seed(db: Database): Promise<void> {
       operationDescription: "Hostelería",
     },
   ]);
-  await db.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
   const [catA] = await db
     .insert(catalogues)
     .values({ name: "Deli A" })
@@ -379,7 +376,7 @@ describe("working_orders", () => {
   });
 
   it("records who opened an order and where: a device names itself, the dashboard names none", async () => {
-    const { deviceId } = await seedDevice(db, { tillId: TILL_A1 });
+    const { deviceId } = await seedDevice(db, { locationId: LOCATION_A });
     const [fromDevice] = await db
       .insert(workingOrders)
       .values({
@@ -408,7 +405,7 @@ describe("working_orders", () => {
   });
 
   it("refuses an order from a job that names a device", async () => {
-    const { deviceId } = await seedDevice(db, { tillId: TILL_A1 });
+    const { deviceId } = await seedDevice(db, { locationId: LOCATION_A });
     const error = await captureError(() =>
       db.insert(workingOrders).values({
         source: "kitchen_timer",

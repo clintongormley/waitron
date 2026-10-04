@@ -18,7 +18,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { and, eq, sql } from "drizzle-orm";
-import { openVenueDatabase, tills, watchers, withTransaction, type Database } from "@waitron/db";
+import { openVenueDatabase, watchers, withTransaction, type Database } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { listDeviceProfiles } from "@waitron/layouts";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -261,9 +261,8 @@ async function provisionVenue(
  * pairing window and number match, so `?dev`'s chooser lists them on first run. Each device is its own
  * transaction: a failure partway leaves the earlier devices enrolled.
  *
- * The till device makes a register named after itself, "Mostrador", and the handheld rings into
- * that same register. The kitchen display binds the default station by `isDefault`, since the
- * demo may rename it. The pass display binds the demo's one active watcher.
+ * The kitchen display binds the default station by `isDefault`, since the demo may rename it. The
+ * pass display binds the demo's one active watcher.
  */
 async function seedDemoDevices(
   db: Database,
@@ -308,23 +307,9 @@ async function seedDemoDevices(
   }
 
   await enrolDeviceForTest(db, cfg, { name: "Mostrador", profileId: profileFor("till") });
-
-  const counter = (
-    await withTransaction(db, async (tx) => {
-      return tx
-        .select({ id: tills.id })
-        .from(tills)
-        .where(and(eq(tills.locationId, cfg.locationId), eq(tills.name, "Mostrador")));
-    })
-  )[0];
-  if (counter === undefined) {
-    throw new Error('dev-setup: the till enrol did not create its "Mostrador" register');
-  }
-
   await enrolDeviceForTest(db, cfg, {
     name: "Camarero 1",
     profileId: profileFor("phone-portrait"),
-    registerId: counter.id,
   });
 
   await enrolDeviceForTest(db, cfg, {

@@ -21,7 +21,7 @@ import { drawerOpens } from "./drawer-opens.js";
 import { workingOrders } from "./orders.js";
 import { sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
 /**
  * What this file does NOT check: that the product's writers keep the bill invariant (design §4.4) —
@@ -29,10 +29,8 @@ import { locations, tenants, tills } from "./tenants.js";
  */
 
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL = "aaaaaaaa-1111-4000-8000-000000000001";
 /** An order opened from the dashboard at `LOCATION`, needing no device. */
 const DASHBOARD = { source: "dashboard", deviceId: null, locationId: LOCATION } as const;
-const TILL_2 = "aaaaaaaa-1111-4000-8000-000000000002";
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
 const MANAGER = "cccccccc-0000-4000-8000-000000000002";
 const AT = "2026-09-27T12:00:00.000Z";
@@ -65,13 +63,9 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await db.insert(tills).values([
-      { id: TILL, locationId: LOCATION, name: "Till" },
-      { id: TILL_2, locationId: LOCATION, name: "Till 2" },
-    ]);
     nodeId = await seedNode(db, brandLocationId(LOCATION));
-    ({ deviceId } = await seedDevice(db, { tillId: TILL }));
-    ({ deviceId: device2 } = await seedDevice(db, { tillId: TILL_2 }));
+    ({ deviceId } = await seedDevice(db, { locationId: LOCATION }));
+    ({ deviceId: device2 } = await seedDevice(db, { locationId: LOCATION }));
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "FA", purpose: "standard" })

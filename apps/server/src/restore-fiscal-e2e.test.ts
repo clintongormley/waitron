@@ -16,7 +16,6 @@ import {
   readStandardSeriesId,
   sales,
   tenants,
-  tills,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -58,7 +57,6 @@ const SQLITE_CONSTRAINT_TRIGGER = 1811;
 
 const F = {
   locationId: "c0000000-0000-4000-8000-000000000002",
-  tillId: "c0000000-0000-4000-8000-000000000003",
   seriesId: "c0000000-0000-4000-8000-000000000004",
   saleId: "c0000000-0000-4000-8000-000000000005",
   sifId: "c0000000-0000-4000-8000-000000000006",
@@ -80,8 +78,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     invoiceLocales: ["es"],
     operationDescription: "Venta en establecimiento",
   });
-  await db.insert(tills).values({ id: F.tillId, locationId: F.locationId, name: "Caja 1" });
-  await seedDevice(db, { tillId: F.tillId });
+  await seedDevice(db, { locationId: F.locationId });
   await db.insert(nodes).values({ id: F.nodeId, locationId: F.locationId, name: "Node 1" });
   await db
     .insert(invoiceSeries)
@@ -102,7 +99,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
   await db.insert(sales).values({
     id: F.saleId,
     source: "device",
-    deviceId: sql`(select id from devices where till_id = ${F.tillId})`,
+    deviceId: sql`(select id from devices where location_id = ${F.locationId})`,
     nodeId: F.nodeId,
     seriesId: F.seriesId,
     invoiceNumber: 4,
@@ -119,7 +116,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     .insert(registrosFacturacion)
     .values({
       source: "device",
-      deviceId: sql`(select id from devices where till_id = ${F.tillId})`,
+      deviceId: sql`(select id from devices where location_id = ${F.locationId})`,
       nodeId: F.nodeId,
       sifId: F.sifId,
       saleId: F.saleId,
@@ -264,7 +261,6 @@ async function buildArtifact(older: boolean, artifact: string): Promise<void> {
         name: "secrets/trading.env",
         bytes: Buffer.from(
           formatEnvFile({
-            WAITRON_TILL_TILL_ID: F.tillId,
             WAITRON_TILL_NODE_ID: F.nodeId,
             WAITRON_TILL_SERIES_ID: F.seriesId,
             WAITRON_TILL_LOCATION_ID: F.locationId,
@@ -368,7 +364,7 @@ describe("fiscal restore, end to end", () => {
       expect(env.WAITRON_TILL_NODE_ID).toBe(F.nodeId);
       // A key the rewrite does not touch survives it.
       expect(env.WAITRON_ENV).toBe("preproduction");
-      expect(env.WAITRON_TILL_TILL_ID).toBe(F.tillId);
+      expect(env.WAITRON_TILL_LOCATION_ID).toBe(F.locationId);
       expect(await readFile(join(dirs.stateDir, "secrets.env"), "utf8")).toBe(
         "WAITRON_CREDENTIALS_KEY=deadbeef\n",
       );

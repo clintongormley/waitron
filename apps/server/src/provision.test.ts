@@ -112,10 +112,10 @@ describe("provisionVenue", () => {
     );
 
     expect(result).not.toHaveProperty("tillId");
-    const tills = await db.execute<{ n: number }>(
-      sql`select cast(count(*) as int) as n from tills`,
+    const devices = await db.execute<{ n: number }>(
+      sql`select cast(count(*) as int) as n from devices`,
     );
-    expect(tills.rows[0]!.n).toBe(0);
+    expect(devices.rows[0]!.n).toBe(0);
     for (const id of [result.locationId, result.nodeId, result.seriesIds[0]]) {
       expect(typeof id).toBe("string");
       expect((id as string).length).toBeGreaterThan(0);

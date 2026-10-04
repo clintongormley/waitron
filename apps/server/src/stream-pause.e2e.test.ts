@@ -31,7 +31,6 @@ import {
   devices,
   openVenueDatabase,
   stampDeployment,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import { hashPassword, hashPin, hashSecret, persons } from "@waitron/identity";
@@ -337,17 +336,11 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
           .select({ id: deviceProfiles.id })
           .from(deviceProfiles)
           .where(eq(deviceProfiles.formFactor, "till"));
-        // A till device still names a till until the tills table goes.
-        const [till] = await seeding.venue
-          .insert(tills)
-          .values({ locationId: venue.locationId, name: "Caja 1" })
-          .returning({ id: tills.id });
         const [device] = await seeding.venue
           .insert(devices)
           .values({
             locationId: venue.locationId,
             deviceProfileId: profile!.id,
-            tillId: till!.id,
             label: "Caja 1",
             tokenHash: hashSecret(DEVICE_TOKEN),
           })

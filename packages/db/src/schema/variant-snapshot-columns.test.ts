@@ -10,10 +10,9 @@ import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { catalogues, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL = "aaaaaaaa-1111-4000-8000-000000000001";
 /** An order opened from the dashboard at `LOCATION`, needing no device. */
 const DASHBOARD = { source: "dashboard", deviceId: null, locationId: LOCATION } as const;
 const AT = "2026-07-20T19:20:30+00:00";
@@ -42,7 +41,6 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
       invoiceLocales: [...LOCALES],
       operationDescription: "Hostelería",
     });
-    await db.insert(tills).values({ id: TILL, locationId: LOCATION, name: "A1" });
     const [cat] = await db
       .insert(catalogues)
       .values({ name: "Deli" })

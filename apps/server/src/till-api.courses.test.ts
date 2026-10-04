@@ -184,8 +184,6 @@ type QueueGroup = { orderId: string; items: QueueItem[] };
 
 let app: Hono;
 let cookie: string;
-// `POST /:id/place` resolves its `till_id` from the authenticated enrolled device, so `placeOrder`
-// carries a `till`-device cookie.
 let tillDeviceCookie: string;
 
 /** Enrol a REAL `till` device and return its `waitron_device=…` cookie. */

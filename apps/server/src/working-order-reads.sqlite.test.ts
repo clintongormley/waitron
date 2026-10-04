@@ -6,7 +6,6 @@ import {
   parties,
   partyTables,
   ticketItems,
-  tills,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -48,8 +47,6 @@ beforeAll(async () => {
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const tillId = randomUUID();
-  await db.insert(tills).values({ id: tillId, locationId, name: "Caja 1" });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   [{ id: stationId }] = await db
     .insert(kitchenStations)

@@ -5,21 +5,13 @@ import {
   locationId as brandLocationId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   decimal,
   percentOf,
   stringToBasisPoints,
   stringToCents,
   stringToThousandths,
 } from "@waitron/shared";
-import type {
-  DeviceId,
-  NodeId,
-  SaleId,
-  SaleLineClassification,
-  SeriesId,
-  TillId,
-} from "@waitron/shared";
+import type { DeviceId, NodeId, SaleId, SaleLineClassification, SeriesId } from "@waitron/shared";
 import {
   billPaymentRefunds,
   billPayments,
@@ -37,7 +29,6 @@ import {
   saleVoids,
   sales,
   tenders,
-  tills,
   ticketItems,
   workingOrderLines,
   workingOrders,
@@ -53,8 +44,7 @@ import type { TenderMethod } from "../src/types.js";
 
 export interface SeededVenue {
   locationId: string;
-  tillId: TillId;
-  /** The device paired with `tillId`: the origin of every money row the fixtures write. */
+  /** A till device at that location: the origin of every money row the fixtures write. */
   deviceId: DeviceId;
   nodeId: NodeId;
   seriesId: SeriesId;
@@ -67,18 +57,13 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
     .values({ name: "Main", invoiceLocales: ["es-ES"], operationDescription: "Test op" })
     .returning({ id: locations.id });
   const locationId = location!.id;
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Till 1" })
-    .returning({ id: tills.id });
-  const tillId = brandTillId(till!.id);
-  const { deviceId } = await seedDevice(db, { tillId });
+  const { deviceId } = await seedDevice(db, { locationId });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId, code: "A" })
     .returning({ id: invoiceSeries.id });
-  return { locationId, tillId, deviceId, nodeId, seriesId: brandSeriesId(series!.id) };
+  return { locationId, deviceId, nodeId, seriesId: brandSeriesId(series!.id) };
 }
 
 /**

@@ -149,14 +149,12 @@ async function seedPrinter(cfg: TillConfig): Promise<string> {
 }
 
 async function deviceBindings(deviceId: string): Promise<{
-  tillId: string | null;
   deviceProfileId: string;
   receiptPrinterId: string | null;
   paymentSlipPrinterId: string | null;
 }> {
   const [row] = await suite.db
     .select({
-      tillId: devices.tillId,
       deviceProfileId: devices.deviceProfileId,
       receiptPrinterId: devices.receiptPrinterId,
       paymentSlipPrinterId: devices.paymentSlipPrinterId,
@@ -275,7 +273,7 @@ async function seedProfile(
 async function knockAndAccept(
   app: Hono,
   venue: Venue,
-  input: { name: string; profileId: string; stationId?: string; registerId?: string },
+  input: { name: string; profileId: string; stationId?: string },
 ): Promise<{ deviceId: string; jar: string; formFactor: string }> {
   windows.get(app)!.open();
   const res = await send(app, "POST", "/api/device/join", { body: { name: input.name } });
@@ -286,7 +284,6 @@ async function knockAndAccept(
       choice: knock.verificationNumber,
       profileId: input.profileId,
       stationId: input.stationId ?? null,
-      registerId: input.registerId ?? null,
     });
   });
   if (!accepted.ok) throw new Error("device-api.test: the fixture's own number mismatched");
@@ -302,18 +299,18 @@ async function enrolKds(
   app: Hono,
   venue: Venue,
   stationId: string,
+  name = "Pantalla Cocina",
 ): Promise<{ deviceId: string; jar: string; profileId: string }> {
   const profileId = await seedProfile("kds");
   const { deviceId, jar } = await knockAndAccept(app, venue, {
-    name: "Pantalla Cocina",
+    name,
     profileId,
     stationId,
   });
   return { deviceId, jar, profileId };
 }
 
-/** Enrol a `till` device (its profile auto-creates the register it rings against). Returns the device id
- *  + the cookie jar. */
+/** Enrol a `till` device. Returns the device id + the cookie jar. */
 async function enrolTill(
   app: Hono,
   venue: Venue,
@@ -324,17 +321,15 @@ async function enrolTill(
   return { deviceId, jar, profileId, formFactor };
 }
 
-/** Enrol a `handheld` device bound to an EXISTING register (`registerId`). Returns the device id + jar. */
+/** Enrol a `handheld` device. Returns the device id + jar. */
 async function enrolHandheld(
   app: Hono,
   venue: Venue,
-  registerId: string,
 ): Promise<{ deviceId: string; jar: string; profileId: string }> {
   const profileId = await seedProfile("phone-portrait");
   const { deviceId, jar } = await knockAndAccept(app, venue, {
     name: "Waiter phone",
     profileId,
-    registerId,
   });
   return { deviceId, jar, profileId };
 }
@@ -629,14 +624,10 @@ describe("GET /api/device/join/status", () => {
 });
 
 describe("Device API — the device-guarded routes", () => {
-  it("enrols, sets the cookie, auto-creates a till's register, and /me reports it", async () => {
+  it("enrols, sets the cookie, and /me reports the device", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId, jar } = await enrolTill(app, venue, "Caja del bar");
-
-    // The device row carries an auto-created register (a till device rings its own).
-    const tillId = (await deviceBindings(deviceId)).tillId;
-    expect(tillId).toEqual(expect.any(String));
 
     const me = await send(app, "GET", "/api/device/me", { cookie: jar });
     expect(me.status).toBe(200);
@@ -645,7 +636,6 @@ describe("Device API — the device-guarded routes", () => {
       formFactor: "till",
       name: "Caja del bar",
       stationId: null,
-      tillId,
     });
   });
 
@@ -732,7 +722,7 @@ describe("Device API — the device-guarded routes", () => {
     });
     expect(noCookie.status).toBe(401);
     // A handheld is bound to no station, so it has no notices to clear.
-    const handheld = await enrolHandheld(app, venue, venue.tillId);
+    const handheld = await enrolHandheld(app, venue);
     const fromHandheld = await send(
       app,
       "POST",
@@ -1251,7 +1241,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
   it("reports an enrolled handheld's formFactor + name, station null", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const { deviceId, jar } = await enrolHandheld(app, venue, venue.tillId);
+    const { deviceId, jar } = await enrolHandheld(app, venue);
     const res = await send(app, "GET", "/api/device/me", { cookie: jar });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
@@ -1259,7 +1249,6 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
       formFactor: "phone-portrait",
       name: "Waiter phone",
       stationId: null,
-      tillId: venue.tillId,
     });
   });
 
@@ -1272,7 +1261,6 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
       update devices
          set receipt_printer_id = ${printerId}
        where id = ${deviceId}`);
-    const tillId = (await deviceBindings(deviceId)).tillId;
 
     const res = await send(app, "GET", "/api/device/me", { cookie: jar });
     expect(res.status).toBe(200);
@@ -1282,7 +1270,6 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
       name: "Caja hw",
       stationId: null,
       watcherId: null,
-      tillId,
       receiptPrinterId: printerId,
       paymentSlipPrinterId: null,
       // The printer is stored on the device but is on none of its profile's lists.
@@ -1293,7 +1280,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
   it("GET /api/device/station 401s an enrolled handheld — it is bound to no station", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const { jar } = await enrolHandheld(app, venue, venue.tillId);
+    const { jar } = await enrolHandheld(app, venue);
     const res = await send(app, "GET", "/api/device/station", { cookie: jar });
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -1519,7 +1506,7 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
     // Enrol through a non-dev mount: a devMode knock auto-accepts as a till.
     const enrolApp = mountApp(venue.cfg);
     const live = await enrolKds(enrolApp, venue, venue.defaultStationId);
-    const doomed = await enrolKds(enrolApp, venue, venue.defaultStationId);
+    const doomed = await enrolKds(enrolApp, venue, venue.defaultStationId, "Pantalla Pase");
     expect(
       (
         await send(app, "POST", `/management-api/devices/${doomed.deviceId}/revoke`, {

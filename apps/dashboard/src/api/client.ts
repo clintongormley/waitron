@@ -387,7 +387,7 @@ export interface ReceiptPreview {
   marks: { headerSubtitle: BlockRange | null; footerMessage: BlockRange | null };
   /** The width drawn at. */
   paperWidth: PrintPaperWidth;
-  /** The widths of the location's tills' receipt printers, narrowest first; empty when none. */
+  /** The widths of the location's active devices' receipt printers, narrowest first; empty when none. */
   paperWidths: PrintPaperWidth[];
 }
 
@@ -923,14 +923,6 @@ export interface StationPrinter {
 export type ReceiptPrintMode = "auto" | "on_request" | "never";
 
 export type DrawerOpenPolicy = "gated" | "open";
-
-export interface Till {
-  id: string;
-  label: string;
-  locationId: string;
-  receiptPrinterId: string | null;
-  opensDrawer: boolean;
-}
 
 // ── Reporting (sales & takings) types ────────────────────────────────────────────────────────────
 // Every decimal value crosses the wire as a string, never a number.
@@ -2424,7 +2416,6 @@ export class DashboardApi {
       profileId: string;
       stationId?: string;
       watcherId?: string;
-      registerId?: string;
     },
   ): Promise<{ deviceId: string; name: string; formFactor: FormFactor }> {
     return this.#request<{ deviceId: string; name: string; formFactor: FormFactor }>(
@@ -2717,10 +2708,6 @@ export class DashboardApi {
   }
 
   // ── Receipt printer + print mode + drawer policy ───────────────────────────────────────────────
-
-  listTills(): Promise<Till[]> {
-    return this.#request<Till[]>("/management-api/tills", "GET");
-  }
 
   setReceiptPrintMode(locationId: string, mode: ReceiptPrintMode): Promise<void> {
     return this.#request<void>(

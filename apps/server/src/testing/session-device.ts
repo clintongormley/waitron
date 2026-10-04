@@ -1,13 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
-import {
-  devices,
-  tills,
-  withTransaction,
-  workingOrders,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { devices, withTransaction, workingOrders, type Database } from "@waitron/db";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { loginWithPin } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
@@ -15,35 +7,6 @@ import { deviceOrigin, locationId as brandLocationId } from "@waitron/shared";
 import type { DeviceOrigin } from "@waitron/shared";
 import type { TillConfig } from "../till-config.js";
 import { SESSION_COOKIE } from "../till-session.js";
-
-/**
- * A fresh till at `locationId`, for a device a test inserts by hand to name: a till device still names
- * one until the tills table goes, and setup makes none.
- */
-export async function fixtureTill(db: Database | Transaction, locationId: string): Promise<string> {
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: `Caja ${randomUUID()}` })
-    .returning({ id: tills.id });
-  return till!.id;
-}
-
-/**
- * The till "Caja 1" at `locationId`, made on first use: the register a test's handheld rings into, or
- * whose printer it reads, until the tills table goes. Setup makes none.
- */
-export async function venueTill(db: Database | Transaction, locationId: string): Promise<string> {
-  const [existing] = await db
-    .select({ id: tills.id })
-    .from(tills)
-    .where(and(eq(tills.locationId, locationId), eq(tills.name, "Caja 1")));
-  if (existing !== undefined) return existing.id;
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
-  return till!.id;
-}
 
 /**
  * A till device at `cfg`'s location whose profile allows every capability: the device a fixture

@@ -1354,8 +1354,6 @@ export interface DeviceIdentity {
   name: string;
   stationId: string | null;
   watcherId?: string | null;
-  /** The `tills` row a sale-capable device rings against; `null` for a `kds_station`. */
-  tillId?: string | null;
   /** The device's current receipt printer; `null` when none. */
   receiptPrinterId: string | null;
   /** The device's current payment slip printer; `null` when none. */
@@ -1402,7 +1400,6 @@ export interface DevDevice {
   id: string;
   kind: string;
   label: string;
-  tillId: string | null;
   stationId: string | null;
   active: boolean;
 }

@@ -8,7 +8,6 @@ import {
   purchaseInvoiceVat,
   purchaseInvoices,
   sales,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -32,7 +31,6 @@ import "./errors.js";
 // Sales and received invoices are seeded directly because the report reads their stored values.
 const noopLog: Logger = () => {};
 
-let tillId: string;
 let deviceId: string;
 let nodeId: string;
 let locationId: string;
@@ -141,7 +139,7 @@ const suite = useVenueDb({
   setup: async (db) => {
     // seedTenant supplies the tax_id + legal_name the route reads back as the obligado identity.
     await seedTenant(db);
-    // The one venue's location/till/node/series, through the table definitions: the ids and
+    // The one venue's location/node/series, through the table definitions: the ids and
     // `created_at`s are JavaScript `$defaultFn` generators a raw insert never reaches, and
     // `invoice_locales` is encoded by the column's own write mapping.
     const [loc] = await db
@@ -153,12 +151,7 @@ const suite = useVenueDb({
       })
       .returning({ id: locations.id });
     locationId = loc!.id;
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId, name: "Caja 1" })
-      .returning({ id: tills.id });
-    tillId = till!.id;
-    ({ deviceId } = await seedDevice(db, { tillId }));
+    ({ deviceId } = await seedDevice(db, { locationId }));
     const [node] = await db
       .insert(nodes)
       .values({ locationId, name: "Nodo 1" })

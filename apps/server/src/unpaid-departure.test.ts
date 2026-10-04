@@ -42,11 +42,7 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { cancelBody, giveAway } from "./testing/cancel-line.js";
-import {
-  revokedDeviceSessionCookie,
-  seedSessionDevice,
-  venueTill,
-} from "./testing/session-device.js";
+import { revokedDeviceSessionCookie, seedSessionDevice } from "./testing/session-device.js";
 import "./errors.js";
 import { watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
 
@@ -437,7 +433,6 @@ describe("who may record it", () => {
     const handheld = await enrolDeviceForTest(venue.db, venue.cfg, {
       name: "Comandera",
       profileId: profile!.id,
-      registerId: await venueTill(venue.db, venue.cfg.locationId),
     });
     const party = await seatedWith(venue, "Botella tinto");
     const onHandheld = await inTx(venue, (tx) =>
@@ -482,7 +477,6 @@ describe("who may record it", () => {
     const handheld = await enrolDeviceForTest(venue.db, venue.cfg, {
       name: "Comandera origin",
       profileId: profile!.id,
-      registerId: await venueTill(venue.db, venue.cfg.locationId),
     });
     const party = await seatedWith(venue, "Botella tinto");
     const onHandheld = await inTx(venue, (tx) =>

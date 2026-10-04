@@ -7,7 +7,7 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { deviceProfiles } from "../schema/device-profiles.js";
 import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";
-import { locations, tills } from "../schema/tenants.js";
+import { locations } from "../schema/tenants.js";
 import { freshNif, seedDevice, seedKitchenStation, seedNode, seedTenant } from "./seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -15,7 +15,6 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 // Each case gets empty mutable fixture tables while sharing the migrated database.
 afterEach(async () => {
   await suite.db.execute(sql`delete from devices`);
-  await suite.db.execute(sql`delete from tills`);
   await suite.db.execute(sql`delete from device_profiles`);
   await suite.db.execute(sql`delete from kitchen_stations`);
   await suite.db.execute(sql`delete from nodes`);
@@ -199,21 +198,5 @@ describe("seedDevice", () => {
       })
       .from(deviceProfiles);
     expect(profiles).toEqual([{ formFactor: "phone-portrait", capabilities: ["take-cash"] }]);
-  });
-
-  it("seedDevice on a given till binds that till, at its location, and makes no other", async () => {
-    await seedTenant(db);
-    const location = await seedLocation(db);
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: location, name: "Till 1" })
-      .returning({ id: tills.id });
-    const { deviceId } = await seedDevice(db, { tillId: till!.id });
-    const [row] = await db
-      .select({ tillId: devices.tillId, locationId: devices.locationId })
-      .from(devices)
-      .where(eq(devices.id, deviceId));
-    expect(row).toEqual({ tillId: till!.id, locationId: location });
-    expect(await db.select({ id: tills.id }).from(tills)).toEqual([{ id: till!.id }]);
   });
 });

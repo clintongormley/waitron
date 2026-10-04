@@ -39,7 +39,6 @@ describe("seedInstalledDemo", () => {
     expect(INSTALLED_DEMO_SALES_DAYS).toBe(30);
     expect(seedDemoRestaurant).toHaveBeenCalledTimes(1);
     expect(seedDemoRestaurant.mock.calls[0]![0]).toBe(db);
-    // Strict, so a `tillId: undefined` key would fail it.
     expect(seedDemoRestaurant.mock.calls[0]![1]).toStrictEqual({
       venue: {
         nodeId: "node-1",

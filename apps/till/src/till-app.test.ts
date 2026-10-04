@@ -471,7 +471,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       name: "Till 1",
       formFactor: "till",
       stationId: null,
-      tillId: "t1",
     }),
     getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     join: vi.fn().mockResolvedValue({ joinId: "dev-1", verificationNumber: "47" }),
@@ -4831,7 +4830,6 @@ describe("till-app", () => {
         name: "Phone 1",
         formFactor: "phone-portrait",
         stationId: null,
-        tillId: null,
       }),
     });
     currentApi = api;
@@ -4881,7 +4879,6 @@ describe("till-app", () => {
         name: "Pass",
         formFactor: "kds",
         stationId: "st-1",
-        tillId: null,
       }),
       getDeviceStation: vi
         .fn()

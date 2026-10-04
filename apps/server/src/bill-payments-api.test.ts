@@ -261,19 +261,14 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       )
     ).token;
   const session = { token: await sessionOn(device.deviceId) };
-  const [deviceRow] = db.all<{ till_id: string }>(
-    sql`select till_id from devices where id = ${device.deviceId}`,
-  );
   // Its profile does not allow the drawer, though its receipt printer has one.
   const handheld = await enrolDeviceForTest(db, cfg, {
     name: "Terraza",
     profileId: seeded.handheldProfileId,
-    registerId: deviceRow!.till_id,
   });
   const noCash = await enrolDeviceForTest(db, cfg, {
     name: "Patio",
     profileId: seeded.noCashProfileId,
-    registerId: deviceRow!.till_id,
   });
   const [admin] = db.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
   // Every device prints receipts and slips here; its profile decides whether it opens the drawer.

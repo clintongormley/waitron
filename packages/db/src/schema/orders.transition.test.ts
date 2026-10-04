@@ -10,7 +10,7 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { catalogues, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
 // A trigger's refusal carries its `RAISE(ABORT, …)` text and nothing else — no table, no column,
 // no constraint name — so it is compared by EQUALITY against the literal the migration owns
@@ -18,7 +18,6 @@ import { locations, tenants, tills } from "./tenants.js";
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
-const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 // Matches LOCATION_A's invoice_locales (es, ca), so check_locales lets the draft line reach
 // require_open_parent — the trigger this suite's composition-freeze case exercises.
@@ -109,10 +108,9 @@ describe("working_orders state machine (enforce_transition)", () => {
         operationDescription: "Hostelería",
       },
     ]);
-    await db.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
     nodeA = await seedNode(db, brandLocationId(LOCATION_A));
-    ({ deviceId: deviceA } = await seedDevice(db, { tillId: TILL_A1 }));
-    ({ deviceId: deviceB } = await seedDevice(db, { tillId: TILL_A1 }));
+    ({ deviceId: deviceA } = await seedDevice(db, { locationId: LOCATION_A }));
+    ({ deviceId: deviceB } = await seedDevice(db, { locationId: LOCATION_A }));
     const [catalogue] = await db
       .insert(catalogues)
       .values({ name: "Deli" })

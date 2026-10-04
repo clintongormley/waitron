@@ -8,7 +8,6 @@ import {
   sales,
   tenants,
   tenders,
-  tills,
   withTransaction,
   workingOrders,
 } from "@waitron/db";
@@ -18,8 +17,8 @@ import { paymentPolicy } from "../src/schema/payment-policy.js";
 import type { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 
 export interface Seeded {
-  tillId: string;
-  /** A device on that till: where the seeded order's payments are started. */
+  locationId: string;
+  /** A till device at that location: where the seeded order's payments are started. */
   deviceId: string;
   nodeId: string;
   workingOrderId: string;
@@ -38,7 +37,7 @@ export function freshNif(): string {
 }
 
 /**
- * Seeds tenant → location → till (with a device) → node → open working_order and returns their
+ * Seeds tenant → location → till device → node → open working_order and returns their
  * ids.
  *
  * Written through the table definitions rather than as raw SQL: `id` and `created_at` are
@@ -55,20 +54,16 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
     .values({ name: "Counter", invoiceLocales: ["es"], operationDescription: "Retail" })
     .returning({ id: locations.id });
   const locationId = location!.id;
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Till 1" })
-    .returning({ id: tills.id });
   const [node] = await db
     .insert(nodes)
     .values({ locationId, name: "Node 1" })
     .returning({ id: nodes.id });
-  const { deviceId } = await seedDevice(db, { tillId: till!.id });
+  const { deviceId } = await seedDevice(db, { locationId });
   const [wo] = await db
     .insert(workingOrders)
     .values({ source: "device", deviceId, locationId, orderNumber: 1 })
     .returning({ id: workingOrders.id });
-  return { tillId: till!.id, deviceId, nodeId: node!.id, workingOrderId: wo!.id };
+  return { locationId, deviceId, nodeId: node!.id, workingOrderId: wo!.id };
 }
 
 const SEEDED_AT = new Date("2026-07-01T12:00:00Z").toISOString();

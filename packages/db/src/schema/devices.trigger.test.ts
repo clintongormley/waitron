@@ -1,7 +1,7 @@
 /**
- * The device binding rule: a `kds`-profile device binds a station or watcher and no register, and
- * every other form factor binds a register and neither. The form factor lives in another table, so the
- * rule is two triggers in `packages/db/drizzle/0001_behavioural_triggers.sql`.
+ * The device binding rule: a `kds`-profile device binds exactly one station or watcher, and every
+ * other form factor binds neither. The form factor lives in another table, so the rule is two
+ * triggers, last written by `packages/db/drizzle/0089_devices_recreate_triggers.sql`.
  *
  * `scripts/behavioural-triggers.test.ts` pins the same triggers with hand-written SQL; every case here
  * writes through the Drizzle builder, the shape the application writes.
@@ -15,17 +15,16 @@ import { seedKitchenStation, seedTenant } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
-import { locations, tills } from "./tenants.js";
+import { locations } from "./tenants.js";
 import type { LocationId } from "@waitron/shared";
 
 const TOKEN_HASH = "scrypt$00$00";
 
-describe("devices binding-rule trigger (form factor → station or watcher XOR register)", () => {
+describe("devices binding-rule trigger (form factor → station or watcher, or neither)", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let db: Database;
   let locationId: LocationId;
   let stationId: string;
-  let tillId: string;
   let kdsProfileId: string;
   let tillProfileId: string;
 
@@ -38,11 +37,6 @@ describe("devices binding-rule trigger (form factor → station or watcher XOR r
       .returning({ id: locations.id });
     locationId = location!.id as LocationId;
     stationId = await seedKitchenStation(db, { locationId });
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId, name: "Till" })
-      .returning({ id: tills.id });
-    tillId = till!.id;
     const [kds] = await db
       .insert(deviceProfiles)
       .values({ name: "KDS profile", formFactor: "kds" })
@@ -58,71 +52,53 @@ describe("devices binding-rule trigger (form factor → station or watcher XOR r
   async function insertDevice(fields: {
     profileId: string;
     stationId: string | null;
-    tillId: string | null;
     label: string;
   }): Promise<void> {
     await db.insert(devices).values({
       locationId,
       deviceProfileId: fields.profileId,
       stationId: fields.stationId,
-      tillId: fields.tillId,
       label: fields.label,
       tokenHash: TOKEN_HASH,
     });
   }
 
-  it("accepts a kds-profile device bound to a station and no register", async () => {
+  it("accepts a kds-profile device bound to a station", async () => {
     await expect(
-      insertDevice({ profileId: kdsProfileId, stationId, tillId: null, label: "KDS ok" }),
+      insertDevice({ profileId: kdsProfileId, stationId, label: "KDS ok" }),
     ).resolves.toBeUndefined();
   });
 
-  it("accepts a till-profile device bound to a register and no station", async () => {
+  it("accepts a till-profile device bound to no station", async () => {
     await expect(
-      insertDevice({ profileId: tillProfileId, stationId: null, tillId, label: "Till ok" }),
+      insertDevice({ profileId: tillProfileId, stationId: null, label: "Till ok" }),
     ).resolves.toBeUndefined();
   });
 
   it("rejects a kds-profile device with a NULL station", async () => {
     const error = await captureError(() =>
-      insertDevice({ profileId: kdsProfileId, stationId: null, tillId: null, label: "KDS bad" }),
+      insertDevice({ profileId: kdsProfileId, stationId: null, label: "KDS bad" }),
     );
     expect(engineErrorMessage(error)).toMatch(/kds device binds a station/);
   });
 
-  it("rejects a till-profile device with a NULL register", async () => {
+  it("rejects a till-profile device that names a station", async () => {
     const error = await captureError(() =>
-      insertDevice({ profileId: tillProfileId, stationId: null, tillId: null, label: "Till bad" }),
+      insertDevice({ profileId: tillProfileId, stationId, label: "Till with station" }),
     );
-    expect(engineErrorMessage(error)).toMatch(/binds a register and no station/);
-  });
-
-  it("rejects a kds-profile device that also names a register", async () => {
-    const error = await captureError(() =>
-      insertDevice({ profileId: kdsProfileId, stationId, tillId, label: "KDS with till" }),
-    );
-    expect(engineErrorMessage(error)).toMatch(/kds device binds a station/);
-  });
-
-  it("rejects a register (non-kds) device that also names a station", async () => {
-    // Reaches the `station_id is not null` disjunct, which the NULL-register case cannot.
-    const error = await captureError(() =>
-      insertDevice({ profileId: tillProfileId, stationId, tillId, label: "Till with station" }),
-    );
-    expect(engineErrorMessage(error)).toMatch(/binds a register and no station/);
+    expect(engineErrorMessage(error)).toMatch(/non-kds device binds no station or watcher/);
   });
 
   it("a binding-changing UPDATE is still enforced (the WHEN did not disable it)", async () => {
     await insertDevice({
       profileId: tillProfileId,
       stationId: null,
-      tillId,
       label: "Till to break",
     });
     const error = await captureError(() =>
       db.update(devices).set({ stationId }).where(eq(devices.label, "Till to break")),
     );
-    expect(engineErrorMessage(error)).toMatch(/binds a register and no station/);
+    expect(engineErrorMessage(error)).toMatch(/non-kds device binds no station or watcher/);
   });
 
   it("reactivation re-validates the binding: the WHEN watches active false→true (BUG D)", async () => {
@@ -136,7 +112,6 @@ describe("devices binding-rule trigger (form factor → station or watcher XOR r
     await insertDevice({
       profileId: profile!.id,
       stationId: null,
-      tillId,
       label: "Reactivate me",
     });
     await db.update(devices).set({ active: false }).where(eq(devices.label, "Reactivate me"));
@@ -157,7 +132,6 @@ describe("devices binding-rule trigger (form factor → station or watcher XOR r
     await insertDevice({
       profileId: tillProfileId,
       stationId: null,
-      tillId,
       label: "Till heartbeat",
     });
     await db
@@ -183,7 +157,6 @@ describe("devices binding-rule trigger (form factor → station or watcher XOR r
       await insertDevice({
         profileId: kdsProfileId,
         stationId: null,
-        tillId: null,
         label: "KDS no-trigger",
       });
       const [counted] = db.all<{ n: number }>(

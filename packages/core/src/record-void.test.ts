@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, deviceOrigin } from "@waitron/shared";
-import type { DeviceId, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import type { DeviceId, LocationId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
@@ -26,7 +26,7 @@ import { recordVoid } from "./record-void.js";
 import { seedTenant } from "../test/fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
-let tillId: TillId;
+let locationId: LocationId;
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -46,7 +46,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ tillId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ locationId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
   managerId = await seedPerson("manager");
   supervisorId = await seedPerson("supervisor");
   const staffId = await seedPerson("staff");
@@ -65,7 +65,7 @@ async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): P
 
 /** Opens a shift session for `personId` at this tenant's till and returns its id. */
 async function openSession(personId: string): Promise<string> {
-  const deviceId = (await seedDevice(suite.db, { tillId: tillId })).deviceId;
+  const deviceId = (await seedDevice(suite.db, { locationId })).deviceId;
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId, pin: "1234" }),
   );
@@ -361,7 +361,7 @@ describe("recordVoid — error propagation", () => {
     // A stub drives `recordVoid`'s catch directly. Its `select` also has to satisfy `authorize`,
     // which runs between the sale lookup and the insert: the sale lookup is `.from().where()` and
     // authorize's is `.from().innerJoin().where()`, so `from()` exposes both.
-    const row = [{ tillId, nodeId, personId: "operator", role: "manager" }];
+    const row = [{ nodeId, personId: "operator", role: "manager" }];
     const fakeTx = {
       select: () => ({
         from: () => ({

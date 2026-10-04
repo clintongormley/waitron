@@ -55,8 +55,7 @@ export const incidents = table(
     // accepted. The empty string is a safe stand-in because `newId` — the `randomUUID()` behind
     // `devices.id` and `sales.id` — never returns it. Written as a CASE rather than
     // `coalesce(x, '')` because drizzle-kit splits an index expression on its commas and emits each
-    // piece as a quoted identifier: the `coalesce` form generated
-    // ``(`till_id`,`code`,`coalesce("sale_id"`,` '')`)``.
+    // piece as a quoted identifier.
     //
     // A drizzle-kit REBUILD of this table writes even the CASE form back as quoted column names,
     // which SQLite refuses with `no such column` (drizzle-kit 0.31.11's recreate path ignores which

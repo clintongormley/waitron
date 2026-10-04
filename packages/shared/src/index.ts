@@ -15,7 +15,6 @@ export type {
   SaleLineId,
   SeriesId,
   TenderId,
-  TillId,
   WorkingOrderId,
   WorkingOrderLineId,
 } from "./ids.js";
@@ -30,7 +29,6 @@ export {
   saleLineId,
   seriesId,
   tenderId,
-  tillId,
   workingOrderId,
   workingOrderLineId,
 } from "./ids.js";

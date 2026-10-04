@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { tills, withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -28,8 +28,6 @@ const LOCALE = "es-ES";
 export interface Venue {
   /** Orders a test opens directly come from the dashboard, so no device is seeded for them. */
   cfg: OriginConfig;
-  /** A till for the venue's till devices to name until the tills table goes: setup makes none. */
-  tillId: string;
   /** The location's provisioned default kitchen station — where `placeOrder` fires items, and the
    *  station the KDS device below binds to. */
   defaultStationId: string;
@@ -151,14 +149,9 @@ export async function setupVenue(db: Database): Promise<Venue> {
 
   const { rows } = await db.execute<{ id: string }>(sql`
     select id from kitchen_stations where location_id = ${cfg.locationId} and is_default and active`);
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId: cfg.locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
 
   return {
     cfg,
-    tillId: till!.id,
     defaultStationId: rows[0]!.id,
     cafeId: seeded.cafeId,
     aguaId: seeded.aguaId,

@@ -11,7 +11,7 @@ import { withTransaction } from "../tenancy.js";
 import { drawerOpens } from "./drawer-opens.js";
 import { printers } from "./printers.js";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const PRINTER_A = "aaaaaaaa-0000-4000-8000-000000000021";
@@ -19,7 +19,6 @@ const PERSON = "cccccccc-0000-4000-8000-000000000001";
 const AUTHORIZER = "cccccccc-0000-4000-8000-000000000002";
 
 let deviceA = "";
-let tillA = "";
 
 describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, FKs)", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
@@ -43,8 +42,6 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
       pollId: "poll-a",
     });
     ({ deviceId: deviceA } = await seedDevice(db, { locationId: brandLocationId(LOCATION_A) }));
-    const [till] = await db.select({ id: tills.id }).from(tills);
-    tillA = till!.id;
   });
 
   function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -210,20 +207,6 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
       ),
     );
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
-  });
-
-  it("tills.receipt_printer_id is writable and its FK accepts a real printer", async () => {
-    await inTx((tx) =>
-      tx.update(tills).set({ receiptPrinterId: PRINTER_A }).where(eq(tills.id, tillA)),
-    );
-    const [row] = await inTx((tx) =>
-      tx
-        .select({ receiptPrinterId: tills.receiptPrinterId })
-        .from(tills)
-        .where(eq(tills.id, tillA)),
-    );
-    expect(row!.receiptPrinterId).toBe(PRINTER_A);
-    await inTx((tx) => tx.update(tills).set({ receiptPrinterId: null }).where(eq(tills.id, tillA)));
   });
 
   it("locations.receipt_print_mode defaults to 'auto' and is settable", async () => {

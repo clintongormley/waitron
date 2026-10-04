@@ -12,7 +12,7 @@ import {
 import { hashSecret, verifySecretAsync } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { firstUsablePrinters, type FormFactor } from "@waitron/layouts";
-import { resolveDeviceBinding } from "./device.js";
+import { insertDevice, resolveDeviceBinding } from "./device.js";
 import type { TillConfig } from "./till-config.js";
 
 /** The predicate every statement here carries: a pending request belongs to the node that received
@@ -310,7 +310,7 @@ export type AcceptResult =
  * is outside it. The kind predicate rides the SAME delete, so a device accept can never consume an
  * agent's request.
  *
- * ONE transaction: a later failure (an unknown profile, a missing station, the register insert)
+ * ONE transaction: a later failure (an unknown profile, a missing station, a taken device name)
  * rolls the consumption back too, so the request survives for a genuine retry.
  *
  * A WRONG CHOICE DENIES — AND THAT IS WHY THIS RETURNS RATHER THAN THROWS: an `AppError` thrown
@@ -327,7 +327,6 @@ export async function acceptDeviceJoinRequest(
     profileId: string;
     stationId?: string | null;
     watcherId?: string | null;
-    registerId?: string | null;
   },
 ): Promise<AcceptResult> {
   await sweepLapsed(tx, cfg);
@@ -349,21 +348,18 @@ export async function acceptDeviceJoinRequest(
     return { ok: false, reason: "mismatch" };
   }
 
-  const binding = await resolveDeviceBinding(tx, cfg, row.locationId, {
+  const binding = await resolveDeviceBinding(tx, cfg, {
     profileId: input.profileId,
-    name: row.label,
     stationId: input.stationId,
     watcherId: input.watcherId,
-    registerId: input.registerId,
   });
 
   const printers = await firstUsablePrinters(tx, input.profileId, row.locationId);
-  await tx.insert(devices).values({
+  await insertDevice(tx, {
     id: row.id,
     locationId: row.locationId,
     stationId: binding.stationId,
     watcherId: binding.watcherId,
-    tillId: binding.tillId,
     deviceProfileId: input.profileId,
     receiptPrinterId: printers.receiptPrinterId,
     paymentSlipPrinterId: printers.paymentSlipPrinterId,

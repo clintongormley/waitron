@@ -12,7 +12,6 @@ import {
 } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { venueTill } from "./testing/session-device.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { DEFAULT_CANVASES } from "@waitron/layouts";
 import type { CanvasDef } from "@waitron/layouts";
@@ -538,12 +537,9 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const { id } = (await created.json()) as ProfileRow;
 
     const location = await suite.db.execute<{ id: string }>(sql`select id from locations  limit 1`);
-    // A `till` profile's device must carry a till id (`device_binding_rule_insert`).
-    const tillId = await venueTill(suite.db, location.rows[0]!.id);
     // Through the table definition, whose `$defaultFn` generators a raw SQL insert never reaches.
     await suite.db.insert(devices).values({
       locationId: location.rows[0]!.id,
-      tillId,
       label: uniqueName("Bound device"),
       tokenHash: "scrypt$00$00",
       deviceProfileId: id,
@@ -850,12 +846,10 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     });
     const { id } = (await created.json()) as ProfileRow;
     const location = await suite.db.execute<{ id: string }>(sql`select id from locations limit 1`);
-    const tillId = await venueTill(suite.db, location.rows[0]!.id);
     const [device] = await suite.db
       .insert(devices)
       .values({
         locationId: location.rows[0]!.id,
-        tillId,
         label: uniqueName("Listed device"),
         tokenHash: "scrypt$00$00",
         deviceProfileId: id,

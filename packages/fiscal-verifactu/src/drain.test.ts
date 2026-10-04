@@ -107,7 +107,7 @@ describe("drain — happy path", () => {
  */
 describe("drain — happy path, an anulación row", () => {
   it("submits a voided sale's anulación through the same accept-and-persist path as an alta", async () => {
-    const { tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db);
+    const { locationId, nodeId, seriesId } = await seedTenantWithSif(suite.db);
     // `recordVoid` requires `sale.void`, so a manager's session authorizes it. `id` and
     // `created_at` are supplied because their defaults are drizzle `$defaultFn`s, which raw SQL
     // never runs.
@@ -115,7 +115,7 @@ describe("drain — happy path, an anulación row", () => {
       sql`insert into persons (id, created_at, display_name, pin_hash, role)
           values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
     );
-    const deviceId = (await seedDevice(suite.db, { tillId: tillId })).deviceId;
+    const deviceId = (await seedDevice(suite.db, { locationId })).deviceId;
     const voidSession = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
     );
@@ -1131,7 +1131,7 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
       sql`insert into persons (id, created_at, display_name, pin_hash, role)
           values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
     );
-    const deviceId = (await seedDevice(suite.db, { tillId: venue.tillId })).deviceId;
+    const deviceId = (await seedDevice(suite.db, { locationId: venue.locationId })).deviceId;
     const session = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
     );
