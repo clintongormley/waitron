@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -49,6 +49,47 @@ beforeEach(() => {
   localStorage.clear();
 });
 describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
+  async function mountPlain() {
+    const mounted = await mountWidget<CatalogueBrowser>(
+      "dashboard-catalogue-browser",
+      { products: PRODUCTS, api: {} as DashboardApi, categories: [] },
+      theme,
+    );
+    const list = mounted.el.shadowRoot!.querySelector("dashboard-product-list")!;
+    await list.updateComplete;
+    const table = list.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    return { ...mounted, table };
+  }
+
+  it("renders the Select button's tooltip on keyboard focus accessibly", async () => {
+    const { el, host } = await mountPlain();
+    const select = el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!;
+    (document.activeElement as HTMLElement | null)?.blur();
+    await userEvent.tab();
+    await userEvent.tab();
+    expect(el.shadowRoot!.activeElement).toBe(select);
+    expect(getComputedStyle(select.querySelector(".icon-tooltip")!).display).toBe("block");
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the Filters panel open beside the rows accessibly", async () => {
+    const width = innerWidth,
+      height = innerHeight;
+    await page.viewport(1280, 800);
+    try {
+      const { host, table } = await mountPlain();
+      table.shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!.click();
+      await table.updateComplete;
+      const panel = table.shadowRoot!.querySelector<HTMLElement>(".filters-panel")!;
+      expect(panel.hasAttribute("data-side")).toBe(true);
+      expect(getComputedStyle(panel).display).not.toBe("none");
+      await expectNoA11yViolations(host);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
   it.each(["top", "open", "search", "naming", "selection", "move", "delete"])(
     "renders %s accessibly",
     async (state) => {

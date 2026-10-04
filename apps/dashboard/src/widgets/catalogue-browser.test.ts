@@ -1897,7 +1897,7 @@ it("passes whether products can be added to every menu", async () => {
   ).toBe(false);
 });
 
-it("draws search, Filters, Expand all, Select and Columns on one toolbar line, in that order", async () => {
+it("draws Filters, Select, search, Expand all and Customise on one toolbar line, in that order", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -1907,15 +1907,15 @@ it("draws search, Filters, Expand all, Select and Columns on one toolbar line, i
     const table = await tableOf(el);
     const search = el.shadowRoot!.querySelector<HTMLElement>('[name="catalogue-search"]')!;
     const select = el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!;
-    expect(search.assignedSlot!.assignedSlot!.closest(".table-toolbar")).toBe(
-      table.shadowRoot!.querySelector(".table-toolbar"),
-    );
-    expect(select.parentElement!.assignedSlot!.assignedSlot!.closest(".table-end")).not.toBeNull();
+    const toolbar = table.shadowRoot!.querySelector(".table-toolbar");
+    expect(search.assignedSlot!.assignedSlot!.closest(".table-toolbar")).toBe(toolbar);
+    expect(select.assignedSlot!.assignedSlot!.closest(".table-toolbar")).toBe(toolbar);
+    expect(select.assignedSlot!.assignedSlot!.closest(".table-end")).toBeNull();
     const boxes = [
-      search,
       table.shadowRoot!.querySelector(".filters-trigger")!,
-      table.shadowRoot!.querySelector(".expand-all")!,
       select,
+      search,
+      table.shadowRoot!.querySelector(".expand-all")!,
       table.shadowRoot!.querySelector(".columns-trigger")!,
     ].map((element) => element.getBoundingClientRect());
     for (let index = 1; index < boxes.length; index++) {
@@ -1923,6 +1923,215 @@ it("draws search, Filters, Expand all, Select and Columns on one toolbar line, i
       expect(boxes[index]!.top, `item ${index}`).toBeLessThan(boxes[0]!.bottom);
     }
     expect(el.shadowRoot!.querySelector(".toolbar")).toBeNull();
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
+it("Select is an icon button named Select, with a tooltip, pressed while selecting", async () => {
+  const el = await mountBrowser();
+  const select = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="select"]')!;
+  expect(select.localName).toBe("button");
+  expect(select.getAttribute("type")).toBe("button");
+  expect(select.getAttribute("slot")).toBe("toolbar-start");
+  expect(select.getAttribute("aria-label")).toBe("Select");
+  const icon = select.querySelector<HTMLElement>('wt-icon[name="select-rows"]')!;
+  await (icon as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  expect(icon.shadowRoot!.querySelector("path")).not.toBeNull();
+  const tooltip = select.querySelector<HTMLElement>(".icon-tooltip")!;
+  expect(tooltip.textContent!.trim()).toBe("Select");
+  expect(tooltip.getAttribute("aria-hidden")).toBe("true");
+  expect(getComputedStyle(tooltip).display).toBe("none");
+  await userEvent.hover(select);
+  expect(getComputedStyle(tooltip).display).toBe("block");
+  await userEvent.keyboard("{Escape}");
+  expect(getComputedStyle(tooltip).display).toBe("none");
+  await userEvent.unhover(select);
+  expect(select.getAttribute("aria-pressed")).toBe("false");
+  await press(el, "select");
+  expect(select.getAttribute("aria-pressed")).toBe("true");
+  expect((await tableOf(el)).selectable).toBe(true);
+});
+
+it("names Select in Spanish", async () => {
+  setLocale("es");
+  const el = await mountBrowser();
+  const select = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="select"]')!;
+  expect(select.getAttribute("aria-label")).toBe(es["folders.select"]);
+  expect(select.querySelector(".icon-tooltip")!.textContent!.trim()).toBe(es["folders.select"]);
+});
+
+it("pressing Select again leaves Select mode and clears the selection, as Cancel does", async () => {
+  const el = await mountBrowser();
+  await selectKeys(el, ["bread"]);
+  expect(count(el)).toBe("1 selected");
+  await press(el, "select");
+  expect((await tableOf(el)).selectable).toBe(false);
+  expect(count(el)).toBeUndefined();
+  expect(el.shadowRoot!.querySelector('[data-test="select"]')!.getAttribute("aria-pressed")).toBe(
+    "false",
+  );
+  await press(el, "select");
+  expect(count(el)).toBe("0 selected");
+  expect(
+    (await tableOf(el)).shadowRoot!.querySelector<HTMLInputElement>(
+      'tr[data-row-key="bread"] input[type="checkbox"]',
+    )!.checked,
+  ).toBe(false);
+});
+
+it("opens the Products table's Filters from the toolbar's start", async () => {
+  const el = await mountBrowser();
+  const table = await tableOf(el);
+  expect(table.leadingFilters).toBe(true);
+  expect(table.shadowRoot!.querySelector(".table-toolbar")!.firstElementChild).toBe(
+    table.shadowRoot!.querySelector(".filters-trigger"),
+  );
+});
+
+it("clears the selection when a filter is chosen in the panel beside the rows", async () => {
+  const { page } = await import("vitest/browser");
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 720);
+  try {
+    const el = await mountBrowser();
+    await selectKeys(el, ["bread"]);
+    expect(count(el)).toBe("1 selected");
+    const table = await tableOf(el);
+    await userEvent.click(table.shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!);
+    await table.updateComplete;
+    const panel = table.shadowRoot!.querySelector<HTMLElement>(".filters-panel")!;
+    expect(panel.hasAttribute("data-side")).toBe(true);
+    const filter = panel.querySelector<HTMLElement>('wt-combobox[data-filter="active"]')!;
+    await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+    const option = [...filter.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (row) => row.textContent!.trim() === en["product.inactive_badge"],
+    )!;
+    await userEvent.click(option);
+    await el.updateComplete;
+    expect(count(el)).toBe("0 selected");
+    expect(getComputedStyle(panel).display).not.toBe("none");
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
+it("shows each filter's whole choice in the panel beside the rows, in Spanish", async () => {
+  const { page } = await import("vitest/browser");
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 720);
+  setLocale("es");
+  try {
+    const el = await mountBrowser();
+    const table = await tableOf(el);
+    await userEvent.click(table.shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!);
+    await table.updateComplete;
+    const panel = table.shadowRoot!.querySelector<HTMLElement>(".filters-panel")!;
+    expect(panel.hasAttribute("data-side")).toBe(true);
+    const values = [...panel.querySelectorAll<HTMLElement>("wt-combobox")].map((filter) =>
+      filter.shadowRoot!.querySelector<HTMLElement>(".value")!,
+    );
+    expect(values.map((value) => value.textContent!.trim())).toContain(
+      es["product.filter_ordering_all"],
+    );
+    for (const value of values)
+      expect(value.scrollWidth, value.textContent!.trim()).toBeLessThanOrEqual(value.clientWidth);
+  } finally {
+    await page.viewport(width, height);
+    setLocale("en-GB");
+  }
+});
+
+it("at phone width puts Filters, Select, Expand all and Customise on the first toolbar line and the search under them", async () => {
+  const { page } = await import("vitest/browser");
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(390, 640);
+  try {
+    const el = await mountBrowser();
+    const table = await tableOf(el);
+    const line = [
+      table.shadowRoot!.querySelector(".filters-trigger")!,
+      el.shadowRoot!.querySelector('[data-test="select"]')!,
+      table.shadowRoot!.querySelector(".expand-all")!,
+      table.shadowRoot!.querySelector(".columns-trigger")!,
+    ].map((element) => element.getBoundingClientRect());
+    for (let index = 1; index < line.length; index++) {
+      expect(line[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(line[index - 1]!.right);
+      expect(line[index]!.top, `item ${index}`).toBeLessThan(line[0]!.bottom);
+    }
+    const search = el
+      .shadowRoot!.querySelector('[name="catalogue-search"]')!
+      .getBoundingClientRect();
+    expect(search.top).toBeGreaterThanOrEqual(Math.max(...line.map((box) => box.bottom)));
+    const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
+    expect(toolbar.bottom).toBeCloseTo(search.bottom, 0);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!.focus();
+    await userEvent.tab();
+    expect(el.shadowRoot!.activeElement).toBe(
+      el.shadowRoot!.querySelector('[name="catalogue-search"]'),
+    );
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
+it("at phone width fits Select mode's controls and the table's own on two toolbar lines", async () => {
+  const { page } = await import("vitest/browser");
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(390, 640);
+  try {
+    const el = await mountBrowser();
+    await press(el, "select");
+    const table = await tableOf(el);
+    const boxes = [
+      table.shadowRoot!.querySelector(".expand-all")!,
+      ...["selected-count", "move", "delete", "cancel-selection"].map((test) =>
+        el.shadowRoot!.querySelector(`[data-test="${test}"]`)!,
+      ),
+      table.shadowRoot!.querySelector(".columns-trigger")!,
+    ]
+      .map((element) => element.getBoundingClientRect())
+      .sort((a, b) => a.top - b.top);
+    let lines = 0;
+    let bottom = -Infinity;
+    for (const box of boxes) {
+      if (box.top >= bottom) lines++;
+      bottom = box.top >= bottom ? box.bottom : Math.max(bottom, box.bottom);
+    }
+    expect(lines).toBeLessThanOrEqual(2);
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
+it("draws the Select tooltip over the sticky headings", async () => {
+  const { page } = await import("vitest/browser");
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 720);
+  try {
+    const el = await mountBrowser({ stickyHeader: true });
+    const host = el.parentElement!;
+    host.style.display = "flex";
+    host.style.flexDirection = "column";
+    host.style.height = "600px";
+    const table = await tableOf(el);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const select = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="select"]')!;
+    await userEvent.hover(select);
+    const tooltip = select.querySelector<HTMLElement>(".icon-tooltip")!;
+    const tip = tooltip.getBoundingClientRect();
+    const heading = table.shadowRoot!.querySelector("thead th")!.getBoundingClientRect();
+    expect(tip.bottom).toBeGreaterThan(heading.top);
+    // Hit testing skips a tooltip that takes no pointer events, so this probe lets it take them.
+    tooltip.style.pointerEvents = "auto";
+    const hit = el.shadowRoot!.elementFromPoint(tip.left + 4, tip.bottom - 2);
+    tooltip.style.pointerEvents = "";
+    expect(hit !== null && tooltip.contains(hit)).toBe(true);
   } finally {
     await page.viewport(width, height);
   }

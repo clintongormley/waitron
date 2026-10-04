@@ -1,9 +1,10 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, iconButtonStyles, registerIcons, trackIconTooltip } from "@waitron/ui";
 import { chooseMaker, type RoutingModel } from "@waitron/venue-service/routing";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-icon.js";
 import type {
   CategorySummary,
   CatalogueSelection,
@@ -25,6 +26,11 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import { acceptsCatalogueDrop, type CategoryNameDraft, type ProductList } from "./product-list.js";
 
+registerIcons({
+  "select-rows":
+    "M1 1h6v6H1Z M2 2v4h4V2Z M2.8 4.2l.7-.7.9.9 1.6-1.6.7.7-2.3 2.3Z M9 3h6v2H9Z M1 9h6v6H1Z M2 10v4h4v-4Z M9 11h6v2H9Z",
+});
+
 @customElement("dashboard-catalogue-browser")
 export class CatalogueBrowser extends LitElement {
   constructor() {
@@ -43,11 +49,10 @@ export class CatalogueBrowser extends LitElement {
         flex: 1 1 0;
         flex-direction: column;
       }
+      /* Its controls wrap one by one with the table's own, rather than as one block on a line of
+         its own. */
       .actions {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2);
+        display: contents;
       }
       fieldset {
         margin: var(--wt-space-4) 0;
@@ -76,7 +81,15 @@ export class CatalogueBrowser extends LitElement {
         flex: 1 1 calc(var(--wt-tap-min) * 7);
         min-width: min(100%, calc(var(--wt-tap-min) * 7));
       }
+      /* On a phone the search cannot share a line with the leading buttons, so it takes the line
+         under them and the table's own buttons join them; Tab still reaches it before those. */
+      @media (max-width: 30rem) {
+        wt-input {
+          order: 1;
+        }
+      }
     `,
+    iconButtonStyles,
   ];
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) products: Product[] = [];
@@ -580,6 +593,25 @@ export class CatalogueBrowser extends LitElement {
           this.nameError = "";
         }}
       >
+        <button
+          type="button"
+          slot="toolbar-start"
+          class="icon-button"
+          data-test="select"
+          aria-label=${t("folders.select")}
+          aria-pressed=${String(this.selecting)}
+          @click=${() => {
+            this.selected = [];
+            this.selecting = !this.selecting;
+          }}
+          @pointerenter=${trackIconTooltip}
+          @pointerleave=${trackIconTooltip}
+          @focus=${trackIconTooltip}
+          @blur=${trackIconTooltip}
+        >
+          <wt-icon name="select-rows"></wt-icon
+          ><span class="icon-tooltip" aria-hidden="true">${t("folders.select")}</span>
+        </button>
         <wt-input
           slot="toolbar-start"
           name="catalogue-search"
@@ -591,48 +623,47 @@ export class CatalogueBrowser extends LitElement {
             this.search = event.detail.value;
           }}
         ></wt-input>
-        <div slot="toolbar-end" class="actions">
-          ${
-            !this.operation && (this.summaryLoading || this.operationBusy)
-              ? html`<wt-spinner></wt-spinner>`
-              : nothing
-          }
-          ${
-            this.selecting
-              ? html`<span data-test="selected-count" aria-live="polite"
-                    >${this.#plural("folders.selected", this.selected.length)}</span
-                  >
-                  <wt-button
-                    data-test="move"
-                    variant="secondary"
-                    .disabled=${!this.selected.length || this.summaryLoading || this.operationBusy}
-                    @click=${() => this.#openMove()}
-                    >${t("folders.move")}</wt-button
-                  >
-                  <wt-button
-                    data-test="delete"
-                    variant="danger"
-                    .disabled=${!this.selected.length || this.summaryLoading || this.operationBusy}
-                    @click=${() => void this.#openDelete()}
-                    >${t("action.delete")}</wt-button
-                  >
-                  <wt-button
-                    data-test="cancel-selection"
-                    variant="secondary"
-                    @click=${() => {
-                      this.selected = [];
-                      this.selecting = false;
-                    }}
-                    >${t("folders.cancel_selection")}</wt-button
-                  >`
-              : html`<wt-button
-                  data-test="select"
-                  variant="secondary"
-                  @click=${() => (this.selecting = true)}
-                  >${t("folders.select")}</wt-button
-                >`
-          }
-        </div>
+        ${
+          this.selecting || this.summaryLoading || this.operationBusy
+            ? html`<div slot="toolbar-end" class="actions">
+                ${
+                  !this.operation && (this.summaryLoading || this.operationBusy)
+                    ? html`<wt-spinner></wt-spinner>`
+                    : nothing
+                }
+                ${
+                  this.selecting
+                    ? html`<span data-test="selected-count" aria-live="polite"
+                          >${this.#plural("folders.selected", this.selected.length)}</span
+                        >
+                        <wt-button
+                          data-test="move"
+                          variant="secondary"
+                          .disabled=${!this.selected.length || this.summaryLoading || this.operationBusy}
+                          @click=${() => this.#openMove()}
+                          >${t("folders.move")}</wt-button
+                        >
+                        <wt-button
+                          data-test="delete"
+                          variant="danger"
+                          .disabled=${!this.selected.length || this.summaryLoading || this.operationBusy}
+                          @click=${() => void this.#openDelete()}
+                          >${t("action.delete")}</wt-button
+                        >
+                        <wt-button
+                          data-test="cancel-selection"
+                          variant="secondary"
+                          @click=${() => {
+                            this.selected = [];
+                            this.selecting = false;
+                          }}
+                          >${t("folders.cancel_selection")}</wt-button
+                        >`
+                    : nothing
+                }
+              </div>`
+            : nothing
+        }
       </dashboard-product-list>
       ${this.#operationDialog()}${
         this.dropError ? html`<p class="error" role="alert">${this.dropError}</p>` : nothing
