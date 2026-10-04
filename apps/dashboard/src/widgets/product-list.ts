@@ -23,6 +23,7 @@ import {
   type ModifierListChoice,
 } from "./product-editor-model.js";
 import type { CategorySummary, MadeAt, Product, Unit } from "../api/client.js";
+import type { FolderMadeAt } from "./folder-made-at.js";
 import {
   PRODUCT_ORDERINGS,
   type ProductOrdering,
@@ -260,6 +261,14 @@ export class ProductList extends LitElement {
         overflow-wrap: anywhere;
         color: var(--wt-color-primary);
       }
+      wt-data-table::part(maker-detail) {
+        display: block;
+        max-inline-size: calc(var(--wt-tap-min) * 5);
+        white-space: normal;
+        overflow-wrap: anywhere;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
     `,
   ];
 
@@ -271,6 +280,10 @@ export class ProductList extends LitElement {
   @property({ attribute: false }) madeAt: Record<string, MadeAt> = {};
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) unroutedFolderIds: string[] = [];
+  /** Each category's baseline route; a category with none is drawn blank while routing loads. */
+  @property({ attribute: false }) folderMadeAt: ReadonlyMap<string, FolderMadeAt> = new Map();
+  /** Whether routing could not be read, so a blank is not mistaken for no route. */
+  @property({ type: Boolean }) routingFailed = false;
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   /** The venue's stored units; a product whose unit is not among them is sold by the each. */
@@ -792,6 +805,46 @@ export class ProductList extends LitElement {
     return t("product.price_per").replace("{unit}", name);
   }
 
+  #folderMadeAt(id: string) {
+    const made = this.folderMadeAt.get(id);
+    if (made === undefined)
+      return this.routingFailed
+        ? html`<span part="maker-detail">${t("folders.made_at_unavailable")}</span>`
+        : nothing;
+    const { maker, source } = made;
+    const value =
+      maker.kind === "no_preparation"
+        ? t("product.no_preparation")
+        : maker.kind === "no_replacement"
+          ? t("product.no_replacement").replace(
+              "{name}",
+              () => maker.stationName ?? t("product.nowhere"),
+            )
+          : maker.kind === "station"
+            ? (maker.stationName ?? t("product.nowhere"))
+            : t("product.nowhere");
+    const detail = [
+      source === null
+        ? ""
+        : source.kind === "own"
+          ? t("folders.made_at_own")
+          : source.kind === "inherited"
+            ? t("folders.made_at_inherited").replace(
+                "{name}",
+                () => source.name ?? t("editor.missing_choice"),
+              )
+            : source.kind === "default"
+              ? t("folders.made_at_default")
+              : t("folders.made_at_exception"),
+      made.someElsewhere ? t("folders.made_at_some_elsewhere") : "",
+    ]
+      .filter((part) => part !== "")
+      .join(" · ");
+    return html`<a part="maker-link" href="/manage/prep-stations">${value}</a>${
+        detail === "" ? nothing : html`<span part="maker-detail">${detail}</span>`
+      }`;
+  }
+
   #productColumns(): DataTableColumn<ProductRow>[] {
     return [
       {
@@ -1099,6 +1152,7 @@ export class ProductList extends LitElement {
               >${t("action.delete")}</wt-button
             ></wt-row-actions
           >`;
+        if (column.key === "made-at") return this.#folderMadeAt(folder.id);
         return nothing;
       },
       ...(column.sortValue

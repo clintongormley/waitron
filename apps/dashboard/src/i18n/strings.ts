@@ -115,6 +115,12 @@ export const en = {
   "folders.routes_warning_one":
     "1 kitchen routing rule names these categories and will be removed.",
   "folders.no_routing_rule": "No kitchen routing rule covers this category",
+  "folders.made_at_own": "set on this category",
+  "folders.made_at_inherited": "from {name}",
+  "folders.made_at_default": "default station",
+  "folders.made_at_exception": "by an exception",
+  "folders.made_at_some_elsewhere": "some items made elsewhere",
+  "folders.made_at_unavailable": "Routing unavailable",
   "folders.summary_error":
     "What these categories hold could not be read, so they cannot be deleted yet.",
   "folders.summary_changed":
@@ -2265,6 +2271,12 @@ export const es: Record<StringKey, string> = {
     "{count} reglas de envío a cocina nombran estas categorías y se eliminarán.",
   "folders.routes_warning_one": "1 regla de envío a cocina nombra estas categorías y se eliminará.",
   "folders.no_routing_rule": "Ninguna regla de envío a cocina cubre esta categoría",
+  "folders.made_at_own": "asignada a esta categoría",
+  "folders.made_at_inherited": "heredada de {name}",
+  "folders.made_at_default": "estación predeterminada",
+  "folders.made_at_exception": "por una excepción",
+  "folders.made_at_some_elsewhere": "algunos productos se preparan en otro sitio",
+  "folders.made_at_unavailable": "Envío a cocina no disponible",
   "folders.summary_error":
     "No se pudo leer lo que contienen estas categorías, así que aún no se pueden eliminar.",
   "folders.summary_changed":
