@@ -297,7 +297,7 @@ export class CatalogueBrowser extends LitElement {
     const totals = rootSummaries.reduce(
       (sum, summary) => ({
         folders: sum.folders + summary.folders,
-        products: sum.products + summary.products,
+        products: sum.products + summary.activeProducts,
         routes: sum.routes + summary.routes,
       }),
       { folders: 0, products: 0, routes: 0 },

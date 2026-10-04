@@ -69,7 +69,9 @@ export async function mountBrowser(overrides: Partial<CatalogueBrowser> = {}) {
   const api = {
     moveCatalogueItems: vi.fn().mockResolvedValue(undefined),
     deleteCatalogueItems: vi.fn().mockResolvedValue(undefined),
-    summariseFolders: vi.fn().mockResolvedValue([{ id: "d", folders: 1, products: 2, routes: 1 }]),
+    summariseFolders: vi
+      .fn()
+      .mockResolvedValue([{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1 }]),
     createCategory: vi.fn().mockResolvedValue(folder("new", "Juice", "d")),
     updateCategory: vi.fn().mockResolvedValue(folder("d", "Beverages", null)),
   } as unknown as DashboardApi;
@@ -1155,7 +1157,7 @@ it("moves products to the explicitly chosen top level", async () => {
 it("deletes only completely summarised empty folders without asking", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.summariseFolders).mockResolvedValue([
-    { id: "f", folders: 0, products: 0, routes: 0 },
+    { id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0 },
   ]);
   await selectKeys(el, ["folder:f"]);
   await press(el, "delete");
@@ -1176,7 +1178,9 @@ it.each(["network", "missing", "partial"])(
       vi.mocked(el.api.summariseFolders).mockRejectedValue(new Error("network"));
     else
       vi.mocked(el.api.summariseFolders).mockResolvedValue(
-        state === "missing" ? [] : [{ id: "d", folders: 0, products: 0, routes: 0 }],
+        state === "missing"
+          ? []
+          : [{ id: "d", folders: 0, products: 0, activeProducts: 0, routes: 0 }],
       );
     await selectKeys(el, ["folder:d", "folder:f"]);
     await press(el, "delete");
@@ -1207,6 +1211,19 @@ it("shows folder contents and routes, defaults to moving up, and sends delete ch
     ),
   );
 });
+it("asks before deleting a category holding only inactive products, and counts none of them as deleted", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "f", folders: 0, products: 1, activeProducts: 0, routes: 0 },
+  ]);
+  await selectKeys(el, ["folder:f"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  expect(el.shadowRoot!.querySelector("input[value=delete]")!.parentElement!.textContent).toContain(
+    "0 categories and 0 products",
+  );
+  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+});
 it("deletes a folder through its own row action", async () => {
   const el = await mountBrowser();
   (await tableOf(el))
@@ -1232,7 +1249,7 @@ it("deleting an empty category from its menu acts on that category alone, and le
     products: [product("steak", "Steak", "m2"), product("stew", "Stew", "m3", false)],
   });
   vi.mocked(el.api.summariseFolders).mockResolvedValue([
-    { id: "m1", folders: 0, products: 0, routes: 0 },
+    { id: "m1", folders: 0, products: 0, activeProducts: 0, routes: 0 },
   ]);
   const table = await tableOf(el);
   const menus = () => [...table.shadowRoot!.querySelectorAll("wt-row-actions")];
@@ -1316,8 +1333,8 @@ it("counts overlapping selected folders once in the delete consent", async () =>
   const el = await mountBrowser();
   await typeSearch(el, "Drinks");
   vi.mocked(el.api.summariseFolders).mockResolvedValue([
-    { id: "d", folders: 1, products: 2, routes: 1 },
-    { id: "b", folders: 0, products: 1, routes: 1 },
+    { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1 },
+    { id: "b", folders: 0, products: 1, activeProducts: 1, routes: 1 },
   ]);
   await selectKeys(el, ["folder:d", "folder:b"]);
   await press(el, "delete");
@@ -1334,7 +1351,13 @@ it("counts overlapping selected folders once in the delete consent", async () =>
 it("shows a spinner and blocks confirmation while summaries are pending", async () => {
   const el = await mountBrowser();
   let resolve!: (
-    value: { id: string; folders: number; products: number; routes: number }[],
+    value: {
+      id: string;
+      folders: number;
+      products: number;
+      activeProducts: number;
+      routes: number;
+    }[],
   ) => void;
   vi.mocked(el.api.summariseFolders).mockImplementation(
     () =>
@@ -1347,7 +1370,7 @@ it("shows a spinner and blocks confirmation while summaries are pending", async 
   expect(el.shadowRoot!.querySelector("wt-spinner")).not.toBeNull();
   expect(dialog(el)).toBeNull();
   expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
-  resolve([{ id: "d", folders: 1, products: 2, routes: 0 }]);
+  resolve([{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 0 }]);
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-spinner")).toBeNull());
   expect(el.shadowRoot!.querySelector("[data-test=confirm]")!.getAttribute("disabled")).toBeNull();
 });
@@ -1355,7 +1378,13 @@ it("shows a spinner and blocks confirmation while summaries are pending", async 
 it("keeps the captured Delete request when Cancel exits selection during the summary read", async () => {
   const el = await mountBrowser();
   let resolve!: (
-    value: { id: string; folders: number; products: number; routes: number }[],
+    value: {
+      id: string;
+      folders: number;
+      products: number;
+      activeProducts: number;
+      routes: number;
+    }[],
   ) => void;
   vi.mocked(el.api.summariseFolders).mockImplementation(
     () =>
@@ -1368,7 +1397,7 @@ it("keeps the captured Delete request when Cancel exits selection during the sum
   await press(el, "cancel-selection");
   expect((await tableOf(el)).selectable).toBe(false);
   expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
-  resolve([{ id: "f", folders: 0, products: 0, routes: 0 }]);
+  resolve([{ id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0 }]);
   await vi.waitFor(() =>
     expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: [], categoryIds: ["f"] },
@@ -1401,7 +1430,13 @@ it("can move after cancelling a failed delete summary", async () => {
 it("never opens a confirmation while reading or deleting empty folders and blocks duplicate reads", async () => {
   const el = await mountBrowser();
   let resolve!: (
-    value: { id: string; folders: number; products: number; routes: number }[],
+    value: {
+      id: string;
+      folders: number;
+      products: number;
+      activeProducts: number;
+      routes: number;
+    }[],
   ) => void;
   vi.mocked(el.api.summariseFolders).mockImplementation(
     () =>
@@ -1421,7 +1456,7 @@ it("never opens a confirmation while reading or deleting empty folders and block
   expect(dialog(el)).toBeNull();
   await press(el, "delete");
   expect(el.api.summariseFolders).toHaveBeenCalledOnce();
-  resolve([{ id: "f", folders: 0, products: 0, routes: 0 }]);
+  resolve([{ id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0 }]);
   await vi.waitFor(() => expect(el.api.deleteCatalogueItems).toHaveBeenCalledOnce());
   expect(dialog(el)).toBeNull();
   finish();
