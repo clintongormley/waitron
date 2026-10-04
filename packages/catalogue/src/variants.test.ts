@@ -299,6 +299,40 @@ describe("product variants", () => {
       { variantId: own!.id, price: null, offered: null },
     ]);
   });
+
+  it("lists a product's variants in the order the product holds them, not by name or by id", async () => {
+    const saved = await run((tx) =>
+      setProductVariants(
+        tx,
+        productId,
+        [
+          variant("Ración 2", "2.00"),
+          variant("0,5 kg", "5.00"),
+          variant("Ración 10", "10.00"),
+          variant("0,25 kg", "2.50"),
+        ],
+        "en",
+      ),
+    );
+    const listed = async () =>
+      (await run((tx) => listProducts(tx)))[0]!.variants.map(({ name }) => name);
+    // Two different stored orders are both read back, so neither a fixed id order nor a name order
+    // can pass for the stored one.
+    for (const order of [
+      [2, 3, 0, 1],
+      [0, 2, 1, 3],
+    ]) {
+      await run((tx) =>
+        setProductVariants(
+          tx,
+          productId,
+          order.map((index) => saved[index]!),
+          "en",
+        ),
+      );
+      expect(await listed()).toEqual(order.map((index) => saved[index]!.name));
+    }
+  });
 });
 
 describe("which products have an Active variant", () => {

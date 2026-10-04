@@ -3095,6 +3095,16 @@ as a whole number, so a decimal weight sorts wrongly — "0,5 kg" before "0,25 k
 with the same comparison, not in the dashboard). The rest of the dashboard sorts names the same
 way.
 
+**Products: a product's variants are listed in the product's own order — DONE (W85a, owner
+2026-10-05: "that would be ideal").** This replaces W85's name order, and with it W85's
+decimal-weight point. The Products list no longer sorts a product's variants: it draws them in the
+order the API sends, which is the stored variant order the product editor shows and saves
+(`listedVariantsOfProducts`, `packages/catalogue/src/operations.ts`, orders by `variantOrder`), and
+`rowKeepsChildOrder` still keeps that order under every column's sort. Pinned in
+`packages/catalogue/src/variants.test.ts` (two reorders through `setProductVariants`, each read
+back by `listProducts`) and `apps/dashboard/src/widgets/product-list.test.ts`. The name sort's
+checks were changed to check the product's order (owner's 2026-10-05 rule; listed in the PR).
+
 **Products: a category's Made at shows where its dishes are made — DONE (W86, #1203, owner 2026-10-04).**
 In the Products tree each category row's Made at cell now shows the category's baseline route, in
 the product rows' words (a station's name, No preparation, No replacement, Nowhere), linked to the

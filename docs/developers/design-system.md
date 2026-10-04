@@ -829,9 +829,9 @@ In tree mode the table keeps a match's ancestor rows and tells each cell, via it
 
 A tree row for which `rowJoinsParent` returns true is drawn as part of its parent's row: at its
 parent's indent rather than a level deeper, on a band of `--wt-color-bg`, while its `aria-level`
-still puts it a level down. The Products list draws a product's variants this way, and lists them
-by name in a numeric-aware order ("Ración 2" before "Ración 10") whatever sorts the table, through
-`rowKeepsChildOrder`; `sortedSiblings` answers that order too. The toggle
+still puts it a level down. The Products list draws a product's variants this way, and keeps them
+in the order the product holds them whatever sorts the table, through `rowKeepsChildOrder`;
+`sortedSiblings` answers that order too. The toggle
 button a branch row draws when its `rowActivation` is not `"toggle"` carries `part="tree-toggle"`,
 so a screen can size and colour it; the Products list makes it small and muted. In tree mode the
 heading over the tree's column is wrapped in `part="tree-heading"`, so a screen can line it up with
