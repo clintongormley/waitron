@@ -3722,13 +3722,28 @@ const followsInDocument = (first: Element, second: Element) =>
 
 it("keeps consecutive closed Product editor sections close enough to read as one form", async () => {
   const el = await mountPricing({ ...saved, variants: [small] });
-  const gap = (before: string, after: string) => {
-    const first = folded(el, before).shadowRoot!.querySelector(".summary")!;
-    const next = folded(el, after).shadowRoot!.querySelector(".heading")!;
-    return next.getBoundingClientRect().top - first.getBoundingClientRect().bottom;
+  const assertGap = (before: string, after: string) => {
+    const first = folded(el, before);
+    const next = folded(el, after);
+    const summary = first.shadowRoot!.querySelector(".summary")!;
+    const heading = next.shadowRoot!.querySelector(".heading")!;
+    const textGap = heading.getBoundingClientRect().top - summary.getBoundingClientRect().bottom;
+    expect(next.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      first.getBoundingClientRect().bottom,
+    );
+    expect(textGap).toBeGreaterThanOrEqual(24);
+    expect(textGap).toBeLessThanOrEqual(42);
   };
-  expect(gap("descriptors", "nutrition")).toBeLessThanOrEqual(28);
-  expect(gap("nutrition", "price")).toBeLessThanOrEqual(28);
+  assertGap("descriptors", "nutrition");
+  assertGap("nutrition", "price");
+});
+
+it("keeps normal section spacing when Descriptors opens", async () => {
+  const el = await mountPricing({ ...saved, variants: [small] });
+  await openSection(el, "descriptors");
+  const descriptors = folded(el, "descriptors").getBoundingClientRect();
+  const nutrition = folded(el, "nutrition").getBoundingClientRect();
+  expect(nutrition.top - descriptors.bottom).toBe(16);
 });
 
 it("separates Add variant from the Modifiers heading", async () => {
@@ -3736,7 +3751,8 @@ it("separates Add variant from the Modifiers heading", async () => {
   const add = section(el, "variants").querySelector("[data-test=add-variant]")!;
   const heading = section(el, "modifiers").querySelector(".group-label")!;
   const gap = heading.getBoundingClientRect().top - add.getBoundingClientRect().bottom;
-  expect(gap).toBeGreaterThanOrEqual(24);
+  expect(gap).toBeGreaterThanOrEqual(20);
+  expect(gap).toBeLessThanOrEqual(32);
 });
 
 it("names the offered lists and menus before saving a product unit change", async () => {
