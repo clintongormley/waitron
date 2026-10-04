@@ -367,6 +367,8 @@ export class VenueOperationsScreen extends LitElement {
       moveColumnLabel=${t("venue.move_column")}
       showColumnLabel=${t("venue.show_column")}
       hideColumnLabel=${t("venue.hide_column")}
+      alwaysShownColumnLabel=${t("venue.column_always_shown")}
+      lastShownColumnLabel=${t("venue.column_last_shown")}
       columnPositionLabel=${t("venue.column_position")}
       aria-label=${label}
       .rows=${rows}

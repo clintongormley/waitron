@@ -526,6 +526,17 @@ async function usedByText(el: ModifiersScreen, testId: string, name: string): Pr
 }
 
 describe("the column chooser", () => {
+  it("words a column that is always shown, and the last one shown, in the dashboard's language", async () => {
+    const el = await mount();
+    const found = table(el, "extra-lists") as Table & {
+      alwaysShownColumnLabel: string;
+      lastShownColumnLabel: string;
+    };
+    expect(currentLocale()).toBe("es-ES");
+    expect(found.alwaysShownColumnLabel).toBe("Siempre visible");
+    expect(found.lastShownColumnLabel).toBe("Deja al menos una visible");
+  });
+
   for (const [testId, kind, detail, detailLabel] of [
     ["extra-lists", "extras", "items", "extras.items"],
     ["option-lists", "options", "labels", "options.labels"],
@@ -540,17 +551,15 @@ describe("the column chooser", () => {
       );
       const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
       expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([
-        ["name", true],
         [detail, true],
         ["usedBy", true],
         ["status", true],
-        ["actions", true],
       ]);
       const headerTexts = () =>
         [...root.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
       expect(headerTexts()).toContain(t(detailLabel));
-      boxes[1]!.checked = false;
-      boxes[1]!.dispatchEvent(new Event("change"));
+      boxes[0]!.checked = false;
+      boxes[0]!.dispatchEvent(new Event("change"));
       await found.updateComplete;
       expect(headerTexts()).not.toContain(t(detailLabel));
       expect(JSON.parse(localStorage.getItem(`waitron.modifiers.${kind}.table:columns`)!)).toEqual({

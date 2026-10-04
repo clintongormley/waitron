@@ -352,15 +352,13 @@ describe("units-screen", () => {
     );
     const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
     expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([
-      ["name", true],
       ["abbreviation", true],
       ["precision", true],
-      ["actions", true],
     ]);
     const headerTexts = () =>
       [...root.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
     expect(headerTexts()).toContain(t("units.abbreviation"));
-    const box = boxes[1]!;
+    const box = boxes[0]!;
     box.checked = false;
     box.dispatchEvent(new Event("change"));
     await table.updateComplete;

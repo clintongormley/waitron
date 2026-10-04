@@ -758,6 +758,8 @@ export class AdjustmentReportScreen extends LitElement {
         moveColumnLabel=${t("adjustments.move_column")}
         showColumnLabel=${t("adjustments.show_column")}
         hideColumnLabel=${t("adjustments.hide_column")}
+        alwaysShownColumnLabel=${t("adjustments.column_always_shown")}
+        lastShownColumnLabel=${t("adjustments.column_last_shown")}
         columnPositionLabel=${t("adjustments.column_position")}
         .rows=${this.#personRows(report)}
         .columns=${this.#personColumns()}
@@ -854,6 +856,8 @@ export class AdjustmentReportScreen extends LitElement {
         moveColumnLabel=${t("adjustments.move_column")}
         showColumnLabel=${t("adjustments.show_column")}
         hideColumnLabel=${t("adjustments.hide_column")}
+        alwaysShownColumnLabel=${t("adjustments.column_always_shown")}
+        lastShownColumnLabel=${t("adjustments.column_last_shown")}
         columnPositionLabel=${t("adjustments.column_position")}
         .rows=${this.entries ?? []}
         .columns=${this.#entryColumns()}

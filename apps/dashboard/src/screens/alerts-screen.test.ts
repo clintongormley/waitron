@@ -159,11 +159,7 @@ describe("dashboard-alerts-screen", () => {
         "Personalizar columnas",
       );
       const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
-      expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([
-        ["alert", true],
-        ...choices,
-        ...(test === "open-alerts-table" ? [["actions", true]] : []),
-      ]);
+      expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual(choices);
       const headerTexts = () =>
         [...root.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
       expect(headerTexts()).toContain(t(hiddenLabel));

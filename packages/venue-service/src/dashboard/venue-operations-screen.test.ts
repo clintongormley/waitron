@@ -1107,11 +1107,7 @@ describe("the venue lists' column choosers", () => {
       await selectTab(el, tab);
       if (name === "zone-menus") await action(el, "zone-menus-z1");
       expect(chooser(el, name)).toBe("Customise columns");
-      expect(choices(el, name)).toEqual([
-        [name === "hours" ? "department" : name === "zone-menus" ? "menu" : "name", true],
-        ...keys.map((key) => [key, true]),
-        ["actions", true],
-      ]);
+      expect(choices(el, name)).toEqual(keys.map((key) => [key, true]));
       const before = headers(el, name);
       expect(before).toHaveLength(keys.length + 2);
       expect(before.at(-1)).toBe("Actions");
@@ -1139,6 +1135,24 @@ describe("the venue lists' column choosers", () => {
     await action(el, "zone-menus-z1");
     expect(chooser(el, "zones")).toBe("Personalizar columnas");
     expect(chooser(el, "zone-menus")).toBe("Personalizar columnas");
+  });
+
+  it("words a column that is always shown, and the last one shown, in Spanish", async () => {
+    setLocale("es");
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "departments");
+    await selectTab(el, "zones");
+    await action(el, "zone-menus-z1");
+    for (const name of ["departments", "hours", "zones", "zone-menus"]) {
+      const list = table(el, name) as Element & {
+        alwaysShownColumnLabel: string;
+        lastShownColumnLabel: string;
+      };
+      expect(list.alwaysShownColumnLabel, name).toBe("Siempre visible");
+      expect(list.lastShownColumnLabel, name).toBe("Deja al menos una visible");
+    }
   });
 });
 
