@@ -37,8 +37,13 @@ function product(overrides: Partial<Product> = {}): Product {
     primaryCategoryId: "category-1",
     name: "Bacon",
     customerName: { es: "Bacon ahumado" },
-    unitId: "unit-each",
-    unit: { id: "unit-each", name: { es: "Unidad" }, precision: 0, abbreviation: { es: "ud" } },
+    unitId: "00000000-0000-0000-0000-000000000001",
+    unit: {
+      id: "00000000-0000-0000-0000-000000000001",
+      name: { es: "Unidad" },
+      precision: 0,
+      abbreviation: { es: "ud" },
+    },
     description: null,
     kitchenName: "BCN",
     dietaryDeclarations: [],
@@ -1310,7 +1315,7 @@ it.each([
       .querySelectorAll("td");
     const handle = cells[0]!.querySelector<HTMLElement>("[data-test^=drag-]")!;
     const preselected = cells[3]!.querySelector("wt-switch")!;
-    const remove = cells[5]!.querySelector("wt-button")!;
+    const remove = cells[6]!.querySelector("wt-button")!;
     expect(cells[0]!.getBoundingClientRect().width).toBeLessThanOrEqual(
       handle.getBoundingClientRect().width + 2,
     );
@@ -1320,7 +1325,7 @@ it.each([
     expect(cells[3]!.getBoundingClientRect().width, "Preselected column").toBeLessThanOrEqual(
       preselected.getBoundingClientRect().width + 8,
     );
-    expect(cells[5]!.getBoundingClientRect().width, "remove column").toBeLessThanOrEqual(
+    expect(cells[6]!.getBoundingClientRect().width, "remove column").toBeLessThanOrEqual(
       remove.getBoundingClientRect().width + 2,
     );
   } finally {
