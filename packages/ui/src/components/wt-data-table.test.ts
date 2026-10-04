@@ -5505,3 +5505,445 @@ test("the last shown column's eye is refused with a visible reason tied to it", 
 function chooserRowContains(el: AnyTable, key: string, node: Element): boolean {
   return chooserRow(el, key).contains(node);
 }
+
+type StickyRow = {
+  id: string;
+  parent: string | null;
+  name: string;
+  kind: "category" | "product";
+  price: number;
+};
+// Categories, a sub-category in each and products under it: long enough to scroll a 560 px box,
+// and wide enough to scroll a 320 px one sideways.
+const stickyRows: StickyRow[] = ["Food", "Drink", "Bakery", "Deli"].flatMap((top, t) => [
+  { id: `c${t}`, parent: null, name: top, kind: "category" as const, price: 0 },
+  { id: `c${t}s`, parent: `c${t}`, name: `${top} specials`, kind: "category" as const, price: 0 },
+  ...Array.from({ length: 6 }, (_, p) => ({
+    id: `p${t}-${p}`,
+    parent: `c${t}s`,
+    name: `${top} item ${p}`,
+    kind: "product" as const,
+    price: p + 1,
+  })),
+]);
+const stickyColumns: DataTableColumn<StickyRow>[] = [
+  { key: "name", label: "Name", cell: (r) => `${r.name}: ${wide}`, sortValue: (r) => r.name },
+  {
+    key: "kind",
+    label: "Kind",
+    cell: (r) => r.kind,
+    choosable: "shown",
+    filter: {
+      label: "Kind",
+      allLabel: "Any kind",
+      value: (r) => r.kind,
+      options: [
+        { value: "category", label: "Category" },
+        { value: "product", label: "Product" },
+      ],
+    },
+  },
+  {
+    key: "price",
+    label: "Price",
+    cell: (r) => `${r.price}: ${wide}`,
+    sortValue: (r) => r.price,
+    choosable: "shown",
+  },
+  {
+    key: "actions",
+    label: "Actions",
+    pinned: "end",
+    cell: (r) =>
+      html`<wt-row-actions label=${`Actions for ${r.name}`} align="end"
+        ><button>Edit</button><button>Move</button><button>Delete</button></wt-row-actions
+      >`,
+  },
+];
+
+async function stickyTable(
+  props: Partial<WtDataTable<StickyRow>> = {},
+): Promise<{ el: WtDataTable<StickyRow>; scroll: HTMLElement }> {
+  const el = (await mount(
+    '<wt-data-table aria-label="Products"></wt-data-table>',
+  )) as WtDataTable<StickyRow>;
+  el.style.width = "320px";
+  el.style.height = "560px";
+  Object.assign(el, {
+    rows: stickyRows,
+    columns: stickyColumns,
+    rowKey: (r: StickyRow) => r.id,
+    rowParent: (r: StickyRow) => r.parent,
+    searchable: true,
+    stickyHeader: true,
+    ...props,
+  });
+  await el.updateComplete;
+  return { el, scroll: el.shadowRoot!.querySelector<HTMLElement>(".scroll")! };
+}
+
+const settle = () => new Promise((resolve) => requestAnimationFrame(resolve));
+const centreOf = (box: DOMRect) => [box.x + box.width / 2, box.y + box.height / 2] as const;
+const stickyHeadings = (el: WtDataTable<StickyRow>) => [
+  ...el.shadowRoot!.querySelectorAll<HTMLElement>("thead th"),
+];
+/** The top of the box's scrollport: below its own border. */
+const scrollportTop = (scroll: HTMLElement) =>
+  scroll.getBoundingClientRect().top + scroll.clientTop;
+
+/** A point in the part of a heading the box shows, clear of the pinned corner; null when none is. */
+function headingPoint(el: WtDataTable<StickyRow>, scroll: HTMLElement, heading: HTMLElement) {
+  const box = heading.getBoundingClientRect();
+  const port = scroll.getBoundingClientRect();
+  const corner = el.shadowRoot!.querySelector('th[data-pinned="end"]')!.getBoundingClientRect();
+  const left = Math.max(box.left, port.left + scroll.clientLeft);
+  const right = heading.dataset.pinned ? box.right : Math.min(box.right, corner.left);
+  if (right - left < 4) return null;
+  return [(left + right) / 2, box.y + box.height / 2] as const;
+}
+
+test("a sticky-header table scrolls its rows inside its own box, under headings and a toolbar that stay put", async () => {
+  const { el, scroll } = await stickyTable();
+  expect(el.hasAttribute("sticky-header")).toBe(true);
+  expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
+  expect(scroll.getBoundingClientRect().bottom).toBeCloseTo(el.getBoundingClientRect().bottom, 0);
+  const toolbar = () =>
+    el.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect().toJSON();
+  const before = toolbar();
+  scroll.scrollTop = 300;
+  await settle();
+  expect(scroll.scrollTop).toBe(300);
+  expect(toolbar()).toEqual(before);
+  let checked = 0;
+  for (const left of [0, scroll.scrollWidth]) {
+    scroll.scrollLeft = left;
+    await settle();
+    for (const heading of stickyHeadings(el)) {
+      const label = `${heading.textContent!.trim()} at scrollLeft ${left}`;
+      expect(heading.getBoundingClientRect().top, label).toBeCloseTo(scrollportTop(scroll), 0);
+      const point = headingPoint(el, scroll, heading);
+      if (!point) continue;
+      // A row really is under the heading here, so the heading winning the hit test is its doing.
+      const under = [...el.shadowRoot!.querySelectorAll("tbody tr")].find((row) => {
+        const r = row.getBoundingClientRect();
+        return r.top <= point[1] && r.bottom >= point[1];
+      });
+      expect(under, label).toBeDefined();
+      const hit = el.shadowRoot!.elementFromPoint(...point);
+      expect(hit !== null && heading.contains(hit), label).toBe(true);
+      checked++;
+    }
+  }
+  expect(checked).toBeGreaterThanOrEqual(stickyHeadings(el).length);
+});
+
+test("a sticky heading's sort button and the Filters button work while rows are scrolled under them", async () => {
+  const { el, scroll } = await stickyTable();
+  const sort = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-sort="price"]')!;
+  scroll.scrollTop = 300;
+  scroll.scrollLeft = sort.closest("th")!.offsetLeft;
+  await settle();
+  const [x, y] = centreOf(sort.getBoundingClientRect());
+  const hit = el.shadowRoot!.elementFromPoint(x, y);
+  expect(hit !== null && sort.contains(hit)).toBe(true);
+  const sorts: unknown[] = [];
+  el.addEventListener("wt-sort-change", (event) => sorts.push((event as CustomEvent).detail));
+  await userEvent.click(sort);
+  expect(sorts).toEqual([{ sortKey: "price", sortDirection: "ascending" }]);
+  const filters = el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!;
+  await userEvent.click(filters);
+  const panelEl = el.shadowRoot!.querySelector<HTMLElement>(".filters-panel")!;
+  expect(panelEl.matches(":popover-open")).toBe(true);
+  // The panel opens over the sticky headings, not under them.
+  const headingCentre = headingPoint(el, scroll, sort.closest("th")!)!;
+  const panelBox = panelEl.getBoundingClientRect();
+  expect(headingCentre[0]).toBeGreaterThan(panelBox.left);
+  expect(headingCentre[0]).toBeLessThan(panelBox.right);
+  expect(headingCentre[1]).toBeGreaterThan(panelBox.top);
+  expect(headingCentre[1]).toBeLessThan(panelBox.bottom);
+  const over = el.shadowRoot!.elementFromPoint(...headingCentre);
+  expect(over !== null && panelEl.contains(over)).toBe(true);
+});
+
+test("a sticky table's headings stay over their own columns at every sideways scroll, after a column is hidden and another moved", async () => {
+  const { el, scroll } = await stickyTable();
+  expect(scroll.scrollWidth).toBeGreaterThan(scroll.clientWidth);
+  scroll.scrollTop = 200;
+  const aligned = async (label: string) => {
+    for (const left of [0, scroll.scrollWidth / 3, scroll.scrollWidth]) {
+      scroll.scrollLeft = left;
+      await settle();
+      const headings = stickyHeadings(el);
+      const rowUnder = [...el.shadowRoot!.querySelectorAll("tbody tr")].find(
+        (row) => row.getBoundingClientRect().top > headings[0]!.getBoundingClientRect().bottom,
+      )!;
+      const cells = [...rowUnder.querySelectorAll("td")];
+      expect(cells).toHaveLength(headings.length);
+      headings.forEach((heading, index) => {
+        const head = heading.getBoundingClientRect();
+        const cell = cells[index]!.getBoundingClientRect();
+        expect(head.left, `${label}, column ${index}, scrollLeft ${left}`).toBeCloseTo(
+          cell.left,
+          0,
+        );
+        expect(head.right, `${label}, column ${index}, scrollLeft ${left}`).toBeCloseTo(
+          cell.right,
+          0,
+        );
+        expect(head.top, `${label}, column ${index}`).toBeCloseTo(scrollportTop(scroll), 0);
+      });
+    }
+  };
+  await aligned("as drawn");
+  await userEvent.click(trigger(el));
+  chooserBox(el, "kind").click();
+  await el.updateComplete;
+  expect(stickyHeadings(el).map((th) => th.textContent!.trim())).toEqual([
+    "Name",
+    "Price",
+    "Actions",
+  ]);
+  await aligned("kind hidden");
+  chooserBox(el, "kind").click();
+  await el.updateComplete;
+  panel(el).querySelector<HTMLButtonElement>('[data-reorder="price"]')!.focus();
+  await userEvent.keyboard("{ArrowUp}");
+  await el.updateComplete;
+  expect(stickyHeadings(el).map((th) => th.textContent!.trim())).toEqual([
+    "Name",
+    "Price",
+    "Kind",
+    "Actions",
+  ]);
+  // The open dialog's backdrop, in the top layer, is what a press on a sticky heading reaches.
+  const heading = headingPoint(el, scroll, stickyHeadings(el).at(-1)!)!;
+  expect(el.shadowRoot!.elementFromPoint(...heading)).toBe(panel(el));
+  await userEvent.keyboard("{Escape}");
+  await el.updateComplete;
+  await aligned("price moved");
+});
+
+test("a sticky table's pinned heading holds the corner above the other headings and the pinned cells", async () => {
+  const { el, scroll } = await stickyTable();
+  scroll.scrollTop = 250;
+  scroll.scrollLeft = scroll.scrollWidth / 3;
+  await settle();
+  const corner = el.shadowRoot!.querySelector<HTMLElement>('th[data-pinned="end"]')!;
+  const box = corner.getBoundingClientRect();
+  const port = scroll.getBoundingClientRect();
+  expect(box.right).toBeCloseTo(port.left + scroll.clientLeft + scroll.clientWidth, 0);
+  expect(box.top).toBeCloseTo(scrollportTop(scroll), 0);
+  const [x, y] = centreOf(box);
+  // Under the corner pass both an unpinned heading and a pinned body cell.
+  const passing = stickyHeadings(el).find((th) => {
+    const r = th.getBoundingClientRect();
+    return th !== corner && r.left <= x && r.right >= x;
+  });
+  expect(passing).toBeDefined();
+  const pinnedUnder = [...el.shadowRoot!.querySelectorAll('td[data-pinned="end"]')].find((td) => {
+    const r = td.getBoundingClientRect();
+    return r.top <= y && r.bottom >= y;
+  });
+  expect(pinnedUnder).toBeDefined();
+  const hit = el.shadowRoot!.elementFromPoint(x, y);
+  expect(hit !== null && corner.contains(hit)).toBe(true);
+});
+
+test("scrolled to its end, a sticky table shows its last row whole below the headings, inside its box", async () => {
+  const { el, scroll } = await stickyTable();
+  scroll.scrollTop = scroll.scrollHeight;
+  await settle();
+  const last = [...el.shadowRoot!.querySelectorAll("tbody tr")].at(-1)!.getBoundingClientRect();
+  const port = scroll.getBoundingClientRect();
+  const headingsBottom = stickyHeadings(el)[0]!.getBoundingClientRect().bottom;
+  expect(last.top).toBeGreaterThanOrEqual(headingsBottom - 0.5);
+  expect(last.bottom).toBeLessThanOrEqual(port.bottom - scroll.clientTop + 0.5);
+  for (const heading of stickyHeadings(el))
+    expect(heading.getBoundingClientRect().bottom).toBeLessThanOrEqual(port.bottom);
+  expect(port.bottom).toBeCloseTo(el.getBoundingClientRect().bottom, 0);
+});
+
+test("revealRow in a sticky table lands the row whole below the headings", async () => {
+  const { el, scroll } = await stickyTable({ initiallyCollapsed: true });
+  el.setExpanded("c3", true);
+  el.setExpanded("c3s", true);
+  await el.updateComplete;
+  scroll.scrollTop = scroll.scrollHeight;
+  await settle();
+  for (const key of ["p0-2", "p3-5", "p0-0"]) {
+    await el.revealRow(key);
+    await settle();
+    const row = el.shadowRoot!.querySelector(`tr[data-row-key="${key}"]`)!.getBoundingClientRect();
+    const headingsBottom = stickyHeadings(el)[0]!.getBoundingClientRect().bottom;
+    const port = scroll.getBoundingClientRect();
+    expect(row.top, key).toBeGreaterThanOrEqual(headingsBottom - 0.5);
+    expect(row.bottom, key).toBeLessThanOrEqual(port.bottom - scroll.clientTop + 0.5);
+  }
+});
+
+/** Reveals an early row from the box's end without waiting for a frame first. */
+async function revealFromEnd(el: WtDataTable<StickyRow>, scroll: HTMLElement) {
+  scroll.scrollTop = scroll.scrollHeight;
+  expect(scroll.scrollTop).toBeGreaterThan(0);
+  await el.revealRow("p0-2");
+  const row = el.shadowRoot!.querySelector('tr[data-row-key="p0-2"]')!.getBoundingClientRect();
+  expect(row.top).toBeGreaterThanOrEqual(
+    stickyHeadings(el)[0]!.getBoundingClientRect().bottom - 0.5,
+  );
+}
+
+test("revealRow straight after a sticky table first draws lands the row below the headings", async () => {
+  const { el, scroll } = await stickyTable();
+  await revealFromEnd(el, scroll);
+});
+
+test("revealRow straight after stickyHeader is turned on lands the row below the headings", async () => {
+  const { el, scroll } = await stickyTable({ stickyHeader: false });
+  el.stickyHeader = true;
+  await el.updateComplete;
+  await revealFromEnd(el, scroll);
+});
+
+test("a sticky table's scroll padding is set as soon as its headings are drawn, before a frame", async () => {
+  const { el, scroll } = await stickyTable({ stickyHeader: false });
+  el.stickyHeader = true;
+  await el.updateComplete;
+  const headHeight = el.shadowRoot!.querySelector("thead")!.getBoundingClientRect().height;
+  expect(scroll.style.scrollPaddingBlockStart).toBe(`${headHeight}px`);
+});
+
+test("revealRow straight after a sticky table's headings grow lands the row below them", async () => {
+  const { el, scroll } = await stickyTable();
+  await settle();
+  const before = stickyHeadings(el)[0]!.getBoundingClientRect().height;
+  host.style.setProperty("--wt-space-3", "40px");
+  expect(stickyHeadings(el)[0]!.getBoundingClientRect().height).toBeGreaterThan(before);
+  await revealFromEnd(el, scroll);
+});
+
+test("revealRow straight after a sticky table's rows come back from loading lands the row below the headings", async () => {
+  const { el } = await stickyTable();
+  el.loading = true;
+  await el.updateComplete;
+  el.loading = false;
+  await el.updateComplete;
+  await revealFromEnd(el, el.shadowRoot!.querySelector<HTMLElement>(".scroll")!);
+});
+
+test("tabbing back to a row hidden under a sticky table's headings scrolls it out from under them", async () => {
+  const { el, scroll } = await stickyTable();
+  await settle();
+  scroll.scrollTop = 300;
+  await settle();
+  const headingsBottom = stickyHeadings(el)[0]!.getBoundingClientRect().bottom;
+  // The last row whose menu button sits behind the headings.
+  const hidden = [...el.shadowRoot!.querySelectorAll<HTMLElement>("wt-row-actions")]
+    .filter((menu) => {
+      const box = menu.getBoundingClientRect();
+      return box.top < headingsBottom && box.bottom > scrollportTop(scroll);
+    })
+    .at(-1)!;
+  expect(hidden).toBeDefined();
+  const rows = [...el.shadowRoot!.querySelectorAll<HTMLElement>("wt-row-actions")];
+  rows[rows.indexOf(hidden) + 1]!.shadowRoot!.querySelector("button")!.focus();
+  await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+  await settle();
+  expect(hidden.shadowRoot!.activeElement).toBe(hidden.shadowRoot!.querySelector("button"));
+  expect(hidden.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    stickyHeadings(el)[0]!.getBoundingClientRect().bottom - 0.5,
+  );
+});
+
+test("a row menu opened in a sticky table is not clipped by the table's box", async () => {
+  const { el, scroll } = await stickyTable();
+  const port = scroll.getBoundingClientRect();
+  // The last row whose menu button is in view, so its menu opens below the box's end.
+  const actions = [...el.shadowRoot!.querySelectorAll<HTMLElement>("wt-row-actions")]
+    .filter((menu) => menu.getBoundingClientRect().bottom <= port.bottom)
+    .at(-1)!;
+  await userEvent.click(actions.shadowRoot!.querySelector("button")!);
+  const popup = actions.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  expect(popup.matches(":popover-open")).toBe(true);
+  const box = popup.getBoundingClientRect();
+  expect(box.bottom).toBeGreaterThan(port.bottom);
+  const hit = actions.shadowRoot!.elementFromPoint(box.x + box.width / 2, box.bottom - 4);
+  expect(hit !== null && popup.contains(hit)).toBe(true);
+  popup.hidePopover();
+});
+
+test("a sticky table's headings are opaque and draw their own lower line from tokens", async () => {
+  const { el, scroll } = await stickyTable();
+  host.style.setProperty("--wt-color-surface", "rgb(7, 8, 9)");
+  host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
+  scroll.scrollTop = 300;
+  await settle();
+  for (const heading of stickyHeadings(el)) {
+    expect(getComputedStyle(heading).backgroundColor, heading.textContent!).toBe("rgb(7, 8, 9)");
+    const line = getComputedStyle(heading, "::after");
+    expect(line.borderBottomStyle, heading.textContent!).toBe("solid");
+    expect(line.borderBottomColor, heading.textContent!).toBe("rgb(1, 2, 3)");
+  }
+});
+
+test("a filtered sticky heading keeps its filtered line and its sort marker shows", async () => {
+  const { el, scroll } = await stickyTable({ sortKey: "price" });
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!);
+  await chooseOption(el.shadowRoot!.querySelector('wt-combobox[data-filter="kind"]')!, "product");
+  el.shadowRoot!.querySelector<HTMLElement>(".filters-panel")!.hidePopover();
+  await el.updateComplete;
+  scroll.scrollTop = 200;
+  scroll.scrollLeft = el
+    .shadowRoot!.querySelector<HTMLElement>('[data-sort="price"]')!
+    .closest("th")!.offsetLeft;
+  await settle();
+  const kind = el.shadowRoot!.querySelector<HTMLElement>("th[data-filtered]")!;
+  expect(getComputedStyle(kind).boxShadow).toContain("inset");
+  expect(el.shadowRoot!.querySelector(".filters-count")!.textContent).toBe("1");
+  const marker = el.shadowRoot!.querySelector('[data-sort="price"] .indicator')!;
+  expect(marker.textContent).toBe("▲");
+  const [x, y] = centreOf(marker.getBoundingClientRect());
+  const hit = el.shadowRoot!.elementFromPoint(x, y);
+  expect(hit !== null && marker.closest("th")!.contains(hit)).toBe(true);
+});
+
+test("without stickyHeader the table's box grows with its rows and its headings are not sticky", async () => {
+  const { el, scroll } = await stickyTable({ stickyHeader: false });
+  expect(el.hasAttribute("sticky-header")).toBe(false);
+  expect(scroll.scrollHeight).toBe(scroll.clientHeight);
+  expect(scroll.getBoundingClientRect().bottom).toBeGreaterThan(el.getBoundingClientRect().bottom);
+  for (const heading of stickyHeadings(el)) {
+    if (heading.dataset.pinned) continue;
+    expect(getComputedStyle(heading).position).toBe("static");
+  }
+});
+
+test("a sticky table with no bounded container is its minimum height and scrolls its rows inside", async () => {
+  const { el, scroll } = await stickyTable();
+  el.style.height = "";
+  await settle();
+  expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
+  host.style.setProperty("--wt-tap-min", "50px");
+  await settle();
+  expect(scroll.getBoundingClientRect().height).toBeCloseTo(150, 0);
+});
+
+test("turning stickyHeader off releases the box and its scroll padding, and on again restores both", async () => {
+  const { el, scroll } = await stickyTable();
+  const headHeight = el.shadowRoot!.querySelector("thead")!.getBoundingClientRect().height;
+  // The padding is set when the headings attach; a resize observer follows later size changes.
+  await vi.waitFor(() => expect(scroll.style.scrollPaddingBlockStart).toBe(`${headHeight}px`));
+  el.stickyHeader = false;
+  await el.updateComplete;
+  expect(scroll.style.scrollPaddingBlockStart).toBe("");
+  expect(scroll.scrollHeight).toBe(scroll.clientHeight);
+  el.loading = true;
+  await el.updateComplete;
+  el.stickyHeader = true;
+  await el.updateComplete;
+  el.loading = false;
+  await el.updateComplete;
+  const again = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  expect(again).not.toBe(scroll);
+  await vi.waitFor(() => expect(again.style.scrollPaddingBlockStart).toBe(`${headHeight}px`));
+  expect(again.scrollHeight).toBeGreaterThan(again.clientHeight);
+});
