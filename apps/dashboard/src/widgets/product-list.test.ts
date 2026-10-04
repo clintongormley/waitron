@@ -706,6 +706,85 @@ describe("product-list", () => {
     expect(rows.map((row) => row.textContent).join(" ")).not.toContain("SM");
   });
 
+  describe("lists a product's variants by name, whatever sorts the table", () => {
+    // Given out of order, priced so that no sort by price or by name backwards gives the name order,
+    // and with "Ración 10" before "Ración 2", which only a numeric-aware comparison puts second.
+    const products = () => [
+      product({
+        id: "solo",
+        name: "Solomillo",
+        variants: [
+          { ...bunVariant, id: "450", name: "450g", unitPrice: "20.00" },
+          { ...bunVariant, id: "250", name: "250g", unitPrice: "30.00" },
+          { ...bunVariant, id: "350", name: "350g", unitPrice: "10.00" },
+        ],
+      }),
+      product({
+        id: "racion",
+        name: "Pulpo",
+        variants: [
+          { ...bunVariant, id: "10", name: "Ración 10", unitPrice: "1.00" },
+          { ...bunVariant, id: "2", name: "Ración 2", unitPrice: "9.00" },
+        ],
+      }),
+    ];
+
+    async function mountOpen() {
+      const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+        products: products(),
+      });
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      const root = await tableRoot(el);
+      for (const id of ["solo", "racion"]) {
+        root.querySelector<HTMLElement>(`tr[data-row-key="${id}"] .tree-toggle`)!.click();
+        await table.updateComplete;
+      }
+      return { table, root };
+    }
+
+    const variantsOf = (root: ShadowRoot, id: string) =>
+      rowKeys(root).filter((key) => key.startsWith(`${id}:`));
+    const expectNameOrder = (root: ShadowRoot) => {
+      expect(variantsOf(root, "solo")).toEqual(["solo:250", "solo:350", "solo:450"]);
+      expect(variantsOf(root, "racion")).toEqual(["racion:2", "racion:10"]);
+    };
+
+    it("under the Name sort, either way", async () => {
+      const { table, root } = await mountOpen();
+      expectNameOrder(root);
+      root.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
+      await table.updateComplete;
+      expect(table.sortDirection).toBe("descending");
+      expect(rowKeys(root).indexOf("solo")).toBeLessThan(rowKeys(root).indexOf("racion"));
+      expectNameOrder(root);
+    });
+
+    it("under another column's sort", async () => {
+      const { table, root } = await mountOpen();
+      root.querySelector<HTMLButtonElement>('button[data-sort="price"]')!.click();
+      await table.updateComplete;
+      expect(table.sortKey).toBe("price");
+      expectNameOrder(root);
+    });
+
+    it("under a sort restored from an earlier visit", async () => {
+      sessionStorage.setItem(
+        "waitron.products.table",
+        JSON.stringify({ sortKey: "price", sortDirection: "descending" }),
+      );
+      const { table, root } = await mountOpen();
+      expect([table.sortKey, table.sortDirection]).toEqual(["price", "descending"]);
+      expectNameOrder(root);
+    });
+
+    it("without changing the order the product holds them in", async () => {
+      const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+        products: products(),
+      });
+      expect(el.products[0]!.variants.map(({ id }) => id)).toEqual(["450", "250", "350"]);
+    });
+  });
+
   it("shows an active/inactive badge carrying text, not colour alone", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "on", active: true }), product({ id: "off", active: false })],

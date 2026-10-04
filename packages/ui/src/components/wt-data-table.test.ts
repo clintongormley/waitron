@@ -874,6 +874,31 @@ test("a smaller group sorts above a larger one among siblings, in both direction
   expect(treeKeys(el)).toEqual(["food", "zest", "bread", "apple"]);
 });
 
+test("a row that keeps its children's order draws them as the rows list them under any sort, while other siblings sort", async () => {
+  const rows: TreeRow[] = [
+    { id: "food", parent: null, name: "Food" },
+    { id: "zest", parent: "food", name: "Zest" },
+    { id: "apple", parent: "food", name: "Apple" },
+    { id: "drinks", parent: null, name: "Drinks" },
+    { id: "tea", parent: "drinks", name: "Tea" },
+    { id: "cola", parent: "drinks", name: "Cola" },
+    { id: "rind", parent: "zest", name: "Rind" },
+    { id: "peel", parent: "zest", name: "Peel" },
+  ];
+  const el = await treeTable({
+    rows,
+    sortKey: "name",
+    rowKeepsChildOrder: (row: TreeRow) => row.id === "food",
+  });
+  expect(treeKeys(el)).toEqual(["drinks", "cola", "tea", "food", "zest", "peel", "rind", "apple"]);
+  const [zest, apple, tea, cola] = [rows[1]!, rows[2]!, rows[4]!, rows[5]!];
+  expect(el.sortedSiblings([apple, zest]).map(({ id }) => id)).toEqual(["zest", "apple"]);
+  expect(el.sortedSiblings([tea, cola]).map(({ id }) => id)).toEqual(["cola", "tea"]);
+  el.sortDirection = "descending";
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "zest", "rind", "peel", "apple", "drinks", "tea", "cola"]);
+});
+
 test("groups order a flat table's rows even with no sort column", async () => {
   const el = await table({ rowGroup: (row: Row) => (row.id === "a" ? 0 : 1) });
   expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]);

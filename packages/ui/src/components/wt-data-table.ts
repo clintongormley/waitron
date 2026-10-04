@@ -657,6 +657,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * indent rather than a level deeper, on the `--wt-color-bg` band, so a run of them reads as one
    * group under that row. Its `aria-level` still puts it a level down. */
   @property({ attribute: false }) rowJoinsParent: (row: Row) => boolean = () => false;
+  /** In tree mode, the children of a row this returns true for are drawn in the order `rows` lists
+   * them, whatever column sorts the table and in either direction; their own children still sort. */
+  @property({ attribute: false }) rowKeepsChildOrder: (row: Row) => boolean = () => false;
   /** When set, each row becomes activatable: a stretched, focusable button covers the row and calls
    * this on click. Per-row controls (the selection checkbox, the Edit/Delete menu) sit above the
    * activator, so they are never swallowed. In a tree, `rowActivation` can give a row a toggle instead. */
@@ -1606,9 +1609,15 @@ export class WtDataTable<Row = unknown> extends LitElement {
       const bucket = p !== null && present.has(p) ? p : "";
       (childrenByParent.get(bucket) ?? childrenByParent.set(bucket, []).get(bucket)!).push(row);
     }
+    const byKey = this.#rowsByKey();
     const out: { row: Row; key: string; depth: number; hasChildren: boolean }[] = [];
     const walk = (parentKey: string, depth: number) => {
-      const siblings = this.#sortByColumn(childrenByParent.get(parentKey) ?? [], column, indexOf);
+      const children = childrenByParent.get(parentKey) ?? [];
+      const parent = byKey.get(parentKey);
+      const siblings =
+        parent !== undefined && this.rowKeepsChildOrder(parent)
+          ? children
+          : this.#sortByColumn(children, column, indexOf);
       for (const row of siblings) {
         const key = keyOf(row, indexOf.get(row)!);
         const hasChildren = (childrenByParent.get(key) ?? []).length > 0;
@@ -1680,6 +1689,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   /** The order the table draws these rows in when they share a parent. */
   sortedSiblings(rows: readonly Row[]): Row[] {
+    const parentKey = rows[0] === undefined ? null : (this.rowParent?.(rows[0]) ?? null);
+    const parent = parentKey === null ? undefined : this.#rowsByKey().get(parentKey);
+    if (parent !== undefined && this.rowKeepsChildOrder(parent)) {
+      const position = new Map(this.rows.map((row, index) => [row, index]));
+      return [...rows].sort((a, b) => (position.get(a) ?? -1) - (position.get(b) ?? -1));
+    }
     return this.#sortedRows(rows, this.#sortColumn(this.#shownColumns()));
   }
 
