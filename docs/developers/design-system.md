@@ -970,8 +970,15 @@ turns `wt-close` into a Cancel checks that it is still meant to be open, as
 off whose `open` is still true: `wt-dialog` shows it again and sends no `wt-close`.
 
 Set `open` to show or close the modal. Handle button clicks in your form and listen for `wt-close`
-to handle dismissal, including Escape. The native dialog keeps focus inside while open and
-returns focus to its trigger on close. Use `wt-dialog` for a compact confirmation.
+to handle dismissal, including Escape. The native dialog keeps focus inside while open. In
+Chromium, which the browser tests run, it hands focus back on close to whatever had focus when it
+opened, including an element inside a shadow root other than the dialog's — which is the button
+that opened it only if that button still had focus then. If that element was removed or disabled
+while the dialog was open, Escape leaves focus on the page body (cases in
+`packages/ui/src/components/wt-dialog.test.ts`). A screen that opens a dialog after focus has moved
+on, or that removes or disables what had it, must hand focus back itself, as the product editor does
+when its unit chooser shuts (`apps/dashboard/src/widgets/product-editor.test.ts`). Use `wt-dialog`
+for a compact confirmation.
 
 Variant- and state-like properties (`variant`, `size`, `align`, `name`, `raised`, `disabled`,
 `loading`, `decorative`, `checked`, `invalid`, `open`) all reflect to attributes, which is what makes

@@ -26,6 +26,35 @@ afterEach(cleanup);
 
 type Openable = HTMLElement & { open: boolean; updateComplete: Promise<unknown> };
 
+/** The focused element, looked for through every shadow root on the way down. */
+function deepActiveElement(): Element | null {
+  let focused = document.activeElement;
+  while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+  return focused;
+}
+
+/** Opens `el` with `focused` holding focus, runs `whileOpen`, closes it as `how` says, and resolves
+ * once it reports the close. */
+async function openAndClose(
+  el: Openable,
+  focused: HTMLElement,
+  how: "Escape" | "open",
+  whileOpen?: () => void,
+): Promise<void> {
+  focused.focus();
+  expect(deepActiveElement()).toBe(focused);
+  el.open = true;
+  await el.updateComplete;
+  expect(deepActiveElement()).not.toBe(focused);
+  whileOpen?.();
+  const closed = new Promise<void>((resolve) =>
+    el.addEventListener("wt-close", () => resolve(), { once: true }),
+  );
+  if (how === "Escape") await userEvent.keyboard("{Escape}");
+  else el.open = false;
+  await closed;
+}
+
 test("is closed by default", async () => {
   const el = await mount("<wt-dialog>body</wt-dialog>");
   const dialog = el.shadowRoot!.querySelector("dialog") as HTMLDialogElement;
@@ -475,9 +504,7 @@ test.each([
       const message = (await formMessageOf(el.querySelector("wt-form-actions")!))!;
       el.open = true;
       await el.updateComplete;
-      let focused = document.activeElement;
-      while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
-      expect(focused).toBeInstanceOf(HTMLInputElement);
+      expect(deepActiveElement()).toBeInstanceOf(HTMLInputElement);
       const dialog = el.shadowRoot!.querySelector("dialog")!;
       await vi.waitFor(() => expect(dialog.scrollTop).toBeGreaterThan(0));
       const frame = dialog.getBoundingClientRect();
@@ -487,5 +514,53 @@ test.each([
     } finally {
       await page.viewport(1280, 900);
     }
+  },
+);
+
+test.each(["Escape", "open"] as const)(
+  "closed by %s, hands focus back to what had it when it opened, not to the button that opened it",
+  async (how) => {
+    const el = (await mount(
+      '<wt-dialog heading="Choose a unit"><button>Each</button></wt-dialog>',
+    )) as Openable;
+    const opener = document.createElement("button");
+    opener.textContent = "Unit";
+    const field = document.createElement("input");
+    host.prepend(opener, field);
+    // Pressed first, as a screen whose button opens the dialog only after focus has moved on.
+    await userEvent.click(opener);
+    await openAndClose(el, field, how);
+    expect(deepActiveElement()).toBe(field);
+  },
+);
+
+test.each(["Escape", "open"] as const)(
+  "closed by %s, hands focus back into the shadow root that had it when it opened",
+  async (how) => {
+    const el = (await mount(
+      '<wt-dialog heading="Choose a unit"><button>Each</button></wt-dialog>',
+    )) as Openable;
+    const screen = document.createElement("div");
+    host.prepend(screen);
+    const inner = document.createElement("button");
+    screen.attachShadow({ mode: "open" }).append(inner);
+    await openAndClose(el, inner, how);
+    expect(deepActiveElement()).toBe(inner);
+  },
+);
+
+test.each([
+  ["removed", (button: HTMLButtonElement) => button.remove()],
+  ["disabled", (button: HTMLButtonElement) => (button.disabled = true)],
+])(
+  "closed by Escape, leaves focus on the page body when what had focus at opening was %s while it was open",
+  async (_, change) => {
+    const el = (await mount(
+      '<wt-dialog heading="Choose a unit"><button>Each</button></wt-dialog>',
+    )) as Openable;
+    const button = document.createElement("button");
+    host.prepend(button);
+    await openAndClose(el, button, "Escape", () => change(button));
+    expect(document.activeElement).toBe(document.body);
   },
 );
