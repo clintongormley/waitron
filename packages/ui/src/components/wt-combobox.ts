@@ -47,7 +47,7 @@ export const SEARCH_THRESHOLD = 7;
  * (https://www.apache.org/licenses/LICENSE-2.0), published at https://fonts.google.com/icons.
  */
 export const DROPDOWN_ICONS: Record<string, string> = {
-  "chevron-down": "M4.9 5.7L8 8.8L11.1 5.7L12 6.7L8 10.7L4 6.7Z",
+  "chevron-down": "M2 4L8 10L14 4L14 6.8L8 12.8L2 6.8Z",
   check: "M6.37 12L2.57 8.2L3.52 7.25L6.37 10.1L12.48 3.98L13.43 4.93Z",
 };
 
@@ -89,7 +89,7 @@ export class WtCombobox extends LitElement {
          pointer; and stopped short of the chevron. */
       .field-label {
         inset-inline-end: auto;
-        max-width: calc(100% - 2 * var(--wt-space-3) - var(--wt-font-size-md) - var(--wt-space-2));
+        max-width: calc(100% - 2 * var(--wt-space-3) - var(--wt-font-size-lg) - var(--wt-space-2));
       }
 
       /* The search box marks focus for an open searchable list; the trigger marks it when no search
@@ -150,6 +150,8 @@ export class WtCombobox extends LitElement {
 
       .chevron {
         flex: none;
+        width: var(--wt-font-size-lg);
+        height: var(--wt-font-size-lg);
       }
 
       [popover] {

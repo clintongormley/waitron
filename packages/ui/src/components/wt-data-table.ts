@@ -493,7 +493,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         border: 0;
         background: transparent;
         color: inherit;
-        font-size: var(--wt-font-size-lg);
+        font-size: var(--wt-font-size-xl);
         line-height: 1;
         cursor: pointer;
       }
@@ -514,7 +514,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         justify-content: center;
         width: var(--wt-tap-min);
         height: var(--wt-tap-min);
-        font-size: var(--wt-font-size-lg);
+        font-size: var(--wt-font-size-xl);
         line-height: 1;
       }
 
