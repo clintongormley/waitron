@@ -2772,31 +2772,33 @@ heading row's trailing edge; the doc only names the exceptions, and whether the 
 is the owner's call. And the row-highlight tests focus only the row's own button, so nothing tests
 that a row highlights while another control in it, such as its Actions menu, has focus.
 
-**Menus list Changes column and top-aligned rows — DONE (W87, owner 2026-10-04).** The Menus
-list has a Changes column. A menu with changes since its live version keeps "Published", the live
-version and its time in Status, and shows an "Unpublished changes" link under Changes, named for
-its menu, that opens the menu's Preview tab straight away without opening the row; a click with a
-modifier key is left to the browser. A menu never published, one with no changes, and every menu
-while the states are read or after their read fails show nothing there. Clashes stay in Status and
-the status sort is unchanged. The list's cells now start at their top (a new `topAligned` option
-on `wt-data-table`, set by this list alone) with the name, state, link and row menu on one line.
-At phone width the state and then the link stack under the name. With a second movable column the
-desktop list now offers Customise columns, which W79 had left off; the list keeps its column
-choices under a new key, so a choice saved while Status was its only movable column is not read.
-Left open by W87: at widths between the phone layout and a wide desktop (about 700 px with a long
-menu name, seen in a screenshot) the four columns no longer fit and the list scrolls sideways under
-its pinned Actions column; the editor heading still reads "Unpublished changes · Live: version
-<n>", which W88 redesigns. In the dark theme the Unpublished changes link's blue on a highlighted
-(hovered or focused) row measured 3.57:1 with axe, below the 4.5:1 minimum for text. Moving the
-link to `--wt-color-primary-text` did not change that, because in the dark theme that token is the
-same colour (`#4c8dff`) as `--wt-color-primary`; in the light theme it now passes at 4.88:1. The
-product list's maker link (`apps/dashboard/src/widgets/product-list.ts`, part `maker-link`) paints
-`--wt-color-primary`, which on a highlighted row is the same colour pair measured at 3.87:1 in light
-and 3.57:1 in dark, though not measured on the product list itself. Its "Made at" column also does
-not set `activatesRow: false`, so, judging by the code (not run), a click beside a short station
-name opens the product editor, which the `activatesRow` rule in
-`docs/developers/design-system.md` forbids. Both predate this branch (5b725d672, ca89633f1) and
-are left for an item of their own.
+**Menus list Changes column and top-aligned rows — DONE (W87, owner 2026-10-04).** The Menus list
+has a Changes column when the list is wide enough. A menu with changes since its live version keeps
+"Published", the live version and its time in Status, and shows an "Unpublished changes" link under
+Changes, named for its menu, that opens the menu's Preview tab straight away without opening the
+row; a click with a modifier key is left to the browser. A menu never published, one with no
+changes, and every menu while the states are read or after their read fails show nothing there.
+Clashes stay in Status and the status sort is unchanged. The list's cells now start at their top (a
+new `topAligned` option on `wt-data-table`, set by this list alone); where Changes is a column, the
+name, state, link and row menu start on one line. The list takes one of three layouts by its own
+width. From 50rem it has four columns and the name wraps so that they fit without sideways
+scrolling, even for a long name. Between 30rem and 50rem it has Name, Status and Actions, with the
+link on its own line under the state, so the link stays in view beside a long name; the end of the
+version's time can scroll under the pinned Actions column there. At 30rem or less the state and then
+the link stack under the name. With a second movable column the wide list now offers Customise
+columns, which W79 had left off; the list keeps its column choices under a new key, so a choice
+saved while Status was its only movable column is not read. Left open by W87: the editor heading
+still reads "Unpublished changes · Live: version <n>", which W88 redesigns. In the dark theme the
+Unpublished changes link's blue on a highlighted (hovered or focused) row measured 3.57:1 with axe,
+below the 4.5:1 minimum for text. Moving the link to `--wt-color-primary-text` did not change that,
+because in the dark theme that token is the same colour (`#4c8dff`) as `--wt-color-primary`; in the
+light theme it now passes at 4.88:1. The product list's maker link
+(`apps/dashboard/src/widgets/product-list.ts`, part `maker-link`) paints `--wt-color-primary`, which
+on a highlighted row is the same colour pair measured at 3.87:1 in light and 3.57:1 in dark, though
+not measured on the product list itself. Its "Made at" column also does not set `activatesRow:
+false`, so, judging by the code (not run), a click beside a short station name opens the product
+editor, which the `activatesRow` rule in `docs/developers/design-system.md` forbids. Both predate
+this branch (5b725d672, ca89633f1) and are left for an item of their own.
 
 **Add products picker selects all listed — DONE (W81, owner 2026-10-04).** The Structure tab's
 "Add several products" button now reads "Add products" ("Añadir productos"). The picker's list has

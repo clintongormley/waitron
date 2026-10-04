@@ -530,22 +530,49 @@ A table given `topAligned` (the `top-aligned` attribute) starts every body cell'
 cell's top instead, the pinned cell included; its headings keep the baseline. Only the Menus list
 sets it (W87, owner, 2026-10-04). There the name button and the row menu are a `--wt-tap-min` tall
 with their text centred, so the state's first line is pushed down by half of `--wt-tap-min` less one
-line, and the Changes link is at least a `--wt-tap-min` tall, centring its text: all four start on
-one line, whether or not the state has a second line. Guards: the `topAligned` case in
+line, and the Changes link is at least a `--wt-tap-min` tall, centring its text: on a wide list all
+four start on one line, whether or not the state has a second line. Guards: the `topAligned` case in
 `packages/ui/src/components/wt-data-table.test.ts` and the "at the row's top, on one line" cases in
 `apps/dashboard/src/screens/menus-screen.test.ts`, which measure three rows at 1280 px only.
 
-**The Menus list puts a menu's unpublished changes in a column of their own.** Status says what is
-live: "Unpublished" for a menu never published, and "Published" with the live version and its time
-for one that has been, whether or not it has changes since. A menu with changes since its live
-version has an "Unpublished changes" link under Changes, named "Unpublished changes: <menu>", that
-opens the menu's Preview tab (`/manage/menus/menu/<id>/view/preview`) straight away; a click with a
-modifier key is left to the browser. A menu never published, one with no changes, and every menu
-while the states are read or after their read fails show nothing there. Sorting by Status still
-puts the menus waiting for a publish first. At phone width, where Status and Changes stop being
-columns, the state and then the link stack under the name. The list keeps its column choices under
-`waitron.menus.list.table`; the key changed when Changes was added, so a choice saved before it,
-when Status was the only movable column, is not read.
+**The Menus list links a menu's unpublished changes beside its state.** Status says what is live:
+"Unpublished" for a menu never published, and "Published" with the live version and its time for
+one that has been, whether or not it has changes since. A menu with changes since its live version
+has an "Unpublished changes" link, named "Unpublished changes: <menu>", that opens the menu's
+Preview tab (`/manage/menus/menu/<id>/view/preview`) straight away; a click with a modifier key is
+left to the browser. A menu never published, one with no changes, and every menu while the states
+are read or after their read fails have no link. Sorting by Status still puts the menus waiting for
+a publish first. Where the link sits depends on the list's own width, read through container
+queries on probe elements:
+
+- From `50rem`, four columns: Name, Status, Changes and Actions, with the link under Changes. The
+  name wraps within the list's width less `30rem`, so the four columns fit without sideways
+  scrolling, a long name with no spaces or hyphens included.
+- Above `30rem` and below `50rem`, three columns: Name, Status and Actions, with the link on its own
+  line under the state in the Status cell, so wherever the state shows, the link is under it. A
+  click on the Status cell's blank space opens the menu, as before Changes was added; a click on
+  the link opens only its Preview tab. The name wraps within the list's width less three
+  `--wt-tap-min` and `8.5rem`, room for the row menu and for the link. A long name still makes the
+  table wider than its box, and the end of the version's time then scrolls under the pinned Actions
+  column; the link stays in view. With Status its only movable column, this layout has no Customise
+  columns button.
+- At `30rem` or less, the state and then the link stack under the name, as below.
+
+The two name widths come from container queries of their own rather than from the layout the
+probes choose, so they already apply in the frame before the probes are read; set from the chosen
+layout, a 600 px list was briefly drawn with four columns and the wide width, and fitted its box.
+
+The breakpoint and the two widths were measured in Chromium with the names
+"Menú-del-mediodía-de-lunes-a-viernes-con-postre", "Menú del mediodía de lunes a viernes, con
+postre y bebida incluidos" and "Menúdelmediodíadelunesaviernesconpostreybebidaincluidos", in
+English and Spanish (W87, 2026-10-04): at 800 px the four columns needed at most 774 px of a 798 px
+box; at 600 px the link ended 18 px (Spanish) and 22 px (English) before the row menu while the
+table overflowed by 29 and 20 px. Guards: the "between the phone layout and a wide list" and "on a
+wide list" cases in `apps/dashboard/src/screens/menus-screen.test.ts`, which run at 600, 700, 790,
+816 and 1280 px only. The list keeps its column choices under `waitron.menus.list.table`, shared by
+the two wider layouts: a choice made on a wide list does not hide Status or the link in the middle
+layout, and applies again once the list is wide. The key changed when Changes was added, so a choice
+saved before it, when Status was the only movable column, is not read.
 
 **Style your own cell markup with `part=` and `::part()`, never with a CSS class.** A cell callback
 returns a template, but the nodes it produces are rendered by `wt-data-table` and so end up inside
@@ -699,7 +726,7 @@ end, but only while its current columns hold at least two movable ones — every
 and a `pinned: "end"` one. With one, the dialog could change nothing: that column can neither move
 nor be hidden, because the last shown movable column stays shown. So a list whose only movable
 column sits between its name and its buttons draws no Customise button, and nor does the Menus list
-at phone width, where its Status and Changes move under the name and it draws no toolbar at all. A
+below `50rem`, where Changes is not a column and, at phone width, Status is not either. A
 stored choice is kept meanwhile and applies again when the columns offer a choice; one that hides
 that single column leaves it shown. An open dialog closes when the columns stop offering a choice.
 The dialog lists every column in table order. A column the person can hide has an eye control. A
