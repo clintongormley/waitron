@@ -3720,6 +3720,25 @@ const showInactiveLink = (el: ProductEditor) =>
 const followsInDocument = (first: Element, second: Element) =>
   Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
 
+it("keeps consecutive closed Product editor sections close enough to read as one form", async () => {
+  const el = await mountPricing({ ...saved, variants: [small] });
+  const gap = (before: string, after: string) => {
+    const first = folded(el, before).shadowRoot!.querySelector(".summary")!;
+    const next = folded(el, after).shadowRoot!.querySelector(".heading")!;
+    return next.getBoundingClientRect().top - first.getBoundingClientRect().bottom;
+  };
+  expect(gap("descriptors", "nutrition")).toBeLessThanOrEqual(28);
+  expect(gap("nutrition", "price")).toBeLessThanOrEqual(28);
+});
+
+it("separates Add variant from the Modifiers heading", async () => {
+  const el = await mountPricing({ ...saved, variants: [small] });
+  const add = section(el, "variants").querySelector("[data-test=add-variant]")!;
+  const heading = section(el, "modifiers").querySelector(".group-label")!;
+  const gap = heading.getBoundingClientRect().top - add.getBoundingClientRect().bottom;
+  expect(gap).toBeGreaterThanOrEqual(24);
+});
+
 it("names the offered lists and menus before saving a product unit change", async () => {
   const kg = { id: "kg", name: { en: "Kilogram" }, abbreviation: { en: "kg" } };
   const usage = [
