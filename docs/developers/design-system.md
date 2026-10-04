@@ -207,6 +207,7 @@ it and its label's line height), `--wt-shadow-1|2`,
 `--wt-field-max-width`, `--wt-cell-name-max-width`,
 `--wt-stepper-field-width` (88px), `--wt-stepper-button-width` (24px), `--wt-price-field-width`,
 `--wt-opacity-disabled`, `--wt-opacity-hover`, `--wt-duration-fade`, `--wt-duration-move`,
+`--wt-duration-disclosure`,
 `--wt-field-height`, `--wt-field-line-width`, `--wt-field-line-width-active`,
 `--wt-dropdown-row-height`
 
@@ -231,6 +232,7 @@ and till app suites: one for the app's own text, one for text on the page outsid
 `--wt-duration-fade` is how long `wt-notice` takes to fade out once its time is up.
 `--wt-duration-move` is how long a row takes to slide into its place while a list is reordered by
 dragging in `ReorderController` (`packages/ui/src/reorder-table.ts`).
+`--wt-duration-disclosure` is how long a disclosure body takes to open or close (900 ms).
 
 `--wt-opacity-hover` is `wt-button`'s hover feedback (`button:hover:not(:disabled)`) — a plain
 opacity dip, the same treatment for every variant. A variant-specific background or border-colour
@@ -1195,6 +1197,12 @@ A disclosure draws no border and no lines in either state; spacing above and bel
 apart (owner, 2026-10-01, A169). The heading and chevron stay exactly where they are when it opens,
 the chevron directly after the heading. Closed, the summary sits under the
 heading; open, the body shows in its place and the summary is not drawn.
+
+The body takes roughly a second to open or close, moving the following content with it. Its
+closed summary gives way to the body when opening starts. Closing makes the body inert while it
+shrinks, then hides it; reduced motion opens and closes at once. A validation error exposes the
+body at once, including when a close was in progress. Repeated toggles reverse from the current
+height.
 
 The body is a plain default slot, so the section's content is ordinary form markup and every rule
 under "Forms" above still applies inside it — including opening a folded section that holds an

@@ -56,6 +56,7 @@ test("defines the structural contract", () => {
     "--wt-price-field-width",
     "--wt-duration-fade",
     "--wt-duration-move",
+    "--wt-duration-disclosure",
     "--wt-field-height",
     "--wt-field-line-width",
     "--wt-field-line-width-active",

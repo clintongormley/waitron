@@ -36,6 +36,20 @@ export class WtDisclosure extends LitElement {
         padding-block: var(--wt-space-3);
       }
 
+      .body {
+        transition: height var(--wt-duration-disclosure) ease;
+      }
+
+      .body.animating {
+        overflow: hidden;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .body {
+          transition: none;
+        }
+      }
+
       /* The first row is the heading and chevron alone, so the summary line below it, shown only
          while closed, never moves either of them. */
       .header {
@@ -120,11 +134,83 @@ export class WtDisclosure extends LitElement {
   @property({ type: Boolean, reflect: true, attribute: "has-error" }) hasError = false;
 
   private readonly bodyId = uniqueId("wt-disclosure-body");
+  private bodyHidden = true;
+  private openingFromHidden = false;
+  private firstRender = true;
+  private animationFrame = 0;
+  private animationGeneration = 0;
+  private motionQuery?: MediaQueryList;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.motionQuery = matchMedia("(prefers-reduced-motion: reduce)");
+    this.motionQuery.addEventListener?.("change", this.onMotionChange);
+  }
+
+  override disconnectedCallback(): void {
+    this.motionQuery?.removeEventListener?.("change", this.onMotionChange);
+    cancelAnimationFrame(this.animationFrame);
+    super.disconnectedCallback();
+  }
+
+  private onMotionChange = (event: MediaQueryListEvent): void => {
+    if (!event.matches || !this.hasUpdated) return;
+    const body = this.shadowRoot?.querySelector<HTMLElement>(".body");
+    if (!body?.classList.contains("animating")) return;
+    ++this.animationGeneration;
+    cancelAnimationFrame(this.animationFrame);
+    body.style.height = "";
+    body.classList.remove("animating");
+    this.bodyHidden = !this.open;
+    body.hidden = this.bodyHidden;
+  };
 
   override willUpdate(changed: PropertyValues<this>): void {
     // A cleared error leaves the section open: collapsing it the moment the last error is fixed would
     // hide the field being typed into.
     if (changed.has("hasError") && this.hasError) this.open = true;
+    if (this.open) {
+      this.openingFromHidden = this.bodyHidden;
+      this.bodyHidden = false;
+    } else this.openingFromHidden = false;
+  }
+
+  override updated(changed: PropertyValues<this>): void {
+    if (this.firstRender) {
+      this.firstRender = false;
+      return;
+    }
+    if (!changed.has("open")) return;
+    const body = this.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const generation = ++this.animationGeneration;
+    cancelAnimationFrame(this.animationFrame);
+    const height = this.openingFromHidden ? 0 : body.getBoundingClientRect().height;
+    const targetHeight = this.open ? body.scrollHeight : 0;
+    if (this.hasError || this.motionQuery?.matches || height === targetHeight) {
+      body.style.height = "";
+      body.classList.remove("animating");
+      this.bodyHidden = !this.open;
+      body.hidden = this.bodyHidden;
+      return;
+    }
+    body.classList.add("animating");
+    body.style.height = `${height}px`;
+    void body.offsetHeight;
+    this.animationFrame = requestAnimationFrame(() => {
+      if (generation !== this.animationGeneration) return;
+      body.style.height = `${targetHeight}px`;
+    });
+  }
+
+  private onBodyTransitionEnd(event: TransitionEvent): void {
+    if (event.propertyName !== "height" || event.target !== event.currentTarget) return;
+    const body = event.currentTarget as HTMLElement;
+    body.style.height = "";
+    body.classList.remove("animating");
+    if (!this.open) {
+      this.bodyHidden = true;
+      body.hidden = true;
+    }
   }
 
   private onToggle(event: Event): void {
@@ -171,7 +257,14 @@ export class WtDisclosure extends LitElement {
           ${this.open ? nothing : this.renderSummary()}
           <wt-icon class="chevron" name="chevron-down"></wt-icon>
         </button>
-        <div id=${this.bodyId} class="body" ?hidden=${!this.open}>
+        <div
+          id=${this.bodyId}
+          class="body"
+          ?hidden=${this.bodyHidden}
+          ?inert=${!this.open}
+          aria-hidden=${this.open ? "false" : "true"}
+          @transitionend=${this.onBodyTransitionEnd}
+        >
           <slot></slot>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { expect, test, afterEach } from "vitest";
+import { commands } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-disclosure.js";
 
@@ -28,6 +29,186 @@ test("clicking the header opens it and emits wt-toggle", async () => {
   await (el as import("./wt-disclosure.js").WtDisclosure).updateComplete;
   expect(opened).toBe(true);
   expect(el.shadowRoot!.querySelector("button")!.getAttribute("aria-expanded")).toBe("true");
+});
+
+test("the body moves through intermediate heights while opening and closing", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Kitchen"><div style="height: 200px">body</div></wt-disclosure>',
+  );
+  const disclosure = el as import("./wt-disclosure.js").WtDisclosure;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
+
+  header.click();
+  await disclosure.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  expect(body.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(body.getBoundingClientRect().height).toBeLessThan(200);
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  expect(body.getBoundingClientRect().height).toBe(200);
+
+  header.click();
+  await disclosure.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  expect(body.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(body.getBoundingClientRect().height).toBeLessThan(200);
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  expect(body.hidden).toBe(true);
+});
+
+test("rapid toggles settle at the last state and keep closed content out of focus", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Kitchen"><button>Inside</button><div style="height: 200px"></div></wt-disclosure>',
+  );
+  const disclosure = el as import("./wt-disclosure.js").WtDisclosure;
+  const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  header.click();
+  await disclosure.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  header.click();
+  await disclosure.updateComplete;
+  header.click();
+  await disclosure.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 1050));
+  expect(body.hidden).toBe(false);
+  expect(body.getBoundingClientRect().height).toBeGreaterThan(200);
+
+  header.click();
+  await disclosure.updateComplete;
+  expect(body.inert).toBe(true);
+  expect(body.getAttribute("aria-hidden")).toBe("true");
+  await new Promise((resolve) => setTimeout(resolve, 1050));
+  expect(body.hidden).toBe(true);
+});
+
+test("reopening during collapse continues from the current height", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Kitchen" open><div style="height: 200px">body</div></wt-disclosure>',
+  );
+  const disclosure = el as import("./wt-disclosure.js").WtDisclosure;
+  const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  header.click();
+  await disclosure.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const heightWhileClosing = body.getBoundingClientRect().height;
+  expect(heightWhileClosing).toBeGreaterThan(0);
+  header.click();
+  await disclosure.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(body.getBoundingClientRect().height).toBeGreaterThanOrEqual(heightWhileClosing - 1);
+  expect(body.getBoundingClientRect().height).toBeLessThan(200);
+});
+
+test("an empty body opened before content arrives grows with its content", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Kitchen"><div class="late"></div></wt-disclosure>',
+  );
+  const disclosure = el as import("./wt-disclosure.js").WtDisclosure;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  el.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
+  await disclosure.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  (el.querySelector(".late") as HTMLElement).style.height = "150px";
+  expect(body.getBoundingClientRect().height).toBe(150);
+});
+
+test("a same-frame close and reopen leaves the body free to grow", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Kitchen" open><div class="growing" style="height: 200px"></div></wt-disclosure>',
+  );
+  const disclosure = el as import("./wt-disclosure.js").WtDisclosure;
+  const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  header.click();
+  header.click();
+  await disclosure.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  (el.querySelector(".growing") as HTMLElement).style.height = "400px";
+  expect(body.getBoundingClientRect().height).toBe(400);
+});
+
+test("idle open content can paint and receive a pointer beyond the body box", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Kitchen" open><div style="position:relative;height:60px"><button class="pop" style="position:absolute;top:40px;height:60px">Outside</button></div></wt-disclosure>',
+  );
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  const pop = el.querySelector<HTMLElement>(".pop")!;
+  const rect = pop.getBoundingClientRect();
+  expect(document.elementFromPoint(rect.left + 5, rect.bottom - 5)).toBe(pop);
+  expect(getComputedStyle(body).overflow).toBe("visible");
+});
+
+test("a validation error interrupts closing and exposes its fields immediately", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Kitchen" open><div style="height: 200px">body</div></wt-disclosure>',
+  );
+  const disclosure = el as import("./wt-disclosure.js").WtDisclosure;
+  const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  header.click();
+  await disclosure.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  disclosure.hasError = true;
+  await disclosure.updateComplete;
+  expect(header.getAttribute("aria-expanded")).toBe("true");
+  expect(body.hidden).toBe(false);
+  expect(body.inert).toBe(false);
+  expect(body.getBoundingClientRect().height).toBe(200);
+});
+
+test("a body with no height still becomes hidden after closing", async () => {
+  const el = await mount('<wt-disclosure heading="Kitchen" open></wt-disclosure>');
+  const disclosure = el as import("./wt-disclosure.js").WtDisclosure;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  el.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
+  await disclosure.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(body.hidden).toBe(true);
+});
+
+test("reduced motion opens and closes without waiting for the height animation", async () => {
+  const original = window.matchMedia.bind(window);
+  window.matchMedia = ((query: string) =>
+    query === "(prefers-reduced-motion: reduce)"
+      ? ({ matches: true, media: query } as MediaQueryList)
+      : original(query)) as typeof window.matchMedia;
+  try {
+    const el = await mount(
+      '<wt-disclosure heading="Kitchen"><div style="height: 200px">body</div></wt-disclosure>',
+    );
+    const disclosure = el as import("./wt-disclosure.js").WtDisclosure;
+    const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
+    const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    header.click();
+    await disclosure.updateComplete;
+    expect(body.getBoundingClientRect().height).toBe(200);
+    header.click();
+    await disclosure.updateComplete;
+    expect(body.hidden).toBe(true);
+  } finally {
+    window.matchMedia = original;
+  }
+});
+
+test("switching on reduced motion during a close hides the body immediately", async () => {
+  await commands.emulateReducedMotion("no-preference");
+  try {
+    const el = await mount(
+      '<wt-disclosure heading="Kitchen" open><div style="height: 200px">body</div></wt-disclosure>',
+    );
+    const disclosure = el as import("./wt-disclosure.js").WtDisclosure;
+    const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    el.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
+    await disclosure.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(body.hidden).toBe(false);
+    await commands.emulateReducedMotion("reduce");
+    await expect.poll(() => body.hidden, { timeout: 450, interval: 25 }).toBe(true);
+  } finally {
+    await commands.emulateReducedMotion(null);
+  }
 });
 
 test("wt-toggle bubbles and crosses shadow boundaries, so an ancestor outside a wrapping shadow root receives it", async () => {
