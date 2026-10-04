@@ -162,7 +162,7 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    cash-settlement drawer job and the feed-before-cut are still unwalked.
 
 7. **Smaller, independent pieces**, in no fixed order: refusing requests from a device that is not
-   enrolled (A4); the pairing alert, "devices tried to join" (A5); Logging Slice 2, the one-touch
+   enrolled (A4); Logging Slice 2, the one-touch
    bug report (A9); the first real Bluetooth pairing at the box through the dashboard (A3; the print
    agent's side, P2b, and the dashboard's, P2c, are built); paying at the table from a handheld (A6,
    Slice 2).
@@ -4183,8 +4183,9 @@ The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A5. Incidents and notifications
 
-**Dashboard alerts and the incidents surface — LANDED #363/#368/#371.** Still not built: the pairing
-consumer, and a standby that has fallen behind.
+**Dashboard alerts and the incidents surface — LANDED #363/#368/#371.** Still not built: a standby
+that has fallen behind. The pairing consumer is retired by A268 (2026-10-04), which removes the
+count of devices that tried to join while the window was shut.
 
 ### A6. Payments
 
@@ -4324,6 +4325,34 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   the request helper with its `as: "blob"` option, as the VAT return download does: an expired
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
+
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — SPEC FOR OWNER REVIEW.**
+  Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
+  the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
+  device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
+  list becomes a table, and it shows each device's battery. Retires the "tried to join" count and
+  A5's pairing alert.
+  [Spec](superpowers/specs/2026-10-04-add-a-device-design.md).
+- **A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN.**
+  A268 discards a waiting device's request when the last Add dialog closes. An agent told
+  `not_approved` stops and needs resetting on its own setup page (`packages/print-agent/src/agent.ts`,
+  the `not_approved` branch), so its request outlives a shut window instead. **Next action:** find a
+  path, for example an agent that asks again on its own after a refusal, so agents follow the
+  device rule. Spec: [A268 §4](superpowers/specs/2026-10-04-add-a-device-design.md#4-pairing-on-the-server).
+- **Does "made here" belong to the device or to its profile? (A270, owner 2026-10-04) — OPEN.** It
+  is a per-device setting by the 2026-10-01 decision
+  ([routing design §5.11](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md)); under
+  the 2026-10-04 profile model a "Bar till" profile could carry it instead. A268 keeps it on the
+  device. Needs an owner decision.
+- **Each browser tab as its own device, in Demo too (A271, owner 2026-10-04) — OPEN, after A268.**
+  Only dev mode lets a tab act as a separate device, and it names the device by id alone
+  (`x-waitron-dev-device`, `apps/server/src/device-session.ts`); the sign-in cookie is shared by the
+  whole browser. Since #269 and #287 pairing also overwrites the browser-wide device cookie, so a
+  tab that misses the dev chooser (the chooser's failure is swallowed, `apps/till/src/till-app.ts`)
+  lands on the most recently paired device's login. **Next action:** a short spec for per-tab device
+  secrets and per-tab sign-ins usable in Demo, and reproduce the owner's report first.
+- **A low-battery alert (A272, idea, 2026-10-04) — OPEN.** A268 shows each device's battery on the
+  Devices list; nothing alerts when a handheld runs low.
 
 - **A till is a device (A238) — DONE: landed as #1164 (main `065354d26`, 2026-10-04); every
   venue needs a reset.** Follow-ups queued 2026-10-04: W56 (the Sales screen's section title reads
