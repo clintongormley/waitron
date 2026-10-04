@@ -196,6 +196,15 @@ async function changesHeardOutside(act: () => Promise<void>): Promise<number> {
 }
 
 describe("venue operations screen", () => {
+  it("shows the departments and zones policy tree when the screen opens", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree");
+    expect(tree.getBoundingClientRect().height).toBeGreaterThan(0);
+    expect(tree.shadowRoot!.textContent).toContain("Dining room");
+  });
+
   it("renames a zone from its policy-tree cell", async () => {
     const updateZone = vi.fn().mockResolvedValue(undefined);
     const el = await mount({

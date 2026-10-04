@@ -1240,7 +1240,6 @@ export class VenueOperationsScreen extends LitElement {
         (row) => String(model.hours.indexOf(row)),
         this.#addHours(),
       )}
-      ${this.#policyTree()}
     </section>`;
   }
   #zones() {
@@ -1684,7 +1683,7 @@ export class VenueOperationsScreen extends LitElement {
                 <div slot="departments">${this.#departments()}</div>
                 <div slot="zones">${this.#zones()}</div>
               </wt-tabs>
-              ${this.#modal()}`
+              ${this.#policyTree()} ${this.#modal()}`
           : nothing
       }`;
   }
