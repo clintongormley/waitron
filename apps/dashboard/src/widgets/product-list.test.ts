@@ -259,7 +259,6 @@ describe("product-list", () => {
         box.checked,
       ]),
     ).toEqual([
-      ["reporting-category", true],
       ["made-at", true],
       ["price", true],
       ["modifiers", true],
@@ -460,7 +459,7 @@ describe("product-list", () => {
   // options list this product does NOT hold, so a column printing the loaded set instead of the
   // attachments names it; and the cell is asserted whole with `toBe`, so resolving the `extras` ref
   // against the options lists — which also reaches "Punto" — loses "Salsas".
-  it("shows the main category, attached modifier list names, and no VAT or labels column", async () => {
+  it("shows attached modifier list names, and no main category, VAT or labels column", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({
@@ -485,12 +484,11 @@ describe("product-list", () => {
     await openRow(el, "folder:reporting");
     const headers = [...root.querySelectorAll("thead th")].map((cell) => cell.textContent!.trim());
     expect(headers.some((header) => header.startsWith(t("product.name")))).toBe(true);
-    expect(headers).toContain(t("editor.main_category"));
+    expect(headers).not.toContain(t("editor.main_category"));
     expect(headers).toContain(t("editor.modifiers"));
     expect(headers).not.toContain(t("product.vat"));
     expect(headers).not.toContain("Etiquetas");
     expect(root.querySelector('input[data-column="labels"]')).toBeNull();
-    expect(cellUnder(root, "prod-1", t("editor.main_category")).textContent!.trim()).toBe("Comida");
     expect(cellUnder(root, "prod-1", t("editor.modifiers")).textContent!.trim()).toBe(
       "Salsas, Punto de la carne",
     );
@@ -531,7 +529,7 @@ describe("product-list", () => {
       optionLists: [],
     });
     const text = productRows(await tableRoot(el))[0]!.textContent!;
-    expect(text.match(new RegExp(t("editor.missing_choice"), "g"))).toHaveLength(2);
+    expect(text.match(new RegExp(t("editor.missing_choice"), "g"))).toHaveLength(1);
   });
 
   // Names differ from their ids and sort in the ids' order, so the rows read the same either way.
@@ -860,7 +858,7 @@ describe("product-list", () => {
   // Its name and price differ from its product's, and its three names differ from one another, so a
   // row reading the product's values or the wrong name fails. A variant is always in its product's
   // category, which only the product's row shows.
-  it("shows a variant's own name and effective price, and leaves its main category to its product's row", async () => {
+  it("shows a variant's own name and effective price", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({
@@ -901,8 +899,6 @@ describe("product-list", () => {
     expect(cell(t("product.price")).querySelector('[data-test="price"]')!.textContent!.trim()).toBe(
       euros("4,75"),
     );
-    expect(cell(t("editor.main_category")).textContent!.trim()).toBe("");
-    expect(cellUnder(root, "wine", t("editor.main_category")).textContent!.trim()).toBe("Comida");
   });
 
   it("notes a variant's VAT under its price only where it differs from its product's", async () => {
@@ -2168,7 +2164,6 @@ describe("a product's variants in the list", () => {
     const { table, root } = await mountDeli();
     await openVariants(root, table, "cecina");
     for (const header of [
-      t("editor.main_category"),
       t("product.made_at"),
       t("editor.modifiers"),
       t("product.ordering"),
@@ -2259,5 +2254,163 @@ describe("the product list with sticky headings", () => {
       root.querySelector("thead th")!.getBoundingClientRect().bottom - 0.5,
     );
     expect(row.bottom).toBeLessThanOrEqual(scroll.getBoundingClientRect().bottom);
+  });
+});
+
+describe("the Products tree's Name column", () => {
+  const deep = { id: "g", name: "Grill", parentId: "m" };
+  const meat = { id: "m", name: "Meat", parentId: "f" };
+  const solomillo = () =>
+    product({
+      id: "loin",
+      name: "Solomillo",
+      primaryCategoryId: "m",
+      image: "loin.png",
+      variants: [
+        { id: "s250", name: "Solomillo 250g", active: true, available: true, unitPrice: "12.00" },
+      ],
+    });
+
+  async function mountDeep(props: Partial<ProductList> = {}) {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      categories: [drinks, food, meat, deep],
+      products: [
+        product({ id: "cola", name: "Cola", primaryCategoryId: "d" }),
+        product({ id: "salad", name: "Salad", primaryCategoryId: "f", image: "salad.png" }),
+        product({ id: "chop", name: "Chop", primaryCategoryId: "m" }),
+        solomillo(),
+        product({ id: "ribs", name: "Ribs", primaryCategoryId: "g" }),
+        product({ id: "bread", name: "Bread", primaryCategoryId: null }),
+      ],
+      ...props,
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    for (const key of ["folder:d", "folder:f", "folder:m", "folder:g", "loin"]) {
+      table.setExpanded(key, true);
+      await table.updateComplete;
+    }
+    return { el, table, root: table.shadowRoot! };
+  }
+
+  /** Where each piece of a row's Name cell starts and where its middle is, in CSS px. */
+  function pieces(root: ShadowRoot, key: string) {
+    const row = root.querySelector(`tr[data-row-key="${key}"]`)!;
+    const cell = row.querySelector("td:not(.select)")!;
+    const box = (element: Element | null) => {
+      if (!element) return null;
+      const rect = element.getBoundingClientRect();
+      return { left: rect.left, middle: rect.top + rect.height / 2 };
+    };
+    const name = cell.querySelector("strong") ?? cell.querySelector('[part="variant-name"]')!;
+    const text = document.createRange();
+    text.selectNodeContents(name);
+    return {
+      level: Number(row.getAttribute("aria-level")),
+      grip: box(cell.querySelector('.drag-grip, [part="grip-space"]')),
+      media: box(
+        cell.querySelector(
+          '[part="folder-frame"], [part="thumb-frame"], [part="thumb-placeholder"]',
+        ),
+      ),
+      name: box({ getBoundingClientRect: () => text.getBoundingClientRect() } as Element)!,
+    };
+  }
+
+  const ROWS = [
+    "root",
+    "folder:d",
+    "cola",
+    "folder:f",
+    "salad",
+    "folder:m",
+    "chop",
+    "loin",
+    "folder:g",
+    "ribs",
+    "bread",
+  ];
+
+  it.each([false, true])(
+    "starts every name one even step further in per level, folders, products and the root alike (selecting: %s)",
+    async (selecting) => {
+      const { root } = await mountDeep({ selecting });
+      const all = ROWS.map((key) => ({ key, ...pieces(root, key === "root" ? ROOT_KEY : key) }));
+      const step = all.find(({ level }) => level === 2)!.name.left - all[0]!.name.left;
+      expect(step).toBeGreaterThan(0);
+      for (const row of all) {
+        const expected = all[0]!.name.left + (row.level - 1) * step;
+        expect(row.name.left, row.key).toBeCloseTo(expected, 0);
+      }
+      // The grip and the folder icon or photo sit in the same slots on every row of one level.
+      for (const row of all) {
+        const twin = all.find((other) => other.level === row.level && other.key !== row.key);
+        if (!twin) continue;
+        expect(row.grip!.left, row.key).toBeCloseTo(twin.grip!.left, 0);
+        expect(row.media!.left, row.key).toBeCloseTo(twin.media!.left, 0);
+      }
+    },
+  );
+
+  it("starts a variant's name where its product's name starts", async () => {
+    const { root } = await mountDeep();
+    expect(pieces(root, "loin:s250").name.left).toBeCloseTo(pieces(root, "loin").name.left, 0);
+  });
+
+  it("lines each row's grip, icon or photo and name up on one middle", async () => {
+    const { root } = await mountDeep();
+    for (const key of ROWS.slice(1)) {
+      const { grip, media, name } = pieces(root, key);
+      expect(Math.abs(grip!.middle - media!.middle), key).toBeLessThanOrEqual(1);
+      expect(Math.abs(name.middle - media!.middle), key).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it.each([false, true])(
+    "puts the Name heading over the first name in the column (selecting: %s)",
+    async (selecting) => {
+      const { root } = await mountDeep({ selecting });
+      const heading = root.querySelector<HTMLElement>('thead th button[data-sort="name"]')!;
+      expect(heading.getBoundingClientRect().left).toBeCloseTo(pieces(root, ROOT_KEY).name.left, 0);
+    },
+  );
+
+  it("shows no Main category column and offers none in Customise", async () => {
+    const { root } = await mountDeep();
+    const headings = [...root.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
+    expect(headings).not.toContain(t("editor.main_category"));
+    expect(root.querySelector('input[data-column="reporting-category"]')).toBeNull();
+  });
+
+  it("ignores a saved column choice and order that name the old Main category column", async () => {
+    localStorage.setItem(
+      "waitron.products.table:columns",
+      JSON.stringify({ "reporting-category": true, modifiers: false }),
+    );
+    localStorage.setItem(
+      "waitron.products.table:column-order",
+      JSON.stringify(["reporting-category", "price", "made-at"]),
+    );
+    onTestFinished(() => localStorage.removeItem("waitron.products.table:column-order"));
+    const { root } = await mountDeep();
+    const headings = [...root.querySelectorAll("thead th")].map((th) =>
+      th.textContent!.replace(/[▲▼]/g, "").trim(),
+    );
+    expect(headings[1]).toBe(t("product.price"));
+    expect(headings.indexOf(t("product.price"))).toBeLessThan(
+      headings.indexOf(t("product.made_at")),
+    );
+    expect(headings).not.toContain(t("editor.main_category"));
+    expect(headings).not.toContain(t("editor.modifiers"));
+  });
+
+  it("still finds a product by its category's path", async () => {
+    const { el, root } = await mountDeep();
+    el.search = "Food / Meat / Grill";
+    await el.updateComplete;
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+    expect(rowKeys(root)).toContain("ribs");
+    expect(rowKeys(root)).not.toContain("chop");
   });
 });

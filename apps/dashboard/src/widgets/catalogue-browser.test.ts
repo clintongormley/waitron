@@ -936,19 +936,16 @@ it("Add category on All products makes a top-level category", async () => {
   );
 });
 
-it("shows each product's main category, and leaves a category row's other cells empty", async () => {
+it("shows no main category column, and leaves a category row's other cells empty", async () => {
   const el = await mountBrowser();
   await toggleCategory(el, "d");
   const table = await tableOf(el);
   expect(table.shadowRoot!.querySelector('input[name="search"]')).toBeNull();
-  expect(table.columns.some((column) => column.key === "reporting-category")).toBe(true);
+  expect(table.columns.some((column) => column.key === "reporting-category")).toBe(false);
   const row = table.shadowRoot!.querySelector('tr[data-row-key="folder:b"]')!;
   expect(
     [...row.querySelectorAll("td")].slice(1, -1).every((cell) => cell.textContent!.trim() === ""),
   ).toBe(true);
-  expect(table.shadowRoot!.querySelector('tr[data-row-key="cola"]')!.textContent).toContain(
-    "Drinks",
-  );
 });
 it("keeps a variant match on its parent until the manager expands it", async () => {
   const el = await mountBrowser({
