@@ -1,6 +1,6 @@
 import { html } from "lit";
 import { afterEach, describe, expect, test } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { chooseOption, cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import type { WtCombobox } from "./wt-combobox.js";
@@ -506,6 +506,64 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     el.collapseAllLabel = "Collapse all";
     await el.updateComplete;
     await expectNoA11yViolations(host);
+  });
+
+  async function leadingTable(): Promise<WtDataTable<Row>> {
+    const el = (await mountThemed(
+      `<wt-data-table aria-label="Users" leading-filters style="width: 900px"
+        ><input slot="toolbar-start" type="search" aria-label="Search users"
+      /></wt-data-table>`,
+      theme,
+    )) as WtDataTable<Row>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name },
+      {
+        key: "status",
+        label: "Status",
+        cell: (row) => row.status,
+        filter: {
+          label: "Filter by status",
+          allLabel: "Any status",
+          value: (row) => row.status,
+          options: [{ value: "Active", label: "Active" }],
+          initial: "Active",
+        },
+      },
+    ] satisfies DataTableColumn<Row>[];
+    el.rows = [{ id: "1", name: "Ada", status: "Active" }];
+    el.rowKey = (row) => row.id;
+    await el.updateComplete;
+    return el;
+  }
+
+  test("a leading Filters button with a count, its tooltip shown on keyboard focus", async () => {
+    const el = await leadingTable();
+    const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!;
+    (document.activeElement as HTMLElement | null)?.blur();
+    await userEvent.tab();
+    expect(el.shadowRoot!.activeElement).toBe(trigger);
+    expect(getComputedStyle(trigger.querySelector(".icon-tooltip")!).display).toBe("block");
+    expect(trigger.querySelector(".filters-count")!.textContent).toBe("1");
+    await expectNoA11yViolations(host);
+  });
+
+  test("a leading Filters panel open beside the rows", async () => {
+    const width = innerWidth,
+      height = innerHeight;
+    await page.viewport(1280, 900);
+    try {
+      const el = await leadingTable();
+      const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!;
+      await userEvent.click(trigger);
+      await el.updateComplete;
+      const panel = el.shadowRoot!.querySelector<HTMLElement>(".filters-panel")!;
+      expect(panel.hasAttribute("data-side")).toBe(true);
+      expect(getComputedStyle(panel).display).not.toBe("none");
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      await expectNoA11yViolations(host);
+    } finally {
+      await page.viewport(width, height);
+    }
   });
 
   test("sticky headings, one sorted and one filtered, with rows scrolled under them", async () => {

@@ -7,6 +7,7 @@ export {
   visuallyHiddenStyles,
 } from "./base-styles.js";
 export { floorChipStyles, renderFloorChips } from "./floor-chips.js";
+export { iconButtonStyles, trackIconTooltip } from "./icon-button.js";
 export {
   delegatesFocusShadowRootOptions,
   dispatchWtChange,
