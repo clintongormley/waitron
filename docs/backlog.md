@@ -415,8 +415,10 @@ the 2026-09-30 folders design; what remains:
   but no route calls it: its only callers under `apps/` are three scripts in
   `apps/server/scripts/` (`daily-close-demo.ts`, `modelo-303-demo.ts`, `settle-invoice-first.ts`)
   and tests. _(2026-10-02, C126: the whole-order cancel route now calls it, for a credit of the
-  whole invoice only; no route issues a correction for part of one.)_ **The owner's points for
-  when this is designed (2026-09-29):** (1) the amount staff enter is what the customer gets back,
+  whole invoice only; no route issues a correction for part of one.)_ The owner also needs a way to
+  correct an issued invoice when a customer spots an error after payment, regardless of the future
+  Tabs · Bill choice (2026-10-04, A261 step 2 decision). **The owner's points for when this is
+  designed (2026-09-29):** (1) the amount staff enter is what the customer gets back,
   VAT included — a €2.00 correction at 10% is €1.82 base plus €0.18 VAT; (2) whether a correction
   should instead cancel the original and issue a new invoice (`TipoRectificativa` "S", where
   today's path files by differences, "I", in `packages/fiscal-verifactu/src/backend.ts`) — asked as
