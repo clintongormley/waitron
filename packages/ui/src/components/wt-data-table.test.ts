@@ -4714,7 +4714,7 @@ test("lines each tree row's name up with the text beside it, with a toggle or wi
   }
 });
 
-test("starts every cell's content at its top with `topAligned`, the pinned cell included, and on the baseline without it", async () => {
+test("starts every body cell's content at its top with `topAligned`, the pinned cell included, and on the baseline without it", async () => {
   const tallColumns: DataTableColumn<Row>[] = [
     { key: "name", label: "Name", cell: (row) => html`<span data-test="short">${row.name}</span>` },
     {
@@ -5398,7 +5398,7 @@ test("a real pointer click on a wt-button in a clickable row's first cell reache
   expect(opened).toEqual([]);
 });
 
-/** A table whose only movable column cannot be hidden by the last-visible rule, as the Menus list's. */
+/** A table whose only movable column cannot be hidden by the last-visible rule. */
 const oneMovable: DataTableColumn<Row>[] = [
   { key: "name", label: "Name", cell: (row) => row.name },
   { key: "count", label: "Count", cell: (row) => row.count, choosable: "shown" },

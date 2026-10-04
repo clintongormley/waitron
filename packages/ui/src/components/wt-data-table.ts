@@ -691,8 +691,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * stays above it. The box fills the block size a bounded flex container gives the table, but is
    * never shorter than its minimum; given no such container, it is that minimum. */
   @property({ type: Boolean, reflect: true, attribute: "sticky-header" }) stickyHeader = false;
-  /** Starts every cell's content at the cell's top rather than lining cells up by their first line's
-   * baseline. */
+  /** Starts every body cell's content at the cell's top rather than lining cells up by their
+   * first line's baseline. */
   @property({ type: Boolean, reflect: true, attribute: "top-aligned" }) topAligned = false;
   @state() private searchText = "";
   /** Every filter choice, chosen or restored, keyed by column key; an absent key means the column's

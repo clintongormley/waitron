@@ -42,10 +42,11 @@ import { formatIsoMinute } from "../date-utils.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => sessionStorage.clear());
-// The list's column chooser remembers its choice in localStorage, which outlives a test.
+// These clear a column choice saved under the list's previous key, which a test below sets and
+// localStorage keeps between tests.
 beforeEach(() => localStorage.removeItem("waitron.menus.table:columns"));
 afterEach(() => localStorage.removeItem("waitron.menus.table:columns"));
-/** The key the list keeps its column choices under since it gained its Changes column (W87). */
+/** The key the list keeps its column choices under. */
 const LIST_KEY = "waitron.menus.list.table";
 const forgetListColumns = () => {
   localStorage.removeItem(`${LIST_KEY}:columns`);
@@ -1062,7 +1063,7 @@ describe("the menus list's columns", () => {
     },
   );
 
-  it("keeps showing Status, and each phone row's state, after Status was saved as hidden", async () => {
+  it("ignores a column choice saved under the list's previous key: Status, and each phone row's state, stay shown", async () => {
     localStorage.setItem("waitron.menus.table:columns", JSON.stringify({ status: false }));
     await at([1280, 900], "en-GB", () => statusSavedHidden());
   });
@@ -3853,7 +3854,7 @@ describe("publishing", () => {
     expect(client.getMenuStatus).not.toHaveBeenCalled();
   });
 
-  it("lists the status column, with a column chooser now that Changes is a column too", async () => {
+  it("lists the status and changes columns, with a column chooser", async () => {
     setLocale("es-ES");
     const el = await mount();
     const headerTexts = () =>
