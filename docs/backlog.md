@@ -1288,7 +1288,7 @@ Descriptors section, whose Name row says "None specified" for a blank language b
 left as it is (asked of the owner, 2026-10-04).
 A name stored under a regional code such as `en-GB`, which the server's API accepts, is read by
 the forms as the customer-facing resolver reads a request for that language's plain code (W77a,
-owner 2026-10-04 choosing the form reading it): the plain code first, then its regional ones
+#1206, owner 2026-10-04 choosing the form reading it): the plain code first, then its regional ones
 (`languageText`, `apps/dashboard/src/widgets/form-fields.ts`). A till or receipt asking for `en-GB`
 reads `en-GB` before `en`, so a map holding both can show one name in the form and serve the
 other. Tested on the Extras and Options lists and the Product editor's Descriptors (fields,
@@ -1300,7 +1300,9 @@ language reads the text typed into the field. The Product editor's choice of whi
 "translation required" refusal points at (`productEditorTranslationField`) reads regional keys
 too, as the server's check does. Still reading the plain code only: the unit form's names, the
 adjustment reasons' names (`packages/adjustments/src/dashboard/reasons-screen.ts`) and the image
-library's names (`packages/media/src/dashboard/image-library.ts`).
+library's names (`packages/media/src/dashboard/image-library.ts`). Left from #1206's review, optional
+tidying: the Product editor keeps a private `text()` helper doing what `languageText` does, as two
+other screens do; folding them into the one helper was not part of W77a.
 
 **Clicking a product's row on the Products screen opens it (A205) — DONE in A208.**
 
