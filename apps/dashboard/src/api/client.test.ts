@@ -3061,18 +3061,18 @@ describe("the card readers' outside-provider reads", () => {
 
   it("allows the alerts response to arrive after the default read limit", async () => {
     const response = { visible: true, alerts: [] };
-    const out = track(new DashboardApi("", answersAfter(35_000, response)).listAlerts());
+    const out = track(new DashboardApi("", answersAfter(50_000, response)).listAlerts());
 
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(40_000);
     expect(out.settled).toBeUndefined();
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(out.settled).toEqual({ value: response });
   });
 
   it("still bounds an alerts read that never answers", async () => {
     const out = track(new DashboardApi("", answersAfter(240_000, [])).listAlerts());
 
-    await vi.advanceTimersByTimeAsync(39_000);
+    await vi.advanceTimersByTimeAsync(54_000);
     expect(out.settled).toBeUndefined();
     await vi.advanceTimersByTimeAsync(1_000);
     expect(out.settled).toEqual({ error: { code: "connection.timed_out" } });

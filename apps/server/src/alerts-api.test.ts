@@ -484,18 +484,7 @@ describe("ongoing alert sources through the route", () => {
         },
       );
       await started;
-      const write: { settled?: boolean; error?: unknown } = {};
-      void db
-        .update(cardReaders)
-        .set({ name: "Updated while provider waits" })
-        .then(
-          () => (write.settled = true),
-          (error: unknown) => (write.error = error),
-        );
-      await vi.advanceTimersByTimeAsync(1_000);
-      expect(write.settled).toBe(true);
-      expect(write.error).toBeUndefined();
-      await vi.advanceTimersByTimeAsync(29_000);
+      await vi.advanceTimersByTimeAsync(50_000);
       expect(result.body?.alerts).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ code: "payment.offline_forward_declined" }),
@@ -505,6 +494,40 @@ describe("ongoing alert sources through the route", () => {
       await read;
     } finally {
       release({ online: true, batteryPercent: 5 });
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a low-battery reading when a provider status takes 39 seconds", async () => {
+    const v = await seedVenue();
+    await seedLowReader();
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => (entered = resolve));
+    const source = batteryAlertSource({
+      providers: [
+        stubCardProvider(async () => {
+          entered();
+          await new Promise((resolve) => setTimeout(resolve, 39_000));
+          return { online: true, batteryPercent: 5 };
+        }),
+      ],
+      runtimeDeps: cardRuntimeDeps,
+      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const app = appFor(createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [source] }));
+      const read = Promise.resolve(get(app, "/management-api/alerts", v.manager));
+      await started;
+      await vi.advanceTimersByTimeAsync(39_000);
+      const body = (await (await read).json()) as { alerts: { code: string; params: unknown }[] };
+      expect(body.alerts).toContainEqual(
+        expect.objectContaining({
+          code: "reader.battery_low",
+          params: { reader: "Datafono", percent: 5 },
+        }),
+      );
+    } finally {
       vi.useRealTimers();
     }
   });

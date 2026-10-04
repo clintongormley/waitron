@@ -374,8 +374,8 @@ export function stationOutputAlertSource(deps: {
 export const BATTERY_WARN = 20;
 /** At or below this it is an error — the reader is close to dying at the till. */
 export const BATTERY_ERROR = 10;
-/** Longer than SumUp's single 20-second request, and bounded even when a provider never settles. */
-const BATTERY_CHECK_LIMIT_MS = 25_000;
+/** Above SumUp's two sequential 20-second status calls; a stalled provider cannot hold alerts open. */
+const BATTERY_CHECK_LIMIT_MS = 45_000;
 
 /**
  * The card-reader battery alert source. A reader whose provider reports no battery raises nothing.
