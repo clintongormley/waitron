@@ -148,6 +148,8 @@ export class VenueOperationsScreen extends LitElement {
   @state() private printTradingNameDrafts: Record<string, boolean> = {};
   @state() private paidEditor?: string;
   @state() private paidDrafts: Record<string, string> = {};
+  @state() private collectionEditor?: string;
+  @state() private collectionDrafts: Record<string, string> = {};
   @state() private view: View = "status";
   @state() private editor?: Editor;
   @state() private zoneId = "";
@@ -660,12 +662,72 @@ export class VenueOperationsScreen extends LitElement {
         key: "collection",
         label: t("venue.collection_number"),
         cell: (row) => {
+          const key =
+            row.kind === "department" ? `department-${row.department.id}` : `zone-${row.zone.id}`;
           const collectionNumber = policyFor(row)?.collectionNumber;
-          return collectionNumber === "none"
-            ? t("venue.none")
-            : collectionNumber === "numbered"
-              ? t("venue.numbered")
-              : nothing;
+          if (collectionNumber === undefined) return nothing;
+          const stored =
+            row.kind === "department"
+              ? collectionNumber
+              : model.salePolicies.zones.find((policy) => policy.zoneId === row.zone.id)
+                  ?.collectionNumber;
+          const effectiveLabel =
+            collectionNumber === "numbered" ? t("venue.numbered") : t("venue.none");
+          if (this.collectionEditor !== key)
+            return html`<button
+              type="button"
+              part="edit-collection"
+              data-test="edit-collection"
+              aria-label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.collection_number")}, ${effectiveLabel}`}
+              @click=${() => (this.collectionEditor = key)}
+            >
+              ${effectiveLabel}
+            </button>`;
+          return html`<wt-combobox
+            name="collectionNumber"
+            label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.collection_number")}`}
+            hide-label
+            .options=${[
+              ...(row.kind === "zone"
+                ? [{ value: "", label: `${t("venue.inherit")} (${effectiveLabel})` }]
+                : []),
+              { value: "none", label: t("venue.none") },
+              { value: "numbered", label: t("venue.numbered") },
+            ]}
+            .value=${live(this.collectionDrafts[key] ?? stored ?? "")}
+            ?disabled=${this.busy}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              const value = event.detail.value;
+              if (value === (stored ?? "")) {
+                const drafts = { ...this.collectionDrafts };
+                delete drafts[key];
+                this.collectionDrafts = drafts;
+                this.collectionEditor = undefined;
+                this.actionError = undefined;
+                return;
+              }
+              this.collectionDrafts = { ...this.collectionDrafts, [key]: value };
+              void this.#save(async () => {
+                if (row.kind === "department")
+                  await this.api.setDepartmentSalePolicyField(
+                    row.department.id,
+                    "collectionNumber",
+                    value as "none" | "numbered",
+                  );
+                else
+                  await this.api.setZoneSalePolicyOverride(
+                    row.zone.id,
+                    "collectionNumber",
+                    value ? (value as "none" | "numbered") : null,
+                  );
+                const drafts = { ...this.collectionDrafts };
+                delete drafts[key];
+                this.collectionDrafts = drafts;
+                this.collectionEditor = undefined;
+              });
+            }}
+          ></wt-combobox>`;
         },
       },
       {

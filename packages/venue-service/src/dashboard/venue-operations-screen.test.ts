@@ -429,6 +429,80 @@ describe("venue operations screen", () => {
     ).toBeNull();
   });
 
+  it("changes a department collection number and lets a zone inherit it", async () => {
+    let departmentCollection: "none" | "numbered" = "none";
+    let zoneCollection: "none" | "numbered" | null = "numbered";
+    const setDepartmentSalePolicyField = vi.fn(async (_id, _field, value) => {
+      departmentCollection = value;
+    });
+    const setZoneSalePolicyOverride = vi.fn(async (_id, _field, value) => {
+      zoneCollection = value;
+    });
+    const load = vi.fn(async () => ({
+      ...model,
+      departments: [model.departments[0]],
+      salePolicies: {
+        departments: [
+          {
+            departmentId: "d1",
+            paidWhen: "prepay" as const,
+            collectionNumber: departmentCollection,
+            receiptPrintMode: "auto" as const,
+            printTradingName: true,
+          },
+        ],
+        zones: [
+          {
+            zoneId: "z1",
+            paidWhen: null,
+            collectionNumber: zoneCollection,
+            receiptPrintMode: null,
+            effective: {
+              paidWhen: "prepay" as const,
+              collectionNumber: zoneCollection ?? departmentCollection,
+              receiptPrintMode: "auto" as const,
+              printTradingName: true,
+            },
+          },
+        ],
+      },
+    }));
+    const el = await mount({
+      load,
+      setDepartmentSalePolicyField,
+      setZoneSalePolicyOverride,
+    } as unknown as VenueServiceApi);
+    const tree = () => table(el, "policy-tree").shadowRoot!;
+    const buttons = () => [
+      ...tree().querySelectorAll<HTMLButtonElement>('[data-test="edit-collection"]'),
+    ];
+    const control = () =>
+      tree().querySelector<HTMLElement & { value: string; options: { value: string }[] }>(
+        'wt-combobox[name="collectionNumber"]',
+      )!;
+    expect(buttons()).toHaveLength(2);
+    buttons()[0].click();
+    await settle(el);
+    expect(control().options.map((option) => option.value)).toEqual(["none", "numbered"]);
+    await chooseOption(control(), "numbered");
+    await vi.waitFor(() =>
+      expect(setDepartmentSalePolicyField).toHaveBeenCalledWith(
+        "d1",
+        "collectionNumber",
+        "numbered",
+      ),
+    );
+    await vi.waitFor(() => expect(buttons()).toHaveLength(2));
+    buttons()[1].click();
+    await settle(el);
+    expect(control().options[0].value).toBe("");
+    await chooseOption(control(), "");
+    await vi.waitFor(() =>
+      expect(setZoneSalePolicyOverride).toHaveBeenCalledWith("z1", "collectionNumber", null),
+    );
+    await vi.waitFor(() => expect(buttons()[1].textContent).toContain("Numbered"));
+  });
+
   it("switches receipt trading names on a department without offering the switch on a zone", async () => {
     let printTradingName = false;
     const save = vi.fn(async (departmentId: string, field: string, value: boolean) => {
