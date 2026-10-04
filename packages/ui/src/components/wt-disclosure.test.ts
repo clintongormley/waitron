@@ -1,4 +1,5 @@
 import { expect, test, afterEach } from "vitest";
+import { commands } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-disclosure.js";
 
@@ -97,6 +98,46 @@ test("reopening during collapse continues from the current height", async () => 
   await disclosure.updateComplete;
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(body.getBoundingClientRect().height).toBeGreaterThanOrEqual(heightWhileClosing - 1);
+  expect(body.getBoundingClientRect().height).toBeLessThan(200);
+});
+
+test("an empty body opened before content arrives grows with its content", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Kitchen"><div class="late"></div></wt-disclosure>',
+  );
+  const disclosure = el as import("./wt-disclosure.js").WtDisclosure;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  el.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
+  await disclosure.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  (el.querySelector(".late") as HTMLElement).style.height = "150px";
+  expect(body.getBoundingClientRect().height).toBe(150);
+});
+
+test("a same-frame close and reopen leaves the body free to grow", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Kitchen" open><div class="growing" style="height: 200px"></div></wt-disclosure>',
+  );
+  const disclosure = el as import("./wt-disclosure.js").WtDisclosure;
+  const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  header.click();
+  header.click();
+  await disclosure.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  (el.querySelector(".growing") as HTMLElement).style.height = "400px";
+  expect(body.getBoundingClientRect().height).toBe(400);
+});
+
+test("idle open content can paint and receive a pointer beyond the body box", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Kitchen" open><div style="position:relative;height:60px"><button class="pop" style="position:absolute;top:40px;height:60px">Outside</button></div></wt-disclosure>',
+  );
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  const pop = el.querySelector<HTMLElement>(".pop")!;
+  const rect = pop.getBoundingClientRect();
+  expect(document.elementFromPoint(rect.left + 5, rect.bottom - 5)).toBe(pop);
+  expect(getComputedStyle(body).overflow).toBe("visible");
 });
 
 test("a validation error interrupts closing and exposes its fields immediately", async () => {
@@ -148,6 +189,25 @@ test("reduced motion opens and closes without waiting for the height animation",
     expect(body.hidden).toBe(true);
   } finally {
     window.matchMedia = original;
+  }
+});
+
+test("switching on reduced motion during a close hides the body immediately", async () => {
+  await commands.emulateReducedMotion("no-preference");
+  try {
+    const el = await mount(
+      '<wt-disclosure heading="Kitchen" open><div style="height: 200px">body</div></wt-disclosure>',
+    );
+    const disclosure = el as import("./wt-disclosure.js").WtDisclosure;
+    const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    el.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
+    await disclosure.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(body.hidden).toBe(false);
+    await commands.emulateReducedMotion("reduce");
+    await expect.poll(() => body.hidden, { timeout: 450, interval: 25 }).toBe(true);
+  } finally {
+    await commands.emulateReducedMotion(null);
   }
 });
 

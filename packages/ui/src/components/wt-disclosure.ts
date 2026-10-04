@@ -37,8 +37,11 @@ export class WtDisclosure extends LitElement {
       }
 
       .body {
-        overflow: hidden;
         transition: height var(--wt-duration-disclosure) ease;
+      }
+
+      .body.animating {
+        overflow: hidden;
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -136,6 +139,31 @@ export class WtDisclosure extends LitElement {
   private firstRender = true;
   private animationFrame = 0;
   private animationGeneration = 0;
+  private motionQuery?: MediaQueryList;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.motionQuery = matchMedia("(prefers-reduced-motion: reduce)");
+    this.motionQuery.addEventListener?.("change", this.onMotionChange);
+  }
+
+  override disconnectedCallback(): void {
+    this.motionQuery?.removeEventListener?.("change", this.onMotionChange);
+    cancelAnimationFrame(this.animationFrame);
+    super.disconnectedCallback();
+  }
+
+  private onMotionChange = (event: MediaQueryListEvent): void => {
+    if (!event.matches || !this.hasUpdated) return;
+    const body = this.shadowRoot?.querySelector<HTMLElement>(".body");
+    if (!body?.classList.contains("animating")) return;
+    ++this.animationGeneration;
+    cancelAnimationFrame(this.animationFrame);
+    body.style.height = "";
+    body.classList.remove("animating");
+    this.bodyHidden = !this.open;
+    body.hidden = this.bodyHidden;
+  };
 
   override willUpdate(changed: PropertyValues<this>): void {
     // A cleared error leaves the section open: collapsing it the moment the last error is fixed would
@@ -157,22 +185,20 @@ export class WtDisclosure extends LitElement {
     const generation = ++this.animationGeneration;
     cancelAnimationFrame(this.animationFrame);
     const height = this.openingFromHidden ? 0 : body.getBoundingClientRect().height;
-    if (
-      this.hasError ||
-      matchMedia("(prefers-reduced-motion: reduce)").matches ||
-      (!this.open && height === 0)
-    ) {
+    const targetHeight = this.open ? body.scrollHeight : 0;
+    if (this.hasError || this.motionQuery?.matches || height === targetHeight) {
       body.style.height = "";
+      body.classList.remove("animating");
       this.bodyHidden = !this.open;
       body.hidden = this.bodyHidden;
       return;
     }
+    body.classList.add("animating");
     body.style.height = `${height}px`;
     void body.offsetHeight;
-    // Let the browser paint the starting height before changing it; the closed body was hidden.
     this.animationFrame = requestAnimationFrame(() => {
       if (generation !== this.animationGeneration) return;
-      body.style.height = this.open ? `${body.scrollHeight}px` : "0px";
+      body.style.height = `${targetHeight}px`;
     });
   }
 
@@ -180,6 +206,7 @@ export class WtDisclosure extends LitElement {
     if (event.propertyName !== "height" || event.target !== event.currentTarget) return;
     const body = event.currentTarget as HTMLElement;
     body.style.height = "";
+    body.classList.remove("animating");
     if (!this.open) {
       this.bodyHidden = true;
       body.hidden = true;
