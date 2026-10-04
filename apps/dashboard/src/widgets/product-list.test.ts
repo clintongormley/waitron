@@ -1947,6 +1947,21 @@ describe("the product list as a tree", () => {
     expect(popup.matches(":popover-open")).toBe(false);
   });
 
+  it("closes a category's menu when Delete is chosen from it", async () => {
+    const { el, root } = await mountTree();
+    const deletes: unknown[] = [];
+    el.addEventListener("delete-folder", (event) => deletes.push((event as CustomEvent).detail));
+    const menu = root.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+      '[data-test="actions-folder-d"]',
+    )!;
+    menu.show();
+    const popup = menu.shadowRoot!.querySelector("[popover]")!;
+    expect(popup.matches(":popover-open")).toBe(true);
+    root.querySelector<HTMLElement>('[data-test="delete-folder-d"]')!.click();
+    expect(deletes).toEqual([{ folderId: "d" }]);
+    expect(popup.matches(":popover-open")).toBe(false);
+  });
+
   it("a rename's box sends a cancel on Esc, and on leaving it blank", async () => {
     const { el } = await mountTree();
     const sent: unknown[] = [];

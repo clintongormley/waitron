@@ -980,13 +980,6 @@ export class ProductList extends LitElement {
     ];
   }
 
-  #emitFolder(event: Event, name: string, folderId: string): void {
-    event.stopPropagation();
-    this.dispatchEvent(
-      new CustomEvent(name, { detail: { folderId }, bubbles: true, composed: true }),
-    );
-  }
-
   #addItems(categoryId: string | null) {
     const test = categoryId ?? ROOT_KEY;
     return html`<wt-button
@@ -1088,7 +1081,7 @@ export class ProductList extends LitElement {
               align="start"
               variant="danger"
               data-test=${`delete-folder-${folder.id}`}
-              @click=${(event: Event) => this.#emitFolder(event, "delete-folder", folder.id)}
+              @click=${() => this.#send("delete-folder", { folderId: folder.id })}
               >${t("action.delete")}</wt-button
             ></wt-row-actions
           >`;
