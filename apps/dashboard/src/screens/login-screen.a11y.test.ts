@@ -128,6 +128,20 @@ describe.each(["light", "dark"] as const)("login-screen a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  it.each(["management_session.expired", "person.suspended", "password.reset_complete"])(
+    "renders the %s notice accessibly",
+    async (code) => {
+      const { el, host } = await mountWidget<LoginScreen>(
+        "dashboard-login-screen",
+        { api: stubApi(), noticeCode: code },
+        theme,
+      );
+      await flush(el);
+      expect(el.shadowRoot!.querySelector(".notice")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    },
+  );
+
   it("renders a remembered passkey account accessibly", async () => {
     const saved = JSON.stringify({ email: "owner@example.com", method: "passkey" });
     sessionStorage.setItem("waitron-login-preference", saved);

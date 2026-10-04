@@ -2983,8 +2983,8 @@ describe("login-screen: the sign-in card", () => {
     return el;
   }
 
-  async function openAccountAction() {
-    history.replaceState(null, "", "/manage/account?token=setup&purpose=invitation");
+  async function openAccountAction(purpose: "invitation" | "password_reset" = "invitation") {
+    history.replaceState(null, "", `/manage/account?token=setup&purpose=${purpose}`);
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     await flush(el);
     return el;
@@ -3015,11 +3015,12 @@ describe("login-screen: the sign-in card", () => {
     ["code", openFactor],
     ["Check your email", openResetSent],
     ["passkey offer", async () => (await mountPasskeyOffer()).el],
-    ["account setup", openAccountAction],
+    ["account setup", () => openAccountAction("invitation")],
+    ["password reset", () => openAccountAction("password_reset")],
   ];
 
   it.each(steps)(
-    "draws the %s step as a card with the Waitron logo first, above the heading",
+    "draws the %s step as a card without the Waitron logo, its heading first",
     async (_step, open) => {
       const el = await open();
       const screen = card(el);
@@ -3033,35 +3034,80 @@ describe("login-screen: the sign-in card", () => {
       expect(style.borderTopLeftRadius).toBe(
         tokenValue(el, "border-top-left-radius", "var(--wt-radius-lg)"),
       );
-      const logo = screen.querySelector<HTMLElement>("[data-test=login-logo]");
-      expect(logo).not.toBeNull();
-      expect(screen.firstElementChild).toBe(logo);
-      expect(logo!.querySelector("svg")).not.toBeNull();
-      // The banner above already names Waitron, so the card's logo is decoration.
-      expect(logo!.getAttribute("aria-hidden")).toBe("true");
-      const heading = screen.querySelector("h1")!;
-      expect(
-        logo!.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
+      // The banner above the card carries the lockup; the brand file's waiter ink finds an
+      // inlined copy whatever wraps it.
+      expect(screen.querySelector("[data-test=login-logo]")).toBeNull();
+      expect(screen.querySelector('svg > g[fill="#1f6feb"]')).toBeNull();
+      expect(screen.firstElementChild).toBe(screen.querySelector("h1"));
     },
   );
 
-  it.each(["light", "dark"] as const)(
-    "paints the logo's waiter in the primary colour and its word in the text colour (%s theme)",
-    async (theme) => {
+  const themes = ["light", "dark"] as const;
+  const warningNotices = ["management_session.expired", "person.suspended"].flatMap((code) =>
+    themes.map((theme) => [code, theme] as const),
+  );
+
+  it.each(warningNotices)(
+    "draws the %s notice as a warning, first in the card and above the heading (%s theme)",
+    async (code, theme) => {
       const { el } = await mountWidget<LoginScreen>(
         "dashboard-login-screen",
-        { api: stubApi() },
+        { api: stubApi(), noticeCode: code },
         theme,
       );
-      const svg = el.shadowRoot!.querySelector("[data-test=login-logo] svg")!;
-      // Found by the brand file's own ink, not by position, so a reordered file fails here.
-      const waiter = svg.querySelector(':scope > g[fill="#1f6feb"]')!;
-      const word = svg.querySelector(':scope > g[fill="#16181d"]')!;
-      expect(getComputedStyle(waiter).fill).toBe(
-        tokenValue(el, "color", "var(--wt-color-primary)"),
+      await flush(el);
+      const screen = card(el);
+      const notice = screen.querySelector<HTMLElement>(".notice")!;
+      expect(notice.textContent!.trim()).toBe(codeMessage(code));
+      expect(notice.getAttribute("role")).toBe("status");
+      expect(notice.dataset.tone).toBe("warning");
+      expect(screen.firstElementChild).toBe(notice);
+      expect(
+        notice.compareDocumentPosition(screen.querySelector("h1")!) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      const danger = tokenValue(el, "color", "var(--wt-color-danger)");
+      // Control: a plain notice in the text colour must not satisfy the colour checks below.
+      expect(danger).not.toBe(tokenValue(el, "color", "var(--wt-color-text)"));
+      const style = getComputedStyle(notice);
+      expect(style.color).toBe(danger);
+      expect(style.fontWeight).toBe(tokenValue(el, "font-weight", "var(--wt-font-weight-bold)"));
+      expect(style.fontWeight).not.toBe("400");
+      expect(style.borderTopWidth).toBe("1px");
+      expect(style.borderTopStyle).toBe("solid");
+      expect(style.borderTopColor).toBe(danger);
+      expect(style.borderTopLeftRadius).toBe(
+        tokenValue(el, "border-top-left-radius", "var(--wt-radius-md)"),
       );
-      expect(getComputedStyle(word).fill).toBe(tokenValue(el, "color", "var(--wt-color-text)"));
+      expect(style.paddingTop).toBe(tokenValue(el, "padding-top", "var(--wt-space-2)"));
+      expect(style.paddingLeft).toBe(tokenValue(el, "padding-left", "var(--wt-space-3)"));
+    },
+  );
+
+  it.each(themes)(
+    "draws the password-reset-complete notice as plain text, not as a warning (%s theme)",
+    async (theme) => {
+      const api = stubApi({
+        completeAccountAction: vi.fn().mockResolvedValue({ personId: "p1", authenticated: false }),
+      });
+      history.replaceState(
+        null,
+        "",
+        "/manage/account?token=token-1&purpose=password_reset#email=new%40example.test",
+      );
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api }, theme);
+      await flush(el);
+      (el as unknown as { password: string }).password = "a replacement password";
+      click(el, "complete-account");
+      await flush(el);
+      const notice = card(el).querySelector<HTMLElement>(".notice")!;
+      expect(notice.textContent!.trim()).toBe(codeMessage("password.reset_complete"));
+      expect(notice.dataset.tone).toBeUndefined();
+      const style = getComputedStyle(notice);
+      expect(style.color).toBe(tokenValue(el, "color", "var(--wt-color-text)"));
+      expect(style.color).not.toBe(tokenValue(el, "color", "var(--wt-color-danger)"));
+      expect(style.borderTopWidth).toBe("0px");
+      expect(style.fontWeight).toBe("400");
     },
   );
 
