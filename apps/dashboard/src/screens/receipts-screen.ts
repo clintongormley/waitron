@@ -739,6 +739,11 @@ export class ReceiptsScreen extends LitElement {
           @focusout=${() => this.#blurTrim()}
           @keydown=${(event: KeyboardEvent) => this.#enter(event)}
         ></wt-input>
+        <p class="reason">
+          ${t("receipts.trading_name_location")}
+          <a href="/manage/venue-operations/view/departments">${t("receipts.departments_zones")}</a
+          >.
+        </p>
         ${this.#renderFooter()}
       </section>
       <section class="settings" aria-labelledby="location-heading">

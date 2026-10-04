@@ -108,6 +108,13 @@ async function mount(api: DashboardApi = stubApi()) {
 afterEach(cleanupWidgets);
 
 describe("the Receipts page's fields", () => {
+  it("points staff to Departments and zones to edit the trading name", async () => {
+    const { el } = await mount();
+    const link = q<HTMLAnchorElement>(el, 'a[href="/manage/venue-operations/view/departments"]');
+    expect(link).not.toBeNull();
+    expect(link!.textContent).toMatch(/^(Departments and zones|Departamentos y zonas)$/);
+  });
+
   it("shows the two receipt texts and the operation description, each with a hint saying where it appears", async () => {
     const { el } = await mount();
     const header = q<WtInput>(el, "wt-input[name=headerSubtitle]")!;

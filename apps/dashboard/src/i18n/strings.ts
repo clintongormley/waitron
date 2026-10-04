@@ -314,8 +314,9 @@ export const en = {
 
   "nav.venue_settings": "Venue settings",
   "receipts.venue_wide": "Every location",
-  "receipts.header_subtitle_hint":
-    "Printed under your venue's name, e.g. a tagline or address line",
+  "receipts.header_subtitle_hint": "Printed under the legal name, e.g. a tagline or address line",
+  "receipts.trading_name_location": "Edit the trading name in",
+  "receipts.departments_zones": "Departments and zones",
   "receipts.footer_message_hint": "Printed at the bottom, e.g. a thank-you or opening hours",
   "receipts.operation_description_hint":
     "Sent to the tax agency with every sale; not printed on the receipt",
@@ -2464,7 +2465,9 @@ export const es: Record<StringKey, string> = {
   "nav.venue_settings": "Ajustes del local",
   "receipts.venue_wide": "Todos los locales",
   "receipts.header_subtitle_hint":
-    "Se imprime bajo el nombre del local; p. ej., un lema o una línea de dirección",
+    "Se imprime bajo la razón social; p. ej., un lema o una línea de dirección",
+  "receipts.trading_name_location": "Edita el nombre comercial en",
+  "receipts.departments_zones": "Departamentos y zonas",
   "receipts.footer_message_hint": "Se imprime al final; p. ej., un agradecimiento o el horario",
   "receipts.operation_description_hint":
     "Se envía a Hacienda con cada venta; no se imprime en el recibo",
