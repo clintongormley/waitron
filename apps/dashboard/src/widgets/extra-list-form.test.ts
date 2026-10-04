@@ -2498,8 +2498,10 @@ it.each([
       expect(row.getBoundingClientRect().height).toBeGreaterThan(handleBox.height * 1.5);
       expect(nameLines, "the name wraps").toBeGreaterThan(1);
       const line = firstLine(name);
+      const iconMiddle = (box.top + box.bottom) / 2;
+      // The middle, not the whole icon: line boxes differ by a pixel between machines' fonts.
       expect(
-        box.top >= line.top && box.bottom <= line.bottom,
+        iconMiddle >= line.top && iconMiddle <= line.bottom,
         JSON.stringify({ icon: box, line }),
       ).toBe(true);
       expect({ width: handleBox.width >= 44, height: handleBox.height >= 44 }).toEqual({
