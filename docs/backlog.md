@@ -2927,10 +2927,32 @@ covered: in Select mode the toolbar wraps taller, and at 375×667 the content co
 hand, not in a test, to scroll and carry the toolbar out of view. Other long tables (Orders, Staff, Payments and
 the rest) keep scrolling with the content column until someone decides they should opt in too; each
 would need its screen to give the table a bounded height, as the Products screen does.
-Still open: at 375×667 the three-tap-target box shows the headings and under two product rows,
-short of the item's "enough rows to remain usable"; a larger minimum does not fit that screen
-without the toolbar scrolling away. A shorter toolbar (W83's icon-only Filters and Select) is the
-expected way to give the rows more room; nothing measures that yet.
+Still open: at 375×667 the box gave few rows, short of the item's "enough rows to remain usable",
+and a larger minimum does not fit that screen without the toolbar scrolling away. W83 (below)
+shortened the toolbar. Measured on 2026-10-04 with a temporary test in the shell test's 375×667
+setup (not kept), reading the rows' box below its headings: before W83, 117.5px of row area, which
+held the All products row and no whole product row (rows are 69px); after it, 173.5px, which holds
+the All products row and one whole product row. At 390×844 the whole rows, the All products row included, went from four to five.
+In Select mode the content column still overflows at 375×667, by 25px (129px before W83). Whether
+that is enough rows is the owner's call.
+
+**Products: Filters and Select at the start of the table's toolbar — DONE (W83, owner
+2026-10-04).** On Products, Filters (a funnel with its count) and Select (a checklist mark) are icon
+buttons at the toolbar's leading edge, before the search. Each is named for screen readers, shows
+its name in a tooltip on hover and on keyboard focus that Escape hides, and reads as pressed while
+its panel or Select mode is on. While the table is at least 768px wide, Filters opens a panel
+beside the rows at their left; it stays in view while the rows scroll, a press outside leaves it
+open, and closing it gives the rows their width back. Narrower, it opens full screen. Pressing
+Select again leaves Select mode as Cancel does; the count, Move to…, Delete and Cancel stay at the
+toolbar's end and wrap one by one on a phone. On a phone the search takes its own line under the
+buttons. `wt-data-table` gained an opt-in `leadingFilters` for this, set only by Products, and the
+icon button and tooltip styles are shared from `@waitron/ui` (`iconButtonStyles`). One existing
+test assertion changed, for the owner to review: the catalogue browser's toolbar-order test pinned
+the old order (search, Filters, Expand all, Select, Customise) and now pins the new one (Filters,
+Select, search, Expand all, Customise). Left open: on a phone the search is drawn under Expand all
+and Customise while Tab reaches it before them; and a desktop window narrow enough to leave the
+table under 768px gets the full-screen panel — at which window width that happens with the sidebar
+shown was not measured.
 
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through
