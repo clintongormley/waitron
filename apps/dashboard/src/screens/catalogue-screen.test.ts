@@ -1166,9 +1166,8 @@ describe("catalogue-screen", () => {
   describe("focus after the unit form opened from the unit chooser closes", () => {
     // The name field has focus when the chooser opens, and the chooser's unit dropdown when Add unit
     // is clicked in script, so the dialogs' own return of focus lands on neither target and only
-    // the hand-back can. The real click on the chooser's heading comes first because Chromium groups
-    // a dialog opened with no user action since the last one with it, and one Escape then closes
-    // both.
+    // the hand-back can. The real click on the chooser's heading comes first because without it one
+    // Escape closed the chooser as well as the form.
     async function openUnitForm(el: CatalogueScreen) {
       const product = editor(el);
       product.shadowRoot!.querySelector<HTMLElement>('[name="name"]')!.focus();
@@ -1208,9 +1207,15 @@ describe("catalogue-screen", () => {
       await vi.waitFor(() => expect(form.open).toBe(false));
       await flush(el);
       await afterDialogCloses(el);
-      expect(editor(el).shadowRoot!.activeElement).toBe(
-        editor(el).shadowRoot!.querySelector("[data-test=add-unit]"),
-      );
+      const product = editor(el);
+      expect(
+        product.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+          "wt-dialog[data-test=unit-chooser]",
+        )!.open,
+      ).toBe(true);
+      const addUnit = product.shadowRoot!.querySelector("[data-test=add-unit]");
+      expect(addUnit).not.toBeNull();
+      expect(product.shadowRoot!.activeElement).toBe(addUnit);
     });
 
     it("goes back to the price's unit button, the chooser's opener, after a save closes it and the chooser", async () => {

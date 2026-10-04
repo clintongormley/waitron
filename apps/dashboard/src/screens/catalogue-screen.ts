@@ -197,8 +197,9 @@ export class CatalogueScreen extends LitElement {
     focus: (kind) => void this.#returnChildFocus(kind),
   });
 
-  /** A nested form's own dialog closes a render after the form does, and until it has closed it
-   * keeps focus from reaching the product editor. */
+  /** Focus handed back before a nested form and its own dialog finish updating does not land: the
+   * dialog may still be open, or the editor control that opened the form may still be drawn
+   * disabled. */
   async #returnChildFocus(kind: ProductChildKind): Promise<void> {
     const tag = CHILD_FORMS[kind];
     if (tag) {
