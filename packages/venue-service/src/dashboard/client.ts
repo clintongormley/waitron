@@ -196,6 +196,10 @@ export class VenueServiceApi {
     return this.request(`/management-api/zones/${zoneId}`, "PATCH", patch);
   }
 
+  deactivateZone(zoneId: string): Promise<void> {
+    return this.request(`/management-api/zones/${zoneId}`, "DELETE");
+  }
+
   setDepartmentSalePolicyField<K extends keyof Omit<DepartmentSalePolicy, "departmentId">>(
     departmentId: string,
     field: K,

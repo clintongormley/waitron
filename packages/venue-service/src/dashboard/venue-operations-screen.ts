@@ -38,7 +38,7 @@ const VIEWS = ["status", "departments", "zones"] as const;
 type View = (typeof VIEWS)[number];
 type Editor =
   | { kind: "department"; row?: Department }
-  | { kind: "hours"; row?: HoursInterval; index?: number }
+  | { kind: "hours"; row?: HoursInterval; index?: number; departmentId?: string }
   | { kind: "zone"; row: FloorZone }
   | { kind: "assignment"; zoneId: string; menuId?: string }
   | {
@@ -1017,6 +1017,51 @@ export class VenueOperationsScreen extends LitElement {
           ></wt-combobox>`;
         },
       },
+      {
+        key: "actions",
+        label: t("venue.actions"),
+        pinned: "end",
+        cell: (row) =>
+          row.kind === "department"
+            ? this.#actions(row.department.name, [
+                {
+                  key: `rename-tree-department-${row.department.id}`,
+                  label: t("venue.rename"),
+                  run: () => {
+                    this.departmentNameDraft = row.department.name;
+                    this.departmentNameError = "";
+                    this.departmentNameEditor = row.department.id;
+                  },
+                },
+                {
+                  key: `hours-tree-department-${row.department.id}`,
+                  label: t("venue.hours"),
+                  run: () => this.#open({ kind: "hours", departmentId: row.department.id }),
+                },
+                {
+                  key: `remove-tree-department-${row.department.id}`,
+                  label: t("venue.remove"),
+                  run: () => void this.#confirmDepartment(row.department),
+                },
+              ])
+            : this.#actions(row.zone.name, [
+                {
+                  key: `rename-tree-zone-${row.zone.id}`,
+                  label: t("venue.rename"),
+                  run: () => {
+                    this.zoneNameDraft = row.zone.name;
+                    this.zoneNameError = "";
+                    this.zoneNameEditor = row.zone.id;
+                  },
+                },
+                {
+                  key: `remove-tree-zone-${row.zone.id}`,
+                  label: t("venue.remove"),
+                  run: () =>
+                    this.#confirm(row.zone.name, () => this.api.deactivateZone(row.zone.id)),
+                },
+              ]),
+      },
     ];
     return html`<wt-data-table
       data-test="policy-tree"
@@ -1393,7 +1438,7 @@ export class VenueOperationsScreen extends LitElement {
       case "hours":
         return {
           heading: t(editor.row ? "venue.edit_hours" : "venue.add_hours"),
-          body: html`${this.#select("hours-department", t("venue.department"), model.departments, editor.row?.departmentId, true, !!editor.row)}${this.#select(
+          body: html`${this.#select("hours-department", t("venue.department"), model.departments, editor.row?.departmentId ?? editor.departmentId, true, !!editor.row || !!editor.departmentId)}${this.#select(
             "hours-weekday",
             t("venue.weekday"),
             DAYS.map((day) => ({ id: String(day), name: t(`venue.day.${day}`) })),

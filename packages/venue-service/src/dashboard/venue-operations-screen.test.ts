@@ -325,6 +325,63 @@ describe("venue operations screen", () => {
     expect(rows[1].textContent).not.toContain("Casa Delgado");
   });
 
+  it("offers row actions in the policy tree and renames a zone in place", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const rows = [...tree.querySelectorAll('tbody [role="row"]')];
+    expect(rows).toHaveLength(3);
+    expect(tree.querySelector('th[data-actions][data-pinned="end"]')).not.toBeNull();
+    expect(rows[0].querySelector("wt-row-actions")!.textContent).toContain("Opening hours");
+    expect(rows[1].querySelector("wt-row-actions")!.textContent).toContain("Remove");
+    const rename = rows[1].querySelector<HTMLElement>('[data-test="rename-tree-zone-z1"]')!;
+    rename
+      .closest("wt-row-actions")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    rename.click();
+    await settle(el);
+    expect(tree.querySelector('wt-input[name="zoneName"]')).not.toBeNull();
+  });
+
+  it("confirms removal of a zone from its policy-tree row", async () => {
+    const deactivateZone = vi.fn().mockResolvedValue(undefined);
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      deactivateZone,
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const remove = tree.querySelector<HTMLElement>('[data-test="remove-tree-zone-z1"]')!;
+    remove
+      .closest("wt-row-actions")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    remove.click();
+    await settle(el);
+    expect(deactivateZone).not.toHaveBeenCalled();
+    await action(el, "save-editor");
+    expect(deactivateZone).toHaveBeenCalledWith("z1");
+  });
+
+  it("opens hours for the chosen policy-tree department", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const hours = tree.querySelector<HTMLElement>('[data-test="hours-tree-department-d2"]')!;
+    hours
+      .closest("wt-row-actions")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    hours.click();
+    await settle(el);
+    expect(modal(el)!.getAttribute("heading")).toBe("Add hours");
+    expect(
+      (find(el, 'wt-combobox[name="hours-department"]') as HTMLElement & { value: string }).value,
+    ).toBe("d2");
+  });
+
   it("shows the effective quick-sale and receipt policy beside each department and zone", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue({
