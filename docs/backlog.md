@@ -4203,9 +4203,11 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   venue needs a reset.** Follow-ups queued 2026-10-04: W56 (the Sales screen's section title reads
   "Tender by device") is done; W57 is done in this change: the two hand-run operator scripts now
   record sales and corrections as "Operator script" / "Script del operador". Its source CHECK
-  migrations also require the accepted pre-live venue reset. Deferred in the PR: three refactors of
-  sign-in-adjacent code, and renaming the `seedTill` test fixtures. The `tills` table is gone; every
-  record names its source (usually the device; otherwise the dashboard or a named background job)
+  migrations also require the accepted pre-live venue reset: rebuilding `working_orders` may delete
+  open order rows through cascading foreign keys, while other populated tables refuse the rebuild.
+  Deferred in the PR: three refactors of sign-in-adjacent code, and renaming the `seedTill` test
+  fixtures. The `tills` table is gone; every record names its source (usually the device; otherwise
+  the dashboard or a named background job)
   and, for a device, the device; a device's profile decides whether it takes cash (`take-cash`) and
   opens the drawer (`open-cash-drawer`), and lists the receipt and payment slip printers its devices
   may switch between mid-service; setup creates no till, and the server reads no

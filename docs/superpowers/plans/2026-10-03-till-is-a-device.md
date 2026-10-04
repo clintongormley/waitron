@@ -1,5 +1,8 @@
 # A till is a device (A238) — Implementation Plan
 
+> 2026-10-04: W57 added `operator_script` to the shared and sale source lists. The lists below record
+> the earlier A238 plan.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Delete the "till record" (`tills` table, the setup till, `WAITRON_TILL_TILL_ID`) so that a till is just a paired device: every record names a **source** and, for `device`, the **device**; the device's profile decides whether it takes cash and opens the drawer and lists the printers it may use; the device holds its current receipt and payment slip printers and can switch them mid-service.

@@ -1345,7 +1345,7 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
 });
 
 describe("a record with no device prints nothing", () => {
-  it.each(["demo_seed", "readiness_test", "payment_check"] as const)(
+  it.each(["demo_seed", "readiness_test", "operator_script", "payment_check"] as const)(
     "finds no receipt or payment slip printer for the %s source",
     async (source) => {
       const { cfg } = await setupVenue();
