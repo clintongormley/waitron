@@ -406,6 +406,75 @@ describe("sumup-add-reader", () => {
     }
   });
 
+  it("keeps polling without unpairing after a status timeout and shows the timeout message", async () => {
+    vi.useFakeTimers();
+    try {
+      registerCodeMessages({
+        "connection.timed_out": {
+          en: "Waitron is taking too long to answer. Try again in a moment.",
+          es: "Waitron está tardando demasiado en responder. Inténtalo de nuevo en un momento.",
+        },
+      });
+      let polls = 0;
+      const request = stubRequest({
+        status: () => {
+          polls++;
+          if (polls === 1) throw { code: "connection.timed_out" };
+          return { online: true, pairingStatus: "paired" };
+        },
+      });
+      const onAdded = vi.fn();
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request, onAdded });
+
+      await fillAndPair(el);
+      await vi.advanceTimersByTimeAsync(PAIRING_POLL_MS);
+      await el.updateComplete;
+      expect(text(el, "[data-test=pairing-timeout]")).toBe(
+        "Waitron está tardando demasiado en responder. Inténtalo de nuevo en un momento.",
+      );
+      expect(text(el, "[data-test=countdown]")).toContain("4:58");
+      expect(request.unpairCalls()).toBe(0);
+      expect(q(el, "[data-test=try-again]")).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(PAIRING_POLL_MS);
+      expect(polls).toBe(2);
+      expect(onAdded).toHaveBeenCalledTimes(1);
+      expect(request.unpairCalls()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps checking after the code expires when every status read times out", async () => {
+    vi.useFakeTimers();
+    try {
+      let paired = false;
+      const request = stubRequest({
+        status: () => {
+          if (!paired) throw { code: "connection.timed_out" };
+          return { online: true, pairingStatus: "paired" };
+        },
+      });
+      const onAdded = vi.fn();
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request, onAdded });
+
+      await fillAndPair(el);
+      await vi.advanceTimersByTimeAsync(PAIRING_LIFETIME_MS + PAIRING_POLL_MS);
+      await el.updateComplete;
+      expect(q(el, "[data-test=countdown]")).toBeNull();
+      expect(q(el, "[data-test=pairing-timeout]")).not.toBeNull();
+      expect(q(el, "[data-test=try-again]")).toBeNull();
+      expect(request.unpairCalls()).toBe(0);
+
+      paired = true;
+      await vi.advanceTimersByTimeAsync(PAIRING_POLL_MS);
+      expect(onAdded).toHaveBeenCalledTimes(1);
+      expect(request.unpairCalls()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps the form and says a refused pair POST above Pair, and does NOT unpair", async () => {
     vi.useFakeTimers();
     try {

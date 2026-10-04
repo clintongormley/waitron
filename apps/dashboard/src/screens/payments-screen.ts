@@ -296,7 +296,10 @@ export class PaymentsScreen extends LitElement {
 
   @state() private providers?: PaymentProviderRow[];
   @state() private readers?: ReaderRow[];
-  @state() private statuses = new Map<string, ReaderStatusView | "error">();
+  @state() private statuses = new Map<
+    string,
+    ReaderStatusView | "error" | "connection.timed_out"
+  >();
   @state() private connectingId: string | null = null;
   @state() private addingId: string | null = null;
   @state() private armedDisconnectId: string | null = null;
@@ -476,9 +479,12 @@ export class PaymentsScreen extends LitElement {
             const status = await client.readerStatus(reader.id);
             if (version === this.#statusVersion)
               this.statuses = new Map(this.statuses).set(reader.id, status);
-          } catch {
+          } catch (error) {
             if (version === this.#statusVersion)
-              this.statuses = new Map(this.statuses).set(reader.id, "error");
+              this.statuses = new Map(this.statuses).set(
+                reader.id,
+                codeOf(error) === "connection.timed_out" ? "connection.timed_out" : "error",
+              );
           } finally {
             releaseStatusSlot();
           }
@@ -1253,6 +1259,7 @@ export class PaymentsScreen extends LitElement {
     if (!reader.active) return t("payments.reader_disabled");
     const status = this.statuses.get(reader.id);
     if (status === undefined) return t("payments.reader_status_loading");
+    if (status === "connection.timed_out") return codeMessage(status);
     if (status === "error" || status.unreachable) return t("payments.reader_status_unknown");
     if (status.pairingStatus === "processing") return t("payments.reader_pairing_processing");
     return status.online ? t("payments.reader_status_online") : t("payments.reader_status_offline");
@@ -1286,7 +1293,10 @@ export class PaymentsScreen extends LitElement {
         label: t("payments.reader_col_battery"),
         cell: (reader) => {
           const status = this.statuses.get(reader.id);
-          const battery = status && status !== "error" ? status.batteryPercent : undefined;
+          const battery =
+            status && status !== "error" && status !== "connection.timed_out"
+              ? status.batteryPercent
+              : undefined;
           return html`<span data-test=${`reader-battery-${reader.id}`}
             >${battery === undefined ? "" : `${battery}%`}</span
           >`;
@@ -1451,7 +1461,7 @@ export class PaymentsScreen extends LitElement {
           : t("payments.details");
     const status = this.statuses.get(reader.id);
     const details =
-      status && status !== "error"
+      status && status !== "error" && status !== "connection.timed_out"
         ? [
             [t("payments.connection"), status.connection],
             [t("payments.activity"), status.activity],

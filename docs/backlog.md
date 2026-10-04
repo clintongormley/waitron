@@ -1242,8 +1242,7 @@ trickled in over 327 ms arrived complete). The SumUp pairing dialog's status rea
 seconds (`packages/payments-sumup/src/dashboard/client.ts`), above SumUp's two 20-second calls
 (`packages/payments-sumup/src/sumup-client.ts`, line 85). Every other read keeps 30 seconds. A
 read that runs out of time now fails as `connection.timed_out` ("Waitron is taking too long to
-answer. Try again in a moment."; the two screens that read a reader's status do not show it yet,
-A259), and a fetch that fails on its own still as `connection.failed`; a timed-out read the live
+answer. Try again in a moment."; the reader-status surfaces show it since W46, A259), and a fetch that fails on its own still as `connection.failed`; a timed-out read the live
 data store keeps is read again as before. The other reads this entry named do not wait on an outside
 service, read in the code and not run: the Cloud status and backup status reads and the bucket
 settings read look only at local files and the database, and the Cloud network calls belong to
@@ -1272,20 +1271,16 @@ released, although a separate database write completed immediately. The existing
 above records why a Stripe reader read can take longer than 30 seconds. Decide a read limit for
 the alerts list and a server-side bound for its battery check without holding the write lock.
 
-**The two screens that read a card reader's status throw the error code away, so a timed-out status
-read is not reported as one (A259, found by W18c's run-it review, 2026-10-03) — OPEN, unqueued.**
-The SumUp pairing dialog (`#pollTick`, `packages/payments-sumup/src/dashboard/sumup-add-reader.ts`,
-line 132) treats any failed status read as a failed pairing: it says "Pairing did not work. Check
-the code and try again." and unpairs the reader, even when the read only ran out of time and the
-pairing may have gone through. The Payments screen's reader details (`#loadStatuses`,
-`apps/dashboard/src/screens/payments-screen.ts`) marks the row as an error and shows its
-generic no-details text and "Unknown". Both predate W18c: they catch every rejection without its
-code. Measured by the review: injecting `{ code: "connection.timed_out" }` into the existing
-rejection fixtures left both screens' generic-message assertions passing
-(`packages/payments-sumup/src/dashboard/sumup-add-reader.test.ts`, "shows the failed copy and
-unpairs the row when a poll is rejected"; `apps/dashboard/src/screens/payments-screen.test.ts`,
-"shows the no-details copy when the reader's status could not be read"). Next step: keep the read's
-code and show `codeMessage(code)`, and decide separately whether a timed-out poll should unpair.
+**A timed-out card-reader status read now says so without ending pairing (A259, found by W18c's
+run-it review, 2026-10-03) — DONE (W46).** The SumUp pairing dialog keeps its created reader and
+polls again after `connection.timed_out`, showing the shared timeout wording; a different status
+refusal still ends pairing and unpairs it. The Payments reader row and details show the timeout
+wording while other failures keep their existing unknown-status and no-details text. The red-first
+browser cases in `packages/payments-sumup/src/dashboard/sumup-add-reader.test.ts` and
+`apps/dashboard/src/screens/payments-screen.test.ts` separate those paths. Repeated timeouts keep
+polling even after the pairing code's five-minute window because the reader may already have paired;
+the countdown disappears at zero, and only a known paired or processing status can finish or expire
+the attempt. A cancelled dialog still follows its existing orphan-cleanup path.
 
 **Several card readers' status reads at once can use up the browser's connections to the box
 (A260, found by W18c's review, 2026-10-03) — DONE (W18c #1145 and W48).** The readers table

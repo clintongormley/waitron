@@ -1160,6 +1160,22 @@ describe("payments-screen remaining edges", () => {
     expect(dialog.textContent).toContain("Unknown");
   });
 
+  it("shows a reader status timeout in its row and details", async () => {
+    const { el } = await mount(
+      stubApi({ readerStatus: vi.fn().mockRejectedValue({ code: "connection.timed_out" }) }),
+    );
+    await vi.waitFor(() =>
+      expect(qCell(el, "[data-test=reader-status-r-1]")?.textContent).toBe(
+        "Waitron is taking too long to answer. Try again in a moment.",
+      ),
+    );
+    qCell(el, "[data-test=details-r-1]")!.click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=reader-editor]")?.textContent).toContain(
+      "Waitron is taking too long to answer. Try again in a moment.",
+    );
+  });
+
   it("ignores a superseded discovery list's late failure", async () => {
     let failOld!: () => void;
     const old = new Promise<never>((_, reject) => {

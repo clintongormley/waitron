@@ -9,14 +9,13 @@ import { codeMessage, codeOf, type DashboardRequest } from "@waitron/dashboard-k
 import { t } from "./strings.js";
 import { SumUpPaymentsClient } from "./client.js";
 
-/** The pairing code's lifetime — the countdown starts here and the poll gives up when it reaches zero. */
+/** The pairing code's lifetime; a status timeout leaves pairing unknown, so polling can outlast it. */
 export const PAIRING_LIFETIME_MS = 5 * 60 * 1000;
 /** How often the dialog re-reads the reader's status while a pairing is in flight. */
 export const PAIRING_POLL_MS = 2_000;
 
-/** The dialog's stage. `form` collects the name + code; `pairing` posts the code and then polls with
- * the countdown showing; `expired`/`failed` are the two end states of a pairing the server accepted,
- * each offering _try again_. */
+/** The dialog's stage. `form` collects the name + code; `pairing` posts the code and then polls;
+ * `expired`/`failed` offer _try again_ after a known result ends the attempt. */
 type Phase = "form" | "pairing" | "expired" | "failed";
 
 @customElement("sumup-add-reader")
@@ -52,6 +51,7 @@ export class SumUpAddReader extends LitElement {
   @state() private refusal = "";
   @state() private phase: Phase = "form";
   @state() private remaining = PAIRING_LIFETIME_MS / 1000;
+  @state() private pollTimedOut = false;
 
   // The timer is cleared in `disconnectedCallback` and never started once the dialog is detached
   // (checked after each await); `#pairUntil` is the clock end (poll ticks are not real seconds in a
@@ -102,6 +102,7 @@ export class SumUpAddReader extends LitElement {
       return;
     }
     this.phase = "pairing";
+    this.pollTimedOut = false;
     this.remaining = PAIRING_LIFETIME_MS / 1000;
     let result;
     try {
@@ -135,13 +136,21 @@ export class SumUpAddReader extends LitElement {
     let status;
     try {
       status = await this.#client().readerStatus(this.#readerId);
-    } catch {
+    } catch (error) {
+      if (codeOf(error) === "connection.timed_out") {
+        if (this.isConnected && !this.#closed) {
+          this.pollTimedOut = true;
+          this.remaining = Math.max(0, Math.ceil((this.#pairUntil - Date.now()) / 1000));
+        }
+        return;
+      }
       this.#abandon("failed");
       return;
     } finally {
       this.#pairInFlight = false;
     }
     if (!this.isConnected || this.#closed) return;
+    this.pollTimedOut = false;
     // Gate on PAIRING status, not device connectivity: a reader that has paired may go briefly offline
     // within the code's window, and `online` would wrongly time it out.
     if (status.pairingStatus === "paired") {
@@ -241,9 +250,20 @@ export class SumUpAddReader extends LitElement {
       return html`
         <p class="steps">${t("payments.sumup.pairing_steps")}</p>
         <p data-test="pairing-progress">${t("payments.sumup.pairing_in_progress")}</p>
-        <p class="countdown" data-test="countdown">
-          ${t("payments.sumup.pairing_time_left").replace("{time}", this.#formatRemaining())}
-        </p>
+        ${
+          this.pollTimedOut
+            ? html`<p data-test="pairing-timeout" role="alert">
+                ${codeMessage("connection.timed_out")}
+              </p>`
+            : ""
+        }
+        ${
+          this.remaining > 0
+            ? html`<p class="countdown" data-test="countdown">
+                ${t("payments.sumup.pairing_time_left").replace("{time}", this.#formatRemaining())}
+              </p>`
+            : ""
+        }
       `;
     }
     if (this.phase === "expired") {
