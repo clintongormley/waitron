@@ -107,6 +107,7 @@ export class CatalogueScreen extends LitElement {
   @state() private productsLoaded = false;
   @state() private madeAt: Record<string, MadeAt> = {};
   @state() private routing: RoutingModel | null = null;
+  @state() private routingFailed = false;
   @state() private courses: Course[] = [];
   @state() private selectedCatalogueId = "";
   @state() private editorOpen = false;
@@ -160,6 +161,7 @@ export class CatalogueScreen extends LitElement {
     () => this.api,
     () => {
       this.routing = null;
+      this.routingFailed = true;
     },
   );
   // A re-read that fails after the step's first load keeps the menus it already shows.
@@ -230,6 +232,7 @@ export class CatalogueScreen extends LitElement {
         this.#routingQueries
           .watch("getFolderRouting", [], (value) => {
             this.routing = value;
+            this.routingFailed = false;
           })
           .catch(() => {
             this.routing = null;
@@ -686,6 +689,7 @@ export class CatalogueScreen extends LitElement {
               .products=${this.products}
               .madeAt=${this.madeAt}
               .routing=${this.routing}
+              .routingFailed=${this.routingFailed}
               .categories=${this.categories}
               .extraLists=${this.extraLists}
               .optionLists=${this.optionLists}
