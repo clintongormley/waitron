@@ -2987,6 +2987,20 @@ above the table's 440px narrow-tree width); (4) the catalogue browser's phone la
 the window's width (`@media (max-width: 30rem)`), where the menus and modifiers screens use
 `@container (max-width: 30rem)`.
 
+**Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, owner
+2026-10-04).** Every row of the Products tree draws the same slots before its name — the arrow, a
+drag grip (a blank one on All products) and a folder icon or photo, one tap target each — so names
+start one indent step apart per level whether the row is a category or a product, and the Name
+heading sits over the All products name (`wt-data-table` gained a `tree-heading` part for this).
+Before, at one level a category's name started 22px left of a product's (measured 2026-10-04 in a
+temporary test, not kept). The Main category column is removed from the table and its Customise
+list; its search text moved into the Name column's, so a category's name or path still finds its
+products and an empty category is found by its parent's path; a saved column choice or order naming
+the old column is ignored. Seven existing test assertions that pinned the column changed, for the
+owner to review (listed in the PR). Now, a product whose category id names no category lists under
+All products with no "missing" marker; the products table's category column has a foreign key to
+categories (`packages/db/src/schema/catalogue.ts:51`), so such an id is not expected (not tried).
+
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through
 that teaches a new user what to set up and in what order — devices, printers, device profiles, and

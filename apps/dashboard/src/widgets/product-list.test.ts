@@ -2405,6 +2405,15 @@ describe("the Products tree's Name column", () => {
     expect(headings).not.toContain(t("editor.modifiers"));
   });
 
+  it("still finds an empty category by its parent's path", async () => {
+    const { el, root } = await mountDeep({ products: [] });
+    el.search = "Food / Meat";
+    await el.updateComplete;
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+    expect(rowKeys(root)).toContain("folder:g");
+    expect(rowKeys(root)).not.toContain("folder:d");
+  });
+
   it("still finds a product by its category's path", async () => {
     const { el, root } = await mountDeep();
     el.search = "Food / Meat / Grill";
