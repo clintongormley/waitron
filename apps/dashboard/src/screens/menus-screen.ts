@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { ref } from "lit/directives/ref.js";
@@ -78,11 +78,24 @@ type ListLayout = "narrow" | "middle" | "wide";
 const STATUS_ORDER = ["unpublished", "changed", "current", "loading", "failed"];
 
 /** The state in one line, for the editor's heading. */
-function statusLine(status: MenuStatus) {
+function statusLine(
+  status: MenuStatus,
+  drawLabel: (label: string) => string | TemplateResult = (label) => label,
+) {
   const { label, live } = statusWords(status);
   return live === null
-    ? label
-    : html`${label} · ${live.version} · <span class="time">${live.time}</span>`;
+    ? drawLabel(label)
+    : html`${drawLabel(label)} · ${live.version} · <span class="time">${live.time}</span>`;
+}
+
+function previewAddress(menuId: string): string {
+  return `/manage/menus/menu/${encodeURIComponent(menuId)}/view/preview`;
+}
+
+/** A held modifier key or another button keeps the browser's own handling of a link, such as
+ * opening a new tab. */
+function leftToBrowser(event: MouseEvent): boolean {
+  return event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey;
 }
 
 /** The state a publish answered as version `number` left, shown until the next read replaces it.
@@ -254,8 +267,39 @@ export class MenusScreen extends LitElement {
       .header wt-button {
         margin-inline-start: auto;
       }
-      .back {
-        margin-bottom: var(--wt-space-3);
+      .heading {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        column-gap: var(--wt-space-2);
+        margin-bottom: var(--wt-space-4);
+      }
+      .heading nav {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+      .heading h1 {
+        margin: 0;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .heading a {
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--wt-tap-min);
+        color: var(--wt-color-primary-text);
+      }
+      /* Padding on an inline link makes its tap target a tap target tall without making its line
+         taller, so the line keeps its height whether the label is a link or words. */
+      .status-line a {
+        padding-block: calc((var(--wt-tap-min) - 1lh) / 2);
+        color: var(--wt-color-primary-text);
+      }
+      .heading a:focus-visible,
+      .status-line a:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
       }
       .structure {
         display: grid;
@@ -1561,17 +1605,15 @@ export class MenusScreen extends LitElement {
     return html`<a
       part="changes-link"
       data-test=${`changes-${menu.id}`}
-      href=${`/manage/menus/menu/${encodeURIComponent(menu.id)}/view/preview`}
+      href=${previewAddress(menu.id)}
       aria-label=${`${label}: ${menu.name}`}
       @click=${(event: MouseEvent) => this.#openPreview(event, menu.id)}
       >${label}</a
     >`;
   }
 
-  /** A held modifier key keeps the browser's own handling, such as opening a new tab. */
   #openPreview(event: MouseEvent, menuId: string): void {
-    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
-      return;
+    if (leftToBrowser(event)) return;
     event.preventDefault();
     this.#open(menuId, "preview");
   }
@@ -2258,12 +2300,24 @@ export class MenusScreen extends LitElement {
     });
   }
 
-  #renderStatusLine() {
+  /** On the Preview tab the changes are already shown, so the label stays plain words there. */
+  #renderStatusLine(menuId: string) {
     const words = this.statusError
       ? t("menus.status_error")
       : this.status === null
         ? t("menus.status_loading")
-        : statusLine(this.status);
+        : this.status.state === "changed" && this.view !== "preview"
+          ? statusLine(
+              this.status,
+              (label) =>
+                html`<a
+                  data-test="status-changes"
+                  href=${previewAddress(menuId)}
+                  @click=${(event: MouseEvent) => this.#openPreview(event, menuId)}
+                  >${label}</a
+                >`,
+            )
+          : statusLine(this.status);
     return html`<p class="status-line" data-test="menu-status">${words}</p>`;
   }
 
@@ -2423,15 +2477,24 @@ export class MenusScreen extends LitElement {
     </wt-modal>`;
   }
 
-  #renderEditor() {
+  #renderEditor(menuId: string) {
     const name = this.#menuName();
-    return html`<div class="back">
-        <wt-button data-test="back" variant="ghost" @click=${() => this.#backToList()}
-          >${t("menus.back")}</wt-button
-        >
+    return html`<div class="heading">
+        <nav aria-label=${t("menus.menu_trail")} data-test="menu-breadcrumb">
+          <a
+            data-test="back"
+            href="/manage/menus"
+            @click=${(event: MouseEvent) => {
+              if (leftToBrowser(event)) return;
+              event.preventDefault();
+              this.#backToList();
+            }}
+            >${t("menus.title")}</a
+          ><span class="sep" aria-hidden="true">›</span>
+        </nav>
+        <h1>${name || t("menus.title")}</h1>
       </div>
-      <h1>${name || t("menus.title")}</h1>
-      ${this.#renderStatusLine()} ${this.#renderLoadState()} ${this.#renderMemberError()}
+      ${this.#renderStatusLine(menuId)} ${this.#renderLoadState()} ${this.#renderMemberError()}
       <wt-tabs
         data-test="menu-tabs"
         label=${name || t("menus.title")}
@@ -2458,7 +2521,7 @@ export class MenusScreen extends LitElement {
   }
 
   override render() {
-    return this.menuId === null ? this.#renderList() : this.#renderEditor();
+    return this.menuId === null ? this.#renderList() : this.#renderEditor(this.menuId);
   }
 }
 
