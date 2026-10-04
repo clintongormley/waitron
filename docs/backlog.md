@@ -3004,7 +3004,7 @@ above the table's 440px narrow-tree width); (4) the catalogue browser's phone la
 the window's width (`@media (max-width: 30rem)`), where the menus and modifiers screens use
 `@container (max-width: 30rem)`.
 
-**Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, owner
+**Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner
 2026-10-04).** The All products row, category rows, a category being added and product rows of the
 Products tree draw the same slots before the name — the arrow, a drag grip (a blank one on All
 products and on a category being added) and a folder icon, or a product's photo or its empty
