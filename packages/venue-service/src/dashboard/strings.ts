@@ -217,8 +217,8 @@ const en = {
   "venue.edit_assignment": "Edit menu assignment",
   "venue.order_invalid": "Enter a whole number of zero or more.",
 
-  "nav.venue_operations": "Venue operations",
-  "venue.title": "Venue operations",
+  "nav.departments_zones": "Departments and zones",
+  "venue.title": "Departments and zones",
   "venue.departments": "Departments",
   "venue.add_department": "Add department",
   "venue.name": "Department name",
@@ -523,8 +523,8 @@ const es: Record<keyof typeof en, string> = {
   "venue.edit_assignment": "Editar asignación de carta",
   "venue.order_invalid": "Introduce un número entero igual o mayor que cero.",
 
-  "nav.venue_operations": "Operaciones del local",
-  "venue.title": "Operaciones del local",
+  "nav.departments_zones": "Departamentos y zonas",
+  "venue.title": "Departamentos y zonas",
   "venue.departments": "Departamentos",
   "venue.add_department": "Añadir departamento",
   "venue.name": "Nombre del departamento",

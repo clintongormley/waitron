@@ -74,17 +74,20 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
     );
   });
 
-  it("mounts venue operations in the service navigation group", () => {
+  it("places Departments and zones first in the Venue operations group", () => {
     expect(VENUE_SERVICE_DASHBOARD.module).toBe("venue-service");
     expect(VENUE_SERVICE_DASHBOARD.screen).toEqual({
       id: "venue-operations",
-      navLabelKey: "nav.venue_operations",
-      group: "service",
+      navLabelKey: "nav.departments_zones",
+      group: "operations",
+      order: 10,
       requiresPermission: "venue_service.manage",
     });
-    expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.venue_operations"]).toBe("Venue operations");
-    expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.venue_operations"]).toBe(
-      "Operaciones del local",
+    expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.departments_zones"]).toBe(
+      "Departments and zones",
+    );
+    expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.departments_zones"]).toBe(
+      "Departamentos y zonas",
     );
   });
 
@@ -156,7 +159,8 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
     expect(prep.screen).toEqual({
       id: "prep-stations",
       navLabelKey: "nav.prep_stations",
-      group: "service",
+      group: "operations",
+      order: 30,
       requiresPermission: "venue_service.manage",
     });
     const handle = prep.create({

@@ -151,11 +151,14 @@ type NavGroup = {
   headerKey?: StringKey;
   icon?: string;
   items: NavItem[];
+  /** Sorted with the group's module pages; a tie keeps the core item first. */
+  itemsAmongModules?: (NavItem & { order: number })[];
   itemsAfterModules?: NavItem[];
 };
 
 const coreItems = (group: NavGroup): NavItem[] => [
   ...group.items,
+  ...(group.itemsAmongModules ?? []),
   ...(group.itemsAfterModules ?? []),
 ];
 /** A nav row as shown: a core item or a module's screen, labelled in the current language. */
@@ -178,6 +181,11 @@ const NAV_GROUPS: NavGroup[] = [
     itemsAfterModules: [{ screen: "orders", labelKey: "nav.orders" }],
   },
   {
+    id: "service",
+    headerKey: "nav.group.service",
+    items: [],
+  },
+  {
     id: "menu",
     headerKey: "nav.group.menu",
     items: [
@@ -188,9 +196,11 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "service",
-    headerKey: "nav.group.service",
-    items: [{ screen: "floor", labelKey: "nav.floor" }],
+    id: "operations",
+    headerKey: "nav.group.operations",
+    items: [],
+    itemsAmongModules: [{ screen: "floor", labelKey: "nav.floor", order: 20 }],
+    itemsAfterModules: [{ screen: "venue-settings", labelKey: "nav.venue_settings" }],
   },
   {
     id: "team",
@@ -212,7 +222,6 @@ const NAV_GROUPS: NavGroup[] = [
     headerKey: "nav.group.configuration",
     icon: "gear",
     items: [
-      { screen: "venue-settings", labelKey: "nav.venue_settings" },
       {
         screen: "content-languages",
         labelKey: "nav.content_languages",
@@ -1548,7 +1557,7 @@ export class DashboardApp extends LitElement {
   }
 
   /** The pages this person may open, group by group in nav order, each labelled in the current
-   * language; `pages` is undefined for a group the search hides whole. */
+   * language; `pages` is undefined when no page is permitted or no page matches the search. */
   #shownNav(): { group: NavGroup; pages?: NavPage[] }[] {
     if (this.sessionRole === "staff")
       return [
@@ -1566,15 +1575,26 @@ export class DashboardApp extends LitElement {
         .filter((item) => this.#mayOpen(item))
         .map((item) => ({ screen: item.screen, label: t(item.labelKey) }));
     return NAV_GROUPS.map((group) => {
+      const among = [
+        ...(group.itemsAmongModules ?? [])
+          .filter((item) => this.#mayOpen(item))
+          .map((item) => ({
+            order: item.order,
+            page: { screen: item.screen, label: t(item.labelKey) },
+          })),
+        ...(this.#navGroups.get(group.id) ?? []).map((screen) => ({
+          order: screen.order ?? 0,
+          page: { screen: screen.id, label: tKit(screen.navLabelKey) },
+        })),
+      ]
+        .sort((a, b) => a.order - b.order)
+        .map(({ page }) => page);
       const permitted: NavPage[] = [
         ...shown(group.items),
-        ...(this.#navGroups.get(group.id) ?? []).map((screen) => ({
-          screen: screen.id,
-          label: tKit(screen.navLabelKey),
-        })),
+        ...among,
         ...shown(group.itemsAfterModules),
       ];
-      if (term === "") return { group, pages: permitted };
+      if (term === "") return { group, pages: permitted.length > 0 ? permitted : undefined };
       const headerMatches =
         group.headerKey !== undefined && foldForSearch(t(group.headerKey)).includes(term);
       const pages = headerMatches

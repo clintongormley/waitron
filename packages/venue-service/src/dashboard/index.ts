@@ -11,8 +11,9 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
   module: "venue-service",
   screen: {
     id: "venue-operations",
-    navLabelKey: "nav.venue_operations",
-    group: "service",
+    navLabelKey: "nav.departments_zones",
+    group: "operations",
+    order: 10,
     requiresPermission: "venue_service.manage",
   },
   strings: VENUE_SERVICE_STRINGS,
@@ -28,7 +29,8 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
       screen: {
         id: "prep-stations",
         navLabelKey: "nav.prep_stations",
-        group: "service",
+        group: "operations",
+        order: 30,
         requiresPermission: "venue_service.manage",
       },
       create(ctx) {
