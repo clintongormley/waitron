@@ -1,5 +1,5 @@
 import { locationId as brandLocationId } from "@waitron/shared";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -187,12 +187,12 @@ describe("sales — the commercial record", () => {
     const [stored] = await suite.db
       .select({ priceQuantity: saleLines.priceQuantity })
       .from(saleLines)
-      .where(eq(saleLines.saleId, saleId));
+      .where(and(eq(saleLines.saleId, saleId), eq(saleLines.lineNo, 1)));
     expect(stored.priceQuantity).toBe(1000);
     const [positive] = await suite.db
       .select({ priceQuantity: saleLines.priceQuantity })
       .from(saleLines)
-      .where(eq(saleLines.lineNo, 2));
+      .where(and(eq(saleLines.saleId, saleId), eq(saleLines.lineNo, 2)));
     expect(positive.priceQuantity).toBe(1);
   });
 
