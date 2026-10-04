@@ -28,6 +28,13 @@ test("the closed field gives its chevron a larger slot", async () => {
   expect(chevron.getBoundingClientRect().width).toBeGreaterThanOrEqual(18);
 });
 
+test("a narrow field keeps enough value room beside the larger chevron", async () => {
+  const { el } = await mountCombobox();
+  el.style.width = "205px";
+  const value = el.shadowRoot!.querySelector<HTMLElement>(".value")!;
+  expect(value.clientWidth).toBeGreaterThanOrEqual(159);
+});
+
 afterEach(cleanup);
 
 async function mountCombobox(html = '<wt-combobox label="Dietary tags"></wt-combobox>') {

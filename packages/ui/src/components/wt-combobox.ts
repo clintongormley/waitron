@@ -115,6 +115,10 @@ export class WtCombobox extends LitElement {
         cursor: pointer;
       }
 
+      .trigger:not(.link) {
+        gap: var(--wt-space-1);
+      }
+
       :host([stable-width]:not([appearance="link"])) .trigger {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
