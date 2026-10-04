@@ -1020,8 +1020,8 @@ export class VenueOperationsScreen extends LitElement {
                 <div slot="status">${this.#readiness()}</div>
                 <div slot="departments">${this.#departments()}</div>
                 <div slot="zones">${this.#zones()}</div>
-              </wt-tabs
-              >${this.#modal()}`
+              </wt-tabs>
+              ${this.#modal()}`
           : nothing
       }`;
   }

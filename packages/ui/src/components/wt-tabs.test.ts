@@ -330,6 +330,28 @@ test("keyboard navigation scrolls the tab bar sideways and leaves the page where
   }
 });
 
+test("shows the selected tab when a narrow page opens directly on a later tab", async () => {
+  const el = (await mountThemed(markup)) as WtTabs;
+  host.style.width = "220px";
+  el.items = items;
+  el.value = "routes";
+  await el.updateComplete;
+
+  const bar = el.shadowRoot!.querySelector<HTMLElement>('[role="tablist"]')!;
+  const selected = buttons(el)[2]!;
+  expect(bar.scrollLeft).toBeGreaterThan(0);
+  expect(selected.getBoundingClientRect().right).toBeLessThanOrEqual(
+    bar.getBoundingClientRect().right,
+  );
+
+  el.value = "status";
+  await el.updateComplete;
+  expect(bar.scrollLeft).toBeLessThan(20);
+  expect(buttons(el)[0]!.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+    bar.getBoundingClientRect().left,
+  );
+});
+
 test("carries each tab's own elements along when the tabs are reordered", async () => {
   // The elements follow the tab key rather than the position, so whatever a browser attaches to a
   // node — focus, a scroll offset, a running transition — stays with the tab the reader chose.

@@ -280,7 +280,7 @@ so they were left alone. At 390px wide a modal's body is narrower than the token
 still takes the body's whole width.
 
 A screen that styles its own native control reads the same variable on the element wrapping it
-(the venue operations screen's Default checkbox label does). A screen whose own layout
+(the Departments and zones screen's Default checkbox label does). A screen whose own layout
 makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
 beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print width ruler"
 button beside the ruler's answer, and the section member list's `.add` row does, for its Add button
@@ -507,7 +507,7 @@ with no search or filter today, so a filter added later is covered (owner, A177)
 stays the screen's own and reads "No <things> yet." ("No extras lists yet.", "Todavía no hay listas
 de extras."), except where the table lists the answer to a question rather than things made, such as
 the Alerts screen's "Nothing needs attention.", or where the screen hands the table only part of what
-was made, such as the Venue operations screen's Tills table, which leaves out revoked devices and kitchen
+was made, such as the Departments and zones screen's Tills table, which leaves out revoked devices and kitchen
 screens and says "No active tills." A screen that filters its rows before handing them to
 the table chooses the empty sentence itself, because the table cannot tell nothing made from nothing
 matching: the Orders screen's rows are always the result of its search and filters, so it passes
@@ -1293,6 +1293,11 @@ of what the header shows, and outside a search the header's `aria-expanded` and 
 arriving at another page in it opens it again. A group opened on arrival stays open after you leave
 it, as one opened by hand does.
 
+A group draws no header when this session cannot open any of its pages. Search also hides a group
+when it removes all of its pages. A group may mix module pages with core pages: a core item listed in
+`itemsAmongModules` uses its `order` to sort among the module pages, with the core item first
+when orders match. Floor plan uses this order in Venue operations.
+
 A search box sits at the top of the sidebar, above the groups: a `wt-input type="search"` with
 `hide-label`, named `nav-search`, whose hidden label (its accessible name) and placeholder are both
 **Search pages**. A staff session sees My schedule and Orders in its sidebar, without a search box.
@@ -1507,7 +1512,7 @@ above for the close-event race a shared, reused modal needs to guard against. On
 owner 2026-09-30): Content languages' Set as default and Remove save straight away, without a modal
 (removing a language keeps its translations); its Add language still opens one. A language the
 venue's region requires has no Remove and shows "Required". A second exception (A212): the course
-list, on the Kitchen screen and in the product editor's Courses window, adds, renames and removes
+list, on Venue settings' Kitchen tab and in the product editor's Courses window, adds, renames and removes
 courses in place without a modal, saving each change as it is made; the Courses window has one Done
 button.
 
@@ -1890,7 +1895,7 @@ Give each tab a stable key, a localized label and a matching named slot:
 
 ```ts
 html`<wt-tabs
-  label="Venue operations"
+  label="Departments and zones"
   .items=${[{ key: "status", label: "Status" }, { key: "departments", label: "Departments" }]}
   .value=${this.view}
   @wt-tab-change=${this.selectView}
@@ -1909,9 +1914,13 @@ listener, carrying the inner strip's key; a listener that returns early unless
 so a screen that nests one strip inside another's panel needs that check on the outer listener.
 The component updates its own selection, while your screen records it with `UrlStateController`.
 An unknown or omitted value shows the first tab. Arrow keys wrap between tabs; Home and End
-select the first and last tab. The tab strip scrolls on narrow screens. Hidden panels remain
+select the first and last tab. The tab strip scrolls on narrow screens and brings the selected tab
+into view when a page opens directly on it. Hidden panels remain
 mounted, so switching tabs retains their input values. Supply unique, nonempty keys and a
 localized `label` for the tab group.
+
+Venue settings fills its tabs with panels from several owners. The page draws the only `h1`;
+each panel leaves it out because its tab already names the panel through `aria-labelledby`.
 
 If a tab has an Add or Create action, put it in the `actions` slot for the selected tab. This
 places the action beside the tabs and outside the tab list's accessibility role. At phone width,
@@ -1967,8 +1976,11 @@ identifiers against its loaded data and permissions; a URL never establishes aut
 replacement history for defaults and invalid destinations, and push history for a new selection.
 Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
-Module management tabs use `/manage/<section>/view/<key>`; Venue operations uses `status`,
-`departments`, `zones` and `kitchen` (Changes after sending). The dashboard preserves module-owned
+Module management tabs use `/manage/<section>/view/<key>`. Departments and zones
+(`/manage/venue-operations`) uses `status`, `departments` and `zones`. Venue settings
+(`/manage/venue-settings`) uses `receipts`, `tables`, `adjustment-reasons` and `kitchen`; a tab
+appears only when a panel on it is visible to the session, and an address naming a hidden tab
+opens the first visible tab. The dashboard preserves module-owned
 `view` segments while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
 the tab:
 `/manage/menus/menu/<id>/view/<key>`, with `structure`, `prices` and `preview` (`dashboardPath`,

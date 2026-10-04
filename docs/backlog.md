@@ -873,8 +873,9 @@ table's own border, corners and background, the sentence centred and, under it, 
 screen puts in the new `empty-action` slot; the "nothing matches" case keeps the toolbar and gets
 the same box without the slot. Every dashboard table whose screen has an Add action for its own
 rows renders that Add button into the slot while its list is empty (Units, the Extras and Options
-lists, Menus, Printers and print agents, Staff, Products, Adjustment reasons, and Venue operations'
-departments, hours and a zone's menus), except the two left open below; a table with no Add action
+lists, Menus, Printers and print agents, Staff, Products, adjustment reasons in Venue settings,
+and the departments, hours and zone menus in Departments and zones), except the two left open
+below; a table with no Add action
 keeps just the sentence. The till and setup draw no `wt-data-table`, so
 nothing changed there. The empty case still shows the toolbar when the table has one, as before.
 Left open: the Payments screen's readers table gets no button, because "Add reader" sits beside
@@ -882,7 +883,7 @@ each connected provider (none, one or several), so there is no single Add to put
 list is pre-filtered by status; and the menu prices table on a menu's Prices tab gets none either,
 because its rows come from "Add several products" on the Structure tab, shown for whichever menu or
 section is open. Found while building it, and fixed in the same change: on the
-Venue operations screen, adding a department, hours or a zone's menu from the top Add button left
+Departments and zones screen, adding a department, hours or a zone's menu from the top Add button left
 keyboard focus on the page, because the screen tried to focus the button while it was still
 greyed out (saving); it now waits until the list has reloaded.
 
@@ -892,7 +893,7 @@ passes `tableNoMatches()` from `@waitron/dashboard-kit` as its no-matches senten
 matches your search or filters." / "Nada coincide con tu búsqueda ni con tus filtros."), which is
 also the table's own English default; the tables' per-screen `*.no_matches` strings and
 `orders.empty` are gone. A filter alone, with nothing searched, does show that sentence (a test pins it). The empty
-sentences now read "No <things> yet." in both languages, and the Venue operations screen's five
+sentences now read "No <things> yet." in both languages, and the Departments and zones screen's five
 tables each name their own thing instead of sharing "No entries yet.", except its Tills table,
 which leaves out revoked devices and kitchen screens and so says "No active tills." / "No hay cajas
 activas." (owner's choice on #1037). Kept as they were, because
@@ -1832,20 +1833,20 @@ Whether the Pricing fold should also name an empty base price or VAT is a questi
 **An Add course button beside the course dropdown (A212) — DONE (#1087).** The owner:
 _"perhaps we should add an "Add course" button under Courses, which would open a modal to edit
 and order the course list. Currently this lives on the kitchen page, not as a modal. need to
-figure that out"_. The course list is edited, added to and reordered on the Kitchen screen
+figure that out"_. The course list is edited, added to and reordered on Venue settings' Kitchen tab
 (`apps/dashboard/src/screens/kitchen-screen.ts`, its "Kitchen courses" section). **To decide:**
 whether the dialog reuses that screen's editor (moved into a widget both use) or the course list
-moves into the dialog alone and the Kitchen screen opens it too; and what the dropdown does when
+moves into the dialog alone and the Kitchen tab opens it too; and what the dropdown does when
 the dialog closes — select a course just added, keep the choice if it still exists. Unsaved edits
 to the product must survive the dialog, as they do around Add unit today (`related()`).
 **Decided (owner, 2026-10-02, choosing B of three):** the course dropdown ends with "Edit
 courses…", drawn like A218's make-new choices, which opens a window holding the whole course list:
 drag to reorder, click a name to rename it, ⋮ to remove one (today's deactivate), and Add course
-at the bottom. The Kitchen screen shows the same list, replacing its one-card-per-course layout
+at the bottom. Venue settings' Kitchen tab shows the same list, replacing its one-card-per-course layout
 with its own Save buttons and typed-in order numbers — so the list is one widget both use.
 Closing the window selects a course just added, and the product's unsaved edits survive it.
 Built: one widget, `dashboard-course-list` (`apps/dashboard/src/widgets/course-list.ts`), on
-the Kitchen screen and in the window the product editor's "Edit courses…" opens (from
+Venue settings' Kitchen tab and in the window the product editor's "Edit courses…" opens (from
 `catalogue-screen.ts`). Each change saves as it is made, so the window has one button, Done, where
 the mockup drew Cancel and Done; Done waits for saves still being answered, including changes made
 while it waits (a second Done during the wait does nothing), and stays open with the reason under
@@ -2145,8 +2146,8 @@ not changed:**
   `apps/till/src/widgets/product-name.ts`) names itself in English only, so a Spanish till drawing
   such a product shows the unit's id — seen only with test products; whether the server ever sends
   a product without a unit was not checked;
-- **for the owner:** the venue operations kitchen tab's two dropdown explanations ("Applies to new
-  kitchen tickets and to reprints." and the release reminder's) are now each dropdown's `hint`,
+- **for the owner:** the two dropdown explanations on venue service's Kitchen panel in Venue
+  settings ("Applies to new kitchen tickets and to reprints." and the release reminder's) are now each dropdown's `hint`,
   which a field that always holds a value never shows, so only screen readers read them while the
   two switches beside them keep visible lines.
 
@@ -3098,7 +3099,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       (`readLinesSoldInEach`), or with no unit recorded on the line — are added together or split;
       a venue-made unit that counts pieces (a "portion"), even one spelled like Each, prints line
       by line, because nothing records a unit's kind (a unit field would need a migration).
-    - The kitchen-ticket grouping setting sits on Venue operations' **Changes after sending** tab,
+    - The kitchen-ticket grouping setting sits on Venue settings' **Kitchen** tab,
       and so does "Print held groups in advance", which is not about sent work at all.
     - `fireHeldGroupsOfCourse` (`apps/server/src/order-groups.ts`), through which a course Fire
       still fires a party's held groups, is to be removed in a follow-up.
@@ -3578,7 +3579,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     `wt-dialog` sets `closedby="none"` while `dismissible` is off. Why that screen behaved
     differently has not been established. The same keydown guard is on other dashboard forms:
     those whose tests press a real Escape during a save also ignore a close while busy in their
-    `wt-close` handler, except the venue operations screen
+    `wt-close` handler, except the Departments and zones screen
     (`packages/venue-service/src/dashboard/venue-operations-screen.ts`), whose handler has no such
     check and which does not set `dismissible`. The rest were tried only with a hand-built
     `KeyboardEvent` (`sections-screen`, `modifiers-screen`, `add-to-menus`, `extra-list-form`,
@@ -4367,8 +4368,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   (4) the form plumbing is hand-written per form: assembling the bottom message, waiting for the
   render and then calling `focusFirstInvalid`, and the state that remembers the first press and
   which refusals the person has since changed, in several different shapes across `apps/dashboard`,
-  the image library, the Stripe and SumUp forms, the adjustment reasons and venue operations
-  screens, and the till's forms. A dashboard-only helper could live in
+  the image library, the Stripe and SumUp forms, adjustment reasons in Venue settings,
+  Departments and zones, and the till's forms. A dashboard-only helper could live in
   `apps/dashboard/src/widgets/form-fields.ts`, but `packages/media` cannot import from
   `apps/dashboard` (it would be a dependency loop), so a helper meant to cover the module screens
   and the image library too would have to live in a package they can all reach, such as
@@ -4402,9 +4403,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   an `AppError` with `server.internal`; (b) the Stripe add-reader dialog
   (`packages/payments-stripe/src/dashboard/stripe-add-reader.ts`) shows "Reader ID" twice, a
   separate label carrying the help icon and then the input's own label, where `wt-input`'s `help`
-  slot would do; (c) a refused save of a venue operations setting that saves at once shows twice,
-  beside the control and in the screen's alert (`#pageAlert`,
-  `packages/venue-service/src/dashboard/venue-operations-screen.ts`), and existing tests pin both;
+  slot would do; (c) a refused save of a venue service setting that saves at once shows twice,
+  beside the control and at the top of the panel (`render`,
+  `packages/venue-service/src/dashboard/service-settings-panel.ts`), and the cases in
+  `packages/venue-service/src/dashboard/service-settings-panel.test.ts` pin both;
   (d) `wt-switch` cannot be marked invalid, so a server refusal of an adjustment reason's
   note-required switch would show its message but move focus nowhere — though the server refuses
   `noteRequired` only when it is not a true/false value (`requireFlag`,
@@ -4626,7 +4628,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   (`packages/venue-service/src/operations.ts`): the device's default, else the zone marked
   `is_counter_default`, neither filtered by service mode. Since A178d the box is a `wt-combobox`,
   which shows an empty box for a value with no matching option (read, not run). Since #1004 the
-  dashboard's venue operations screen sets a device's default zone, through `PUT
+  dashboard's Departments and zones screen sets a device's default zone, through `PUT
   /management-api/venue-service/devices/:deviceId/default-zone`. **Next action:** find whether a
   `table_tab` zone can be the counter default or a device default; if it can, decide whether that
   is refused where it is set or handled by the till.
@@ -4729,8 +4731,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   (`locations.invoice_locales`), read in the transaction that files the sale (`readReceiptLanguage`,
   `packages/catalogue/src/operations.ts`); a reprint asked for without a language prints in the
   language the sale was filed in (`sales.locale`). The fixed words come from Spain's country pack
-  (`packages/country-es/src/receipt-labels.ts`). It is set on the **Receipts** page and on setup's
-  venue screen; **in Catalonia it is fixed to Catalan**
+  (`packages/country-es/src/receipt-labels.ts`). You set it on Venue settings' **Receipts** tab or
+  setup's venue screen; **in Catalonia it is fixed to Catalan**
   ([regional-language-rules.md](compliance/regional-language-rules.md), Catalonia). Server: `GET`
   and `PUT /management-api/receipt-language` (`apps/server/src/location-settings-api.ts`).
   - **A copy can be printed in another receipt language (C114, landed 2026-10-02 as #1022).** Where the till reprints an issued receipt (the finished
@@ -4747,7 +4749,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     [regional-language-rules.md](compliance/regional-language-rules.md), Catalonia). The till learns
     the filed language from the sale it just recorded, and for a paid bill from `receiptLanguage` in
     the party's bill list (`readPartyBills`, `apps/server/src/parties.ts`). Catalonia's reason on
-    setup and the Receipts page says a copy can be printed in another language. The dashboard
+    setup and the Receipts tab of Venue settings say a copy can be printed in another language. The dashboard
     Printers screen's Resend still sends a job's stored bytes again (owner, 2026-10-02), and the
     Orders screen's copy (`reprintOrderReceipt`, `apps/server/src/orders-reprint.ts`) prints in the
     language the sale was filed in. Two tidy-ups #1022's review raised and left, because each changes
@@ -4780,7 +4782,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
       printed receipt). An invoice-first order is filed at placing and keeps
       the language it was filed in (the case "accepts a change while an invoice-first order is
       placed, and collecting it keeps the language it was filed in" in the same test file).
-    - The refusal's count of blocking orders is not shown on the Receipts page: `codeMessage` fills
+    - The refusal's count of blocking orders is not shown on the Receipts tab of Venue settings: `codeMessage` fills
       in no values.
     - **The payment slip was left alone.** Its words («JUSTIFICANTE DE PAGO», «Importe»,
       «Cobrado») stay Spanish (`apps/server/src/payment-slip.ts`), and its date and amounts still
@@ -4801,7 +4803,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
       starts (again after a server switch or an enrolment), so a change reaches those after a
       reload. The on-screen ticket follows each sale's own language.
     - The dev and demo seed's English mode stores `en-GB`, which prints the Spanish words beside
-      English dish names; the Receipts page shows it as the saved language although it is not
+      English dish names; the Receipts tab of Venue settings shows it as the saved language although it is not
       offered.
     - The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish
       way (`20,00 €`, `5 ago 2026`), while its words are Galician or Basque. Measured 2026-10-02:
@@ -4916,7 +4918,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   open, including advisor questions Q21, Q14, Q27 and Q22.
   Its §4 day types and §5 placement are revised by A261.
 - **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — SPEC
-  APPROVED; step 1 planned** ([plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)). The sidebar's Venue operations group; Venue settings with one tab per group
+  APPROVED; step 1 built, awaiting PR** ([plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
+  The sidebar's Venue operations group; Venue settings with one tab per group
   (Receipts moves there); Departments and zones as one table edited in place; Prep stations as one
   tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
   special dates, a calendar and public holidays; Printing rules and the cash drawer policy deleted.
@@ -7627,7 +7630,7 @@ Live A2 work is under *A2* in Track A. What constrains the next change to the wi
   default to **FS** (factura simplificada — every till sale is `TipoFactura` F2) and **FR**
   (rectificativa). Nothing in the dashboard can change or add a series today.
 - **`operation_description` is a Veri\*Factu field, not a country fact.** It defaults from the fiscal
-  contribution and is editable after setup on the dashboard's **Receipts** page (its location
+  contribution and is editable after setup on the dashboard's Venue settings **Receipts** tab (its location
   section), applying to records filed from then on and leaving already-filed records alone.
 
 ### Roles the admin can edit (A7)
