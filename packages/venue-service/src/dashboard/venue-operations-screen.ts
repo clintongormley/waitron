@@ -81,7 +81,9 @@ export class VenueOperationsScreen extends LitElement {
       wt-data-table::part(till-zone) {
         font-size: var(--wt-font-size-sm);
       }
-      wt-data-table::part(edit-paid) {
+      wt-data-table::part(edit-paid),
+      wt-data-table::part(edit-collection),
+      wt-data-table::part(edit-receipt) {
         border: 0;
         background: transparent;
         color: var(--wt-color-primary-text);
@@ -150,6 +152,8 @@ export class VenueOperationsScreen extends LitElement {
   @state() private paidDrafts: Record<string, string> = {};
   @state() private collectionEditor?: string;
   @state() private collectionDrafts: Record<string, string> = {};
+  @state() private receiptEditor?: string;
+  @state() private receiptDrafts: Record<string, string> = {};
   @state() private view: View = "status";
   @state() private editor?: Editor;
   @state() private zoneId = "";
@@ -734,14 +738,91 @@ export class VenueOperationsScreen extends LitElement {
         key: "receipt",
         label: t("venue.receipt"),
         cell: (row) => {
+          const key =
+            row.kind === "department" ? `department-${row.department.id}` : `zone-${row.zone.id}`;
           const receiptPrintMode = policyFor(row)?.receiptPrintMode;
-          return receiptPrintMode === "auto"
-            ? t("venue.always")
-            : receiptPrintMode === "on_request"
-              ? t("venue.on_request")
-              : receiptPrintMode === "never"
-                ? t("venue.never")
-                : nothing;
+          if (receiptPrintMode === undefined) return nothing;
+          const stored =
+            row.kind === "department"
+              ? receiptPrintMode
+              : model.salePolicies.zones.find((policy) => policy.zoneId === row.zone.id)
+                  ?.receiptPrintMode;
+          const effectiveLabel =
+            receiptPrintMode === "auto"
+              ? t("venue.always")
+              : receiptPrintMode === "on_request"
+                ? t("venue.on_request")
+                : receiptPrintMode === "never"
+                  ? t("venue.never")
+                  : "";
+          const inheritedMode =
+            row.kind === "zone"
+              ? model.salePolicies.departments.find(
+                  (policy) => policy.departmentId === row.departmentId,
+                )?.receiptPrintMode
+              : undefined;
+          const inheritedLabel =
+            inheritedMode === "auto"
+              ? t("venue.always")
+              : inheritedMode === "on_request"
+                ? t("venue.on_request")
+                : t("venue.never");
+          if (this.receiptEditor !== key)
+            return html`<button
+              type="button"
+              part="edit-receipt"
+              data-test="edit-receipt"
+              aria-label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.receipt")}, ${effectiveLabel}`}
+              @click=${() => (this.receiptEditor = key)}
+            >
+              ${effectiveLabel}
+            </button>`;
+          return html`<wt-combobox
+            name="receiptPrintMode"
+            label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.receipt")}`}
+            hide-label
+            .options=${[
+              ...(row.kind === "zone"
+                ? [{ value: "", label: `${t("venue.inherit")} (${inheritedLabel})` }]
+                : []),
+              { value: "auto", label: t("venue.always") },
+              { value: "on_request", label: t("venue.on_request") },
+              { value: "never", label: t("venue.never") },
+            ]}
+            .value=${live(this.receiptDrafts[key] ?? stored ?? "")}
+            ?disabled=${this.busy}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              const value = event.detail.value;
+              if (value === (stored ?? "")) {
+                const drafts = { ...this.receiptDrafts };
+                delete drafts[key];
+                this.receiptDrafts = drafts;
+                this.receiptEditor = undefined;
+                this.actionError = undefined;
+                return;
+              }
+              this.receiptDrafts = { ...this.receiptDrafts, [key]: value };
+              void this.#save(async () => {
+                if (row.kind === "department")
+                  await this.api.setDepartmentSalePolicyField(
+                    row.department.id,
+                    "receiptPrintMode",
+                    value as "auto" | "on_request" | "never",
+                  );
+                else
+                  await this.api.setZoneSalePolicyOverride(
+                    row.zone.id,
+                    "receiptPrintMode",
+                    value ? (value as "auto" | "on_request" | "never") : null,
+                  );
+                const drafts = { ...this.receiptDrafts };
+                delete drafts[key];
+                this.receiptDrafts = drafts;
+                this.receiptEditor = undefined;
+              });
+            }}
+          ></wt-combobox>`;
         },
       },
     ];

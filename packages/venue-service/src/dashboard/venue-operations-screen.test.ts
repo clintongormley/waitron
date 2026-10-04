@@ -503,6 +503,85 @@ describe("venue operations screen", () => {
     await vi.waitFor(() => expect(buttons()[1].textContent).toContain("Numbered"));
   });
 
+  it("changes a department receipt choice and lets a zone inherit it", async () => {
+    let departmentMode: "auto" | "on_request" = "auto";
+    let zoneMode: "never" | null = "never";
+    const setDepartmentSalePolicyField = vi.fn(async (_id, _field, value) => {
+      departmentMode = value;
+    });
+    const setZoneSalePolicyOverride = vi.fn(async (_id, _field, value) => {
+      zoneMode = value;
+    });
+    const load = vi.fn(async () => ({
+      ...model,
+      departments: [model.departments[0]],
+      salePolicies: {
+        departments: [
+          {
+            departmentId: "d1",
+            paidWhen: "prepay" as const,
+            collectionNumber: "none" as const,
+            receiptPrintMode: departmentMode,
+            printTradingName: true,
+          },
+        ],
+        zones: [
+          {
+            zoneId: "z1",
+            paidWhen: null,
+            collectionNumber: null,
+            receiptPrintMode: zoneMode,
+            effective: {
+              paidWhen: "prepay" as const,
+              collectionNumber: "none" as const,
+              receiptPrintMode: zoneMode ?? departmentMode,
+              printTradingName: true,
+            },
+          },
+        ],
+      },
+    }));
+    const el = await mount({
+      load,
+      setDepartmentSalePolicyField,
+      setZoneSalePolicyOverride,
+    } as unknown as VenueServiceApi);
+    const tree = () => table(el, "policy-tree").shadowRoot!;
+    const buttons = () => [
+      ...tree().querySelectorAll<HTMLButtonElement>('[data-test="edit-receipt"]'),
+    ];
+    const control = () =>
+      tree().querySelector<HTMLElement & { options: { value: string; label: string }[] }>(
+        'wt-combobox[name="receiptPrintMode"]',
+      )!;
+    expect(buttons()).toHaveLength(2);
+    buttons()[0].click();
+    await settle(el);
+    expect(control().options.map((option) => option.value)).toEqual([
+      "auto",
+      "on_request",
+      "never",
+    ]);
+    await chooseOption(control(), "on_request");
+    await vi.waitFor(() =>
+      expect(setDepartmentSalePolicyField).toHaveBeenCalledWith(
+        "d1",
+        "receiptPrintMode",
+        "on_request",
+      ),
+    );
+    await vi.waitFor(() => expect(buttons()).toHaveLength(2));
+    buttons()[1].click();
+    await settle(el);
+    expect(control().options[0].value).toBe("");
+    expect(control().options[0].label).toContain("On request");
+    await chooseOption(control(), "");
+    await vi.waitFor(() =>
+      expect(setZoneSalePolicyOverride).toHaveBeenCalledWith("z1", "receiptPrintMode", null),
+    );
+    await vi.waitFor(() => expect(buttons()[1].textContent).toContain("On request"));
+  });
+
   it("switches receipt trading names on a department without offering the switch on a zone", async () => {
     let printTradingName = false;
     const save = vi.fn(async (departmentId: string, field: string, value: boolean) => {
