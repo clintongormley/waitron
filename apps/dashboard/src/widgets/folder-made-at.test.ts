@@ -287,7 +287,14 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
     expect(result.get("drinks")?.someElsewhere).toBe(true);
   });
 
-  it("qualifies a station opened or closed by hand today", () => {
+  it("does not qualify a station opened by hand today that keeps no hours, which nothing can close", () => {
+    const result = madeAt(
+      routing({ ...barOnDrinks, stationTimes: [times("bar", { today: "open" })] }),
+    );
+    expect(result.get("drinks")?.someElsewhere).toBe(false);
+  });
+
+  it("qualifies a station closed by hand today", () => {
     const result = madeAt(
       routing({ ...barOnDrinks, stationTimes: [times("bar", { today: "closed" })] }),
     );

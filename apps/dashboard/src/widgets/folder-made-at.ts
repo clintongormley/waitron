@@ -100,7 +100,7 @@ export function folderMadeAt(
   const timed = (stationId: string) => {
     if (stationId === routing.defaultStationId) return false;
     const timing = rules.timing.get(stationId);
-    return timing !== undefined && (timing.hours.length > 0 || timing.today !== null);
+    return timing !== undefined && (timing.hours.length > 0 || timing.today === "closed");
   };
 
   const result = new Map<string, FolderMadeAt>();
