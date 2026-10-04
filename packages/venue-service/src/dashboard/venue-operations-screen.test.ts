@@ -196,6 +196,30 @@ async function changesHeardOutside(act: () => Promise<void>): Promise<number> {
 }
 
 describe("venue operations screen", () => {
+  it("renames a department from its table cell", async () => {
+    const updateDepartment = vi.fn().mockResolvedValue(undefined);
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      updateDepartment,
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    tree.querySelector<HTMLButtonElement>('[data-test="edit-department-name"]')!.click();
+    await settle(el);
+    const input = tree
+      .querySelector('wt-input[name="departmentName"]')!
+      .shadowRoot!.querySelector("input")!;
+    input.value = "Dining and bar";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    tree.querySelector<HTMLButtonElement>('[data-test="save-department-name"]')!.click();
+    await vi.waitFor(() =>
+      expect(updateDepartment).toHaveBeenCalledWith("d1", {
+        name: "Dining and bar",
+        tradingName: "Casa Delgado",
+        defaultServiceMode: "table_tab",
+      }),
+    );
+  });
+
   it("edits a department trading name in its table cell", async () => {
     const updateDepartment = vi.fn().mockResolvedValue(undefined);
     const el = await mount({

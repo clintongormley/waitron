@@ -84,6 +84,7 @@ export class VenueOperationsScreen extends LitElement {
       wt-data-table::part(edit-paid),
       wt-data-table::part(edit-collection),
       wt-data-table::part(edit-receipt),
+      wt-data-table::part(edit-department-name),
       wt-data-table::part(edit-trading-name) {
         border: 0;
         background: transparent;
@@ -149,6 +150,9 @@ export class VenueOperationsScreen extends LitElement {
   @state() private attempted = false;
   @state() private busy = false;
   @state() private printTradingNameDrafts: Record<string, boolean> = {};
+  @state() private departmentNameEditor?: string;
+  @state() private departmentNameDraft = "";
+  @state() private departmentNameError = "";
   @state() private tradingNameEditor?: string;
   @state() private tradingNameDraft = "";
   @state() private tradingNameError = "";
@@ -548,12 +552,68 @@ export class VenueOperationsScreen extends LitElement {
       {
         key: "name",
         label: t("venue.name"),
-        cell: (row) =>
-          row.kind === "department"
-            ? departments.length === 1
-              ? t("venue.every_zone")
-              : row.department.name
-            : row.zone.name,
+        cell: (row) => {
+          if (row.kind !== "department") return row.zone.name;
+          const displayName =
+            departments.length === 1 ? t("venue.every_zone") : row.department.name;
+          if (this.departmentNameEditor !== row.department.id)
+            return html`<button
+              type="button"
+              part="edit-department-name"
+              data-test="edit-department-name"
+              aria-label=${`${row.department.name}: ${t("venue.name")}`}
+              @click=${() => {
+                this.departmentNameDraft = row.department.name;
+                this.departmentNameError = "";
+                this.departmentNameEditor = row.department.id;
+              }}
+            >
+              ${displayName}
+            </button>`;
+          return html`<wt-input
+              name="departmentName"
+              label=${t("venue.name")}
+              hide-label
+              required
+              .value=${live(this.departmentNameDraft)}
+              error=${this.departmentNameError}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                this.departmentNameDraft = event.detail.value;
+                this.departmentNameError = "";
+              }}
+            ></wt-input>
+            <button
+              type="button"
+              data-test="save-department-name"
+              ?disabled=${this.busy}
+              @click=${() => {
+                const name = this.departmentNameDraft.trim();
+                if (!name) {
+                  this.departmentNameError = t("venue.field_required");
+                  return;
+                }
+                void this.#save(async () => {
+                  await this.api.updateDepartment(row.department.id, {
+                    name,
+                    tradingName: row.department.tradingName,
+                    defaultServiceMode: row.department.defaultServiceMode,
+                  });
+                  if (this.departmentNameEditor === row.department.id)
+                    this.departmentNameEditor = undefined;
+                });
+              }}
+            >
+              ${t("venue.save")}
+            </button>
+            <button
+              type="button"
+              data-test="cancel-department-name"
+              @click=${() => (this.departmentNameEditor = undefined)}
+            >
+              ${t("venue.cancel")}
+            </button>`;
+        },
       },
       {
         key: "trading",
