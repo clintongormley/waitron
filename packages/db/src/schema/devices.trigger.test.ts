@@ -1,7 +1,7 @@
 /**
  * The device binding rule: a `kds`-profile device binds exactly one station or watcher, and every
  * other form factor binds neither. The form factor lives in another table, so the rule is two
- * triggers, last written by `packages/db/drizzle/0089_devices_recreate_triggers.sql`.
+ * triggers, last written by `packages/db/drizzle/0091_devices_recreate_triggers.sql`.
  *
  * `scripts/behavioural-triggers.test.ts` pins the same triggers with hand-written SQL; every case here
  * writes through the Drizzle builder, the shape the application writes.

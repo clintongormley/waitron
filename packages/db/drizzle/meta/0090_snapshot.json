@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7f83e98f-4d9f-4418-a48b-be48569503fa",
-  "prevId": "e70fe78a-9dfc-46b3-8585-856ec2548f7f",
+  "id": "060bcaf8-d1ef-4616-9266-130e19cbb628",
+  "prevId": "62d08416-1426-448b-8930-cc73bfa6a9d8",
   "tables": {
     "locations": {
       "name": "locations",
@@ -245,95 +245,6 @@
           "value": "\"tenants\".\"id\" = 1"
         }
       }
-    },
-    "tills": {
-      "name": "tills",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "receipt_printer_id": {
-          "name": "receipt_printer_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "opens_drawer": {
-          "name": "opens_drawer",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "tills_tenant_location_name_key": {
-          "name": "tills_tenant_location_name_key",
-          "columns": [
-            "location_id",
-            "name"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "tills_location_id_locations_id_fk": {
-          "name": "tills_location_id_locations_id_fk",
-          "tableFrom": "tills",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "tills_receipt_printer_id_printers_id_fk": {
-          "name": "tills_receipt_printer_id_printers_id_fk",
-          "tableFrom": "tills",
-          "tableTo": "printers",
-          "columnsFrom": [
-            "receipt_printer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "nodes": {
       "name": "nodes",
@@ -871,13 +782,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "till_id": {
-          "name": "till_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "source": {
           "name": "source",
           "type": "text",
@@ -1003,19 +907,6 @@
         }
       },
       "foreignKeys": {
-        "working_orders_till_id_tills_id_fk": {
-          "name": "working_orders_till_id_tills_id_fk",
-          "tableFrom": "working_orders",
-          "tableTo": "tills",
-          "columnsFrom": [
-            "till_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
         "working_orders_device_id_devices_id_fk": {
           "name": "working_orders_device_id_devices_id_fk",
           "tableFrom": "working_orders",
@@ -1089,6 +980,14 @@
           "name": "working_orders_status_ck",
           "value": "\"working_orders\".\"status\" in ('open', 'placed', 'settled', 'abandoned')"
         },
+        "working_orders_source_ck": {
+          "name": "working_orders_source_ck",
+          "value": "\"working_orders\".\"source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test')"
+        },
+        "working_orders_source_device_ck": {
+          "name": "working_orders_source_device_ck",
+          "value": "(\"working_orders\".\"source\" = 'device') = (\"working_orders\".\"device_id\" is not null)"
+        },
         "working_orders_settled_at_ck": {
           "name": "working_orders_settled_at_ck",
           "value": "(\"working_orders\".\"status\" = 'settled') = (\"working_orders\".\"settled_at\" is not null)"
@@ -1140,11 +1039,18 @@
           "notNull": false,
           "autoincrement": false
         },
-        "captured_by_till_id": {
-          "name": "captured_by_till_id",
+        "captured_by_source": {
+          "name": "captured_by_source",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "captured_by_device_id": {
+          "name": "captured_by_device_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "captured_by_node_id": {
@@ -1221,12 +1127,12 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "order_amendments_till_fk": {
-          "name": "order_amendments_till_fk",
+        "order_amendments_device_fk": {
+          "name": "order_amendments_device_fk",
           "tableFrom": "order_amendments",
-          "tableTo": "tills",
+          "tableTo": "devices",
           "columnsFrom": [
-            "captured_by_till_id"
+            "captured_by_device_id"
           ],
           "columnsTo": [
             "id"
@@ -1258,6 +1164,14 @@
         "order_amendments_kind_ck": {
           "name": "order_amendments_kind_ck",
           "value": "\"order_amendments\".\"kind\" in ('order_placed', 'order_cancelled')"
+        },
+        "order_amendments_captured_by_source_ck": {
+          "name": "order_amendments_captured_by_source_ck",
+          "value": "\"order_amendments\".\"captured_by_source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test')"
+        },
+        "order_amendments_captured_by_source_device_ck": {
+          "name": "order_amendments_captured_by_source_device_ck",
+          "value": "(\"order_amendments\".\"captured_by_source\" = 'device') = (\"order_amendments\".\"captured_by_device_id\" is not null)"
         },
         "order_amendments_entry_hash_ck": {
           "name": "order_amendments_entry_hash_ck",
@@ -2841,13 +2755,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "till_id": {
-          "name": "till_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "device_profile_id": {
           "name": "device_profile_id",
           "type": "text",
@@ -2913,7 +2820,17 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "devices_location_label_active_key": {
+          "name": "devices_location_label_active_key",
+          "columns": [
+            "location_id",
+            "label"
+          ],
+          "isUnique": true,
+          "where": "\"devices\".\"active\" = 1"
+        }
+      },
       "foreignKeys": {
         "devices_location_id_locations_id_fk": {
           "name": "devices_location_id_locations_id_fk",
@@ -2954,19 +2871,6 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "devices_till_id_tills_id_fk": {
-          "name": "devices_till_id_tills_id_fk",
-          "tableFrom": "devices",
-          "tableTo": "tills",
-          "columnsFrom": [
-            "till_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
         "devices_device_profile_id_device_profiles_id_fk": {
           "name": "devices_device_profile_id_device_profiles_id_fk",
           "tableFrom": "devices",
@@ -3003,7 +2907,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -4343,8 +4247,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "till_id": {
-          "name": "till_id",
+        "device_id": {
+          "name": "device_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -4410,12 +4314,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "drawer_opens_till_id_tills_id_fk": {
-          "name": "drawer_opens_till_id_tills_id_fk",
+        "drawer_opens_device_id_devices_id_fk": {
+          "name": "drawer_opens_device_id_devices_id_fk",
           "tableFrom": "drawer_opens",
-          "tableTo": "tills",
+          "tableTo": "devices",
           "columnsFrom": [
-            "till_id"
+            "device_id"
           ],
           "columnsTo": [
             "id"
@@ -4472,7 +4376,7 @@
         },
         "drawer_opens_target_ck": {
           "name": "drawer_opens_target_ck",
-          "value": "(\"drawer_opens\".\"reason\" = 'calibration' and \"drawer_opens\".\"printer_id\" is not null and \"drawer_opens\".\"till_id\" is null and \"drawer_opens\".\"sale_id\" is null and \"drawer_opens\".\"bill_payment_id\" is null) or (\"drawer_opens\".\"reason\" in ('bill_payment', 'bill_refund') and \"drawer_opens\".\"till_id\" is not null and \"drawer_opens\".\"bill_payment_id\" is not null and \"drawer_opens\".\"sale_id\" is null) or (\"drawer_opens\".\"reason\" in ('cash_sale', 'manual') and \"drawer_opens\".\"till_id\" is not null and \"drawer_opens\".\"bill_payment_id\" is null) or (\"drawer_opens\".\"reason\" = 'card_slip' and \"drawer_opens\".\"till_id\" is not null and (\"drawer_opens\".\"sale_id\" is null) <> (\"drawer_opens\".\"bill_payment_id\" is null))"
+          "value": "(\"drawer_opens\".\"reason\" = 'calibration' and \"drawer_opens\".\"printer_id\" is not null and \"drawer_opens\".\"device_id\" is null and \"drawer_opens\".\"sale_id\" is null and \"drawer_opens\".\"bill_payment_id\" is null) or (\"drawer_opens\".\"reason\" in ('bill_payment', 'bill_refund') and \"drawer_opens\".\"device_id\" is not null and \"drawer_opens\".\"bill_payment_id\" is not null and \"drawer_opens\".\"sale_id\" is null) or (\"drawer_opens\".\"reason\" in ('cash_sale', 'manual') and \"drawer_opens\".\"device_id\" is not null and \"drawer_opens\".\"bill_payment_id\" is null) or (\"drawer_opens\".\"reason\" = 'card_slip' and \"drawer_opens\".\"device_id\" is not null and (\"drawer_opens\".\"sale_id\" is null) <> (\"drawer_opens\".\"bill_payment_id\" is null))"
         }
       }
     },

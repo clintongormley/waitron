@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "28800555-b58f-4159-9c5c-52de50904373",
-  "prevId": "f34a9f75-7c13-4840-acbd-7e9e4f676a8d",
+  "id": "9838e6d2-0130-4786-97c9-b8660b05ccc3",
+  "prevId": "91eba573-7c85-4675-a06e-1cfc0229ba16",
   "tables": {
     "locations": {
       "name": "locations",
@@ -606,6 +606,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "price_quantity": {
+          "name": "price_quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1000
         },
         "unit_price_gross": {
           "name": "unit_price_gross",
@@ -6276,6 +6284,14 @@
           "notNull": true,
           "autoincrement": false
         },
+        "price_quantity": {
+          "name": "price_quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1000
+        },
         "unit_price": {
           "name": "unit_price",
           "type": "integer",
@@ -7406,6 +7422,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "till_id": {
+          "name": "till_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "source": {
           "name": "source",
           "type": "text",
@@ -7487,20 +7510,22 @@
             "acknowledged_at"
           ],
           "isUnique": false
-        },
-        "incidents_open_dedup": {
-          "name": "incidents_open_dedup",
-          "columns": [
-            "source",
-            "case when \"device_id\" is null then '' else \"device_id\" end",
-            "code",
-            "case when \"sale_id\" is null then '' else \"sale_id\" end"
-          ],
-          "isUnique": true,
-          "where": "\"incidents\".\"acknowledged_at\" is null"
         }
       },
       "foreignKeys": {
+        "incidents_till_id_tills_id_fk": {
+          "name": "incidents_till_id_tills_id_fk",
+          "tableFrom": "incidents",
+          "tableTo": "tills",
+          "columnsFrom": [
+            "till_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "incidents_device_id_devices_id_fk": {
           "name": "incidents_device_id_devices_id_fk",
           "tableFrom": "incidents",
@@ -7538,14 +7563,6 @@
         "incidents_code_ck": {
           "name": "incidents_code_ck",
           "value": "\"incidents\".\"code\" <> ''"
-        },
-        "incidents_source_ck": {
-          "name": "incidents_source_ck",
-          "value": "\"incidents\".\"source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test')"
-        },
-        "incidents_source_device_ck": {
-          "name": "incidents_source_device_ck",
-          "value": "(\"incidents\".\"source\" = 'device') = (\"incidents\".\"device_id\" is not null)"
         }
       }
     },
@@ -7906,17 +7923,6 @@
     "columns": {}
   },
   "internal": {
-    "indexes": {
-      "incidents_open_dedup": {
-        "columns": {
-          "case when \"device_id\" is null then '' else \"device_id\" end": {
-            "isExpression": true
-          },
-          "case when \"sale_id\" is null then '' else \"sale_id\" end": {
-            "isExpression": true
-          }
-        }
-      }
-    }
+    "indexes": {}
   }
 }

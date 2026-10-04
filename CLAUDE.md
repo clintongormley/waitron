@@ -711,7 +711,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A drizzle-kit 0.31.11 table rebuild writes an expression index back as quoted column names,
   which this engine refuses** (`no such column: case when …`). Take the index out of the schema for
   every generation that rebuilds its table and add it back in a generation of its own, with a note
-  at the index (core `0075` to `0077`; `packages/db/src/schema/incidents.ts`). Cost: A238's
+  at the index (core `0077` to `0079`; `packages/db/src/schema/incidents.ts`). Cost: A238's
   `incidents` migration failed until the index moved (2026-10-03). Receipt:
   [conventions-data.md](docs/developers/conventions-data.md).
 - **A foreign key whose target has no unique index is refused at the first WRITE, not at migrate

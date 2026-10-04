@@ -52,7 +52,7 @@ export const workingOrderStatus = enumType([
  * Each of those three exceptions lists every column of this table it holds
  * unchanged, so a column added here goes into every list too, by a migration
  * that re-creates the trigger from the latest text,
- * `drizzle/0084_working_orders_recreate_triggers.sql`.
+ * `drizzle/0086_working_orders_recreate_triggers.sql`.
  */
 export const workingOrders = table(
   "working_orders",

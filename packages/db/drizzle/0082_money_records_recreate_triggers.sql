@@ -1,4 +1,4 @@
--- The five triggers `0078_money_records_drop_triggers.sql` dropped. The four bill payment triggers
+-- The five triggers `0080_money_records_drop_triggers.sql` dropped. The four bill payment triggers
 -- are `0024_bill_payment_triggers.sql`'s, with each guard holding `source` and `device_id` fixed
 -- where it held `till_id`; `sale_settlements_check_coverage` is `0001_behavioural_triggers.sql`'s,
 -- unchanged.

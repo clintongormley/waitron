@@ -59,7 +59,7 @@ import {
  * unchanged-column lists, and by `packages/db/drizzle/0053_line_sent_after_close.sql`, which lets a
  * presented or paid bill's line take a first `sent_at`.
  * The device binding pair and `device_profile_form_factor_locked` are re-created by
- * `packages/db/drizzle/0089_devices_recreate_triggers.sql`, the pair with no register in it.
+ * `packages/db/drizzle/0091_devices_recreate_triggers.sql`, the pair with no register in it.
  * `packages/db/drizzle/0064_line_locale_triggers_text_only.sql` re-creates the two locale update
  * triggers to fire only when an update changes the name map each one checks or moves the line.
  * Some triggers ACT rather than refuse.

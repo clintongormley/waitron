@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f34a9f75-7c13-4840-acbd-7e9e4f676a8d",
-  "prevId": "e7718111-b737-4939-b0f3-4d9c239a9649",
+  "id": "91eba573-7c85-4675-a06e-1cfc0229ba16",
+  "prevId": "eea61daf-3727-482a-9a34-62df22c95ab2",
   "tables": {
     "locations": {
       "name": "locations",
@@ -606,6 +606,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "price_quantity": {
+          "name": "price_quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1000
         },
         "unit_price_gross": {
           "name": "unit_price_gross",
@@ -6276,6 +6284,14 @@
           "notNull": true,
           "autoincrement": false
         },
+        "price_quantity": {
+          "name": "price_quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1000
+        },
         "unit_price": {
           "name": "unit_price",
           "type": "integer",
@@ -7406,18 +7422,11 @@
           "notNull": true,
           "autoincrement": false
         },
-        "source": {
-          "name": "source",
+        "till_id": {
+          "name": "till_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
-        },
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
           "autoincrement": false
         },
         "sale_id": {
@@ -7472,11 +7481,10 @@
         }
       },
       "indexes": {
-        "incidents_origin_open_idx": {
-          "name": "incidents_origin_open_idx",
+        "incidents_till_open_idx": {
+          "name": "incidents_till_open_idx",
           "columns": [
-            "source",
-            "device_id",
+            "till_id",
             "detected_at"
           ],
           "isUnique": false
@@ -7487,20 +7495,30 @@
             "acknowledged_at"
           ],
           "isUnique": false
+        },
+        "incidents_open_dedup": {
+          "name": "incidents_open_dedup",
+          "columns": [
+            "till_id",
+            "code",
+            "case when \"sale_id\" is null then '' else \"sale_id\" end"
+          ],
+          "isUnique": true,
+          "where": "\"incidents\".\"acknowledged_at\" is null"
         }
       },
       "foreignKeys": {
-        "incidents_device_id_devices_id_fk": {
-          "name": "incidents_device_id_devices_id_fk",
+        "incidents_till_id_tills_id_fk": {
+          "name": "incidents_till_id_tills_id_fk",
           "tableFrom": "incidents",
-          "tableTo": "devices",
+          "tableTo": "tills",
           "columnsFrom": [
-            "device_id"
+            "till_id"
           ],
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "incidents_sale_id_sales_id_fk": {
@@ -7527,14 +7545,6 @@
         "incidents_code_ck": {
           "name": "incidents_code_ck",
           "value": "\"incidents\".\"code\" <> ''"
-        },
-        "incidents_source_ck": {
-          "name": "incidents_source_ck",
-          "value": "\"incidents\".\"source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test')"
-        },
-        "incidents_source_device_ck": {
-          "name": "incidents_source_device_ck",
-          "value": "(\"incidents\".\"source\" = 'device') = (\"incidents\".\"device_id\" is not null)"
         }
       }
     },
@@ -7895,6 +7905,14 @@
     "columns": {}
   },
   "internal": {
-    "indexes": {}
+    "indexes": {
+      "incidents_open_dedup": {
+        "columns": {
+          "case when \"sale_id\" is null then '' else \"sale_id\" end": {
+            "isExpression": true
+          }
+        }
+      }
+    }
   }
 }

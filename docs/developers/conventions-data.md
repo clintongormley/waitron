@@ -1412,14 +1412,14 @@ moves the line),
 unchanged-column lists),
 `packages/db/drizzle/0072_device_binding_watcher_sql.sql` (re-creates the two device binding
 triggers so a kitchen display binds a station or a watcher),
-`packages/db/drizzle/0078_money_records_drop_triggers.sql` and
-`packages/db/drizzle/0080_money_records_recreate_triggers.sql` (the triggers around `0079`'s rebuild
+`packages/db/drizzle/0080_money_records_drop_triggers.sql` and
+`packages/db/drizzle/0082_money_records_recreate_triggers.sql` (the triggers around `0081`'s rebuild
 of `sales`, `bill_payments`, `bill_payment_refunds` and `unpaid_departures`),
-`packages/db/drizzle/0081_working_orders_drop_triggers.sql` and
-`packages/db/drizzle/0084_working_orders_recreate_triggers.sql` (the triggers around `0083`'s
+`packages/db/drizzle/0083_working_orders_drop_triggers.sql` and
+`packages/db/drizzle/0086_working_orders_recreate_triggers.sql` (the triggers around `0085`'s
 rebuild of `working_orders`),
-`packages/db/drizzle/0087_devices_drop_triggers.sql` and
-`packages/db/drizzle/0089_devices_recreate_triggers.sql` (the triggers around `0088`'s rebuild of
+`packages/db/drizzle/0089_devices_drop_triggers.sql` and
+`packages/db/drizzle/0091_devices_recreate_triggers.sql` (the triggers around `0090`'s rebuild of
 `devices`),
 `packages/media/drizzle/0001_image_references.sql`,
 `packages/media/drizzle/0002_section_image_references.sql`,
@@ -1441,8 +1441,8 @@ rebuild of `working_orders`),
 `0064_line_locale_triggers_text_only.sql`, media `0004_drop_category_image_triggers.sql`,
 `0006_recreate_section_image_triggers.sql` and `0007_recreate_product_image_triggers.sql`, and
 catalogue `0013_drop_category_image_triggers.sql`, `0018_sections_owned_prepare.sql` and
-`0021_sections_owned_restore.sql`, and 2026-10-04 for core `0066`, `0072`, `0078`, `0080`, `0081`,
-`0084`, `0087` and `0089`)
+`0021_sections_owned_restore.sql`, and 2026-10-04 for core `0066`, `0072`, `0080`, `0082`, `0083`,
+`0086`, `0089` and `0091`)
 each of those files equalled the one before it once `id` and
 `prevId` were removed and keys sorted, except that `0042`'s `_meta.columns` no longer carried
 `0041`'s column rename, so the snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript
@@ -1552,12 +1552,12 @@ it. `sqliteCombineStatements` (around line 27546) turns a generation into a rebu
 column's type, default or nullability, drops or changes a foreign key, adds a foreign key to a
 column that is not new, changes a primary key, or adds or drops a unique or CHECK constraint, among
 others; in the generations A238 wrote, an added column with none of those beside it came out as
-`ALTER TABLE … ADD` (core `0075`, `0082`, `0085`). A238 paid for it a
+`ALTER TABLE … ADD` (core `0077`, `0084`, `0087`). A238 paid for it a
 third time on 2026-10-03: its `incidents` generation that added `source` and `device_id` with their
 CHECKs wrote `SELECT … "source" … FROM incidents` and the core suite failed with
 `no such column: "source" - should this be a string literal in single-quotes?` (commit f8f4bc381,
 "Alerts name their source and device instead of a till");
-core `0075` now adds the two columns and `0076` adds the CHECKs while it drops `till_id`. The engine
+core `0077` now adds the two columns and `0078` adds the CHECKs while it drops `till_id`. The engine
 half re-measured 2026-10-04 on `node:sqlite`, Node v26.7.0 (SQLite 3.53.4): an
 `INSERT INTO __new_incidents (…, "source") SELECT …, "source" FROM incidents` on an EMPTY
 `incidents` without that column threw that same message, and the control naming only the columns
@@ -1576,8 +1576,8 @@ migrate failed with `no such column: case when "device_id" …` (commit f8f4bc38
 Re-measured 2026-10-04 on `node:sqlite`, Node v26.7.0 (SQLite 3.53.4): `CREATE INDEX` over that
 expression in backticks threw `no such column: case when "till_id" is null then '' else "till_id"
 end` on a scratch table, and the same expression unquoted was accepted. What A238 did: the index
-leaves the schema for the generations that rebuild `incidents` (core `0075` drops it, `0076`
-rebuilds the table) and comes back alone in `0077_incident_origin_dedup.sql`, written correctly; a
+leaves the schema for the generations that rebuild `incidents` (core `0077` drops it, `0078`
+rebuilds the table) and comes back alone in `0079_incident_origin_dedup.sql`, written correctly; a
 note at the index in `packages/db/src/schema/incidents.ts` says so. Any later change that rebuilds a
 table with an expression index keeps the index out of the schema in every generation that rebuilds
 the table and adds it back in a later generation. A wrong index fails the migrate loudly,

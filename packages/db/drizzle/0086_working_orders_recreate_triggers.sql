@@ -1,10 +1,10 @@
--- The ten triggers `0081_working_orders_drop_triggers.sql` dropped. `working_orders_enforce_transition`
+-- The ten triggers `0083_working_orders_drop_triggers.sql` dropped. `working_orders_enforce_transition`
 -- is `0056_placed_order_handover.sql`'s with the till replaced by the order's source, device and
 -- location. The four locale triggers are `0027_line_vat_class_triggers.sql`'s two inserts and
 -- `0064_line_locale_triggers_text_only.sql`'s two updates, reading the order's location from
 -- `working_orders.location_id`. The other five are copied unchanged: the two
 -- `working_orders_release_main_bill*` from `0045_recreate_triggers_after_rebuild.sql`,
--- `working_order_lines_require_open_parent_update` from `0066_line_make_at_station_trigger.sql`, and
+-- `working_order_lines_require_open_parent_update` from `0074_extra_price_quantity_freeze.sql`, and
 -- its insert and delete twins from `0027_line_vat_class_triggers.sql`.
 CREATE TRIGGER working_orders_enforce_transition
 BEFORE UPDATE ON working_orders
@@ -112,6 +112,7 @@ BEGIN
       AND new.unit_name IS old.unit_name
       AND new.unit_precision IS old.unit_precision
       AND new.quantity IS old.quantity
+      AND new.price_quantity IS old.price_quantity
       AND new.unit_price_gross IS old.unit_price_gross
       AND new.vat_class IS old.vat_class
       AND new.line_total IS old.line_total
@@ -143,6 +144,7 @@ BEGIN
       AND new.unit_name IS old.unit_name
       AND new.unit_precision IS old.unit_precision
       AND new.quantity IS old.quantity
+      AND new.price_quantity IS old.price_quantity
       AND new.unit_price_gross IS old.unit_price_gross
       AND new.vat_class IS old.vat_class
       AND new.line_total IS old.line_total
@@ -180,6 +182,7 @@ BEGIN
       AND new.unit_name IS old.unit_name
       AND new.unit_precision IS old.unit_precision
       AND new.quantity IS old.quantity
+      AND new.price_quantity IS old.price_quantity
       AND new.unit_price_gross IS old.unit_price_gross
       AND new.vat_class IS old.vat_class
       AND new.line_total IS old.line_total

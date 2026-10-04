@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c1889bff-9842-4ad6-a652-42e1f49da169",
-  "prevId": "71d2e439-9a46-482b-b324-65a830594fb8",
+  "id": "f9d7601d-1dbc-4cc7-9e0d-f40751fff7dc",
+  "prevId": "351d1896-2f8e-4978-a3ff-947d63b63fb9",
   "tables": {
     "locations": {
       "name": "locations",
@@ -606,6 +606,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "price_quantity": {
+          "name": "price_quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1000
         },
         "unit_price_gross": {
           "name": "unit_price_gross",
@@ -5771,11 +5779,18 @@
           "notNull": true,
           "autoincrement": false
         },
+        "till_id": {
+          "name": "till_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "source": {
           "name": "source",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "device_id": {
@@ -5878,7 +5893,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "bill_payment_refunds_payment_fk": {
@@ -5893,6 +5908,19 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
+        },
+        "bill_payment_refunds_till_fk": {
+          "name": "bill_payment_refunds_till_fk",
+          "tableFrom": "bill_payment_refunds",
+          "tableTo": "tills",
+          "columnsFrom": [
+            "till_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5901,14 +5929,6 @@
         "bill_payment_refunds_state_ck": {
           "name": "bill_payment_refunds_state_ck",
           "value": "\"bill_payment_refunds\".\"state\" in ('pending', 'completed', 'failed')"
-        },
-        "bill_payment_refunds_source_ck": {
-          "name": "bill_payment_refunds_source_ck",
-          "value": "\"bill_payment_refunds\".\"source\" in ('device', 'demo_seed', 'readiness_test')"
-        },
-        "bill_payment_refunds_source_device_ck": {
-          "name": "bill_payment_refunds_source_device_ck",
-          "value": "(\"bill_payment_refunds\".\"source\" = 'device') = (\"bill_payment_refunds\".\"device_id\" is not null)"
         },
         "bill_payment_refunds_amounts_ck": {
           "name": "bill_payment_refunds_amounts_ck",
@@ -6020,11 +6040,18 @@
           "notNull": true,
           "autoincrement": false
         },
+        "till_id": {
+          "name": "till_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "source": {
           "name": "source",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "device_id": {
@@ -6091,7 +6118,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "bill_payments_working_order_fk": {
@@ -6106,6 +6133,19 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
+        },
+        "bill_payments_till_fk": {
+          "name": "bill_payments_till_fk",
+          "tableFrom": "bill_payments",
+          "tableTo": "tills",
+          "columnsFrom": [
+            "till_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -6114,14 +6154,6 @@
         "bill_payments_kind_ck": {
           "name": "bill_payments_kind_ck",
           "value": "\"bill_payments\".\"kind\" in ('items', 'contribution', 'share')"
-        },
-        "bill_payments_source_ck": {
-          "name": "bill_payments_source_ck",
-          "value": "\"bill_payments\".\"source\" in ('device', 'demo_seed', 'readiness_test')"
-        },
-        "bill_payments_source_device_ck": {
-          "name": "bill_payments_source_device_ck",
-          "value": "(\"bill_payments\".\"source\" = 'device') = (\"bill_payments\".\"device_id\" is not null)"
         },
         "bill_payments_method_ck": {
           "name": "bill_payments_method_ck",
@@ -6251,6 +6283,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "price_quantity": {
+          "name": "price_quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1000
         },
         "unit_price": {
           "name": "unit_price",
@@ -6552,11 +6592,18 @@
           "notNull": true,
           "autoincrement": false
         },
+        "till_id": {
+          "name": "till_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "source": {
           "name": "source",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "device_id": {
@@ -6732,6 +6779,19 @@
         }
       },
       "foreignKeys": {
+        "sales_till_id_tills_id_fk": {
+          "name": "sales_till_id_tills_id_fk",
+          "tableFrom": "sales",
+          "tableTo": "tills",
+          "columnsFrom": [
+            "till_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
         "sales_device_id_devices_id_fk": {
           "name": "sales_device_id_devices_id_fk",
           "tableFrom": "sales",
@@ -6742,7 +6802,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "sales_series_id_invoice_series_id_fk": {
@@ -6824,14 +6884,6 @@
         "sales_fiscal_state_ck": {
           "name": "sales_fiscal_state_ck",
           "value": "\"sales\".\"fiscal_state\" in ('recorded', 'not_applicable')"
-        },
-        "sales_source_ck": {
-          "name": "sales_source_ck",
-          "value": "\"sales\".\"source\" in ('device', 'demo_seed', 'readiness_test')"
-        },
-        "sales_source_device_ck": {
-          "name": "sales_source_device_ck",
-          "value": "(\"sales\".\"source\" = 'device') = (\"sales\".\"device_id\" is not null)"
         }
       }
     },
@@ -7095,11 +7147,18 @@
           "notNull": true,
           "autoincrement": false
         },
+        "till_id": {
+          "name": "till_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "source": {
           "name": "source",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "device_id": {
@@ -7137,7 +7196,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "unpaid_departures_party_fk": {
@@ -7178,6 +7237,19 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
+        },
+        "unpaid_departures_till_fk": {
+          "name": "unpaid_departures_till_fk",
+          "tableFrom": "unpaid_departures",
+          "tableTo": "tills",
+          "columnsFrom": [
+            "till_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -7186,14 +7258,6 @@
         "unpaid_departures_amount_ck": {
           "name": "unpaid_departures_amount_ck",
           "value": "\"unpaid_departures\".\"amount\" > 0"
-        },
-        "unpaid_departures_source_ck": {
-          "name": "unpaid_departures_source_ck",
-          "value": "\"unpaid_departures\".\"source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test')"
-        },
-        "unpaid_departures_source_device_ck": {
-          "name": "unpaid_departures_source_device_ck",
-          "value": "(\"unpaid_departures\".\"source\" = 'device') = (\"unpaid_departures\".\"device_id\" is not null)"
         }
       }
     },

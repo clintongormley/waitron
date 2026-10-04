@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e7718111-b737-4939-b0f3-4d9c239a9649",
-  "prevId": "4826e3fe-0aa4-46b2-9f6c-52bc67082b3a",
+  "id": "eea61daf-3727-482a-9a34-62df22c95ab2",
+  "prevId": "e2e8b565-e096-4447-86f1-6f80d8ab7d75",
   "tables": {
     "locations": {
       "name": "locations",
@@ -606,6 +606,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "price_quantity": {
+          "name": "price_quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1000
         },
         "unit_price_gross": {
           "name": "unit_price_gross",
@@ -5778,20 +5786,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "state": {
           "name": "state",
           "type": "text",
@@ -5875,19 +5869,6 @@
         }
       },
       "foreignKeys": {
-        "bill_payment_refunds_device_id_devices_id_fk": {
-          "name": "bill_payment_refunds_device_id_devices_id_fk",
-          "tableFrom": "bill_payment_refunds",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "bill_payment_refunds_payment_fk": {
           "name": "bill_payment_refunds_payment_fk",
           "tableFrom": "bill_payment_refunds",
@@ -6039,20 +6020,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -6100,19 +6067,6 @@
         }
       },
       "foreignKeys": {
-        "bill_payments_device_id_devices_id_fk": {
-          "name": "bill_payments_device_id_devices_id_fk",
-          "tableFrom": "bill_payments",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "bill_payments_working_order_fk": {
           "name": "bill_payments_working_order_fk",
           "tableFrom": "bill_payments",
@@ -6275,6 +6229,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "price_quantity": {
+          "name": "price_quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1000
         },
         "unit_price": {
           "name": "unit_price",
@@ -6583,20 +6545,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "series_id": {
           "name": "series_id",
           "type": "text",
@@ -6774,19 +6722,6 @@
             "id"
           ],
           "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "sales_device_id_devices_id_fk": {
-          "name": "sales_device_id_devices_id_fk",
-          "tableFrom": "sales",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "sales_series_id_invoice_series_id_fk": {
@@ -7138,20 +7073,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "recorded_at": {
           "name": "recorded_at",
           "type": "text",
@@ -7170,19 +7091,6 @@
         }
       },
       "foreignKeys": {
-        "unpaid_departures_device_id_devices_id_fk": {
-          "name": "unpaid_departures_device_id_devices_id_fk",
-          "tableFrom": "unpaid_departures",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "unpaid_departures_party_fk": {
           "name": "unpaid_departures_party_fk",
           "tableFrom": "unpaid_departures",
@@ -7413,20 +7321,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "sale_id": {
           "name": "sale_id",
           "type": "text",
@@ -7479,11 +7373,10 @@
         }
       },
       "indexes": {
-        "incidents_origin_open_idx": {
-          "name": "incidents_origin_open_idx",
+        "incidents_till_open_idx": {
+          "name": "incidents_till_open_idx",
           "columns": [
-            "source",
-            "device_id",
+            "till_id",
             "detected_at"
           ],
           "isUnique": false
@@ -7494,6 +7387,16 @@
             "acknowledged_at"
           ],
           "isUnique": false
+        },
+        "incidents_open_dedup": {
+          "name": "incidents_open_dedup",
+          "columns": [
+            "till_id",
+            "code",
+            "case when \"sale_id\" is null then '' else \"sale_id\" end"
+          ],
+          "isUnique": true,
+          "where": "\"incidents\".\"acknowledged_at\" is null"
         }
       },
       "foreignKeys": {
@@ -7508,19 +7411,6 @@
             "id"
           ],
           "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "incidents_device_id_devices_id_fk": {
-          "name": "incidents_device_id_devices_id_fk",
-          "tableFrom": "incidents",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
           "onUpdate": "no action"
         },
         "incidents_sale_id_sales_id_fk": {
@@ -7907,6 +7797,14 @@
     "columns": {}
   },
   "internal": {
-    "indexes": {}
+    "indexes": {
+      "incidents_open_dedup": {
+        "columns": {
+          "case when \"sale_id\" is null then '' else \"sale_id\" end": {
+            "isExpression": true
+          }
+        }
+      }
+    }
   }
 }

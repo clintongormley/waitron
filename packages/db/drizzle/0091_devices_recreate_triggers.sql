@@ -1,4 +1,4 @@
--- The three triggers `0087_devices_drop_triggers.sql` dropped. `device_profile_form_factor_locked` is
+-- The three triggers `0089_devices_drop_triggers.sql` dropped. `device_profile_form_factor_locked` is
 -- `0001_behavioural_triggers.sql`'s, unchanged. The binding pair is `0072_device_binding_watcher_sql.sql`'s
 -- with every `till_id` term gone: a `kds` device binds exactly one station or watcher, and any other
 -- device binds neither.

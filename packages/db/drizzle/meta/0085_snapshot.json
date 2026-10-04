@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7ddbdf18-2835-4423-9e24-0d9a1bf45774",
-  "prevId": "0c3dd1b3-3355-4c06-bf7e-870d5a2126bd",
+  "id": "e5e9e77f-3334-4107-98b5-00abbb4046ba",
+  "prevId": "7f83e98f-4d9f-4418-a48b-be48569503fa",
   "tables": {
     "locations": {
       "name": "locations",
@@ -607,6 +607,14 @@
           "notNull": true,
           "autoincrement": false
         },
+        "price_quantity": {
+          "name": "price_quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1000
+        },
         "unit_price_gross": {
           "name": "unit_price_gross",
           "type": "integer",
@@ -1127,20 +1135,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "captured_by_source": {
-          "name": "captured_by_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "captured_by_device_id": {
-          "name": "captured_by_device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "captured_by_node_id": {
           "name": "captured_by_node_id",
           "type": "text",
@@ -1202,19 +1196,6 @@
         }
       },
       "foreignKeys": {
-        "order_amendments_captured_by_device_id_devices_id_fk": {
-          "name": "order_amendments_captured_by_device_id_devices_id_fk",
-          "tableFrom": "order_amendments",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "captured_by_device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "order_amendments_order_fk": {
           "name": "order_amendments_order_fk",
           "tableFrom": "order_amendments",
@@ -4357,13 +4338,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "printer_id": {
           "name": "printer_id",
           "type": "text",
@@ -4430,19 +4404,6 @@
           "tableTo": "tills",
           "columnsFrom": [
             "till_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "drawer_opens_device_id_devices_id_fk": {
-          "name": "drawer_opens_device_id_devices_id_fk",
-          "tableFrom": "drawer_opens",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
           ],
           "columnsTo": [
             "id"
@@ -6333,6 +6294,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "price_quantity": {
+          "name": "price_quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1000
         },
         "unit_price": {
           "name": "unit_price",

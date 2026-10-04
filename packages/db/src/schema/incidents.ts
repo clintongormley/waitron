@@ -60,7 +60,7 @@ export const incidents = table(
     // A drizzle-kit REBUILD of this table writes even the CASE form back as quoted column names,
     // which SQLite refuses with `no such column` (drizzle-kit 0.31.11's recreate path ignores which
     // index columns are expressions). A change that rebuilds `incidents` takes this index out of
-    // the schema first and adds it back in a generation of its own, as core 0075 to 0077 do.
+    // the schema first and adds it back in a generation of its own, as core 0077 to 0079 do.
     uniqueIndex("incidents_open_dedup")
       .on(
         t.source,
