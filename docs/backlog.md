@@ -1195,6 +1195,19 @@ back without waiting for their dialog to finish closing — the shape W71 had to
 editors in `catalogue-screen.ts`, where focus otherwise landed nowhere. Next step: a focus-return
 test for each, as W71's list cases do; fix only if it fails.
 
+**The Extras editor shows Portion beside Price, and a fixed 1 for a product sold by the unit
+(W75, owner 2026-10-04) — DONE.** In `apps/dashboard/src/widgets/extra-list-form.ts` Portion is a
+column of its own between Preselected and Price, there even when every item is sold by the unit,
+and its heading carries the required star while any row asks for a portion. A product sold by the
+unit is told apart by its unit's id, `EACH_UNIT_ID` (moved to the browser-safe
+`packages/catalogue/src/unit-types.ts`), not by its decimals: its cell shows a plain 1, the form
+sends no portion for it, so the server stores one, and its inherited price is the unit price
+whatever portion an earlier unit left saved. Every other unit — kg, g, ml, a venue's own — shows an
+editable, required Portion as soon as the product is added, before any save, which ended the owner's
+"Portion appears only after reopening". A row switches between the two when its product's unit
+changes. The drag handle now sits on the first line of the product's name rather than the middle of
+a tall row. Open: the Price heading reads "Price per portion" also over a row sold by the unit.
+
 **Clicking a product's row on the Products screen opens it (A205) — DONE in A208.**
 
 **The dashboard recovers by itself when the server comes back after a restart (A206, owner
@@ -1656,7 +1669,10 @@ W53 changes the filed display surfaces.
 
 - an extras list item for a product whose unit is weighed (`hardwareUnit` set) or fractional
   (`precision > 0`) has a required **portion**, e.g. 50 g, held to the unit's precision; an "each"
-  product's portion is one and the form asks for none;
+  product's portion is one and the form asks for none; _2026-10-04 (W75): the list editor now asks
+  for a portion for EVERY unit but Each, so whole grams, millilitres and a venue's own units too;
+  the server still accepts a new item of a whole unit with no hardware link (ml, say) without one,
+  and stores 1._
 - each pick adds one portion: three picks of 50 g are 150 g, and a dish × 2 doubles that, as the
   count does today;
 - the item's **Price is per portion**: blank, it is the portion × the product's unit price (50 g ×
