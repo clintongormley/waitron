@@ -4,6 +4,12 @@ import "./wt-disclosure.js";
 
 afterEach(cleanup);
 
+test("the section chevron is large enough to read beside its heading", async () => {
+  const el = await mount('<wt-disclosure heading="Kitchen"><p>body</p></wt-disclosure>');
+  const chevron = el.shadowRoot!.querySelector<HTMLElement>(".chevron")!;
+  expect(chevron.getBoundingClientRect().width).toBeGreaterThanOrEqual(18);
+});
+
 test("collapsed by default; body hidden", async () => {
   const el = await mount('<wt-disclosure heading="Kitchen"><p>body</p></wt-disclosure>');
   expect(el.shadowRoot!.querySelector("button")!.getAttribute("aria-expanded")).toBe("false");

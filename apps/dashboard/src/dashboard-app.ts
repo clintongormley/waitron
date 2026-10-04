@@ -399,13 +399,15 @@ export class DashboardApp extends LitElement {
       /* Holds the chevron's place, so a header does not shift sideways when a search starts. */
       .nav-group .chevron-space {
         flex-shrink: 0;
-        width: var(--wt-font-size-md);
+        width: var(--wt-font-size-lg);
       }
 
       /* Points down at rest ("expand downward"); rotated to point up when expanded ("collapse"),
          matching the direction its own panel of items opens in. */
       .nav-group .chevron {
         flex-shrink: 0;
+        width: var(--wt-font-size-lg);
+        height: var(--wt-font-size-lg);
         transition: transform 150ms ease;
       }
 

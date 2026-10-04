@@ -655,6 +655,15 @@ test("tree mode nests children under parents in order", async () => {
   expect(keys).toEqual(["food", "break", "eggs", "drinks"]);
 });
 
+test("tree branches draw a larger disclosure arrow inside the existing touch target", async () => {
+  const el = await treeTable();
+  const toggle = el.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="food"] .tree-toggle')!;
+  const arrow = el.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="food"] .tree-arrow');
+  expect(parseFloat(getComputedStyle(toggle).fontSize)).toBeGreaterThanOrEqual(22);
+  expect(toggle.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+  expect(arrow).toBeNull();
+});
+
 test("tree mode can start every branch collapsed and still lets each one expand", async () => {
   const el = await treeTable({ initiallyCollapsed: true });
   const keys = () =>
@@ -1023,6 +1032,7 @@ test("a toggling branch opens and closes from its row, says which it will do, an
   expect(el.shadowRoot!.querySelector('tr[data-row-key="break"] button.tree-toggle')).toBeNull();
   expect(arrow().getAttribute("aria-hidden")).toBe("true");
   expect(arrow().textContent!.trim()).toBe("▾");
+  expect(parseFloat(getComputedStyle(arrow()).fontSize)).toBeGreaterThanOrEqual(22);
   activator().click();
   await el.updateComplete;
   expect(treeKeys(el)).toEqual(["food", "break", "drinks"]);

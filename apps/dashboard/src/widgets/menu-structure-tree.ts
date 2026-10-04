@@ -65,7 +65,7 @@ export class MenuStructureTree extends LitElement {
         width: var(--wt-tap-min);
       }
       .toggle {
-        font-size: var(--wt-font-size-lg);
+        font-size: var(--wt-font-size-xl);
         line-height: 1;
       }
       .edit,

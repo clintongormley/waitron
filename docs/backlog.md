@@ -1148,6 +1148,10 @@ the right of the header, at the moment you don't see it"_. The shared `wt-disclo
 directly after the heading text, including in the extras list form, product editor and content
 languages screen. The focused Chromium test covers the position at desktop and phone widths.
 
+**Chevron sizing across the interface (W60) — DONE.** The shared dropdown icon has a wider drawing;
+disclosures, dropdown fields, dashboard groups, table trees and menu trees give their chevrons more
+room without enlarging other icons or changing touch targets.
+
 **Clicking an option's row on the options list form opens that option (A197, owner 2026-10-02) —
 DONE.** The owner: _"clicking on the options rows should open the edit page, like the previous
 screen"_ — the Modifiers screen's table, where a click anywhere on a row opens it (`wt-data-table`'s

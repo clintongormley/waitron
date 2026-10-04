@@ -1910,6 +1910,15 @@ describe("dashboard-app", () => {
     );
   });
 
+  it("draws a larger group chevron", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const chevron = el.shadowRoot!.querySelector<HTMLElement>("button.nav-group .chevron")!;
+    expect(chevron.getBoundingClientRect().width).toBeGreaterThanOrEqual(18);
+  });
+
   it("expands and collapses a nav group's items from its header toggle", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),

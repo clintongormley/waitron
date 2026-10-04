@@ -68,6 +68,13 @@ async function mount(props: Partial<MenuStructureTree> = {}) {
   return el;
 }
 
+it("draws a legible section chevron within its touch target", async () => {
+  const el = await mount();
+  const toggle = el.shadowRoot!.querySelector<HTMLElement>('[data-test="toggle-m-drinks"]')!;
+  expect(parseFloat(getComputedStyle(toggle).fontSize)).toBeGreaterThanOrEqual(22);
+  expect(toggle.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+});
+
 function q<T extends Element = HTMLElement>(el: MenuStructureTree, selector: string): T | null {
   return el.shadowRoot!.querySelector<T>(selector);
 }

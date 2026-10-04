@@ -97,6 +97,8 @@ export class WtDisclosure extends LitElement {
         grid-column: 2;
         grid-row: 1;
         justify-self: start;
+        width: var(--wt-font-size-lg);
+        height: var(--wt-font-size-lg);
         transition: transform 150ms ease;
       }
 

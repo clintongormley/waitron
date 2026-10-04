@@ -15,6 +15,26 @@ import "./wt-input.js";
 import { focusFirstInvalid } from "../interactive.js";
 import { submitOnEnter } from "../submit-on-enter.js";
 
+test("the dropdown chevron paints wide enough to read", async () => {
+  registerIcons({ "test-dropdown-chevron": DROPDOWN_ICONS["chevron-down"]! });
+  const icon = await mount('<wt-icon name="test-dropdown-chevron" size="lg"></wt-icon>');
+  const path = icon.shadowRoot!.querySelector("path")!;
+  expect(path.getBoundingClientRect().width).toBeGreaterThanOrEqual(13);
+});
+
+test("the closed field gives its chevron a larger slot", async () => {
+  const { el } = await mountCombobox();
+  const chevron = el.shadowRoot!.querySelector<HTMLElement>(".chevron")!;
+  expect(chevron.getBoundingClientRect().width).toBeGreaterThanOrEqual(18);
+});
+
+test("a narrow field keeps enough value room beside the larger chevron", async () => {
+  const { el } = await mountCombobox();
+  el.style.width = "205px";
+  const value = el.shadowRoot!.querySelector<HTMLElement>(".value")!;
+  expect(value.clientWidth).toBeGreaterThanOrEqual(159);
+});
+
 afterEach(cleanup);
 
 async function mountCombobox(html = '<wt-combobox label="Dietary tags"></wt-combobox>') {
