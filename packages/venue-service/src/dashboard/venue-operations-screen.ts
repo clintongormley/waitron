@@ -81,6 +81,15 @@ export class VenueOperationsScreen extends LitElement {
       wt-data-table::part(till-zone) {
         font-size: var(--wt-font-size-sm);
       }
+      wt-data-table::part(edit-paid) {
+        border: 0;
+        background: transparent;
+        color: var(--wt-color-primary-text);
+        font: inherit;
+        cursor: pointer;
+        padding: 0;
+        text-decoration: underline;
+      }
       .toolbar {
         display: flex;
         align-items: center;
@@ -137,6 +146,8 @@ export class VenueOperationsScreen extends LitElement {
   @state() private attempted = false;
   @state() private busy = false;
   @state() private printTradingNameDrafts: Record<string, boolean> = {};
+  @state() private paidEditor?: string;
+  @state() private paidDrafts: Record<string, string> = {};
   @state() private view: View = "status";
   @state() private editor?: Editor;
   @state() private zoneId = "";
@@ -577,12 +588,72 @@ export class VenueOperationsScreen extends LitElement {
         key: "paid",
         label: t("venue.paid"),
         cell: (row) => {
+          const key =
+            row.kind === "department" ? `department-${row.department.id}` : `zone-${row.zone.id}`;
           const paidWhen = policyFor(row)?.paidWhen;
-          return paidWhen === "prepay"
-            ? t("venue.prepay")
-            : paidWhen === "ticket_then_pay"
-              ? t("venue.pay_on_collection")
-              : nothing;
+          if (paidWhen === undefined) return nothing;
+          const stored =
+            row.kind === "department"
+              ? paidWhen
+              : model.salePolicies.zones.find((policy) => policy.zoneId === row.zone.id)?.paidWhen;
+          const effectiveLabel =
+            paidWhen === "ticket_then_pay" ? t("venue.pay_on_collection") : t("venue.prepay");
+          if (this.paidEditor !== key) {
+            return html`<button
+              type="button"
+              part="edit-paid"
+              data-test="edit-paid"
+              aria-label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.paid")}, ${effectiveLabel}`}
+              @click=${() => (this.paidEditor = key)}
+            >
+              ${effectiveLabel}
+            </button>`;
+          }
+          return html`<wt-combobox
+            name="paidWhen"
+            label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.paid")}`}
+            hide-label
+            .options=${[
+              ...(row.kind === "zone"
+                ? [{ value: "", label: `${t("venue.inherit")} (${effectiveLabel})` }]
+                : []),
+              { value: "prepay", label: t("venue.prepay") },
+              { value: "ticket_then_pay", label: t("venue.pay_on_collection") },
+            ]}
+            .value=${live(this.paidDrafts[key] ?? stored ?? "")}
+            ?disabled=${this.busy}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              const value = event.detail.value;
+              if (value === (stored ?? "")) {
+                const drafts = { ...this.paidDrafts };
+                delete drafts[key];
+                this.paidDrafts = drafts;
+                this.paidEditor = undefined;
+                this.actionError = undefined;
+                return;
+              }
+              this.paidDrafts = { ...this.paidDrafts, [key]: value };
+              void this.#save(async () => {
+                if (row.kind === "department")
+                  await this.api.setDepartmentSalePolicyField(
+                    row.department.id,
+                    "paidWhen",
+                    value as "prepay" | "ticket_then_pay",
+                  );
+                else
+                  await this.api.setZoneSalePolicyOverride(
+                    row.zone.id,
+                    "paidWhen",
+                    value ? (value as "prepay" | "ticket_then_pay") : null,
+                  );
+                const drafts = { ...this.paidDrafts };
+                delete drafts[key];
+                this.paidDrafts = drafts;
+                this.paidEditor = undefined;
+              });
+            }}
+          ></wt-combobox>`;
         },
       },
       {

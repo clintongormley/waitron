@@ -290,6 +290,145 @@ describe("venue operations screen", () => {
     expect(rows[2].textContent).toContain("On request");
   });
 
+  it("changes paid timing on a department and lets a zone inherit it again", async () => {
+    let departmentPaidWhen: "prepay" | "ticket_then_pay" = "prepay";
+    let zonePaidWhen: "prepay" | "ticket_then_pay" | null = "ticket_then_pay";
+    const setDepartmentSalePolicyField = vi.fn(async (_id, _field, value) => {
+      departmentPaidWhen = value;
+    });
+    const setZoneSalePolicyOverride = vi.fn(async (_id, _field, value) => {
+      zonePaidWhen = value;
+    });
+    const load = vi.fn(async () => ({
+      ...model,
+      departments: [model.departments[0]],
+      salePolicies: {
+        departments: [
+          {
+            departmentId: "d1",
+            paidWhen: departmentPaidWhen,
+            collectionNumber: "none" as const,
+            receiptPrintMode: "auto" as const,
+            printTradingName: true,
+          },
+        ],
+        zones: [
+          {
+            zoneId: "z1",
+            paidWhen: zonePaidWhen,
+            collectionNumber: null,
+            receiptPrintMode: null,
+            effective: {
+              paidWhen: zonePaidWhen ?? departmentPaidWhen,
+              collectionNumber: "none" as const,
+              receiptPrintMode: "auto" as const,
+              printTradingName: true,
+            },
+          },
+        ],
+      },
+    }));
+    const el = await mount({
+      load,
+      setDepartmentSalePolicyField,
+      setZoneSalePolicyOverride,
+    } as unknown as VenueServiceApi);
+    const paidControls = () => [
+      ...table(el, "policy-tree").shadowRoot!.querySelectorAll<HTMLElement>(
+        'wt-combobox[name="paidWhen"]',
+      ),
+    ];
+    const paidButtons = () => [
+      ...table(el, "policy-tree").shadowRoot!.querySelectorAll<HTMLButtonElement>(
+        '[data-test="edit-paid"]',
+      ),
+    ];
+    expect(paidButtons()).toHaveLength(2);
+    paidButtons()[0].click();
+    await settle(el);
+    expect(paidControls()).toHaveLength(1);
+    expect(
+      (paidControls()[0] as HTMLElement & { options: { value: string }[] }).options.map(
+        (option) => option.value,
+      ),
+    ).toEqual(["prepay", "ticket_then_pay"]);
+    await chooseOption(paidControls()[0], "ticket_then_pay");
+    await vi.waitFor(() =>
+      expect(setDepartmentSalePolicyField).toHaveBeenCalledWith(
+        "d1",
+        "paidWhen",
+        "ticket_then_pay",
+      ),
+    );
+    await vi.waitFor(() => expect(paidButtons()).toHaveLength(2));
+    paidButtons()[1].click();
+    await settle(el);
+    expect(
+      (paidControls()[0] as HTMLElement & { options: { value: string }[] }).options[0].value,
+    ).toBe("");
+    expect(
+      (paidControls()[0] as HTMLElement & { options: { label: string }[] }).options[0].label,
+    ).toContain("Pay on collection");
+    await chooseOption(paidControls()[0], "");
+    await vi.waitFor(() =>
+      expect(setZoneSalePolicyOverride).toHaveBeenCalledWith("z1", "paidWhen", null),
+    );
+    await vi.waitFor(() => expect(paidButtons()).toHaveLength(2));
+    expect(paidButtons()[1].textContent).toContain("Pay on collection");
+  });
+
+  it("keeps a refused paid-timing choice ready to retry", async () => {
+    const save = vi.fn().mockRejectedValue(new Error("offline"));
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        departments: [model.departments[0]],
+        salePolicies: {
+          departments: [
+            {
+              departmentId: "d1",
+              paidWhen: "prepay",
+              collectionNumber: "none",
+              receiptPrintMode: "auto",
+              printTradingName: true,
+            },
+          ],
+          zones: [],
+        },
+      }),
+      setDepartmentSalePolicyField: save,
+    } as unknown as VenueServiceApi);
+    table(el, "policy-tree")
+      .shadowRoot!.querySelector<HTMLButtonElement>('[data-test="edit-paid"]')!
+      .click();
+    await settle(el);
+    const control = () =>
+      table(el, "policy-tree").shadowRoot!.querySelector<HTMLElement & { value: string }>(
+        'wt-combobox[name="paidWhen"]',
+      )!;
+    await chooseOption(control(), "ticket_then_pay");
+    await vi.waitFor(() => expect(save).toHaveBeenCalledWith("d1", "paidWhen", "ticket_then_pay"));
+    await vi.waitFor(() => expect(pageAlert(el)).toContain("could not be saved"));
+    expect(control().value).toBe("ticket_then_pay");
+    await chooseOption(control(), "prepay");
+    await settle(el);
+    const departmentRow = table(el, "policy-tree").shadowRoot!.querySelector('tbody [role="row"]')!;
+    expect(departmentRow.querySelector('wt-combobox[name="paidWhen"]')).toBeNull();
+    expect(departmentRow.querySelector('[data-test="edit-paid"]')?.textContent).toContain(
+      "Pay before preparation",
+    );
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not present a missing paid policy as pay before preparation", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    expect(
+      table(el, "policy-tree").shadowRoot!.querySelector('[data-test="edit-paid"]'),
+    ).toBeNull();
+  });
+
   it("switches receipt trading names on a department without offering the switch on a zone", async () => {
     let printTradingName = false;
     const save = vi.fn(async (departmentId: string, field: string, value: boolean) => {
