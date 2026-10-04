@@ -2,9 +2,10 @@
 
 > **Do not execute this version, 2026-10-04.** The
 > [prevention and offline-recovery design update](../specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md)
-> changes the allocation, recovery and duplicate-classification assumptions. Revise this plan
-> after the owner settles and reviews that design. Its probe requirements remain unfulfilled;
-> this historical task list is not an approval to build the old behaviour.
+> changes the allocation, recovery and duplicate-classification assumptions. The owner approved
+> that design on 2026-10-04; the [replacement plan](2026-10-04-fiscal-prevention-and-offline-recovery.md)
+> awaits review for queue execution. Its probe requirements remain unfulfilled; this historical
+> task list is not an approval to build the old behaviour.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

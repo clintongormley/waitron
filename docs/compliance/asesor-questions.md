@@ -20,6 +20,11 @@ These are proposed procedures, not implemented features or legal clearance. The 
 English and Spanish Word copies have **not** been updated in this pass; regenerate them from
 these questions before sending them. No enquiry has been sent.
 
+Later on **2026-10-04**, the owner approved the revised design and selected queue execution.
+Its [implementation plan](../superpowers/plans/2026-10-04-fiscal-prevention-and-offline-recovery.md)
+proposes building prevention and investigation while answers are pending, with separate gates
+before disputed remedies are enabled for real invoices. Design approval is not an adviser answer.
+
 On **2026-10-03** (W41s, the design for a fiscal chain AEAT disagrees with): **Q33 to Q40 added**
 in a new section, *Recovering from conflicts*. They replace the ten questions the design listed in its
 §10. Later the same day **Q5(f)** was added, on how new series are named. The standalone copy (the
@@ -1864,9 +1869,10 @@ optional cloud and emergency routes. Neither internet access nor pairing survivi
 prerequisite. A last-seen invoice is a lower bound on issued numbers, not proof of the final
 invoice. A continuity file restored from the same disk supplies no independent history.
 
-For an unexpected conflict detected during trading, the original D1 proposed an automatic
-switch with a 24-hour loop guard. Its interaction with allocation and competing machines is
-still under design review. A new identity does not by itself stop an old machine from selling.
+For an unexpected conflict detected during trading, the approved design qualifies D1's automatic
+switch: it requires a consumable allocation and established selling authority; otherwise use
+administrator recovery. The detailed evidence policy is the plan's allocation-contract checkpoint.
+The 24-hour loop guard remains. A new identity does not by itself stop an old machine from selling.
 Available original records and AEAT replies are preserved. Missing history is investigated
 separately; opening a new series does not recover it.
 
@@ -1914,9 +1920,9 @@ being asked about the justification and evidence, not to validate an allocation 
 > emergencia? ¿Hay alguna comunicación adicional a la AEAT por la incidencia, aparte de lo ya
 > preguntado en Q7 sobre el fin de una cadena?
 
-**Proposed treatment pending answers:** retain the available evidence and the administrator's
-declaration without claiming that they satisfy every legal obligation. D1's automatic-conflict
-policy remains under review; the declared-restore procedure is administrator-led.
+**Treatment pending answers:** retain the available evidence and the administrator's declaration
+without claiming that they satisfy every legal obligation. The owner approved conditional
+automatic conflict recovery as described above; declared restores are administrator-led.
 
 This records a question; no enquiry has been sent.
 
@@ -2221,8 +2227,8 @@ claims were checked in primary sources; live-service acceptance remains a separa
   determine whether the API can cancel an absent original. Test-service results can establish
   protocol behaviour, not the legal remedy. Refresh the standalone copies before sending.
 - **Scope of the historical “nothing blocks the build” note below:** it is not approval to treat
-  these new remedies as settled. The revised W41s design and plan still need owner review;
-  D2 and D5 retain their stated verification conditions.
+  these new remedies as settled. The revised W41s design is owner-approved; its implementation
+  plan awaits review. D2 and D5 retain their stated verification conditions.
 
 - **Send first, 2026-09-30: Q27, Q28 and Q29** (the backlog's "send now"). They are about table
   service, which is being built now. A table that leaves without paying (service plan Task 17) is

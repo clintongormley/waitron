@@ -2477,7 +2477,7 @@ it by itself later; its source code waits 7 days before counting such a job fail
 five questions. This settles A3's open "Printing A4 invoices on an office printer" design when
 built.
 
-### W41s. A fiscal chain that AEAT disagrees with — DESIGN FOR OWNER REVIEW (2026-10-03)
+### W41s. Fiscal prevention and offline recovery — DESIGN APPROVED; REVISED PLAN FOR REVIEW (2026-10-04)
 
 **Update, 2026-10-04:** the owner requires prevention before conflict recovery, including an
 old-backup restore on new hardware with no internet. The
@@ -2486,9 +2486,14 @@ records manual recovery, a paper allocation register in the recovery pack, an op
 registry reachable by phone, emergency random series and an explicit later switch to a fresh
 short series. Device evidence is optional. Matching invoice date and amounts no longer excuse
 a fingerprint mismatch. Q5(f) and Q33–Q40 in the adviser document are revised, and Q41 covers
-issued invoices missing from the backup. **Next action:** settle the remaining automatic-recovery,
-corrective-workflow and emergency-identity decisions, review the revised spec, then revise the
-plan. No new live probes have been run. The following paragraph records the 2026-10-03 state;
+issued invoices missing from the backup. The owner approved this design ("lgtm") and selected
+queue execution. The [revised implementation plan](superpowers/plans/2026-10-04-fiscal-prevention-and-offline-recovery.md)
+separates development from production-enablement gates: prevention and evidence work can
+proceed while adviser answers are pending; disputed remedies retain explicit gates. It includes
+an allocation-contract checkpoint, live AEAT probes, offline recovery, corrective workflows and
+a separately owned Cloud registry workstream. **Next action:** owner reviews the revised plan,
+then lane E expands W41s into its dependent queue items. No implementation or new live probe is
+claimed. The following paragraph records the 2026-10-03 state;
 its old next action and allocation assumptions are superseded by this update.
 
 The owner asked (2026-10-03, on W21's review) how a chain AEAT disagrees with can happen, how to

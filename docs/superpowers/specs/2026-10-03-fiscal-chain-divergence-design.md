@@ -4,8 +4,10 @@
 > [Preventing fiscal conflicts and recovering offline](2026-10-04-fiscal-prevention-and-offline-recovery-design.md)
 > first. It records the owner's offline-recovery requirements, revises allocation and the
 > same-sale assumption, and identifies decisions still open. The document below preserves the
-> 2026-10-03 research and D1–D9 history; where they differ, the update takes precedence. Neither
-> the revised design nor the old implementation plan is approved for execution.
+> 2026-10-03 research and D1–D9 history; where they differ, the update takes precedence. The owner
+> approved the revised design on 2026-10-04. The
+> [replacement plan](../plans/2026-10-04-fiscal-prevention-and-offline-recovery.md) awaits review;
+> the old plan is not approved for execution.
 
 Status: **proposed; the owner decided D1–D9 on 2026-10-03 (§11), and the spec and plan await the
 owner's approval as decided.** Nothing here is built. Research done

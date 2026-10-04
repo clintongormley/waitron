@@ -1,13 +1,15 @@
 # Preventing fiscal conflicts and recovering offline (W41s)
 
-Status: **draft for owner review, 2026-10-04.** This records the agreed direction and identifies
-the remaining design decisions. It does not authorise implementation. Nothing in this revision
-has been implemented or tested against AEAT's live test service.
+Status: **design approved by the owner, 2026-10-04 ("lgtm").** The recommendations in §6 are
+accepted; detailed allocation formats and verification conditions still need resolution before
+their dependent implementation tasks. The owner chose queue execution. The
+[revised implementation plan](../plans/2026-10-04-fiscal-prevention-and-offline-recovery.md)
+awaits review. No implementation or new live AEAT probe is claimed by this approval.
 
 This updates the [2026-10-03 design](2026-10-03-fiscal-chain-divergence-design.md). Its incident
 research and decision history remain available there; the changes below take precedence where
 they differ. The [old implementation plan](../plans/2026-10-03-fiscal-chain-divergence.md) needs
-revision after this design is settled. Adviser questions live in
+replacement by the revised plan linked above. Adviser questions live in
 [asesor-questions.md](../../compliance/asesor-questions.md), Q5(f) and Q33–Q41.
 
 ## 1. Start with prevention
@@ -117,7 +119,7 @@ These are proposed requirements, not a claim that all current paths have been ve
 
 | Decision | Treatment in this revision |
 | --- | --- |
-| D1: automatic new chain after conflict | The 2026-10-03 approval remains part of the history. Its interaction with allocation and competing machines needs a new decision. Declared restores are administrator-led. Remove the same-amounts exception. |
+| D1: automatic new chain after conflict | The approved §6 condition qualifies the 2026-10-03 automatic policy: a consumable allocation and established selling authority. Otherwise use administrator recovery. Declared restores are administrator-led. Remove the same-amounts exception. |
 | D2: ordinary rejection does not stop later filing | Retain the condition that a live probe establishes what happens to successors linked to a rejected record. No new probe result is claimed. |
 | D3: active series read per sale | Retain; it also enables the explicit later move to a fresh short series. |
 | D4: staff actions allowed, conflicting fiscal records held | Retain as the interim proposal subject to Q35/Q40. Specify how a held record is eventually resolved; do not present the hold as a final legal remedy. |
@@ -127,18 +129,18 @@ These are proposed requirements, not a claim that all current paths have been ve
 | D8: clock warning without blocking sales | Retain the one-minute warning decision. |
 | D9: short series checked against local/device/AEAT history | Replace the allocation method with §2–3. Lookups supply evidence, not reservations. Add the agreed emergency prefix and explicit later short-series change. |
 
-## 6. Outstanding decisions and adviser questions
+## 6. Approved scope, remaining technical decisions and adviser questions
 
-**Automatic unexpected-conflict recovery.** Recommendation for review: automate only when an
+**Automatic unexpected-conflict recovery.** Approved with this design: automate only when an
 allocation can be consumed under the agreed policy and the selling authority is established;
 otherwise use the administrator recovery procedure. Specify the offline branch, the existing
 24-hour loop guard and how trading proceeds while the conflict is investigated. Random series
-alone do not settle competing-machine authority. This recommendation has not replaced D1 by
-owner decision.
+alone do not settle competing-machine authority. This qualifies D1; the exact evidence and
+offline procedure must be specified at the revised plan's allocation-contract checkpoint.
 
-**Corrective workflow scope.** Recommendation for review: include a usable path to resolve a
-rejected invoice in the overall recovery plan. The old plan excludes a correction-record builder.
-Decide the scope explicitly; do not leave the operator with only a continuing queue and an alert.
+**Corrective workflow scope.** Approved with this design: include a usable path to resolve a
+rejected invoice in the overall recovery plan. This supersedes the old plan's exclusion of a
+correction-record builder. Do not leave the operator with only a continuing queue and an alert.
 Q37 supplies the legal classification, and Q35/Q40 address ambiguous invoice identities.
 
 **Emergency identity and uncertain paper history.** Longer random series are agreed. The
