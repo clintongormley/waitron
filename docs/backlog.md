@@ -1245,7 +1245,7 @@ the option list form's is replaced by the top alignment. See `docs/developers/de
 tables.
 
 **The server refuses a new Extras item with no Portion for every unit but Each (W75c, owner
-2026-10-04) — DONE.** `assertPortionPrecision` (`packages/catalogue/src/extras.ts`) used to refuse a
+2026-10-04) — DONE (#1204).** `assertPortionPrecision` (`packages/catalogue/src/extras.ts`) used to refuse a
 missing portion only for an item sent with no id whose unit had decimals or a scale link. So an item
 sent with an id, whatever its unit, and an item sent with no id for ml or a venue's own whole unit,
 were saved with no portion and stored as 1. It now refuses a new item with no portion as
