@@ -31,8 +31,7 @@ const coffee: ProductEditorDraft = {
   modifiers: [],
   courseId: null,
 };
-// One list of each kind attached, so the scan covers the Modifiers table: its reorder handles, its
-// row menus and the combobox that adds to it.
+// One list of each kind attached, so the scan covers the Modifiers table's attached rows.
 const withModifiers: ProductEditorDraft = {
   ...coffee,
   modifiers: [
