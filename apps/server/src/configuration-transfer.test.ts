@@ -51,6 +51,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { readProfilePrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { recordSale } from "@waitron/core";
@@ -1222,6 +1223,69 @@ it("transfers a watcher with its station, zone, and printer in configuration exp
         .where(eq(printers.name, "Pass printer"))
     )[0]?.id,
   );
+});
+
+it("transfers a device profile's receipt and payment-slip printer lists, in order", async () => {
+  const source = await applyVenue(planVenue(venue("B13572471"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, async (tx) => {
+    const added = await tx
+      .insert(printers)
+      .values(
+        ["Bar printer", "Back printer", "Slip printer"].map((name, index) => ({
+          locationId: source.locationId,
+          name,
+          transport: "network_tcp" as const,
+          host: `10.0.1.${index + 1}`,
+        })),
+      )
+      .returning({ id: printers.id });
+    const [profile] = await tx
+      .insert(deviceProfiles)
+      .values({ name: "Counter till", formFactor: "tablet-landscape" })
+      .returning({ id: deviceProfiles.id });
+    await setProfilePrinterLists(tx, profile!.id, {
+      receiptPrinterIds: [added[1]!.id, added[0]!.id],
+      paymentSlipPrinterIds: [added[2]!.id],
+    });
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-04T12:00:00Z"),
+    versions,
+  );
+  await applyVenue(planVenue(venue("B97531867"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await withTransaction(targetSuite.db, async (tx) => {
+    const [profile] = await tx
+      .select({ id: deviceProfiles.id })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.name, "Counter till"));
+    const names = new Map(
+      (await tx.select({ id: printers.id, name: printers.name }).from(printers)).map((row) => [
+        row.id,
+        row.name,
+      ]),
+    );
+    const lists = await readProfilePrinterLists(tx, profile!.id);
+    return {
+      receipt: lists.receiptPrinterIds.map((id) => names.get(id)),
+      paymentSlip: lists.paymentSlipPrinterIds.map((id) => names.get(id)),
+    };
+  });
+  expect(imported).toEqual({
+    receipt: ["Back printer", "Bar printer"],
+    paymentSlip: ["Slip printer"],
+  });
 });
 
 it("leaves a table's clearing state behind", async () => {
