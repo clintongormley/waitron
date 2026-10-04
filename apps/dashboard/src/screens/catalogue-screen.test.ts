@@ -731,7 +731,7 @@ describe("catalogue-screen", () => {
     const openFromRow = async () => {
       await userEvent.click(
         product.shadowRoot!.querySelector<HTMLElement>(
-          '[data-test=attached-modifier][data-modifier="options:opt-list-1"] .row-activate',
+          '[data-test="open-modifier-options:opt-list-1"]',
         )!,
       );
       await el.updateComplete;
@@ -753,6 +753,97 @@ describe("catalogue-screen", () => {
     expect(form.open).toBe(false);
     expect(product.open).toBe(true);
     expect(unsaved()).toEqual(expected);
+  });
+
+  describe("focus after the list editor opened from an attached row closes", () => {
+    async function openProduct(api: DashboardApi) {
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      const form = el.shadowRoot!.querySelector("dashboard-option-list-form")!;
+      const row = editor(el).shadowRoot!.querySelector<HTMLElement>(
+        '[data-test=attached-modifier][data-modifier="options:opt-list-1"]',
+      )!;
+      return { el, form, row };
+    }
+    const activator = (row: HTMLElement) =>
+      row.querySelector<HTMLElement>('[data-test="open-modifier-options:opt-list-1"]')!;
+
+    // Safari does not focus a button it clicks, so there the browser's own return of focus when
+    // the list editor closes goes back to whatever had it before, not to the row.
+    it.each([
+      [
+        "Enter on the row",
+        async (row: HTMLElement) => {
+          activator(row).focus();
+          await userEvent.keyboard("{Enter}");
+        },
+      ],
+      [
+        "a click that leaves focus where it was",
+        async (row: HTMLElement, el: CatalogueScreen) => {
+          editor(el).shadowRoot!.querySelector<HTMLElement>('[name="name"]')!.focus();
+          activator(row).click();
+        },
+      ],
+    ])("goes back to the row after Cancel and after a save, when %s opened it", async (_, open) => {
+      const api = stubApi();
+      const { el, form, row } = await openProduct(api);
+      for (const close of [
+        () => emit(form, "wt-cancel", {}),
+        () => emit(form, "wt-submit", { value: optionInput }),
+      ]) {
+        await open(row, el);
+        await el.updateComplete;
+        expect(form.open).toBe(true);
+        close();
+        await flush(el);
+        await afterDialogCloses(el);
+        expect(form.open).toBe(false);
+        expect(editor(el).shadowRoot!.activeElement).toBe(activator(row));
+      }
+      expect(api.updateOptionList).toHaveBeenCalledWith("opt-list-1", optionInput);
+    });
+
+    it("goes back to the row's menu after Cancel, when the menu's Edit opened it", async () => {
+      const { el, form, row } = await openProduct(stubApi());
+      const menu = row.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+        "wt-row-actions",
+      )!;
+      await userEvent.click(menu.shadowRoot!.querySelector<HTMLElement>("button")!);
+      await menu.updateComplete;
+      await userEvent.click(
+        row.querySelector<HTMLElement>('[data-test="edit-modifier-options:opt-list-1"]')!,
+      );
+      await el.updateComplete;
+      expect(form.open).toBe(true);
+      emit(form, "wt-cancel", {});
+      await flush(el);
+      await afterDialogCloses(el);
+      expect(editor(el).shadowRoot!.activeElement).toBe(menu);
+    });
+
+    it("goes to the Modifiers control after a new list's form is cancelled, though a row opened one before", async () => {
+      const { el, form, row } = await openProduct(stubApi());
+      activator(row).focus();
+      await userEvent.keyboard("{Enter}");
+      await el.updateComplete;
+      emit(form, "wt-cancel", {});
+      await flush(el);
+      await afterDialogCloses(el);
+      const combobox = editor(el).shadowRoot!.querySelector<HTMLElement>(
+        "[data-test=add-modifier]",
+      )!;
+      combobox.focus();
+      emit(combobox, "wt-change", { value: "create-options" });
+      await el.updateComplete;
+      expect(form.open).toBe(true);
+      emit(form, "wt-cancel", {});
+      await flush(el);
+      await afterDialogCloses(el);
+      expect(editor(el).shadowRoot!.activeElement).toBe(combobox);
+    });
   });
 
   it("edits an attached list of either kind through its own nested form", async () => {

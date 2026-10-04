@@ -387,6 +387,8 @@ export class ProductEditor extends LitElement {
   @state() private unitPickerOpen = false;
   /** Which button opened the unit chooser, where focus goes back once it shuts. */
   #unitOpener: "price" | "heading" = "price";
+  /** The attached row, and which of its controls, that asked for the list editor now open. */
+  #relatedOpener: { key: string; via: "row" | "menu" } | null = null;
   @state() private unitUsage: ExtraOfferUsage[] = [];
   @state() private unitUsageUnavailable = false;
   #unitUsageGeneration = 0;
@@ -723,6 +725,7 @@ export class ProductEditor extends LitElement {
   private related(event: Event, kind: ProductChildKind) {
     event.stopPropagation();
     if (this.suspended) return;
+    this.#relatedOpener = null;
     this.dispatchEvent(
       new CustomEvent("wt-create-related", { detail: { kind }, bubbles: true, composed: true }),
     );
@@ -742,9 +745,10 @@ export class ProductEditor extends LitElement {
   clearCourse(): void {
     this.change("courseId", null);
   }
-  /** Both kinds of modifier list are added from the ONE combobox, so both return focus there. A
-   * unit goes back to Add unit while the chooser is still open, and to the chooser's opener once a
-   * new unit has been chosen and the chooser shut. */
+  /** A modifier list edited from an attached row returns focus to that row: to its button, or to
+   * its menu when the menu's Edit opened the list. A new list, or one whose row is gone, returns
+   * it to the combobox both kinds are added from. A unit goes back to Add unit while the chooser is
+   * still open, and to the chooser's opener once a new unit has been chosen and the chooser shut. */
   returnRelatedFocus(kind: ProductChildKind): void {
     if (kind === "unit" && !this.unitPickerOpen) {
       void this.returnUnitFocus();
@@ -753,6 +757,20 @@ export class ProductEditor extends LitElement {
     if (kind === "courses") {
       this.shadowRoot!.querySelector<HTMLElement>("[name=product-course]")?.focus();
       return;
+    }
+    if (kind === "extras" || kind === "options") {
+      const opener = this.#relatedOpener;
+      this.#relatedOpener = null;
+      const row = [
+        ...this.shadowRoot!.querySelectorAll<HTMLElement>("tr[data-test=attached-modifier]"),
+      ].find((tr) => tr.dataset.modifier === opener?.key);
+      const target = row?.querySelector<HTMLElement>(
+        opener?.via === "row" ? ".row-activate" : "wt-row-actions",
+      );
+      if (target) {
+        target.focus();
+        return;
+      }
     }
     const control = kind === "extras" || kind === "options" ? "modifier" : kind;
     this.shadowRoot!.querySelector<HTMLElement>(`[data-test=add-${control}]`)?.focus();
@@ -1510,8 +1528,9 @@ export class ProductEditor extends LitElement {
     return kindLabel(this.modifierListName(ref), ref.kind);
   }
 
-  private editRelated(ref: ProductModifierRef): void {
+  private editRelated(ref: ProductModifierRef, via: "row" | "menu"): void {
     if (this.suspended) return;
+    this.#relatedOpener = { key: modifierKey(ref), via };
     this.dispatchEvent(
       new CustomEvent("wt-edit-related", {
         detail: { kind: ref.kind, id: ref.id },
@@ -1531,9 +1550,13 @@ export class ProductEditor extends LitElement {
         <button
           type="button"
           class="row-activate"
+          data-test=${`open-modifier-${key}`}
           aria-label=${`${t("action.edit")}: ${name}${SUMMARY_SEPARATOR}${kind}`}
           .disabled=${this.suspended}
-          @click=${() => this.editRelated(ref)}
+          @click=${(event: Event) => {
+            event.stopPropagation();
+            this.editRelated(ref, "row");
+          }}
         ></button
         >${name}
       </td>
@@ -1548,7 +1571,7 @@ export class ProductEditor extends LitElement {
             .disabled=${this.suspended}
             @click=${(event: Event) => {
               event.stopPropagation();
-              this.editRelated(ref);
+              this.editRelated(ref, "menu");
             }}
             >${t("action.edit")}</wt-button
           ><wt-button

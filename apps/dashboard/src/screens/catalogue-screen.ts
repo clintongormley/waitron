@@ -194,8 +194,21 @@ export class CatalogueScreen extends LitElement {
     },
     refresh: (kind) => this.#refreshRelated(kind),
     loadError: (error) => this.#showReadError(error),
-    focus: (kind) => this.#editor()?.returnRelatedFocus(kind),
+    focus: (kind) => void this.#returnChildFocus(kind),
   });
+
+  /** A list form's own dialog closes a render after the form does, and until it has closed it
+   * keeps focus from reaching the product editor. */
+  async #returnChildFocus(kind: ProductChildKind): Promise<void> {
+    if (kind === "extras" || kind === "options") {
+      const form = this.shadowRoot!.querySelector<LitElement>(
+        kind === "extras" ? "dashboard-extra-list-form" : "dashboard-option-list-form",
+      );
+      await form?.updateComplete;
+      await form?.shadowRoot!.querySelector<WtModal>("wt-modal")?.updateComplete;
+    }
+    this.#editor()?.returnRelatedFocus(kind);
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();

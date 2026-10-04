@@ -1186,7 +1186,8 @@ Modifiers page (W71, owner 2026-10-04) — DONE.** In the product editor's Modif
 row, or Enter or Space on it, does what Edit in the row's menu does (`wt-edit-related`), through a
 row-sized button named "Edit: <list> · <kind>", built as the variants table's is; the drag handle,
 the row menu and Remove keep their own clicks, and the product's unsaved edits stay through the
-nested editor's Cancel and save (`catalogue-screen.test.ts`). On the Modifiers page an Extras row
+nested editor's Cancel and save (`catalogue-screen.test.ts`), after which focus goes back to the row's
+button, or to its menu when the menu's Edit opened the list. On the Modifiers page an Extras row
 now opens like an Options row, with Used by opening only its popup. Left as it was: the focus ring
 of a row's button shows only along the row's top edge, in both tables, as on the shared table.
 

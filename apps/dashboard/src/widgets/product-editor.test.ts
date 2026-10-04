@@ -1450,6 +1450,8 @@ const attachedRow = (el: ProductEditor, key: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(
     `[data-test=attached-modifier][data-modifier="${key}"]`,
   )!;
+const openModifier = (el: ProductEditor, key: string) =>
+  attachedRow(el, key).querySelector<HTMLButtonElement>(`[data-test="open-modifier-${key}"]`)!;
 
 describe.each([
   ["extras:sauces", { kind: "extras", id: "sauces" }, "Sauces", "extras.title"],
@@ -1457,7 +1459,7 @@ describe.each([
 ] as const)("the attached row %s", (key, detail, name, kindTitle) => {
   it("names its activator by the list's name and kind", async () => {
     const { el } = await mountTwoAttached();
-    const activator = attachedRow(el, key).querySelector<HTMLButtonElement>(".row-activate")!;
+    const activator = openModifier(el, key);
     expect(activator.getAttribute("aria-label")).toBe(
       `${t("action.edit")}: ${name} · ${t(kindTitle)}`,
     );
@@ -1485,7 +1487,7 @@ describe.each([
     "asks for its list's editor once from the keyboard (%s)",
     async (press) => {
       const { el, edits } = await mountTwoAttached();
-      attachedRow(el, key).querySelector<HTMLElement>(".row-activate")!.focus();
+      openModifier(el, key).focus();
       await userEvent.keyboard(press);
       await el.updateComplete;
       expect(edits).toEqual([detail]);
@@ -1535,7 +1537,7 @@ describe.each([
     el.childOpen = true;
     await el.updateComplete;
     const row = attachedRow(el, key);
-    const activator = row.querySelector<HTMLButtonElement>(".row-activate")!;
+    const activator = openModifier(el, key);
     expect(activator.disabled).toBe(true);
     await userEvent.click(row.querySelector<HTMLElement>("[data-test=modifier-kind]")!, {
       force: true,
@@ -1559,6 +1561,186 @@ it("still reorders attached rows from the drag handle's keyboard, asking for no 
     { kind: "extras", id: "sauces" },
   ]);
   expect(edits).toEqual([]);
+});
+
+it("keeps an attached row's click from reaching the row around its button", async () => {
+  const { el, edits } = await mountTwoAttached();
+  const reached = vi.fn();
+  attachedRow(el, "extras:sauces").addEventListener("click", reached);
+  openModifier(el, "extras:sauces").click();
+  await el.updateComplete;
+  expect(edits).toEqual([{ kind: "extras", id: "sauces" }]);
+  expect(reached).not.toHaveBeenCalled();
+});
+
+it("reorders attached rows when the handle is dragged with the pointer, asking for no editor", async () => {
+  const { el, edits } = await mountTwoAttached();
+  await userEvent.dragAndDrop(
+    attachedRow(el, "extras:sauces").querySelector<HTMLElement>(
+      '[data-test="drag-extras:sauces"]',
+    )!,
+    openModifier(el, "options:cooked"),
+  );
+  await el.updateComplete;
+  expect(el.currentValue.modifiers).toEqual([
+    { kind: "options", id: "cooked" },
+    { kind: "extras", id: "sauces" },
+  ]);
+  expect(edits).toEqual([]);
+});
+
+it("draws a dragged attached row over the controls of the row it passes", async () => {
+  await atDesktopWidth(async () => {
+    const { el } = await mountTwoAttached();
+    const dragged = attachedRow(el, "extras:sauces");
+    const passed = attachedRow(el, "options:cooked");
+    dragged.scrollIntoView({ block: "center" });
+    const start = dragged.getBoundingClientRect();
+    const centre = start.top + start.height / 2;
+    const pointer = (target: EventTarget, type: string, clientY: number) =>
+      target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, clientY }));
+    pointer(dragged.querySelector('[data-test="drag-extras:sauces"]')!, "pointerdown", centre);
+    try {
+      // Not far enough to swap the rows: the dragged one now overlaps the top of the next.
+      pointer(document, "pointermove", centre + 0.4 * start.height);
+      await el.updateComplete;
+      expect(el.currentValue.modifiers).toEqual(twoAttached.modifiers);
+      const menu = passed.querySelector("wt-row-actions")!.getBoundingClientRect();
+      const y = menu.top + 2;
+      expect(y).toBeLessThan(dragged.getBoundingClientRect().bottom);
+      const under = el.shadowRoot!.elementFromPoint(menu.left + menu.width / 2, y);
+      expect(dragged.contains(under)).toBe(true);
+    } finally {
+      pointer(document, "pointerup", centre);
+    }
+  });
+});
+
+/** The colour `token` resolves to where the editor is mounted, read off a probe painted with it. */
+function resolved(el: ProductEditor, token: string): string {
+  const probe = document.createElement("div");
+  probe.style.background = `var(${token})`;
+  el.parentElement!.appendChild(probe);
+  const colour = getComputedStyle(probe).backgroundColor;
+  probe.remove();
+  return colour;
+}
+
+it.each(["light", "dark"] as const)(
+  "tints a hovered or focused attached row in a colour the dialog's panel is not, and leaves a dragged row lifted (%s)",
+  async (theme) => {
+    const { el } = await mountWidget<ProductEditor>(
+      "dashboard-product-editor",
+      {
+        open: true,
+        value: twoAttached,
+        locales: ["en"],
+        units: [unit],
+        taxChoices: reduced,
+        extraLists,
+        optionLists,
+      },
+      theme,
+    );
+    const tint = resolved(el, "--wt-color-bg");
+    // The table sits inside the editor's dialog, painted with the raised surface.
+    expect(tint).not.toBe(resolved(el, "--wt-color-surface-raised"));
+    const keys = ["extras:sauces", "options:cooked"];
+    const name = (index: number) =>
+      attachedRow(el, keys[index]!).querySelector<HTMLElement>("[data-test=modifier-name]")!;
+    attachedRow(el, keys[0]!).scrollIntoView({ block: "center" });
+    expect(getComputedStyle(name(0)).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    // Aimed at the name, which nothing but the row's button covers.
+    const button = openModifier(el, keys[0]!).getBoundingClientRect();
+    const onName = name(0).getBoundingClientRect();
+    const y = onName.top + onName.height / 2;
+    await userEvent.hover(openModifier(el, keys[0]!), {
+      position: { x: onName.left + onName.width / 2 - button.left, y: y - button.top },
+    });
+    expect(getComputedStyle(name(0)).backgroundColor).toBe(tint);
+    openModifier(el, keys[1]!).focus();
+    expect(getComputedStyle(name(1)).backgroundColor).toBe(tint);
+
+    const row = attachedRow(el, keys[0]!);
+    row
+      .querySelector('[data-test="drag-extras:sauces"]')!
+      .dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 1, clientY: y }));
+    try {
+      expect(row.hasAttribute("data-dragging")).toBe(true);
+      expect(row.matches(":hover")).toBe(true);
+      expect(getComputedStyle(name(0)).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      expect(getComputedStyle(row).backgroundColor).toBe(resolved(el, "--wt-color-surface-lifted"));
+    } finally {
+      document.dispatchEvent(
+        new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientY: y }),
+      );
+    }
+  },
+);
+
+describe("where focus goes when the list editor an attached row asked for closes", () => {
+  it("goes back to the row's button when the row asked", async () => {
+    const { el, edits } = await mountTwoAttached();
+    const activator = openModifier(el, "options:cooked");
+    activator.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(edits).toEqual([{ kind: "options", id: "cooked" }]);
+    activator.blur();
+    el.returnRelatedFocus("options");
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(activator);
+  });
+
+  it("goes back to the row's menu when the menu's Edit asked", async () => {
+    const { el, edits } = await mountTwoAttached();
+    const row = attachedRow(el, "extras:sauces");
+    const menu = row.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-row-actions",
+    )!;
+    await userEvent.click(menu.shadowRoot!.querySelector<HTMLElement>("button")!);
+    await menu.updateComplete;
+    await userEvent.click(
+      row.querySelector<HTMLElement>('[data-test="edit-modifier-extras:sauces"]')!,
+    );
+    expect(edits).toEqual([{ kind: "extras", id: "sauces" }]);
+    (el.shadowRoot!.activeElement as HTMLElement | null)?.blur();
+    el.returnRelatedFocus("extras");
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(menu);
+  });
+
+  it("goes to the Modifiers control when the row that asked is gone", async () => {
+    const { el } = await mountTwoAttached();
+    const row = attachedRow(el, "extras:sauces");
+    openModifier(el, "extras:sauces").click();
+    const menu = row.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-row-actions",
+    )!;
+    await userEvent.click(menu.shadowRoot!.querySelector<HTMLElement>("button")!);
+    await menu.updateComplete;
+    await userEvent.click(
+      row.querySelector<HTMLElement>('[data-test="remove-modifier-extras:sauces"]')!,
+    );
+    await el.updateComplete;
+    expect(row.isConnected).toBe(false);
+    (el.shadowRoot!.activeElement as HTMLElement | null)?.blur();
+    el.returnRelatedFocus("extras");
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(addModifier(el));
+  });
+
+  it("goes to the Modifiers control after a new list, even when a row asked before", async () => {
+    const { el } = await mountTwoAttached();
+    openModifier(el, "options:cooked").click();
+    addModifier(el).dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "create-options" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    (el.shadowRoot!.activeElement as HTMLElement | null)?.blur();
+    el.returnRelatedFocus("options");
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(addModifier(el));
+  });
 });
 
 const addModifier = (el: ProductEditor) =>
