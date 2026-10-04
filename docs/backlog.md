@@ -3105,6 +3105,15 @@ order the API sends, which is the stored variant order the product editor shows 
 back by `listProducts`) and `apps/dashboard/src/widgets/product-list.test.ts`. The name sort's
 checks were changed to check the product's order (owner's 2026-10-05 rule; listed in the PR).
 
+**Products at phone width: a long name runs under the pinned Actions column, cut with no ellipsis —
+open (seen during W85a's check, 2026-10-05).** At 390 px in the demo venue, with Croquetas'
+variants open, "Ración 10" showed as "Ración 1(" and the product's "4 variantes" as "4 variante"
+against the pinned Actions column (`~/waitron-campaign/w85a-shots/shot-dark-390.png`, a local
+screenshot). W85a changes only the variants' order, so I believe this predates it; not compared
+with `main`. Seen in the same check, also not traced: in the product editor's variant table the
+Unit button sits against the Price heading with no gap. Needs the owner to say whether either
+wants an item.
+
 **Products: a category's Made at shows where its dishes are made — DONE (W86, #1203, owner 2026-10-04).**
 In the Products tree each category row's Made at cell now shows the category's baseline route, in
 the product rows' words (a station's name, No preparation, No replacement, Nowhere), linked to the
