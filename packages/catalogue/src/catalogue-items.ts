@@ -1,6 +1,6 @@
 import { now, products, tableExists, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { and, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { categoryDetails } from "./schema/categories.js";
 import {
@@ -22,7 +22,10 @@ export type FolderContents = "move_up" | "delete";
 export interface FolderSummary {
   id: string;
   folders: number;
+  /** Products in the category and every category below it, variants left out, inactive ones
+   * included. */
   products: number;
+  activeProducts: number;
   routes: number;
 }
 
@@ -147,13 +150,18 @@ export async function summariseFolders(
   for (const id of categoryIds) {
     const subtree = tree.subtree(id);
     let productCount = 0;
+    let activeCount = 0;
     let routeCount = 0;
     for (const batch of batches(subtree)) {
       const [row] = await tx
-        .select({ n: sql<number>`count(*)` })
+        .select({
+          n: sql<number>`count(*)`,
+          active: sql<number>`count(*) filter (where ${eq(products.active, true)})`,
+        })
         .from(products)
         .where(and(inArray(products.categoryId, batch), isTopLevelProduct));
       productCount += Number(row!.n);
+      activeCount += Number(row!.active);
       if (claimsPresent || exceptionsPresent) {
         const folderIds = sql.join(
           batch.map((folder) => sql`${folder}`),
@@ -173,7 +181,13 @@ export async function summariseFolders(
         }
       }
     }
-    summaries.push({ id, folders: subtree.length - 1, products: productCount, routes: routeCount });
+    summaries.push({
+      id,
+      folders: subtree.length - 1,
+      products: productCount,
+      activeProducts: activeCount,
+      routes: routeCount,
+    });
   }
   return summaries;
 }

@@ -1778,7 +1778,9 @@ Custom events crossing a shadow boundary are `composed: true`. A native event th
 composed, such as `input`, also crosses that boundary, so re-emitting it without care makes the
 consumer see the change twice. Native `change` is not composed (the measurement is under "Event
 discipline" in [conventions-ui.md](conventions-ui.md)). **Always `stopPropagation()` the native
-event before dispatching your own.** `wt-input` and `wt-switch` are the reference implementations.
+event before dispatching your own.** The exception is a click on an action inside a
+`wt-row-actions` menu, which is not stopped, or the menu stays open (see "Tabbed management
+pages"). `wt-input` and `wt-switch` are the reference implementations.
 
 Custom events are named `wt-*` and carry data in `detail`.
 
@@ -2080,7 +2082,10 @@ edge, when it does not fit. Put Edit, Delete or domain-specific actions in each 
 screen may instead offer Create as a round icon-only `wt-button` (`shape="round"` with the `plus`
 icon and an `aria-label`) beside the heading — but **no screen does today**, and no dashboard
 control uses `shape="round"` at all, so read this as a permission rather than a pattern with a home.
-The menu uses a native popover: clicking outside or pressing Escape closes it. Its action buttons
+The menu uses a native popover: clicking outside or pressing Escape closes it. Clicking an action
+inside it closes it too; `onAction` in `packages/ui/src/components/wt-row-actions.ts` decides which
+clicks count. The menu learns of the click only when the click reaches it, so an action's click
+handler must not stop the click's propagation, or the menu stays open. Its action buttons
 follow normal Tab navigation. Give every `wt-button` slotted into a `wt-row-actions` popover
 `align="start"` — a centred label reads oddly once the button has been stretched to the popover's
 full width, the way a dropdown menu item never centres its text. This applies to every

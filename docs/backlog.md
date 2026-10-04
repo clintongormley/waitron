@@ -1425,6 +1425,50 @@ there is no copy to keep in step.
 plan [2026-10-02-products-category-tree.md](superpowers/plans/2026-10-02-products-category-tree.md).
 The tree's folder icons use the larger shared icon size on the root, category, new-category and drag-preview rows (W61).
 
+**Deleting a category warns about exactly what will go (W74, owner 2026-10-04) — DONE.** The owner
+deleted an empty "Mains", one of three top-level categories with that name, and was warned about
+another Mains's product. A reproduction on a running stack found the server always counted and
+deleted the right category; the dashboard was at fault. Fixed:
+- Choosing Delete in a category's row menu now closes the menu, as Rename and Move already did.
+  It stayed open, and once the empty category was deleted and the list redrawn, the open menu
+  belonged to the next category, so a second click deleted or summarised that one.
+- `wt-data-table` keeps each row's page elements with that row's data when rows are added, removed
+  or reordered, in the plain table and the tree, so an open menu stays with its row — where each
+  row's `rowKey` is unique to it. Rows that share a key are still all drawn, and are told apart by
+  which occurrence of the key they are (`repeatKeys`), so a row added ahead with the same key takes
+  over the elements of the row it displaces. A table that sets no `rowKey` keys rows by their
+  position.
+- The "Delete it too" choice counts only active products (a new `activeProducts` in each
+  category's summary); a deactivated product is already out of the list, unless the Status filter
+  is set to show inactive products, and only moves up.
+  Whether a category is deleted at once without the dialog is unchanged, so one holding only
+  deactivated products still asks.
+- The dialog lists each category it will delete by its full path, with "(2 of 3)" where several
+  share a path, in the order the list draws them.
+- Pressing Delete in the dialog reads the categories' contents again; if the numbers of
+  subcategories, active products or routing rules differ from those shown (`#unchanged` in
+  `apps/dashboard/src/widgets/catalogue-browser.ts`), nothing is deleted and the dialog shows the
+  new counts with a message saying so.
+
+Still open from W74:
+- **A short window remains** between that second read and the delete, in which a change is not
+  seen. Closing it needs the server to compare the counts, which means sending them with the delete
+  request (`deleteCatalogueItems` takes only the selection and the contents choice today).
+- **A product's row menu stays open after Delete, Edit or Restore** on the Products list: `#emit`
+  in `apps/dashboard/src/widgets/product-list.ts` stops the click the same way the category Delete
+  did. Seen for Delete in a throwaway browser test (menu still open after the click); Edit and
+  Restore go through the same code but were not tried.
+- **The routing-rules warning counts too many rules when contents move up.** From reading the code,
+  not run: the summary counts the rules of the category and every category below it
+  (`summariseFolders`, `packages/catalogue/src/catalogue-items.ts`), and the dialog shows that number
+  under either choice, but moving contents up deletes only the chosen category, so only its own
+  rules go (they are removed with it: `packages/venue-service/src/schema/routing.ts`).
+- **The Printers screen's discovered-device rows can share a key.** From reading the code, not run:
+  `#deviceKey` (`apps/dashboard/src/screens/printers-screen.ts`) leaves out which print agent
+  reported the device, while the server lists one entry per agent, so two agents that see the same
+  network printer give two rows the same key. The table now draws both; anything that finds a row
+  by its key would reach only the first.
+
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE.** The
 owner, on two screenshots of the same three options, the Name column starting far to the right
 until one name is long enough to push it left: _"the drag handle column shouldn't auto-expand, so

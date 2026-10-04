@@ -248,11 +248,17 @@ restore the products later. Before deleting a non-empty category, choose what ha
 - **Move it up to the parent category** keeps the products active and moves the category's direct
   products and subcategories to its parent. For a top-level category they move to **All products**.
 - **Delete it too** removes the subtree and makes its products Inactive. The summary shows the
-  numbers of subcategories, products and routing rules removed (category claims and exceptions).
+  numbers of subcategories, active products and routing rules removed (category claims and
+  exceptions). A product that is already Inactive is not counted. Every product in the subtree,
+  Inactive ones included, is moved to the parent of the outermost selected category that holds it.
 
 An empty category is deleted without confirmation. A category's row-menu Delete uses the same path.
 If the summary cannot be read, deletion waits for a successful new attempt rather than asking you
-to approve unknown contents. A refused action keeps its dialog open with a message at the bottom.
+to approve unknown contents. The dialog lists each category being deleted by its full path, adding
+"(2 of 3)" where several categories share a path. Pressing **Delete** in the dialog reads the counts
+again; if the numbers of subcategories, active products or routing rules have changed, it deletes
+nothing, shows the new counts and asks you to confirm again. A refused action keeps its dialog open
+with a message at the bottom.
 Deleting a category removes its station claim and every exception naming it, because both tables
 have a cascading foreign key to `categories`. The summary counts those removed rules; it does
 not list products whose station would change. **Move to…** also has no routing preview. Check
@@ -274,7 +280,7 @@ a non-string name is `management.request_invalid` (400).
 | `PATCH /management-api/categories/:id` | supplied name or parent fields; 200, saved category |
 | `POST /management-api/folders/move` | `{ productIds, categoryIds, to }`; 204 |
 | `POST /management-api/folders/delete` | `{ productIds, categoryIds, contents }`; 204 |
-| `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, routes }[]` |
+| `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes }[]`; `products` includes Inactive products, `activeProducts` leaves them out |
 
 Both ID arrays are required and contain distinct UUIDs. `to` is a category ID or null. `contents`
 is `move_up` or `delete`. For example, once you have created Cocktails and your products, use their

@@ -6011,3 +6011,82 @@ test("turning stickyHeader off releases the box and its scroll padding, and on a
   await vi.waitFor(() => expect(again.style.scrollPaddingBlockStart).toBe(`${headHeight}px`));
   expect(again.scrollHeight).toBeGreaterThan(again.clientHeight);
 });
+
+/** An actions column whose one item reports the row it was drawn for, so a menu that ends up in
+ * another row's place is caught acting on that other row. */
+function actingColumn<R extends { id: string }>(acted: string[]): DataTableColumn<R> {
+  return {
+    key: "actions",
+    label: "Actions",
+    pinned: "end",
+    cell: (r) =>
+      html`<wt-row-actions label=${`Actions for ${r.id}`} align="end"
+        ><button data-test="act" @click=${() => acted.push(r.id)}>Delete</button></wt-row-actions
+      >`,
+  };
+}
+
+async function moveUnderOpenMenu(
+  el: WtDataTable<{ id: string }>,
+  key: string,
+  redraw: () => void,
+): Promise<{ menu: HTMLElement; rowOfMenu: () => string | undefined }> {
+  const menu = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+    `tr[data-row-key="${key}"] wt-row-actions`,
+  )!;
+  menu.show();
+  redraw();
+  await el.updateComplete;
+  return { menu, rowOfMenu: () => menu.closest<HTMLElement>("tr")?.dataset.rowKey };
+}
+
+test("a row's open menu stays bound to its own row when a redraw inserts a row above it", async () => {
+  const acted: string[] = [];
+  const el = await table({ columns: [...columns, actingColumn<Row>(acted)] });
+  const { menu, rowOfMenu } = await moveUnderOpenMenu(
+    el as unknown as WtDataTable<{ id: string }>,
+    "a",
+    () => (el.rows = [{ id: "c", name: "Cy", count: 1 }, ...rows]),
+  );
+  expect(rowOfMenu()).toBe("a");
+  menu.querySelector<HTMLElement>('[data-test="act"]')!.click();
+  expect(acted).toEqual(["a"]);
+});
+
+test("in a tree, a row's open menu stays bound to its own row when a redraw inserts a row above it", async () => {
+  const acted: string[] = [];
+  const el = await treeTable({ columns: [...treeColumns, actingColumn<TreeRow>(acted)] });
+  const { menu, rowOfMenu } = await moveUnderOpenMenu(
+    el as unknown as WtDataTable<{ id: string }>,
+    "drinks",
+    () => (el.rows = [{ id: "bar", parent: null, name: "Bar" }, ...treeRows]),
+  );
+  expect(treeKeys(el)).toEqual(["bar", "food", "break", "eggs", "drinks"]);
+  expect(rowOfMenu()).toBe("drinks");
+  menu.querySelector<HTMLElement>('[data-test="act"]')!.click();
+  expect(acted).toEqual(["drinks"]);
+});
+
+test("rows that share a key are each drawn with their own content, through a reorder", async () => {
+  const row = (id: string): Row => ({ id, name: id.toUpperCase(), count: 0 });
+  const el = await table({
+    rowKey: (r) =>
+      r.id === "p" || r.id === "q" ? "pq" : r.id === "r" || r.id === "s" ? "rs" : r.id,
+    rows: ["s", "u", "q", "t"].map(row),
+  });
+  expect(rowText(el)).toEqual(["S0Edit", "U0Edit", "Q0Edit", "T0Edit"]);
+  el.rows = ["p", "r", "q", "u", "w"].map(row);
+  await el.updateComplete;
+  expect(rowText(el)).toEqual(["P0Edit", "R0Edit", "Q0Edit", "U0Edit", "W0Edit"]);
+});
+
+test("rows that share a key three at a time are each drawn, through a reorder", async () => {
+  const row = (id: string): Row => ({ id, name: id.toUpperCase(), count: 0 });
+  const el = await table({
+    rowKey: (r) => ("pqr".includes(r.id) ? "pqr" : "stu".includes(r.id) ? "stu" : r.id),
+    rows: ["v", "q", "p", "w", "u"].map(row),
+  });
+  el.rows = ["p", "w", "r", "q", "u", "s"].map(row);
+  await el.updateComplete;
+  expect(rowText(el)).toEqual(["P0Edit", "W0Edit", "R0Edit", "Q0Edit", "U0Edit", "S0Edit"]);
+});

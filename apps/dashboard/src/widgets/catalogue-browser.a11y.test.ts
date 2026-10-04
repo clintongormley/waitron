@@ -60,7 +60,9 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
             createCategory: vi.fn(),
             summariseFolders: vi
               .fn()
-              .mockResolvedValue([{ id: "d", folders: 1, products: 2, routes: 1 }]),
+              .mockResolvedValue([
+                { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1 },
+              ]),
           } as unknown as DashboardApi,
           categories: [
             { id: "d", name: "Drinks", parentId: null },

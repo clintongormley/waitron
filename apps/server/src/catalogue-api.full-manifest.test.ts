@@ -54,7 +54,9 @@ it("folder summaries count claims and exceptions in the subtree and deletion rem
     v.managerCookie,
   );
   expect(summary.status).toBe(200);
-  expect(await summary.json()).toEqual([{ id: parent, folders: 1, products: 0, routes: 2 }]);
+  expect(await summary.json()).toEqual([
+    { id: parent, folders: 1, products: 0, activeProducts: 0, routes: 2 },
+  ]);
   expect(
     (
       await send(app, "POST", "/management-api/folders/delete", v.managerCookie, {

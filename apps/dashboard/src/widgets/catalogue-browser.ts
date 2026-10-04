@@ -69,6 +69,9 @@ export class CatalogueBrowser extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
+      .deleting {
+        overflow-wrap: anywhere;
+      }
       wt-input {
         flex: 1 1 calc(var(--wt-tap-min) * 7);
         min-width: min(100%, calc(var(--wt-tap-min) * 7));
@@ -239,7 +242,8 @@ export class CatalogueBrowser extends LitElement {
       this.summaryLoading = false;
     }
   }
-  async #confirm(operation = this.operation): Promise<void> {
+  /** `shown` marks a confirmation from the dialog, whose counts are read again before deleting. */
+  async #confirm(operation = this.operation, shown = false): Promise<void> {
     if (
       this.operationBusy ||
       this.summaryLoading ||
@@ -256,7 +260,11 @@ export class CatalogueBrowser extends LitElement {
           this.operationSelection,
           this.destination === "top" ? null : this.destination,
         );
-      else await this.api.deleteCatalogueItems(this.operationSelection, this.contents);
+      else {
+        if (shown && this.operationSelection.categoryIds.length && !(await this.#unchanged()))
+          return;
+        await this.api.deleteCatalogueItems(this.operationSelection, this.contents);
+      }
       this.operation = null;
       this.selected = [];
     } catch (error) {
@@ -266,11 +274,79 @@ export class CatalogueBrowser extends LitElement {
       this.operationBusy = false;
     }
   }
+  /** When what the dialog showed has changed, shows the new counts instead; when it cannot be read
+   * again, says so and leaves Delete to try again. A refusal carrying a code is left to the caller. */
+  async #unchanged(): Promise<boolean> {
+    const ids = this.operationSelection.categoryIds;
+    let read: unknown;
+    try {
+      read = await this.api.summariseFolders(ids);
+    } catch (error) {
+      if (codeOf(error, "") !== "") throw error;
+    }
+    const list: FolderSummary[] = Array.isArray(read) ? read : [];
+    const fresh = ids.map((id) => list.find((summary) => summary.id === id));
+    if (fresh.some((summary) => summary === undefined)) {
+      this.operationError = t("folders.summary_error");
+      return false;
+    }
+    const same = fresh.every((summary, index) => {
+      const shown = this.summaries[index];
+      return (
+        shown !== undefined &&
+        summary!.folders === shown.folders &&
+        summary!.activeProducts === shown.activeProducts &&
+        summary!.routes === shown.routes
+      );
+    });
+    if (same) return true;
+    this.summaries = fresh as FolderSummary[];
+    this.operationError = t("folders.summary_changed");
+    return false;
+  }
   #plural(key: Parameters<typeof t>[0], count: number): string {
     return t(count === 1 ? (`${key}_one` as Parameters<typeof t>[0]) : key).replace(
       "{count}",
       String(count),
     );
+  }
+  /** Each category's path, numbered where others share it in the order the list draws them: depth
+   * first, with siblings in `categories` order, which is how the table breaks a tie in its sort. */
+  #namedPaths(ids: readonly string[]): string[] {
+    const known = new Set(this.categories.map(({ id }) => id));
+    const children = new Map<string | null, CategorySummary[]>();
+    for (const category of this.categories) {
+      const parent =
+        category.parentId !== null && known.has(category.parentId) ? category.parentId : null;
+      (children.get(parent) ?? children.set(parent, []).get(parent)!).push(category);
+    }
+    const sharing = new Map<string, string[]>();
+    const pathOf = new Map<string, string>();
+    const walk = (parentId: string | null): void => {
+      for (const category of children.get(parentId) ?? []) {
+        if (pathOf.has(category.id)) continue;
+        const path = categoryPath(category, this.categories);
+        pathOf.set(category.id, path);
+        (sharing.get(path) ?? sharing.set(path, []).get(path)!).push(category.id);
+        walk(category.id);
+      }
+    };
+    walk(null);
+    return ids.map((id) => {
+      const path = pathOf.get(id) ?? "";
+      const same = sharing.get(path) ?? [];
+      if (same.length < 2) return path;
+      const values: Record<string, string> = {
+        path,
+        position: String(same.indexOf(id) + 1),
+        total: String(same.length),
+      };
+      // One pass with a function replacement: a `$&` or `{total}` in a name stays literal.
+      return t("folders.path_ordinal").replace(
+        /\{(\w+)\}/g,
+        (whole, name: string) => values[name] ?? whole,
+      );
+    });
   }
   #operationDialog() {
     if (!this.operation) return nothing;
@@ -297,7 +373,7 @@ export class CatalogueBrowser extends LitElement {
     const totals = rootSummaries.reduce(
       (sum, summary) => ({
         folders: sum.folders + summary.folders,
-        products: sum.products + summary.products,
+        products: sum.products + summary.activeProducts,
         routes: sum.routes + summary.routes,
       }),
       { folders: 0, products: 0, routes: 0 },
@@ -322,7 +398,7 @@ export class CatalogueBrowser extends LitElement {
       <form
         @submit=${(event: Event) => {
           event.preventDefault();
-          void this.#confirm();
+          void this.#confirm(this.operation, true);
         }}
       >
         ${
@@ -341,6 +417,14 @@ export class CatalogueBrowser extends LitElement {
               ></wt-combobox>`
             : html`
                 ${selection.productIds.length ? html`<p>${selection.productIds.length === 1 ? t("product.delete_warning") : t("folders.delete_products_body")}</p>` : nothing}
+                ${
+                  selection.categoryIds.length
+                    ? html`<p>${t("folders.deleting")}</p>
+                        <ul class="deleting" data-test="deleting">
+                          ${this.#namedPaths(selection.categoryIds).map((name) => html`<li>${name}</li>`)}
+                        </ul>`
+                    : nothing
+                }
                 ${this.summaryLoading ? html`<wt-spinner></wt-spinner>` : nothing}
                 ${
                   selection.categoryIds.length && !this.summaryLoading && !this.summaryFailed
@@ -387,7 +471,7 @@ export class CatalogueBrowser extends LitElement {
           variant=${this.operation === "delete" ? "danger" : "primary"}
           .loading=${this.operationBusy}
           .disabled=${this.operationBusy || this.summaryLoading || this.summaryFailed || (this.operation === "move" && !this.destination)}
-          @click=${() => void this.#confirm()}
+          @click=${() => void this.#confirm(this.operation, true)}
           >${t(this.operation === "delete" ? "action.delete" : "folders.move")}</wt-button
         >
       </wt-form-actions>

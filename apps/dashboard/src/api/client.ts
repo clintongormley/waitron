@@ -314,7 +314,10 @@ export type FolderContents = "move_up" | "delete";
 export interface FolderSummary {
   id: string;
   folders: number;
+  /** Products in the category and every category below it, variants left out, inactive ones
+   * included. */
   products: number;
+  activeProducts: number;
   routes: number;
 }
 export interface Unit {

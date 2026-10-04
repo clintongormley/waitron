@@ -251,9 +251,28 @@ describe("summariseFolders", () => {
     await app((tx) => deactivateProduct(tx, lager));
     await app((tx) => plantStoredCategory(tx, variant, b));
     expect(await app((tx) => summariseFolders(tx, [f, d, b]))).toEqual([
-      { id: f, folders: 0, products: 1, routes: 0 },
-      { id: d, folders: 1, products: 2, routes: 0 },
-      { id: b, folders: 0, products: 1, routes: 0 },
+      { id: f, folders: 0, products: 1, activeProducts: 1, routes: 0 },
+      { id: d, folders: 1, products: 2, activeProducts: 1, routes: 0 },
+      { id: b, folders: 0, products: 1, activeProducts: 0, routes: 0 },
+    ]);
+  });
+  it("counts active products across the whole subtree, leaving out an inactive one two levels down", async () => {
+    await app(async (tx) => {
+      const stouts = (await createCategory(tx, { name: "Stout", parentId: b })).id;
+      const bar = await createCatalogue(tx, { name: "Bar" });
+      const { id } = await createProduct(tx, {
+        catalogueId: bar.id,
+        categoryId: stouts,
+        name: "Porter",
+        pricingUnit: "each",
+        unitPrice: "3",
+        vatClass: "general",
+      });
+      await deactivateProduct(tx, id);
+    });
+    expect(await app((tx) => summariseFolders(tx, [d, b]))).toEqual([
+      { id: d, folders: 2, products: 3, activeProducts: 2, routes: 0 },
+      { id: b, folders: 1, products: 2, activeProducts: 1, routes: 0 },
     ]);
   });
   it("refuses unknown folders rather than reporting them as empty", async () => {

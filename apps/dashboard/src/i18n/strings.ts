@@ -100,6 +100,8 @@ export const en = {
     "This makes the products inactive: the till stops selling them and they leave this list until you choose to show inactive products. You can restore them, and their past sales are kept.",
   "folders.delete_heading": "Delete {count} items?",
   "folders.delete_heading_one": "Delete 1 item?",
+  "folders.deleting": "Categories to delete:",
+  "folders.path_ordinal": "{path} ({position} of {total})",
   "folders.contents_question": "What happens to what is inside?",
   "folders.contents_move_up": "Move it up to the parent category",
   "folders.contents_delete":
@@ -115,6 +117,8 @@ export const en = {
   "folders.no_routing_rule": "No kitchen routing rule covers this category",
   "folders.summary_error":
     "What these categories hold could not be read, so they cannot be deleted yet.",
+  "folders.summary_changed":
+    "What these categories hold has changed since this opened. Check the new counts and confirm again.",
   "folders.all_products": "All products",
   "folders.search": "Search products and categories",
   "folders.name": "Category name",
@@ -2247,6 +2251,8 @@ export const es: Record<StringKey, string> = {
     "Esto desactiva los productos: la caja deja de venderlos y salen de esta lista hasta que elijas mostrar los productos inactivos. Puedes restaurarlos, y sus ventas anteriores se conservan.",
   "folders.delete_heading": "¿Eliminar {count} elementos?",
   "folders.delete_heading_one": "¿Eliminar 1 elemento?",
+  "folders.deleting": "Categorías que se eliminarán:",
+  "folders.path_ordinal": "{path} ({position} de {total})",
   "folders.contents_question": "¿Qué pasa con lo que contienen?",
   "folders.contents_move_up": "Subirlo a la categoría superior",
   "folders.contents_delete":
@@ -2261,6 +2267,8 @@ export const es: Record<StringKey, string> = {
   "folders.no_routing_rule": "Ninguna regla de envío a cocina cubre esta categoría",
   "folders.summary_error":
     "No se pudo leer lo que contienen estas categorías, así que aún no se pueden eliminar.",
+  "folders.summary_changed":
+    "Lo que contienen estas categorías ha cambiado desde que se abrió. Revisa las nuevas cifras y vuelve a confirmar.",
   "folders.all_products": "Todos los productos",
   "folders.search": "Buscar productos y categorías",
   "folders.name": "Nombre de la categoría",
