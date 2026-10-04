@@ -7,6 +7,7 @@ import { MAX_MODIFIER_INTEGER } from "@waitron/catalogue/src/modifier-limits.js"
 import { setLocale } from "../i18n/t.js";
 import {
   type FieldContext,
+  effectiveNamesLine,
   isModifierQuantity,
   nameFields,
   namesLine,
@@ -150,6 +151,95 @@ describe("namesLine", () => {
     ]);
     expect(namesLine(["es", "en"], { es: "", en: " " })).toEqual([]);
     expect(namesLine(["es", "en"], {})).toEqual([]);
+  });
+});
+
+describe("effectiveNamesLine", () => {
+  it("lists each language's own name after its upper-case code, in the languages' order", () => {
+    expect(
+      effectiveNamesLine(["es", "en"], { en: "Make it yours", es: "Añádele algo" }, "es", "Extras"),
+    ).toEqual([
+      { label: "ES", value: "Añádele algo" },
+      { label: "EN", value: "Make it yours" },
+    ]);
+  });
+
+  it("shows the default language's name as a placeholder for a blank language", () => {
+    expect(
+      effectiveNamesLine(["es", "en"], { es: "Añádele algo", en: "" }, "es", "Extras"),
+    ).toEqual([
+      { label: "ES", value: "Añádele algo" },
+      { label: "EN", value: "Añádele algo", placeholder: true },
+    ]);
+  });
+
+  it("shows the staff name for a blank default language, never another language's name", () => {
+    expect(
+      effectiveNamesLine(["es", "en"], { es: "", en: "Make it yours" }, "es", "Extras"),
+    ).toEqual([
+      { label: "ES", value: "Extras", placeholder: true },
+      { label: "EN", value: "Make it yours" },
+    ]);
+  });
+
+  it("shows the staff name for a blank language when the default language is blank too", () => {
+    expect(effectiveNamesLine(["es", "en"], { es: "", en: "" }, "es", "Extras")).toEqual([
+      { label: "ES", value: "Extras", placeholder: true },
+      { label: "EN", value: "Extras", placeholder: true },
+    ]);
+  });
+
+  it("counts a whitespace-only name as blank and trims every name it shows", () => {
+    expect(
+      effectiveNamesLine(
+        ["es", "en", "fr"],
+        { es: " Añádele algo ", en: "   ", fr: " Ajoutez " },
+        "es",
+        " Extras ",
+      ),
+    ).toEqual([
+      { label: "ES", value: "Añádele algo" },
+      { label: "EN", value: "Añádele algo", placeholder: true },
+      { label: "FR", value: "Ajoutez" },
+    ]);
+    expect(effectiveNamesLine(["es", "en"], { es: "  ", en: "\t" }, "es", " Extras ")).toEqual([
+      { label: "ES", value: "Extras", placeholder: true },
+      { label: "EN", value: "Extras", placeholder: true },
+    ]);
+  });
+
+  it("falls back to the default language's name when the default is not first in the order", () => {
+    expect(
+      effectiveNamesLine(
+        ["en", "fr", "es"],
+        { es: "Añádele algo", en: "", fr: " " },
+        "es",
+        "Extras",
+      ),
+    ).toEqual([
+      { label: "EN", value: "Añádele algo", placeholder: true },
+      { label: "FR", value: "Añádele algo", placeholder: true },
+      { label: "ES", value: "Añádele algo" },
+    ]);
+  });
+
+  it("falls back to the default language's name even when the default is not one of the languages", () => {
+    expect(
+      effectiveNamesLine(
+        ["en", "fr"],
+        { es: "Añádele algo", en: "", fr: "Ajoutez" },
+        "es",
+        "Extras",
+      ),
+    ).toEqual([
+      { label: "EN", value: "Añádele algo", placeholder: true },
+      { label: "FR", value: "Ajoutez" },
+    ]);
+  });
+
+  it("is empty when every name and the staff name are blank", () => {
+    expect(effectiveNamesLine(["es", "en"], { es: "", en: " " }, "es", "  ")).toEqual([]);
+    expect(effectiveNamesLine(["es", "en"], {}, "es", "")).toEqual([]);
   });
 });
 
