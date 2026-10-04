@@ -1252,8 +1252,8 @@ actions, which have no limit. The test-email reads (`GET /management-api/email` 
 Mailpit over HTTP with no limit of their own (`apps/server/src/mailpit-client.ts`), but Mailpit is a
 container on the box itself (`deploy/compose.yml`, the `mailpit` service), not an outside service,
 so they keep 30 seconds. The alerts list now asks the card provider outside its transaction
-(A258). The Payments screen asks at most two readers for their status at a
-time in each browser tab (A260).
+(A258). The Payments screen asks at most two readers for their status across
+same-origin tabs when Web Locks grants requests, and at most two per tab when it does not (A260).
 
 **A low SumUp reader battery now reaches the alerts list (A258 — DONE).**
 `GET /management-api/alerts` reads the session, incidents and database-only sources in its
