@@ -222,6 +222,13 @@ export class ProductEditor extends LitElement {
       .form {
         gap: var(--wt-space-4);
       }
+      .form > [data-section="descriptors"]:not([open]) + [data-section="nutrition"]:not([open]),
+      .form > [data-section="nutrition"]:not([open]) + [data-section="price"]:not([open]) {
+        margin-block-start: calc(-1 * var(--wt-space-4));
+      }
+      .form > [data-section="modifiers"] {
+        margin-block-start: var(--wt-space-2);
+      }
       .group-label {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);

@@ -1989,6 +1989,10 @@ save refuses a missing VAT class (`vatClass` in `packages/catalogue/src/product-
 and a new product's draft starts on General. A VAT, unit or price error opens the fold
 (`SECTION_FIELDS`).
 
+**Product editor section spacing (W67) — DONE.** Consecutive closed detail sections sit closer
+together, while Modifiers has more room below Add variant. The open sections and other forms keep
+their spacing.
+
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).** The owner: _"the Kitchen name, and
 customer facing names aren't showing the internal name as the default value, at least when I add a variant and fill in
