@@ -66,8 +66,8 @@ describe("folder selection routes", () => {
     );
     expect(summary.status).toBe(200);
     expect(await summary.json()).toEqual([
-      { id: parent, folders: 1, products: 0, routes: 0 },
-      { id: child, folders: 0, products: 0, routes: 0 },
+      { id: parent, folders: 1, products: 0, activeProducts: 0, routes: 0 },
+      { id: child, folders: 0, products: 0, activeProducts: 0, routes: 0 },
     ]);
     expect(
       (

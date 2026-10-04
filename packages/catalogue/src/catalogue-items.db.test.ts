@@ -251,9 +251,19 @@ describe("summariseFolders", () => {
     await app((tx) => deactivateProduct(tx, lager));
     await app((tx) => plantStoredCategory(tx, variant, b));
     expect(await app((tx) => summariseFolders(tx, [f, d, b]))).toEqual([
-      { id: f, folders: 0, products: 1, routes: 0 },
-      { id: d, folders: 1, products: 2, routes: 0 },
-      { id: b, folders: 0, products: 1, routes: 0 },
+      { id: f, folders: 0, products: 1, activeProducts: 1, routes: 0 },
+      { id: d, folders: 1, products: 2, activeProducts: 1, routes: 0 },
+      { id: b, folders: 0, products: 1, activeProducts: 0, routes: 0 },
+    ]);
+  });
+  it("counts only active top-level products as active, leaving an active variant of an inactive product out", async () => {
+    await app((tx) => deactivateProduct(tx, lager));
+    await app((tx) => plantStoredCategory(tx, variant, b));
+    const summaries = await app((tx) => summariseFolders(tx, [b, d, f]));
+    expect(summaries.map(({ id, activeProducts }) => ({ id, activeProducts }))).toEqual([
+      { id: b, activeProducts: 0 },
+      { id: d, activeProducts: 1 },
+      { id: f, activeProducts: 1 },
     ]);
   });
   it("refuses unknown folders rather than reporting them as empty", async () => {
