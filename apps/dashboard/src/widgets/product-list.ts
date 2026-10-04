@@ -1014,13 +1014,14 @@ export class ProductList extends LitElement {
           return column.key === "name"
             ? html`<span part="folder-cell"
                 ><span part="grip-space"></span
-                ><wt-icon name="folder"></wt-icon>${this.#nameBox()}</span
+                ><wt-icon name="folder" size="lg"></wt-icon>${this.#nameBox()}</span
               >`
             : nothing;
         if (row.kind === "root") {
           if (column.key === "name")
             return html`<span part="folder-cell"
-              ><wt-icon name="folder"></wt-icon><strong>${t("folders.all_products")}</strong
+              ><wt-icon name="folder" size="lg"></wt-icon
+              ><strong>${t("folders.all_products")}</strong
               ><span part="count" data-test="count-root">${this.#contents(null)}</span></span
             >`;
           if (column.key === "actions")
@@ -1042,7 +1043,7 @@ export class ProductList extends LitElement {
               aria-label=${`${t("folders.drag")}: ${folder.name}`}
             >
               <wt-icon name="grip"></wt-icon></button
-            ><wt-icon name="folder"></wt-icon>${
+            ><wt-icon name="folder" size="lg"></wt-icon>${
               this.#renaming(folder.id) ? this.#nameBox() : html`<strong>${folder.name}</strong>`
             }<span part="count" data-test=${`count-${folder.id}`}>${this.#contents(folder.id)}</span
             >${
@@ -1252,7 +1253,7 @@ export class ProductList extends LitElement {
                 this.ghost.image
                   ? html`<img src=${`/media/${this.ghost.image}`} alt="" draggable="false" />`
                   : this.ghost.folder
-                    ? html`<wt-icon name="folder"></wt-icon>`
+                    ? html`<wt-icon name="folder" size="lg"></wt-icon>`
                     : html`<span class="ghost-thumb"></span>`
               }<span>${this.ghost.label}</span>
             </div>`
