@@ -2001,6 +2001,15 @@ their spacing.
 and following content over about a second. Reduced-motion preferences and validation errors reveal
 fields immediately; repeated clicks reverse the motion from its current height.
 
+**The pricing unit is chosen in a dialog (W66, owner 2026-10-04) — DONE.** The owner, on Product
+editor screenshots: _"the unit selector should open in a modal, it's not obvious that the field gets
+added after clicking the 'per g' button, also there is no way to dismiss it like you would have in a
+modal"_. The price field's unit button, and on a product with variants the unit button in the
+variants table's Price heading, open one Pricing unit dialog holding the unit dropdown and Add unit.
+Close and Escape shut it without changing the unit, choosing a unit shuts it, and focus goes back to
+the button that opened it. A refused unit opens it once, and the refusal stays on the price field
+once it is shut. Detail: design-system.md, the `wt-price-input` note under the product editor.
+
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).** The owner: _"the Kitchen name, and
 customer facing names aren't showing the internal name as the default value, at least when I add a variant and fill in

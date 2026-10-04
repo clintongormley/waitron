@@ -297,3 +297,39 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
     await expectNoA11yViolations(host);
   });
 });
+
+describe.each(["light", "dark"] as const)(
+  "product editor's unit chooser accessibility (%s)",
+  (theme) => {
+    it.each(["open", "refused"])("renders the chooser %s", async (state) => {
+      const { el, host } = await mountWidget<ProductEditor>(
+        "dashboard-product-editor",
+        {
+          open: true,
+          locales: ["en", "es"],
+          units: [{ id: "each", name: { en: "Each" }, abbreviation: { en: "ea" } }],
+          taxChoices: [{ id: "reduced", rate: "10.00", label: "Reduced" }],
+          value: coffee,
+          fieldErrors: state === "refused" ? { unit: "The server rejected this value." } : {},
+        },
+        theme,
+      );
+      if (state === "open")
+        el.shadowRoot!.querySelector("[name=unit-price]")!.dispatchEvent(
+          new CustomEvent("wt-unit-click", { detail: {}, bubbles: true, composed: true }),
+        );
+      await el.updateComplete;
+      // Without these the scan could pass on an editor that never opened the chooser or drew its error.
+      const dialog = el.shadowRoot!.querySelector<
+        HTMLElement & { open: boolean; updateComplete: Promise<unknown> }
+      >("wt-dialog[data-test=unit-chooser]")!;
+      await dialog.updateComplete;
+      expect(dialog.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+      const field = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        "wt-combobox[name=unit]",
+      )!;
+      expect(field.error).toBe(state === "refused" ? "The server rejected this value." : "");
+      await expectNoA11yViolations(host);
+    });
+  },
+);

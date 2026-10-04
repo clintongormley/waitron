@@ -2,7 +2,6 @@ import { ReorderController, reorder, type ReorderModel } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -15,9 +14,9 @@ interface VariantRow {
   variant: ProductEditorVariant;
 }
 
-const ADD_UNIT = "__add__";
-/** The dropdown's value for Each, which a product stores as no unit: the shared dropdown draws an
- * empty value as the grey prompt for nothing chosen. Translated back to `null` before it leaves. */
+/** The product editor's unit dropdown's value for Each, which a product stores as no unit: the
+ * shared dropdown draws an empty value as the grey prompt for nothing chosen. Translated back to
+ * `null` before it leaves. */
 export const EACH_CHOICE = "__each__";
 
 /**
@@ -93,10 +92,10 @@ export class VariantTable extends LitElement {
         display: none;
       }
       /* On a narrow table the price moves under the name and its own column goes, taking the
-         heading's unit dropdown with it; the price field above the table has a unit button for the
-         same unit. The name column takes what the grip, Available and row menu columns leave, and
-         is never narrower than its widest price. An Available heading longer than its cap runs on
-         into the row menu's empty heading. Receipt: the --wt-cell-name-max-width entry in
+         heading's unit button with it; the price field above the table has a unit button that
+         opens the same chooser. The name column takes what the grip, Available and row menu
+         columns leave, and is never narrower than its widest price. An Available heading longer
+         than its cap runs on into the row menu's empty heading. Receipt: the --wt-cell-name-max-width entry in
          docs/developers/design-system.md; guard: the phone-width cases in product-editor.test.ts. */
       @container (max-width: 30rem) {
         th:nth-child(2) {
@@ -194,9 +193,8 @@ export class VariantTable extends LitElement {
   /** True while the product has changes not yet saved: opening a variant's page would leave them
    * behind, so Open is held until they are saved. */
   @property({ type: Boolean }) openBlocked = false;
-  @property({ attribute: false }) unitId: string | null = null;
-  @property({ attribute: false }) unitOptions: { value: string | null; label: string }[] = [];
-  @property() addUnitLabel = "";
+  /** The product's unit as the price heading's button names it. */
+  @property() unitLabel = "";
   @property({ type: Boolean }) busy = false;
   /** A problem with one row, keyed by that row's index in `variants`. The host validates; this
    * only shows what it reports, beside the row it belongs to. */
@@ -233,6 +231,12 @@ export class VariantTable extends LitElement {
     const menu = this.shadowRoot?.querySelector<LitElement>(`[data-test="actions-${index}"]`);
     await menu?.updateComplete;
     menu?.focus();
+  }
+
+  /** Puts focus back on the price heading's unit button, once the chooser it opened has closed. */
+  async focusUnit(): Promise<void> {
+    await this.updateComplete;
+    this.shadowRoot?.querySelector<HTMLElement>('[data-test="pricing-unit"]')?.focus();
   }
 
   #shows(variant: ProductEditorVariant): boolean {
@@ -419,7 +423,6 @@ export class VariantTable extends LitElement {
     const visible = this.rows
       .map((row, index) => ({ row, index }))
       .filter(({ row }) => this.#shows(row.variant));
-    const noUnit = this.unitOptions.find((option) => option.value === null)?.label ?? "";
     return html`<div class="wrap">
         <table>
           <caption class="visually-hidden">
@@ -433,38 +436,20 @@ export class VariantTable extends LitElement {
               <th scope="col">${t("editor.name")}</th>
               <th scope="col">
                 <span class="price-heading"
-                  >${t("product.price")}<wt-combobox
-                    name="pricing-unit"
-                    label=${t("product.unit")}
-                    hide-label
-                    search="auto"
-                    searchPlaceholder=${t("categories.combobox_search")}
-                    noResultsLabel=${t("categories.combobox_no_results")}
-                    placeholder=${noUnit}
-                    .options=${[
-                      ...this.unitOptions.map((option) => ({
-                        value: option.value ?? EACH_CHOICE,
-                        label: option.label,
-                      })),
-                      ...(this.addUnitLabel
-                        ? [{ value: ADD_UNIT, label: this.addUnitLabel, action: true as const }]
-                        : []),
-                    ]}
-                    .value=${this.unitId ?? EACH_CHOICE}
+                  >${t("product.price")}<wt-button
+                    variant="secondary"
+                    data-test="pricing-unit"
+                    aria-label=${t("editor.change_pricing_unit").replace("{unit}", this.unitLabel)}
+                    aria-haspopup="dialog"
                     .disabled=${this.busy}
-                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    @click=${(event: Event) => {
                       event.stopPropagation();
-                      const value = event.detail.value;
-                      this.#emit("wt-unit-change", {
-                        unitId: value === EACH_CHOICE ? null : value,
-                      });
+                      if (this.busy) return;
+                      this.#emit("wt-unit-click", {});
                     }}
-                    @wt-combobox-action=${(event: Event) => {
-                      event.stopPropagation();
-                      this.#emit("wt-add-unit", {});
-                    }}
-                  ></wt-combobox
-                ></span>
+                    >${this.unitLabel}</wt-button
+                  ></span
+                >
               </th>
               <th scope="col">${t("editor.available")}</th>
               <th scope="col">

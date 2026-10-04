@@ -1,9 +1,9 @@
 import { reorder } from "@waitron/ui";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { EACH_CHOICE, type VariantTable } from "./variant-table.js";
+import type { VariantTable } from "./variant-table.js";
+import "./variant-table.js";
 import type { ProductEditorVariant } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 
@@ -98,24 +98,9 @@ async function click(el: VariantTable, id: string) {
   await el.updateComplete;
 }
 
-type Box = HTMLElement & {
-  label: string;
-  hideLabel: boolean;
-  search: string;
-  placeholder: string;
-  value: string;
-  disabled: boolean;
-  options: { value: string; label: string; action?: true }[];
-  updateComplete: Promise<unknown>;
-};
-const box = (el: VariantTable, name: string) =>
-  el.shadowRoot!.querySelector<Box>(`wt-combobox[name="${name}"]`)!;
-/** What the closed dropdown shows on its trigger, not what its properties say it holds. */
-async function shown(el: VariantTable, name: string): Promise<string | undefined> {
-  const combobox = box(el, name);
-  await combobox.updateComplete;
-  return combobox.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
-}
+/** The price heading's button, which opens the product editor's unit chooser. */
+const unitButton = (el: VariantTable) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="pricing-unit"]')!;
 
 it("draws no status dropdown: whether Inactive variants show is the host's to say", async () => {
   const el = await mountTable({ variants: withRemoved() });
@@ -124,135 +109,57 @@ it("draws no status dropdown: whether Inactive variants show is the host's to sa
   expect(cells(el, 1)).toEqual(["Media", "Doble"]);
 });
 
-it("picks the pricing unit from an unlabelled shared dropdown whose last row adds a unit", async () => {
-  const el = await mountTable({
-    unitId: "kg",
-    unitOptions: [
-      { value: null, label: "Each" },
-      { value: "kg", label: "kg" },
-    ],
-    addUnitLabel: "Add unit",
-  });
-  const unit = box(el, "pricing-unit");
+it("asks for the pricing unit chooser from a button in the price heading that names the unit", async () => {
+  const el = await mountTable({ unitLabel: "kg" });
+  const unit = unitButton(el);
   expect(unit).not.toBeNull();
-  expect(unit.label).toBe(t("product.unit"));
-  expect(unit.hideLabel).toBe(true);
-  expect(unit.search).toBe("auto");
-  expect(unit.placeholder).toBe("Each");
-  expect(unit.options).toEqual([
-    { value: EACH_CHOICE, label: "Each" },
-    { value: "kg", label: "kg" },
-    { value: "__add__", label: "Add unit", action: true },
-  ]);
-  expect(unit.value).toBe("kg");
-  expect(await shown(el, "pricing-unit")).toBe("kg");
-  const changed = listen(el, "wt-unit-change");
-  await chooseOption(unit, EACH_CHOICE);
-  expect(changed.mock.calls[0]![0].detail).toEqual({ unitId: null });
-  const added = listen(el, "wt-add-unit");
-  unit.dispatchEvent(
-    new CustomEvent("wt-combobox-action", {
-      detail: { value: "__add__" },
-      bubbles: true,
-      composed: true,
-    }),
+  expect(unit.textContent!.trim()).toBe("kg");
+  expect(unit.getAttribute("aria-label")).toBe(
+    t("editor.change_pricing_unit").replace("{unit}", "kg"),
   );
-  expect(added).toHaveBeenCalledOnce();
-  expect(changed).toHaveBeenCalledOnce();
+  expect(unit.getAttribute("aria-haspopup")).toBe("dialog");
+  const asked = listen(el, "wt-unit-click");
+  unit.click();
+  expect(asked).toHaveBeenCalledOnce();
+  expect(asked.mock.calls[0]![0].detail).toEqual({});
   el.busy = true;
   await el.updateComplete;
   expect(unit.disabled).toBe(true);
 });
 
-it("offers no add-unit row when the host gives it no label", async () => {
-  const el = await mountTable({ unitId: null, unitOptions: [{ value: null, label: "Each" }] });
-  expect(box(el, "pricing-unit").options).toEqual([{ value: EACH_CHOICE, label: "Each" }]);
-  expect(await shown(el, "pricing-unit")).toBe("Each");
-});
-
-it("draws Each as a chosen unit, not as the grey prompt for nothing chosen, and reports no unit for it", async () => {
-  const el = await mountTable({
-    unitId: null,
-    unitOptions: [
-      { value: null, label: "Each" },
-      { value: "kg", label: "kg" },
-    ],
-  });
-  const unit = box(el, "pricing-unit");
-  const each = unit.options.find((option) => option.label === "Each")!;
-  expect(each.value).not.toBe("");
-  expect(unit.value).toBe(each.value);
-  expect(await shown(el, "pricing-unit")).toBe("Each");
-  expect(unit.shadowRoot!.querySelector(".trigger .value")!.classList).not.toContain("placeholder");
-  const changed = listen(el, "wt-unit-change");
-  await chooseOption(unit, "kg");
-  await chooseOption(unit, each.value);
-  expect(changed.mock.calls.map((call) => call[0].detail)).toEqual([
-    { unitId: "kg" },
-    { unitId: null },
-  ]);
-});
-
-it("lists one row per variant with its staff name and price, and changes the unit from the header", async () => {
+it("lists one row per variant with its staff name and price, and names the unit in the header", async () => {
   const el = await mountTable();
   expect(rows(el)).toHaveLength(3);
   expect(cells(el, 1)).toEqual(["Media", "Entera", "Doble"]);
   expect(cells(el, 2)).toEqual([euros("6,50"), euros("12,00"), euros("20,00")]);
-  el.unitId = "kg";
-  el.unitOptions = [
-    { value: null, label: "Each" },
-    { value: "kg", label: "kg" },
-    { value: "l", label: "l" },
-  ];
+  el.unitLabel = "kg";
   await el.updateComplete;
-  const select = box(el, "pricing-unit");
-  expect(select.value).toBe("kg");
-  // The heading names the price once, and the dropdown shows only the unit, so a narrow column
+  const unit = unitButton(el);
+  // The heading names the price once, and the button shows only the unit, so a narrow column
   // still has room to read it.
-  expect(await shown(el, "pricing-unit")).toBe("kg");
-  expect(select.closest("th")!.textContent).toContain(t("product.price"));
-  const changed = listen(el, "wt-unit-change");
-  await chooseOption(select, "l");
-  expect(changed.mock.calls[0]![0].detail).toEqual({ unitId: "l" });
+  expect(unit.textContent!.trim()).toBe("kg");
+  expect(unit.closest("th")!.textContent).toContain(t("product.price"));
+  const asked = listen(el, "wt-unit-click");
+  unit.click();
+  expect(asked).toHaveBeenCalledOnce();
   // The table is a staff screen: the customer-facing name belongs to the receipt, not here.
   expect(el.shadowRoot!.textContent).not.toContain("Media ración");
 });
 
-it("returns the unit chooser to its saved value after Add unit is chosen", async () => {
-  const el = await mountTable({
-    unitId: "kg",
-    unitOptions: [
-      { value: null, label: "Each" },
-      { value: "kg", label: "kg" },
-    ],
-    addUnitLabel: "Add unit",
+it("puts focus back on the price heading's unit button when asked", async () => {
+  await atDesktopWidth(async () => {
+    const el = await mountTable({ unitLabel: "kg" });
+    await el.focusUnit();
+    expect(el.shadowRoot!.activeElement).toBe(unitButton(el));
   });
-  const added = listen(el, "wt-add-unit");
-  const select = box(el, "pricing-unit");
-  select.dispatchEvent(
-    new CustomEvent("wt-combobox-action", {
-      detail: { value: "__add__" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  expect(added).toHaveBeenCalledOnce();
-  expect(select.value).toBe("kg");
-  expect(await shown(el, "pricing-unit")).toBe("kg");
 });
 
-it("keeps the unit chooser in the price heading a tap target on both axes", async () => {
+it("keeps the unit button in the price heading a tap target on both axes", async () => {
   await atDesktopWidth(async () => {
-    const el = await mountTable({
-      unitId: "kg",
-      unitOptions: [
-        { value: null, label: "Each" },
-        { value: "kg", label: "kg" },
-      ],
-    });
+    const el = await mountTable({ unitLabel: "kg" });
     const tapMin = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
     expect(tapMin).toBeGreaterThan(0);
-    const rect = box(el, "pricing-unit").getBoundingClientRect();
+    const rect = unitButton(el).getBoundingClientRect();
     expect(rect.height).toBeGreaterThanOrEqual(tapMin);
     expect(rect.width).toBeGreaterThanOrEqual(tapMin);
   });
