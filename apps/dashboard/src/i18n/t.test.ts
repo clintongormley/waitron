@@ -38,9 +38,12 @@ it("notifies subscribers on setLocale and stops after unsubscribe", () => {
   expect(calls).toBe(1);
 });
 
-it("uses the cash-register wording for the register-meaning strings", () => {
-  // The device-KIND label (devices.kind_till) means the device, and is deliberately not swept here.
-  expect(en["sales.tender_title"]).toBe("Tender by cash register");
+it("titles the Sales tender section by device in English and Spanish", () => {
+  expect(t("sales.tender_title", "en")).toBe("Tender by device");
+  expect(t("sales.tender_title", "es-ES")).toBe("Cobros por dispositivo");
+});
+
+it("keeps the cash-register wording for the till form factor", () => {
   expect(en["device_profiles.form_factor.till"]).toBe("Cash register");
 });
 
