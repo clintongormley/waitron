@@ -1292,6 +1292,7 @@ it.each([
       .shadowRoot!.querySelector(`tr[data-item="${BACON_ITEM}"]`)!
       .querySelectorAll("td");
     const handle = cells[0]!.querySelector<HTMLElement>("[data-test^=drag-]")!;
+    const preselected = cells[3]!.querySelector("wt-switch")!;
     const remove = cells[5]!.querySelector("wt-button")!;
     expect(cells[0]!.getBoundingClientRect().width).toBeLessThanOrEqual(
       handle.getBoundingClientRect().width + 2,
@@ -1299,9 +1300,8 @@ it.each([
     expect(cells[1]!.getBoundingClientRect().width).toBeGreaterThan(
       cells[0]!.getBoundingClientRect().width,
     );
-    const preselectedHeading = el.shadowRoot!.querySelectorAll("thead th")[3]!;
-    expect(preselectedHeading.scrollWidth, "Preselected heading").toBeLessThanOrEqual(
-      preselectedHeading.clientWidth,
+    expect(cells[3]!.getBoundingClientRect().width, "Preselected column").toBeLessThanOrEqual(
+      preselected.getBoundingClientRect().width + 8,
     );
     expect(cells[5]!.getBoundingClientRect().width, "remove column").toBeLessThanOrEqual(
       remove.getBoundingClientRect().width + 2,
@@ -1330,6 +1330,14 @@ it.each([
       const range = document.createRange();
       range.selectNodeContents(heading);
       expect(range.getClientRects().length, `${frame}px in ${locale}`).toBeLessThanOrEqual(2);
+      const text = range.getBoundingClientRect();
+      const table = el.shadowRoot!.querySelector("table")!.getBoundingClientRect();
+      expect(text.left, `${frame}px in ${locale}`).toBeGreaterThanOrEqual(table.left);
+      expect(text.right, `${frame}px in ${locale}`).toBeLessThanOrEqual(table.right);
+      const required = el.shadowRoot!.querySelectorAll("thead th")[2]!.querySelector(".required")!;
+      expect(text.left, `after Maximum quantity at ${frame}px in ${locale}`).toBeGreaterThanOrEqual(
+        required.getBoundingClientRect().right,
+      );
     } finally {
       setLocale("en");
       await page.viewport(width, height);
@@ -1375,7 +1383,7 @@ it.each([
   },
 );
 
-it.each([1280, 390])("keeps a long product name inside its fixed column at %ipx", async (frame) => {
+it.each([1280, 390])("wraps an unbroken product name inside its cell at %ipx", async (frame) => {
   const width = window.innerWidth;
   const height = window.innerHeight;
   await page.viewport(frame, 844);

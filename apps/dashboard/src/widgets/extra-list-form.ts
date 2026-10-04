@@ -125,8 +125,8 @@ export class ExtraListForm extends LitElement {
       table {
         table-layout: fixed;
         min-width: calc(
-          var(--wt-cell-name-max-width) * 2 + var(--wt-stepper-field-width) +
-            var(--wt-price-field-width) + var(--wt-tap-min) * 3 + var(--wt-space-5) +
+          var(--wt-cell-name-max-width) + var(--wt-stepper-field-width) +
+            var(--wt-price-field-width) + var(--wt-tap-min) * 5 + var(--wt-space-5) +
             var(--wt-space-4)
         );
       }
@@ -135,16 +135,20 @@ export class ExtraListForm extends LitElement {
         width: var(--wt-tap-min);
       }
       col:nth-child(3) {
-        width: calc(var(--wt-stepper-field-width) + var(--wt-space-4));
+        width: calc(var(--wt-stepper-field-width) + var(--wt-tap-min) + var(--wt-space-4));
       }
       col:nth-child(4) {
-        width: var(--wt-cell-name-max-width);
+        width: var(--wt-tap-min);
       }
       col:nth-child(5) {
         width: calc(var(--wt-price-field-width) + var(--wt-tap-min) + var(--wt-space-5));
       }
       td:nth-child(2) {
         overflow-wrap: anywhere;
+      }
+      .quantity-heading {
+        display: inline-block;
+        max-width: var(--wt-stepper-field-width);
       }
       /* The grip and the bin are each a tap-target-wide button that already centres its icon. */
       th:first-child,
@@ -168,6 +172,12 @@ export class ExtraListForm extends LitElement {
         margin-bottom: var(--wt-space-2);
       }
       th:nth-child(4) {
+        position: relative;
+      }
+      .preselected-heading {
+        position: absolute;
+        inset-inline-end: var(--wt-space-1);
+        inset-block-start: var(--wt-space-2);
         white-space: nowrap;
       }
       /* A row lines up its text, not its boxes (spec D6); the handle cell keeps its centring. */
@@ -773,11 +783,13 @@ export class ExtraListForm extends LitElement {
               <th scope="col"><span class="visually-hidden">${t("extras.reorder")}</span></th>
               <th scope="col">${t("extras.product")}</th>
               <th scope="col">
-                ${t("extras.max_quantity")}<span class="required" data-required aria-hidden="true"
-                  >*</span
+                <span class="quantity-heading"
+                  >${t("extras.max_quantity")}<span class="required" data-required aria-hidden="true"
+                    >*</span
+                  ></span
                 >
               </th>
-              <th scope="col">${t("extras.preselected")}</th>
+              <th scope="col"><span class="preselected-heading">${t("extras.preselected")}</span></th>
               <th scope="col" colspan="2">${t("extras.price")}</th>
             </tr>
           </thead>

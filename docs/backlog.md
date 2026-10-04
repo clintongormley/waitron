@@ -1356,8 +1356,9 @@ done too (above).
 
 **Empty extras and options tables keep their Preselected and Default headings readable (A262, owner
 2026-10-03) — DONE (W49).** The headings stay on one line with no rows in English and Spanish.
-The extras table reserves room for its heading; the options heading extends left into the Name
-column's spare space while the Default radio column stays narrow. Chromium cases cover empty tables
+The extras heading extends into the preceding column's spare space while its switch column stays
+narrow; the options heading does the same with Name while the Default radio column stays narrow.
+Chromium cases cover empty tables
 at 1280px and 390px in both languages.
 
 **The number field with − and + is still too wide (A263, owner 2026-10-03) — DONE (#1151). (The owner chose
@@ -1425,7 +1426,8 @@ token-painting tests, changed with it.
   the owner approved. OPEN, unqueued.
 - At 390px the extras table's Price column runs past its scroll area's right edge until scrolled;
   #1151's review measured it on main before the change (452px against a 373px area) and smaller
-  after it (388px). OPEN, unqueued; A264 (lane D's W49) changes the same table's columns.
+  after it (388px). OPEN, unqueued; W49 changed the table's column sizing, but horizontal scrolling
+  remains for the Price column at phone width.
 
 **The extras list editor's columns stay in place as products are added (A264, owner 2026-10-03)
 — DONE (W49).** Fixed table sizing leaves spare width with Product, and long names wrap inside it.
