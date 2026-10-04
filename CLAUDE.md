@@ -701,9 +701,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `product_categories` on a scratch venue without the media triggers, and its `menu_items` rebuild
   emptied three menu tables while reporting success or, once the venue had sold from a menu, refused
   to run. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
-- **A drizzle generation that rebuilds a table must not also add a column to it.** The rebuild's
-  `INSERT … SELECT` names every column of the NEW schema, so it reads the added one from the old
-  table, and this engine refuses that even on an empty table (`no such column`). A new CHECK, a
+- **A drizzle-kit 0.31.10–0.31.11 generation that rebuilds a table must not also add a column to
+  it.** The rebuild's `INSERT … SELECT` names every column of the NEW schema, so it reads the added
+  one from the old table, and this engine refuses that even on an empty table (`no such column`). A
+  new CHECK, a
   changed nullability or a changed foreign key forces a rebuild, so add the column in one
   generation and its CHECK in the next. Cost: paid three times — #721, #750 and A238's `incidents`
   migration (2026-10-03). Receipt: [conventions-data.md](docs/developers/conventions-data.md).
@@ -951,9 +952,9 @@ browser test** — most of these rules exist because a test passed while proving
   its current receipt printer's drawer only when its profile has `open-cash-drawer` and that
   printer has a drawer, handhelds included (`drawerPrinter`, `apps/server/src/receipt-print.ts`);
   nothing per till decides it, and a till that must not open a drawer it shares gets a profile of
-  its own (approved by the owner 2026-10-03, A238). `take-cash` decides whether a device takes cash at all: a cash
-  sale, collection or bill payment from a profile without it is refused `device.cash_not_allowed`
-  (`assertTakesCash`, `apps/server/src/device-session.ts`). The manual open needs a session on an
+  its own (approved by the owner 2026-10-03, A238). `take-cash` decides whether a device takes cash
+  at all: a cash sale, collection or bill payment from a profile without it is refused
+  `device.cash_not_allowed` (`assertTakesCash`, `apps/server/src/device-session.ts`). The manual open needs a session on an
   active device, the profile's `open-cash-drawer`, and under the `gated` drawer policy `cash.drawer`
   or the PIN of someone holding it. The one exception is the dashboard's "Test open drawer"
   calibration (`POST /management-api/printers/:id/test-drawer`), which opens any active printer's
@@ -961,9 +962,11 @@ browser test** — most of these rules exist because a test passed while proving
   resent. The receipt review reproduced a resent cash receipt opening the drawer without a new
   audit row. Guards, weaker than the rule: the drawer cases in
   `apps/server/src/receipt-print.test.ts`, `apps/server/src/till-api.receipt.test.ts` and
-  `apps/server/src/bill-payments-api.test.ts`, and the `device.cash_not_allowed` cases in
-  `apps/server/src/till-api.fiscal-sale-paths.test.ts` and `bill-payments-api.test.ts` — each holds
-  the routes it names, and nothing stops a new route queuing a `drawer` job without `drawerPrinter`
+  `apps/server/src/bill-payments-api.test.ts`, the `device.cash_not_allowed` cases in
+  `apps/server/src/till-api.fiscal-sale-paths.test.ts` and `bill-payments-api.test.ts`, the
+  calibration case in `apps/server/src/print-api.test.ts` and the drawer resend refusal in
+  `packages/printing/src/outbox.test.ts` — each holds only the routes or functions it names, and
+  nothing stops a new route queuing a `drawer` job without `drawerPrinter`
   or taking cash without `assertTakesCash`. Pointer: #324; the card slip, B30; A238;
   [conventions-ui.md](docs/developers/conventions-ui.md#a-device-opens-the-drawer-when-its-profile-allows-it-a-handheld-does-what-a-till-does).
 

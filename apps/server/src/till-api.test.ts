@@ -374,8 +374,6 @@ async function enrolTillDevice(
   deviceProfileId: string | null = null,
 ): Promise<{ deviceId: string; cookie: string }> {
   tillDeviceCounter += 1;
-  // `resolveDeviceBinding` creates a register for a `till` device at accept, named after the device,
-  // so each call names the device uniquely.
   const profileId =
     deviceProfileId ?? (await seedDeviceProfile(db, `Till profile ${tillDeviceCounter}`, [], null));
   const dev = await enrolDeviceForTest(db, cfg, {

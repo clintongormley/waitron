@@ -1555,7 +1555,8 @@ others; in the generations A238 wrote, an added column with none of those beside
 `ALTER TABLE … ADD` (core `0075`, `0082`, `0085`). A238 paid for it a
 third time on 2026-10-03: its `incidents` generation that added `source` and `device_id` with their
 CHECKs wrote `SELECT … "source" … FROM incidents` and the core suite failed with
-`no such column: "source" - should this be a string literal in single-quotes?` (Task 9's report);
+`no such column: "source" - should this be a string literal in single-quotes?` (commit f8f4bc381,
+"Alerts name their source and device instead of a till");
 core `0075` now adds the two columns and `0076` adds the CHECKs while it drops `till_id`. The engine
 half re-measured 2026-10-04 on `node:sqlite`, Node v26.7.0 (SQLite 3.53.4): an
 `INSERT INTO __new_incidents (…, "source") SELECT …, "source" FROM incidents` on an EMPTY
@@ -1571,14 +1572,15 @@ is an expression in backticks. So an index over an expression, such as `incident
 `case when "device_id" is null then '' else "device_id" end`, comes back as a quoted column name;
 the plain create-index path passes `internal` and writes the expression as it is. A238's `incidents`
 rebuild wrote ``(`source`,`case when "device_id" is null then '' else "device_id" end`,…)`` and the
-migrate failed with `no such column: case when "device_id" …` (Task 9's report, 2026-10-03).
+migrate failed with `no such column: case when "device_id" …` (commit f8f4bc381, 2026-10-03).
 Re-measured 2026-10-04 on `node:sqlite`, Node v26.7.0 (SQLite 3.53.4): `CREATE INDEX` over that
 expression in backticks threw `no such column: case when "till_id" is null then '' else "till_id"
 end` on a scratch table, and the same expression unquoted was accepted. What A238 did: the index
 leaves the schema for the generations that rebuild `incidents` (core `0075` drops it, `0076`
 rebuilds the table) and comes back alone in `0077_incident_origin_dedup.sql`, written correctly; a
 note at the index in `packages/db/src/schema/incidents.ts` says so. Any later change that rebuilds a
-table with an expression index needs the same three steps. A wrong index fails the migrate loudly,
+table with an expression index keeps the index out of the schema in every generation that rebuilds
+the table and adds it back in a later generation. A wrong index fails the migrate loudly,
 so nothing silent is at stake, only a round trip.
 
 ## `applyMigrations` refuses to report success on a short set
