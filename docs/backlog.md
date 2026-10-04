@@ -2762,10 +2762,11 @@ row's own button is named "Open: <menu>". Every `wt-data-table` row that opens s
 takes the lifted surface colour while hovered, or while anything in it has focus, pinned Actions
 cell included, because the raised colour it used was the same white as a resting row in the light
 theme. A table shows its Customise columns button only when it has two movable columns, so the Menus
-list, whose Status is its only one, shows none. In the Customise dialog a column that can never be
-hidden says "Always shown" instead of drawing a greyed-out eye, fixed rows keep the drag handle's
-space so names line up, and the last shown column's greyed-out eye carries a visible "Keep at least
-one shown".
+list, whose Status is its only one, shows none. (Since W87, 2026-10-04, a wide Menus list has a
+second movable column, Changes, and shows the button; see below.) In the Customise dialog a column
+that can never be hidden says "Always shown" instead of drawing a greyed-out eye, fixed rows keep
+the drag handle's space so names line up, and the last shown column's greyed-out eye carries a
+visible "Keep at least one shown".
 Left open by W79 (#1186): `docs/developers/design-system.md` still says a list's Create action
 goes in a menu beside the table heading, while Menus, Staff and Units put a text Add button at the
 heading row's trailing edge; the doc only names the exceptions, and whether the rule itself changes
@@ -2783,16 +2784,25 @@ new `topAligned` option on `wt-data-table`, set by this list alone); where Chang
 name, state, link and row menu start on one line. The list takes one of three layouts by its own
 width. From 50rem it has four columns and the name wraps so that they fit without sideways
 scrolling, even for a long name. Between 30rem and 50rem it has Name, Status and Actions, with the
-link on its own line under the state, so the link stays in view beside a long name; the end of the
-version's time can scroll under the pinned Actions column there. At 30rem or less the state and then
-the link stack under the name. With a second movable column the wide list now offers Customise
-columns, which W79 had left off; the list keeps its column choices under a new key, so a choice
-saved while Status was its only movable column is not read. Left open by W87: the editor heading
-still reads "Unpublished changes · Live: version <n>", which W88 redesigns. In the dark theme the
-Unpublished changes link's blue on a highlighted (hovered or focused) row measured 3.57:1 with axe,
-below the 4.5:1 minimum for text. Moving the link to `--wt-color-primary-text` did not change that,
-because in the dark theme that token is the same colour (`#4c8dff`) as `--wt-color-primary`; in the
-light theme it now passes at 4.88:1. The product list's maker link
+link on its own line under the state, so the link stays in view beside a long name. At 30rem or less
+the state and then the link stack under the name. With a second movable column the wide list now
+offers Customise columns, which W79 had left off; the list keeps its column choices under a new key,
+so a choice saved while Status was its only movable column is not read. Left open by W87: the editor
+heading still reads "Unpublished changes · Live: version <n>", which W88 redesigns. Between 30rem
+and 50rem a long menu name can still make the table wider than its box (measured in Chromium,
+2026-10-04: by 20 px in English and 29 px in Spanish, at a 600 px window with hyphenated, spaced and
+unbroken names and at 700 px with spaced and unbroken ones, where a hyphenated one did not
+overflow), so the end of the live version's time scrolls under the pinned Actions column; the link
+and the row menu stay in view. The existing 600 px case "keeps every menu row's menu on screen and
+uncovered while the other columns scroll sideways" in
+`apps/dashboard/src/screens/menus-screen.test.ts` requires that overflow. In that middle layout the
+Status column, and on a phone the Name column, hold the Unpublished changes link but do not set
+`activatesRow: false`, so a click beside the link opens the menu; the design system records this as
+a deviation from its `activatesRow` rule, and whether it stays is the owner's call. In the dark
+theme the Unpublished changes link's blue on a highlighted (hovered or focused) row measured 3.57:1
+with axe, below the 4.5:1 minimum for text. Moving the link to `--wt-color-primary-text` did not
+change that, because in the dark theme that token is the same colour (`#4c8dff`) as
+`--wt-color-primary`; in the light theme it now passes at 4.88:1. The product list's maker link
 (`apps/dashboard/src/widgets/product-list.ts`, part `maker-link`) paints `--wt-color-primary`, which
 on a highlighted row is the same colour pair measured at 3.87:1 in light and 3.57:1 in dark, though
 not measured on the product list itself. Its "Made at" column also does not set `activatesRow:

@@ -468,6 +468,12 @@ also applies to pinned columns. Without it, a control in a clickable row's cell 
 `input`, `select`, `label`, `wt-button` or `wt-row-actions` — still sits above the row's activator, so
 a click on it reaches that control and not the row: the Menus list's name button opens its menu once,
 by its own click (the "opens its menu once" cases in `apps/dashboard/src/screens/menus-screen.test.ts`).
+The Menus list's middle-width Status column and phone-width Name column depart from this rule, a
+deviation recorded for the owner in `docs/backlog.md` (W87): each shows the menu's own state or name
+with the Unpublished changes link under it and does not set `activatesRow: false`, so a click
+beside the link opens the menu while the link opens only Preview. The middle-width half is guarded
+by the "opens the menu once from a click on the Status cell's blank space" cases in
+`apps/dashboard/src/screens/menus-screen.test.ts`; the phone-width half is not tested.
 
 `wt-button shape="round"` renders a circular button of exactly `--wt-tap-min` diameter, meant for
 one icon with its own `aria-label` rather than a text label — the round "Add" button beside a table
@@ -552,11 +558,12 @@ queries on probe elements:
   line under the state in the Status cell, so wherever the state shows, the link is under it. A
   click on the Status cell's blank space opens the menu, as before Changes was added; a click on
   the link opens only its Preview tab. The name wraps within the list's width less three
-  `--wt-tap-min` and `8.5rem`, room for the row menu and for the link. A long name still makes the
-  table wider than its box, and the end of the version's time then scrolls under the pinned Actions
-  column; the link stays in view. With Status its only movable column, this layout has no Customise
+  `--wt-tap-min` and `8.5rem`, room for the row menu and for the link. A long name can still make
+  the table wider than its box, and the end of the version's time then scrolls under the pinned
+  Actions column; the link stays in view. With Status its only movable column, this layout has no Customise
   columns button.
-- At `30rem` or less, the state and then the link stack under the name, as below.
+- At `30rem` or less, the state and then the link stack under the name, as the variants table's
+  prices do (above).
 
 The two name widths come from container queries of their own rather than from the layout the
 probes choose, so they already apply in the frame before the probes are read; set from the chosen
