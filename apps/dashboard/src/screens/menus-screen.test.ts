@@ -1142,6 +1142,44 @@ describe("the menus list's columns", () => {
     },
   );
 
+  describe("before the list reports a size", () => {
+    // No size report ever arrives, so the layout can come only from the list as it is drawn.
+    beforeEach(() => {
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+      onTestFinished(() => void vi.unstubAllGlobals());
+    });
+
+    it("draws a phone-width list in its phone layout the first time it is shown (390 px)", async () => {
+      await at([390, 844], "en-GB", async () => {
+        const el = await mount();
+        await vi.waitFor(async () => {
+          await table(el).updateComplete;
+          expect(table(el).shadowRoot.querySelectorAll("tbody tr")).toHaveLength(2);
+        });
+        expect(table(el).classList.contains("narrow")).toBe(true);
+        expect(table(el).shadowRoot.querySelector(".columns-trigger")).toBeNull();
+      });
+    });
+
+    it("draws the phone layout again on coming back to the list from a menu (390 px)", async () => {
+      await at([390, 844], "en-GB", async () => {
+        const el = await mount(api(), LUNCH_PATH);
+        await vi.waitFor(() => expect(structure(el)).not.toBeNull());
+        await click(el, "back");
+        await vi.waitFor(() => expect(table(el)).not.toBeNull());
+        await table(el).updateComplete;
+        expect(table(el).classList.contains("narrow")).toBe(true);
+      });
+    });
+  });
+
   it("ignores a column choice saved under the list's previous key: Status, and the Lunch row's state on a phone, stay shown", async () => {
     localStorage.setItem("waitron.menus.table:columns", JSON.stringify({ status: false }));
     await at([1280, 900], "en-GB", () => statusSavedHidden());

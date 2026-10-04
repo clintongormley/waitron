@@ -342,7 +342,8 @@ export class MenusScreen extends LitElement {
       .status-line .time {
         white-space: nowrap;
       }
-      .list {
+      .list,
+      .sizer {
         container-type: inline-size;
       }
       .narrow-probe,
@@ -627,6 +628,10 @@ export class MenusScreen extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues): void {
+    // The size report comes a frame after the list is drawn, and a table redrawn in another layout
+    // replaces the link a person may already have focused.
+    if (this.menuId === null && (changed.has("menuId") || changed.has("loading")))
+      this.layout = this.#measuredLayout();
     if (changed.has("menus") || changed.has("statuses") || changed.has("statusesError"))
       this.#rows = this.menus.map((menu) => ({
         ...menu,
@@ -1804,6 +1809,14 @@ export class MenusScreen extends LitElement {
   #observeNarrowProbe = (probe: Element | undefined): void => this.#observeProbe("narrow", probe);
   #observeWideProbe = (probe: Element | undefined): void => this.#observeProbe("wide", probe);
 
+  #measuredLayout(): ListLayout {
+    const shown = (which: "narrow" | "wide") => {
+      const found = this.#probes.get(which);
+      return found !== undefined && getComputedStyle(found).display !== "none";
+    };
+    return shown("narrow") ? "narrow" : shown("wide") ? "wide" : "middle";
+  }
+
   #observeProbe(kind: "narrow" | "wide", probe: Element | undefined): void {
     const before = this.#probes.get(kind);
     if (before !== undefined) this.#listSize?.unobserve(before);
@@ -1811,11 +1824,7 @@ export class MenusScreen extends LitElement {
     if (probe === undefined) return;
     this.#probes.set(kind, probe);
     this.#listSize ??= new ResizeObserver(() => {
-      const shown = (which: "narrow" | "wide") => {
-        const found = this.#probes.get(which);
-        return found !== undefined && getComputedStyle(found).display !== "none";
-      };
-      this.layout = shown("narrow") ? "narrow" : shown("wide") ? "wide" : "middle";
+      this.layout = this.#measuredLayout();
     });
     this.#listSize.observe(probe);
   }
@@ -1843,8 +1852,6 @@ export class MenusScreen extends LitElement {
       ${
         loaded
           ? html`<div class="list">
-              <span class="narrow-probe" aria-hidden="true" ${ref(this.#observeNarrowProbe)}></span>
-              <span class="wide-probe" aria-hidden="true" ${ref(this.#observeWideProbe)}></span>
               <wt-data-table
                 noMatchesMessage=${tableNoMatches()}
                 data-test="menus"
@@ -2441,7 +2448,13 @@ export class MenusScreen extends LitElement {
   }
 
   override render() {
-    return this.menuId === null ? this.#renderList() : this.#renderEditor(this.menuId);
+    // Drawn in both views and as wide as the list, so the list's layout is known before its table
+    // is first drawn, coming back from a menu included.
+    return html`<div class="sizer" aria-hidden="true">
+        <span class="narrow-probe" ${ref(this.#observeNarrowProbe)}></span>
+        <span class="wide-probe" ${ref(this.#observeWideProbe)}></span>
+      </div>
+      ${this.menuId === null ? this.#renderList() : this.#renderEditor(this.menuId)}`;
   }
 }
 
