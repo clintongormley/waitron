@@ -659,6 +659,34 @@
       "when": 1791106090982,
       "tag": "0093_restore_line_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "6",
+      "when": 1791111404751,
+      "tag": "0094_operator_script_drop_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "6",
+      "when": 1791111405587,
+      "tag": "0095_operator_script_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "6",
+      "when": 1791111406389,
+      "tag": "0096_operator_script_restore_incident_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "6",
+      "when": 1791111407188,
+      "tag": "0097_operator_script_restore_triggers",
+      "breakpoints": true
     }
   ]
 }

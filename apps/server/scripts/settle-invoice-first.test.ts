@@ -56,16 +56,24 @@ describe("settle-invoice-first against a real venue directory", () => {
   it("wrote both sales and both fiscal records into the directory the env named", async () => {
     const store = await openVenueDatabase(venueDir);
     try {
-      const saleRows = await store.venue.select({ total: sales.total }).from(sales);
+      const saleRows = await store.venue
+        .select({ total: sales.total, source: sales.source })
+        .from(sales);
       // Whole cents: 110.00 is 11000.
       expect(saleRows.map((r) => r.total).sort((a, b) => a - b)).toEqual([-1_100, 11_000]);
+      expect(saleRows.map((r) => r.source)).toEqual(["operator_script", "operator_script"]);
       const registroRows = await store.venue
-        .select({ entorno: registrosFacturacion.entorno, huella: registrosFacturacion.huella })
+        .select({
+          entorno: registrosFacturacion.entorno,
+          huella: registrosFacturacion.huella,
+          source: registrosFacturacion.source,
+        })
         .from(registrosFacturacion);
       expect(registroRows).toHaveLength(2);
       for (const row of registroRows) {
         expect(row.huella).toMatch(/^[0-9A-F]{64}$/);
         expect(row.entorno).toBe("preproduction");
+        expect(row.source).toBe("operator_script");
       }
     } finally {
       await store.close();

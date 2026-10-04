@@ -40,14 +40,20 @@ describe("record-one-sale against a real venue directory", () => {
 
   /** `sales.total` reads back as a count of whole cents: 11000, not "110.00". */
   async function readBox(box: Box): Promise<{
-    sales: { id: string; total: number }[];
-    registros: { entorno: string | null; huella: string }[];
+    sales: { id: string; total: number; source: string }[];
+    registros: { entorno: string | null; huella: string; source: string }[];
   }> {
     const store = await openVenueDatabase(box.dir);
     try {
-      const saleRows = await store.venue.select({ id: sales.id, total: sales.total }).from(sales);
+      const saleRows = await store.venue
+        .select({ id: sales.id, total: sales.total, source: sales.source })
+        .from(sales);
       const registroRows = await store.venue
-        .select({ entorno: registrosFacturacion.entorno, huella: registrosFacturacion.huella })
+        .select({
+          entorno: registrosFacturacion.entorno,
+          huella: registrosFacturacion.huella,
+          source: registrosFacturacion.source,
+        })
         .from(registrosFacturacion);
       return { sales: saleRows, registros: registroRows };
     } finally {
@@ -78,9 +84,10 @@ describe("record-one-sale against a real venue directory", () => {
     expect(result.fiscal.recordId).toMatch(/^[0-9a-f-]{36}$/);
 
     const here = await readBox(preproduction);
-    expect(here.sales).toEqual([{ id: result.saleId, total: 11_000 }]);
+    expect(here.sales).toEqual([{ id: result.saleId, total: 11_000, source: "operator_script" }]);
     expect(here.registros).toHaveLength(1);
     expect(here.registros[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
+    expect(here.registros[0]!.source).toBe("operator_script");
 
     expect(await readBox(production)).toEqual({ sales: [], registros: [] });
   });

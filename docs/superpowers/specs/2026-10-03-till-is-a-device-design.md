@@ -1,5 +1,8 @@
 # A till is a device — design (A238, piece 1 of 3)
 
+> 2026-10-04: W57 added `operator_script` to the shared and sale source lists. The lists below record
+> the earlier A238 design.
+
 Status: approved by the owner, 2026-10-03, including the designer's defaults marked below.
 Backlog: A238 (`docs/backlog.md`). Pieces 2 and 3 are separate backlog entries and are NOT in this
 spec.

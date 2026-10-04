@@ -279,6 +279,12 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "core/0092_positive_price_quantity": {
     refused: ["DROP TABLE `working_order_lines`", "FOREIGN KEY constraint failed"],
   },
+  "core/0095_operator_script_source": {
+    refused: ["DROP TABLE `working_orders`", "FOREIGN KEY constraint failed"],
+  },
+  "core/0096_operator_script_restore_incident_index": {
+    refused: ["UNIQUE constraint failed: index 'incidents_open_dedup'"],
+  },
   "catalogue/0018_sections_owned_prepare": {
     refused: ["DELETE FROM sections WHERE role = 'library'", "FOREIGN KEY constraint failed"],
   },
@@ -312,9 +318,18 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "fiscal-verifactu/0002_registro_lose_till": {
     refused: ["NOT NULL constraint failed: __new_registros_facturacion.source"],
   },
+  "fiscal-verifactu/0003_operator_script_source": {
+    refused: ["DROP TABLE `registros_facturacion`", "FOREIGN KEY constraint failed"],
+  },
   // Rebuilds `payments` with `source` required; a carried row has none.
   "payments/0004_payment_origin_required": {
     refused: ["NOT NULL constraint failed: __new_payments.source"],
+  },
+  "payments/0005_operator_script_source": {
+    refused: ["DROP TABLE `payments`", "FOREIGN KEY constraint failed"],
+  },
+  "workforce/0003_operator_script_source": {
+    refused: ["DROP TABLE `time_entries`", "FOREIGN KEY constraint failed"],
   },
   // Adds `working_orders.source` as required with no default; a held row has no source to name.
   "core/0084_working_orders_add_origin": {
