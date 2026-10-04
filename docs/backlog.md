@@ -3093,20 +3093,23 @@ menus and ordering) is unchanged: the list sorts a copy. No existing test assert
 Left open, for the owner to decide whether it needs an item: the order reads each run of digits
 as a whole number, so a decimal weight sorts wrongly — "0,5 kg" before "0,25 kg" (tried in Node
 with the same comparison, not in the dashboard). The rest of the dashboard sorts names the same
-way.
+way. _2026-10-05 (W85a): a product's variants now keep the product's own order, below; the
+decimal-weight point no longer applies to them._
 
 **Products: a product's variants are listed in the product's own order — DONE (W85a, owner
-2026-10-05: "that would be ideal").** This replaces W85's name order, and with it W85's
-decimal-weight point. The Products list no longer sorts a product's variants: it draws them in the
+2026-10-05: "that would be ideal").** This replaces W85's name order, so W85's decimal-weight
+point no longer applies to a product's variants; the number-aware name sort elsewhere still puts
+"0,5 kg" before "0,25 kg". The Products list no longer sorts a product's variants: it draws them in the
 order the API sends, which is the stored variant order the product editor shows and saves
 (`listedVariantsOfProducts`, `packages/catalogue/src/operations.ts`, orders by `variantOrder`), and
 `rowKeepsChildOrder` still keeps that order under every column's sort. Pinned in
 `packages/catalogue/src/variants.test.ts` (two reorders through `setProductVariants`, each read
-back by `listProducts`) and `apps/dashboard/src/widgets/product-list.test.ts`. The name sort's
-checks were changed to check the product's order (owner's 2026-10-05 rule; listed in the PR).
+back by `listProducts`) and `apps/dashboard/src/widgets/product-list.test.ts`. Three existing
+tests' order checks (W85's name-order group, the status-filter case and the variant-alignment case)
+now check the product's order; listed in the PR.
 
 **Products at phone width: a long name runs under the pinned Actions column, cut with no ellipsis —
-open (seen during W85a's check, 2026-10-05).** At 390 px in the demo venue, with Croquetas'
+OPEN (found 2026-10-05 during W85a's check).** At 390 px in the demo venue, with Croquetas'
 variants open, "Ración 10" showed as "Ración 1(" and the product's "4 variantes" as "4 variante"
 against the pinned Actions column (`~/waitron-campaign/w85a-shots/shot-dark-390.png`, a local
 screenshot). W85a changes only the variants' order, so I believe this predates it; not compared

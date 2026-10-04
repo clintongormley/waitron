@@ -2281,8 +2281,8 @@ describe("a product's variants in the list", () => {
         name: "Pulpo",
         variants: [
           { ...bunVariant, id: "z", name: "Ración 10", unitPrice: "1.00" },
-          { ...bunVariant, id: "m", name: "Ración 2", unitPrice: "9.00" },
           { ...bunVariant, id: "y", name: "0,25 kg", unitPrice: "5.00" },
+          { ...bunVariant, id: "m", name: "Ración 2", unitPrice: "9.00" },
           { ...bunVariant, id: "x", name: "0,5 kg", unitPrice: "3.00" },
         ],
       }),
@@ -2302,7 +2302,7 @@ describe("a product's variants in the list", () => {
       rowKeys(root).filter((key) => key.startsWith(`${id}:`));
     const expectProductOrder = (root: ShadowRoot) => {
       expect(variantsOf(root, "solo")).toEqual(["solo:b", "solo:c", "solo:a"]);
-      expect(variantsOf(root, "racion")).toEqual(["racion:z", "racion:m", "racion:y", "racion:x"]);
+      expect(variantsOf(root, "racion")).toEqual(["racion:z", "racion:y", "racion:m", "racion:x"]);
     };
 
     it("under the Name sort, either way", async () => {
