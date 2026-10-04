@@ -703,6 +703,7 @@ export class VenueOperationsScreen extends LitElement {
       {
         key: "trading",
         label: t("venue.trading_name"),
+        group: t("venue.on_receipt"),
         cell: (row) => {
           if (row.kind !== "department") return nothing;
           if (this.tradingNameEditor !== row.department.id)
@@ -767,6 +768,7 @@ export class VenueOperationsScreen extends LitElement {
       {
         key: "printTradingName",
         label: t("venue.print_it"),
+        group: t("venue.on_receipt"),
         cell: (row) => {
           if (row.kind !== "department") return nothing;
           const checked =
@@ -801,6 +803,7 @@ export class VenueOperationsScreen extends LitElement {
       {
         key: "paid",
         label: t("venue.paid"),
+        group: t("venue.quick_sales"),
         cell: (row) => {
           const key =
             row.kind === "department" ? `department-${row.department.id}` : `zone-${row.zone.id}`;
@@ -873,6 +876,7 @@ export class VenueOperationsScreen extends LitElement {
       {
         key: "collection",
         label: t("venue.collection_number"),
+        group: t("venue.quick_sales"),
         cell: (row) => {
           const key =
             row.kind === "department" ? `department-${row.department.id}` : `zone-${row.zone.id}`;
@@ -945,6 +949,7 @@ export class VenueOperationsScreen extends LitElement {
       {
         key: "receipt",
         label: t("venue.receipt"),
+        group: t("venue.every_sale"),
         cell: (row) => {
           const key =
             row.kind === "department" ? `department-${row.department.id}` : `zone-${row.zone.id}`;

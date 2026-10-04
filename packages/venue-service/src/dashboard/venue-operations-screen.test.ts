@@ -325,6 +325,35 @@ describe("venue operations screen", () => {
     expect(rows[1].textContent).not.toContain("Casa Delgado");
   });
 
+  it("groups receipt, quick sale and every sale settings above their column labels", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const headings = [...table(el, "policy-tree").shadowRoot!.querySelectorAll("thead tr")];
+    expect(headings).toHaveLength(2);
+    expect(
+      [...headings[0].querySelectorAll('th[scope="colgroup"]')].map((heading) => [
+        heading.textContent?.trim(),
+        heading.getAttribute("colspan"),
+      ]),
+    ).toEqual([
+      ["On the receipt", "2"],
+      ["Quick sales", "2"],
+      ["Every sale", "1"],
+    ]);
+    expect(
+      [...headings[1].querySelectorAll("th")].map((heading) => heading.textContent?.trim()),
+    ).toEqual([
+      "Department name",
+      "Trading name",
+      "Print it",
+      "Paid",
+      "Order number",
+      "Receipt",
+      "Actions",
+    ]);
+  });
+
   it("offers row actions in the policy tree and renames a zone in place", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
