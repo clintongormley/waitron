@@ -197,13 +197,12 @@ export class CatalogueScreen extends LitElement {
     focus: (kind) => void this.#returnChildFocus(kind),
   });
 
-  /** A list form's own dialog closes a render after the form does, and until it has closed it
+  /** A nested form's own dialog closes a render after the form does, and until it has closed it
    * keeps focus from reaching the product editor. */
   async #returnChildFocus(kind: ProductChildKind): Promise<void> {
-    if (kind === "extras" || kind === "options") {
-      const form = this.shadowRoot!.querySelector<LitElement>(
-        kind === "extras" ? "dashboard-extra-list-form" : "dashboard-option-list-form",
-      );
+    const tag = CHILD_FORMS[kind];
+    if (tag) {
+      const form = this.shadowRoot!.querySelector<LitElement>(tag);
       await form?.updateComplete;
       await form?.shadowRoot!.querySelector<WtModal>("wt-modal")?.updateComplete;
     }
@@ -871,6 +870,13 @@ export class CatalogueScreen extends LitElement {
     `;
   }
 }
+
+/** The nested forms that draw their own dialog; the courses window is the screen's own. */
+const CHILD_FORMS: Partial<Record<ProductChildKind, string>> = {
+  unit: "dashboard-unit-form",
+  extras: "dashboard-extra-list-form",
+  options: "dashboard-option-list-form",
+};
 
 /** The editor field that chose the id a not-found refusal names, or null when the save sent no such
  * id there. */
