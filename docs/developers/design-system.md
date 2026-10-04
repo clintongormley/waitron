@@ -549,14 +549,23 @@ four start on one line, whether or not the state has a second line. Guards: the 
 `apps/dashboard/src/screens/menus-screen.test.ts`, which measure three rows at 1280 px only.
 
 A reorderable table (`ReorderController.tableStyles`, `packages/ui/src/reorder-table.ts`) lines its
-body cells up the same way, so on a tall row the drag handle and every control beside it sit on the
-first line of the row's text, not in the row's middle (W75b, owner 2026-10-04). The Product editor's
-Modifiers table, the variant table and the Courses list hold one line of text beside controls a
-`--wt-tap-min` tall, so they start their cells at the top instead and push the text's first line down
-by half of `--wt-tap-min` less one line, as the Menus list does. Guards: the first-line cases in
-`packages/ui/src/reorder-table.test.ts` and in the tests of the Product editor, variant table,
-Courses list, option list, section member list and Extras list widgets; the prep stations screen has
-no case of its own.
+body cells up by the baseline (`vertical-align: baseline`), so on a tall row the drag handle sits on
+the first line of the plain text beside it, not in the row's middle (W75b, owner 2026-10-04). The
+Courses list, the Product editor's Modifiers table and the variant table start their cells at the top
+instead and push the text's first line down by half of `--wt-tap-min` less one line, as the Menus
+list does. Under the baseline rule, the Courses list's name button lined the grip up with the
+button's last line (`course-list.ts`). Under the baseline rule, a one-line row's text and controls
+sat up to 1.5 px apart in the Product editor's Modifiers table, as in the option list (measured in
+Chromium); the Product editor already had a one-line test that allows only half a pixel, so it
+moved to the top, and the option list stayed on the baseline rule. The variant table does not use the shared styles; its own
+rules also start its cells at the top and push the text down. Guards, weaker than their name: the
+first-line cases in `packages/ui/src/reorder-table.test.ts` (in a 300 px wide table, one theme only)
+and in the tests of the Product editor, variant table, Courses list, option list, section member
+list, Extras list and Prep stations screen check only that a control's middle falls within the
+first line's box, so a control up to about half a line off still passes. For a one-line row, the
+shared table's case checks only that the handle's icon has its middle inside the line; only the
+Product editor's checks that the text and the controls share one centre line, to within half a
+pixel.
 
 **The Menus list links a menu's unpublished changes beside its state.** Status says what is live:
 "Unpublished" for a menu never published, and "Published" with the live version and its time for

@@ -170,8 +170,10 @@ export class ReorderController implements ReactiveController {
       vertical-align: top;
       border-bottom: 1px solid var(--wt-color-border);
     }
-    /* A text line is shorter than the handle, so only baseline alignment puts the handle, and every
-       control, on the first line of a tall row's text. */
+    /* A text line is shorter than the handle, so neither top nor middle alignment puts the handle
+       on it; baseline alignment does, beside plain text. The Courses list's name button lined the
+       grip up with the button's last line under this rule, so that host top-aligns and pads
+       (course-list.ts). */
     tbody td {
       vertical-align: baseline;
     }

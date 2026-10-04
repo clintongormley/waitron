@@ -310,7 +310,8 @@ export class ProductEditor extends LitElement {
       /* The grip and the row menu are a tap target tall and the name and type are text, so the cells
          start at their top and each text cell is padded by half the difference: a one-line row
          reads as one line, and a wrapping name keeps the grip, type and menu on its first line.
-         Guard: the one-line and wrapping-name row tests in product-editor.test.ts. */
+         The --wt-space-2 term repeats the cell padding of ReorderController.tableStyles and must
+         change with it. Guard: the one-line and wrapping-name row tests in product-editor.test.ts. */
       th {
         vertical-align: middle;
       }

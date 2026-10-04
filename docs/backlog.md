@@ -1230,11 +1230,13 @@ but Each while the server accepts none for a whole unit with no scale link (ml) 
 
 **Every reorderable table puts its drag handle on the first line of a tall row (W75b, owner
 2026-10-04) — DONE.** The shared reorder table styles (`packages/ui/src/reorder-table.ts`) now line
-body cells up by their first line, so the handle and the controls beside it sit on the first line of
-a long, wrapping name instead of the row's middle; the Extras editor's own rule for this went. The
+body cells up by the baseline, so the handle sits on the first line of the plain text beside it,
+such as a long, wrapping name, instead of the row's middle; the Extras editor's own rule for this went. The
 Product editor's Modifiers table, the variant table and the Courses list start their cells at the top
-and push the text down to the middle of a tap-target-tall first line, which keeps a one-line row on
-one middle. The option list form and the section member list had their own centring rules, now
+and push the text down to the middle of a tap-target-tall first line, so on a one-line row the text
+and the controls still share one centre line (tested for the Product editor only). The Product
+editor, variant table, Courses list, option list form, section member list, Extras editor and Prep
+stations screen each have a test with a wrapping name. The option list form and the section member list had their own centring rules, now
 removed. See `docs/developers/design-system.md`, tables.
 
 **A folded Customer-facing names section shows every language's name, inherited ones in italic
