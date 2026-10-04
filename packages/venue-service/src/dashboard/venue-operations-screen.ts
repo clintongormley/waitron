@@ -83,7 +83,8 @@ export class VenueOperationsScreen extends LitElement {
       }
       wt-data-table::part(edit-paid),
       wt-data-table::part(edit-collection),
-      wt-data-table::part(edit-receipt) {
+      wt-data-table::part(edit-receipt),
+      wt-data-table::part(edit-trading-name) {
         border: 0;
         background: transparent;
         color: var(--wt-color-primary-text);
@@ -148,6 +149,9 @@ export class VenueOperationsScreen extends LitElement {
   @state() private attempted = false;
   @state() private busy = false;
   @state() private printTradingNameDrafts: Record<string, boolean> = {};
+  @state() private tradingNameEditor?: string;
+  @state() private tradingNameDraft = "";
+  @state() private tradingNameError = "";
   @state() private paidEditor?: string;
   @state() private paidDrafts: Record<string, string> = {};
   @state() private collectionEditor?: string;
@@ -554,7 +558,66 @@ export class VenueOperationsScreen extends LitElement {
       {
         key: "trading",
         label: t("venue.trading_name"),
-        cell: (row) => (row.kind === "department" ? row.department.tradingName : nothing),
+        cell: (row) => {
+          if (row.kind !== "department") return nothing;
+          if (this.tradingNameEditor !== row.department.id)
+            return html`<button
+              type="button"
+              part="edit-trading-name"
+              data-test="edit-trading-name"
+              aria-label=${`${row.department.name}: ${t("venue.trading_name")}, ${row.department.tradingName}`}
+              @click=${() => {
+                this.tradingNameDraft = row.department.tradingName;
+                this.tradingNameError = "";
+                this.tradingNameEditor = row.department.id;
+              }}
+            >
+              ${row.department.tradingName}
+            </button>`;
+          return html`<wt-input
+              name="tradingName"
+              label=${`${row.department.name}: ${t("venue.trading_name")}`}
+              hide-label
+              required
+              .value=${live(this.tradingNameDraft)}
+              error=${this.tradingNameError}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                this.tradingNameDraft = event.detail.value;
+                this.tradingNameError = "";
+              }}
+            ></wt-input>
+            <button
+              type="button"
+              data-test="save-trading-name"
+              ?disabled=${this.busy}
+              @click=${() => {
+                const tradingName = this.tradingNameDraft.trim();
+                if (!tradingName) {
+                  this.tradingNameError = t("venue.field_required");
+                  return;
+                }
+                void this.#save(async () => {
+                  await this.api.updateDepartment(row.department.id, {
+                    name: row.department.name,
+                    tradingName,
+                    defaultServiceMode: row.department.defaultServiceMode,
+                  });
+                  if (this.tradingNameEditor === row.department.id)
+                    this.tradingNameEditor = undefined;
+                });
+              }}
+            >
+              ${t("venue.save")}
+            </button>
+            <button
+              type="button"
+              data-test="cancel-trading-name"
+              @click=${() => (this.tradingNameEditor = undefined)}
+            >
+              ${t("venue.cancel")}
+            </button>`;
+        },
       },
       {
         key: "printTradingName",
