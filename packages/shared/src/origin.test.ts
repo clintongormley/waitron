@@ -61,6 +61,15 @@ describe("origins", () => {
     expect((caught as AppError).params).toEqual({ source, deviceId: device });
   });
 
+  it("refuses a stored device that is not an id", () => {
+    expect(() => readOrigin("device", "not-a-uuid")).toThrow(
+      expect.objectContaining({
+        code: "shared.invalid_id",
+        params: { kind: "DeviceId", value: "not-a-uuid" },
+      }),
+    );
+  });
+
   it("tells a sale origin from any other", () => {
     expect(isSaleOrigin(deviceOrigin(DEVICE))).toBe(true);
     expect(isSaleOrigin(jobOrigin("demo_seed"))).toBe(true);

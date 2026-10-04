@@ -1,7 +1,7 @@
 import { deviceId as brandDeviceId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceId, LocationId, NodeId } from "@waitron/shared";
 import type { Database } from "../client.js";
-import { deviceProfiles } from "../schema/device-profiles.js";
+import { deviceFormFactorEnum, deviceProfiles } from "../schema/device-profiles.js";
 import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";
 import { nodes } from "../schema/nodes.js";
@@ -64,7 +64,7 @@ export async function seedDevice(
   opts: {
     locationId: LocationId | string;
     label?: string;
-    formFactor?: "till" | "phone-portrait" | "tablet-landscape";
+    formFactor?: Exclude<(typeof deviceFormFactorEnum.enumValues)[number], "kds">;
     capabilities?: string[];
     profileId?: string;
   },

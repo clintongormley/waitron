@@ -264,8 +264,9 @@ export const tenders = table(
       foreignColumns: [sales.id],
       name: "tenders_sale_fk",
     }).onDelete("restrict"),
-    // No delete rule: drizzle adds this column with a plain `ALTER TABLE ADD`, which writes none
-    // (`drizzle/0022_bill_payments.sql`), and a declared `restrict` would not match the table built.
+    // No delete rule: the `ALTER TABLE ADD` drizzle generated for this column
+    // (`drizzle/0022_bill_payments.sql`) names none, so the table holds `no action`, and a declared
+    // `restrict` would not match it.
     foreignKey({
       columns: [t.billPaymentId],
       foreignColumns: [billPayments.id],

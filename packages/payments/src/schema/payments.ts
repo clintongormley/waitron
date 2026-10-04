@@ -113,8 +113,6 @@ export const payments = table(
       foreignColumns: [cardReaders.id],
       name: "payments_reader_fk",
     }).onDelete("restrict"),
-    // No delete rule: drizzle adds this column with a plain `ALTER TABLE ADD`, which writes none
-    // (`drizzle/0002_bill_payment_link.sql`), and a declared `restrict` would not match the table.
     foreignKey({
       columns: [t.billPaymentId],
       foreignColumns: [billPayments.id],

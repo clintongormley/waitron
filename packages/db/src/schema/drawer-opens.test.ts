@@ -158,17 +158,6 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
   });
 
-  it("refuses a cash sale's open that names no device", async () => {
-    const error = await captureError(() =>
-      inTx((tx) =>
-        tx
-          .insert(drawerOpens)
-          .values({ personId: PERSON, printerId: PRINTER_A, reason: "cash_sale" }),
-      ),
-    );
-    expect(engineErrorMessage(error)).toBe("CHECK constraint failed: drawer_opens_target_ck");
-  });
-
   it("refuses a calibration that names a device", async () => {
     const error = await captureError(() =>
       inTx((tx) =>

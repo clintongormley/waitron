@@ -161,7 +161,7 @@ export function createTrustedClock(options: TrustedClockOptions): TrustedClock {
 
     anchor(trusted): TrustedTimeAnchor {
       // A trusted source always wins, including when it corrects backwards: rejecting that would
-      // pin a till that has run fast to its own drift.
+      // pin a device that has run fast to its own drift.
       anchor = {
         trustedAtMs: trusted.instant.getTime(),
         offsetMinutes: trusted.offsetMinutes,

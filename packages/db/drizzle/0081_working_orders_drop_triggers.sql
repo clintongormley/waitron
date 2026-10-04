@@ -1,7 +1,7 @@
--- The next two migrations rebuild `working_orders`. A rename fails while a trigger body names a
--- table the rebuild has dropped, and a trigger ON a rebuilt table would be dropped with it silently,
--- so every trigger that is either goes here and comes back in
--- `0084_working_orders_recreate_triggers.sql`.
+-- `0083_working_orders_drop_till.sql` rebuilds `working_orders` (`0082` only adds columns to it).
+-- A rename fails while a trigger body names a table the rebuild has dropped, and a trigger ON a
+-- rebuilt table would be dropped with it silently, so every trigger that is either goes here and
+-- comes back in `0084_working_orders_recreate_triggers.sql`.
 DROP TRIGGER working_orders_release_main_bill;
 --> statement-breakpoint
 DROP TRIGGER working_orders_release_main_bill_on_move;

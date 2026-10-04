@@ -424,6 +424,12 @@ function seed(connection) {
     `insert into devices (id, location_id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
       `values ('dev-off', 'loc', 'dp-drift', 'Caja 4', 'hash', 0, '${STAMP}', '${STAMP}')`,
 
+    // An order at a venue invoicing in Spanish alone, opened on `dev-active`, whose own venue `loc`
+    // invoices in two: the locale triggers must read the order's location, not its device's.
+    `insert into locations (id, name, invoice_locales, operation_description) ` +
+      `values ('loc-es-only', 'Venue 4', '["es"]', 'Restaurante')`,
+    workingOrder("wo-es-only", "open", { locationId: "loc-es-only" }),
+
     // Lines for the served exception, written while their orders are open; the orders leave open
     // below. `loc-relocale` is a venue of its own so its invoice locales can change without moving
     // what any other case reads; its orders are opened on a device of `loc`, so a trigger reading
@@ -1271,6 +1277,15 @@ describe("working_order_lines_check_locales", () => {
       ),
     ).toBe(LOCALES_REFUSAL);
   });
+
+  it("reads the order's location, not its device's, when the two differ", () => {
+    expect(
+      refusalFor(connection, line("line-es-only", "wo-es-only", '{"es":"Plato"}')),
+    ).toBeUndefined();
+    expect(
+      refusalFor(connection, line("line-es-only-ca", "wo-es-only", '{"es":"Plato","ca":"Plat"}')),
+    ).toBe(LOCALES_REFUSAL);
+  });
 });
 
 describe("working_order_lines_check_variant_locales", () => {
@@ -1297,6 +1312,21 @@ describe("working_order_lines_check_variant_locales", () => {
     expect(
       refusalFor(connection, line("line-var-null", "wo-open", '{"es":"a","ca":"b"}')),
     ).toBeUndefined();
+  });
+
+  it("reads the order's location, not its device's, when the two differ", () => {
+    expect(
+      refusalFor(
+        connection,
+        line("line-var-es-only", "wo-es-only", '{"es":"Plato"}', '{"es":"Grande"}'),
+      ),
+    ).toBeUndefined();
+    expect(
+      refusalFor(
+        connection,
+        line("line-var-es-only-ca", "wo-es-only", '{"es":"Plato"}', '{"es":"Grande","ca":"Gran"}'),
+      ),
+    ).toBe(VARIANT_LOCALES_REFUSAL);
   });
 
   it("refuses an update that breaks the variant locale set", () => {
