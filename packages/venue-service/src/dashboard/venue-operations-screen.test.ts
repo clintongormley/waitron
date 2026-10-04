@@ -607,6 +607,17 @@ describe("venue operations screen", () => {
     expect(field(el, "zone-mode-z1").value).toBe("prepay");
   });
 
+  it("opens receipt preview for the selected department", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "departments");
+    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>(
+      'a[href="/manage/venue-settings/view/receipts?departmentId=d2"]',
+    );
+    expect(link?.textContent?.trim()).toBe("Preview");
+  });
+
   it("deactivates a department that has no active zones", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(model),

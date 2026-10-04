@@ -558,6 +558,20 @@ export class VenueOperationsScreen extends LitElement {
         (row) => row.id,
         this.#addDepartment(),
       )}
+      <nav aria-label=${t("venue.preview")}>
+        ${model.departments
+          .filter((department) => department.active)
+          .map(
+            (department) =>
+              html`<p>
+                ${department.name}:
+                <a
+                  href=${`/manage/venue-settings/view/receipts?departmentId=${encodeURIComponent(department.id)}`}
+                  >${t("venue.preview")}</a
+                >
+              </p>`,
+          )}
+      </nav>
       ${this.#toolbar(t("venue.hours"))}
       ${this.#table(
         "hours",
