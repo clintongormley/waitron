@@ -2213,10 +2213,7 @@ describe("a product's variants in the list", () => {
       });
       const table = el.shadowRoot!.querySelector("wt-data-table")!;
       const root = await tableRoot(el);
-      for (const id of ["solo", "racion"]) {
-        root.querySelector<HTMLElement>(`tr[data-row-key="${id}"] .tree-toggle`)!.click();
-        await table.updateComplete;
-      }
+      for (const id of ["solo", "racion"]) await openVariants(root, table, id);
       return { table, root };
     }
 
