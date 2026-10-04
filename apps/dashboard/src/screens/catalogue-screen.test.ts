@@ -1163,6 +1163,78 @@ describe("catalogue-screen", () => {
     expect(cancels).toBe(1);
   });
 
+  describe("focus after the unit form opened from the unit chooser closes", () => {
+    // The name field has focus when the chooser opens, and the chooser's unit dropdown when Add unit
+    // is clicked in script, so the dialogs' own return of focus lands on neither target and only
+    // the hand-back can. The real click on the chooser's heading comes first because without it one
+    // Escape closed the chooser as well as the form.
+    async function openUnitForm(el: CatalogueScreen) {
+      const product = editor(el);
+      product.shadowRoot!.querySelector<HTMLElement>('[name="name"]')!.focus();
+      emit(product.shadowRoot!.querySelector("wt-price-input")!, "wt-unit-click", {});
+      await product.updateComplete;
+      const chooser = product.shadowRoot!.querySelector<LitElement>(
+        "wt-dialog[data-test=unit-chooser]",
+      )!;
+      await chooser.updateComplete;
+      await userEvent.click(chooser.shadowRoot!.querySelector("h2")!);
+      product.shadowRoot!.querySelector<HTMLElement>("wt-combobox[name=unit]")!.focus();
+      product.shadowRoot!.querySelector<HTMLElement>("[data-test=add-unit]")!.click();
+      await el.updateComplete;
+      const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
+      expect(form.open).toBe(true);
+      return form;
+    }
+    async function mountWithProduct(api: DashboardApi) {
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      return el;
+    }
+
+    it.each([
+      [
+        "its Cancel",
+        (form: HTMLElement) =>
+          form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click(),
+      ],
+      ["Escape", () => userEvent.keyboard("{Escape}")],
+    ])("goes back to Add unit after %s closes it", async (_, close) => {
+      const el = await mountWithProduct(stubApi());
+      const form = await openUnitForm(el);
+      await close(form);
+      await vi.waitFor(() => expect(form.open).toBe(false));
+      await flush(el);
+      await afterDialogCloses(el);
+      const product = editor(el);
+      expect(
+        product.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+          "wt-dialog[data-test=unit-chooser]",
+        )!.open,
+      ).toBe(true);
+      const addUnit = product.shadowRoot!.querySelector("[data-test=add-unit]");
+      expect(addUnit).not.toBeNull();
+      expect(product.shadowRoot!.activeElement).toBe(addUnit);
+    });
+
+    it("goes back to the price's unit button, the chooser's opener, after a save closes it and the chooser", async () => {
+      const api = stubApi();
+      const el = await mountWithProduct(api);
+      const form = await openUnitForm(el);
+      emit(form, "wt-submit", {
+        value: { name: { es: "ración" }, abbreviation: { es: "ra" }, precision: 2 },
+      });
+      await flush(el);
+      await afterDialogCloses(el);
+      expect(api.createUnit).toHaveBeenCalledOnce();
+      expect(form.open).toBe(false);
+      const price = editor(el).shadowRoot!.querySelector("wt-price-input")!;
+      expect(editor(el).shadowRoot!.activeElement).toBe(price);
+      expect(price.shadowRoot!.activeElement).toBe(price.shadowRoot!.querySelector("button.unit"));
+    });
+  });
+
   it("reports a refused attachment inside the editor, not behind it", async () => {
     const api = stubApi({
       updateProductEditor: vi.fn().mockRejectedValue({
@@ -1787,6 +1859,34 @@ describe("catalogue-screen", () => {
       expect(editor(el).open).toBe(true);
       expect(editor(el).currentValue.courseId).toBe("k-new");
       expect(editor(el).currentValue.name).toBe("Croquetas sin guardar");
+      expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
+    });
+
+    // Choosing Edit courses… focuses the course box before the window opens, so the window's own
+    // return of focus lands there whatever the screen does. Here the name field has focus and the
+    // box's action event is sent from script, so only the hand-back can put focus on the box.
+    it.each([
+      [
+        "Done",
+        (el: CatalogueScreen) =>
+          el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!.click(),
+      ],
+      ["Escape", () => userEvent.keyboard("{Escape}")],
+    ])("goes back to the course box after %s closes it", async (_, close) => {
+      const el = await openCourses(courseApi(), "k1");
+      await done(el);
+      editor(el).shadowRoot!.querySelector<HTMLElement>('[name="name"]')!.focus();
+      emit(courseBox(el), "wt-combobox-action", { value: "edit-courses" });
+      await el.updateComplete;
+      await vi.waitFor(() =>
+        expect(courseList(el)?.shadowRoot!.querySelectorAll("tbody tr").length).toBeGreaterThan(0),
+      );
+      expect(coursesWindow(el).open).toBe(true);
+      await close(el);
+      await vi.waitFor(() => expect(editor(el).childOpen).toBe(false));
+      await flush(el);
+      await flush(el);
+      expect(coursesWindow(el).open).toBe(false);
       expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
     });
 
