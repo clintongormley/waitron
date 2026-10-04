@@ -1268,6 +1268,8 @@ async function finalizeCapture(
           ],
         },
       });
+      const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
+      await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
 
       // The provider already recorded the payment row; this only points its `sale_id` at the sale.
       await associatePaymentWithSale(tx, {
@@ -1307,6 +1309,7 @@ async function finalizeCapture(
 
       const ticket: TillSaleResult = {
         ...(await readReceiptIssuer(deps.backend, tx, saleId)),
+        receiptHeader: (await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId)) ?? undefined,
         ...(await readReceiptOrder(tx, cfg, req.id)),
         locale: language.locale,
         invoiceNumber: await readInvoiceNumber(tx, saleId),
@@ -1412,6 +1415,8 @@ async function finalizeRecovery(
         tenders: [{ method: "card", amount: capturedAmount, tipAmount: tip, settledAt }],
       },
     });
+    const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
+    await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
 
     await associatePaymentWithSale(tx, {
       provider: deps.provider.provider,
@@ -1452,6 +1457,7 @@ async function finalizeRecovery(
 
     const ticket: TillSaleResult = {
       ...(await readReceiptIssuer(deps.backend, tx, saleId)),
+      receiptHeader: (await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId)) ?? undefined,
       ...(await readReceiptOrder(tx, cfg, req.id)),
       locale: language.locale,
       invoiceNumber: await readInvoiceNumber(tx, saleId),
