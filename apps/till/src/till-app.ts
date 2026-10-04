@@ -123,7 +123,7 @@ import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/tab-shell.js";
 import "./widgets/find-bill-dialog.js";
 import "./widgets/printers-dialog.js";
-import type { PrinterSlot, PrintersChangeDetail } from "./widgets/printers-dialog.js";
+import type { PrinterSlot } from "./widgets/printers-dialog.js";
 import type { FindBillPayDetail } from "./widgets/find-bill-dialog.js";
 import "./widgets/card-grid.js";
 import type { StringKey } from "./i18n/strings.js";
@@ -214,7 +214,7 @@ import type { BasketRefusal, OrderLine } from "./state/working-order.js";
 import type { StoredLines } from "./widgets/basket.js";
 import { adjustableListing } from "./state/adjust-target.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
-import type { DevDeviceList, DeviceIdentity } from "./api/client.js";
+import type { DevDeviceList, DeviceIdentity, DevicePrintersChange } from "./api/client.js";
 import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
 import type {
@@ -1507,12 +1507,28 @@ export class TillApp extends LitElement {
   };
   @state() private printersOpen = false;
   @state() private printersError: { code: string; field?: string } | null = null;
-  /** Numbers printer switches. The newest success applied decides the printer shown; the newest
-   * answer applied, success or refusal, decides whether a refusal is shown. */
-  #printersSwitch = 0;
-  #printersStored = 0;
-  #printersAnswered = 0;
-  /** `GET /api/device/me` as last read, which the printers dialog falls back to. */
+  /** Printer switches are sent one at a time, each once the one before has answered or been cut
+   * off, so each answer is newer than the one before. A switch with no answer within
+   * `TABLE_REQUEST_LIMIT_MS` is cut off, so it cannot hold back the picks after it; a cut-off
+   * request may still reach the server after later ones, so the server stores this tab's switches
+   * in the order they were picked only while every switch answers. */
+  #printersQueue: Promise<void> = Promise.resolve();
+  #printersWaiting = 0;
+  /** A refusal is shown only in the dialog opening it was picked in. */
+  #printersOpenings = 0;
+  /** When a read of the device and a switch were out at once, either answer may be the older, so
+   * the one that comes back second is not shown: a switch's answer when a read came back while it
+   * was out, a read when a switch answered while it was out. A switch that failed with no HTTP
+   * status may have been stored too. The device is then read again once no switch waits, unless a
+   * later switch's answer is shown first; that read is tried once, and if it fails the next
+   * switch's answer or the next opening reads again. `#printersReads` counts reads answered with
+   * the device, the boot read included, shown or not; `#printersSwitched` counts switches answered
+   * with what the server stored. */
+  #printersReads = 0;
+  #printersSwitched = 0;
+  #printersStale = false;
+  /** The device as last read, leaving out reads set aside, with any printer switch shown since;
+   * the printers dialog is drawn from it. */
   #heldIdentity?: DeviceIdentity;
   /** The open cancel, give-away or discount dialog, with what the server last answered it. */
   @state() private adjusting: Adjusting | null = null;
@@ -1766,7 +1782,7 @@ export class TillApp extends LitElement {
         this.makeNow = [];
       this.deviceName = identity.name;
       this.deviceId = identity.deviceId;
-      this.#heldIdentity = identity;
+      this.#holdIdentity(identity);
       this.#restoreMakeNow();
       const kind = kindOfFormFactor(identity.formFactor);
       this.#deviceKind = kind ?? "till";
@@ -3508,15 +3524,31 @@ export class TillApp extends LitElement {
   }
 
   /** Reads the device again first, so a profile list changed since boot is offered; a failed read
-   * opens on the device as boot read it. */
+   * opens on the printers last known. */
   async #onOpenPrinters(): Promise<void> {
     const session = this.#operatorSession;
-    try {
-      this.#heldIdentity = await this.api.getDeviceIdentity();
-    } catch {
-      // Opens on the identity held.
-    }
+    this.#printersOpenings++;
+    await this.#readPrinters();
     if (session !== this.#operatorSession) return;
+    this.printersError = null;
+    this.printersOpen = true;
+  }
+
+  /** Whether the device answered; either way the printers held are shown. */
+  async #readPrinters(): Promise<boolean> {
+    const switched = this.#printersSwitched;
+    let answered = true;
+    try {
+      const read = await this.api.getDeviceIdentity();
+      if (switched === this.#printersSwitched) {
+        this.#holdIdentity(read);
+      } else {
+        this.#printersReads++;
+        this.#printersStale = true;
+      }
+    } catch {
+      answered = false;
+    }
     const identity = this.#heldIdentity;
     if (identity !== undefined) {
       this.devicePrinters = {
@@ -3527,37 +3559,72 @@ export class TillApp extends LitElement {
         },
       };
     }
-    this.printersError = null;
-    this.printersOpen = true;
+    // No retry while the server does not answer: the next switch's answer or opening reads again.
+    if (answered) await this.#rereadIfStale();
+    return answered;
   }
 
-  /** A refusal stays shown until a newer switch answers: clearing it before the request re-renders
+  /** Cleared while the read is out, so a second caller does not read too. */
+  async #rereadIfStale(): Promise<void> {
+    if (this.#printersWaiting > 0 || !this.#printersStale) return;
+    this.#printersStale = false;
+    if (!(await this.#readPrinters())) this.#printersStale = true;
+  }
+
+  #holdIdentity(identity: DeviceIdentity): void {
+    this.#printersReads++;
+    this.#heldIdentity = identity;
+  }
+
+  #onPrintersChange(event: CustomEvent<DevicePrintersChange>): Promise<void> {
+    const opening = this.#printersOpenings;
+    this.#printersWaiting++;
+    const step = () => this.#switchPrinters(event.detail, opening);
+    const run = this.#printersQueue.then(step, step);
+    this.#printersQueue = run;
+    return run;
+  }
+
+  /** A refusal stays shown until the next switch answers: clearing it before the request re-renders
    * the list, dropping the retried pick while the request is in flight. */
-  async #onPrintersChange(event: CustomEvent<PrintersChangeDetail>): Promise<void> {
-    const attempt = ++this.#printersSwitch;
+  async #switchPrinters(change: DevicePrintersChange, opening: number): Promise<void> {
+    const reads = this.#printersReads;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      const stored = await this.api.setDevicePrinters(event.detail);
-      if (attempt > this.#printersAnswered) {
-        this.#printersAnswered = attempt;
-        this.printersError = null;
+      const stored = await this.api.setDevicePrinters(change, { signal: limit.signal });
+      this.#printersSwitched++;
+      if (opening === this.#printersOpenings) this.printersError = null;
+      if (reads === this.#printersReads) {
+        this.#printersStale = false;
+        if (this.#heldIdentity !== undefined)
+          this.#heldIdentity = { ...this.#heldIdentity, ...stored };
+        this.devicePrinters = {
+          receipt: { ...this.devicePrinters.receipt, current: stored.receiptPrinterId },
+          paymentSlip: { ...this.devicePrinters.paymentSlip, current: stored.paymentSlipPrinterId },
+        };
+      } else {
+        this.#printersStale = true;
       }
-      if (attempt <= this.#printersStored) return;
-      this.#printersStored = attempt;
-      if (this.#heldIdentity !== undefined)
-        this.#heldIdentity = { ...this.#heldIdentity, ...stored };
-      this.devicePrinters = {
-        receipt: { ...this.devicePrinters.receipt, current: stored.receiptPrinterId },
-        paymentSlip: { ...this.devicePrinters.paymentSlip, current: stored.paymentSlipPrinterId },
-      };
     } catch (error) {
-      if (attempt <= this.#printersAnswered) return;
-      this.#printersAnswered = attempt;
-      const { code, field } = error as { code?: unknown; field?: unknown };
-      this.printersError = {
-        code: typeof code === "string" ? code : "server.internal",
-        ...(typeof field === "string" ? { field } : {}),
+      const { code, field, status } = (error ?? {}) as {
+        code?: unknown;
+        field?: unknown;
+        status?: unknown;
       };
+      // An error with no HTTP status is not a refusal, so the server may have stored the switch.
+      if (typeof status !== "number") this.#printersStale = true;
+      if (opening === this.#printersOpenings) {
+        this.printersError = {
+          code: typeof code === "string" ? code : "server.internal",
+          ...(typeof field === "string" ? { field } : {}),
+        };
+      }
+    } finally {
+      limit.done();
+      this.#printersWaiting--;
     }
+    // Not awaited: a read with no answer must not hold back the next switch.
+    void this.#rereadIfStale();
   }
 
   /** The picker is the server's list of authorizers; the client holds no policy or role knowledge. */
@@ -7441,7 +7508,7 @@ export class TillApp extends LitElement {
                 .receipt=${this.devicePrinters.receipt}
                 .paymentSlip=${this.devicePrinters.paymentSlip}
                 .error=${this.printersError}
-                @printers-change=${(event: CustomEvent<PrintersChangeDetail>) =>
+                @printers-change=${(event: CustomEvent<DevicePrintersChange>) =>
                   void this.#onPrintersChange(event)}
                 @close=${() => (this.printersOpen = false)}
               ></till-printers-dialog>`

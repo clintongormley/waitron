@@ -8,17 +8,11 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { trackDialog } from "./track-dialog.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { PrinterChoice } from "../api/client.js";
+import type { DevicePrintersChange, PrinterChoice } from "../api/client.js";
 
 export interface PrinterSlot {
   current: string | null;
   choices: PrinterChoice[];
-}
-
-/** Names only the printer the person changed. */
-export interface PrintersChangeDetail {
-  receiptPrinterId?: string | null;
-  paymentSlipPrinterId?: string | null;
 }
 
 type Field = "receiptPrinterId" | "paymentSlipPrinterId";
@@ -105,7 +99,7 @@ export class TillPrintersDialog extends LitElement {
           .error=${this.#refusedField() === field ? codeMessage(this.error!.code) : ""}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
-            this.#emit<PrintersChangeDetail>("printers-change", { [field]: event.detail.value });
+            this.#emit<DevicePrintersChange>("printers-change", { [field]: event.detail.value });
           }}
         ></wt-combobox>
       </div>`;

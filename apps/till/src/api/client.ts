@@ -2289,8 +2289,11 @@ export class TillApi {
    * Switch the session's device's current printers → `PUT /api/device/printers`. Send only the field
    * that changed: the server refuses a switched-off printer, which a device may still be on.
    */
-  setDevicePrinters(change: DevicePrintersChange): Promise<DevicePrinters> {
-    return this.#request<DevicePrinters>("/api/device/printers", "PUT", change);
+  setDevicePrinters(
+    change: DevicePrintersChange,
+    options: ReadOptions = {},
+  ): Promise<DevicePrinters> {
+    return this.#request<DevicePrinters>("/api/device/printers", "PUT", change, options.signal);
   }
 
   /**

@@ -5,7 +5,8 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./printers-dialog.js";
-import type { PrintersChangeDetail, TillPrintersDialog } from "./printers-dialog.js";
+import type { TillPrintersDialog } from "./printers-dialog.js";
+import type { DevicePrintersChange } from "../api/client.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("en"));
@@ -29,10 +30,10 @@ const combobox = (el: TillPrintersDialog, name: string) =>
 const shown = (el: TillPrintersDialog, row: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-printer-row="${row}"] [data-printer-shown]`);
 
-function changes(el: TillPrintersDialog): PrintersChangeDetail[] {
-  const seen: PrintersChangeDetail[] = [];
+function changes(el: TillPrintersDialog): DevicePrintersChange[] {
+  const seen: DevicePrintersChange[] = [];
   el.addEventListener("printers-change", (event) =>
-    seen.push((event as CustomEvent<PrintersChangeDetail>).detail),
+    seen.push((event as CustomEvent<DevicePrintersChange>).detail),
   );
   return seen;
 }

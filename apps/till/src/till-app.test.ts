@@ -12323,7 +12323,10 @@ describe("the device's printers, switched from the header", () => {
     await flush(el);
 
     expect(setDevicePrinters).toHaveBeenCalledTimes(1);
-    expect(setDevicePrinters.mock.calls[0]).toEqual([{ paymentSlipPrinterId: "S2" }]);
+    expect(setDevicePrinters.mock.calls[0]).toEqual([
+      { paymentSlipPrinterId: "S2" },
+      { signal: expect.any(AbortSignal) },
+    ]);
     const dialog = printersDialog(el)!;
     expect(dialog.paymentSlip).toEqual({ current: "S2", choices: [S1, S2] });
     expect(dialog.receipt).toEqual({ current: "P-off", choices: [P1, P2] });
@@ -12397,7 +12400,7 @@ describe("the device's printers, switched from the header", () => {
     expect(dialog.paymentSlip).toEqual({ current: "S1", choices: [S1, S2] });
   });
 
-  it("shows the latest switch's answer when an earlier switch answers after it", async () => {
+  it("sends a later switch only once the earlier one has answered, and shows the later one's answer", async () => {
     const answers: ((value: unknown) => void)[] = [];
     const setDevicePrinters = vi.fn(() => new Promise((resolve) => answers.push(resolve)));
     const el = await openPrinters({ setDevicePrinters });
@@ -12405,15 +12408,17 @@ describe("the device's printers, switched from the header", () => {
     emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
     emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
     await flush(el);
-    answers[1]!({ receiptPrinterId: "P2", paymentSlipPrinterId: "S1" });
-    await flush(el);
+    expect(setDevicePrinters).toHaveBeenCalledTimes(1);
     answers[0]!({ receiptPrinterId: "P1", paymentSlipPrinterId: "S1" });
+    await flush(el);
+    expect(setDevicePrinters).toHaveBeenCalledTimes(2);
+    answers[1]!({ receiptPrinterId: "P2", paymentSlipPrinterId: "S1" });
     await flush(el);
 
     expect(printersDialog(el)!.receipt).toEqual({ current: "P2", choices: [P1, P2] });
   });
 
-  it("shows no refusal of an earlier switch that answers after the latest one succeeded", async () => {
+  it("shows no refusal of an earlier switch once the later one succeeds", async () => {
     const answers: { resolve: (value: unknown) => void; reject: (error: unknown) => void }[] = [];
     const setDevicePrinters = vi.fn(
       () => new Promise((resolve, reject) => answers.push({ resolve, reject })),
@@ -12423,16 +12428,16 @@ describe("the device's printers, switched from the header", () => {
     emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
     emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
     await flush(el);
-    answers[1]!.resolve({ receiptPrinterId: "P2", paymentSlipPrinterId: "S1" });
-    await flush(el);
     answers[0]!.reject({ field: "receiptPrinterId", code: "device.binding_invalid", status: 400 });
+    await flush(el);
+    answers[1]!.resolve({ receiptPrinterId: "P2", paymentSlipPrinterId: "S1" });
     await flush(el);
 
     expect(printersDialog(el)!.error).toBeNull();
     expect(printersDialog(el)!.receipt).toEqual({ current: "P2", choices: [P1, P2] });
   });
 
-  it("shows an earlier switch's success with a later switch's refusal when they answer in order", async () => {
+  it("shows an earlier switch's success with a later switch's refusal", async () => {
     const answers: { resolve: (value: unknown) => void; reject: (error: unknown) => void }[] = [];
     const setDevicePrinters = vi.fn(
       () => new Promise((resolve, reject) => answers.push({ resolve, reject })),
@@ -12445,28 +12450,6 @@ describe("the device's printers, switched from the header", () => {
     answers[0]!.resolve({ receiptPrinterId: "P1", paymentSlipPrinterId: "S1" });
     await flush(el);
     answers[1]!.reject({ field: "receiptPrinterId", code: "device.binding_invalid", status: 400 });
-    await flush(el);
-
-    expect(printersDialog(el)!.receipt).toEqual({ current: "P1", choices: [P1, P2] });
-    expect(printersDialog(el)!.error).toEqual({
-      code: "device.binding_invalid",
-      field: "receiptPrinterId",
-    });
-  });
-
-  it("shows an earlier switch's success that answers after a later switch's refusal, keeping the refusal", async () => {
-    const answers: { resolve: (value: unknown) => void; reject: (error: unknown) => void }[] = [];
-    const setDevicePrinters = vi.fn(
-      () => new Promise((resolve, reject) => answers.push({ resolve, reject })),
-    );
-    const el = await openPrinters({ setDevicePrinters });
-
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
-    await flush(el);
-    answers[1]!.reject({ field: "receiptPrinterId", code: "device.binding_invalid", status: 400 });
-    await flush(el);
-    answers[0]!.resolve({ receiptPrinterId: "P1", paymentSlipPrinterId: "S1" });
     await flush(el);
 
     expect(printersDialog(el)!.receipt).toEqual({ current: "P1", choices: [P1, P2] });
@@ -12509,6 +12492,363 @@ describe("the device's printers, switched from the header", () => {
     await flush(el);
     expect(printersDialog(el)!.error).toBeNull();
     expect(receiptBox().value).toBe("P2");
+  });
+
+  /** A server holding the device's printers, which both reads and switches go through. */
+  function printersServer() {
+    const stored: { receiptPrinterId: string | null; paymentSlipPrinterId: string | null } = {
+      receiptPrinterId: "P-off",
+      paymentSlipPrinterId: "S1",
+    };
+    const getDeviceIdentity = vi.fn(async () => ({ ...identity, ...stored }));
+    return { stored, getDeviceIdentity };
+  }
+
+  it("sends a payment slip switch picked during a receipt switch only after the receipt switch is stored, and shows both", async () => {
+    const { stored, getDeviceIdentity } = printersServer();
+    // Each switch is stored only when the test releases it, and answers with everything stored then.
+    const held: (() => void)[] = [];
+    const setDevicePrinters = vi.fn(
+      (change: Partial<typeof stored>) =>
+        new Promise((resolve) =>
+          held.push(() => {
+            Object.assign(stored, change);
+            resolve({ ...stored });
+          }),
+        ),
+    );
+    const el = await openPrinters({ getDeviceIdentity, setDevicePrinters });
+
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
+    emit(printersDialog(el)!, "printers-change", { paymentSlipPrinterId: "S2" });
+    await flush(el);
+    expect(setDevicePrinters).toHaveBeenCalledTimes(1);
+    held[0]!();
+    await flush(el);
+    expect(setDevicePrinters).toHaveBeenCalledTimes(2);
+    held[1]!();
+    await flush(el);
+
+    expect(stored).toEqual({ receiptPrinterId: "P1", paymentSlipPrinterId: "S2" });
+    expect(printersDialog(el)!.receipt.current).toBe("P1");
+    expect(printersDialog(el)!.paymentSlip.current).toBe("S2");
+  });
+
+  it("keeps showing what another tab stored after reopening, when an earlier switch answers late", async () => {
+    const { stored, getDeviceIdentity } = printersServer();
+    let answer!: () => void;
+    const setDevicePrinters = vi.fn((change: Partial<typeof stored>) => {
+      Object.assign(stored, change);
+      const answered = { ...stored };
+      return new Promise((resolve) => (answer = () => resolve(answered)));
+    });
+    const el = await openPrinters({ getDeviceIdentity, setDevicePrinters });
+    const reopen = async () => {
+      emit(printersDialog(el)!, "close");
+      await flush(el);
+      shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
+      await flush(el);
+    };
+
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    await flush(el);
+    stored.receiptPrinterId = "P3";
+    await reopen();
+    expect(printersDialog(el)!.receipt.current).toBe("P3");
+    answer();
+    await flush(el);
+
+    expect(printersDialog(el)!.receipt.current).toBe("P3");
+    getDeviceIdentity.mockRejectedValue(new TypeError("Failed to fetch"));
+    await reopen();
+    expect(printersDialog(el)!.receipt.current).toBe("P3");
+  });
+
+  it("shows an earlier switch the server stored after the reopened dialog read the device", async () => {
+    const { stored, getDeviceIdentity } = printersServer();
+    let release!: () => void;
+    const setDevicePrinters = vi.fn(
+      (change: Partial<typeof stored>) =>
+        new Promise(
+          (resolve) =>
+            (release = () => {
+              Object.assign(stored, change);
+              resolve({ ...stored });
+            }),
+        ),
+    );
+    const el = await openPrinters({ getDeviceIdentity, setDevicePrinters });
+
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    await flush(el);
+    stored.receiptPrinterId = "P3";
+    emit(printersDialog(el)!, "close");
+    await flush(el);
+    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
+    await flush(el);
+    expect(printersDialog(el)!.receipt.current).toBe("P3");
+    release();
+    await flush(el);
+
+    expect(stored.receiptPrinterId).toBe("P2");
+    expect(printersDialog(el)!.receipt.current).toBe("P2");
+  });
+
+  it("shows a switch's answer when the reopened dialog's read of the device, sent before it, finishes after it", async () => {
+    const { stored, getDeviceIdentity } = printersServer();
+    let release!: () => void;
+    const setDevicePrinters = vi.fn(
+      (change: Partial<typeof stored>) =>
+        new Promise(
+          (resolve) =>
+            (release = () => {
+              Object.assign(stored, change);
+              resolve({ ...stored });
+            }),
+        ),
+    );
+    const el = await openPrinters({ getDeviceIdentity, setDevicePrinters });
+    const reopen = async () => {
+      emit(printersDialog(el)!, "close");
+      await flush(el);
+      shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
+      await flush(el);
+    };
+    // The server answers this read from what it had stored before the switch was saved.
+    let deliver!: () => void;
+    getDeviceIdentity.mockImplementationOnce(() => {
+      const read = { ...identity, ...stored };
+      return new Promise((resolve) => (deliver = () => resolve(read)));
+    });
+
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    await flush(el);
+    await reopen();
+    release();
+    await flush(el);
+    deliver();
+    await flush(el);
+
+    expect(stored.receiptPrinterId).toBe("P2");
+    expect(printersDialog(el)!.receipt.current).toBe("P2");
+    getDeviceIdentity.mockRejectedValue(new TypeError("Failed to fetch"));
+    await reopen();
+    expect(printersDialog(el)!.receipt.current).toBe("P2");
+  });
+
+  it("sends a later pick after a switch whose request rejects with nothing", async () => {
+    const setDevicePrinters = vi
+      .fn()
+      .mockRejectedValueOnce(undefined)
+      .mockResolvedValue({ receiptPrinterId: "P2", paymentSlipPrinterId: "S1" });
+    const el = await openPrinters({ setDevicePrinters });
+
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
+    await flush(el);
+    expect(printersDialog(el)!.error).toEqual({ code: "server.internal" });
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    await flush(el);
+
+    expect(setDevicePrinters).toHaveBeenCalledTimes(2);
+    expect(printersDialog(el)!.receipt.current).toBe("P2");
+    expect(printersDialog(el)!.error).toBeNull();
+  });
+
+  it("gives up on a switch that gets no answer within the request limit, and sends the next pick", async () => {
+    let calls = 0;
+    const setDevicePrinters = vi.fn((_change: unknown, options?: { signal?: AbortSignal }) => {
+      calls++;
+      if (calls > 1) return Promise.resolve({ receiptPrinterId: "P2", paymentSlipPrinterId: "S1" });
+      // Like fetch, the hung request rejects only when its signal aborts.
+      return new Promise((_, reject) =>
+        options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+      );
+    });
+    const el = await openPrinters({ setDevicePrinters });
+
+    vi.useFakeTimers();
+    try {
+      emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
+      emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+      await vi.advanceTimersByTimeAsync(149_999);
+      expect(setDevicePrinters).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+    } finally {
+      vi.useRealTimers();
+    }
+    await flush(el);
+
+    expect(setDevicePrinters).toHaveBeenCalledTimes(2);
+    expect(printersDialog(el)!.receipt.current).toBe("P2");
+    expect(printersDialog(el)!.error).toBeNull();
+  });
+
+  it("sends a pick while the read of the device after an earlier switch has no answer", async () => {
+    const { stored, getDeviceIdentity } = printersServer();
+    let release!: () => void;
+    const setDevicePrinters = vi.fn(
+      (change: Partial<typeof stored>) =>
+        new Promise(
+          (resolve) =>
+            (release = () => {
+              Object.assign(stored, change);
+              resolve({ ...stored });
+            }),
+        ),
+    );
+    const el = await openPrinters({ getDeviceIdentity, setDevicePrinters });
+
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    await flush(el);
+    emit(printersDialog(el)!, "close");
+    await flush(el);
+    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
+    await flush(el);
+    // The read made because the reopened dialog's read came back while the switch was out.
+    getDeviceIdentity.mockImplementationOnce(() => new Promise(() => {}));
+    release();
+    await flush(el);
+    expect(getDeviceIdentity).toHaveBeenCalledTimes(4);
+    emit(printersDialog(el)!, "printers-change", { paymentSlipPrinterId: "S2" });
+    await flush(el);
+
+    expect(setDevicePrinters).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads the device again when a read it set aside came back while a later switch was out", async () => {
+    const { stored, getDeviceIdentity } = printersServer();
+    // Each switch is stored when sent and answers when the test says.
+    const answers: (() => void)[] = [];
+    const setDevicePrinters = vi.fn((change: Partial<typeof stored>) => {
+      Object.assign(stored, change);
+      const answered = { ...stored };
+      return new Promise((resolve) => answers.push(() => resolve(answered)));
+    });
+    const el = await openPrinters({ getDeviceIdentity, setDevicePrinters });
+
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
+    await flush(el);
+    emit(printersDialog(el)!, "close");
+    await flush(el);
+    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
+    await flush(el);
+    // The read made because the reopened dialog's read came back while the first switch was out,
+    // which the server answers late.
+    let deliver!: () => void;
+    getDeviceIdentity.mockImplementationOnce(
+      () => new Promise((resolve) => (deliver = () => resolve({ ...identity, ...stored }))),
+    );
+    answers[0]!();
+    await flush(el);
+    emit(printersDialog(el)!, "printers-change", { paymentSlipPrinterId: "S2" });
+    await flush(el);
+    answers[1]!();
+    await flush(el);
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    await flush(el);
+    stored.receiptPrinterId = "P3";
+    deliver();
+    await flush(el);
+    answers[2]!();
+    await flush(el);
+
+    expect(printersDialog(el)!.receipt.current).toBe("P3");
+    expect(printersDialog(el)!.paymentSlip.current).toBe("S2");
+  });
+
+  /** A switch to receipt P2 the reopened dialog's read of the device came back during, so its
+   * answer is set aside, and the read made once it answers fails. */
+  async function switchSetAsideThenReadFails() {
+    const { stored, getDeviceIdentity } = printersServer();
+    let release!: () => void;
+    const setDevicePrinters = vi.fn(
+      (change: Partial<typeof stored>) =>
+        new Promise((resolve) => {
+          release = () => {
+            Object.assign(stored, change);
+            resolve({ ...stored });
+          };
+        }),
+    );
+    const el = await openPrinters({ getDeviceIdentity, setDevicePrinters });
+    const reopen = async () => {
+      emit(printersDialog(el)!, "close");
+      await flush(el);
+      shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
+      await flush(el);
+    };
+
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    await flush(el);
+    await reopen();
+    expect(printersDialog(el)!.receipt.current).toBe("P-off");
+    getDeviceIdentity.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    release();
+    await flush(el);
+    expect(stored.receiptPrinterId).toBe("P2");
+    return { el, getDeviceIdentity, setDevicePrinters, reopen };
+  }
+
+  it("reads the device once after a switch it set aside, once per failed opening, and a later opening shows what the server stored", async () => {
+    const { el, getDeviceIdentity, reopen } = await switchSetAsideThenReadFails();
+
+    expect(getDeviceIdentity).toHaveBeenCalledTimes(4);
+    getDeviceIdentity.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await reopen();
+    expect(getDeviceIdentity).toHaveBeenCalledTimes(5);
+    await reopen();
+    expect(printersDialog(el)!.receipt.current).toBe("P2");
+  });
+
+  it("reads the device again after the next switch answers, when the read after a switch it set aside failed", async () => {
+    const { el, getDeviceIdentity, setDevicePrinters } = await switchSetAsideThenReadFails();
+
+    setDevicePrinters.mockRejectedValueOnce({
+      field: "paymentSlipPrinterId",
+      code: "device.binding_invalid",
+      status: 400,
+    });
+    emit(printersDialog(el)!, "printers-change", { paymentSlipPrinterId: "S2" });
+    await flush(el);
+
+    expect(getDeviceIdentity).toHaveBeenCalledTimes(5);
+    expect(printersDialog(el)!.receipt.current).toBe("P2");
+    expect(printersDialog(el)!.error).toEqual({
+      code: "device.binding_invalid",
+      field: "paymentSlipPrinterId",
+    });
+  });
+
+  it("shows a switch the server stored when its answer never arrived", async () => {
+    const { stored, getDeviceIdentity } = printersServer();
+    const setDevicePrinters = vi.fn(async (change: Partial<typeof stored>) => {
+      Object.assign(stored, change);
+      throw new TypeError("Failed to fetch");
+    });
+    const el = await openPrinters({ getDeviceIdentity, setDevicePrinters });
+
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
+    await flush(el);
+
+    expect(printersDialog(el)!.error).toEqual({ code: "server.internal" });
+    expect(printersDialog(el)!.receipt.current).toBe("P1");
+  });
+
+  it("does not show a refusal of a switch picked before the dialog was reopened", async () => {
+    let refuse!: (error: unknown) => void;
+    const setDevicePrinters = vi.fn(() => new Promise((_, reject) => (refuse = reject)));
+    const el = await openPrinters({ setDevicePrinters });
+
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    await flush(el);
+    emit(printersDialog(el)!, "close");
+    await flush(el);
+    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
+    await flush(el);
+    refuse({ field: "receiptPrinterId", code: "device.binding_invalid", status: 400 });
+    await flush(el);
+
+    expect(printersDialog(el)!.error).toBeNull();
   });
 
   it("closes the dialog when the operator logs out", async () => {
