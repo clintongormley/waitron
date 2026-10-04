@@ -1266,6 +1266,22 @@ it("numbers categories sharing a path in the order the list draws them, each und
     "Food / Mains (2 of 2)",
   );
 });
+it("shows a shared category name literally beside its number, even when it reads like a placeholder", async () => {
+  const name = "Mains $& {position} {total}";
+  const el = await mountBrowser({
+    categories: [folder("m1", name, null), folder("m2", name, null), folder("m3", name, null)],
+    products: [],
+  });
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "m2", folders: 0, products: 1, activeProducts: 1, routes: 0 },
+  ]);
+  await selectKeys(el, ["folder:m2"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  expect(el.shadowRoot!.querySelector('[data-test="deleting"] li')!.textContent!.trim()).toBe(
+    `${name} (2 of 3)`,
+  );
+});
 it("asks before deleting a category holding only inactive products, and counts none of them as deleted", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.summariseFolders).mockResolvedValue([
@@ -1361,9 +1377,76 @@ it("deletes nothing when the second read leaves a category out", async () => {
   await press(el, "delete");
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   await press(el, "confirm");
-  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull());
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+      en["folders.summary_error"],
+    ),
+  );
   expect(dialog(el)).not.toBeNull();
   expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+});
+it("deletes nothing when the second read fails without a code, and says the contents could not be read", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders)
+    .mockResolvedValueOnce([{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1 }])
+    .mockRejectedValue(new TypeError("unreadable reply"));
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+      en["folders.summary_error"],
+    ),
+  );
+  expect(dialog(el)).not.toBeNull();
+  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+});
+it("deletes nothing when the second read's reply is not a list, and says the contents could not be read", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders)
+    .mockResolvedValueOnce([{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1 }])
+    .mockResolvedValue({} as never);
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+      en["folders.summary_error"],
+    ),
+  );
+  expect(dialog(el)).not.toBeNull();
+  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+});
+it("after a failed second read keeps Delete enabled, and pressing it again reads again and deletes", async () => {
+  const el = await mountBrowser();
+  const shown = { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1 };
+  vi.mocked(el.api.summariseFolders)
+    .mockResolvedValueOnce([shown])
+    .mockRejectedValueOnce(new TypeError("unreadable reply"))
+    .mockResolvedValue([shown]);
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+      en["folders.summary_error"],
+    ),
+  );
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector("[data-test=confirm]")!.getAttribute("disabled"),
+    ).toBeNull(),
+  );
+  await press(el, "confirm");
+  await vi.waitFor(() => expect(el.api.deleteCatalogueItems).toHaveBeenCalledOnce());
+  expect(el.api.summariseFolders).toHaveBeenCalledTimes(3);
+  expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+    { productIds: [], categoryIds: ["d"] },
+    "move_up",
+  );
 });
 it("deletes a folder through its own row action", async () => {
   const el = await mountBrowser();

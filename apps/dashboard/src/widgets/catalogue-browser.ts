@@ -274,12 +274,22 @@ export class CatalogueBrowser extends LitElement {
       this.operationBusy = false;
     }
   }
-  /** When what the dialog showed has changed, shows the new counts instead. */
+  /** When what the dialog showed has changed, shows the new counts instead; when it cannot be read
+   * again, says so and leaves Delete to try again. A refusal carrying a code is left to the caller. */
   async #unchanged(): Promise<boolean> {
     const ids = this.operationSelection.categoryIds;
-    const read = await this.api.summariseFolders(ids);
-    const fresh = ids.map((id) => read.find((summary) => summary.id === id));
-    if (fresh.some((summary) => summary === undefined)) throw new Error("incomplete summary");
+    let read: unknown;
+    try {
+      read = await this.api.summariseFolders(ids);
+    } catch (error) {
+      if (codeOf(error, "") !== "") throw error;
+    }
+    const list: FolderSummary[] = Array.isArray(read) ? read : [];
+    const fresh = ids.map((id) => list.find((summary) => summary.id === id));
+    if (fresh.some((summary) => summary === undefined)) {
+      this.operationError = t("folders.summary_error");
+      return false;
+    }
     const same = fresh.every((summary, index) => {
       const shown = this.summaries[index];
       return (
@@ -326,10 +336,16 @@ export class CatalogueBrowser extends LitElement {
       const path = pathOf.get(id) ?? "";
       const same = sharing.get(path) ?? [];
       if (same.length < 2) return path;
-      return t("folders.path_ordinal")
-        .replace("{path}", path)
-        .replace("{n}", String(same.indexOf(id) + 1))
-        .replace("{count}", String(same.length));
+      const values: Record<string, string> = {
+        path,
+        position: String(same.indexOf(id) + 1),
+        total: String(same.length),
+      };
+      // One pass with a function replacement: a `$&` or `{total}` in a name stays literal.
+      return t("folders.path_ordinal").replace(
+        /\{(\w+)\}/g,
+        (whole, name: string) => values[name] ?? whole,
+      );
     });
   }
   #operationDialog() {
