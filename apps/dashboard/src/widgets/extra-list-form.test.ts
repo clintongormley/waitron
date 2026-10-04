@@ -1016,11 +1016,12 @@ it("shows the staff name, in italic, for every language on the closed line while
   });
   const section = disclosure(el);
   await section.updateComplete;
-  expect(
-    [...section.shadowRoot!.querySelectorAll(".summary-placeholder")].map(
-      (part) => part.textContent,
-    ),
-  ).toEqual(["Add-ons", "Add-ons"]);
+  const placeholders = [...section.shadowRoot!.querySelectorAll(".summary-placeholder")];
+  expect(placeholders.map((part) => part.textContent)).toEqual(["Add-ons", "Add-ons"]);
+  expect(placeholders.map((part) => getComputedStyle(part).fontStyle)).toEqual([
+    "italic",
+    "italic",
+  ]);
 
   await type(el, "name", "Toppings");
   expect(namesShown(el)).toEqual({
