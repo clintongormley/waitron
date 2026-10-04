@@ -1215,7 +1215,7 @@ reorderable tables still centre their handles; (3) the editor refuses a blank Po
 but Each while the server accepts none for a whole unit with no scale link (ml) and stores 1.
 
 **A folded Customer-facing names section shows every language's name, inherited ones in italic
-(W77, owner 2026-10-04) — DONE.** The owner, on an Extras list: _"missing the summary of the values
+(W77, owner 2026-10-04) — DONE (#1197).** The owner, on an Extras list: _"missing the summary of the values
 (even though they're inherited, not filled in currently)"_. The closed line of the Extras and
 Options list forms' names sections now names every content language in order: its own name, or
 else, in italic, what the open field hints while empty — the default language's name, then the
@@ -1225,6 +1225,11 @@ stay blank and what is saved is unchanged.
 Audited: the only other folded section holding customer-facing names is the Product editor's
 Descriptors section, whose Name row says "None specified" for a blank language by A211's decision;
 left as it is (asked of the owner, 2026-10-04).
+Left OPEN from its review: a name stored under a regional code such as `en-GB` is accepted by the
+server's API and used by the customer-facing resolver for English, but the form's fields, their
+hints and this line read only the plain code (`en`), so for such a list the line shows the staff
+name. The dashboard never writes regional codes, and the fields behaved so before W77. Next step,
+for the owner: should the server refuse or normalise a regional key, or the form read it?
 
 **Clicking a product's row on the Products screen opens it (A205) — DONE in A208.**
 
