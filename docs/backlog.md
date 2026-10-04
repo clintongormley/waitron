@@ -2479,6 +2479,18 @@ built.
 
 ### W41s. A fiscal chain that AEAT disagrees with — DESIGN FOR OWNER REVIEW (2026-10-03)
 
+**Update, 2026-10-04:** the owner requires prevention before conflict recovery, including an
+old-backup restore on new hardware with no internet. The
+[revised design](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md)
+records manual recovery, a paper allocation register in the recovery pack, an optional cloud
+registry reachable by phone, emergency random series and an explicit later switch to a fresh
+short series. Device evidence is optional. Matching invoice date and amounts no longer excuse
+a fingerprint mismatch. Q5(f) and Q33–Q40 in the adviser document are revised, and Q41 covers
+issued invoices missing from the backup. **Next action:** settle the remaining automatic-recovery,
+corrective-workflow and emergency-identity decisions, review the revised spec, then revise the
+plan. No new live probes have been run. The following paragraph records the 2026-10-03 state;
+its old next action and allocation assumptions are superseded by this update.
+
 The owner asked (2026-10-03, on W21's review) how a chain AEAT disagrees with can happen, how to
 prevent it, how to recover, and how to put things right with AEAT; today `drain.ts` stops such a
 chain for good and the alert says "Contact support". The

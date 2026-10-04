@@ -9,6 +9,17 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
+On **2026-10-04** (W41s prevention and offline recovery): **Q5(f) and Q33–Q40 revised; Q41
+added** for issued invoices missing from a restored backup. The current formulations below
+replace the 2026-10-03 proposals where they differ. They cover a paper allocation register in
+the recovery pack, an optional cloud registry, emergency series and evidence of recovery.
+Q38 no longer treats matching amounts as proof of the same sale. Q40(c) now distinguishes the
+documented `SinRegistroPrevio` operation from the legal question of when to use it. See the
+[revised design](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md).
+These are proposed procedures, not implemented features or legal clearance. The standalone
+English and Spanish Word copies have **not** been updated in this pass; regenerate them from
+these questions before sending them. No enquiry has been sent.
+
 On **2026-10-03** (W41s, the design for a fiscal chain AEAT disagrees with): **Q33 to Q40 added**
 in a new section, *Recovering from conflicts*. They replace the ten questions the design listed in its
 §10. Later the same day **Q5(f)** was added, on how new series are named. The standalone copy (the
@@ -536,25 +547,37 @@ it is the case where a single till needs two series (and, per art. 7.c, still on
 > nuevo y empieza una cadena nueva. Además, cerramos sus series y abrimos otras nuevas. ¿Es
 > admisible abrir series nuevas por este motivo? ¿Debe documentarse la razón en algún sitio?
 
-**(f), added 2026-10-03 (W41s, design decision D9).** New series are now opened in a second case as
-well: when the software switches to a new installation number after AEAT reports a collision (Q33).
-The owner decided how they are named: the prefix chosen at setup, then the same prefix with a
-number, `FS`, `FS-2`, `FS-3`, rather than a code carrying the installation number
-(`FS-213192000`), which made unreadable invoice numbers. Before a code is used, the software checks
-that its own records, the tills and AEAT (whether invoice number 1 of that series exists, month by
-month since October 2024) show no earlier use. Setup also refuses a prefix AEAT already holds for
-the tax ID. What (e) does not cover: a new series opened because of a collision rather than a
-restore, and whether this naming is acceptable.
+**(f), added 2026-10-03; revised 2026-10-04.** Recovery must work on new hardware with an old
+backup and no internet. The proposed allocation history lives outside that backup: a paper
+register in the recovery pack, or a cloud registry for customers who subscribe. An administrator
+can reserve an allocation on a phone over cellular service and enter it into the offline box.
+Subscribers can also keep allocations reserved in advance on paper. Customers without the
+service rely on paper. Device reports and AEAT lookups are additional evidence; absence from
+either is not a reservation or proof of non-use.
 
-> **(f)** *(añadida el 03-10-2026)* También abrimos series nuevas cuando el sistema cambia de nº de
-> instalación tras detectar un conflicto con la AEAT (Q33). Las nombramos con el prefijo que eligió
-> el titular seguido de un número correlativo: FS, después FS-2, FS-3, y antes de usar una
-> comprobamos que no consta en nuestra base de datos, en los TPV ni en la AEAT (consultando si
-> existe la factura número 1 de esa serie en cada mes desde octubre de 2024).
+The owner accepted short sequential codes when allocation history is available and longer random
+emergency codes when it is not. Randomness reduces collision risk; it does not prove a code has
+never been used. Returning to a short code is an explicit change to a freshly allocated series,
+never a return to the old potentially reused series. The exact emergency format remains a
+technical design question. Q33 covers installation identity and the recovery evidence.
+
+> **(f)** *(revisada el 04-10-2026)* Tras una restauración o un conflicto abrimos series nuevas.
+> Proponemos llevar las asignaciones fuera de la copia restaurada: en un registro en papel dentro
+> del paquete de recuperación, o en un servicio opcional en la nube. Un administrador puede
+> reservarlas desde su teléfono y transcribirlas al equipo sin Internet; también puede usar una
+> reserva previa en papel. Las asignaciones abandonadas no se reutilizan.
 >
-> - (i) ¿Es este motivo, igual que la restauración de (e), razón suficiente para abrir series nuevas?
-> - (ii) ¿Hay algún inconveniente en este formato de serie? ¿Debe reflejar de algún modo el nº de
->   instalación o el año?
+> Cuando consta el historial, preferimos códigos cortos: FS, FS-2, FS-3. Si no hay historial
+> fiable, proponemos un prefijo de emergencia más largo y aleatorio, con numeración correlativa
+> dentro de esa serie. Más adelante el administrador puede cerrar esa serie y abrir otra nueva
+> con un código corto, sin renumerar las facturas emitidas ni retomar una serie antigua.
+>
+> - (i) ¿Son la restauración, el conflicto y el posterior cambio de la serie de emergencia a una
+>   serie corta motivos suficientes para abrir series nuevas? ¿Cómo deben justificarse?
+> - (ii) ¿Hay algún inconveniente fiscal en estos formatos? ¿Deben incluir el año o el nº de
+>   instalación, aparte de respetar los límites técnicos del formato de remisión?
+> - (iii) Si al pasar de la serie de emergencia a la corta se mantiene la misma instalación y su
+>   cadena, ¿basta con documentar el cambio de serie? ¿Exige este supuesto alguna otra actuación?
 
 ---
 
@@ -1815,29 +1838,37 @@ Sources checked 2026-09-09:
 and [external test portal](https://preportal.aeat.es/PRE-Exteriores/Inicio/Inicio.html).
 This records a question; no enquiry has been sent.
 
-## RECOVERING FROM CONFLICTS — when AEAT holds something we did not send (added 2026-10-03)
+## PREVENTING AND RECOVERING FROM CONFLICTS (added 2026-10-03; revised 2026-10-04)
 
-**Why this section exists.** The design for W41s
-(`../superpowers/specs/2026-10-03-fiscal-chain-divergence-design.md`) covers what the software does
-when AEAT comes to hold, under one of the restaurant's invoice numbers, a record that is not the one
-in the restaurant's database. The questions below are what that design could not settle from AEAT's
-or the BOE's own texts. Each one states what the software does until it is answered. None blocks the
-build.
+**Why this section exists.** W41s now starts with preventing identity reuse during ordinary
+operation and disaster recovery. The [2026-10-04 design update](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md)
+records the owner's offline requirements and distinguishes agreed decisions from remaining
+proposals. Q33–Q40 still ask how to recover when prevention fails; Q41 covers missing history
+even when no identity is reused. Proposed defaults below are not claims about shipped behaviour
+or conclusions that the adviser has approved.
 
-**How it happens.** Usually an older copy of the restaurant's database is put back into use: a box
+**How it can happen.** An older copy of the restaurant's database is put back into use: a box
 rolled back to a disk snapshot, a copied disk started on a second machine, or a second box set up
 under the same tax ID. The older copy does not know about the last invoices that were sent, so it
 issues the same invoice numbers again. AEAT identifies an invoice by tax ID + number + issue date
 ([verifactu-findings.md](verifactu-findings.md) §1, *Record identity and duplicates*), so:
 
 - the same number on the **same** date: AEAT refuses the second record as a duplicate (error 3000);
-- the same number on a **different** date: AEAT accepts both.
+- the same number on a **different** date: the invoice keys differ, so duplicate-key detection
+  alone does not catch the number reuse. Other validation can still reject either record.
 
-**What the software does.** When it detects a collision, it stops adding to that installation's
-chain and switches to an installation number never used before. That is a new SIF in the sense of
-FAQ §4, and its first record carries `PrimerRegistro = S`. It also opens new invoice series whose
-codes are checked unused before they are taken (Q5 f). Sales are never interrupted. The old installation's
-chain stays as it is.
+**The proposed recovery.** An administrator declares a database or disk restore, confirms that
+the old machine is offline and that no other recovery is in progress, and allocates a new
+installation identity and invoice series before trading resumes. Q5(f) describes the paper,
+optional cloud and emergency routes. Neither internet access nor pairing surviving tills is a
+prerequisite. A last-seen invoice is a lower bound on issued numbers, not proof of the final
+invoice. A continuity file restored from the same disk supplies no independent history.
+
+For an unexpected conflict detected during trading, the original D1 proposed an automatic
+switch with a 24-hour loop guard. Its interaction with allocation and competing machines is
+still under design review. A new identity does not by itself stop an old machine from selling.
+Available original records and AEAT replies are preserved. Missing history is investigated
+separately; opening a new series does not recover it.
 
 **Settled, so not asked here.** Sending late after an incident ([verifactu-findings.md](verifactu-findings.md)
 §2). That a cancellation or correction may come from a different SIF than the original invoice (§13).
@@ -1848,35 +1879,44 @@ chain ends is Q7's second part.
 
 ### Q33. Switching to a new installation number when a collision is found (added 2026-10-03)
 
-**Why it matters.** Starting a new chain is the core of the design. AEAT's FAQ (§4) describes a new
-installation number only for a reinstall, and warns against using a SIF «de forma dinámica», meaning
-switching per session, per day or per invoice. Our switch is permanent, but the software makes it
-by itself. Q7 already asks what happens when a chain ends; this asks whether the automatic switch is
-acceptable. **If the answer is no,** the switch becomes a step an administrator confirms (design
-decision D1), and the box keeps colliding until someone does.
+**Why it matters.** Q7 covers installation lifecycle and chain retirement. This question adds
+an unexpected conflict and the evidence needed for an offline recovery. The proposed new
+identity is allocated independently of the restored database; a timestamp alone is not treated
+as proof of uniqueness. The emergency identity format is still to be designed. The adviser is
+being asked about the justification and evidence, not to validate an allocation algorithm.
 
-> Nuestro sistema identifica cada SIF por NIF + Id.SIF + nº de instalación, usa como nº de
-> instalación una marca de tiempo (FAQ de desarrolladores, §4) y lleva una única cadena por SIF
-> (Orden HAC/1177/2024, art. 7.c).
+> Nuestro sistema identifica cada SIF por NIF + Id.SIF + nº de instalación y mantiene su cadena
+> de registros. Una recuperación declarada desde una copia antigua requiere la intervención de
+> un administrador y una nueva asignación de identidad y series según Q5(f).
 >
 > Si detecta que la AEAT tiene, con uno de nuestros números de factura, un registro distinto del
-> nuestro (por ejemplo, porque se ha vuelto a poner en marcha una copia antigua de la base de datos
-> que ha repetido números ya usados), deja de añadir registros a esa cadena y pasa automáticamente a
-> un nº de instalación nuevo, nunca usado, cuyo primer registro lleva `PrimerRegistro` = "S", con
-> series de facturación nuevas que comprobamos que no se han usado antes (Q5 f). La facturación no se
-> interrumpe. La cadena anterior se conserva intacta, junto con las respuestas de la AEAT y un
-> registro interno de cuándo, por qué y con qué factura se produjo el conflicto. No se comunica nada
-> a la AEAT.
+> nuestro, proponemos dejar de añadir registros a esa cadena y pasar a una identidad y series
+> nuevas. Para este conflicto imprevisto estamos valorando un cambio automático, con un límite de
+> una vez cada 24 horas y una vía manual. Conservamos los registros originales disponibles, las
+> respuestas de la AEAT y el motivo y momento del cambio. El cambio de identidad no demuestra por
+> sí solo que otro equipo haya dejado de facturar.
 >
 > **(a)** La FAQ §4 contempla un nº de instalación nuevo al reinstalar el software, y advierte que no
 > debe resultar posible una «utilización dinámica del SIF». ¿Es admisible que el propio sistema
 > cambie de nº de instalación al detectar un conflicto, como máximo una vez cada 24 horas, y que un
 > administrador pueda hacerlo también manualmente?
 >
-> **(b)** Si la AEAT pide justificarlo (Orden, art. 16.4), ¿bastan las respuestas de la AEAT y
-> nuestro registro interno, o conviene conservar algo más?
+> **(b)** En una recuperación sin Internet proponemos guardar el motivo, la copia restaurada y su
+> fecha, las identidades y series asignadas, quién las asignó y cuándo, las reservas abandonadas,
+> y la declaración del administrador de que el equipo antiguo está fuera de servicio y no hay
+> otra recuperación simultánea. El registro en papel se conserva con la clave de emergencia,
+> sin incluir esa clave en los informes del incidente. Si hay servicio en la nube, se guarda
+> también el justificante de reserva. ¿Qué documentación adicional se exige o recomienda, dónde
+> debe conservarse y durante cuánto tiempo?
+>
+> **(c)** Si sólo quedan una copia antigua y la declaración del administrador, sin un historial
+> completo de asignaciones, ¿qué justificación exige la recuperación con identidades de
+> emergencia? ¿Hay alguna comunicación adicional a la AEAT por la incidencia, aparte de lo ya
+> preguntado en Q7 sobre el fin de una cadena?
 
-**Default until answered:** yes to both.
+**Proposed treatment pending answers:** retain the available evidence and the administrator's
+declaration without claiming that they satisfy every legal obligation. D1's automatic-conflict
+policy remains under review; the declared-restore procedure is administrator-led.
 
 This records a question; no enquiry has been sent.
 
@@ -1884,19 +1924,16 @@ This records a question; no enquiry has been sent.
 
 ### Q34. Sending the old installation's unsent records after the switch (added 2026-10-03)
 
-**Why it matters.** When the switch happens, the old installation usually has records AEAT has not
-received yet: the sales made between the colliding record and AEAT's answer to it. That is normally a
-minute's worth, but hours' worth after an internet outage. Each is final: the customer has the
-ticket and its QR code, and RD 1007/2023 art. 8.2.a forbids changing a record. Some of them link to a
-record of ours that AEAT does not hold, because AEAT holds the other copy's record under that
-number. Whether AEAT checks a link against what it holds is not stated anywhere; we will test it on
-AEAT's test service first. Sending late after an incident is settled (findings §2), so that is not
-asked. **If the answer is no,** the only alternative we can see is regenerating them, which the
-regulation forbids; we would need the asesor's alternative. Design decision D5 rests on this.
+**Why it matters.** After a conflict or a declared restore, surviving records from the old
+installation may still need filing. Some may link to a record AEAT rejected or holds differently.
+D5 proposes sending the surviving records unchanged. The live tests must distinguish those
+cases and have not been run for this revision. If this treatment is inappropriate, the adviser
+must identify the remedy without assuming that existing records can be rewritten. Q41 deals
+with records missing entirely, which this procedure cannot send. Late submission itself is
+already covered by the findings, §2.
 
-> Cuando el sistema cambia de nº de instalación (Q33), la instalación anterior suele tener registros
-> ya generados que la AEAT aún no ha recibido: las ventas hechas entre el registro en conflicto y la
-> respuesta de la AEAT, que tras un corte de Internet pueden ser las de varias horas. Cada uno
+> Tras un conflicto (Q33) o una recuperación desde una copia antigua, pueden quedar registros
+> originales de la instalación anterior pendientes de remisión. Cada uno
 > corresponde a una factura ya entregada, con su QR, y no puede modificarse (RD 1007/2023, art.
 > 8.2.a). Algunos enlazan con un registro nuestro que la AEAT no tiene, porque con ese número la
 > AEAT tiene el registro de la otra copia.
@@ -1909,7 +1946,9 @@ regulation forbids; we would need the asesor's alternative. Design decision D5 r
 > ¿Es correcto remitirlos así, incluidos los que enlazan con un registro que la AEAT tiene en otra
 > versión? ¿O el cambio de instalación exige otro tratamiento para ellos?
 
-**Default until answered:** send them unchanged, oldest first, never regenerated.
+**Proposed default:** send surviving original records unchanged, in generation order within
+each chain. D5 remains conditional on the adviser answer and live probes; this is not a claim
+that an untested link will be accepted.
 
 This records a question; no enquiry has been sent.
 
@@ -1917,14 +1956,14 @@ This records a question; no enquiry has been sent.
 
 ### Q35. Two real invoices with the same number and the same date (added 2026-10-03)
 
-**Why it matters.** This is the collision that leaves a real sale missing at AEAT, and no source
-covers it. Every corrective record names the invoice it corrects by tax ID + number + date, so it
-would act on the *other* invoice AEAT holds under that key: a cancellation would cancel another
-customer's real sale (we confirmed this against our model of AEAT), a credit note would amend it, and
-a correction record (*subsanación*) would overwrite it. The design's first draft proposed a credit
-note naming our invoice; that would have reached the other invoice, so it was withdrawn. Restaurant
-customers are usually anonymous, so the diner holding the affected ticket usually cannot be found.
-Building whichever remedy the asesor picks is a separate piece of work.
+**Why it matters.** In this scenario two real sales share an invoice identity, and AEAT holds
+only the first. A cancellation targets that identity; a credit note is a new invoice but would
+reference the same ambiguous identity. A correction record (*subsanación*) would address the
+record already held. The original W41s research did not establish an appropriate remedy for
+the second sale. This question considers anonymous customers who cannot be contacted, then
+asks whether an identified recipient changes the answer.
+The revised recovery design must account for the chosen remedy; its implementation scope is
+still to be agreed.
 
 > Nuestras ventas son facturas simplificadas (F2), normalmente sin identificar al cliente. Una
 > copia antigua de la base de datos expide, un día dado, la factura FS/120 al cliente B, cuando el
@@ -1932,9 +1971,9 @@ Building whichever remedy the asesor picks is a separate piece of work.
 > y los dos clientes tienen su ticket con QR. La AEAT recibió primero la de A y rechaza la de B con el
 > error 3000: nunca tendrá la de B, y el QR del ticket de B remite a la factura de A.
 >
-> Toda rectificativa, anulación o subsanación identifica la factura por NIF + número + fecha de
-> expedición, así que cualquiera de ellas actuaría sobre la factura de A: la anulación anularía la
-> venta de A, la rectificativa la modificaría y la subsanación la sustituiría. No encontramos ningún
+> La referencia a la factura original es NIF + número + fecha de expedición. La anulación
+> identificaría el registro de A y la subsanación se dirigiría a ese registro. La rectificativa
+> sería una factura nueva, pero referenciaría esa misma identidad ambigua. No encontramos ningún
 > texto que contemple dos facturas reales con el mismo número; además, la numeración correlativa que
 > exige el art. 7.1.a del RD 1619/2012 haría defectuoso el ticket de B.
 >
@@ -1958,9 +1997,9 @@ This records a question; no enquiry has been sent.
 
 ### Q36. The same number reused on a different date (added 2026-10-03)
 
-**Why it matters.** Here AEAT raises nothing, because the two invoices have different keys. Nothing
-is missing at AEAT, but the series is no longer correlative. The software can only find these by
-asking AEAT, and the design has gaps in how it does so (decision D7).
+**Why it matters.** In this scenario AEAT has accepted both records under different invoice
+keys, but the series has reused a number. A lookup or surviving receipts and device evidence may
+expose the reuse. None is assumed to provide a complete history after an offline restore.
 
 > Como en Q35, pero la copia antigua reutiliza el número otro día: la FS/120 de A es del 9 de marzo
 > y la de B del 10 de marzo. Para la AEAT son facturas distintas y acepta las dos, de modo que tiene
@@ -1969,8 +2008,8 @@ asking AEAT, and the design has gaps in how it does so (decision D7).
 > La AEAT tiene las dos, pero la serie ya no es correlativa (RD 1619/2012, art. 7.1.a). ¿Debe
 > expedirse o remitirse algo para la factura de B? ¿Es la respuesta la misma que en Q35?
 
-**Default until answered:** nothing is filed; the invoice is listed for the adviser. The software
-never reuses a number within a series, whatever the date.
+**Proposed default:** make no additional filing automatically; list the invoice for the adviser.
+The prevention design retires series whose continuation cannot be established after a restore.
 
 This records a question; no enquiry has been sent.
 
@@ -1985,8 +2024,9 @@ record fields (case 2.b); such a correction came back `Correcto` from AEAT's tes
 a wrong registered name and an issue date in the future, are both printed invoice content (RD
 1619/2012 art. 7.1.b and 7.1.d), so they look like case 2.a. A credit note here does not have Q35's
 problem: AEAT holds nothing under the refused invoice's key. Whether AEAT accepts a credit note
-naming an invoice it never received has not been tested. Building either remedy is a separate piece
-of work.
+naming an invoice it never received remains a live-probe question. The original plan excluded
+the correction-record builder; the revised scope must explicitly decide how operators resolve
+these rejections. Advancing the queue does not resolve the rejected invoice.
 
 > La FAQ de desarrolladores, §17, distingue: si el error está previsto en el ROF (caso 2.a), se
 > expide una factura rectificativa y el registro rechazado no se toca; si sólo afecta a campos
@@ -2005,9 +2045,15 @@ of work.
 >
 > **(b)** En el caso (1), ¿basta una rectificativa por sustitución con la razón social correcta, o
 > hace falta otra cosa?
+>
+> **(c)** ¿Qué debe hacer y conservar el restaurante mientras se corrige el rechazo y cómo debe
+> reflejarlo en sus libros y declaraciones? Distinguimos la remisión de las facturas posteriores
+> de la resolución de esta factura: continuar enviando no la da por resuelta.
 
-**Default until answered:** nothing is issued. The refused record stays as it is, an alert names the
-invoice and AEAT's reason, and later records keep being sent (design decision D2).
+**Proposed interim treatment:** preserve the rejected record and response, show the invoice as
+unresolved, and require an explicit corrective action. D2 proposes continuing later submissions
+after a definitive rejection, conditional on the live test. An unknown outcome remains a
+different case. No automated choice of legal remedy is approved by this question.
 
 This records a question; no enquiry has been sent.
 
@@ -2015,14 +2061,14 @@ This records a question; no enquiry has been sent.
 
 ### Q38. The same sale recorded a second time (added 2026-10-03)
 
-**Why it matters.** One way this happens: a till pays for an order, the box records the sale and
-sends it, but the till never gets the reply; the box is then rolled back to a copy where the order is
-still unpaid, and the till's retry records the sale again. That is a reading of
-`apps/server/src/till-sale.ts`, not a test. There was one sale and one customer, and the customer's
-QR code matches what AEAT holds. AEAT's lookup reply carries the stored record's total, tax and
-generation time (`RespuestaConsultaLR.xsd`), so the software can tell this case from Q35.
+**Why it matters.** A lost reply followed by an old-backup restore can leave an operator
+investigating whether one sale was recorded twice. Matching invoice date, amount and tax do not
+distinguish that from two real sales. This question assumes independent evidence has established
+one sale; it does not authorise automatic classification. Until then, a fingerprint mismatch
+remains a conflict requiring investigation.
 
-> Una copia antigua de la base de datos registra por segunda vez una venta que la AEAT ya tiene:
+> Tras investigar con pruebas independientes de la mera coincidencia de fecha e importes,
+> establecemos que una copia antigua registró por segunda vez una única venta que la AEAT ya tiene:
 > mismo número, fecha, líneas e importe, pero generada en otro momento y con otro encadenamiento, y
 > por tanto con otra huella (y, si el sistema ya cambió de instalación, con otro nº de instalación).
 > La AEAT rechaza el segundo registro con el error 3000. Hubo una sola venta y un solo cliente, y su
@@ -2035,9 +2081,12 @@ generation time (`RespuestaConsultaLR.xsd`), so the software can tell this case 
 >
 > **(b)** ¿Cuenta nuestro duplicado rechazado como un registro «sin remitir» (FAQ §5), si la AEAT
 > tiene la misma venta con la misma factura?
+>
+> **(c)** ¿Qué pruebas deben conservarse para justificar que se trata de una sola venta?
 
-**Default until answered:** leave AEAT's record as it is and note locally that it stands for this
-invoice.
+**Proposed interim treatment:** preserve both available versions and the response; make no
+automatic replacement or statement that the AEAT record represents the local sale. Record the
+investigation and its evidence. If that evidence is inconclusive, keep the conflict unresolved.
 
 This records a question; no enquiry has been sent.
 
@@ -2045,10 +2094,10 @@ This records a question; no enquiry has been sent.
 
 ### Q39. AEAT holds a sale that never happened (added 2026-10-03)
 
-**Why it matters.** The software cannot tell a phantom sale from a real sale its database has lost:
-after a rollback, AEAT holds the real sales made after the copy was taken, and the box has no record
-of them. Those must never be cancelled. Only someone at the restaurant can tell which is which, so
-a cancellation is only ever a step a person confirms. That a cancellation may come from a different
+**Why it matters.** Absence from a restored database does not establish that a sale never happened.
+AEAT may hold real sales made after the backup. The proposed procedure requires evidence and a
+person's confirmation before cancelling an alleged phantom sale; if the evidence is insufficient,
+it remains unresolved. That a cancellation may come from a different
 SIF than the one that issued the invoice is settled (findings §13), so it is not asked.
 
 > La AEAT tiene, con uno de nuestros números de factura, un registro que no corresponde a ninguna
@@ -2078,45 +2127,102 @@ This records a question; no enquiry has been sent.
 
 ### Q40. Records the software deliberately keeps back (added 2026-10-03)
 
-**Why it matters.** A void or a refund of an invoice that collided as in Q35 would act on the other
-customer's invoice at AEAT, so the software never sends one. Staff can still make one at the till
-(design decision D4, owner 2026-10-03), so the order is cancelled and the bill settled as usual; the
-record is kept back and listed beside the invoice it names. That is in tension with FAQ §5's «no
-pueden quedar RF generados sin remitir a la AEAT». Part (c) is a different case: a void of an
-invoice AEAT refused. Sending it and keeping AEAT's refusal leaves nothing unsent and harms nobody.
-The design's first draft would have held that back too.
+**Why it matters.** In Q35, a cancellation would target the invoice AEAT holds under the shared
+key, and a credit note would refer to that same ambiguous identity. D4 proposes allowing the
+staff action while holding its fiscal submission for resolution. That leaves a question about
+the obligation to submit generated records, and about how to resolve the held record later.
 
-> El sistema registra una anulación cuando se anula un ticket y una rectificativa cuando se
-> devuelve; las dos identifican la factura original por NIF + número + fecha, y sólo se remiten
-> cuando la AEAT ha aceptado la original. Si la original resulta ser una de las facturas en conflicto
-> de Q35 (la AEAT tiene otra factura real con ese número y esa fecha), cualquier anulación o
-> rectificativa actuaría sobre esa otra factura. Por eso el sistema no las remite nunca: el TPV
-> permite anular o rectificar la factura como cualquier otra (el pedido se cancela y la cuenta se
-> salda), pero el registro se retiene sin remitir y se señala al asesor junto a la factura a la que
-> se refiere. Lo mismo ocurre con las que se hicieron antes de detectar el conflicto (por ejemplo,
-> una anulación justo después de la venta durante un corte de Internet).
+**Correction, 2026-10-04:** part (c) originally assumed an absent original inevitably produced
+error 3002. The service specification, §9.2.3, documents `SinRegistroPrevio = S`, including an
+original rejected by AEAT when cancellation is appropriate. Technical support for that operation
+does not establish that a real sale should be cancelled. The source and quotation are recorded
+in the provenance table below.
+
+> Proponemos permitir que el personal registre una cancelación o devolución aunque la factura
+> tenga el conflicto de Q35. Sin embargo, la anulación fiscal identificaría la factura de otro
+> cliente en la AEAT y una rectificativa referenciaría esa misma clave ambigua. Por ello se retiene
+> la remisión del registro generado y se muestra al asesor. También pueden existir registros
+> generados antes de detectar el conflicto, por ejemplo durante un corte de Internet.
 >
 > **(a)** La FAQ §5 dice que «no pueden quedar RF generados sin remitir a la AEAT». ¿Es admisible
-> retener estos registros, dado que remitirlos alteraría ante la AEAT la factura de otro cliente?
+> retener estos registros, dado que identificarían ante la AEAT la factura de otro cliente?
 > ¿Qué conviene conservar para justificarlo?
 >
 > **(b)** Una vez resuelta la factura original según Q35, ¿qué se hace con la anulación o la
 > rectificativa retenida? Por ejemplo, si la venta se expide de nuevo con otro número (opción 1 de
 > Q35), ¿se aplica a la nueva factura?
 >
-> **(c)** Caso distinto: se anula un ticket cuyo registro original la AEAT rechazó (Q37). La AEAT no
-> tiene nada con esa clave, así que rechazará la anulación (error 3002, el registro no existe).
-> ¿La remitimos igualmente y conservamos el rechazo, la retenemos, o se trata la anulación de otro
-> modo? Por ejemplo, ¿deja entonces de ser necesaria la rectificativa del caso 2.a?
+> **(c)** Caso distinto: la AEAT rechazó el alta original y no tiene ningún registro con esa clave
+> (Q37). La especificación del servicio, §9.2.3, permite una anulación con `SinRegistroPrevio = S`
+> cuando proceda anular. ¿En qué supuestos concretos de nuestro restaurante corresponde esa
+> anulación y en cuáles debe emitirse una rectificativa o una subsanación? Distinguimos una
+> operación real posteriormente devuelta de una factura emitida por error sin operación real.
+> Si ya se había generado un registro de anulación inadecuado, ¿cómo se resuelve sin modificarlo?
 
-**Default until answered:** a void or refund of a colliding invoice is kept back and listed; a void
-of a refused invoice is sent and AEAT's refusal kept.
+**Proposed interim treatment:** D4's hold for conflicting identities remains subject to answers
+to (a) and (b). For an absent rejected original, remove the blanket instruction to send and expect
+a refusal. Select the remedy on the facts, generate the appropriate new record and preserve any
+earlier record unchanged. The precise operator workflow remains under design review.
 
 This records a question; no enquiry has been sent.
 
 ---
 
+### Q41. Issued invoices missing from the restored backup (added 2026-10-04)
+
+**Why it matters.** Avoiding identity reuse does not recover invoices issued after the backup.
+Some may be held by AEAT, some may survive only
+as customer tickets or payment evidence, and some may have no recoverable detail. A last-seen
+invoice number gives no complete list of those sales or their contents. Q34 covers surviving
+original records; Q35 covers two sales with a shared identity; neither answers this case.
+
+> Tras perder el equipo, restauramos una copia antigua en otro y reanudamos la actividad con
+> nuevas series e identidad. Hay facturas reales expedidas después de la copia que ya no están
+> en la base de datos restaurada. Algunas constan en la AEAT; otras se expidieron sin Internet y
+> nunca llegaron a remitirse. Puede haber tickets, justificantes de cobro o números recordados,
+> pero no necesariamente todos los datos originales ni su encadenamiento.
+>
+> **(a)** ¿Cómo debemos recuperar o documentar las facturas que constan en la AEAT? ¿Qué datos
+> deben conservarse localmente y cómo se reflejan en los libros sin volver a contabilizarlas?
+>
+> **(b)** Para una factura entregada al cliente pero nunca recibida por la AEAT, ¿qué procede si
+> sólo conservamos el ticket o pruebas parciales y no el registro de facturación original?
+> ¿Qué documento o registro debe generarse, con qué identificación y referencias?
+>
+> **(c)** Si no puede reconstruirse el detalle, ¿cómo se documenta la pérdida y se regularizan los
+> libros y declaraciones? ¿Exige alguna comunicación específica a la AEAT, con qué plazo y pruebas?
+>
+> **(d)** Si más tarde aparece el disco original o una copia más reciente, ¿cómo se incorpora lo
+> recuperado sin duplicar facturas, remisiones ni apuntes ya regularizados?
+
+**Proposed interim treatment:** preserve every recovered source and mark the missing period for
+investigation. Do not invent fiscal contents, hashes or links, treat missing sales as cancelled,
+or present new numbering as resolution of the historical loss. The adviser must specify the
+remedy for each evidence case.
+
+This records a question; no enquiry has been sent.
+
+### Sources checked for the 2026-10-04 revision
+
+The recovery-pack and allocation procedures are product proposals. The following external
+claims were checked in primary sources; live-service acceptance remains a separate experiment.
+
+| Source | Source wording | What it establishes here |
+| --- | --- | --- |
+| [AEAT service specification v1.0.3, §9.2.3, p. 71](https://sede.agenciatributaria.gob.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/Veri-Factu_Descripcion_SWeb.pdf#page=71) | “por haber sido rechazado el registro de alta” | Q40(c): cancellation without a prior registered original is documented, provided cancellation is appropriate; original rejection alone does not decide the remedy. |
+| [AEAT developer FAQ v1.3, §17, pp. 35–37](https://sede.agenciatributaria.gob.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/FAQs-Desarrolladores.pdf#page=35) | “La operativa descrita debería ofrecerla el SIF” | Q37: the product design needs a corrective workflow. Which remedy fits each scenario remains the question. |
+
+---
+
 ## Notes for the conversation
+
+- **W41s revision, 2026-10-04:** send the current Q5(f), Q33–Q41 with their shared offline-recovery
+  context. Q38 assumes independent evidence of one sale; Q40(c) no longer asks the adviser to
+  determine whether the API can cancel an absent original. Test-service results can establish
+  protocol behaviour, not the legal remedy. Refresh the standalone copies before sending.
+- **Scope of the historical “nothing blocks the build” note below:** it is not approval to treat
+  these new remedies as settled. The revised W41s design and plan still need owner review;
+  D2 and D5 retain their stated verification conditions.
 
 - **Send first, 2026-09-30: Q27, Q28 and Q29** (the backlog's "send now"). They are about table
   service, which is being built now. A table that leaves without paying (service plan Task 17) is

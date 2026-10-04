@@ -3,6 +3,13 @@
 Written **2026-07-26**. Plain action list; the reasoning and sources are in
 [getting-to-production.md](getting-to-production.md).
 
+> **Recovery questions updated, 2026-10-04 (W41s).** Review
+> [Q5(f) and Q33–Q41](asesor-questions.md) before an adviser engagement on recovery. They cover
+> offline restoration, independent paper or optional cloud allocations, missing issued invoices
+> and the remedies after rejection or conflict. These are proposed procedures; the technical
+> probes remain separate from the legal questions. The standalone Word copies need refreshing
+> before they are sent.
+
 > **Updated 2026-08-02.** Step 1 is done — a valid certificate for the deli exists and has been
 > proven to work unattended against AEAT preproduction (see Step 1 and
 > [first-aeat-contact.md](first-aeat-contact.md)). Nothing on this list blocks testing against AEAT
