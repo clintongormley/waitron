@@ -2787,6 +2787,11 @@ goes in a menu beside the table heading, while Menus, Staff and Units put a text
 heading row's trailing edge; the doc only names the exceptions, and whether the rule itself changes
 is the owner's call. And the row-highlight tests focus only the row's own button, so nothing tests
 that a row highlights while another control in it, such as its Actions menu, has focus.
+W79 deleted the two checks that clicking a fixed column's eye left the sort alone, since fixed
+columns no longer have one; W79f puts a check back, on a flat table, in `wt-data-table.test.ts`:
+hiding and showing columns through the Customise dialog keeps the sort column and direction, and
+hiding the sorted column itself (allowed only while another movable column stays shown) stops the
+rows being sorted by it until it is shown again, when the same sort returns.
 
 **Menus list Changes column and top-aligned rows — DONE (W87, owner 2026-10-04).** The Menus list
 has a Changes column when the list is wide enough. A menu with changes since its live version keeps
