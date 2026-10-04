@@ -175,7 +175,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
 
-      /* …and every other interactive control in a clickable row sits ABOVE it, so a click on the
+      /* …and the controls listed below sit ABOVE it in a clickable row, so a click on the
          Edit/Delete menu or the selection checkbox never activates the row. */
       tr.clickable
         td
@@ -533,7 +533,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         line-height: 1;
       }
 
-      /* The hover rules are more specific than this resting band, so they still win over it. */
+      /* The hover and focus rules are more specific than this resting band, so they still win over it. */
       tr.joined td {
         background: var(--wt-color-bg);
       }
