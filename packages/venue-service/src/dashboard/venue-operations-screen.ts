@@ -733,18 +733,22 @@ export class VenueOperationsScreen extends LitElement {
           if (row.kind !== "department") return nothing;
           if (this.tradingNameEditor !== row.department.id)
             return html`<button
-              type="button"
-              part="edit-trading-name"
-              data-test="edit-trading-name"
-              aria-label=${`${row.department.name}: ${t("venue.trading_name")}, ${row.department.tradingName}`}
-              @click=${() => {
-                this.tradingNameDraft = row.department.tradingName;
-                this.tradingNameError = "";
-                this.tradingNameEditor = row.department.id;
-              }}
-            >
-              ${row.department.tradingName}
-            </button>`;
+                type="button"
+                part="edit-trading-name"
+                data-test="edit-trading-name"
+                aria-label=${`${row.department.name}: ${t("venue.trading_name")}, ${row.department.tradingName}`}
+                @click=${() => {
+                  this.tradingNameDraft = row.department.tradingName;
+                  this.tradingNameError = "";
+                  this.tradingNameEditor = row.department.id;
+                }}
+              >
+                ${row.department.tradingName}
+              </button>
+              <a
+                href=${`/manage/venue-settings/view/receipts?departmentId=${encodeURIComponent(row.department.id)}`}
+                >${t("venue.preview")}</a
+              >`;
           return html`<wt-input
               name="tradingName"
               label=${`${row.department.name}: ${t("venue.trading_name")}`}

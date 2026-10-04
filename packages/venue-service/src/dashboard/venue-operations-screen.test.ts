@@ -1508,6 +1508,18 @@ describe("venue operations screen", () => {
     expect(link?.textContent?.trim()).toBe("Preview");
   });
 
+  it("offers each active department’s receipt preview from the unified tree", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree");
+    const links = [...tree.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a[href]")];
+    expect(links.map((link) => [link.textContent?.trim(), link.getAttribute("href")])).toEqual([
+      ["Preview", "/manage/venue-settings/view/receipts?departmentId=d1"],
+      ["Preview", "/manage/venue-settings/view/receipts?departmentId=d2"],
+    ]);
+  });
+
   it("deactivates a department that has no active zones", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(model),
