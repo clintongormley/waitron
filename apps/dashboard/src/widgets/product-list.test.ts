@@ -789,7 +789,7 @@ describe("product-list", () => {
     const root = await tableRoot(el);
     root.querySelector<HTMLElement>(".tree-toggle")!.click();
     await table.updateComplete;
-    expect(rowKeys(root)).toEqual(["bun", "bun:medium", "bun:small"]);
+    expect(rowKeys(root)).toEqual(["bun", "bun:small", "bun:medium"]);
     const small = cellUnder(root, "bun:small", t("product.status"));
     expect(small.querySelector("[data-test=active-badge]")!.getAttribute("data-active")).toBe(
       "true",
@@ -818,9 +818,9 @@ describe("product-list", () => {
     await choose(el, "active", "");
     expect(rowKeys(root)).toEqual([
       "bun",
-      "bun:large",
-      "bun:medium",
       "bun:small",
+      "bun:medium",
+      "bun:large",
       "roll",
       "roll:r1",
     ]);
@@ -2208,8 +2208,8 @@ describe("a product's variants in the list", () => {
         expect(rowKeys(root)).toEqual([
           "folder:deli",
           "cecina",
-          "cecina:thick",
           "cecina:thin",
+          "cecina:thick",
           "loin",
           "chorizo",
         ]);
@@ -2263,25 +2263,27 @@ describe("a product's variants in the list", () => {
     expect(cellUnder(root, "cecina", t("product.made_at")).textContent!.trim()).not.toBe("");
   });
 
-  describe("lists a product's variants by name, whatever sorts the table", () => {
-    // Given out of order, priced so that no sort by price or by name backwards gives the name order,
-    // and with "Ración 10" before "Ración 2", which only a numeric-aware comparison puts second.
+  describe("lists a product's variants in the product's own order, whatever sorts the table", () => {
+    // Each product's stored order differs from its name order (number-aware or not), from its id
+    // order, and from every price sort, so only keeping the order the product holds passes.
     const products = () => [
       product({
         id: "solo",
         name: "Solomillo",
         variants: [
-          { ...bunVariant, id: "450", name: "450g", unitPrice: "20.00" },
-          { ...bunVariant, id: "250", name: "250g", unitPrice: "30.00" },
-          { ...bunVariant, id: "350", name: "350g", unitPrice: "10.00" },
+          { ...bunVariant, id: "b", name: "450g", unitPrice: "20.00" },
+          { ...bunVariant, id: "c", name: "250g", unitPrice: "30.00" },
+          { ...bunVariant, id: "a", name: "350g", unitPrice: "10.00" },
         ],
       }),
       product({
         id: "racion",
         name: "Pulpo",
         variants: [
-          { ...bunVariant, id: "10", name: "Ración 10", unitPrice: "1.00" },
-          { ...bunVariant, id: "2", name: "Ración 2", unitPrice: "9.00" },
+          { ...bunVariant, id: "z", name: "Ración 10", unitPrice: "1.00" },
+          { ...bunVariant, id: "y", name: "0,25 kg", unitPrice: "5.00" },
+          { ...bunVariant, id: "m", name: "Ración 2", unitPrice: "9.00" },
+          { ...bunVariant, id: "x", name: "0,5 kg", unitPrice: "3.00" },
         ],
       }),
     ];
@@ -2298,19 +2300,19 @@ describe("a product's variants in the list", () => {
 
     const variantsOf = (root: ShadowRoot, id: string) =>
       rowKeys(root).filter((key) => key.startsWith(`${id}:`));
-    const expectNameOrder = (root: ShadowRoot) => {
-      expect(variantsOf(root, "solo")).toEqual(["solo:250", "solo:350", "solo:450"]);
-      expect(variantsOf(root, "racion")).toEqual(["racion:2", "racion:10"]);
+    const expectProductOrder = (root: ShadowRoot) => {
+      expect(variantsOf(root, "solo")).toEqual(["solo:b", "solo:c", "solo:a"]);
+      expect(variantsOf(root, "racion")).toEqual(["racion:z", "racion:y", "racion:m", "racion:x"]);
     };
 
     it("under the Name sort, either way", async () => {
       const { table, root } = await mountOpen();
-      expectNameOrder(root);
+      expectProductOrder(root);
       root.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
       await table.updateComplete;
       expect(table.sortDirection).toBe("descending");
       expect(rowKeys(root).indexOf("solo")).toBeLessThan(rowKeys(root).indexOf("racion"));
-      expectNameOrder(root);
+      expectProductOrder(root);
     });
 
     it("under another column's sort", async () => {
@@ -2318,7 +2320,7 @@ describe("a product's variants in the list", () => {
       root.querySelector<HTMLButtonElement>('button[data-sort="price"]')!.click();
       await table.updateComplete;
       expect(table.sortKey).toBe("price");
-      expectNameOrder(root);
+      expectProductOrder(root);
     });
 
     it("under a sort restored from an earlier visit", async () => {
@@ -2328,14 +2330,14 @@ describe("a product's variants in the list", () => {
       );
       const { table, root } = await mountOpen();
       expect([table.sortKey, table.sortDirection]).toEqual(["price", "descending"]);
-      expectNameOrder(root);
+      expectProductOrder(root);
     });
 
     it("without changing the order the product holds them in", async () => {
       const { el } = await mountWidget<ProductList>("dashboard-product-list", {
         products: products(),
       });
-      expect(el.products[0]!.variants.map(({ id }) => id)).toEqual(["450", "250", "350"]);
+      expect(el.products[0]!.variants.map(({ id }) => id)).toEqual(["b", "c", "a"]);
     });
   });
 });

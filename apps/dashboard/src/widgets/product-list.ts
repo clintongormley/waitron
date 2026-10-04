@@ -10,7 +10,7 @@ import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t, currentLocale } from "../i18n/t.js";
 import { allergenState, allergenStateName, vatClassName } from "../i18n/domain.js";
-import { byLabel, categoryPath, categoryWithDescendants } from "./category-form.js";
+import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
 import {
   holdPageCursor,
@@ -710,15 +710,13 @@ export class ProductList extends LitElement {
           product,
           variant: null,
         },
-        ...[...product.variants]
-          .sort((a, b) => byLabel(a.name, b.name))
-          .map((variant): ProductRow => ({
-            kind: "product",
-            key: `${product.id}:${variant.id}`,
-            parentKey: product.id,
-            product,
-            variant,
-          })),
+        ...product.variants.map((variant): ProductRow => ({
+          kind: "product",
+          key: `${product.id}:${variant.id}`,
+          parentKey: product.id,
+          product,
+          variant,
+        })),
       ]),
     ];
   }
