@@ -1181,7 +1181,7 @@ while the drag handle, the Default radio and the row menu keep doing their own t
 list form (`extra-list-form.ts`) draws the same kind of table, but its rows have no editor.
 
 **Clicking an Extras or Options list's row opens its editor, in the product editor and on the
-Modifiers page (W71, owner 2026-10-04) — DONE.** In the product editor's Modifiers table
+Modifiers page (W71, owner 2026-10-04) — DONE (#1192).** In the product editor's Modifiers table
 (`apps/dashboard/src/widgets/product-editor.ts`) a click on a list's name or the empty part of its
 row, or Enter or Space on it, does what Edit in the row's menu does (`wt-edit-related`), through a
 row-sized button named "Edit: <list> · <kind>", built as the variants table's is; the drag handle,
@@ -1190,6 +1190,10 @@ stay through an Options list editor's Cancel and save (`catalogue-screen.test.ts
 button, or to its menu when the menu's Edit opened the list. On the Modifiers page an Extras row
 now opens like an Options row, with Used by opening only its popup. Left as it was: the focus ring
 of a row's button shows only along the row's top edge, in both tables, as on the shared table.
+Left OPEN from its review, not tested: the product editor's unit form and Courses window hand focus
+back without waiting for their dialog to finish closing — the shape W71 had to fix for the list
+editors in `catalogue-screen.ts`, where focus otherwise landed nowhere. Next step: a focus-return
+test for each, as W71's list cases do; fix only if it fails.
 
 **Clicking a product's row on the Products screen opens it (A205) — DONE in A208.**
 
