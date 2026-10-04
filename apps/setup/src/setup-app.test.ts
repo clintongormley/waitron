@@ -599,7 +599,6 @@ describe("setup-app", () => {
           timeZone: "Europe/Madrid",
           dayCutover: "06:00",
         },
-        tillName: "Till",
         seriesCode: "F",
         rectificativeSeriesCode: "R",
       },
@@ -2298,7 +2297,6 @@ describe("A2 mode boundaries", () => {
         venue: {
           taxId: "B12345674",
           legalName: "Demo company",
-          tillName: "Caja 1",
           seriesCode: "FS",
           rectificativeSeriesCode: "FR",
           admin: { displayName: "Ada" },

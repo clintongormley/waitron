@@ -179,7 +179,6 @@ export class SetupReviewScreen extends LitElement {
           "review.help.invoicing",
           "venue",
           html`
-            ${this.#row("review.till", venue?.tillName, "summary-tillName")}
             ${this.#row("review.series", venue?.seriesCode, "summary-seriesCode")}
             ${this.#row("review.rectificative_series", venue?.rectificativeSeriesCode, "summary-rectificativeSeriesCode")}
             ${this.#row("review.operation_description", location?.operationDescription, "summary-operationDescription")}

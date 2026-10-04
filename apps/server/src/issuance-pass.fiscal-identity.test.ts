@@ -20,7 +20,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import type {} from "./till-config.js";
@@ -121,7 +120,6 @@ async function fileOneSale(db: Database) {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -136,7 +134,6 @@ async function fileOneSale(db: Database) {
     { db, modules: ALL_MODULES },
   );
   const cfg = await deviceRequestCfg(db, {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),

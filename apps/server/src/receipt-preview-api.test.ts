@@ -107,7 +107,7 @@ async function withPrinters(
         })
         .returning({ id: printers.id });
       const { deviceId } = await seedDevice(suite.db, {
-        tillId: venue.cfg.tillId,
+        tillId: venue.tillId,
         label: row.device,
       });
       await suite.db
@@ -282,7 +282,7 @@ describe("GET /management-api/receipt-preview", () => {
             .from(devices)
             .where(eq(devices.label, "Caja 1"));
           const { deviceId } = await seedDevice(suite.db, {
-            tillId: venue.cfg.tillId,
+            tillId: venue.tillId,
             label: "Caja 2",
           });
           try {
@@ -330,7 +330,7 @@ describe("GET /management-api/receipt-preview", () => {
             await suite.db
               .update(tills)
               .set({ receiptPrinterId: tillPrinter!.id })
-              .where(eq(tills.id, venue.cfg.tillId));
+              .where(eq(tills.id, venue.tillId));
             const result = await at("");
             expect([result.paperWidths, result.paperWidth]).toEqual([["80mm"], "80mm"]);
           } finally {

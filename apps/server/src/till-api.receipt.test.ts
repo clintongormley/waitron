@@ -13,6 +13,7 @@ import {
   tills,
   withTransaction,
 } from "@waitron/db";
+import { venueTill } from "./testing/session-device.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -36,7 +37,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
@@ -112,7 +112,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -157,7 +156,6 @@ async function setupVenue(): Promise<{
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -391,7 +389,7 @@ async function enrolTillCookie(
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
-/** A till device that may open a drawer, bound to the configured till `cfg.tillId`. */
+/** A till device that may open a drawer, bound to the venue's till. */
 async function enrolConfiguredTillCookie(cfg: TillConfig): Promise<string> {
   tillDeviceCounter += 1;
   const n = tillDeviceCounter;
@@ -407,7 +405,10 @@ async function enrolConfiguredTillCookie(cfg: TillConfig): Promise<string> {
     name: `Configured till ${n}`,
     profileId: profile!.id,
   });
-  await suite.db.update(devices).set({ tillId: cfg.tillId }).where(eq(devices.id, dev.deviceId));
+  await suite.db
+    .update(devices)
+    .set({ tillId: await venueTill(suite.db, cfg.locationId) })
+    .where(eq(devices.id, dev.deviceId));
   await startOnVenuePrinter(dev.deviceId);
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
@@ -1680,7 +1681,9 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     const dev = await enrolDeviceForTest(suite.db, cfg, {
       name: `Printing device ${n}`,
       profileId: profile!.id,
-      ...(formFactor === "phone-portrait" ? { registerId: cfg.tillId } : {}),
+      ...(formFactor === "phone-portrait"
+        ? { registerId: await venueTill(suite.db, cfg.locationId) }
+        : {}),
     });
     const [row] = await suite.db
       .select({ tillId: devices.tillId })
@@ -1714,8 +1717,8 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       await makePrinter(venue.cfg, false),
       await makePrinter(venue.cfg, false),
     ];
-    // The setup till's own printer: a device printing here would be reading the till, not itself.
-    await setTillPrinter(venue.cfg.tillId, r3!);
+    // A till's own printer: a device printing here would be reading the till, not itself.
+    await setTillPrinter(await venueTill(suite.db, venue.cfg.locationId), r3!);
     const app = new Hono();
     mountTillApi(app, apiDeps(venue.cfg), noopLog);
     mountDeviceApi(

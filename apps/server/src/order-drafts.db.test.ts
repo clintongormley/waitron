@@ -10,7 +10,6 @@ import {
   orderGroups,
   serviceCommands,
   ticketItems,
-  tills,
   parties,
   withTransaction,
   workingOrderLines,
@@ -38,7 +37,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   jobOrigin,
 } from "@waitron/shared";
 import type { OptionSelection } from "@waitron/shared";
@@ -110,14 +108,9 @@ async function setupVenue(): Promise<Venue> {
     .returning({ id: locations.id });
   const locationId = location!.id;
   await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
-    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),

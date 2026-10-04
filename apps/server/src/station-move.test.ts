@@ -17,6 +17,7 @@ import {
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
+import { fixtureTill } from "./testing/session-device.js";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId as brandLocationId } from "@waitron/shared";
@@ -839,7 +840,7 @@ describe("release", () => {
         .insert(devices)
         .values({
           locationId: venue.cfg.locationId,
-          tillId: venue.cfg.tillId,
+          tillId: await fixtureTill(tx, venue.cfg.locationId),
           deviceProfileId: profile!.id,
           label: "Bar till",
           tokenHash: randomUUID(),
@@ -2116,7 +2117,7 @@ describe("moveDishesToStation", () => {
           .insert(devices)
           .values({
             locationId: venue.cfg.locationId,
-            tillId: venue.cfg.tillId,
+            tillId: await fixtureTill(tx, venue.cfg.locationId),
             deviceProfileId: profile!.id,
             label: "Bar till",
             tokenHash: randomUUID(),

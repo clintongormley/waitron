@@ -27,7 +27,6 @@ import {
   nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
@@ -84,7 +83,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -132,7 +130,6 @@ beforeAll(async () => {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {

@@ -12,7 +12,6 @@ import {
   printJobs,
   stationPrinters,
   tenantReceipts,
-  tills,
   withTransaction,
   writeNodeMembership,
 } from "@waitron/db";
@@ -54,7 +53,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
@@ -150,10 +148,6 @@ const suite = useVenueDb({
     const defaultStationId = await seedKitchenStation(db, {
       locationId: brandLocationId(loc!.id),
     });
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: loc!.id, name: "Till 1" })
-      .returning({ id: tills.id });
     // A node the working-order routes need: `parkOrder`/`payWorkingOrder` write `working_orders.node_id`
     // (its FK `(node_id) → nodes(id)` requires a real row), and
     // `listHeldOrders` filters by it. `cfg.nodeId` names THIS row so every parked order is on-node.
@@ -266,7 +260,7 @@ const suite = useVenueDb({
     counterZoneId = zoneId;
     aguaOfferId = offerId;
     hiddenAguaOfferId = hiddenOfferId;
-    cfg = makeCfg(till!.id, loc!.id, nodeId);
+    cfg = makeCfg(loc!.id, nodeId);
     sessionDeviceId = await seedSessionDevice(db, cfg);
   },
 });
@@ -294,9 +288,8 @@ function collect(
 
 /** The till's config for the seeded tenant. `seriesId` is unused by these routes, so it carries a
  * fresh uuid. */
-function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
+function makeCfg(locationId: string, nodeId: string): TillConfig {
   return {
-    tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -898,9 +891,11 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
 
   /** What `requireSession` answers for a session on {@link sessionDeviceId}. */
   async function sessionOnSeededDevice(sessionId: string) {
-    const { rows } = await suite.db.execute<{ device_profile_id: string; label: string }>(
-      sql`select device_profile_id, label from devices where id = ${sessionDeviceId}`,
-    );
+    const { rows } = await suite.db.execute<{
+      device_profile_id: string;
+      label: string;
+      till_id: string;
+    }>(sql`select device_profile_id, label, till_id from devices where id = ${sessionDeviceId}`);
     return {
       personId: ana.id,
       sessionId,
@@ -912,7 +907,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
         locationId: cfg.locationId,
         stationId: null,
         watcherId: null,
-        tillId: cfg.tillId,
+        tillId: rows[0]!.till_id,
         deviceProfileId: rows[0]!.device_profile_id,
         receiptPrinterId: null,
         paymentSlipPrinterId: null,

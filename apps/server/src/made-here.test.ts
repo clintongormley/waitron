@@ -110,7 +110,7 @@ describe("device made-here stations", () => {
       await routeProductTo(tx, venue.cfg, venue.cafeId, bar.id);
       await setStationFallback(tx, venue.cfg, bar.id, downstairs.id);
       const downstairsPrinter = await stationPrinter(tx, venue.cfg.locationId, downstairs.id);
-      const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.cfg.tillId, bar.id);
+      const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.tillId, bar.id);
       await setStationToday(tx, venue.cfg, bar.id, "closed", new Date());
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
@@ -140,7 +140,7 @@ describe("device made-here stations", () => {
       const deviceId = await deviceAt(
         tx,
         venue.cfg.locationId,
-        venue.cfg.tillId,
+        venue.tillId,
         venue.defaultStationId,
       );
       const cfg = { ...venue.cfg, sendingDeviceId: deviceId };
@@ -196,7 +196,7 @@ describe("device made-here stations", () => {
       const deviceId = await deviceAt(
         tx,
         venue.cfg.locationId,
-        venue.cfg.tillId,
+        venue.tillId,
         venue.defaultStationId,
       );
       const orderId = randomUUID();
@@ -271,7 +271,7 @@ describe("device made-here stations", () => {
       const deviceId = await deviceAt(
         tx,
         venue.cfg.locationId,
-        venue.cfg.tillId,
+        venue.tillId,
         venue.defaultStationId,
       );
       const orderId = randomUUID();
@@ -311,7 +311,7 @@ describe("device made-here stations", () => {
       const deviceId = await deviceAt(
         tx,
         venue.cfg.locationId,
-        venue.cfg.tillId,
+        venue.tillId,
         venue.defaultStationId,
       );
       const orderId = randomUUID();
@@ -336,7 +336,7 @@ describe("device made-here stations", () => {
       const deviceId = await deviceAt(
         tx,
         venue.cfg.locationId,
-        venue.cfg.tillId,
+        venue.tillId,
         venue.defaultStationId,
       );
       const orderId = randomUUID();
@@ -378,7 +378,7 @@ describe("device made-here stations", () => {
         .insert(devices)
         .values({
           locationId: venue.cfg.locationId,
-          tillId: venue.cfg.tillId,
+          tillId: venue.tillId,
           deviceProfileId: profile!.id,
           label: "Other",
           tokenHash: "test",
@@ -408,7 +408,7 @@ describe("device made-here stations", () => {
       const barDeviceId = await deviceAt(
         tx,
         venue.cfg.locationId,
-        venue.cfg.tillId,
+        venue.tillId,
         venue.defaultStationId,
       );
       const [profile] = await tx
@@ -419,7 +419,7 @@ describe("device made-here stations", () => {
         .insert(devices)
         .values({
           locationId: venue.cfg.locationId,
-          tillId: venue.cfg.tillId,
+          tillId: venue.tillId,
           deviceProfileId: profile!.id,
           label: "Other",
           tokenHash: "test",
@@ -472,7 +472,7 @@ describe("device made-here stations", () => {
       const deviceId = await deviceAt(
         tx,
         venue.cfg.locationId,
-        venue.cfg.tillId,
+        venue.tillId,
         venue.defaultStationId,
       );
       const orderId = randomUUID();
@@ -524,7 +524,7 @@ describe("device made-here stations", () => {
       const deviceId = await deviceAt(
         tx,
         venue.cfg.locationId,
-        venue.cfg.tillId,
+        venue.tillId,
         venue.defaultStationId,
       );
       const orderId = randomUUID();
@@ -559,7 +559,7 @@ describe("device made-here stations", () => {
         .insert(devices)
         .values({
           locationId: venue.cfg.locationId,
-          tillId: venue.cfg.tillId,
+          tillId: venue.tillId,
           deviceProfileId: profile!.id,
           label: "Bar till",
           tokenHash: "test",
@@ -625,7 +625,7 @@ describe("device made-here stations", () => {
         .values({
           id: randomUUID(),
           locationId: venue.cfg.locationId,
-          tillId: venue.cfg.tillId,
+          tillId: venue.tillId,
           deviceProfileId: profile!.id,
           label: "Counter",
           tokenHash: "test",
@@ -662,7 +662,7 @@ describe("device made-here stations", () => {
         .values({
           id: randomUUID(),
           locationId: venue.cfg.locationId,
-          tillId: venue.cfg.tillId,
+          tillId: venue.tillId,
           deviceProfileId: profile!.id,
           label: "Counter",
           tokenHash: "test",
@@ -701,7 +701,7 @@ describe("device made-here stations", () => {
           ["A", "B"].map((label) => ({
             id: randomUUID(),
             locationId: venue.cfg.locationId,
-            tillId: venue.cfg.tillId,
+            tillId: venue.tillId,
             deviceProfileId: profile!.id,
             label,
             tokenHash: "test",

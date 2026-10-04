@@ -33,28 +33,27 @@ Vite on `:5190`. `wa-wt ls` shows the ports when you run a second worktree besid
 inspects that stack's box state and sends `/api` and `/media` to HTTP for a leaf-less demo or HTTPS
 for a server using its persisted self-signed leaf (`vite.config.ts`).
 
-1. **Provision a venue.** `waitron-provision venue` creates the taxpayer row, location, till, node
-   (SIF) and invoice series a sellable venue needs — see
+1. **Provision a venue.** `waitron-provision venue` creates the taxpayer row, location, node (SIF)
+   and invoice series a sellable venue needs — see
    ["Provisioning a venue"](../server/README.md#provisioning-a-venue) in the server README.
 
-2. **Read its four ids.** The `venue` command prints the node id; read all four the till needs with
+2. **Read its three ids.** The `venue` command prints the node id; read all three the server needs with
    the query below, against `venue.db` inside the venue directory — any SQLite client will do,
    since the venue is just a folder of files. There is one taxpayer per database and no tenant
    column, so nothing here is scoped by a tenant — the location is the only thing that narrows it,
    and a single-location venue has just the one:
 
    ```sql
-   select l.id as location_id, ti.id as till_id, n.id as node_id, s.id as series_id
+   select l.id as location_id, n.id as node_id, s.id as series_id
    from locations l
-   join tills ti on ti.location_id = l.id
    join nodes n on n.location_id = l.id
    join invoice_series s on s.node_id = n.id and s.purpose = 'standard' and s.retired_at is null;
    ```
 
-   Run on 2026-09-22 with `sqlite3` 3.51.0 against a fresh database built from
-   `packages/db/drizzle/0000_baseline.sql` and seeded with one location, one till, one node and two
-   series, it returns exactly those four columns and one row — the rectificative series is filtered
-   out by `purpose`. The control, a column the schema does not have, fails to prepare.
+   Run on 2026-10-04 with `sqlite3` 3.51.0 against a database migrated with every set and
+   provisioned by `applyVenue` (one location, one node, two series, no till), it returns exactly those
+   three columns and one row — the rectificative series is filtered out by `purpose`. The control, a
+   column the schema does not have, fails to prepare.
 
    A cold restore rewrites `trading.env` with your new live series id automatically.
 
@@ -67,7 +66,6 @@ for a server using its persisted self-signed leaf (`vite.config.ts`).
    WAITRON_VENUE_DIR=<the directory you provisioned> \
    WAITRON_CREDENTIALS_KEY=<base64, 32 bytes> \
    WAITRON_TILL_LOCATION_ID=<location_id> \
-   WAITRON_TILL_TILL_ID=<till_id> \
    WAITRON_TILL_NODE_ID=<node_id> \
    WAITRON_TILL_SERIES_ID=<series_id> \
    WAITRON_TILL_LOCALE=es-ES \
@@ -89,7 +87,6 @@ for a server using its persisted self-signed leaf (`vite.config.ts`).
 | Variable                   | Required | Default | What it is                                                                                                                                                                                                                                                                                           |
 | -------------------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `WAITRON_TILL_LOCATION_ID` | yes      | —       | The location this till sells from.                                                                                                                                                                                                                                                                   |
-| `WAITRON_TILL_TILL_ID`     | yes      | —       | This physical till.                                                                                                                                                                                                                                                                                  |
 | `WAITRON_TILL_NODE_ID`     | yes      | —       | The compute node whose SIF/chain it files to.                                                                                                                                                                                                                                                        |
 | `WAITRON_TILL_SERIES_ID`   | yes      | —       | The standard invoice series.                                                                                                                                                                                                                                                                         |
 | `WAITRON_TILL_LOCALE`      | no       | `es-ES` | Overrides the default UI language. A few other things read it too, among them the kitchen's unit names, the payment slip's date and money format, and the dish-text language a sale falls back to when the venue has saved no content languages. Not the receipt's language: that is the location's. |

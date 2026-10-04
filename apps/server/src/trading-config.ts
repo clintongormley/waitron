@@ -8,15 +8,14 @@ import { formatEnvFile } from "./env-file.js";
 export type OnboardingIntent = "demo" | "prepare" | "live";
 
 /**
- * The provisioned identity of a single till, written out as the env the supervisor sources on the
- * next boot so the box enters TRADING mode.
+ * The provisioned identity of the venue on this node, written out as the env the supervisor sources
+ * on the next boot so the box enters TRADING mode.
  *
  * Nothing here names the venue directory: boot derives it from `WAITRON_VENUE_DIR` or, by default,
  * the state root, and an absolute path written here would pin one that a moved state root could not
  * correct.
  */
 export interface TradingConfig {
-  tillId: string;
   nodeId: string;
   seriesId: string;
   locationId: string;
@@ -33,7 +32,6 @@ export interface TradingConfig {
 export async function writeTradingEnv(stateDir: string, cfg: TradingConfig): Promise<string> {
   const path = join(stateDir, "trading.env");
   const body = formatEnvFile({
-    WAITRON_TILL_TILL_ID: cfg.tillId,
     WAITRON_TILL_NODE_ID: cfg.nodeId,
     WAITRON_TILL_SERIES_ID: cfg.seriesId,
     WAITRON_TILL_LOCATION_ID: cfg.locationId,

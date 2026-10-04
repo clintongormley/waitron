@@ -35,7 +35,6 @@ import {
   purchaseInvoiceVat,
   purchaseInvoices,
   tenants,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -52,10 +51,9 @@ import {
   sumDecimals,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   jobOrigin,
 } from "@waitron/shared";
-import type { Decimal, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import type { Decimal, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import type { InputVatRateLine } from "@waitron/reporting";
 import { scriptSessionDevice } from "./script-device.js";
 
@@ -242,7 +240,7 @@ interface SeededNode {
   rectificativeSeriesId: SeriesId;
 }
 interface Venue {
-  tillId: TillId;
+  locationId: string;
   nodes: SeededNode[];
   authorizerId: string;
 }
@@ -264,11 +262,6 @@ async function seedVenue(db: Database): Promise<Venue> {
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
-  const tillId = brandTillId(till!.id);
 
   const seeded: SeededNode[] = [];
   for (let i = 1; i <= 2; i++) {
@@ -304,7 +297,7 @@ async function seedVenue(db: Database): Promise<Venue> {
     .returning({ id: persons.id });
   const authorizerId = person!.id;
 
-  return { tillId, nodes: seeded, authorizerId };
+  return { locationId, nodes: seeded, authorizerId };
 }
 
 /** Summed from the constants above, never read back from the database the roll-ups query. */
@@ -507,7 +500,7 @@ async function main(): Promise<void> {
     // The rectificativa's `sale.rectify` gate needs a supervisor session.
     const authorizerSession = await withTransaction(db, async (tx) => {
       return loginWithPin(tx, {
-        deviceId: await scriptSessionDevice(tx, venue.tillId, "Modelo 303 demo"),
+        deviceId: await scriptSessionDevice(tx, venue.locationId, "Modelo 303 demo"),
         personId: venue.authorizerId,
         pin: "1234",
       });

@@ -65,7 +65,6 @@ export interface ProvisionBody {
     taxId: string;
     legalName: string;
     location: LocationDraft;
-    tillName: string;
     seriesCode: string;
     rectificativeSeriesCode: string;
     admin: AdminDraft;

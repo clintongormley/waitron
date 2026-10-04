@@ -18,7 +18,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   type ContentLanguageRules,
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
@@ -282,7 +281,6 @@ const suite = useVenueDb({
  */
 function venueCfg(): TillConfig {
   return {
-    tillId: brandTillId(crypto.randomUUID()),
     nodeId: brandNodeId("11111111-1111-4111-8111-111111111111"),
     seriesId: brandSeriesId(crypto.randomUUID()),
     locationId: brandLocationId(locationId),

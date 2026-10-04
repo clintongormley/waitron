@@ -6,7 +6,6 @@ import {
   locations,
   nodes,
   tenants,
-  tills,
   withTransaction,
   type Database,
   type Transaction,
@@ -32,7 +31,6 @@ export interface VenueApplyDeps {
 
 export interface VenueResult {
   locationId: string;
-  tillId: string;
   nodeId: string;
   /** The ids of the series actually inserted, in plan order: `[standard, rectificative]` for a plan
    * `planVenue` built. A hand-built plan whose second series collides yields only `[standard]`. */
@@ -45,7 +43,7 @@ export interface VenueResult {
  * Runs one plan as ONE transaction, so no partial venue is ever left behind.
  *
  * A database contains one taxpayer and one operational venue. Repeating the same plan returns the
- * existing location, till, node and series without rerunning module seeds. A different location is
+ * existing location, node and series without rerunning module seeds. A different location is
  * refused; so is a different taxpayer. Two overlapping plans cannot interleave: `withTransaction`
  * holds the file's write lock for the whole plan.
  */
@@ -60,7 +58,6 @@ export async function applyVenue(
 
   return withTransaction(deps.db, async (tx) => {
     let locationId = "";
-    let tillId = "";
     let nodeId = "";
     let reusingVenue = false;
     const seeded: SeedReport[] = [];
@@ -195,27 +192,9 @@ export async function applyVenue(
           });
           break;
         }
-        case "create-till":
+        case "create-node":
           // Ordering guards throw a plain Error, not an AppError: a malformed plan is a programming
           // bug, not operator input.
-          if (locationId === "") throw new Error("applyVenue: create-till before create-location");
-          if (reusingVenue) {
-            const existing = await tx
-              .select({ id: tills.id, name: tills.name })
-              .from(tills)
-              .where(eq(tills.locationId, locationId))
-              .orderBy(tills.id)
-              .limit(1);
-            if (existing[0] === undefined || existing[0].name !== action.name) {
-              throw new AppError("provisioning.second_venue", {});
-            }
-            tillId = existing[0].id;
-            break;
-          }
-          tillId = randomUUID();
-          await tx.insert(tills).values({ id: tillId, locationId, name: action.name });
-          break;
-        case "create-node":
           if (locationId === "") throw new Error("applyVenue: create-node before create-location");
           if (reusingVenue) {
             const existing = await tx
@@ -304,10 +283,9 @@ export async function applyVenue(
     }
 
     // The ordering guards fire only when a dependent action runs, so a plan that omits create-node
-    // (with everything depending on it) or create-till reaches here with an empty id.
+    // (with everything depending on it) reaches here with an empty id.
     if (nodeId === "") throw new Error("applyVenue: plan is missing create-node");
-    if (tillId === "") throw new Error("applyVenue: plan is missing create-till");
-    const result = { locationId, tillId, nodeId, seriesIds, seeded };
+    const result = { locationId, nodeId, seriesIds, seeded };
     await deps.beforeCommit?.(tx, result);
     return result;
   });

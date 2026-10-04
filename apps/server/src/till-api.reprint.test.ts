@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, locations, printJobs, tills, withTransaction } from "@waitron/db";
+import { deviceProfiles, locations, printJobs, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -15,7 +15,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger } from "./logger.js";
@@ -59,17 +58,13 @@ const suite = useVenueDb({
     const locationId = brandLocationId(loc!.id);
     // The default station serves an item with no matching exception or claim.
     stationId = await seedKitchenStation(db, { locationId });
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: loc!.id, name: "Caja 1" })
-      .returning({ id: tills.id });
     const nodeId = await seedNode(db, locationId);
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
-    cfg = makeCfg(till!.id, loc!.id, nodeId);
+    cfg = makeCfg(loc!.id, nodeId);
 
     // One sellable product with no claimed folder, routed to the default station.
     await withTransaction(db, async (tx) => {
@@ -88,9 +83,8 @@ const suite = useVenueDb({
   },
 });
 
-function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
+function makeCfg(locationId: string, nodeId: string): TillConfig {
   return {
-    tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),

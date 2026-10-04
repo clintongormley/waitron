@@ -41,7 +41,6 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   thousandthsToDecimal,
-  tillId as brandTillId,
   deviceOrigin,
   jobOrigin,
 } from "@waitron/shared";
@@ -171,7 +170,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -187,7 +185,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   );
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
-    tillId: brandTillId(provisioned.tillId),
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
     locationId: brandLocationId(provisioned.locationId),

@@ -36,7 +36,6 @@ import {
   nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import {
   assertBillInvariant,
@@ -137,7 +136,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -152,7 +150,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     { db, modules: ALL_MODULES },
   );
   const cfg = await deviceRequestCfg(db, {
-    tillId: brandTillId(provisioned.tillId),
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
     locationId: brandLocationId(provisioned.locationId),

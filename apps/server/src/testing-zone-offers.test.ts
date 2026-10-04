@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import {
   locations,
   ticketItems,
-  tills,
   withTransaction,
   workingOrderLines,
   type Database,
@@ -26,7 +25,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   jobOrigin,
 } from "@waitron/shared";
 import { addTabRound, parkOrder } from "./working-order.js";
@@ -64,13 +62,8 @@ async function seedVenue(db: Database): Promise<Venue> {
     .returning({ id: locations.id });
   const locationId = brandLocationId(loc!.id);
   const cocina = await seedKitchenStation(db, { locationId });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
-    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(await seedNode(db, locationId)),
     seriesId: brandSeriesId(randomUUID()),
     locationId,

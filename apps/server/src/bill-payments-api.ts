@@ -13,7 +13,7 @@ import {
 import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
 import { refundBillPayment, refundProvidersOf } from "./bill-refunds.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
-import { assertDeviceCapability, assertTakesCash, deviceTillCfg } from "./device-session.js";
+import { assertDeviceCapability, assertTakesCash } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import {
   overridePinAttempts,
@@ -216,7 +216,7 @@ export function mountBillPaymentsApi(
       const body = asObject(await readRawJsonBody<unknown>(c));
       const request = parseRequest(body);
       if (request.entry !== "reader") {
-        const saleCfg = sendingCfg(deviceTillCfg(cfg, session.device), c, session.device);
+        const saleCfg = sendingCfg(cfg, c, session.device);
         if (request.method === "cash") assertTakesCash(session.device);
         return c.json(await takeBillPayment(fiscal, saleCfg, id, request, personId));
       }
@@ -228,7 +228,7 @@ export function mountBillPaymentsApi(
       if (request.simulationOutcome !== undefined && deps.cardProvider?.provider !== "simulator") {
         throw invalid("simulationOutcome");
       }
-      const saleCfg = sendingCfg(deviceTillCfg(cfg, device), c, device);
+      const saleCfg = sendingCfg(cfg, c, device);
       const { provider, reader } = await resolveCardCollector(deps, device.deviceId, readerId);
       return c.json(
         await takeReaderBillPayment(
@@ -267,7 +267,7 @@ export function mountBillPaymentsApi(
       const id = requireBillParam(c.req.param("id"));
       const paymentId = c.req.param("paymentId");
       const refund = parseRefund(asObject(await readRawJsonBody<unknown>(c)));
-      const saleCfg = sendingCfg(deviceTillCfg(cfg, session.device), c, session.device);
+      const saleCfg = sendingCfg(cfg, c, session.device);
       return c.json(
         await refundBillPayment(
           {

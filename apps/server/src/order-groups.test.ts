@@ -15,7 +15,6 @@ import {
   products,
   serviceCommands,
   ticketItems,
-  tills,
   parties,
   withTransaction,
   workingOrderLines,
@@ -41,7 +40,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
@@ -156,13 +154,8 @@ async function setupVenue(): Promise<Venue> {
     .returning({ id: locations.id });
   const locationId = location!.id;
   const stationId = await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg = await deviceRequestCfg(db, {
-    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),

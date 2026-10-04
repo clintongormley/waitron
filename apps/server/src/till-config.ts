@@ -2,16 +2,8 @@
 // throws its codes.
 import "./errors.js";
 import { eq } from "drizzle-orm";
-import { AppError, locationId, nodeId, seriesId, tillId } from "@waitron/shared";
-import type {
-  Decimal,
-  DeviceOrigin,
-  LocationId,
-  NodeId,
-  Origin,
-  SeriesId,
-  TillId,
-} from "@waitron/shared";
+import { AppError, locationId, nodeId, seriesId } from "@waitron/shared";
+import type { Decimal, DeviceOrigin, LocationId, NodeId, Origin, SeriesId } from "@waitron/shared";
 import { locations, nodes, orderFlow, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { isUnset } from "./env-value.js";
@@ -22,9 +14,9 @@ import { isUnset } from "./env-value.js";
  */
 export type OrderFlow = (typeof orderFlow.enumValues)[number];
 
-/** The deployed till's identity, resolved once at boot from the environment provisioning stamped. */
+/** The venue's identity on this node, resolved once at boot from the environment provisioning
+ * stamped. */
 export interface TillConfig {
-  tillId: TillId;
   nodeId: NodeId;
   seriesId: SeriesId;
   locationId: LocationId;
@@ -104,7 +96,6 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): TillIdentityConfig {
   const tipsEnabled = rawTips === "true" || rawTips === "1";
 
   return {
-    tillId: brand("WAITRON_TILL_TILL_ID", tillId, required(env, "WAITRON_TILL_TILL_ID")),
     nodeId: brand("WAITRON_TILL_NODE_ID", nodeId, required(env, "WAITRON_TILL_NODE_ID")),
     seriesId: brand("WAITRON_TILL_SERIES_ID", seriesId, required(env, "WAITRON_TILL_SERIES_ID")),
     locationId: brand(
@@ -121,14 +112,13 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): TillIdentityConfig {
 
 /** Order matters: a partial set names the FIRST missing variable in this order. */
 const TILL_ID_VARS = [
-  "WAITRON_TILL_TILL_ID",
   "WAITRON_TILL_NODE_ID",
   "WAITRON_TILL_SERIES_ID",
   "WAITRON_TILL_LOCATION_ID",
 ] as const;
 
 /**
- * None of the four ids set is setup mode (`undefined`), not a fault. Some but not all set is a
+ * None of the three ids set is setup mode (`undefined`), not a fault. Some but not all set is a
  * misconfiguration, refused rather than silently degraded to setup mode.
  */
 export function tryLoadTillConfig(env: NodeJS.ProcessEnv): TillIdentityConfig | undefined {

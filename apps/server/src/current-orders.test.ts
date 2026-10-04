@@ -29,7 +29,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { writeReleaseReminderMinutes } from "@waitron/venue-service";
 import { deploymentEnvironment } from "./config.js";
@@ -148,7 +147,6 @@ async function setupVenue(): Promise<Venue> {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -163,7 +161,6 @@ async function setupVenue(): Promise<Venue> {
     { db: suite.db, modules: ALL_MODULES },
   );
   const cfg = await deviceRequestCfg(suite.db, {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),

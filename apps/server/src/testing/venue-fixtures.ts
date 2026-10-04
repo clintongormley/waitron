@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { withTransaction, type Database } from "@waitron/db";
+import { tills, withTransaction, type Database } from "@waitron/db";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -14,7 +14,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "../modules.js";
@@ -29,6 +28,8 @@ const LOCALE = "es-ES";
 export interface Venue {
   /** Orders a test opens directly come from the dashboard, so no device is seeded for them. */
   cfg: OriginConfig;
+  /** A till for the venue's till devices to name until the tills table goes: setup makes none. */
+  tillId: string;
   /** The location's provisioned default kitchen station — where `placeOrder` fires items, and the
    *  station the KDS device below binds to. */
   defaultStationId: string;
@@ -44,7 +45,6 @@ export interface Venue {
 function tillConfigFromVenue(venue: VenueResult): OriginConfig {
   return {
     origin: jobOrigin("dashboard"),
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -89,7 +89,6 @@ export async function setupVenue(db: Database): Promise<Venue> {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -152,9 +151,14 @@ export async function setupVenue(db: Database): Promise<Venue> {
 
   const { rows } = await db.execute<{ id: string }>(sql`
     select id from kitchen_stations where location_id = ${cfg.locationId} and is_default and active`);
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId: cfg.locationId, name: "Caja 1" })
+    .returning({ id: tills.id });
 
   return {
     cfg,
+    tillId: till!.id,
     defaultStationId: rows[0]!.id,
     cafeId: seeded.cafeId,
     aguaId: seeded.aguaId,

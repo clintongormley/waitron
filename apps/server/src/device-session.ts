@@ -2,14 +2,13 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { AppError, isUuid, tillId } from "@waitron/shared";
+import { AppError, isUuid } from "@waitron/shared";
 import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import { verifySecretAsync } from "@waitron/identity";
 // Side-effect only: keeps `device.unauthorized` (errors.ts) reachable from the file that throws it.
 import "./errors.js";
-import type { TillConfig } from "./till-config.js";
 
 /** The trusted-device cookie: a long-lived DEVICE identity, unlike the session cookies. */
 export const DEVICE_COOKIE = "waitron_device";
@@ -296,14 +295,6 @@ export async function requireDevice(
   const device = await tryReadDevice(deps, c);
   if (device === null) throw new AppError("device.unauthorized", {});
   return device;
-}
-
-/**
- * The configuration `device`'s request runs under: the device's own till, for the records that still
- * name one. A sale names the request's device, not a till.
- */
-export function deviceTillCfg<C extends TillConfig>(cfg: C, device: DeviceBinding): C {
-  return device.tillId === null ? cfg : { ...cfg, tillId: tillId(device.tillId) };
 }
 
 /**

@@ -48,7 +48,6 @@ import {
   seriesId as brandSeriesId,
   deviceOrigin,
   jobOrigin,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
@@ -137,7 +136,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConfig {
   return {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -181,7 +179,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -274,13 +271,13 @@ async function configureReceipt(
 /** Every capability but the drawer. */
 const NO_DRAWER_CAPABILITY = CAPABILITY_FLAGS.filter((flag) => flag !== "open-cash-drawer");
 
-/** `cfg` as a request from a new device on its till whose profile lacks `capability`. */
+/** `cfg` as a request from a new device at its location whose profile lacks `capability`. */
 async function deviceWithout(
   cfg: DeviceRequestConfig,
   capability: string,
 ): Promise<DeviceRequestConfig> {
   const { deviceId } = await seedDevice(suite.db, {
-    tillId: cfg.tillId,
+    locationId: cfg.locationId,
     capabilities: CAPABILITY_FLAGS.filter((flag) => flag !== capability),
   });
   return { ...cfg, origin: deviceOrigin(deviceId) };
@@ -937,18 +934,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     async (mode) => {
       const base = await setupVenue("invoice_first");
       const cfg = await deviceRequestCfg(suite.db, { ...base.cfg, orderFlow: "invoice_first" });
-      const deviceTillId = await withTransaction(suite.db, async (tx) => {
-        const [till] = await tx
-          .insert(tills)
-          .values({
-            locationId: cfg.locationId,
-            name: "Issuing counter",
-          })
-          .returning({ id: tills.id });
-        return brandTillId(till!.id);
-      });
       const printerId = await makePrinter(cfg);
-      await configureReceipt({ ...cfg, tillId: deviceTillId }, { mode, printerId });
+      await configureReceipt(cfg, { mode, printerId });
       const id = randomUUID();
       await parkOrder({ db: suite.db }, cfg, {
         id,
@@ -1041,7 +1028,7 @@ describe("every device whose profile allows the drawer opens its receipt printer
       return till!.id;
     });
     const { deviceId } = await seedDevice(suite.db, { tillId: id, capabilities });
-    return { ...cfg, tillId: brandTillId(id), origin: deviceOrigin(deviceId) };
+    return { ...cfg, origin: deviceOrigin(deviceId) };
   }
 
   async function sale(

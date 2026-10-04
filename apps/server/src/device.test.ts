@@ -15,7 +15,6 @@ import type { FormFactor } from "@waitron/layouts";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
-  tillId as brandTillId,
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
@@ -34,6 +33,7 @@ const suite = useVenueDb({
 interface SeededVenue {
   cfg: TillConfig;
   stationId: string;
+  tillId: string;
 }
 
 async function watcher(cfg: TillConfig): Promise<string> {
@@ -110,13 +110,13 @@ async function setupVenue(): Promise<SeededVenue> {
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
+  // A handheld rings into an existing till until the tills table goes; setup makes none.
   const [till] = await admin
     .insert(tills)
     .values({ locationId, name: "Caja 1" })
     .returning({ id: tills.id });
   const nodeId = await seedNode(admin, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -129,7 +129,7 @@ async function setupVenue(): Promise<SeededVenue> {
   const st = await withTransaction(admin, async (tx) => {
     return createStation(tx, cfg, { name: "Cocina", isDefault: true });
   });
-  return { cfg, stationId: st.id };
+  return { cfg, stationId: st.id, tillId: till!.id };
 }
 
 /** `name` is unique (`device_profiles_tenant_name_key`), so a test seeding two profiles passes two
@@ -190,19 +190,19 @@ describe("device join-and-accept binds the device by its profile's form factor",
   });
 
   it("a handheld profile binds an EXISTING register named by registerId and creates no new till", async () => {
-    const { cfg } = await setupVenue();
+    const { cfg, tillId } = await setupVenue();
     const profileId = await seedProfile("phone-portrait", "Perfil Móvil");
     const before = await tillCount();
 
     const dev = await enrolDeviceForTest(suite.db, cfg, {
       name: "Camarero 1",
       profileId,
-      registerId: cfg.tillId,
+      registerId: tillId,
     });
     expect(await tillCount()).toBe(before); // no register minted
 
     const row = await deviceRow(dev.deviceId);
-    expect(row.till_id).toBe(cfg.tillId);
+    expect(row.till_id).toBe(tillId);
     expect(row.station_id).toBeNull();
   });
 

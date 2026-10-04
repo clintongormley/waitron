@@ -37,7 +37,6 @@ const venue: VenueRequest = {
     timeZone: "Europe/London",
     dayCutover: "06:00",
   },
-  tillName: "Till",
   seriesCode: "F",
   rectificativeSeriesCode: "R",
   admin: { displayName: "Admin", email: "admin@example.test", pinHash: "pin", passwordHash: "pw" },

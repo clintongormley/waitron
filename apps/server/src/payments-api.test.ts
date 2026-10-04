@@ -21,7 +21,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { mountPaymentsApi } from "./payments-api.js";
@@ -182,7 +181,6 @@ function saleDeps() {
 
 function cfgOf(venue: Venue): TillConfig {
   return {
-    tillId: brandTillId(randomUUID()),
     nodeId: brandNodeId(randomUUID()),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(venue.locationId),

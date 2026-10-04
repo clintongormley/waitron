@@ -6,7 +6,6 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 
 export interface TestVenue {
-  tillId: string;
   nodeId: string;
   /** The ORDINARY sale series. `planVenue` emits the standard series first. */
   seriesId: string;
@@ -39,7 +38,6 @@ export async function provisionTestVenue(venueDir: string, taxId: string): Promi
             timeZone: "Europe/Madrid",
             dayCutover: "05:00",
           },
-          tillName: "Caja 1",
           seriesCode: "A",
           rectificativeSeriesCode: "R",
           admin: {
@@ -54,7 +52,6 @@ export async function provisionTestVenue(venueDir: string, taxId: string): Promi
       { db: store.venue, modules: ALL_MODULES },
     );
     return {
-      tillId: venue.tillId,
       nodeId: venue.nodeId,
       seriesId: venue.seriesIds[0]!,
       rectificativeSeriesId: venue.seriesIds[1]!,

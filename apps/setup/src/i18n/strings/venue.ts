@@ -24,7 +24,6 @@ export const venueEn = {
   "venue.label.province": "Province",
   "venue.label.province_region": "Province / region",
   "venue.label.day_cutover": "Business day cutover",
-  "venue.label.till_name": "Till name",
   "venue.label.series_code": "Invoice series code",
   "venue.label.rectificative_series_code": "Rectificative series code",
 
@@ -50,7 +49,6 @@ export const venueEn = {
   "venue.field.city": "city",
   "venue.field.province": "province",
   "venue.field.day_cutover": "business day cutover",
-  "venue.field.till_name": "till name",
   "venue.field.series_code": "invoice series code",
   "venue.field.rectificative_series_code": "correction series code",
   "venue.enter_field": "Enter the {field}.",
@@ -72,8 +70,6 @@ export const venueEn = {
     "The province must match the postal code. It determines the fiscal territory and time zone.",
   "venue.help.day_cutover":
     "Sales before this time belong to the previous business day. Keep 04:00 if you finish trading after midnight.",
-  "venue.help.till_name":
-    "Name the first register. Caja 1 is a useful starting point; this name is not your tax-filing identity.",
   "venue.help.series_code":
     "This prefix identifies ordinary invoices, for example FS/1. Use letters, numbers, / _ . or -, up to 38 characters. Keep FS unless you need another series.",
   "venue.help.rectificative_series_code":
@@ -107,7 +103,6 @@ export const venueEn = {
   "review.invoice_locales": "Receipt language",
   "review.operation_description": "Invoice operation description",
   "review.day_cutover": "Business day cutover",
-  "review.till": "Till",
   "review.series": "Invoice series",
   "review.rectificative_series": "Corrections series",
   "review.group.business": "Business",
@@ -212,7 +207,6 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.label.province": "Provincia",
   "venue.label.province_region": "Provincia / región",
   "venue.label.day_cutover": "Cambio de día comercial",
-  "venue.label.till_name": "Nombre de la caja",
   "venue.label.series_code": "Código de la serie de facturas",
   "venue.label.rectificative_series_code": "Código de la serie rectificativa",
 
@@ -236,7 +230,6 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.field.city": "la localidad",
   "venue.field.province": "la provincia",
   "venue.field.day_cutover": "la hora de cambio de día comercial",
-  "venue.field.till_name": "el nombre de la caja",
   "venue.field.series_code": "el código de la serie de facturas",
   "venue.field.rectificative_series_code": "el código de la serie rectificativa",
   "venue.enter_field": "Introduce {field}.",
@@ -258,8 +251,6 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
     "La provincia debe corresponder al código postal. Determina el territorio fiscal y la zona horaria.",
   "venue.help.day_cutover":
     "Las ventas anteriores a esta hora pertenecen al día comercial anterior. Deja las 04:00 si cierras después de medianoche.",
-  "venue.help.till_name":
-    "Pon nombre a la primera caja. Caja 1 es un buen punto de partida; este nombre no es tu identidad a efectos fiscales.",
   "venue.help.series_code":
     "Este prefijo identifica las facturas ordinarias, por ejemplo FS/1. Usa letras, números, / _ . o -, hasta 38 caracteres. Deja FS salvo que necesites otra serie.",
   "venue.help.rectificative_series_code":
@@ -295,7 +286,6 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "review.invoice_locales": "Idioma del recibo",
   "review.operation_description": "Descripción de la operación en la factura",
   "review.day_cutover": "Cambio de día comercial",
-  "review.till": "Caja",
   "review.series": "Serie de facturas",
   "review.rectificative_series": "Serie de correcciones",
   "review.group.business": "Negocio",

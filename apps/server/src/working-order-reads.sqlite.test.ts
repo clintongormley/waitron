@@ -15,11 +15,7 @@ import {
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  locationId as brandLocationId,
-  seriesId as brandSeriesId,
-  tillId as brandTillId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, seriesId as brandSeriesId } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -100,7 +96,6 @@ beforeAll(async () => {
   await db.insert(partyTables).values({ partyId: party!.id, tableId });
 
   cfg = {
-    tillId: brandTillId(tillId),
     nodeId,
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),

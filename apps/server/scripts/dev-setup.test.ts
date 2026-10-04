@@ -7,7 +7,6 @@ import {
   openVenueDatabase,
   runMigrations,
   tenants,
-  tills,
 } from "@waitron/db";
 import { loadKeyRing } from "@waitron/credentials";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -38,7 +37,6 @@ const sampleEnv: DevEnv = {
   WAITRON_HTTP_PORT: "8080",
   WAITRON_CREDENTIALS_KEY: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
-  WAITRON_TILL_TILL_ID: "22222222-2222-2222-2222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-3333-3333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-4444-444444444444",
   WAITRON_TILL_LOCATION_ID: "55555555-5555-5555-5555-555555555555",
@@ -57,7 +55,6 @@ describe("renderEnvFile", () => {
       "WAITRON_HTTP_PORT=8080",
       "WAITRON_CREDENTIALS_KEY=c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
       "WAITRON_CREDENTIALS_KEY_VERSION=1",
-      "WAITRON_TILL_TILL_ID=22222222-2222-2222-2222-222222222222",
       "WAITRON_TILL_NODE_ID=33333333-3333-3333-3333-333333333333",
       "WAITRON_TILL_SERIES_ID=44444444-4444-4444-4444-444444444444",
       "WAITRON_TILL_LOCATION_ID=55555555-5555-5555-5555-555555555555",
@@ -106,7 +103,6 @@ describe("the demo login PIN + seed locale", () => {
 // into `WAITRON_TILL_LOCALE` is pinned here.
 describe("buildDevEnv carries the resolved seed locale into the env contract", () => {
   const ids = {
-    tillId: "22222222-2222-2222-2222-222222222222",
     nodeId: "33333333-3333-3333-3333-333333333333",
     seriesId: "44444444-4444-4444-4444-444444444444",
     locationId: "55555555-5555-5555-5555-555555555555",
@@ -198,15 +194,15 @@ describe("devSetup against a real venue directory", () => {
     });
   }
 
-  it("provisions a virgin directory, writing a .env and two tills rows", async () => {
+  it("provisions a virgin directory, writing a .env with no till id, and makes no setup till", async () => {
     expect(first.reused).toBe(false);
-    // Provisioning's "Caja 1" plus the "Mostrador" register the till device auto-creates.
-    expect(await tillsCount()).toBe(2);
+    // Only the "Mostrador" register the till device makes when it pairs.
+    expect(await tillsCount()).toBe(1);
 
     const written = parseEnvFile(readFileSync(envPath, "utf8"));
     expect(written).toEqual({ ...first.env });
+    expect(written).not.toHaveProperty("WAITRON_TILL_TILL_ID");
     for (const key of [
-      "WAITRON_TILL_TILL_ID",
       "WAITRON_TILL_NODE_ID",
       "WAITRON_TILL_SERIES_ID",
       "WAITRON_TILL_LOCATION_ID",
@@ -248,7 +244,6 @@ describe("devSetup against a real venue directory", () => {
     expect(config.httpPort).toBe(8080);
     expect(config.venueDir).toBe(venueDir);
     expect(config.till).toBeDefined();
-    expect(config.till?.tillId).toBe(first.env.WAITRON_TILL_TILL_ID);
     expect(config.till?.seriesId).toBe(first.env.WAITRON_TILL_SERIES_ID);
     expect(config.till?.locationId).toBe(first.env.WAITRON_TILL_LOCATION_ID);
     const ring = loadKeyRing(written);
@@ -265,8 +260,7 @@ describe("devSetup against a real venue directory", () => {
     });
 
     expect(second.reused).toBe(true);
-    expect(await tillsCount()).toBe(2);
-    expect(second.env.WAITRON_TILL_TILL_ID).toBe(first.env.WAITRON_TILL_TILL_ID);
+    expect(await tillsCount()).toBe(1);
     expect(second.env.WAITRON_TILL_NODE_ID).toBe(first.env.WAITRON_TILL_NODE_ID);
     expect(second.env.WAITRON_TILL_SERIES_ID).toBe(first.env.WAITRON_TILL_SERIES_ID);
     expect(second.env.WAITRON_TILL_LOCATION_ID).toBe(first.env.WAITRON_TILL_LOCATION_ID);
@@ -362,7 +356,7 @@ describe("devSetup against a real venue directory", () => {
     await expect(devSetup({ venueDir, envPath, stateDir: workDir, log: () => {} })).rejects.toThrow(
       /already holds a venue/i,
     );
-    expect(await tillsCount()).toBe(2);
+    expect(await tillsCount()).toBe(1);
   });
 });
 
@@ -401,7 +395,7 @@ describe("devSetup under WAITRON_ENV=production", () => {
     const corrected = await devSetup({ venueDir, envPath, stateDir: workDir, log: () => {} });
     expect(corrected.reused).toBe(false);
     expect(existsSync(envPath)).toBe(true);
-    await expect(inspectVenues(venueDir, corrected.env.WAITRON_TILL_TILL_ID)).resolves.toEqual({
+    await expect(inspectVenues(venueDir, corrected.env.WAITRON_TILL_LOCATION_ID)).resolves.toEqual({
       hasExpected: true,
       hasAny: true,
     });
@@ -429,7 +423,7 @@ describe("resetVenueDir", () => {
 });
 
 describe("inspectVenues reads a migrated venue directory", () => {
-  const tillId = "11111111-2222-3333-4444-555555555555";
+  const locationId = "11111111-2222-3333-4444-555555555555";
   let migrated: string;
 
   beforeAll(async () => {
@@ -440,17 +434,12 @@ describe("inspectVenues reads a migrated venue directory", () => {
       await store.venue
         .insert(tenants)
         .values({ id: 1, country: "ES", taxId: "00000000T", legalName: "Inspection SL" });
-      const [location] = await store.venue
-        .insert(locations)
-        .values({
-          name: "Inspection",
-          invoiceLocales: ["es-ES"],
-          operationDescription: "Hospitality",
-        })
-        .returning({ id: locations.id });
-      await store.venue
-        .insert(tills)
-        .values({ id: tillId, locationId: location!.id, name: "Caja" });
+      await store.venue.insert(locations).values({
+        id: locationId,
+        name: "Inspection",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Hospitality",
+      });
     } finally {
       await store.close();
     }
@@ -472,8 +461,8 @@ describe("inspectVenues reads a migrated venue directory", () => {
     }
   });
 
-  it("finds the expected till and refuses to overlook a different existing venue", async () => {
-    await expect(inspectVenues(migrated, tillId)).resolves.toEqual({
+  it("finds the expected location and refuses to overlook a different existing venue", async () => {
+    await expect(inspectVenues(migrated, locationId)).resolves.toEqual({
       hasExpected: true,
       hasAny: true,
     });
@@ -489,7 +478,7 @@ describe("inspectVenues reads a migrated venue directory", () => {
     const broken = await mkdtemp(join(tmpdir(), "waitron-inspect-broken-"));
     try {
       const file = new DatabaseSync(join(broken, "venue.db"));
-      file.exec("create table tills (not_id text)");
+      file.exec("create table locations (not_id text)");
       file.exec("create table tenants (id integer)");
       file.close();
       await expect(inspectVenues(broken, null)).rejects.toThrow(/no such column/i);

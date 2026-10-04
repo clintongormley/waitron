@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locations, tableServiceStatuses, tills, withTransaction } from "@waitron/db";
+import { locations, tableServiceStatuses, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -11,7 +11,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createTable } from "./tables.js";
@@ -51,17 +50,13 @@ const suite = useVenueDb({
       })
       .returning({ id: locations.id });
     const locationId = loc!.id;
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: locationId, name: "Caja 1" })
-      .returning({ id: tills.id });
     const nodeId = await seedNode(db, brandLocationId(locationId));
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
-    cfg = makeCfg(till!.id, locationId, nodeId);
+    cfg = makeCfg(locationId, nodeId);
     const seeded = await withTransaction(db, async (tx) => {
       const { id: tableId } = await createTable(tx, cfg, { label: "T1" });
       const [active] = await tx
@@ -91,9 +86,8 @@ function collect(
 }
 
 /** `seriesId` is unused by this route (no fiscal write on the status path), so it carries a fresh uuid. */
-function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
+function makeCfg(locationId: string, nodeId: string): TillConfig {
   return {
-    tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),

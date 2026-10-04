@@ -35,7 +35,6 @@ const request: VenueRequest = {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00",
   },
-  tillName: "Till",
   seriesCode: "F",
   rectificativeSeriesCode: "R",
   admin: {

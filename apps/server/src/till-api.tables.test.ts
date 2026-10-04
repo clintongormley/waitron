@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { floorZones, locations, tills, withTransaction } from "@waitron/db";
+import { floorZones, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { writeEditSentLines } from "@waitron/venue-service";
@@ -19,7 +19,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
@@ -66,10 +65,6 @@ const suite = useVenueDb({
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
       .returning({ id: locations.id });
     await seedKitchenStation(db, { locationId: brandLocationId(loc!.id) });
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: loc!.id, name: "Till 1" })
-      .returning({ id: tills.id });
     // `openTab`/`addTabRound` create a working_orders row whose `node_id` FK requires a real row.
     const nodeId = await seedNode(db, brandLocationId(loc!.id));
     const [person] = await db
@@ -98,7 +93,7 @@ const suite = useVenueDb({
       .values({ locationId: loc!.id, name: "Terraza" })
       .returning({ id: floorZones.id });
     seededZoneId = zone!.id;
-    cfg = makeCfg(till!.id, loc!.id, nodeId);
+    cfg = makeCfg(loc!.id, nodeId);
     const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
     menuItemId = offers.offerFor(productId);
     tablesZoneId = offers.zoneId;
@@ -112,9 +107,8 @@ function collect(
 }
 
 /** `seriesId` is unused by these routes (no fiscal write on the tab/table path), so it carries a fresh uuid. */
-function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
+function makeCfg(locationId: string, nodeId: string): TillConfig {
   return {
-    tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),

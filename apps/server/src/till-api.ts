@@ -161,7 +161,6 @@ import {
 import {
   assertDeviceCapability,
   assertTakesCash,
-  deviceTillCfg,
   requireDevice,
   tryReadDevice,
 } from "./device-session.js";
@@ -887,7 +886,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   mountBillLookupApi(app, deps, log, run);
 
   // Device-gated: the throttle keys on the authenticated device, so dropping the cookie cannot
-  // evade it, and the shift records the device's own till rather than `cfg.tillId`.
+  // evade it.
   app.post("/api/session", (c) =>
     run(c, log, async () => {
       const { personId: rawPersonId, pin } = await readJsonBody<{ personId: string; pin: string }>(
@@ -1317,8 +1316,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
       const zoneId = await resolveHttpOrderZone(deps, body.lines.length, body.zoneId);
-      // The device supplies `tillId`; `nodeId`/`seriesId`, the SIF and chain key, stay the venue's.
-      const saleCfg = sendingCfg(deviceTillCfg(cfg, session.device), c, session.device);
+      const saleCfg = sendingCfg(cfg, c, session.device);
       if (body.tender?.method === "cash") assertTakesCash(session.device);
       const result = await recordTillSale(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
@@ -1357,7 +1355,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         requireUuidParam(body.readerId, "CardReaderId");
       }
       // Resolved after the capability firewall so its refusal keeps its status.
-      const saleCfg = sendingCfg(deviceTillCfg(cfg, device), c, device);
+      const saleCfg = sendingCfg(cfg, c, device);
 
       const { provider, reader } = await resolveCardCollector(deps, device.deviceId, body.readerId);
       const outcome = await payWorkingOrderIntegrated(
@@ -1456,7 +1454,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         revision?: unknown;
       }>(c);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const saleCfg = sendingCfg(deviceTillCfg(cfg, session.device), c, session.device);
+      const saleCfg = sendingCfg(cfg, c, session.device);
       const revision = await updateHeldOrder(
         { db: deps.db },
         sendCfg,
@@ -1489,8 +1487,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
-      // The `order_placed` amendment keeps the box's configured `cfg.tillId`, matching
-      // `cancelPlacedOrder`.
       const result = await placeOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         sendingCfg(cfg, c, session.device),
@@ -1741,7 +1737,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const device = session.device;
       await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open", device);
-      const drawerCfg = deviceTillCfg(cfg, device);
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
       const attempts = overridePinAttempts(pinThrottle, session.deviceId);
       const toCheck = await drawerOverrideToCheck(deps.db, cfg, sessionId, body);
@@ -1776,14 +1771,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           if (!printer.hasCashDrawer) {
             throw new AppError("drawer.not_attached", { printerId: printer.id });
           }
-          await enqueueManualDrawerOpen(
-            tx,
-            drawerCfg,
-            printer.id,
-            personId,
-            authorizedBy,
-            viaOverride,
-          );
+          await enqueueManualDrawerOpen(tx, cfg, printer.id, personId, authorizedBy, viaOverride);
         }),
       );
       return c.body(null, 200);
@@ -1799,12 +1787,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await readJsonBody<{ tender: TillTender }>(c);
-      // The device supplies `tillId`; `nodeId`/`seriesId`, the SIF and chain key, stay the venue's.
-      const saleCfg = deviceTillCfg(cfg, session.device);
       if (body.tender?.method === "cash") assertTakesCash(session.device);
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
-        saleCfg,
+        cfg,
         { id, lines: [], tender: body.tender },
         personId,
       );
@@ -1830,7 +1816,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await readJsonBody<{ reason: string; override?: unknown }>(c);
       const override = parseOverrideField(body.override);
-      // The `order_cancelled` amendment keeps `cfg.tillId`.
       await cancelPlacedOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         cfg,
@@ -2502,7 +2487,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { revision, ...patch } = await readJsonBody<OrderLinePatch & { revision?: unknown }>(c);
       const copy = requireRevision(revision);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const saleCfg = sendingCfg(deviceTillCfg(cfg, session.device), c, session.device);
+      const saleCfg = sendingCfg(cfg, c, session.device);
       const saved = await withTransaction(deps.db, async (tx) => {
         const revision = await updateOrderLine(tx, sendCfg, id, lineNo, patch, copy, personId);
         await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
@@ -2640,7 +2625,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = asObject(await readRawJsonBody<unknown>(c));
       const transfers = requireTransfers(body.transfers);
       const command = billCommand(personId, body);
-      const saleCfg = sendingCfg(deviceTillCfg(cfg, session.device), c, session.device);
+      const saleCfg = sendingCfg(cfg, c, session.device);
       const result = await withTransaction(deps.db, async (tx) => {
         const split = await splitBill(tx, cfg, billId, transfers, command);
         await issueIfFullyPaid(tx, fiscal, saleCfg, billId, personId);

@@ -28,7 +28,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { splitBill } from "../bill-actions.js";
 import { takeBillPayment } from "../bill-payments.js";
@@ -115,7 +114,6 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -130,7 +128,6 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     { db, modules: ALL_MODULES },
   );
   const cfg = await deviceRequestCfg(db, {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),

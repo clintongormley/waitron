@@ -576,7 +576,6 @@ export class SetupApp extends LitElement {
       const venue = { ...this.draft.venue, location: { ...this.draft.venue?.location } };
       delete venue.taxId;
       delete venue.legalName;
-      delete venue.tillName;
       delete venue.seriesCode;
       delete venue.rectificativeSeriesCode;
       delete venue.location.operationDescription;

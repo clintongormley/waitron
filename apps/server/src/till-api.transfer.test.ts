@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { locations, parties, tills, withTransaction, workingOrders } from "@waitron/db";
+import { locations, parties, withTransaction, workingOrders } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -18,7 +18,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   jobOrigin,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -59,10 +58,6 @@ const suite = useVenueDb({
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
       .returning({ id: locations.id });
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: loc!.id, name: "Till 1" })
-      .returning({ id: tills.id });
     // `openTab` writes `working_orders.node_id`, whose FK requires a real row.
     const nodeId = await seedNode(db, brandLocationId(loc!.id));
     const [person] = await db
@@ -70,7 +65,7 @@ const suite = useVenueDb({
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
-    cfg = makeCfg(till!.id, loc!.id, nodeId);
+    cfg = makeCfg(loc!.id, nodeId);
     const offers = await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
       const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -99,10 +94,9 @@ function collect(
 }
 
 /** `seriesId` is unused by the transfer route (no fiscal write on the tab path). */
-function makeCfg(tillId: string, locationId: string, nodeId: string): OriginConfig {
+function makeCfg(locationId: string, nodeId: string): OriginConfig {
   return {
     origin: jobOrigin("dashboard"),
-    tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),

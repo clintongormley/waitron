@@ -732,7 +732,7 @@ describe("Device API — the device-guarded routes", () => {
     });
     expect(noCookie.status).toBe(401);
     // A handheld is bound to no station, so it has no notices to clear.
-    const handheld = await enrolHandheld(app, venue, venue.cfg.tillId);
+    const handheld = await enrolHandheld(app, venue, venue.tillId);
     const fromHandheld = await send(
       app,
       "POST",
@@ -1251,7 +1251,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
   it("reports an enrolled handheld's formFactor + name, station null", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const { deviceId, jar } = await enrolHandheld(app, venue, venue.cfg.tillId);
+    const { deviceId, jar } = await enrolHandheld(app, venue, venue.tillId);
     const res = await send(app, "GET", "/api/device/me", { cookie: jar });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
@@ -1259,7 +1259,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
       formFactor: "phone-portrait",
       name: "Waiter phone",
       stationId: null,
-      tillId: venue.cfg.tillId,
+      tillId: venue.tillId,
     });
   });
 
@@ -1293,7 +1293,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
   it("GET /api/device/station 401s an enrolled handheld — it is bound to no station", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const { jar } = await enrolHandheld(app, venue, venue.cfg.tillId);
+    const { jar } = await enrolHandheld(app, venue, venue.tillId);
     const res = await send(app, "GET", "/api/device/station", { cookie: jar });
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({

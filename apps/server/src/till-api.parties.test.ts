@@ -7,7 +7,6 @@ import {
   invoiceSeries,
   locations,
   sales,
-  tills,
   parties,
   serviceCommands,
   withTransaction,
@@ -30,7 +29,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { mountTillApi } from "./till-api.js";
@@ -60,10 +58,6 @@ const suite = useVenueDb({
       .insert(locations)
       .values({ name: "Sala", invoiceLocales: ["es-ES"], operationDescription: "Restaurante" })
       .returning({ id: locations.id });
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: loc!.id, name: "Caja 1" })
-      .returning({ id: tills.id });
     const nodeId = await seedNode(db, brandLocationId(loc!.id));
     const [person] = await db
       .insert(persons)
@@ -71,7 +65,6 @@ const suite = useVenueDb({
       .returning({ id: persons.id });
     ana = { id: person!.id };
     cfg = {
-      tillId: brandTillId(till!.id),
       nodeId: brandNodeId(nodeId),
       seriesId: brandSeriesId(randomUUID()),
       locationId: brandLocationId(loc!.id),

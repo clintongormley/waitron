@@ -20,7 +20,6 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   thousandthsToDecimal,
-  tillId as brandTillId,
   type ExtraSelection,
   jobOrigin,
 } from "@waitron/shared";
@@ -85,7 +84,6 @@ async function setupVenue(): Promise<Seeded> {
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
-    tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),

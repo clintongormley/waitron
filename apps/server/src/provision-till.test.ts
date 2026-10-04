@@ -1,14 +1,10 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { invoiceSeries, locations, nodes, tenants, tills } from "@waitron/db";
+import { invoiceSeries, locations, nodes, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  tillId as brandTillId,
-} from "@waitron/shared";
-import type { NodeId, TillId } from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { provisionNode } from "./provision-till.js";
 
@@ -23,7 +19,6 @@ const suite = useVenueDb({
 });
 
 interface Bootstrapped {
-  tillId: TillId;
   nodeId: NodeId;
   nif: string;
 }
@@ -35,7 +30,7 @@ function nextNif(): string {
 }
 
 /**
- * The pre-SIF state: tenant → location → till → node → node-keyed series, and NO SIF registration.
+ * The pre-SIF state: tenant → location → node → node-keyed series, and NO SIF registration.
  * `@waitron/fiscal-verifactu`'s `seedTill` registers a SIF, which is why it is not reused here.
  */
 async function bootstrapTenant(): Promise<Bootstrapped> {
@@ -54,12 +49,6 @@ async function bootstrapTenant(): Promise<Bootstrapped> {
     })
     .returning({ id: locations.id });
 
-  const [till] = await suite.db
-    .insert(tills)
-    .values({ locationId: brandLocationId(location!.id), name: "Caja 1" })
-    .returning({ id: tills.id });
-  const tillId = brandTillId(till!.id);
-
   const [node] = await suite.db
     .insert(nodes)
     .values({ locationId: brandLocationId(location!.id), name: "Node 1" })
@@ -68,7 +57,7 @@ async function bootstrapTenant(): Promise<Bootstrapped> {
 
   await suite.db.insert(invoiceSeries).values({ nodeId, code: "A" });
 
-  return { tillId, nodeId, nif };
+  return { nodeId, nif };
 }
 
 describe("provisioning a node that has no SIF registration yet", () => {

@@ -24,7 +24,6 @@ import {
   orderAmendments,
   saleLines,
   sales,
-  tills,
   verifyAmendmentChain,
   withTransaction,
   workingOrderLines,
@@ -39,7 +38,6 @@ import {
   nodeId as brandNodeId,
   rawCentsToDecimal,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
@@ -142,7 +140,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     // planVenue emits the standard series first, then the rectificative one.
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -196,7 +193,6 @@ async function setupVenue(): Promise<SeededVenue> {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -508,17 +504,9 @@ async function asTenant<T>(
  * A SECOND register on the SAME node — a `cfg` that shares `cfg`'s node, series and location, on a
  * device of its own.
  */
-async function addTill(cfg: DeviceRequestConfig, name: string): Promise<DeviceRequestConfig> {
-  const id = randomUUID();
-  await withTransaction(suite.db, async (tx) => {
-    // Through the table, not a raw `insert`: `tills.created_at` is supplied by a `$defaultFn` in
-    // JavaScript rather than by a SQL DEFAULT, so a raw insert naming only the other three columns is
-    // refused `NOT NULL constraint failed: tills.created_at`. `id` is a `$defaultFn` too and is
-    // passed explicitly here because the caller needs the value back.
-    await tx.insert(tills).values({ id, locationId: cfg.locationId, name });
-  });
-  // A register of its own is a device of its own.
-  return deviceRequestCfg(suite.db, { ...cfg, tillId: brandTillId(id) });
+/** `cfg` as a request from a second device at its location. */
+async function addDevice(cfg: DeviceRequestConfig): Promise<DeviceRequestConfig> {
+  return deviceRequestCfg(suite.db, cfg);
 }
 
 /**
@@ -530,7 +518,8 @@ async function addTill(cfg: DeviceRequestConfig, name: string): Promise<DeviceRe
 async function addNode(cfg: DeviceRequestConfig, name: string): Promise<DeviceRequestConfig> {
   const id = randomUUID();
   await withTransaction(suite.db, async (tx) => {
-    // Through the table, for the reason {@link addTill} gives: `nodes.created_at` is a `$defaultFn`.
+    // Through the table, not a raw `insert`: `nodes.created_at` is a `$defaultFn` in JavaScript, not a
+    // SQL DEFAULT.
     await tx.insert(nodes).values({ id, locationId: cfg.locationId, name });
   });
   return { ...cfg, nodeId: brandNodeId(id) };
@@ -1096,17 +1085,17 @@ describe("card tender (manual / datáfono)", () => {
 describe("cross-till end-to-end", () => {
   it("parks on till A, lists + retrieves + pays on till B (same node), and the chain across two sales verifies", async () => {
     const { cfg: tillA, cafe, agua, zoneId } = await setupVenue();
-    // A SECOND register on the SAME node. It differs from till A ONLY in `till_id`: same tenant, node,
+    // A SECOND device on the SAME node. It differs from till A ONLY in its device: same tenant, node,
     // series and location — the shared node is the whole point of this cross-till, same-node path.
-    const tillB = await addTill(tillA, "Caja 2");
-    expect(tillB.tillId).not.toBe(tillA.tillId);
+    const tillB = await addDevice(tillA);
+    expect(tillB.origin.deviceId).not.toBe(tillA.origin.deviceId);
     expect(tillB.nodeId).toBe(tillA.nodeId);
 
     const deps = { db: suite.db, backend, clock };
 
     // Sale 1 (A/1): a walk-up cash sale on till A, so the node's huella chain already has one link
     // before the cross-till sale — `checkIntegrity` at the end verifies a chain of TWO that spans two
-    // DIFFERENT tills, the concrete proof the chain is per-node, not per-till.
+    // DIFFERENT devices, the concrete proof the chain is per-node, not per-device.
     const walkUp = await payWorkingOrder(deps, tillA, {
       id: randomUUID(),
       zoneId,
@@ -2572,7 +2561,7 @@ async function addTable(
   cfg: DeviceRequestConfig,
   zoneId: string,
 ): Promise<string> {
-  // Through the table, for the reason {@link addTill} gives — and here BOTH `dining_tables.id` and
+  // Through the table, not a raw `insert`: BOTH `dining_tables.id` and
   // `dining_tables.created_at` are `$defaultFn` columns, so a raw insert naming neither is refused
   // `NOT NULL constraint failed: dining_tables.id`.
   const rows = await tx

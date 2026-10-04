@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, locations, tills, withTransaction } from "@waitron/db";
+import { deviceProfiles, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -17,7 +17,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
@@ -69,17 +68,13 @@ const suite = useVenueDb({
       .returning({ id: locations.id });
     const locationId = brandLocationId(loc!.id);
     await seedKitchenStation(db, { locationId });
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: loc!.id, name: "Till 1" })
-      .returning({ id: tills.id });
     const nodeId = await seedNode(db, locationId);
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
-    cfg = makeCfg(till!.id, loc!.id, nodeId);
+    cfg = makeCfg(loc!.id, nodeId);
 
     // Through the verbs rather than direct inserts, so the course FK and the active/assignment
     // filters are real.
@@ -120,9 +115,8 @@ function collect(
 }
 
 /** `seriesId` is unused (no fiscal write on the coursing/fire path), so it carries a fresh uuid. */
-function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
+function makeCfg(locationId: string, nodeId: string): TillConfig {
   return {
-    tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),

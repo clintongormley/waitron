@@ -25,7 +25,6 @@ import { DEMO_PRINTER_KEY } from "../../src/demo-printer.js";
 
 /** `seriesId` is the standard series, the first of `applyVenue`'s `seriesIds`. */
 export interface SeedDemoVenue {
-  tillId: string;
   nodeId: string;
   seriesId: string;
   locationId: string;

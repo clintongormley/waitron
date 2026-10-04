@@ -29,7 +29,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
@@ -44,7 +43,6 @@ import {
   cookieDomainFor,
   readDeviceCookie,
   requireDevice,
-  deviceTillCfg,
   setDeviceCookie,
   tryReadDevice,
   VERIFIED_TOKENS_LIMIT,
@@ -91,7 +89,7 @@ function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T>
 /**
  * Each database-backed test seeds its own venue, so the device state each case reads is its own.
  */
-async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
+async function setupStation(): Promise<{ cfg: TillConfig; stationId: string; tillId: string }> {
   const admin = suite.db;
   await seedTenant(admin);
   const [loc] = await admin
@@ -103,13 +101,13 @@ async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
+  // A handheld rings into an existing till until the tills table goes; setup makes none.
   const [till] = await admin
     .insert(tills)
     .values({ locationId, name: "Caja 1" })
     .returning({ id: tills.id });
   const nodeId = await seedNode(admin, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -122,7 +120,7 @@ async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
   const st = await asApp(admin, (tx) =>
     createStation(tx, cfg, { name: "Cocina", isDefault: true }),
   );
-  return { cfg, stationId: st.id };
+  return { cfg, stationId: st.id, tillId: till!.id };
 }
 
 /** Enrol a REAL device via join-and-accept — the only way to obtain a `${deviceId}.${token}` whose
@@ -285,18 +283,18 @@ async function enrolHandheldWithCanvasFixture(): Promise<{
   deviceId: string;
   token: string;
 }> {
-  const { cfg } = await setupStation();
+  const { cfg, tillId } = await setupStation();
   const [canvas] = await suite.db
     .insert(canvases)
     .values({ name: "Waiter phone", definition: DEFAULT_CANVASES["phone-portrait"] })
     .returning({ id: canvases.id });
   const canvasId = canvas!.id;
-  // A handheld (`phone-portrait`) binds an EXISTING register at enrol — the venue's own till.
+  // A handheld (`phone-portrait`) binds an EXISTING register at enrol.
   const deviceProfileId = await seedDeviceProfile("Waiter", "phone-portrait", [], canvasId);
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: "Waiter phone",
     profileId: deviceProfileId,
-    registerId: cfg.tillId,
+    registerId: tillId,
   });
   return { cfg, deviceId: dev.deviceId, token: dev.token };
 }
@@ -658,7 +656,7 @@ async function enrolDevDevices(): Promise<{
   };
 }
 
-describe("assertTakesCash and deviceTillCfg on a resolved device", () => {
+describe("assertTakesCash on a resolved device", () => {
   const binding = (
     capabilities: CapabilityFlag[],
     formFactor: FormFactor = "phone-portrait",
@@ -675,13 +673,6 @@ describe("assertTakesCash and deviceTillCfg on a resolved device", () => {
     receiptPrinterId: null,
     paymentSlipPrinterId: null,
     capabilities,
-  });
-
-  it("deviceTillCfg runs on the device's till, and keeps the configured till for one with none", () => {
-    const till = randomUUID();
-    const configured = { tillId: brandTillId(randomUUID()) } as TillConfig;
-    expect(deviceTillCfg(configured, binding([], "till", till)).tillId).toBe(till);
-    expect(deviceTillCfg(configured, binding([], "kds")).tillId).toBe(configured.tillId);
   });
 
   it("refuses a device whose profile lacks take-cash, and passes one that has it and no device", () => {

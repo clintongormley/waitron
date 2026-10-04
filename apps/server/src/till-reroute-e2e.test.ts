@@ -186,7 +186,6 @@ function primaryEnv(
 ): Record<string, string> {
   return {
     ...KEY_ENV,
-    WAITRON_TILL_TILL_ID: TILL,
     WAITRON_TILL_NODE_ID: nodeId,
     WAITRON_TILL_SERIES_ID: seriesId,
     WAITRON_TILL_LOCATION_ID: LOCATION,
@@ -202,7 +201,6 @@ function primaryEnv(
 function mirrorEnv(venueDir: string, port: number): Record<string, string> {
   return {
     ...KEY_ENV,
-    WAITRON_TILL_TILL_ID: TILL,
     WAITRON_TILL_NODE_ID: NODE_B,
     WAITRON_TILL_SERIES_ID: SERIES_B,
     WAITRON_TILL_LOCATION_ID: LOCATION,

@@ -13,7 +13,6 @@ import {
   stampDeployment,
   subscribeToChanges,
   tenants,
-  tills,
 } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
@@ -61,7 +60,6 @@ vi.mock("./cloud-snapshot-loop.js", async (importOriginal) => {
 });
 
 const TILL_ENV = {
-  WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
@@ -132,11 +130,6 @@ async function seedVenue(directory: string): Promise<void> {
       locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
       name: "Node",
       filingModule: "verifactu",
-    });
-    await db.insert(tills).values({
-      id: TILL_ENV.WAITRON_TILL_TILL_ID,
-      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
-      name: "Till",
     });
     await db.insert(invoiceSeries).values({
       id: TILL_ENV.WAITRON_TILL_SERIES_ID,

@@ -29,7 +29,6 @@ describe("seedInstalledDemo", () => {
     const db = {} as Database;
     const result = {
       locationId: "location-1",
-      tillId: "till-1",
       nodeId: "node-1",
       seriesIds: ["series-standard", "series-rectificative"],
       seeded: [],
@@ -39,9 +38,10 @@ describe("seedInstalledDemo", () => {
 
     expect(INSTALLED_DEMO_SALES_DAYS).toBe(30);
     expect(seedDemoRestaurant).toHaveBeenCalledTimes(1);
-    expect(seedDemoRestaurant).toHaveBeenCalledWith(db, {
+    expect(seedDemoRestaurant.mock.calls[0]![0]).toBe(db);
+    // Strict, so a `tillId: undefined` key would fail it.
+    expect(seedDemoRestaurant.mock.calls[0]![1]).toStrictEqual({
       venue: {
-        tillId: "till-1",
         nodeId: "node-1",
         seriesId: "series-standard",
         locationId: "location-1",

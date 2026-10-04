@@ -31,7 +31,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
@@ -124,7 +123,6 @@ function venueRequest(nif: string): VenueRequest {
       timeZone: "Europe/Madrid",
       dayCutover: "05:00",
     },
-    tillName: "Caja 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
     admin: {
@@ -138,7 +136,6 @@ function venueRequest(nif: string): VenueRequest {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     // planVenue emits the standard series first, then the rectificative one.
     seriesId: brandSeriesId(venue.seriesIds[0]!),

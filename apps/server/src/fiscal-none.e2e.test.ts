@@ -11,13 +11,8 @@ import type { WaitronModule } from "@waitron/module";
 import { recordCorrection, recordSale, recordSubstitution, recordVoid } from "@waitron/core";
 import { hashPassword, hashPin, loginWithPin } from "@waitron/identity";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import {
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  tillId as brandTillId,
-  deviceOrigin,
-} from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import { nodeId as brandNodeId, seriesId as brandSeriesId, deviceOrigin } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import { seedSessionDevice } from "./testing/session-device.js";
@@ -83,7 +78,6 @@ beforeAll(() => {
 });
 
 interface GbVenue {
-  tillId: TillId;
   /** The device the admin's shift session is on, and the origin of every sale rung here. */
   deviceId: string;
   nodeId: NodeId;
@@ -117,7 +111,6 @@ async function setupGbVenue(): Promise<GbVenue> {
           timeZone: "Europe/London",
           dayCutover: "05:00",
         },
-        tillName: "Till 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -162,7 +155,6 @@ async function setupGbVenue(): Promise<GbVenue> {
   );
 
   return {
-    tillId: brandTillId(venue.tillId),
     deviceId: sessionDeviceId,
     nodeId,
     standardSeriesId: brandSeriesId(standard.id),

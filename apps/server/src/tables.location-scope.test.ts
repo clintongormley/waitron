@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, tills, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -9,7 +9,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { clearPlacement, createTable, createZone, setTablePlacement } from "./tables.js";
@@ -45,13 +44,8 @@ async function setupTwoVenues(): Promise<{ a: TillConfig; b: TillConfig }> {
       })
       .returning({ id: locations.id });
     const locationId = location!.id;
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId, name: `${name} Caja` })
-      .returning({ id: tills.id });
     const nodeId = await seedNode(db, brandLocationId(locationId));
     return {
-      tillId: brandTillId(till!.id),
       nodeId: brandNodeId(nodeId),
       seriesId: brandSeriesId(randomUUID()),
       locationId: brandLocationId(locationId),

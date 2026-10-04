@@ -35,7 +35,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
   deviceOrigin,
 } from "@waitron/shared";
@@ -169,7 +168,6 @@ async function setup(
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -184,7 +182,6 @@ async function setup(
     { db: suite.db, modules: ALL_MODULES },
   );
   const cfg = await deviceRequestCfg(suite.db, {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -269,8 +266,8 @@ async function setup(
     noopLog,
   );
   const devices = [
-    await seedDevice(suite.db, { tillId: venue.tillId, label: "Barra 1" }),
-    await seedDevice(suite.db, { tillId: venue.tillId, label: "Barra 2" }),
+    await seedDevice(suite.db, { locationId: brandLocationId(venue.locationId), label: "Barra 1" }),
+    await seedDevice(suite.db, { locationId: brandLocationId(venue.locationId), label: "Barra 2" }),
   ];
   return {
     cfg,

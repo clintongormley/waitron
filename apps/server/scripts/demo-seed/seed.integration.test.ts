@@ -18,7 +18,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   jobOrigin,
 } from "@waitron/shared";
 import type { OriginConfig } from "../../src/till-config.js";
@@ -46,7 +45,6 @@ const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
 });
 
 interface Venue {
-  tillId: string;
   nodeId: string;
   seriesId: string;
   locationId: string;
@@ -55,7 +53,6 @@ interface Venue {
 function tillConfigFor(venue: Venue): OriginConfig {
   return {
     origin: jobOrigin("dashboard"),
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesId),
     locationId: brandLocationId(venue.locationId),
@@ -73,6 +70,13 @@ describe("demo seed end-to-end", () => {
     const start = Date.now();
 
     await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 3 });
+
+    const paired = await suite.db.execute<{ n: number }>(sql`select count(*) as n from devices`);
+    expect(paired.rows[0]!.n).toBe(0);
+    const origins = await suite.db.execute<{ source: string; device_id: string | null }>(
+      sql`select distinct source, device_id from sales`,
+    );
+    expect(origins.rows).toEqual([{ source: "demo_seed", device_id: null }]);
 
     const read = await withTransaction(suite.db, async (tx) => {
       const menus = await listAccessibleCatalogues(tx, venue.locationId);

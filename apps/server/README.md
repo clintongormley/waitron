@@ -116,7 +116,7 @@ refuses.
 ## Provisioning a venue
 
 `waitron-provision venue` creates the business rows a sellable venue needs — the taxpayer row, a
-location, a till, a node, and a standard plus a rectificative invoice series — and runs every enabled module's
+location, a node, and a standard plus a rectificative invoice series — and runs every enabled module's
 seed for that node, the fiscal one registering it as a Veri\*Factu SIF, in one transaction. It replaced the retired `apps/server/sql/bootstrap-tenant.sql` (see "What actually
 writes the stamp" above for why that file was removed).
 
@@ -147,7 +147,7 @@ WAITRON_ADMIN_PASSWORD='choose-a-strong-one' \
     --operation-description 'Venta en establecimiento' \
     --address-line1 'Calle Mayor 1' --postal-code 28001 --city Madrid --province Madrid \
     --time-zone Europe/Madrid --day-cutover 06:00 \
-    --till-name 'Caja 1' --series-code A --rectificative-code R \
+    --series-code A --rectificative-code R \
     --admin-name 'Owner' --admin-email 'owner@example.com' \
     --yes
 ```

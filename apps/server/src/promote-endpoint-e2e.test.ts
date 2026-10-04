@@ -340,7 +340,6 @@ function mirrorEnv(
   return {
     ...KEY_ENV,
     ...TICK_ENV,
-    WAITRON_TILL_TILL_ID: MIRROR_TILL_ID,
     WAITRON_TILL_NODE_ID: nodeId,
     WAITRON_TILL_SERIES_ID: MIRROR_DESIGNATED_SERIES_ID,
     WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
@@ -435,7 +434,6 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
       primary = await startServer({
         ...KEY_ENV,
         ...TICK_ENV,
-        WAITRON_TILL_TILL_ID: persisted.WAITRON_TILL_TILL_ID!,
         WAITRON_TILL_NODE_ID: persisted.WAITRON_TILL_NODE_ID!,
         WAITRON_TILL_SERIES_ID: persisted.WAITRON_TILL_SERIES_ID!,
         WAITRON_TILL_LOCATION_ID: persisted.WAITRON_TILL_LOCATION_ID!,

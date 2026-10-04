@@ -6,7 +6,6 @@ import {
   locations,
   nowIso,
   ticketItems,
-  tills,
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
@@ -25,7 +24,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   jobOrigin,
 } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
@@ -82,14 +80,9 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<OriginConfi
     })
     .returning({ id: locations.id });
   const locationId = location!.id;
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
     origin: jobOrigin("dashboard"),
-    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -497,14 +490,9 @@ async function setupTabVenue(): Promise<{
     .returning({ id: locations.id });
   const locationId = location!.id;
   await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
-    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),

@@ -98,7 +98,6 @@ async function venueWith(
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -115,7 +114,6 @@ async function venueWith(
   // Built the way boot builds it, from the variables the box sets.
   const cfg = await deviceRequestCfg(suite.db, {
     ...loadTillConfig({
-      WAITRON_TILL_TILL_ID: venue.tillId,
       WAITRON_TILL_NODE_ID: venue.nodeId,
       WAITRON_TILL_SERIES_ID: venue.seriesIds[0]!,
       WAITRON_TILL_LOCATION_ID: venue.locationId,

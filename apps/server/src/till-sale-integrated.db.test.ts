@@ -37,7 +37,6 @@ import {
   rawCentsToDecimal,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import {
   insertAttempting,
@@ -132,7 +131,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConfig {
   return {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -174,7 +172,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {

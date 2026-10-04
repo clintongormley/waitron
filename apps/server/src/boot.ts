@@ -1510,7 +1510,6 @@ async function bootServer(
         db,
         cfg: {
           locationId: till.locationId,
-          tillId: till.tillId,
           nodeId: till.nodeId,
         },
         modules: setsToMigrate,
@@ -1550,7 +1549,7 @@ async function bootServer(
   mountUnitsApi(app, { db, venueLocale }, log);
   mountPurchasingApi(app, { db }, log);
   // Every ENABLED module's routes, so a module toggled off mounts nothing. `core.seatTable` closes
-  // over the full `till` here, so `nodeId`/`tillId` never enter a module's cfg.
+  // over the full `till` here, so `nodeId` never enters a module's cfg.
   const routeCtx: ModuleRouteContext = {
     db,
     cfg: {
@@ -1877,7 +1876,6 @@ async function bootServer(
         // `MirrorPromoteDeps.persistTradingEnv`).
         persistTradingEnv: async (seriesId) => {
           const next: TradingConfig = {
-            tillId: till.tillId,
             nodeId: till.nodeId,
             seriesId,
             locationId: till.locationId,

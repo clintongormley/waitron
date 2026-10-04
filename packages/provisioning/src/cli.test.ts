@@ -16,7 +16,6 @@ const VENUE_DIR = "/var/lib/waitron/venue";
 
 const VENUE_RESULT = {
   locationId: "22222222-2222-2222-2222-222222222222",
-  tillId: "33333333-3333-3333-3333-333333333333",
   nodeId: "44444444-4444-4444-4444-444444444444",
   seriesIds: ["66666666-6666-6666-6666-666666666666", "77777777-7777-7777-7777-777777777777"],
   seeded: [
@@ -67,8 +66,6 @@ const VENUE_ARGS = [
   "Europe/Madrid",
   "--day-cutover",
   "06:00",
-  "--till-name",
-  "Barra 1",
   "--series-code",
   "A",
   "--rectificative-code",
@@ -267,7 +264,6 @@ describe("runCli venue", () => {
       "seed-admin",
       "seed-device-profiles",
       "create-location",
-      "create-till",
       "create-node",
       "create-series",
       "create-series",
@@ -886,7 +882,6 @@ describe("runCli venue", () => {
         "Madrid",
         "Europe/Madrid",
         "06:00",
-        "Barra 1",
         "A",
         "R",
         "Owner", // admin name
@@ -917,7 +912,6 @@ describe("runCli venue", () => {
       "province: ",
       "time zone (e.g. Europe/Madrid): ",
       "day cutover (HH:MM): ",
-      "till name: ",
       "series code: ",
       "rectificative series code: ",
       "admin name: ",

@@ -17,6 +17,7 @@ import {
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
+import { fixtureTill } from "./testing/session-device.js";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCategory, createProduct, getExtraList, readCategory } from "@waitron/catalogue";
@@ -946,7 +947,7 @@ describe("sending split-off extras", () => {
         .insert(devices)
         .values({
           locationId: cfg.locationId,
-          tillId: cfg.tillId,
+          tillId: await fixtureTill(tx, cfg.locationId),
           deviceProfileId: profile!.id,
           label: "Bar till",
           tokenHash: "test",
@@ -994,7 +995,7 @@ describe("sending split-off extras", () => {
         .insert(devices)
         .values({
           locationId: venue.cfg.locationId,
-          tillId: venue.cfg.tillId,
+          tillId: await fixtureTill(tx, venue.cfg.locationId),
           deviceProfileId: profile!.id,
           label: "Here",
           tokenHash: `here-${randomUUID()}`,
@@ -1004,7 +1005,7 @@ describe("sending split-off extras", () => {
         .insert(devices)
         .values({
           locationId: venue.cfg.locationId,
-          tillId: venue.cfg.tillId,
+          tillId: await fixtureTill(tx, venue.cfg.locationId),
           deviceProfileId: profile!.id,
           label: "Elsewhere",
           tokenHash: `elsewhere-${randomUUID()}`,

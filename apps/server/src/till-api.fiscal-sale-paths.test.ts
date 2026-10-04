@@ -13,6 +13,7 @@ import {
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
+import { venueTill } from "./testing/session-device.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -44,7 +45,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { MANUAL_PROVIDER, SimulatorPaymentProvider, cardReaders } from "@waitron/payments";
 import { stationClaims } from "@waitron/venue-service";
@@ -116,7 +116,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     // planVenue emits the standard series first, then the rectificative one.
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -159,7 +158,6 @@ async function setupVenue(): Promise<{
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -1740,12 +1738,12 @@ describe("handheld sales and device capability gates", () => {
     cfg: TillConfig,
     capabilities: string[] = ["take-cash"],
   ): Promise<string> {
-    // A handheld binds an EXISTING register at enrol — here the venue's own till.
+    // A handheld binds an EXISTING register at enrol.
     const profileId = await seedProfileFF("phone-portrait", capabilities);
     const dev = await enrolDeviceForTest(suite.db, cfg, {
       name: "Waiter phone",
       profileId,
-      registerId: cfg.tillId,
+      registerId: await venueTill(suite.db, cfg.locationId),
     });
     return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
   }
@@ -1824,7 +1822,7 @@ describe("handheld sales and device capability gates", () => {
         hasCashDrawer: true,
       });
       await tx.execute(
-        sql`update tills set receipt_printer_id = ${printer.id} where id = ${cfg.tillId}`,
+        sql`update tills set receipt_printer_id = ${printer.id} where id = ${await venueTill(tx, cfg.locationId)}`,
       );
       await tx.execute(
         sql`update locations set receipt_print_mode = 'auto' where id = ${cfg.locationId}`,
@@ -1978,7 +1976,7 @@ describe("handheld sales and device capability gates", () => {
     const dev = await enrolDeviceForTest(suite.db, cfg, {
       name: "Waiter phone",
       profileId: deviceProfileId,
-      registerId: cfg.tillId,
+      registerId: await venueTill(suite.db, cfg.locationId),
     });
     const deviceCookie = `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
     const sessionPair = await loginOperator(app, cfg, operatorId, deviceCookie);
@@ -2872,12 +2870,12 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
 
   it("a card sale on a handheld whose profile does not allow the drawer opens none, although its receipt printer and its till's have one", async () => {
     const { cfg, each, app, on } = await venueWithTill();
-    await tillReceiptPrinter(cfg, cfg.tillId, true);
+    await tillReceiptPrinter(cfg, await venueTill(suite.db, cfg.locationId), true);
     const profileId = await seedProfileFF("phone-portrait");
     const handheld = await enrolDeviceForTest(suite.db, cfg, {
       name: "Waiter phone",
       profileId,
-      registerId: cfg.tillId,
+      registerId: await venueTill(suite.db, cfg.locationId),
     });
     const handheldCookie = `${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`;
     await deviceReceiptPrinter(cfg, handheldCookie, true);
@@ -2909,7 +2907,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       const handheld = await enrolDeviceForTest(suite.db, cfg, {
         name: "Waiter phone",
         profileId,
-        registerId: cfg.tillId,
+        registerId: await venueTill(suite.db, cfg.locationId),
       });
       const handheldCookie = `${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`;
       const printerId = await deviceReceiptPrinter(cfg, handheldCookie, true);
@@ -3027,12 +3025,12 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     "a handheld whose profile does not allow the drawer collecting a placed %s order by %s opens none, although its receipt printer and its till's have one",
     async (orderFlow, method) => {
       const { cfg, each, app, cookie, on } = await venueWithTill(orderFlow);
-      await tillReceiptPrinter(cfg, cfg.tillId, true);
+      await tillReceiptPrinter(cfg, await venueTill(suite.db, cfg.locationId), true);
       const profileId = await seedProfileFF("phone-portrait", ["take-cash"]);
       const handheld = await enrolDeviceForTest(suite.db, cfg, {
         name: "Waiter phone",
         profileId,
-        registerId: cfg.tillId,
+        registerId: await venueTill(suite.db, cfg.locationId),
       });
       const handheldCookie = `${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`;
       await deviceReceiptPrinter(cfg, handheldCookie, true);

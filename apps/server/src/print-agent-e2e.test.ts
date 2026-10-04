@@ -20,7 +20,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountPrintApi } from "./print-api.js";
@@ -66,7 +65,6 @@ const suite = useVenueDb({
     locationId = loc!.id;
     // Knock and accept must share this one cfg: every join-request statement filters by node.
     cfg = {
-      tillId: brandTillId(randomUUID()),
       nodeId: brandNodeId(randomUUID()),
       seriesId: brandSeriesId(randomUUID()),
       locationId: brandLocationId(locationId),

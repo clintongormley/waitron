@@ -286,7 +286,6 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       const seeding = await openVenueDatabase(dirsA.venue);
       let a: {
         nodeId: string;
-        tillId: string;
         seriesId: string;
         locationId: string;
         publicKey: string;
@@ -312,7 +311,6 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
                 timeZone: "Europe/Madrid",
                 dayCutover: "05:00",
               },
-              tillName: "Caja 1",
               seriesCode: "A",
               rectificativeSeriesCode: "R",
               admin: {
@@ -347,7 +345,6 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
           .where(eq(nodes.id, venue.nodeId));
         a = {
           nodeId: venue.nodeId,
-          tillId: venue.tillId,
           seriesId: venue.seriesIds[0]!,
           locationId: venue.locationId,
           publicKey: row!.publicKey!,
@@ -358,7 +355,6 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       await writeFile(
         join(dirsA.state, "trading.env"),
         formatEnvFile({
-          WAITRON_TILL_TILL_ID: a.tillId,
           WAITRON_TILL_NODE_ID: a.nodeId,
           WAITRON_TILL_SERIES_ID: a.seriesId,
           WAITRON_TILL_LOCATION_ID: a.locationId,
@@ -426,7 +422,6 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       // 4. A sells, and the sale is confirmed in the bucket by RESTORING it, not by counting files.
       const saleA = await recordOneSale(
         {
-          tillId: a.tillId,
           nodeId: a.nodeId,
           seriesId: a.seriesId,
           description: "Café",
@@ -548,7 +543,6 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       // 8. B sells on the series the restore opened, and the sale reaches B's generation.
       const saleB = await recordOneSale(
         {
-          tillId: tradingB.WAITRON_TILL_TILL_ID!,
           nodeId: tradingB.WAITRON_TILL_NODE_ID!,
           seriesId: tradingB.WAITRON_TILL_SERIES_ID!,
           description: "Agua",
@@ -567,7 +561,6 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       //     waited on the bucket would hang with it; the bound sits far below that and far above a
       //     healthy sale.
       const idsB = {
-        tillId: tradingB.WAITRON_TILL_TILL_ID!,
         nodeId: tradingB.WAITRON_TILL_NODE_ID!,
         seriesId: tradingB.WAITRON_TILL_SERIES_ID!,
       };

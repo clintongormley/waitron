@@ -6,7 +6,6 @@ import {
   deviceProfiles,
   workingOrders,
   locations,
-  tills,
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
@@ -27,7 +26,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   jobOrigin,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -74,17 +72,12 @@ async function seedVenue(db: Database): Promise<Venue> {
     .returning({ id: locations.id });
   const locationId = brandLocationId(loc!.id);
   await seedKitchenStation(db, { locationId });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Till 1" })
-    .returning({ id: tills.id });
   const [person] = await db
     .insert(persons)
     .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
     .returning({ id: persons.id });
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
-    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(await seedNode(db, locationId)),
     seriesId: brandSeriesId(randomUUID()),
     locationId,

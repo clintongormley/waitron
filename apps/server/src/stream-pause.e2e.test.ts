@@ -31,6 +31,7 @@ import {
   devices,
   openVenueDatabase,
   stampDeployment,
+  tills,
   withTransaction,
 } from "@waitron/db";
 import { hashPassword, hashPin, hashSecret, persons } from "@waitron/identity";
@@ -273,7 +274,6 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
       const seeding = await openVenueDatabase(venueDir);
       let box: {
         nodeId: string;
-        tillId: string;
         seriesId: string;
         locationId: string;
         venueId: string;
@@ -302,7 +302,6 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
                 timeZone: "Europe/Madrid",
                 dayCutover: "05:00",
               },
-              tillName: "Caja 1",
               seriesCode: "A",
               rectificativeSeriesCode: "R",
               admin: {
@@ -338,12 +337,17 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
           .select({ id: deviceProfiles.id })
           .from(deviceProfiles)
           .where(eq(deviceProfiles.formFactor, "till"));
+        // A till device still names a till until the tills table goes.
+        const [till] = await seeding.venue
+          .insert(tills)
+          .values({ locationId: venue.locationId, name: "Caja 1" })
+          .returning({ id: tills.id });
         const [device] = await seeding.venue
           .insert(devices)
           .values({
             locationId: venue.locationId,
             deviceProfileId: profile!.id,
-            tillId: venue.tillId,
+            tillId: till!.id,
             label: "Caja 1",
             tokenHash: hashSecret(DEVICE_TOKEN),
           })
@@ -368,7 +372,6 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
         });
         box = {
           nodeId: venue.nodeId,
-          tillId: venue.tillId,
           seriesId: venue.seriesIds[0]!,
           locationId: venue.locationId,
           venueId: venue.locationId,
@@ -382,7 +385,6 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
       await writeFile(
         join(stateDir, "trading.env"),
         formatEnvFile({
-          WAITRON_TILL_TILL_ID: box.tillId,
           WAITRON_TILL_NODE_ID: box.nodeId,
           WAITRON_TILL_SERIES_ID: box.seriesId,
           WAITRON_TILL_LOCATION_ID: box.locationId,

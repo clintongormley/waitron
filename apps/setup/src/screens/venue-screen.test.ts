@@ -86,7 +86,6 @@ const VALID: Record<string, string> = {
   city: "Madrid",
   province: "28",
   dayCutover: "06:00",
-  tillName: "Mostrador 1",
   seriesCode: "FA",
   rectificativeSeriesCode: "RF",
 };
@@ -119,7 +118,6 @@ const EXPECTED_VENUE = {
   taxId: "B12345674",
   legalName: "Deli del Sol SL",
   location: EXPECTED_LOCATION,
-  tillName: "Mostrador 1",
   seriesCode: "FA",
   rectificativeSeriesCode: "RF",
 };
@@ -321,7 +319,6 @@ describe("setup-venue-screen", () => {
           timeZone: "Atlantic/Canary",
           dayCutover: "05:30",
         },
-        tillName: "Barra",
         seriesCode: "AA",
         rectificativeSeriesCode: "RA",
       },
@@ -780,10 +777,20 @@ describe("setup-venue-screen form errors", () => {
 
 describe("A2 shop form", () => {
   const defaults = { verifactu: { operationDescription: "Venta en establecimiento" } };
-  it("prefills the first till and invoice series, using the fiscal description default", async () => {
+  it("asks for no till name, in any mode", async () => {
+    for (const mode of ["demo", "prepare", "live"] as const) {
+      const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+        draft: { mode },
+        defaults,
+      });
+      expect(q(el, "[data-test=tillName]"), mode).toBeNull();
+      expect(el.shadowRoot!.textContent, mode).not.toMatch(/till name/i);
+      cleanupWidgets();
+    }
+  });
+  it("prefills the invoice series, using the fiscal description default", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { defaults });
     for (const [field, value] of Object.entries({
-      tillName: "Caja 1",
       seriesCode: "FS",
       rectificativeSeriesCode: "FR",
       dayCutover: "04:00",
@@ -803,7 +810,6 @@ describe("A2 shop form", () => {
       "legalName",
       "operationDescription",
       "dayCutover",
-      "tillName",
       "seriesCode",
       "rectificativeSeriesCode",
       "locale-es-ES",
@@ -1144,7 +1150,6 @@ it("emits a country pack with no provinces or validators as the operator typed i
       city: "Port",
       province: "North Riding",
       dayCutover: "05:00",
-      tillName: "Till",
       seriesCode: "A",
       rectificativeSeriesCode: "B",
     }))
@@ -1173,7 +1178,6 @@ it("emits a country pack with no provinces or validators as the operator typed i
                 timeZone: "Etc/GMT-3",
                 dayCutover: "05:00",
               },
-              tillName: "Till",
               seriesCode: "A",
               rectificativeSeriesCode: "B",
             },
@@ -1392,7 +1396,6 @@ describe("setup-venue-screen layout", () => {
       "province",
       "operationDescription",
       "dayCutover",
-      "tillName",
       "seriesCode",
       "rectificativeSeriesCode",
     ];

@@ -11,7 +11,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import type { EnrolRateLimiter } from "./enrol-rate-limit.js";
@@ -63,7 +62,6 @@ beforeAll(async () => {
  * not reset between tests. */
 function cfgOf(tenant: Tenant): TillConfig {
   return {
-    tillId: brandTillId(randomUUID()),
     nodeId: brandNodeId(randomUUID()),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(tenant.locationId),

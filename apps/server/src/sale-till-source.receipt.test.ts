@@ -25,7 +25,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
@@ -86,7 +85,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -126,7 +124,6 @@ async function setupVenue(): Promise<{
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -198,9 +195,9 @@ async function setupVenue(): Promise<{
   return { cfg, locationId: venue.locationId, product, operatorId };
 }
 
-/** A SECOND `tills` row in the SAME tenant and location as the venue's own till — the register a
- *  re-homed / second device would ring against. Inserted directly (fixture setup, not the code
- *  under test), returning its id. */
+/** A `tills` row at the venue's location — the register a till device rings against until the
+ *  tills table goes; setup makes none. Inserted directly (fixture setup, not the code under test),
+ *  returning its id. */
 async function insertTill(locationId: string, name: string): Promise<string> {
   // Through the table definition: `tills.id` and `tills.created_at` are `$defaultFn` generators
   // (`tills` in `packages/db/src/schema/tenants.ts`), which a raw statement never reaches.
@@ -373,13 +370,13 @@ describe("H2 receipt: a sale's device resolves from the request, the chain does 
     // records on the SAME chain (secuencia 1, 2) whose ONLY difference is the `device_id` snapshot:
     // nothing device-derived touches `node_id`, the series or the hash chain.
     const { cfg, locationId, product, operatorId } = await setupVenue();
-    const tillX = cfg.tillId;
+    const tillX = await insertTill(locationId, "Caja 1");
     const tillY = await insertTill(locationId, "Caja 2");
     expect(tillY).not.toBe(tillX);
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    // Sale 1 via a device bound to till X (the venue's own till), signed in on it.
+    // Sale 1 via a device bound to till X, signed in on it.
     const deviceX = await enrolTillCookie(cfg, tillX);
     await ringSale(
       app,
@@ -431,7 +428,7 @@ describe("SP-C: a sale posted with the dev-override header files under THAT devi
     // `waitron_device` cookie) is that device's, and its `POST /api/sales` files under THAT device;
     // were the header ignored the sign-in would answer `device.unauthorized` (401).
     const { cfg, locationId, product, operatorId } = await setupVenue();
-    const tillX = cfg.tillId;
+    const tillX = await insertTill(locationId, "Caja 1");
     const tillY = await insertTill(locationId, "Caja override");
     expect(tillY).not.toBe(tillX);
 
@@ -463,11 +460,12 @@ describe("SP-C: a sale posted with the dev-override header files under THAT devi
 describe("a sale names the device it was rung on", () => {
   it("files the sale and its fiscal record under the ringing device's source and device", async () => {
     // Two devices on one till, so only the device can tell the two sales apart.
-    const { cfg, product, operatorId } = await setupVenue();
+    const { cfg, locationId, product, operatorId } = await setupVenue();
+    const till = await insertTill(locationId, "Caja 1");
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const deviceX = await enrolTillCookie(cfg, cfg.tillId);
-    const deviceY = await enrolTillCookie(cfg, cfg.tillId);
+    const deviceX = await enrolTillCookie(cfg, till);
+    const deviceY = await enrolTillCookie(cfg, till);
     for (const cookie of [deviceX, deviceY]) {
       await ringSale(app, await login(app, operatorId, { cookie }), cookie, product.menuItemId);
     }

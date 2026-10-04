@@ -24,7 +24,6 @@ describe("settle-invoice-first against a real venue directory", () => {
     lines = [];
     await settleInvoiceFirst(
       {
-        tillId: venue.tillId,
         nodeId: venue.nodeId,
         standardSeriesId: venue.seriesId,
         rectificativeSeriesId: venue.rectificativeSeriesId,

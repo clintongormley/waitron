@@ -26,7 +26,6 @@ import {
   nodeId as brandNodeId,
   rawCentsToDecimal,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { deploymentEnvironment } from "./config.js";
@@ -100,7 +99,6 @@ describe("the category report reconciles with the till's sales", () => {
             timeZone: "Europe/Madrid",
             dayCutover: "05:00",
           },
-          tillName: "Caja 1",
           seriesCode: "A",
           rectificativeSeriesCode: "R",
           admin: {
@@ -115,7 +113,6 @@ describe("the category report reconciles with the till's sales", () => {
       { db: suite.db, modules: ALL_MODULES },
     );
     const cfg = await deviceRequestCfg(suite.db, {
-      tillId: brandTillId(venue.tillId),
       nodeId: brandNodeId(venue.nodeId),
       seriesId: brandSeriesId(venue.seriesIds[0]!),
       locationId: brandLocationId(venue.locationId),

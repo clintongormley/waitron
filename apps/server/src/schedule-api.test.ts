@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, tills, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin, persons } from "@waitron/identity";
@@ -39,11 +39,7 @@ const suite = useVenueDb({
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
       .returning({ id: locations.id });
     locationId = loc!.id;
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId, name: "Till 1" })
-      .returning({ id: tills.id });
-    deviceId = await seedSessionDevice(db, { tillId: till!.id });
+    deviceId = await seedSessionDevice(db, { locationId });
     const [meRow] = await db
       .insert(persons)
       .values({ displayName: "Me", pinHash: hashPin("1111"), role: "staff" })

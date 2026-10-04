@@ -31,7 +31,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "../config.js";
 import { DEVICE_COOKIE } from "../device-session.js";
@@ -294,7 +293,6 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -309,7 +307,6 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     { db, modules: ALL_MODULES },
   );
   const cfg = await deviceRequestCfg(db, {
-    tillId: brandTillId(provisioned.tillId),
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
     locationId: brandLocationId(provisioned.locationId),

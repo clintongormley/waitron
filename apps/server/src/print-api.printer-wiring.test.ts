@@ -26,7 +26,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { mountPrintApi } from "./print-api.js";
 import { acceptPrintAgentJoinRequest } from "./join-requests.js";
@@ -109,7 +108,6 @@ const venueNodeId = brandNodeId(randomUUID());
 
 function cfgOf(tenant: Tenant): TillConfig {
   return {
-    tillId: brandTillId(randomUUID()),
     nodeId: venueNodeId,
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(tenant.locationId),

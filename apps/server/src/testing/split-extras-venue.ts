@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { locations, tills, workingOrderLines, withTransaction } from "@waitron/db";
+import { locations, workingOrderLines, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -17,7 +17,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { DeviceRequestConfig, OriginConfig, TillConfig } from "../till-config.js";
 import { deviceRequestCfg } from "./session-device.js";
@@ -59,10 +58,6 @@ export async function setupVenue(): Promise<Venue> {
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const catalogueId = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
@@ -70,7 +65,6 @@ export async function setupVenue(): Promise<Venue> {
     return cat.id;
   });
   const cfg = await deviceRequestCfg(db, {
-    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),

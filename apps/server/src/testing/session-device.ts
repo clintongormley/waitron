@@ -1,5 +1,13 @@
-import { eq } from "drizzle-orm";
-import { devices, withTransaction, workingOrders, type Database } from "@waitron/db";
+import { randomUUID } from "node:crypto";
+import { and, eq } from "drizzle-orm";
+import {
+  devices,
+  tills,
+  withTransaction,
+  workingOrders,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { loginWithPin } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
@@ -9,21 +17,57 @@ import type { TillConfig } from "../till-config.js";
 import { SESSION_COOKIE } from "../till-session.js";
 
 /**
- * A till device on `cfg`'s own till whose profile allows every capability: the device a fixture
- * opens its shift session on when the test is about something other than the device.
+ * A fresh till at `locationId`, for a device a test inserts by hand to name: a till device still names
+ * one until the tills table goes, and setup makes none.
  */
-export async function seedSessionDevice(db: Database, cfg: { tillId: string }): Promise<string> {
-  return (await seedDevice(db, { tillId: cfg.tillId, capabilities: [...CAPABILITY_FLAGS] }))
-    .deviceId;
+export async function fixtureTill(db: Database | Transaction, locationId: string): Promise<string> {
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId, name: `Caja ${randomUUID()}` })
+    .returning({ id: tills.id });
+  return till!.id;
 }
 
 /**
- * The cookie of `personId`'s shift session on a device of `cfg`'s till that has since been revoked:
- * the request every till route refuses `device.unauthorized`.
+ * The till "Caja 1" at `locationId`, made on first use: the register a test's handheld rings into, or
+ * whose printer it reads, until the tills table goes. Setup makes none.
+ */
+export async function venueTill(db: Database | Transaction, locationId: string): Promise<string> {
+  const [existing] = await db
+    .select({ id: tills.id })
+    .from(tills)
+    .where(and(eq(tills.locationId, locationId), eq(tills.name, "Caja 1")));
+  if (existing !== undefined) return existing.id;
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId, name: "Caja 1" })
+    .returning({ id: tills.id });
+  return till!.id;
+}
+
+/**
+ * A till device at `cfg`'s location whose profile allows every capability: the device a fixture
+ * opens its shift session on when the test is about something other than the device.
+ */
+export async function seedSessionDevice(
+  db: Database,
+  cfg: { locationId: string },
+): Promise<string> {
+  return (
+    await seedDevice(db, {
+      locationId: brandLocationId(cfg.locationId),
+      capabilities: [...CAPABILITY_FLAGS],
+    })
+  ).deviceId;
+}
+
+/**
+ * The cookie of `personId`'s shift session on a device at `cfg`'s location that has since been
+ * revoked: the request every till route refuses `device.unauthorized`.
  */
 export async function revokedDeviceSessionCookie(
   db: Database,
-  cfg: { tillId: string },
+  cfg: { locationId: string },
   personId: string,
   pin: string,
 ): Promise<string> {
@@ -33,7 +77,7 @@ export async function revokedDeviceSessionCookie(
   return `${SESSION_COOKIE}=${session.token}`;
 }
 
-/** `cfg` as a till-app request from a device seeded on its till, allowed every capability. */
+/** `cfg` as a till-app request from a device seeded at its location, allowed every capability. */
 export async function deviceRequestCfg<C extends TillConfig>(
   db: Database,
   cfg: C,

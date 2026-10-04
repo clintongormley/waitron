@@ -31,7 +31,6 @@ import { verifyBreakGlass } from "./break-glass.js";
 // Adopt never reads these ids back from the database, so a fixed set is enough.
 const DESIGNATED = {
   locationId: "22222222-2222-4222-8222-222222222222",
-  tillId: "33333333-3333-4333-8333-333333333333",
   nodeId: "44444444-4444-4444-8444-444444444444",
   seriesId: "55555555-5555-4555-8555-555555555555",
 } as const;
@@ -148,7 +147,6 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(persistedTrading).toHaveLength(1);
     expect(persistedTrading[0]).toMatchObject({
       locationId: DESIGNATED.locationId,
-      tillId: DESIGNATED.tillId,
       seriesId: DESIGNATED.seriesId,
       nodeId: capturedStandby!.nodeId,
       environment: "preproduction",

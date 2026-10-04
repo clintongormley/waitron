@@ -103,7 +103,6 @@ function venue(taxId: string): VenueRequest {
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
     },
-    tillName: "Till",
     seriesCode: "F",
     rectificativeSeriesCode: "R",
     admin: {
@@ -143,7 +142,6 @@ const bundle: ConfigurationBundle = {
       drawerOpenPolicy: "gated",
       catalogueId: null,
     },
-    tillName: "Till",
     seriesCode: "F",
     rectificativeSeriesCode: "R",
   },
@@ -182,6 +180,16 @@ describe("configuration transfer archive", () => {
         "a strong passphrase",
       ),
     ).toEqual(bundle);
+  });
+
+  it("accepts a bundle that still carries a tillName, as it ignores every key it does not know", () => {
+    const older = { ...bundle, venue: { ...bundle.venue, tillName: "Till" } };
+    expect(
+      decodeConfigurationBundle(
+        encodeConfigurationBundle(older, "a strong passphrase"),
+        "a strong passphrase",
+      ).venue,
+    ).toMatchObject(bundle.venue);
   });
 
   it("rejects a short passphrase before creating an artifact", () => {
@@ -412,6 +420,7 @@ describe("configuration transfer database path", () => {
       new Date("2026-09-09T00:00:00.000Z"),
       versions,
     );
+    expect(transferred.venue).not.toHaveProperty("tillName");
     for (const person of transferred.tables.persons ?? []) {
       expect(person).not.toHaveProperty("pin_hash");
       expect(person).not.toHaveProperty("password_hash");

@@ -164,10 +164,12 @@ describe("seedSales", () => {
       nifFormat: "calculated",
       invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
     })();
+    // Two days, not one: before the day's first service slot every one of today's sales would be in
+    // the future, so only yesterday guarantees any.
     const { count } = await seedSales(suite.db, {
       venue: venueFor(venue),
       locale: LOCALE,
-      days: 1,
+      days: 2,
       products: PRODUCTS,
     });
     expect(count).toBeGreaterThan(0);

@@ -39,7 +39,6 @@ const ADOPT_BODY = JSON.stringify({
 const BUNDLE: MirrorBundle = {
   designated: {
     locationId: "33333333-3333-4333-8333-333333333333",
-    tillId: "44444444-4444-4444-8444-444444444444",
     nodeId: PRIMARY_NODE_ID,
     seriesId: "55555555-5555-4555-8555-555555555555",
   },

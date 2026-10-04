@@ -672,7 +672,7 @@ describe("acceptDeviceJoinRequest", () => {
     await suite.db.insert(devices).values({
       id: made.joinId,
       locationId: venue.cfg.locationId,
-      tillId: venue.cfg.tillId,
+      tillId: venue.tillId,
       deviceProfileId: profileId,
       label: "blocker",
       tokenHash: "x",
