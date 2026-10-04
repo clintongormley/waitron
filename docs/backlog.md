@@ -2726,6 +2726,19 @@ panel. The table keeps its measured column widths when a filter narrows rows and
 then sizes them anew when the table's container, rows or column choices change. This supersedes
 W39's funnel mark.
 
+**Products table toolbar and headings stay in view — DONE (W80, owner 2026-10-04).** On the
+Products screen the table fills the main column, and its rows scroll inside the table's own box
+under its column headings; the page title, the search, Filters, Expand all, Select and Customise
+stay above it. `wt-data-table` gained an opt-in `stickyHeader` for this, set only by the Products
+screen. At every width the table's box is at least three tap targets tall. The dashboard shell
+test, with a stub catalogue of 40 uncategorised products, no category open and no message above the
+list, finds only the rows scrolling at 390×844 and 375×667, with about 27px to spare at 375×667, so
+longer toolbar labels, a wrapped banner or a message can still make the content column scroll. Not
+covered: in Select mode the toolbar wraps taller, and at 375×667 the content column was seen once by
+hand, not in a test, to scroll and carry the toolbar out of view. Other long tables (Orders, Staff, Payments and
+the rest) keep scrolling with the content column until someone decides they should opt in too; each
+would need its screen to give the table a bounded height, as the Products screen does.
+
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through
 that teaches a new user what to set up and in what order — devices, printers, device profiles, and

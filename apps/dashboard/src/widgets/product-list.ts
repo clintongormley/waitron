@@ -86,6 +86,11 @@ export class ProductList extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      :host([sticky-header]) {
+        display: flex;
+        flex: 1 1 0;
+        flex-direction: column;
+      }
       /* Cell templates are rendered in wt-data-table's shadow root, so ::part is the one boundary
          crossing used for their presentation. */
       wt-data-table::part(folder-cell) {
@@ -241,6 +246,8 @@ export class ProductList extends LitElement {
     `,
   ];
 
+  /** Fills a bounded flex column, with the table's rows scrolling under its headings. */
+  @property({ type: Boolean, reflect: true, attribute: "sticky-header" }) stickyHeader = false;
   @property({ type: Boolean }) selecting = false;
   @property({ attribute: false }) selected: string[] = [];
   @property({ attribute: false }) products: Product[] = [];
@@ -1185,6 +1192,7 @@ export class ProductList extends LitElement {
         viewKey="waitron.products.table"
         rememberExpanded
         searchOpensPath
+        .stickyHeader=${this.stickyHeader}
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}

@@ -567,6 +567,13 @@ export class DashboardApp extends LitElement {
         padding: var(--wt-space-4);
       }
 
+      /* A screen that fills .main, so its table's own box scrolls the rows while .main has room for the box's minimum. */
+      .body.fill {
+        display: flex;
+        flex: 1 1 0;
+        flex-direction: column;
+      }
+
       /* Narrow screens (a phone or a split view): the sidebar becomes an off-canvas DRAWER inside the
          content row, below the banner. It leaves the flow and slides in when the layout gains
          the drawer-open class; the hamburger appears to toggle it. A CSS media query cannot read a
@@ -1322,7 +1329,10 @@ export class DashboardApp extends LitElement {
             }
             <!-- keyed on the active locale: a switch changes the key, so Lit discards and rebuilds the
                  screen subtree, repainting every child in the new language (screens hold no controller). -->
-            <div class="body" @wt-edit-product=${this.#onEditProduct}>
+            <div
+              class=${classMap({ body: true, fill: this.screen === "catalogue" })}
+              @wt-edit-product=${this.#onEditProduct}
+            >
               ${
                 this.contentLanguagesReady
                   ? keyed(currentLocale(), this.#renderScreen())
@@ -1807,7 +1817,10 @@ export class DashboardApp extends LitElement {
       case "menus":
         return html`<dashboard-menus-screen .api=${this.api}></dashboard-menus-screen>`;
       case "catalogue":
-        return html`<dashboard-catalogue-screen .api=${this.api}></dashboard-catalogue-screen>`;
+        return html`<dashboard-catalogue-screen
+          .api=${this.api}
+          sticky-header
+        ></dashboard-catalogue-screen>`;
       case "units":
         return html`<dashboard-units-screen .api=${this.api}></dashboard-units-screen>`;
       case "content-languages":

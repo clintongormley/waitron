@@ -1702,3 +1702,21 @@ it("puts Select mode's count, Move to…, Delete and Cancel at the toolbar's end
     ).toBe(end);
   }
 });
+
+it.each([false, true])(
+  "hands stickyHeader (%s) to the Products table, which fills a bounded column only when it is set",
+  async (sticky) => {
+    const el = await mountBrowser({ stickyHeader: sticky });
+    const host = el.parentElement!;
+    host.style.display = "flex";
+    host.style.flexDirection = "column";
+    host.style.height = "600px";
+    const table = await tableOf(el);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(el.hasAttribute("sticky-header")).toBe(sticky);
+    expect(table.stickyHeader).toBe(sticky);
+    const scroll = table.shadowRoot!.querySelector(".scroll")!.getBoundingClientRect();
+    if (sticky) expect(scroll.bottom).toBeCloseTo(host.getBoundingClientRect().bottom, 0);
+    else expect(scroll.bottom).toBeLessThan(host.getBoundingClientRect().bottom - 100);
+  },
+);

@@ -70,6 +70,37 @@ export class WtDataTable<Row = unknown> extends LitElement {
         border-radius: var(--wt-radius-md);
       }
 
+      :host([sticky-header]) {
+        display: flex;
+        flex: 1 1 0;
+        flex-direction: column;
+      }
+
+      /* A zero basis lets the box fill a bounded container and still report only its minimum to
+         the containers above it, so below that minimum an outer container scrolls rather than the
+         rows being squeezed. */
+      :host([sticky-header]) .scroll {
+        flex: 1 1 0;
+        min-block-size: calc(var(--wt-tap-min) * 3);
+      }
+
+      :host([sticky-header]) thead th {
+        position: sticky;
+        inset-block-start: 0;
+        z-index: 3;
+        background: var(--wt-color-surface);
+      }
+
+      /* The collapsed border stays where the heading sits unscrolled, so the line under a held
+         heading is drawn by the heading itself. */
+      :host([sticky-header]) thead th::after {
+        content: "";
+        position: absolute;
+        inset-inline: 0;
+        inset-block-end: 0;
+        border-block-end: 1px solid var(--wt-color-border);
+      }
+
       .scroll:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
@@ -652,6 +683,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** In a tree, while a search is typed, holds open every row above a match, and keeps what passes
    * the filters under a match reachable. Off, only a row kept solely to place a match is held open. */
   @property({ type: Boolean }) searchOpensPath = false;
+  /** Rows scroll inside the table's own box, under headings held at its top, while the toolbar
+   * stays above it. The box fills the block size a bounded flex container gives the table, but is
+   * never shorter than its minimum; given no such container, it is that minimum. */
+  @property({ type: Boolean, reflect: true, attribute: "sticky-header" }) stickyHeader = false;
   @state() private searchText = "";
   /** Every filter choice, chosen or restored, keyed by column key; an absent key means the column's
    * `initial` option, or "all" when it has none, and "" is "all" chosen over an `initial` one. A
@@ -704,6 +739,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
     }
   });
   #observedScroll: Element | null = null;
+  /** Keeps a revealed or focused row clear of the headings held over the top of the box. */
+  readonly #headObserver = new ResizeObserver(() => this.#padScroll());
+  #observedHead: Element | null = null;
   #remembered: Set<string> | null = null;
   readonly #resizeFilters = (): void => {
     if (this.filtersPanel?.matches(":popover-open")) this.#positionFilters();
@@ -735,11 +773,30 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#observedScroll = scroll;
   }
 
+  #padScroll(): void {
+    const scroll = this.renderRoot.querySelector<HTMLElement>(".scroll");
+    const head = this.stickyHeader ? this.renderRoot.querySelector("thead") : null;
+    if (scroll)
+      scroll.style.scrollPaddingBlockStart = head ? `${head.getBoundingClientRect().height}px` : "";
+  }
+
+  #observeHead(): void {
+    const head = this.stickyHeader ? this.renderRoot.querySelector("thead") : null;
+    if (head === this.#observedHead) return;
+    this.#headObserver.disconnect();
+    if (head) this.#headObserver.observe(head);
+    this.#observedHead = head;
+    this.#padScroll();
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     window.addEventListener("resize", this.#resizeFilters);
     if (this.filterColumnWidths) this.#hostResizeObserver.observe(this);
-    if (this.hasUpdated) this.#observeScroll();
+    if (this.hasUpdated) {
+      this.#observeScroll();
+      this.#observeHead();
+    }
   }
 
   override disconnectedCallback(): void {
@@ -751,11 +808,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#resizeFrame = null;
     this.#scrollObserver.disconnect();
     this.#observedScroll = null;
+    this.#headObserver.disconnect();
+    this.#observedHead = null;
   }
 
   protected override updated(changed: PropertyValues<this>): void {
     super.updated(changed);
     this.#observeScroll();
+    this.#observeHead();
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
@@ -1531,6 +1591,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     }
     if (closed.length > 0) this.#setOpen(closed, true);
     await this.updateComplete;
+    this.#padScroll();
     this.shadowRoot!.querySelector(`tr[data-row-key="${CSS.escape(key)}"]`)?.scrollIntoView({
       block: "nearest",
     });

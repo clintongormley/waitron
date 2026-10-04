@@ -507,4 +507,47 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
+
+  test("sticky headings, one sorted and one filtered, with rows scrolled under them", async () => {
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Users" style="height: 480px"></wt-data-table>',
+      theme,
+    )) as WtDataTable<Row>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name, sortValue: (row) => row.name },
+      {
+        key: "status",
+        label: "Status",
+        cell: (row) => row.status,
+        filter: {
+          label: "Status",
+          allLabel: "Any status",
+          value: (row) => row.status,
+          options: [{ value: "Active", label: "Active" }],
+          initial: "Active",
+        },
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        pinned: "end",
+        cell: (row) => html`<button aria-label=${`Edit ${row.name}`}>Edit</button>`,
+      },
+    ] satisfies DataTableColumn<Row>[];
+    el.rows = Array.from({ length: 30 }, (_, index) => ({
+      id: String(index),
+      name: `Person ${index}`,
+      status: "Active",
+    }));
+    el.rowKey = (row) => row.id;
+    el.sortKey = "name";
+    el.stickyHeader = true;
+    await el.updateComplete;
+    const scroll = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+    scroll.scrollTop = 200;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(scroll.scrollTop).toBe(200);
+    expect(el.shadowRoot!.querySelector("th[data-filtered]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 });
