@@ -3,7 +3,11 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   DEFAULT_TIME_ZONE,
+  diningTables,
+  floorZones,
   locations,
+  parties,
+  partyTables,
   nowIso,
   ticketItems,
   withTransaction,
@@ -325,6 +329,111 @@ describe("zone CRUD", () => {
       code: "zone.not_found",
       params: { zoneId: missing },
     });
+  });
+
+  it("deactivating a zone switches off its tables", async () => {
+    const cfg = await setupVenue();
+    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
+    const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T8", zoneId }));
+
+    await asApp(cfg, (tx) => deactivateZone(tx, cfg, zoneId));
+
+    expect(
+      (
+        await db
+          .select({ active: floorZones.active })
+          .from(floorZones)
+          .where(eq(floorZones.id, zoneId))
+      )[0],
+    ).toEqual({ active: false });
+    expect(
+      (
+        await db
+          .select({ active: diningTables.active })
+          .from(diningTables)
+          .where(eq(diningTables.id, tableId))
+      )[0],
+    ).toEqual({ active: false });
+  });
+
+  it("refuses zone removal while an open party occupies a table there", async () => {
+    const cfg = await setupVenue();
+    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
+    const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T9", zoneId }));
+    await asApp(cfg, async (tx) => {
+      const [party] = await tx
+        .insert(parties)
+        .values({ openedBy: randomUUID() })
+        .returning({ id: parties.id });
+      await tx.insert(partyTables).values({ partyId: party!.id, tableId });
+    });
+
+    await expect(asApp(cfg, (tx) => deactivateZone(tx, cfg, zoneId))).rejects.toMatchObject({
+      code: "zone.table_in_use",
+      params: { zoneId, tableId, tableName: "T9" },
+    });
+    await expect(
+      asApp(cfg, (tx) => updateZone(tx, cfg, zoneId, { active: false })),
+    ).rejects.toMatchObject({
+      code: "zone.table_in_use",
+      params: { zoneId, tableId, tableName: "T9" },
+    });
+    expect(
+      (
+        await db
+          .select({ active: floorZones.active })
+          .from(floorZones)
+          .where(eq(floorZones.id, zoneId))
+      )[0],
+    ).toEqual({ active: true });
+  });
+
+  it("allows removing a zone with a closed party while another zone has an open party", async () => {
+    const cfg = await setupVenue();
+    const { id: removedZone } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Dining" }));
+    const { id: otherZone } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Bar" }));
+    const { id: removedTable } = await asApp(cfg, (tx) =>
+      createTable(tx, cfg, { label: "D1", zoneId: removedZone }),
+    );
+    const { id: otherTable } = await asApp(cfg, (tx) =>
+      createTable(tx, cfg, { label: "B1", zoneId: otherZone }),
+    );
+    await asApp(cfg, async (tx) => {
+      const [closed] = await tx
+        .insert(parties)
+        .values({
+          openedBy: randomUUID(),
+          state: "closed",
+          closedAt: new Date().toISOString(),
+        })
+        .returning({ id: parties.id });
+      const [open] = await tx
+        .insert(parties)
+        .values({ openedBy: randomUUID() })
+        .returning({ id: parties.id });
+      await tx.insert(partyTables).values([
+        { partyId: closed!.id, tableId: removedTable },
+        { partyId: open!.id, tableId: otherTable },
+      ]);
+    });
+
+    await expect(asApp(cfg, (tx) => deactivateZone(tx, cfg, removedZone))).resolves.toBeUndefined();
+    expect(
+      (
+        await db
+          .select({ active: floorZones.active })
+          .from(floorZones)
+          .where(eq(floorZones.id, otherZone))
+      )[0],
+    ).toEqual({ active: true });
+    expect(
+      (
+        await db
+          .select({ active: diningTables.active })
+          .from(diningTables)
+          .where(eq(diningTables.id, otherTable))
+      )[0],
+    ).toEqual({ active: true });
   });
 
   it("createZone rethrows a NON-unique DB error raw, not as zone.name_taken", async () => {

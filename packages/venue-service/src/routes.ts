@@ -18,6 +18,7 @@ import {
   configureZone,
   createDepartment,
   deactivateDepartment,
+  departmentRemovalImpact,
   listDepartments,
   listSalePolicies,
   listDepartmentHours,
@@ -71,6 +72,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
   "department.not_found": 404,
+  "department.last_active": 409,
+  "zone.table_in_use": 409,
   "department.has_active_zones": 409,
   "service_zone.not_found": 404,
   "catalogue.not_found": 404,
@@ -578,6 +581,16 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             );
         });
         return c.body(null, 204);
+      }),
+    );
+
+    app.get("/management-api/venue-service/departments/:departmentId/removal-impact", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
+        return c.json(
+          await gated(sessionId, (tx) => departmentRemovalImpact(tx, ctx.cfg, departmentId)),
+        );
       }),
     );
 

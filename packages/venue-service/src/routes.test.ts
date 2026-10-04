@@ -13,6 +13,7 @@ import {
   CORE_MIGRATIONS,
   deviceProfiles,
   devices,
+  diningTables,
   floorZones,
   kitchenStations,
   locations,
@@ -168,6 +169,61 @@ async function send(
 }
 
 describe("venue service management routes", () => {
+  it("previews department removal with zone names and active table counts", async () => {
+    const fx = await fixture();
+    const department = (await (
+      await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
+        name: "Restaurant",
+        defaultServiceMode: "table_tab",
+      })
+    ).json()) as { id: string };
+    const [secondZone] = await db
+      .insert(floorZones)
+      .values({
+        locationId: fx.locationId,
+        name: "Dining room",
+      })
+      .returning({ id: floorZones.id });
+    await withTransaction(db, async (tx) => {
+      await configureZone(
+        tx,
+        { locationId: fx.locationId },
+        {
+          zoneId: fx.zoneId,
+          departmentId: department.id,
+        },
+      );
+      await configureZone(
+        tx,
+        { locationId: fx.locationId },
+        {
+          zoneId: secondZone!.id,
+          departmentId: department.id,
+        },
+      );
+      await tx.insert(diningTables).values([
+        { locationId: fx.locationId, label: "T1", zoneId: fx.zoneId },
+        { locationId: fx.locationId, label: "T2", zoneId: fx.zoneId, active: false },
+        { locationId: fx.locationId, label: "D1", zoneId: secondZone!.id },
+        { locationId: fx.locationId, label: "D2", zoneId: secondZone!.id },
+      ]);
+    });
+
+    const response = await send(
+      fx.app,
+      "GET",
+      `/management-api/venue-service/departments/${department.id}/removal-impact`,
+      fx.managerCookie,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      zones: [
+        { id: secondZone!.id, name: "Dining room", activeTableCount: 2 },
+        { id: fx.zoneId, name: "Terrace", activeTableCount: 1 },
+      ],
+    });
+  });
+
   it("reads inherited sale policy and edits one field with a clearable zone override", async () => {
     const fx = await fixture();
     const created = await send(
@@ -842,6 +898,9 @@ describe("venue service management routes", () => {
       fx.managerCookie,
     );
     expect(blocked.status).toBe(409);
+    expect(await blocked.json()).toMatchObject({
+      error: { code: "department.last_active", params: { departmentId: department.id } },
+    });
 
     const spare = await send(
       fx.app,

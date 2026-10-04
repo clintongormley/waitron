@@ -3,6 +3,8 @@ import "@waitron/shared";
 declare module "@waitron/shared" {
   interface ErrorParams {
     "department.not_found": { departmentId: string };
+    "department.last_active": { departmentId: string };
+    "zone.table_in_use": { zoneId: string; tableId: string; tableName: string };
     "department.has_active_zones": { departmentId: string; zoneId: string };
     "service_zone.not_found": { zoneId: string };
     "service_zone.default_missing": Record<string, never>;
