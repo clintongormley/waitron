@@ -1,5 +1,10 @@
 # Departments, service styles and opening hours
 
+> **2026-10-04 follow-up:** the [devices, menus and service zones design](2026-10-04-devices-menus-and-service-zones-design.md)
+> replaces the unrestricted-device proposal in §2 with profile-based departmental access and
+> allowed zones, and records accepted transfers through a shared receiving desk. Its written spec
+> awaits review; the service-setting and advisor questions below remain separate.
+
 **Status:** Draft, 2026-10-03. It records the owner's decisions from a design conversation that day,
 marked **Owner, 2026-10-03**. Everything else is a proposal the owner has not yet confirmed. No plan
 has been written. Backlog entry: A254.

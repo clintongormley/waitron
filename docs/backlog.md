@@ -1670,24 +1670,14 @@ deletes, so a rebuild can also remove their rows. Core `0093` restores the seven
 line triggers dropped by the rebuild. `sale_lines` is append-only, and this migration copies its
 rows through a new table before its append-only triggers are reinstalled.
 
-**A menu's hours per location, and a publish date for a new version (A204, owner 2026-10-02) —
-OPEN, not designed.** The owner: _"we should be able to specify what times of of which days each
-menu is live in each location, and a publish date for a new version of a menu"_, and _"that can be
-a backlog item for now"_. Today publishing is immediate: `menu_publications` holds each menu's one
-live version (`packages/catalogue/src/schema/publication.ts`), and the SP18 row of the roadmap
-table below lists "menu schedule" as not done. **Wanted:**
-
-- per location, the days of the week and the times of day each menu is live (e.g. the lunch menu
-  Monday to Friday 13:00–16:00 at one location only);
-- a new version of a menu can be published with a future date and time, going live then rather
-  than at once, while the current version stays live until it does.
-
-Station opening hours (slice 3b, #1024) already store per-weekday intervals
-(`station_hours`, `packages/venue-service/src/schema/station-times.ts`); reuse that shape rather
-than invent a second one. Not looked into: how a till chooses its menus today, what a till shows
-for a menu outside its hours (an order already open on it, a held dish), the business day that
-ends after midnight (`when the day ends` in setup), and what a scheduled version does if a newer
-one is published before it goes live. Needs a brainstorm and spec before building.
+**Department menu timetables and queued publication (A204, owner 2026-10-02; refined
+2026-10-04) — DESIGN RECORDED, written spec awaiting review; not implemented.** Departments own
+the available-menu list and the only timetable; zones override defaults within its shared periods.
+An all-day default covers gaps; normal weeks and special dates share A261's calendar. Staff may
+still order from breakfast after it stops being the default. Several future menu editions can be
+queued, always moving forwards; an immediate publication that overtakes queued editions requires
+explicit cancellation or replacement.
+[Spec](superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md), §§2–3 and the proposed details in §9.
 
 **The product editor, tidied: eleven changes from one walk-through (A209 to A219, owner
 2026-10-02) — OPEN.** The owner, on six screenshots of "Edit product" for "Cured beef cecina (per
@@ -4947,6 +4937,16 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   [Step 2 plan](superpowers/plans/2026-10-04-departments-and-zones.md) is ready for owner review;
   the Departments and zones build has not started.
   [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
+- **Devices, profiles and departmental transfers (owner, 2026-10-04) — DESIGN RECORDED,
+  written spec awaiting review; not implemented.** Profiles bind departmental access, permitted
+  zones, staff eligibility, actions, screens and equipment choices. Devices switch among approved
+  profiles and select equipment and station/watcher bindings; drawers are independent of receipt
+  printers. Portable equipment supports scan takeover and confirmed dropdown takeover, with busy
+  payment terminals protected. Tab transfers require acceptance at a shared departmental receiving
+  profile; existing preparation and pickup instructions stay unchanged. Menu work is A204 above.
+  [Spec](superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md); §9 separates designer proposals from
+  owner decisions, and §10 names the A238/A254/A261 decisions it revises. Reconcile A261 step 2's
+  starting-zone placement before implementing the intersecting work.
 - **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
   states and signals a table has that Waitron sets itself (today Free, Occupied, Reserved from a
   booking, Needs clearing, Bill requested and the kitchen signals), which a venue can switch off,

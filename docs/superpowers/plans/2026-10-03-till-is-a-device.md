@@ -1,5 +1,9 @@
 # A till is a device (A238) — Implementation Plan
 
+> **2026-10-04 follow-up:** the [devices, menus and service zones design](../specs/2026-10-04-devices-menus-and-service-zones-design.md)
+> records independent drawer selection and expanded profile/device choices as subsequent work.
+> Its written spec awaits review; do not read this historical plan as that follow-up implementation.
+
 > 2026-10-04: W57 added `operator_script` to the shared and sale source lists. The lists below record
 > the earlier A238 plan.
 

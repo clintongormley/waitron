@@ -1,5 +1,10 @@
 # Departments and zones: implementation plan (A261 step 2)
 
+> **2026-10-04 design follow-up:** the [devices, menus and service zones design](../specs/2026-10-04-devices-menus-and-service-zones-design.md)
+> places starting zones on profiles and menu membership on departments. Its written spec awaits
+> review. Reconcile the starting-zone decision here before implementing that part; this pointer
+> does not add the new profile, scheduling or transfer work to this plan.
+
 > **Review:** On 2026-10-04 a fresh-context Claude read-only seat compared A261 §§4, 5, 11–12 and A254 §§2–3, 6 with the plan. Its six findings led to corrected receipt choices, an explicit `order_flow` retirement boundary, moved-bill coverage, removed-tab checks, stated defaults, and a Devices home for the starting zone. A narrow read-only correction check followed; it identified an unscoped-sale snapshot, a missing switch-toggle test, the unassigned column cleanup, and the Floor-side setting handover. Those four corrections are now in Tasks 5, 7, and 9 and decision 5.
 
 **Goal:** Replace the three-part Departments and zones screen with one editable tree table; give quick sales and receipts department defaults with optional zone overrides; print an enabled department trading name above the legal name and preview it from the table.

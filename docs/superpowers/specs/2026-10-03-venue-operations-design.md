@@ -1,5 +1,10 @@
 # Venue operations: how the venue is organised and configured
 
+> **2026-10-04 follow-up:** the [devices, menus and service zones design](2026-10-04-devices-menus-and-service-zones-design.md)
+> records department-wide menu membership and timetables, zone default-menu overrides, profile
+> starting zones and selectable station/watcher bindings. It reuses §7's special-date calendar.
+> Its written spec awaits review; reconcile §§4, 6.3 and 8 when planning the intersecting work.
+
 **Status:** Draft, 2026-10-03. Every decision below was made by the owner in a design conversation
 that day, over a series of mockups, unless it is marked **Proposed**. Each §11 step gets its own
 plan; step 1's is [2026-10-03-venue-settings-and-navigation.md](../plans/2026-10-03-venue-settings-and-navigation.md).
