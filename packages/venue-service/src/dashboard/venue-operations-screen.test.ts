@@ -350,6 +350,9 @@ describe("venue operations screen", () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
       deactivateZone,
+      departmentRemovalImpact: vi.fn().mockResolvedValue({
+        zones: [{ id: "z1", name: "Dining room", activeTableCount: 0 }],
+      }),
     } as unknown as VenueServiceApi);
     const tree = table(el, "policy-tree").shadowRoot!;
     const remove = tree.querySelector<HTMLElement>('[data-test="remove-tree-zone-z1"]')!;
@@ -362,6 +365,24 @@ describe("venue operations screen", () => {
     expect(deactivateZone).not.toHaveBeenCalled();
     await action(el, "save-editor");
     expect(deactivateZone).toHaveBeenCalledWith("z1");
+  });
+
+  it("names the zone and its active tables before removal", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      departmentRemovalImpact: vi.fn().mockResolvedValue({
+        zones: [{ id: "z1", name: "Dining room", activeTableCount: 2 }],
+      }),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const remove = tree.querySelector<HTMLElement>('[data-test="remove-tree-zone-z1"]')!;
+    remove
+      .closest("wt-row-actions")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    remove.click();
+    await settle(el);
+    expect(modal(el)?.textContent).toMatch(/Dining room:\s*2 active tables/);
   });
 
   it("opens hours for the chosen policy-tree department", async () => {

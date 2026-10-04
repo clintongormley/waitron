@@ -500,6 +500,19 @@ export class VenueOperationsScreen extends LitElement {
       this.actionError = this.#refusal(codeOf(error ?? {}), error);
     }
   }
+  async #confirmZone(row: FloorZone, departmentId: string): Promise<void> {
+    try {
+      const impact = await this.api.departmentRemovalImpact(departmentId);
+      this.#open({
+        kind: "delete",
+        name: row.name,
+        action: () => this.api.deactivateZone(row.id),
+        impact: { zones: impact.zones.filter((zone) => zone.id === row.id) },
+      });
+    } catch (error) {
+      this.actionError = this.#refusal(codeOf(error ?? {}), error);
+    }
+  }
   #readinessMessage(issue: VenueReadinessIssue): string {
     switch (issue.code) {
       case "venue.department_missing":
@@ -1057,8 +1070,7 @@ export class VenueOperationsScreen extends LitElement {
                 {
                   key: `remove-tree-zone-${row.zone.id}`,
                   label: t("venue.remove"),
-                  run: () =>
-                    this.#confirm(row.zone.name, () => this.api.deactivateZone(row.zone.id)),
+                  run: () => void this.#confirmZone(row.zone, row.departmentId),
                 },
               ]),
       },
