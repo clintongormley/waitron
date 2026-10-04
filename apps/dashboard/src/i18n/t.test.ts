@@ -52,6 +52,11 @@ it("heads the Sales screen's tender column Device, because a sale's origin is a 
   expect(es["sales.device"]).toBe("Dispositivo");
 });
 
+it("calls the Structure tab's picker button Add products in English and Spanish", () => {
+  expect(en["sections.add_products"]).toBe("Add products");
+  expect(es["sections.add_products"]).toBe("Añadir productos");
+});
+
 it("registers en-GB as a first-class catalogue entry", () => {
   expect(catalogues["en-GB"]).toBe(en);
 });

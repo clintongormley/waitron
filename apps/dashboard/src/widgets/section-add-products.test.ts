@@ -334,3 +334,145 @@ it("names the categories by their one name whatever language is in force", async
     "Bebidas / Cerveza",
   );
 });
+
+const header = (el: SectionAddProducts): HTMLInputElement =>
+  q<HTMLInputElement>(el, 'input[data-test="select-listed"]');
+
+async function tickHeader(el: SectionAddProducts): Promise<void> {
+  header(el).click();
+  await el.updateComplete;
+}
+
+function ticked(el: SectionAddProducts): string[] {
+  return [
+    ...el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="product"]:checked'),
+  ].map((box) => box.value);
+}
+
+it("names the header checkbox for what it does, and shows a shorter label beside it", async () => {
+  const el = await mount();
+  const box = header(el);
+  expect(box.getAttribute("aria-label")).toBe(t("add_products.select_listed_label"));
+  expect(box.closest("label")!.textContent!.trim()).toBe(t("add_products.select_listed"));
+  expect(box.checked).toBe(false);
+  expect(box.indeterminate).toBe(false);
+  expect(box.disabled).toBe(false);
+});
+
+it("puts the header checkbox above the list, in line with the product checkboxes", async () => {
+  const el = await mount();
+  const box = header(el).getBoundingClientRect();
+  const first = q<HTMLInputElement>(el, 'input[name="product"]').getBoundingClientRect();
+  expect(box.width).toBeGreaterThan(0);
+  expect(box.left).toBeCloseTo(first.left, 0);
+  expect(box.width).toBeCloseTo(first.width, 0);
+  expect(box.top).toBeLessThan(first.top);
+});
+
+it("the header checkbox chooses only the products the filters list", async () => {
+  const el = await mount();
+  await filterBy(el, "c-beer");
+  await tickHeader(el);
+  expect(ticked(el)).toEqual(["p-ipa", "p-lager"]);
+  expect(header(el).checked).toBe(true);
+  expect(header(el).indeterminate).toBe(false);
+  expect(q(el, '[data-test="count"]').textContent!.trim()).toBe(
+    t("add_products.selected").replace("{count}", "2"),
+  );
+  await filterBy(el, "");
+  expect(ticked(el)).toEqual(["p-ipa", "p-lager"]);
+});
+
+it("the header checkbox chooses only what a search lists", async () => {
+  const el = await mount();
+  await search(el, "la");
+  await tickHeader(el);
+  await search(el, "");
+  expect(ticked(el)).toEqual(["p-lager"]);
+});
+
+it("shows mixed while some listed products are chosen, and a click then chooses every listed one", async () => {
+  const el = await mount();
+  await filterBy(el, "c-drinks");
+  await tick(el, "p-lager");
+  expect(header(el).indeterminate).toBe(true);
+  expect(header(el).checked).toBe(false);
+  await tickHeader(el);
+  expect(ticked(el)).toEqual(["p-ipa", "p-lager", "p-lemonade"]);
+  expect(header(el).indeterminate).toBe(false);
+  expect(header(el).checked).toBe(true);
+});
+
+it("unchooses only the listed products, keeping those a filter hides", async () => {
+  const el = await mount();
+  const adds = capture(el);
+  await tick(el, "p-burger");
+  await tick(el, "p-ipa");
+  await tick(el, "p-lager");
+  await filterBy(el, "c-beer");
+  expect(header(el).checked).toBe(true);
+  await tickHeader(el);
+  expect(ticked(el)).toEqual([]);
+  expect(header(el).checked).toBe(false);
+  expect(header(el).indeterminate).toBe(false);
+  expect(q(el, '[data-test="count"]').textContent!.trim()).toBe(
+    t("add_products.selected").replace("{count}", "1"),
+  );
+  q(el, '[data-test="add"]').click();
+  expect(adds).toEqual([{ productIds: ["p-burger"] }]);
+});
+
+it("reads its state from the listed products alone, not from chosen ones a filter hides", async () => {
+  const el = await mount();
+  await tick(el, "p-burger");
+  await tick(el, "p-water");
+  expect(header(el).indeterminate).toBe(true);
+  await filterBy(el, "c-beer");
+  expect(header(el).checked).toBe(false);
+  expect(header(el).indeterminate).toBe(false);
+});
+
+it("adds what the header chose together with chosen products the filter now hides", async () => {
+  const el = await mount();
+  const adds = capture(el);
+  await tick(el, "p-water");
+  await filterBy(el, "c-beer");
+  await tickHeader(el);
+  q(el, '[data-test="add"]').click();
+  expect(adds).toEqual([{ productIds: ["p-ipa", "p-lager", "p-water"] }]);
+});
+
+it("disables the header checkbox while no product matches the filters", async () => {
+  const el = await mount();
+  await tick(el, "p-burger");
+  await filterBy(el, "c-beer");
+  await search(el, "zzz");
+  expect(q(el, '[data-test="no-matches"]')).not.toBeNull();
+  expect(header(el).disabled).toBe(true);
+  expect(header(el).checked).toBe(false);
+  expect(header(el).indeterminate).toBe(false);
+  await search(el, "");
+  expect(header(el).disabled).toBe(false);
+});
+
+it("draws no header checkbox when there is nothing the filters could list", async () => {
+  const none = await mount({ products: [] });
+  expect(none.shadowRoot!.querySelector('[data-test="select-listed"]')).toBeNull();
+  cleanupWidgets();
+  const held = await mount({ inSection: products.map(({ id }) => id) });
+  expect(held.shadowRoot!.querySelector('[data-test="select-listed"]')).toBeNull();
+});
+
+it("disables the header checkbox while busy", async () => {
+  const el = await mount({ busy: true });
+  expect(header(el).disabled).toBe(true);
+});
+
+it("clears the nothing-chosen explanation once the header checkbox chooses", async () => {
+  const el = await mount();
+  q(el, '[data-test="add"]').click();
+  await el.updateComplete;
+  expect(q(el, '[data-test="error"]')).not.toBeNull();
+  await tickHeader(el);
+  expect(el.shadowRoot!.querySelector('[data-test="error"]')).toBeNull();
+});

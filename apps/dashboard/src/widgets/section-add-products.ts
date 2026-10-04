@@ -70,8 +70,14 @@ export class SectionAddProducts extends LitElement {
         padding: 0;
         list-style: none;
       }
-      li {
+      li,
+      .head {
         border-bottom: 1px solid var(--wt-color-border);
+      }
+      .head {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
       }
       /* The whole row is the tap target for its checkbox, never the checkbox stretched past its
          own box. */
@@ -176,6 +182,16 @@ export class SectionAddProducts extends LitElement {
     this.error = false;
   }
 
+  #toggleListed(event: Event, listed: AddableProduct[]): void {
+    event.stopPropagation();
+    const selected = new Set(this.selected);
+    if (listed.every(({ id }) => selected.has(id)))
+      for (const { id } of listed) selected.delete(id);
+    else for (const { id } of listed) selected.add(id);
+    this.selected = selected;
+    this.error = false;
+  }
+
   #confirm(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
@@ -214,6 +230,26 @@ export class SectionAddProducts extends LitElement {
     </li>`;
   }
 
+  #header(listed: AddableProduct[]) {
+    const chosen = listed.filter(({ id }) => this.selected.has(id)).length;
+    const all = listed.length > 0 && chosen === listed.length;
+    return html`<div class="head">
+      <label class="pick">
+        <input
+          type="checkbox"
+          name="select-listed"
+          data-test="select-listed"
+          aria-label=${t("add_products.select_listed_label")}
+          .checked=${all}
+          .indeterminate=${chosen > 0 && !all}
+          .disabled=${this.busy || listed.length === 0}
+          @change=${(event: Event) => this.#toggleListed(event, listed)}
+        />
+        <span class="name">${t("add_products.select_listed")}</span>
+      </label>
+    </div>`;
+  }
+
   #list() {
     if (this.products.length === 0)
       return html`<p class="notice" data-test="empty">${t("add_products.empty")}</p>`;
@@ -223,15 +259,17 @@ export class SectionAddProducts extends LitElement {
       </p>`;
     const visible = this.#visible();
     if (visible.length === 0)
-      return html`<p class="notice" data-test="no-matches">${t("add_products.no_matches")}</p>`;
+      return html`${this.#header(visible)}
+        <p class="notice" data-test="no-matches">${t("add_products.no_matches")}</p>`;
     const onMenu = new Set(this.onMenu ?? []);
-    return html`<ul>
-      ${repeat(
-        visible,
-        (product) => product.id,
-        (product) => this.#item(product, onMenu),
-      )}
-    </ul>`;
+    return html`${this.#header(visible)}
+      <ul>
+        ${repeat(
+          visible,
+          (product) => product.id,
+          (product) => this.#item(product, onMenu),
+        )}
+      </ul>`;
   }
 
   override render() {
