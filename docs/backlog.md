@@ -3029,7 +3029,7 @@ in either direction, and under a sort restored from an earlier visit. Before, th
 table like any other row, so a Name sort backwards or a price sort reordered them. `wt-data-table`
 gained `rowKeepsChildOrder`, which the Products list turns on for product rows; categories and
 products still sort as before. The order the product editor keeps (drag-reorderable, used by menus
-and ordering) is unchanged: the list sorts a copy.
+and ordering) is unchanged: the list sorts a copy. No existing test assertion changed.
 
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through

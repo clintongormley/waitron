@@ -120,7 +120,8 @@ extras lists to take the product off first.
 
 The products list keeps each product's variants folded away under it. A product with Active
 variants says how many under its name, such as **2 variants**, and the small arrow just before
-its drag handle opens them.
+its drag handle opens them. The list shows a product's variants in name order, with numbers in
+number order (so "Ración 2" comes before "Ración 10"), whichever column the list is sorted by.
 Each variant's row shows its own name, the price it sells at, its status and its
 row menu. If a variant's VAT differs
 from its product's, the list notes it under the variant's price. A variant's row menu offers

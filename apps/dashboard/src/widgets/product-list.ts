@@ -1233,7 +1233,7 @@ export class ProductList extends LitElement {
         .rowGroup=${(row: ListRow) => (row.kind === "product" ? 1 : 0)}
         .rowCollapsible=${(row: ListRow) => row.kind !== "root"}
         .rowJoinsParent=${(row: ListRow) => row.kind === "product" && row.variant !== null}
-        .rowKeepsChildOrder=${(row: ListRow) => row.kind === "product"}
+        .rowKeepsChildOrder=${(row: ListRow) => row.kind === "product" && row.variant === null}
         .expandAllIncludes=${(row: ListRow) => row.kind === "folder"}
         .rowActivation=${(row: ListRow) =>
           row.kind === "folder" && !this.#renaming(row.folder.id)

@@ -648,7 +648,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
     String(index);
   @property({ attribute: false }) rowParent?: (row: Row) => string | null;
   /** Siblings sort by this number first, smallest first in either sort direction, and by the chosen
-   * column only within a group. */
+   * column only within a group. Not applied to the children of a row `rowKeepsChildOrder` keeps in
+   * order. */
   @property({ attribute: false }) rowGroup?: (row: Row) => number;
   /** In tree mode, a branch this returns false for is always open: it draws no toggle, is never seeded
    * closed, and `setExpanded` cannot close it. */
@@ -658,7 +659,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * group under that row. Its `aria-level` still puts it a level down. */
   @property({ attribute: false }) rowJoinsParent: (row: Row) => boolean = () => false;
   /** In tree mode, the children of a row this returns true for are drawn in the order `rows` lists
-   * them, whatever column sorts the table and in either direction; their own children still sort. */
+   * them, ignoring `rowGroup` and the sort column, in either direction; their own children still
+   * sort. */
   @property({ attribute: false }) rowKeepsChildOrder: (row: Row) => boolean = () => false;
   /** When set, each row becomes activatable: a stretched, focusable button covers the row and calls
    * this on click. Per-row controls (the selection checkbox, the Edit/Delete menu) sit above the
