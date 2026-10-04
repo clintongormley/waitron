@@ -239,6 +239,57 @@ describe("venue operations screen", () => {
     expect(rows[1].textContent).not.toContain("Casa Delgado");
   });
 
+  it("shows the effective quick-sale and receipt policy beside each department and zone", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        salePolicies: {
+          departments: [
+            {
+              departmentId: "d1",
+              paidWhen: "prepay",
+              collectionNumber: "none",
+              receiptPrintMode: "auto",
+              printTradingName: true,
+            },
+            {
+              departmentId: "d2",
+              paidWhen: "ticket_then_pay",
+              collectionNumber: "numbered",
+              receiptPrintMode: "on_request",
+              printTradingName: false,
+            },
+          ],
+          zones: [
+            {
+              zoneId: "z1",
+              paidWhen: "ticket_then_pay",
+              collectionNumber: null,
+              receiptPrintMode: "never",
+              effective: {
+                paidWhen: "ticket_then_pay",
+                collectionNumber: "none",
+                receiptPrintMode: "never",
+                printTradingName: true,
+              },
+            },
+          ],
+        },
+      }),
+    } as unknown as VenueServiceApi);
+    const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
+    expect(rows).toHaveLength(3);
+    expect(rows[0].textContent).toContain("Pay before preparation");
+    expect(rows[0].textContent).toContain("None");
+    expect(rows[0].textContent).toContain("Always");
+    expect(rows[1].textContent).toContain("Pay on collection");
+    expect(rows[1].textContent).toContain("None");
+    expect(rows[1].textContent).toContain("Never");
+    expect(rows[2].textContent).toContain("Pay on collection");
+    expect(rows[2].textContent).toContain("Numbered");
+    expect(rows[2].textContent).toContain("On request");
+  });
+
   it("puts each tab's available Add actions beside the tablist", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),

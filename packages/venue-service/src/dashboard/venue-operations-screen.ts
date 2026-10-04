@@ -517,6 +517,10 @@ export class VenueOperationsScreen extends LitElement {
             : [];
         }),
     ]);
+    const policyFor = (row: PolicyRow) =>
+      row.kind === "department"
+        ? model.salePolicies.departments.find((policy) => policy.departmentId === row.department.id)
+        : model.salePolicies.zones.find((policy) => policy.zoneId === row.zone.id)?.effective;
     const columns: DataTableColumn<PolicyRow>[] = [
       {
         key: "name",
@@ -532,6 +536,44 @@ export class VenueOperationsScreen extends LitElement {
         key: "trading",
         label: t("venue.trading_name"),
         cell: (row) => (row.kind === "department" ? row.department.tradingName : nothing),
+      },
+      {
+        key: "paid",
+        label: t("venue.paid"),
+        cell: (row) => {
+          const paidWhen = policyFor(row)?.paidWhen;
+          return paidWhen === "prepay"
+            ? t("venue.prepay")
+            : paidWhen === "ticket_then_pay"
+              ? t("venue.pay_on_collection")
+              : nothing;
+        },
+      },
+      {
+        key: "collection",
+        label: t("venue.collection_number"),
+        cell: (row) => {
+          const collectionNumber = policyFor(row)?.collectionNumber;
+          return collectionNumber === "none"
+            ? t("venue.none")
+            : collectionNumber === "numbered"
+              ? t("venue.numbered")
+              : nothing;
+        },
+      },
+      {
+        key: "receipt",
+        label: t("venue.receipt"),
+        cell: (row) => {
+          const receiptPrintMode = policyFor(row)?.receiptPrintMode;
+          return receiptPrintMode === "auto"
+            ? t("venue.always")
+            : receiptPrintMode === "on_request"
+              ? t("venue.on_request")
+              : receiptPrintMode === "never"
+                ? t("venue.never")
+                : nothing;
+        },
       },
     ];
     return html`<wt-data-table
