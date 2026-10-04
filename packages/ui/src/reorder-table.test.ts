@@ -3,7 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { commands } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, mount as mountHtml } from "./test-helpers.js";
+import { cleanup, middleWithin, mount as mountHtml, textLines } from "./test-helpers.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import { reorder } from "./reorder.js";
 import { baseStyles } from "./base-styles.js";
@@ -982,20 +982,14 @@ it.each([
     });
     const row = el.shadowRoot!.querySelector("tr")!;
     const icon = row.querySelector("wt-icon")!.getBoundingClientRect();
-    const range = document.createRange();
-    range.selectNodeContents(row.querySelector(".name")!);
-    const lines = range.getClientRects();
+    const lines = textLines(row.querySelector(".name")!);
     const line = lines[0]!;
-    const iconMiddle = (icon.top + icon.bottom) / 2;
     if (name.length > 10) {
       expect(lines.length, "the name wraps").toBeGreaterThan(1);
       expect(row.getBoundingClientRect().height).toBeGreaterThan(
         row.querySelector(".handle")!.getBoundingClientRect().height * 1.5,
       );
     }
-    expect(
-      iconMiddle >= line.top && iconMiddle <= line.bottom,
-      JSON.stringify({ iconMiddle, line }),
-    ).toBe(true);
+    expect(middleWithin(line)(icon), JSON.stringify({ icon, line })).toBe(true);
   },
 );

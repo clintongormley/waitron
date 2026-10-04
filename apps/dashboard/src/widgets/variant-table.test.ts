@@ -1,5 +1,6 @@
 import { reorder } from "@waitron/ui";
 import { afterEach, expect, it, vi } from "vitest";
+import { middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { VariantTable } from "./variant-table.js";
@@ -840,17 +841,6 @@ it.each(["light", "dark"] as const)(
   },
 );
 
-/** The line boxes of the first text inside `cell`. A Range over the whole cell would also return
- * the boxes of the elements in it, such as the row's button. */
-function textLines(cell: Element): DOMRectList {
-  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
-  let node = walker.nextNode();
-  while (node && !node.textContent!.trim()) node = walker.nextNode();
-  const range = document.createRange();
-  range.selectNodeContents(node!);
-  return range.getClientRects();
-}
-
 it.each([
   [1280, "light"],
   [1280, "dark"],
@@ -881,7 +871,6 @@ it.each([
       const row = rows(el)[0]!;
       const name = row.children[1]!;
       const handle = handles(el)[0]!;
-      const middle = (box: DOMRect) => (box.top + box.bottom) / 2;
 
       expect(window.innerWidth).toBe(frame);
       expect(row.getBoundingClientRect().height).toBeGreaterThan(
@@ -889,11 +878,7 @@ it.each([
       );
       expect(textLines(name).length, "the name wraps").toBeGreaterThan(1);
       const line = textLines(name)[0]!;
-      // Middles, not whole boxes: line boxes differ by a pixel between machines' fonts.
-      const within = (box: DOMRect) => {
-        const at = middle(box);
-        return at >= line.top && at <= line.bottom;
-      };
+      const within = middleWithin(line);
       const icon = (handle.querySelector("wt-icon") ?? handle).getBoundingClientRect();
       const toggle = row
         .querySelector('[data-test="available-0"]')!

@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { formMessageOf, middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
 // Value import (not `import type`): pulls the module in for its `@customElement` side effect, so
 // `mountWidget` can create `dashboard-option-list-form`.
 import { OptionListForm } from "./option-list-form.js";
@@ -1612,17 +1612,6 @@ it("starts again when reopened: no messages and Save working", async () => {
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
 
-/** The line boxes of the first text inside `cell`. A Range over the whole cell would also return
- * the boxes of the elements in it, such as the name's button. */
-function textLines(cell: Element): DOMRectList {
-  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
-  let node = walker.nextNode();
-  while (node && !node.textContent!.trim()) node = walker.nextNode();
-  const range = document.createRange();
-  range.selectNodeContents(node!);
-  return range.getClientRects();
-}
-
 it.each([
   [1280, "light"],
   [1280, "dark"],
@@ -1659,7 +1648,6 @@ it.each([
       const row = el.shadowRoot!.querySelector<HTMLElement>(`tr[data-label="${RARE}"]`)!;
       const name = row.querySelector('[data-test="label-0-name"]')!;
       const handle = row.querySelector<HTMLElement>(".handle")!;
-      const middle = (box: DOMRect) => (box.top + box.bottom) / 2;
 
       expect(window.innerWidth).toBe(frame);
       expect(row.getBoundingClientRect().height).toBeGreaterThan(
@@ -1667,11 +1655,7 @@ it.each([
       );
       expect(textLines(name).length, "the name wraps").toBeGreaterThan(1);
       const line = textLines(name)[0]!;
-      // Middles, not whole boxes: line boxes differ by a pixel between machines' fonts.
-      const within = (box: DOMRect) => {
-        const at = middle(box);
-        return at >= line.top && at <= line.bottom;
-      };
+      const within = middleWithin(line);
       const icon = (handle.querySelector("wt-icon") ?? handle).getBoundingClientRect();
       const radio = row.querySelector('[data-test="label-0-default"]')!.getBoundingClientRect();
       const menu = row.querySelector("wt-row-actions")!.getBoundingClientRect();

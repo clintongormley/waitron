@@ -3,7 +3,12 @@ import { page, userEvent } from "vitest/browser";
 import { registerIcons, type ComboboxOption } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
-import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import {
+  chooseOption,
+  formMessageOf,
+  middleWithin,
+  textLines,
+} from "@waitron/ui/src/test-helpers.js";
 import {
   ProductEditor,
   productEditorField,
@@ -3017,17 +3022,6 @@ it("keeps an attached row's name, type, grip and row menu on one line", async ()
   expect(textMiddle("[data-test=modifier-kind]")).toBeCloseTo(grip, 0);
 });
 
-/** The line boxes of the first text inside `cell`. A Range over the whole cell would also return
- * the boxes of the elements in it, such as the row's button. */
-function textLines(cell: Element): DOMRectList {
-  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
-  let node = walker.nextNode();
-  while (node && !node.textContent!.trim()) node = walker.nextNode();
-  const range = document.createRange();
-  range.selectNodeContents(node!);
-  return range.getClientRects();
-}
-
 it.each([
   [1280, "light"],
   [1280, "dark"],
@@ -3062,7 +3056,6 @@ it.each([
       const row = attachedRows(el)[0]!;
       const name = row.querySelector("[data-test=modifier-name]")!;
       const handle = row.querySelector<HTMLElement>(".handle")!;
-      const middle = (box: DOMRect) => (box.top + box.bottom) / 2;
 
       expect(window.innerWidth).toBe(frame);
       expect(row.getBoundingClientRect().height).toBeGreaterThan(
@@ -3070,11 +3063,7 @@ it.each([
       );
       expect(textLines(name).length, "the name wraps").toBeGreaterThan(1);
       const line = textLines(name)[0]!;
-      // Middles, not whole boxes: line boxes differ by a pixel between machines' fonts.
-      const within = (box: DOMRect) => {
-        const at = middle(box);
-        return at >= line.top && at <= line.bottom;
-      };
+      const within = middleWithin(line);
       const icon = (handle.querySelector("wt-icon") ?? handle).getBoundingClientRect();
       const menu = row.querySelector("wt-row-actions")!.getBoundingClientRect();
       const kind = textLines(row.querySelector("[data-test=modifier-kind]")!)[0]!;

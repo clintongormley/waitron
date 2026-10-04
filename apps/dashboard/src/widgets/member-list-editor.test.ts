@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import type { WtModal } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import type { SectionMember } from "@waitron/catalogue/src/section-types.js";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 // Value import: pulls the module in for its `@customElement` side effect.
 import { MemberListEditor, sectionParents, sectionsHolding } from "./member-list-editor.js";
@@ -695,17 +695,6 @@ it("describes both tile choices in the Home mode and products alone in structura
   expect(memberBox(el).placeholder).toBe(t("members.add_placeholder"));
 });
 
-/** The line boxes of the first text inside `cell`. A Range over the whole cell would also return
- * the boxes of the elements in it, such as the note under the name. */
-function textLines(cell: Element): DOMRectList {
-  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
-  let node = walker.nextNode();
-  while (node && !node.textContent!.trim()) node = walker.nextNode();
-  const range = document.createRange();
-  range.selectNodeContents(node!);
-  return range.getClientRects();
-}
-
 it.each([
   [1280, "light"],
   [1280, "dark"],
@@ -740,7 +729,6 @@ it.each([
       const row = q(el, 'tr[data-member="m-burger"]');
       const name = row.querySelector('[data-test="name"]')!;
       const handle = row.querySelector<HTMLElement>(".handle")!;
-      const middle = (box: DOMRect) => (box.top + box.bottom) / 2;
 
       expect(window.innerWidth).toBe(frame);
       expect(row.getBoundingClientRect().height).toBeGreaterThan(
@@ -749,11 +737,7 @@ it.each([
       expect(textLines(name).length, "the name wraps").toBeGreaterThan(1);
       expect(row.querySelector('[data-test="note"]')).not.toBeNull();
       const line = textLines(name)[0]!;
-      // Middles, not whole boxes: line boxes differ by a pixel between machines' fonts.
-      const within = (box: DOMRect) => {
-        const at = middle(box);
-        return at >= line.top && at <= line.bottom;
-      };
+      const within = middleWithin(line);
       const icon = (handle.querySelector("wt-icon") ?? handle).getBoundingClientRect();
       const menu = row.querySelector("wt-row-actions")!.getBoundingClientRect();
       const kind = textLines(row.querySelector('[data-test="kind"]')!)[0]!;

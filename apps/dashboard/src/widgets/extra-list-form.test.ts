@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { formMessageOf, middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
 // Value import (not `import type`): pulls the module in for its `@customElement` side effect, so
 // `mountWidget` can create `dashboard-extra-list-form`.
 import { ExtraListForm } from "./extra-list-form.js";
@@ -2567,13 +2567,6 @@ it("shows the same Portion cells before a save and after the list is reopened wi
   expect(resent[1]!.portion).toBe("250.000");
 });
 
-/** A text's FIRST line box, however many lines it wraps to. */
-function firstLine(node: Element): DOMRect {
-  const range = document.createRange();
-  range.selectNodeContents(node);
-  return range.getClientRects()[0]!;
-}
-
 it.each([
   [1280, "light"],
   [1280, "dark"],
@@ -2613,23 +2606,13 @@ it.each([
       const icon = handle.querySelector("wt-icon") ?? handle;
       const box = icon.getBoundingClientRect();
       const handleBox = handle.getBoundingClientRect();
-      const nameLines = (() => {
-        const range = document.createRange();
-        range.selectNodeContents(name);
-        return range.getClientRects().length;
-      })();
 
       expect(window.innerWidth).toBe(frame);
       // Only a row taller than its handle can tell the first line from the row's middle.
       expect(row.getBoundingClientRect().height).toBeGreaterThan(handleBox.height * 1.5);
-      expect(nameLines, "the name wraps").toBeGreaterThan(1);
-      const line = firstLine(name);
-      const iconMiddle = (box.top + box.bottom) / 2;
-      // The middle, not the whole icon: line boxes differ by a pixel between machines' fonts.
-      expect(
-        iconMiddle >= line.top && iconMiddle <= line.bottom,
-        JSON.stringify({ icon: box, line }),
-      ).toBe(true);
+      expect(textLines(name).length, "the name wraps").toBeGreaterThan(1);
+      const line = textLines(name)[0]!;
+      expect(middleWithin(line)(box), JSON.stringify({ icon: box, line })).toBe(true);
       expect({ width: handleBox.width >= 44, height: handleBox.height >= 44 }).toEqual({
         width: true,
         height: true,
