@@ -3,8 +3,8 @@
 // the root guard (`scripts/alert-codes.test.ts`) can load it.
 //
 // No sentence promises a later check by the server: the daily payments check looks at each day once,
-// and the fiscal reconciliation sweep has no production caller. Only `alert.source_unavailable`
-// and `fiscal.estado_desconocido` promise an automatic retry: an open dashboard asks for its alerts
+// and the fiscal reconciliation sweep has no production caller. Only `alert.source_unavailable`,
+// `reader.status_unavailable` and `fiscal.estado_desconocido` promise an automatic retry: an open dashboard asks for its alerts
 // again every minute, and the drain puts such a record back to waiting (`awaitReadableAnswer`,
 // `@waitron/fiscal-verifactu`); a sentence that asks for a retry or a restart asks the owner to do it.
 
@@ -224,5 +224,9 @@ export const ALERT_MESSAGES: Readonly<
   "reader.battery_low": {
     en: "Card reader “{reader}” battery is low ({percent}%). Charge it to avoid interruptions at the till.",
     es: "La batería del lector de tarjetas «{reader}» está baja ({percent} %). Cárgalo para evitar interrupciones en la caja.",
+  },
+  "reader.status_unavailable": {
+    en: "Waitron could not check card reader “{reader}”. Check it on the Payments page; the alert check will try again in a minute.",
+    es: "Waitron no ha podido comprobar el lector de tarjetas «{reader}». Revísalo en la página de Pagos; la comprobación de alertas lo intentará de nuevo en un minuto.",
   },
 };

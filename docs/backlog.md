@@ -1366,11 +1366,12 @@ response; the browser cases in
 ignores cancellation may continue after the server has answered; the source's five-minute cache
 shares that in-flight call with reads during its lifetime.
 
-One reader whose provider stalls makes the whole card-reader battery source unavailable, so a
-second reader's prompt low-battery result is not shown until the stalled call completes. The W58
-run-it review reproduced that outcome with a 5% reader and a held reader. A future per-reader
-result would need to keep the prompt alert while also showing that a reader check is unavailable;
-the existing source-level error path does not express both at once.
+**A slow reader no longer hides another reader's battery warning (W91 — DONE).**
+Each reader has its own result under the source's 45-second deadline. A failed or timed-out check
+names that reader in `reader.status_unavailable`; a prompt low-battery result remains visible beside
+it. When every reader check is unavailable, the card-reader area also retains its existing
+`alert.source_unavailable` alert. The route and source tests cover a held reader beside a 5% reader,
+a throwing reader beside a 5% reader, and the unchanged all-prompt result.
 
 **A timed-out card-reader status read now says so without ending pairing (A259, found by W18c's
 run-it review, 2026-10-03) — DONE (W46).** The SumUp pairing dialog keeps its created reader and

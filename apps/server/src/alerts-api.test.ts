@@ -456,6 +456,59 @@ const liveGet = (app: Hono, cookie: string) =>
   });
 
 describe("ongoing alert sources through the route", () => {
+  it("returns a prompt reader's warning beside a timed-out reader within the alerts deadline", async () => {
+    const v = await seedVenue();
+    await seedLowReader("Counter");
+    await seedLowReader("Terrace");
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => (started = resolve));
+    let release!: (status: ReaderStatus) => void;
+    const held = new Promise<ReaderStatus>((resolve) => (release = resolve));
+    const provider = stubCardProvider();
+    provider.readers.status = async (_deps, ref) => {
+      if (ref === "ref-Terrace") {
+        started();
+        return held;
+      }
+      return { online: true, batteryPercent: 5 };
+    };
+    const source = batteryAlertSource({
+      providers: [provider],
+      runtimeDeps: cardRuntimeDeps,
+      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+    });
+    const app = appFor(createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [source] }));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const read = get(app, "/management-api/alerts", v.manager);
+      await entered;
+      await vi.advanceTimersByTimeAsync(45_000);
+      const response = await read;
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        alerts: { code: string; area: string; params: { reader?: string; percent?: number } }[];
+      };
+      expect(body.alerts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "reader.battery_low",
+            area: "card_reader",
+            params: { reader: "Counter", percent: 5 },
+          }),
+          expect.objectContaining({
+            code: "reader.status_unavailable",
+            area: "card_reader",
+            params: { reader: "Terrace" },
+          }),
+        ]),
+      );
+      expect(body.alerts.some((alert) => alert.code === "alert.source_unavailable")).toBe(false);
+    } finally {
+      release({ online: true, batteryPercent: 90 });
+      vi.useRealTimers();
+    }
+  });
+
   it("answers with battery unavailable while a provider status remains held", async () => {
     const v = await seedVenue();
     await seedLowReader();

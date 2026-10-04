@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   locations,
@@ -857,6 +857,107 @@ async function readBattery(source: AlertSource, now = NOW) {
 }
 
 describe("batteryAlertSource", () => {
+  it("keeps a prompt low-battery warning beside a held reader and names the unavailable reader", async () => {
+    await seedTenant(batterySuite.db);
+    const lowId = await seedReader({ providerRef: "low", name: "Counter" });
+    const heldId = await seedReader({ providerRef: "held", name: "Terrace" });
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => (started = resolve));
+    let release!: (value: ReaderStatus) => void;
+    const held = new Promise<ReaderStatus>((resolve) => (release = resolve));
+    const provider = stubProvider({ battery: () => 5, calls: { n: 0 } });
+    provider.readers.status = async (_deps, ref) => {
+      if (ref === "held") {
+        started();
+        return held;
+      }
+      return { online: true, batteryPercent: 5 };
+    };
+    const source = batteryAlertSource({
+      providers: [provider],
+      runtimeDeps: stubRuntimeDeps(batterySuite.db),
+      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const read = readBattery(source);
+      await entered;
+      await vi.advanceTimersByTimeAsync(45_000);
+      expect(await read).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            key: `reader.battery_low:${lowId}`,
+            code: "reader.battery_low",
+          }),
+          expect.objectContaining({
+            key: `reader.status_unavailable:${heldId}`,
+            code: "reader.status_unavailable",
+            params: { reader: "Terrace" },
+          }),
+        ]),
+      );
+    } finally {
+      release({ online: true, batteryPercent: 90 });
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a prompt low-battery warning when another reader throws", async () => {
+    await seedTenant(batterySuite.db);
+    const lowId = await seedReader({ providerRef: "low", name: "Counter" });
+    const failedId = await seedReader({ providerRef: "failed", name: "Terrace" });
+    const provider = stubProvider({ battery: () => 5, calls: { n: 0 } });
+    provider.readers.status = async (_deps, ref) => {
+      if (ref === "failed") throw new Error("provider failed");
+      return { online: true, batteryPercent: 5 };
+    };
+    const source = batteryAlertSource({
+      providers: [provider],
+      runtimeDeps: stubRuntimeDeps(batterySuite.db),
+      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+    });
+
+    expect(await readBattery(source)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: `reader.battery_low:${lowId}`, code: "reader.battery_low" }),
+        expect.objectContaining({
+          key: `reader.status_unavailable:${failedId}`,
+          code: "reader.status_unavailable",
+          params: { reader: "Terrace" },
+        }),
+      ]),
+    );
+  });
+
+  it("keeps the area-level alert when every reader is unavailable", async () => {
+    await seedTenant(batterySuite.db);
+    await seedReader({ providerRef: "failed", name: "Terrace" });
+    const provider = stubProvider({ battery: () => 5, calls: { n: 0 } });
+    provider.readers.status = async () => {
+      throw new Error("provider failed");
+    };
+    const source = batteryAlertSource({
+      providers: [provider],
+      runtimeDeps: stubRuntimeDeps(batterySuite.db),
+      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+    });
+
+    expect(await readBattery(source)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "alert.source_unavailable:card_reader",
+          code: "alert.source_unavailable",
+          severity: "error",
+          since: NOW.toISOString(),
+        }),
+        expect.objectContaining({
+          code: "reader.status_unavailable",
+          params: { reader: "Terrace" },
+        }),
+      ]),
+    );
+  });
+
   it("does not ask a real provider for the pretend reader's battery", async () => {
     await seedTenant(batterySuite.db);
     await batterySuite.db.insert(cardReaders).values({
