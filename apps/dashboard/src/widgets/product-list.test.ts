@@ -6,6 +6,7 @@ import { chooseOption, expectRowMenusOnScreen } from "@waitron/ui/src/test-helpe
 import { allergenStateName, vatClassName } from "../i18n/domain.js";
 import type { Product, Unit } from "../api/client.js";
 import type { ListedVariant } from "@waitron/catalogue/src/product-types.js";
+import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
 import { ProductList, ROOT_KEY } from "./product-list.js";
 import type { FolderMadeAt } from "./folder-made-at.js";
 import { registerIcons } from "@waitron/ui";
@@ -1178,7 +1179,12 @@ describe("product-list", () => {
     setLocale(locale);
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
-        product({ id: "plate", unitPrice: "19.00" }),
+        product({
+          id: "plate",
+          unitPrice: "19.00",
+          unitId: EACH_UNIT_ID,
+          unit: { ...product().unit, id: EACH_UNIT_ID },
+        }),
         product({ id: "ham", name: "Jamón", unitId: "kg", unit: kilo, unitPrice: "48.00" }),
       ],
       units: [kilo],
@@ -1207,6 +1213,35 @@ describe("product-list", () => {
         .textContent!.trim();
     expect(unit("bun")).toBe("/ bandeja");
     expect(unit("bun:small")).toBe("/ bandeja");
+  });
+
+  it("names a measured unit after its price before the venue's unit list has loaded", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "ham", unitId: "kg", unit: kilo, unitPrice: "48.00" })],
+      units: [],
+      unitLanguage: "en",
+    });
+    const unit = cellUnder(await tableRoot(el), "ham", t("product.price"))
+      .querySelector('[data-test="price-unit"]')!
+      .textContent!.trim();
+    expect(unit).toBe("/ kg");
+  });
+
+  it("calls a product sold by the Each unit 'each', by the unit's identity", async () => {
+    const each: Unit = {
+      id: EACH_UNIT_ID,
+      name: { en: "Each" },
+      abbreviation: { en: "ea" },
+      precision: 0,
+    };
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "plate", unitId: EACH_UNIT_ID, unit: each })],
+      unitLanguage: "en",
+    });
+    const unit = cellUnder(await tableRoot(el), "plate", t("product.price"))
+      .querySelector('[data-test="price-unit"]')!
+      .textContent!.trim();
+    expect(unit).toBe(t("product.price_each"));
   });
 
   it("draws the unit quietly, in the muted colour and the small size", async () => {

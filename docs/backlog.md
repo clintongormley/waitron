@@ -1222,10 +1222,14 @@ editable, required Portion as soon as the product is added, before any save, whi
 "Portion appears only after reopening". A row switches between the two when its product's unit
 changes. The drag handle now sits on the first line of the product's name rather than the middle of
 a tall row. Open: the Price heading reads "Price per portion" also over a row sold by the unit.
-Left OPEN from its review, for the owner to decide: (1) the Products list decides "Each" by whether
+Left OPEN from its review, for the owner to decide: (1) the Products list decided "Each" by whether
 the product's unit is in the venue's saved unit list, the Extras editor by the unit's id, so the two
-can disagree (for example before the unit list has loaded) — aligning them changes the Products
-screen; (2) the handle-on-the-first-line alignment applied to the Extras list only — DONE by W75b, below; (3) the editor refuses a blank Portion for every unit
+could disagree (for example before the unit list had loaded) — DONE by W75a: the Products list now
+uses `EACH_UNIT_ID` too, so a measured product shows its "/ kg" label even before the unit list
+loads. Still open from it: the list's `units` property is no longer read (removing it means deleting
+the setup line of three existing tests), and neither screen counts a stored unit seeded as `each`
+as Each, which `isEachUnit` (`packages/catalogue/src/units.ts`) does — only a server test helper
+seeds one today; (2) the handle-on-the-first-line alignment applied to the Extras list only — DONE by W75b, below; (3) the editor refuses a blank Portion for every unit
 but Each while the server accepts none for a whole unit with no scale link (ml) and stores 1 — DONE
 by W75c, below.
 

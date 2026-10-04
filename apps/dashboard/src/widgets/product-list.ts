@@ -24,6 +24,7 @@ import {
 } from "./product-editor-model.js";
 import type { CategorySummary, MadeAt, Product, Unit } from "../api/client.js";
 import type { FolderMadeAt } from "./folder-made-at.js";
+import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
 import {
   PRODUCT_ORDERINGS,
   type ProductOrdering,
@@ -286,7 +287,6 @@ export class ProductList extends LitElement {
   @property({ type: Boolean }) routingFailed = false;
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
-  /** The venue's stored units; a product whose unit is not among them is sold by the each. */
   @property({ attribute: false }) units: readonly Unit[] = [];
   /** The content language a stored unit's abbreviation is read in. */
   @property() unitLanguage = "en";
@@ -795,9 +795,8 @@ export class ProductList extends LitElement {
     return low === high ? text : `${text}–${formatMoney(String(high), locale)}`;
   }
 
-  /** A listed product with no stored unit still carries one, the server's Each. */
   #unitWord(product: Product): string {
-    if (!this.units.some(({ id }) => id === product.unitId)) return t("product.price_each");
+    if (product.unitId === EACH_UNIT_ID) return t("product.price_each");
     const language = this.unitLanguage;
     const name =
       resolveContentText(product.unit.abbreviation, language, language) ||
