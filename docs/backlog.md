@@ -3022,7 +3022,7 @@ lists under All products with no "missing" marker; the database refuses a stored
 category that does not exist (`packages/db/src/schema/catalogue.ts:51`, a foreign key; not tried),
 so this is expected only while the dashboard's category list is behind.
 
-**Products: a product's variants are listed by name — DONE (W85, owner 2026-10-04).** In the
+**Products: a product's variants are listed by name — DONE (W85, #1200, owner 2026-10-04).** In the
 Products tree a product's variants are listed under it by name, in the dashboard's numeric-aware
 label order (`byLabel`, so "Ración 2" comes before "Ración 10"), whichever column sorts the table,
 in either direction, and under a sort restored from an earlier visit. Before, they sorted with the
@@ -3030,6 +3030,10 @@ table like any other row, so a Name sort backwards or a price sort reordered the
 gained `rowKeepsChildOrder`, which the Products list turns on for a product's own row; categories
 and products still sort as before. The order the product editor keeps (drag-reorderable, used by
 menus and ordering) is unchanged: the list sorts a copy. No existing test assertion changed.
+Left open, for the owner to decide whether it needs an item: the order reads each run of digits
+as a whole number, so a decimal weight sorts wrongly — "0,5 kg" before "0,25 kg" (tried in Node
+with the same comparison, not in the dashboard). The rest of the dashboard sorts names the same
+way.
 
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through
