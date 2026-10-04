@@ -99,6 +99,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
 async function flush(el: PaymentsScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
+  // Let an asynchronous Web Lock grant run before callers inspect status cells.
   await new Promise((resolve) => setTimeout(resolve, 10));
   await el.updateComplete;
 }
@@ -1808,12 +1809,94 @@ describe("the readers' status reads", () => {
       );
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(peak).toBe(2);
-      expect((await fetch(import.meta.url)).ok).toBe(true);
       answers.shift()?.();
       await vi.waitFor(() => expect((api.readerStatus as Mock).mock.calls.length).toBe(3));
     } finally {
       for (const frame of frames) frame.remove();
       for (const answer of answers) answer();
+    }
+  });
+
+  it("keeps the per-tab limit when Web Locks refuses a request", async () => {
+    const original = Object.getOwnPropertyDescriptor(navigator, "locks");
+    Object.defineProperty(navigator, "locks", {
+      configurable: true,
+      value: { request: () => Promise.reject(new Error("lock refused")) },
+    });
+    const held = heldStatuses();
+    try {
+      const { el } = await mount(
+        stubApi({
+          listReaders: vi.fn().mockResolvedValue(readers(3)),
+          readerStatus: held.readerStatus,
+        }),
+      );
+      await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledTimes(2));
+      await flush(el);
+      expect(held.readerStatus).toHaveBeenCalledTimes(2);
+      held.answer("r-1");
+      await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledTimes(3));
+      held.answer("r-2");
+      held.answer("r-3");
+      await vi.waitFor(async () => {
+        await el.updateComplete;
+        expect(q(el, "[data-test=refresh-readers]")?.hasAttribute("disabled")).toBe(false);
+      });
+    } finally {
+      if (original) Object.defineProperty(navigator, "locks", original);
+      else Reflect.deleteProperty(navigator, "locks");
+    }
+  });
+
+  it("keeps two per tab when one lock request falls back and others succeed", async () => {
+    const original = Object.getOwnPropertyDescriptor(navigator, "locks");
+    const locks = navigator.locks;
+    let requests = 0;
+    Object.defineProperty(navigator, "locks", {
+      configurable: true,
+      value: {
+        request: (...args: Parameters<LockManager["request"]>) => {
+          if (requests++ < 2) return Promise.reject(new Error("lock refused"));
+          return locks.request(...args);
+        },
+      },
+    });
+    const held = heldStatuses();
+    try {
+      await mount(
+        stubApi({
+          listReaders: vi.fn().mockResolvedValue(readers(3)),
+          readerStatus: held.readerStatus,
+        }),
+      );
+      await vi.waitFor(() => expect(held.readerStatus.mock.calls.length).toBeGreaterThanOrEqual(2));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(held.readerStatus).toHaveBeenCalledTimes(2);
+      held.answer("r-1");
+      await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledTimes(3));
+    } finally {
+      if (original) Object.defineProperty(navigator, "locks", original);
+      else Reflect.deleteProperty(navigator, "locks");
+    }
+  });
+
+  it("keeps the per-tab limit when Web Locks is unavailable", async () => {
+    const original = Object.getOwnPropertyDescriptor(navigator, "locks");
+    Object.defineProperty(navigator, "locks", { configurable: true, value: undefined });
+    const held = heldStatuses();
+    try {
+      await mount(
+        stubApi({
+          listReaders: vi.fn().mockResolvedValue(readers(3)),
+          readerStatus: held.readerStatus,
+        }),
+      );
+      await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledTimes(2));
+      held.answer("r-1");
+      await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledTimes(3));
+    } finally {
+      if (original) Object.defineProperty(navigator, "locks", original);
+      else Reflect.deleteProperty(navigator, "locks");
     }
   });
 

@@ -86,7 +86,8 @@ function billRefusalText(error: unknown): string {
   return codeMessage(code);
 }
 
-// Keep the per-tab gate for browsers without Web Locks.
+// Two status reads can wait on the card provider for 250 seconds; keep other browser connections
+// available, including in browsers without Web Locks.
 let statusSlotsFree = 2;
 const statusSlotWaiters: (() => void)[] = [];
 
@@ -106,30 +107,36 @@ function releaseLocalStatusSlot(): void {
 
 // Each lock is one place. A document that closes releases its held Web Lock even if its read hangs.
 async function takeStatusSlot(): Promise<() => void> {
-  if (!navigator.locks) {
-    await takeLocalStatusSlot();
+  await takeLocalStatusSlot();
+  if (!navigator.locks) return releaseLocalStatusSlot;
+
+  try {
+    const releaseWebSlot = await new Promise<() => void>((resolve, reject) => {
+      const controllers = [new AbortController(), new AbortController()];
+      let acquired = false;
+      controllers.forEach((controller, index) => {
+        void navigator.locks
+          .request(`waitron.reader-status.${index}`, { signal: controller.signal }, async () => {
+            if (acquired) return;
+            acquired = true;
+            for (const other of controllers) if (other !== controller) other.abort();
+            await new Promise<void>((release) => resolve(release));
+          })
+          .catch((error: unknown) => {
+            if (controller.signal.aborted || acquired) return;
+            acquired = true;
+            for (const other of controllers) if (other !== controller) other.abort();
+            reject(error);
+          });
+      });
+    });
+    return () => {
+      releaseWebSlot();
+      releaseLocalStatusSlot();
+    };
+  } catch {
     return releaseLocalStatusSlot;
   }
-
-  return new Promise<() => void>((resolve, reject) => {
-    const controllers = [new AbortController(), new AbortController()];
-    let acquired = false;
-    controllers.forEach((controller, index) => {
-      void navigator.locks
-        .request(`waitron.reader-status.${index}`, { signal: controller.signal }, async () => {
-          if (acquired) return;
-          acquired = true;
-          for (const other of controllers) if (other !== controller) other.abort();
-          await new Promise<void>((release) => resolve(release));
-        })
-        .catch((error: unknown) => {
-          if (controller.signal.aborted || acquired) return;
-          acquired = true;
-          for (const other of controllers) if (other !== controller) other.abort();
-          reject(error instanceof Error ? error : new Error(String(error)));
-        });
-    });
-  });
 }
 
 /** Provider forms come through CARD_PROVIDER_PANELS; this screen never imports a provider package. */

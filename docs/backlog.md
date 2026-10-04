@@ -1289,14 +1289,16 @@ code and show `codeMessage(code)`, and decide separately whether a timed-out pol
 
 **Several card readers' status reads at once can use up the browser's connections to the box
 (A260, found by W18c's review, 2026-10-03) — DONE (W18c #1145 and W48).** The readers table
-holds at most two status reads across same-origin documents when Web Locks is available, with the
-original per-tab two-place limit as the fallback (`takeStatusSlot`,
+holds at most two status reads across same-origin documents when Web Locks grants requests, with the
+original per-tab two-place limit when the API is unavailable or refuses a request (`takeStatusSlot`,
 `apps/dashboard/src/screens/payments-screen.ts`). In real Chromium, the W48 test held reads in two
 same-origin documents: four started before W48 and two after; removing a document while its reads
-were pending freed both places for the other document. A same-origin Vite resource read also
-completed while two status reads were held. This does not measure a real silent provider or the
-box's HTTP/1.1 connection limit. A load a refresh has replaced, and a closed
-screen's reads still waiting for a slot, give up through the status version number
+were pending freed both places for the other document. When one document holds both places on a
+silent provider, another document cannot start a reader status request until one finishes or its
+250-second client limit expires (`CARD_PROVIDER_READ_LIMIT_MS`, `apps/dashboard/src/api/client.ts`).
+The W48 test does not measure a real silent provider or the box's HTTP/1.1 connection limit. A
+load a refresh has replaced, and a closed screen's reads still waiting for a slot, give up through
+the status version number
 (`disconnectedCallback` bumps it); a new load on a closed screen (an action that finishes after it
 closed) is stopped by the `isConnected` check in `#loadStatuses`. Before W48 each tab had its own two,
 and W18c's review measured three tabs of the real screen in headless Chromium against held HTTP/1.1
