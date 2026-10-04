@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, deviceOrigin, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
@@ -36,6 +36,7 @@ async function storedOrigin(paymentRef: string) {
 }
 
 describe("SimulatorPaymentProvider", () => {
+  afterEach(() => vi.useRealTimers());
   it("stores the device a captured payment was started on", async () => {
     const { seeded, provider, params } = await setup();
     const result = await provider.collect({ ...params, simulationOutcome: "captured" });
@@ -168,6 +169,43 @@ describe("SimulatorPaymentProvider", () => {
     expect(provider.pendingDemoReaderPayments()).toHaveLength(1);
     provider.decideDemoReaderPayment(provider.pendingDemoReaderPayments()[0]!.id, "captured");
     await expect(collecting).resolves.toMatchObject({ state: "captured" });
+  });
+
+  it("cancels the matching newer attempt even while an older attempt remains pending", async () => {
+    const { provider, params } = await setup();
+    const first = provider.collect({
+      ...params,
+      readerRef: "waitron-demo-reader",
+      demoAttemptId: "first",
+    });
+    const second = provider.collect({
+      ...params,
+      readerRef: "waitron-demo-reader",
+      demoAttemptId: "second",
+    });
+    const [older, newer] = provider.pendingDemoReaderPayments();
+
+    expect(
+      provider.cancelDemoReaderPayment(params.workingOrderId, params.origin.deviceId, "second"),
+    ).toBe(true);
+    expect(provider.pendingDemoReaderPayments()).toEqual([older]);
+    await expect(second).resolves.toMatchObject({ state: "failed" });
+    provider.decideDemoReaderPayment(older!.id, "captured");
+    await expect(first).resolves.toMatchObject({ state: "captured" });
+    expect(provider.decideDemoReaderPayment(newer!.id, "captured")).toBe(false);
+  });
+
+  it("expires an abandoned pretend reader request and records a failed result", async () => {
+    vi.useFakeTimers();
+    const { provider, params } = await setup();
+    const collecting = provider.collect({ ...params, readerRef: "waitron-demo-reader" });
+    const [pending] = provider.pendingDemoReaderPayments();
+
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+
+    expect(provider.pendingDemoReaderPayments()).toEqual([]);
+    expect(provider.decideDemoReaderPayment(pending!.id, "captured")).toBe(false);
+    await expect(collecting).resolves.toMatchObject({ state: "failed" });
   });
 
   it("has no provider-side payment attempt for resolvePending to forward", async () => {

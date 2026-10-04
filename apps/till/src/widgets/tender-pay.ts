@@ -390,8 +390,8 @@ export class TillTenderPay extends LitElement {
     );
   }
 
-  /** Real provider collects continue after leaving this spinner; the pretend reader sends a
-   * cancellation so its page drops the pending amount. */
+  /** Real provider collects continue after leaving this spinner because PaymentProvider has no
+   * cancel method. The pretend reader alone accepts a cancellation. */
   #cancel(): void {
     if (
       this.view === "collecting" &&

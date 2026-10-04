@@ -32,6 +32,7 @@ import {
   loginWithPin,
   permissionsForRole,
   setPersonLocale,
+  withPassiveManagementRead,
 } from "@waitron/identity";
 import type { PinAttempts, PinThrottle } from "@waitron/identity";
 import {
@@ -918,12 +919,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     const authorizeDemoReader = async (c: Parameters<typeof requireManagementSession>[0]) => {
       const sessionId = requireManagementSession(c);
       await withTransaction(deps.db, (tx) =>
-        authorizeManager(tx, { managementSessionId: sessionId, permission: "person.manage" }),
+        authorizeManager(tx, { managementSessionId: sessionId, permission: "payments.manage" }),
       );
     };
     app.get("/management-api/demo-reader/payments", (c) =>
       demoRun(c, log, async () => {
-        await authorizeDemoReader(c);
+        await withPassiveManagementRead(() => authorizeDemoReader(c));
         return c.json({ payments: simulator.pendingDemoReaderPayments() });
       }),
     );

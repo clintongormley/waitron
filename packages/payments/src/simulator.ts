@@ -44,6 +44,7 @@ export class SimulatorPaymentProvider implements PaymentProvider {
       workingOrderId: string;
       deviceId: string;
       attemptId?: string;
+      timer: ReturnType<typeof setTimeout>;
       resolve: (outcome: "captured" | "declined") => void;
     }
   >();
@@ -94,12 +95,17 @@ export class SimulatorPaymentProvider implements PaymentProvider {
           ? "declined"
           : await new Promise<"captured" | "declined">((resolve) => {
               const id = randomUUID();
+              const timer = setTimeout(() => {
+                this.decideDemoReaderPayment(id, "declined");
+              }, 10 * 60_000);
+              timer.unref();
               this.pendingDemoReader.set(id, {
                 id,
                 amount: params.amount,
                 workingOrderId: params.workingOrderId,
                 deviceId: params.origin.deviceId,
                 attemptId: params.demoAttemptId,
+                timer,
                 resolve,
               });
             })
@@ -136,18 +142,25 @@ export class SimulatorPaymentProvider implements PaymentProvider {
     const pending = this.pendingDemoReader.get(id);
     if (pending === undefined) return false;
     this.pendingDemoReader.delete(id);
+    clearTimeout(pending.timer);
     pending.resolve(outcome);
     return true;
   }
 
   cancelDemoReaderPayment(workingOrderId: string, deviceId: string, attemptId?: string): boolean {
     const pending = [...this.pendingDemoReader.values()].find(
-      (entry) => entry.workingOrderId === workingOrderId && entry.deviceId === deviceId,
+      (entry) =>
+        entry.workingOrderId === workingOrderId &&
+        entry.deviceId === deviceId &&
+        (attemptId === undefined || entry.attemptId === attemptId),
     );
-    if (pending !== undefined)
-      return attemptId !== undefined && pending.attemptId !== attemptId
-        ? false
-        : this.decideDemoReaderPayment(pending.id, "declined");
+    if (pending !== undefined) return this.decideDemoReaderPayment(pending.id, "declined");
+    if (
+      [...this.pendingDemoReader.values()].some(
+        (entry) => entry.workingOrderId === workingOrderId && entry.deviceId === deviceId,
+      )
+    )
+      return false;
     if (attemptId === undefined) return false;
     const cancellation = { workingOrderId, deviceId };
     this.cancelledDemoAttempts.set(attemptId, cancellation);

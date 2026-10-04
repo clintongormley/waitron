@@ -51,5 +51,8 @@ describe("buildCardProvider", () => {
 
     await buildCardProvider(suite.db);
     expect(await read()).toMatchObject({ active: false });
+    const firstDisabledAt = (await read())!.disabledAt;
+    await buildCardProvider(suite.db);
+    expect((await read())!.disabledAt).toBe(firstDisabledAt);
   });
 });

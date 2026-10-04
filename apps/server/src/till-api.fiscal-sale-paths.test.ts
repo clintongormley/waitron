@@ -34,7 +34,9 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   hashPassword,
   hashPin,
+  hashSessionToken,
   loginWithPin,
+  managementSessions,
   permissionsForRole,
   persons,
   startManagementSession,
@@ -1450,6 +1452,11 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const path = "/management-api/demo-reader/payments";
     const managerCookie = `${MANAGEMENT_COOKIE}=${sessions.admin.token}`;
     const staffCookie = `${MANAGEMENT_COOKIE}=${sessions.staff.token}`;
+    const priorSeenAt = new Date(Date.now() - 60_000).toISOString();
+    await suite.db
+      .update(managementSessions)
+      .set({ lastSeenAt: priorSeenAt })
+      .where(eq(managementSessions.tokenHash, hashSessionToken(sessions.admin.token)));
 
     expect((await app.request(path)).status).toBe(401);
     expect((await app.request(path, { headers: { cookie: staffCookie } })).status).toBe(403);
@@ -1458,6 +1465,11 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     expect(await listed.json()).toMatchObject({
       payments: [{ amount: "1.50" }],
     });
+    const [afterPoll] = await suite.db
+      .select({ lastSeenAt: managementSessions.lastSeenAt })
+      .from(managementSessions)
+      .where(eq(managementSessions.tokenHash, hashSessionToken(sessions.admin.token)));
+    expect(afterPoll?.lastSeenAt).toBe(priorSeenAt);
     const [pending] = provider.pendingDemoReaderPayments();
     const decided = await app.request(`${path}/${pending!.id}/decision`, {
       method: "POST",

@@ -332,12 +332,14 @@ export async function buildCardProvider(
   db: Database,
   onboardingIntent?: OnboardingIntent,
   paymentTestProviders = false,
+  paymentsEnabled = true,
 ): Promise<PaymentProvider | undefined> {
+  if (!paymentsEnabled) return undefined;
   const simulated =
     onboardingIntent === "demo" || (onboardingIntent === "prepare" && !paymentTestProviders);
   await withTransaction(db, async (tx) => {
     const [existing] = await tx
-      .select({ id: cardReaders.id })
+      .select({ id: cardReaders.id, active: cardReaders.active })
       .from(cardReaders)
       .where(eq(cardReaders.id, DEMO_READER_ID));
     if (existing === undefined) {
@@ -349,7 +351,7 @@ export async function buildCardProvider(
           name: "Demo card reader",
         });
       }
-    } else {
+    } else if (existing.active !== simulated) {
       await tx
         .update(cardReaders)
         .set({ active: simulated, disabledAt: simulated ? null : new Date().toISOString() })
@@ -1389,6 +1391,7 @@ async function bootServer(
     db,
     config.onboardingIntent,
     config.paymentTestProviders,
+    setsToMigrate.some((module) => module.name === "payments"),
   );
   // One pool, shared by the pay route and the payments management surface below, so a reader added
   // or a credential rotated there evicts the exact provider the next sale uses.
