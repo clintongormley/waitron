@@ -259,7 +259,6 @@ describe("product-list", () => {
         box.checked,
       ]),
     ).toEqual([
-      ["name", true],
       ["reporting-category", true],
       ["made-at", true],
       ["price", true],
@@ -267,7 +266,6 @@ describe("product-list", () => {
       ["ordering", true],
       ["active", true],
       ["allergens", true],
-      ["actions", true],
     ]);
     const headerLabels = () =>
       [...root.querySelectorAll("thead th")].map((th) =>

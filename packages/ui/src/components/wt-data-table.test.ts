@@ -1195,6 +1195,7 @@ test("a row that joins its parent sits on the band colour, pinned cell too, and 
   host.style.setProperty("--wt-color-bg", "rgb(4, 5, 6)");
   host.style.setProperty("--wt-color-surface", "rgb(7, 8, 9)");
   host.style.setProperty("--wt-color-surface-raised", "rgb(30, 40, 50)");
+  host.style.setProperty("--wt-color-surface-lifted", "rgb(60, 70, 80)");
   const cells = (key: string) => [
     ...el.shadowRoot!.querySelectorAll<HTMLElement>(`tr[data-row-key="${key}"] td`),
   ];
@@ -1205,7 +1206,7 @@ test("a row that joins its parent sits on the band colour, pinned cell too, and 
   await userEvent.hover(cells("small")[0]!);
   onTestFinished(() => commands.parkPointer());
   for (const cell of cells("small"))
-    expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
+    expect(getComputedStyle(cell).backgroundColor).toBe("rgb(60, 70, 80)");
   el.rowClick = undefined;
   await el.updateComplete;
   await commands.parkPointer();
@@ -3179,10 +3180,10 @@ test("an in-cell control's click is not also wired to the row activator", async 
 
 test("paints the focused clickable row from a token", async () => {
   const el = await table({ rowClick: (row: Row) => row.id });
-  host.style.setProperty("--wt-color-surface-raised", "rgb(30, 40, 50)");
+  host.style.setProperty("--wt-color-surface-lifted", "rgb(30, 40, 50)");
   const activate = el.shadowRoot!.querySelector<HTMLButtonElement>(".row-activate")!;
   const cell = activate.closest("td")!;
-  // Before focus, the cell paints no raised background of its own.
+  // Before focus, the cell paints no lifted background of its own.
   expect(getComputedStyle(cell).backgroundColor).not.toBe("rgb(30, 40, 50)");
   activate.focus();
   // Via :focus-within, because getComputedStyle cannot force a hover state.
@@ -3277,17 +3278,18 @@ test("customise lists every column and fixes the first and pinned columns in pla
   const columns: DataTableColumn<Row>[] = [
     choosable[0]!,
     choosable[1]!,
+    choosable[2]!,
     { key: "actions", label: "Actions", cell: () => "Edit", pinned: "end" },
   ];
   const el = await table({ columns });
   await userEvent.click(trigger(el));
   const rows = [...panel(el).querySelectorAll<HTMLElement>("[data-column-row]")];
-  expect(rows.map((row) => row.dataset.columnRow)).toEqual(["name", "count", "actions"]);
+  expect(rows.map((row) => row.dataset.columnRow)).toEqual(["name", "count", "extra", "actions"]);
   expect(rows[0]!.querySelector("[data-reorder]")).toBeNull();
   expect(rows[1]!.querySelector("[data-reorder]")).not.toBeNull();
-  expect(rows[2]!.querySelector("[data-reorder]")).toBeNull();
-  expect(chooserBox(el, "name").disabled).toBe(true);
-  expect(chooserBox(el, "actions").disabled).toBe(true);
+  expect(rows[3]!.querySelector("[data-reorder]")).toBeNull();
+  expect(chooserBox(el, "name")).toBeNull();
+  expect(chooserBox(el, "actions")).toBeNull();
 });
 
 test("a movable column without a visibility choice has a muted label", async () => {
@@ -3301,7 +3303,7 @@ test("a movable column without a visibility choice has a muted label", async () 
   await el.updateComplete;
   const row = panel(el).querySelector<HTMLElement>('[data-column-row="id"]')!;
   expect(row.querySelector("[data-reorder]")).not.toBeNull();
-  expect(chooserBox(el, "id").disabled).toBe(true);
+  expect(chooserBox(el, "id")).toBeNull();
   expect(getComputedStyle(row.querySelector(".column-name")!).color).toBe("rgb(71, 83, 97)");
 });
 
@@ -3675,19 +3677,23 @@ test("a choosable column starts shown or hidden as it asks, and an unchoosable o
     chooserBoxes(el).map((box) =>
       box.closest(".column-choice")!.querySelector(".column-name")!.textContent!.trim(),
     ),
-  ).toEqual(["Name", "Count", "Extra", "ID"]);
-  expect(chooserBoxes(el).map((box) => box.checked)).toEqual([true, true, false, true]);
+  ).toEqual(["Count", "Extra", "ID"]);
+  expect(chooserBox(el, "name")).toBeNull();
+  expect(chooserBoxes(el).map((box) => box.checked)).toEqual([true, false, true]);
   expect(chooserBoxes(el).map((box) => box.name)).toEqual([
-    "name-column",
     "count-column",
     "extra-column",
     "id-column",
   ]);
-  expect(chooserBoxes(el).map((box) => box.disabled)).toEqual([true, false, false, false]);
+  expect(chooserBoxes(el).map((box) => box.disabled)).toEqual([false, false, false]);
 });
 
 test("the chooser sits at the toolbar's trailing end, after the filters", async () => {
-  const cols: DataTableColumn<RowS>[] = [withStatus[0]!, { ...withStatus[1]!, choosable: "shown" }];
+  const cols: DataTableColumn<RowS>[] = [
+    withStatus[0]!,
+    { ...withStatus[1]!, choosable: "shown" },
+    { key: "id", label: "ID", cell: (r: RowS) => r.id },
+  ];
   const el = await tableS({ columns: cols });
   el.style.width = "600px";
   await el.updateComplete;
@@ -3745,12 +3751,16 @@ test("a selectable table keeps its selection column while columns are hidden", a
 });
 
 test("a clickable table keeps its first column and its row activator", async () => {
+  localStorage.setItem("test.clickable-first:columns", JSON.stringify({ count: false }));
   const cols: DataTableColumn<Row>[] = [
     { ...choosable[1]! },
     { key: "name", label: "Name", cell: (row) => row.name },
   ];
-  const el = await table({ columns: cols, rowClick: (row: Row) => row.id });
-  await choose(el, "count");
+  const el = await table({
+    columns: cols,
+    rowClick: (row: Row) => row.id,
+    viewKey: "test.clickable-first",
+  });
   const cells = el.shadowRoot!.querySelectorAll('tbody tr[data-row-key="b"] td');
   expect(cells.length).toBe(2);
   expect(cells[0]!.querySelector(".row-activate")).not.toBeNull();
@@ -3770,7 +3780,7 @@ test("a tree keeps its first column and toggle while other columns are chosen", 
   expect(headers(el)).toEqual(["", "Name", "Other"]);
   await choose(el, "code");
   expect(headers(el)).toEqual(["", "Name", "Code", "Other"]);
-  await choose(el, "name");
+  expect(chooserBox(el, "name")).toBeNull();
   expect(headers(el)).toEqual(["", "Name", "Code", "Other"]);
   const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>('tr[data-row-key="food"] td')];
   expect(cells.length).toBe(4);
@@ -3781,14 +3791,16 @@ test("a tree keeps its first column and toggle while other columns are chosen", 
 });
 
 test("a tree without selection hides a chosen column's header and cells", async () => {
-  const el = await treeTable({ columns: choosableTree });
+  const el = await treeTable({
+    columns: [...choosableTree, { key: "other", label: "Other", cell: (row) => row.id }],
+  });
   await choose(el, "code");
-  expect(headers(el)).toEqual(["Name", "Code"]);
+  expect(headers(el)).toEqual(["Name", "Code", "Other"]);
   expect(
     [...el.shadowRoot!.querySelectorAll('tr[data-row-key="eggs"] td')].map((cell) =>
       cell.textContent!.trim(),
     ),
-  ).toEqual(["Eggs", "eggs"]);
+  ).toEqual(["Eggs", "eggs", "eggs"]);
 });
 
 test("the fixed first column cannot be hidden while other choices remain available", async () => {
@@ -3798,15 +3810,14 @@ test("the fixed first column cannot be hidden while other choices remain availab
     { ...choosable[2]! },
   ];
   const el = await table({ columns: all });
-  expect(chooserBoxes(el).map((box) => box.disabled)).toEqual([true, true, false]);
-  await choose(el, "name");
-  expect(chooserBoxes(el).map((box) => box.disabled)).toEqual([true, true, false]);
+  expect(chooserBox(el, "name")).toBeNull();
+  expect(chooserBoxes(el).map((box) => box.disabled)).toEqual([true, false]);
   await choose(el, "extra");
-  expect(chooserBoxes(el).map((box) => box.disabled)).toEqual([true, false, false]);
+  expect(chooserBoxes(el).map((box) => box.disabled)).toEqual([false, false]);
 });
 
 test("the last visible movable column cannot be hidden beside the fixed first column", async () => {
-  const el = await table({ columns: [choosable[0]!, choosable[1]!] });
+  const el = await table({ columns: choosable });
   expect(chooserBox(el, "count").disabled).toBe(true);
   await choose(el, "count");
   expect(headers(el)).toEqual(["Name", "Count"]);
@@ -3821,22 +3832,26 @@ test("when every column starts hidden, the first and one movable column are show
   ];
   const el = await table({ columns: hidden });
   expect(headers(el)).toEqual(["Name", "Count"]);
+  expect(chooserBox(el, "name")).toBeNull();
   expect(chooserBoxes(el).map((box) => [box.checked, box.disabled])).toEqual([
-    [true, true],
     [true, true],
     [false, false],
   ]);
 });
 
 test("a stored choice hiding every column still leaves the first and one movable shown", async () => {
-  localStorage.setItem("test.none:columns", JSON.stringify({ name: false, count: false }));
+  localStorage.setItem(
+    "test.none:columns",
+    JSON.stringify({ name: false, count: false, extra: false }),
+  );
   const cols: DataTableColumn<Row>[] = [
     { key: "name", label: "Name", cell: (row) => row.name, choosable: "shown" },
     { ...choosable[1]! },
+    { ...choosable[2]! },
   ];
   const el = await table({ columns: cols, viewKey: "test.none" });
   expect(headers(el)).toEqual(["Name", "Count"]);
-  expect(chooserBox(el, "name").disabled).toBe(true);
+  expect(chooserBox(el, "name")).toBeNull();
   expect(chooserBox(el, "count").disabled).toBe(true);
 });
 
@@ -3845,6 +3860,7 @@ test("a stored choice cannot hide the last movable column", async () => {
   const cols: DataTableColumn<Row>[] = [
     choosable[0]!,
     choosable[1]!,
+    choosable[2]!,
     { key: "actions", label: "Actions", cell: () => "Edit", pinned: "end" },
   ];
   const el = await table({ columns: cols, viewKey: "test.last-movable" });
@@ -3886,14 +3902,16 @@ test("the fixed first column keeps sorting a tree's siblings", async () => {
     choosableTree[0]!,
     { key: "code", label: "Code", cell: (row) => row.id },
   ];
-  const el = await treeTable({ columns: cols, sortKey: "name", sortDirection: "descending" });
+  localStorage.setItem("test.tree-first:columns", JSON.stringify({ name: false }));
+  const el = await treeTable({
+    columns: cols,
+    sortKey: "name",
+    sortDirection: "descending",
+    viewKey: "test.tree-first",
+  });
   expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
   el.sortDirection = "ascending";
   await el.updateComplete;
-  expect(treeKeys(el)).toEqual(["drinks", "food", "break", "eggs"]);
-  await choose(el, "name");
-  expect(treeKeys(el)).toEqual(["drinks", "food", "break", "eggs"]);
-  await choose(el, "name");
   expect(treeKeys(el)).toEqual(["drinks", "food", "break", "eggs"]);
 });
 
@@ -3949,7 +3967,7 @@ test("restores the chosen columns from local storage under the view key", async 
   localStorage.setItem("test.restore:columns", JSON.stringify({ count: false, extra: true }));
   const el = await table({ columns: choosable, viewKey: "test.restore" });
   expect(headers(el)).toEqual(["Name", "Extra"]);
-  expect(chooserBoxes(el).map((box) => box.checked)).toEqual([true, false, true]);
+  expect(chooserBoxes(el).map((box) => box.checked)).toEqual([false, true]);
 });
 
 test("restores the chosen columns once columns arrive after the viewKey", async () => {
@@ -4487,7 +4505,7 @@ test("a pinned column paints the row's background at rest and on hover, and draw
 
 test("a pinned column in a clickable row paints the row's hover and focus background", async () => {
   const { el } = await narrowTable("end", { rowClick: (row: Row) => row.id });
-  host.style.setProperty("--wt-color-surface-raised", "rgb(30, 40, 50)");
+  host.style.setProperty("--wt-color-surface-lifted", "rgb(30, 40, 50)");
   const cell = el.shadowRoot!.querySelector("tbody tr td:last-child")!;
   await userEvent.hover(el.shadowRoot!.querySelector("tbody td")!);
   onTestFinished(() => commands.parkPointer());
@@ -5272,3 +5290,218 @@ test("while searching, a row that matches or sits under a match is not marked an
   expect(treeKeys(el)).toEqual(["food", "break", "eggs"]);
   expect(seen).toEqual({ food: false, break: false, eggs: false });
 });
+
+test("a clickable row, pinned cell included, takes the lifted surface while hovered or focused", async () => {
+  const { el } = await narrowTable("end", { rowClick: (row: Row) => row.id });
+  host.style.setProperty("--wt-color-surface", "rgb(7, 8, 9)");
+  host.style.setProperty("--wt-color-surface-raised", "rgb(30, 40, 50)");
+  host.style.setProperty("--wt-color-surface-lifted", "rgb(60, 70, 80)");
+  const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>('tr[data-row-key="b"] td')];
+  expect(cells.at(-1)!.dataset.pinned).toBe("end");
+  for (const cell of cells)
+    expect(getComputedStyle(cell).backgroundColor).not.toBe("rgb(60, 70, 80)");
+  await userEvent.hover(cells[0]!);
+  onTestFinished(() => commands.parkPointer());
+  for (const cell of cells) expect(getComputedStyle(cell).backgroundColor).toBe("rgb(60, 70, 80)");
+  await commands.parkPointer();
+  for (const cell of cells)
+    expect(getComputedStyle(cell).backgroundColor).not.toBe("rgb(60, 70, 80)");
+  el.shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="b"] .row-activate')!.focus();
+  for (const cell of cells) expect(getComputedStyle(cell).backgroundColor).toBe("rgb(60, 70, 80)");
+});
+
+test("a row that is not clickable does not take the lifted surface on hover", async () => {
+  const { el } = await narrowTable("end");
+  host.style.setProperty("--wt-color-surface-lifted", "rgb(60, 70, 80)");
+  const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>('tr[data-row-key="b"] td')];
+  await userEvent.hover(cells[0]!);
+  onTestFinished(() => commands.parkPointer());
+  for (const cell of cells)
+    expect(getComputedStyle(cell).backgroundColor).not.toBe("rgb(60, 70, 80)");
+});
+
+test("in both themes a hovered clickable row looks different from a resting one", async () => {
+  for (const theme of ["light", "dark"]) {
+    const { el } = await narrowTable("end", { rowClick: (row: Row) => row.id });
+    host.setAttribute("data-theme", theme);
+    const cell = el.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="b"] td')!;
+    const pinned = el.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="b"] td:last-child')!;
+    const resting = getComputedStyle(pinned).backgroundColor;
+    await userEvent.hover(cell);
+    expect(getComputedStyle(cell).backgroundColor, theme).not.toBe(resting);
+    expect(getComputedStyle(pinned).backgroundColor, theme).toBe(
+      getComputedStyle(cell).backgroundColor,
+    );
+    await commands.parkPointer();
+    cleanup();
+  }
+});
+
+test("a real pointer click on a wt-button in a clickable row's first cell reaches that button alone", async () => {
+  const opened: string[] = [];
+  const pressed: string[] = [];
+  const el = await table({
+    rowClick: (row: Row) => opened.push(row.id),
+    columns: [
+      {
+        key: "name",
+        label: "Name",
+        cell: (row) =>
+          html`<wt-button
+            variant="ghost"
+            data-test=${`open-${row.id}`}
+            @click=${() => pressed.push(row.id)}
+            >${row.name}</wt-button
+          >`,
+      },
+      columns[1]!,
+    ],
+  });
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-test="open-b"]')!);
+  expect(pressed).toEqual(["b"]);
+  expect(opened).toEqual([]);
+});
+
+/** A table whose only movable column cannot be hidden by the last-visible rule, as the Menus list's. */
+const oneMovable: DataTableColumn<Row>[] = [
+  { key: "name", label: "Name", cell: (row) => row.name },
+  { key: "count", label: "Count", cell: (row) => row.count, choosable: "shown" },
+  { key: "actions", label: "Actions", cell: () => "Edit", pinned: "end" },
+];
+
+test("no Customise columns control when the only movable column can be neither hidden nor moved", async () => {
+  const el = await table({ columns: oneMovable });
+  expect(el.shadowRoot!.querySelector(".columns-trigger")).toBeNull();
+  expect(el.shadowRoot!.querySelector(".columns-panel")).toBeNull();
+  expect(el.shadowRoot!.querySelector(".table-toolbar")).toBeNull();
+  const narrow = await table({ columns: [oneMovable[0]!, oneMovable[2]!] });
+  expect(narrow.shadowRoot!.querySelector(".columns-trigger")).toBeNull();
+});
+
+test("a stored hidden choice for the only movable column leaves it shown and draws no control", async () => {
+  localStorage.setItem("test.one-movable:columns", JSON.stringify({ count: false }));
+  const el = await table({ columns: oneMovable, viewKey: "test.one-movable" });
+  expect(headers(el)).toEqual(["Name", "Count", "Actions"]);
+  expect(el.shadowRoot!.querySelector(".columns-trigger")).toBeNull();
+  expect(localStorage.getItem("test.one-movable:columns")).toBe('{"count":false}');
+});
+
+test("a second movable column brings the control back, and a stored choice applies again", async () => {
+  localStorage.setItem("test.two-movable:columns", JSON.stringify({ count: false }));
+  const el = await table({ columns: oneMovable, viewKey: "test.two-movable" });
+  el.columns = [
+    oneMovable[0]!,
+    oneMovable[1]!,
+    { key: "id", label: "ID", cell: (row) => row.id, choosable: "shown" },
+    oneMovable[2]!,
+  ];
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".columns-trigger")).not.toBeNull();
+  expect(headers(el)).toEqual(["Name", "ID", "Actions"]);
+});
+
+test("two movable columns that cannot be hidden still offer the control, to reorder them", async () => {
+  const el = await table({
+    columns: [
+      { ...oneMovable[0]!, choosable: "shown" },
+      { key: "count", label: "Count", cell: (row) => row.count },
+      { key: "id", label: "ID", cell: (row) => row.id },
+    ],
+  });
+  expect(el.shadowRoot!.querySelector(".columns-trigger")).not.toBeNull();
+});
+
+test("an open Customise dialog closes when the columns stop offering a choice", async () => {
+  const two: DataTableColumn<Row>[] = [
+    oneMovable[0]!,
+    oneMovable[1]!,
+    { key: "id", label: "ID", cell: (row) => row.id, choosable: "shown" },
+  ];
+  const el = await table({ columns: two });
+  await userEvent.click(trigger(el));
+  expect(chooserOpen(el)).toBe(true);
+  el.columns = oneMovable;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".columns-panel")).toBeNull();
+  el.columns = two;
+  await el.updateComplete;
+  expect(chooserOpen(el)).toBe(false);
+});
+
+/** Two fixed columns, an always-shown movable one, and two the person can hide. */
+const mixed: DataTableColumn<Row>[] = [
+  { key: "name", label: "Name", cell: (row) => row.name },
+  { key: "count", label: "Count", cell: (row) => row.count, choosable: "shown" },
+  { key: "id", label: "ID", cell: (row) => row.id },
+  { key: "extra", label: "Extra", cell: (row) => `x${row.id}`, choosable: "hidden" },
+  { key: "actions", label: "Actions", cell: () => "Edit", pinned: "end" },
+];
+
+function chooserRow(el: AnyTable, key: string): HTMLElement {
+  return panel(el).querySelector<HTMLElement>(`[data-column-row="${key}"]`)!;
+}
+
+test("every column name in Customise starts at the same place, a fixed row keeping the handle's room", async () => {
+  const el = await table({ columns: mixed });
+  await userEvent.click(trigger(el));
+  const lefts = ["name", "count", "id", "extra", "actions"].map(
+    (key) => chooserRow(el, key).querySelector(".column-name")!.getBoundingClientRect().left,
+  );
+  for (const left of lefts) expect(left).toBeCloseTo(lefts[1]!, 0);
+  for (const key of ["name", "actions"]) {
+    const spacer = chooserRow(el, key).querySelector<HTMLElement>(".handle-spacer")!;
+    expect(spacer.getAttribute("aria-hidden")).toBe("true");
+    expect(chooserRow(el, key).querySelector("button")).toBeNull();
+  }
+});
+
+test("a column that cannot be hidden says it is always shown, with no eye control", async () => {
+  const el = await table({ columns: mixed });
+  await userEvent.click(trigger(el));
+  for (const key of ["name", "id", "actions"]) {
+    const row = chooserRow(el, key);
+    expect(row.querySelector("input"), key).toBeNull();
+    expect(row.querySelector('wt-icon[name^="eye"]'), key).toBeNull();
+    const state = row.querySelector<HTMLElement>(".column-state")!;
+    expect(state.textContent!.trim()).toBe("Always shown");
+    expect(state.checkVisibility()).toBe(true);
+  }
+  for (const key of ["count", "extra"]) {
+    expect(chooserBox(el, key).disabled, key).toBe(false);
+    expect(chooserRow(el, key).querySelector(".column-state"), key).toBeNull();
+  }
+  el.alwaysShownColumnLabel = "Siempre visible";
+  await el.updateComplete;
+  expect(chooserRow(el, "name").querySelector(".column-state")!.textContent!.trim()).toBe(
+    "Siempre visible",
+  );
+});
+
+test("the last shown column's eye is refused with a visible reason tied to it", async () => {
+  const el = await table({
+    columns: [mixed[0]!, mixed[1]!, mixed[3]!, mixed[4]!],
+  });
+  await userEvent.click(trigger(el));
+  const count = chooserBox(el, "count");
+  expect(count.disabled).toBe(true);
+  const reason = panel(el).querySelector<HTMLElement>(
+    `#${count.getAttribute("aria-describedby")}`,
+  )!;
+  expect(reason.textContent!.trim()).toBe("Keep at least one shown");
+  expect(reason.checkVisibility()).toBe(true);
+  expect(chooserRowContains(el, "count", reason)).toBe(true);
+  expect(chooserBox(el, "extra").hasAttribute("aria-describedby")).toBe(false);
+  el.lastShownColumnLabel = "Deja al menos una visible";
+  await el.updateComplete;
+  expect(reason.textContent!.trim()).toBe("Deja al menos una visible");
+  await userEvent.click(chooserRow(el, "extra").querySelector("label")!);
+  await el.updateComplete;
+  expect(headers(el)).toEqual(["Name", "Count", "Extra", "Actions"]);
+  expect(chooserBox(el, "count").disabled).toBe(false);
+  expect(chooserBox(el, "count").hasAttribute("aria-describedby")).toBe(false);
+  expect(chooserRow(el, "count").querySelector(".column-note")).toBeNull();
+});
+
+function chooserRowContains(el: AnyTable, key: string, node: Element): boolean {
+  return chooserRow(el, key).contains(node);
+}

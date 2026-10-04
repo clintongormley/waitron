@@ -1572,7 +1572,6 @@ describe("variants", () => {
       ...table(el).shadowRoot.querySelectorAll<HTMLInputElement>("input[data-column]"),
     ].map((box) => [box.dataset.column, box.checked]);
     expect(choices).toEqual([
-      ["name", true],
       ["placements", true],
       ["category", true],
       ["product-price", true],
@@ -1581,7 +1580,6 @@ describe("variants", () => {
       ["price-on-menu", false],
       ["active", true],
       ["from", true],
-      ["actions", true],
     ]);
     expect(headers(el)).toEqual([
       "name",

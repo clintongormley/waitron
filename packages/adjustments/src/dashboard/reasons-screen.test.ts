@@ -390,12 +390,10 @@ describe("the reasons list's column chooser", () => {
     const el = await mount(fakeApi());
     expect(chooser(el)).toBe("Customise columns");
     expect(choices(el)).toEqual([
-      ["name", true],
       ["allows", true],
       ["limits", true],
       ["roles", true],
       ["status", true],
-      ["actions", true],
     ]);
     expect(headers(el)).toEqual([
       "Name",
@@ -421,6 +419,17 @@ describe("the reasons list's column chooser", () => {
     setLocale("es");
     const el = await mount(fakeApi());
     expect(chooser(el)).toBe("Personalizar columnas");
+  });
+
+  it("words a column that is always shown, and the last one shown, in Spanish", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi());
+    const list = table(el) as Table & {
+      alwaysShownColumnLabel: string;
+      lastShownColumnLabel: string;
+    };
+    expect(list.alwaysShownColumnLabel).toBe("Siempre visible");
+    expect(list.lastShownColumnLabel).toBe("Deja al menos una visible");
   });
 });
 

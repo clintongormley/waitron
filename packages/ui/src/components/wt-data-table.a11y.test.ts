@@ -419,9 +419,21 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     const panel = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(".columns-panel")!;
     expect(panel.open).toBe(true);
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
-    expect(
-      el.shadowRoot!.querySelector<HTMLInputElement>('input[data-column="name"]')!.disabled,
-    ).toBe(true);
+    expect(el.shadowRoot!.querySelector('input[data-column="name"]')).toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("Customise dialog with always-shown columns and a refused last eye", async () => {
+    const el = await chooserTable();
+    el.columns = [
+      ...el.columns,
+      { key: "actions", label: "Actions", cell: () => "Edit", pinned: "end" },
+    ];
+    await el.updateComplete;
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLButtonElement>(".columns-trigger")!);
+    const panel = el.shadowRoot!.querySelector<HTMLElement>(".columns-panel")!;
+    expect(panel.querySelectorAll(".column-state")).toHaveLength(2);
+    expect(panel.querySelector(".column-note")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

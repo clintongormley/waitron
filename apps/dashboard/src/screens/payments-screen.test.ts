@@ -214,12 +214,10 @@ describe("payments-screen", () => {
         box.checked,
       ]),
     ).toEqual([
-      ["name", true],
       ["provider", true],
       ["status", true],
       ["battery", true],
       ["deviceCount", true],
-      ["actions", true],
     ]);
     const headerLabels = () =>
       [...root.querySelectorAll("thead th")].map((th) =>

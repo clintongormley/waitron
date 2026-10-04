@@ -135,6 +135,8 @@ export class StaffList extends LitElement {
         moveColumnLabel=${t("table.move_column")}
         showColumnLabel=${t("table.show_column")}
         hideColumnLabel=${t("table.hide_column")}
+        alwaysShownColumnLabel=${t("table.column_always_shown")}
+        lastShownColumnLabel=${t("table.column_last_shown")}
         columnPositionLabel=${t("table.column_position")}
         .rows=${this.people}
         .columns=${this.#columns()}

@@ -1353,11 +1353,7 @@ describe("printers-screen", () => {
           box.dataset.column,
           box.checked,
         ]),
-      ).toEqual([
-        [tab === "queue" ? "printer" : "name", true],
-        ...choices.map((key) => [key, true]),
-        [tab === "queue" ? "preview" : "actions", true],
-      ]);
+      ).toEqual(choices.map((key) => [key, true]));
       const headerLabels = () =>
         [...root.querySelectorAll("thead th")].map((th) =>
           th.textContent!.replace(/[▲▼]/g, "").trim(),

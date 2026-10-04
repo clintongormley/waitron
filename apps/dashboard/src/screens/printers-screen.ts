@@ -1788,6 +1788,8 @@ export class PrintersScreen extends LitElement {
         moveColumnLabel=${t("table.move_column")}
         showColumnLabel=${t("table.show_column")}
         hideColumnLabel=${t("table.hide_column")}
+        alwaysShownColumnLabel=${t("table.column_always_shown")}
+        lastShownColumnLabel=${t("table.column_last_shown")}
         columnPositionLabel=${t("table.column_position")}
         filtersLabel=${t("table.filters")}
         filteredColumnLabel=${t("table.filtered_column")}
@@ -2200,6 +2202,8 @@ export class PrintersScreen extends LitElement {
         moveColumnLabel=${t("table.move_column")}
         showColumnLabel=${t("table.show_column")}
         hideColumnLabel=${t("table.hide_column")}
+        alwaysShownColumnLabel=${t("table.column_always_shown")}
+        lastShownColumnLabel=${t("table.column_last_shown")}
         columnPositionLabel=${t("table.column_position")}
         filtersLabel=${t("table.filters")}
         filteredColumnLabel=${t("table.filtered_column")}
@@ -2353,6 +2357,8 @@ export class PrintersScreen extends LitElement {
         moveColumnLabel=${t("table.move_column")}
         showColumnLabel=${t("table.show_column")}
         hideColumnLabel=${t("table.hide_column")}
+        alwaysShownColumnLabel=${t("table.column_always_shown")}
+        lastShownColumnLabel=${t("table.column_last_shown")}
         columnPositionLabel=${t("table.column_position")}
         filtersLabel=${t("table.filters")}
         filteredColumnLabel=${t("table.filtered_column")}

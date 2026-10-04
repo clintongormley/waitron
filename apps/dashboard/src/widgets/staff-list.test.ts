@@ -133,13 +133,11 @@ describe("staff-list", () => {
         box.checked,
       ]),
     ).toEqual([
-      ["displayName", true],
       ["legalName", true],
       ["role", true],
       ["email", true],
       ["telephone", true],
       ["status", true],
-      ["actions", true],
     ]);
     const headerLabels = () =>
       [...root.querySelectorAll("thead th")].map((th) =>
