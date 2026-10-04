@@ -154,12 +154,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
         position: relative;
       }
 
-      tr.clickable:hover td,
-      tr.clickable:focus-within td {
-        background: var(--wt-color-surface-raised);
-        cursor: pointer;
-      }
-
       /* The stretched activator covers the whole row so a mouse user can click anywhere; it is a
          real focusable button so keyboard/AT users tab to it and Enter/Space activate the row. It
          sits at the base layer… */
@@ -183,7 +177,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
       /* …and every other interactive control in a clickable row sits ABOVE it, so a click on the
          Edit/Delete menu or the selection checkbox never activates the row. */
-      tr.clickable td :is(button, a, input, select, label, wt-row-actions):not(.row-activate) {
+      tr.clickable
+        td
+        :is(button, a, input, select, label, wt-button, wt-row-actions):not(.row-activate) {
         position: relative;
         z-index: 1;
       }
@@ -408,6 +404,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .column-choice[data-fixed],
       .column-choice[data-unchoosable] {
         color: var(--wt-color-text-muted);
+        cursor: default;
       }
 
       .column-choice[data-drop-target] {
@@ -429,9 +426,16 @@ export class WtDataTable<Row = unknown> extends LitElement {
         box-shadow: var(--wt-shadow-2);
       }
 
+      [data-reorder],
+      .handle-spacer {
+        flex: none;
+        width: var(--wt-tap-min);
+      }
+
       [data-reorder] {
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
+        padding: 0;
         border: 0;
         background: transparent;
         color: var(--wt-color-text);
@@ -444,8 +448,21 @@ export class WtDataTable<Row = unknown> extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
 
-      .column-name {
+      .column-text {
+        display: flex;
         flex: 1;
+        flex-direction: column;
+      }
+
+      .column-note,
+      .column-state {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .column-state {
+        padding-inline: var(--wt-space-2);
+        text-align: end;
       }
 
       .eye-toggle {
@@ -467,6 +484,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
       .eye-toggle wt-icon {
         color: var(--wt-color-primary);
+      }
+
+      .eye-toggle:has(input:disabled) {
+        cursor: default;
       }
 
       .eye-toggle input:disabled + wt-icon {
@@ -512,14 +533,21 @@ export class WtDataTable<Row = unknown> extends LitElement {
         line-height: 1;
       }
 
-      /* The clickable and pinned hover rules above are more specific than this resting band, so they
-       * still win over it. */
+      /* The hover rules are more specific than this resting band, so they still win over it. */
       tr.joined td {
         background: var(--wt-color-bg);
       }
 
       tbody tr.joined:hover td {
         background: var(--wt-color-surface-raised);
+      }
+
+      /* The raised surface equals the resting one in the light theme, so a row that opens something
+         takes the lifted one. Last, and as specific as the pinned and joined rules, so it wins over
+         both. */
+      tbody tr.clickable:is(:hover, :focus-within) td {
+        background: var(--wt-color-surface-lifted);
+        cursor: pointer;
       }
 
       .tree-cell {
@@ -602,6 +630,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property() showColumnLabel = "Show";
   @property() hideColumnLabel = "Hide";
   @property() columnPositionLabel = "{position} of {total}";
+  /** Stands in the Customise dialog where a column that cannot be hidden would have its eye. */
+  @property() alwaysShownColumnLabel = "Always shown";
+  /** Under the one shown column the person could otherwise hide, saying why its eye is refused. */
+  @property() lastShownColumnLabel = "Keep at least one shown";
   /** The tab remembers sort and filter choices, and local storage remembers column visibility and
    * order under this key. Search text is never persisted. */
   @property() viewKey?: string;
@@ -736,6 +768,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       !this.columns.some((column) => column.filter)
     )
       this.filtersOpen = false;
+    if (!this.#offersChooser()) this.chooserOpen = false;
     if (changed.has("viewKey") || changed.has("rememberExpanded")) this.#remembered = null;
     if (
       this.initiallyCollapsed &&
@@ -1647,19 +1680,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const activeCount = this.columns.filter(
       (column) => column.filter && this.#activeFilter(column) !== "",
     ).length;
-    const choosable = this.columns.filter((column) => column.choosable !== undefined);
+    const chooser = this.#offersChooser();
     const slotted = (name: string) => this.querySelector(`:scope > [slot="${name}"]`) !== null;
     const start = slotted("toolbar-start");
     const end = slotted("toolbar-end");
     const expandAll = this.#renderExpandAll();
-    if (
-      !this.searchable &&
-      !hasFilters &&
-      choosable.length === 0 &&
-      !start &&
-      !end &&
-      expandAll === nothing
-    )
+    if (!this.searchable && !hasFilters && !chooser && !start && !end && expandAll === nothing)
       return nothing;
     return html`<div class="table-toolbar">
       <slot name="toolbar-start"></slot>
@@ -1792,15 +1818,25 @@ export class WtDataTable<Row = unknown> extends LitElement {
           : nothing
       }
       ${
-        expandAll !== nothing || end || choosable.length > 0
+        expandAll !== nothing || end || chooser
           ? html`<div class="table-end">
               ${expandAll}<slot name="toolbar-end"></slot>${
-                choosable.length > 0 ? this.#renderChooser() : nothing
+                chooser ? this.#renderChooser() : nothing
               }
             </div>`
           : nothing
       }
     </div>`;
+  }
+
+  /** Whether the chooser could change anything: a table opts in with a `choosable` column, and
+   * there are two movable columns to reorder. One movable column can be neither moved nor hidden,
+   * because the last shown movable column stays shown. */
+  #offersChooser(): boolean {
+    return (
+      this.columns.some((column) => column.choosable !== undefined) &&
+      this.columns.filter((column, index) => index > 0 && column.pinned !== "end").length >= 2
+    );
   }
 
   #renderChooser() {
@@ -1832,6 +1868,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
             (column, index) => {
               const isShown = shown.includes(column);
               const fixed = index === 0 || column.pinned === "end";
+              const alwaysShown = fixed || column.choosable === undefined;
+              const lastShown = !alwaysShown && isShown && visibleMovable.length === 1;
+              const note = `column-note-${column.key}`;
               return html`<div
                 class="column-choice"
                 data-column-row=${column.key}
@@ -1841,7 +1880,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
               >
                 ${
                   fixed
-                    ? nothing
+                    ? html`<span class="handle-spacer" aria-hidden="true"></span>`
                     : html`<button
                         type="button"
                         data-reorder=${column.key}
@@ -1859,24 +1898,37 @@ export class WtDataTable<Row = unknown> extends LitElement {
                         <wt-icon name="column-grip"></wt-icon>
                       </button>`
                 }
-                <span class="column-name">${column.label}</span>
-                <label class="eye-toggle">
-                  <input
-                    type="checkbox"
-                    name=${`${column.key}-column`}
-                    data-column=${column.key}
-                    aria-label=${`${isShown ? this.hideColumnLabel : this.showColumnLabel} ${column.label}`}
-                    .checked=${isShown}
-                    ?disabled=${
-                      fixed ||
-                      column.choosable === undefined ||
-                      (isShown && !fixed && visibleMovable.length === 1)
-                    }
-                    @change=${(event: Event) => {
-                      event.stopPropagation();
-                      this.#chooseColumn(column.key, (event.target as HTMLInputElement).checked);
-                    }} /><wt-icon name=${isShown ? "eye-open" : "eye-closed"}></wt-icon
-                ></label>
+                <span class="column-text">
+                  <span class="column-name">${column.label}</span>
+                  ${
+                    lastShown
+                      ? html`<span class="column-note" id=${note}
+                          >${this.lastShownColumnLabel}</span
+                        >`
+                      : nothing
+                  }
+                </span>
+                ${
+                  alwaysShown
+                    ? html`<span class="column-state">${this.alwaysShownColumnLabel}</span>`
+                    : html`<label class="eye-toggle">
+                        <input
+                          type="checkbox"
+                          name=${`${column.key}-column`}
+                          data-column=${column.key}
+                          aria-label=${`${isShown ? this.hideColumnLabel : this.showColumnLabel} ${column.label}`}
+                          aria-describedby=${lastShown ? note : nothing}
+                          .checked=${isShown}
+                          ?disabled=${lastShown}
+                          @change=${(event: Event) => {
+                            event.stopPropagation();
+                            this.#chooseColumn(
+                              column.key,
+                              (event.target as HTMLInputElement).checked,
+                            );
+                          }} /><wt-icon name=${isShown ? "eye-open" : "eye-closed"}></wt-icon
+                      ></label>`
+                }
               </div>`;
             },
           )}
