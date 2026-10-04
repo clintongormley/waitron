@@ -182,6 +182,245 @@ describe("extra list CRUD", () => {
     });
   });
 
+  it.each([
+    ["the seeded ml unit", "ml"],
+    ["a venue's own whole unit", null],
+  ])("requires an explicit portion for %s, which has no scale link", async (_label, seedKey) => {
+    const productId = await run(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "millilitre" }, precision: 0, abbreviation: { en: "ml" } },
+        "en",
+      );
+      await tx.execute(sql`update units set seed_key = ${seedKey} where id = ${unit.id}`);
+      const catalogue = await createCatalogue(tx, { name: "Poured extras" });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        name: "Olive oil",
+        unitId: unit.id,
+        unitPrice: "0.02",
+        vatClass: "reduced",
+      });
+      return product.id;
+    });
+
+    const error = await refusal((tx) =>
+      createExtraList(
+        tx,
+        { name: "Oils", items: [{ productId: breads.rye }, { productId }] },
+        "en",
+      ),
+    );
+    expect(error).toMatchObject({
+      code: "extras.invalid",
+      params: { field: "items.1.portion" },
+    });
+  });
+
+  it("takes no portion for an Each extra, stored or not, and stores one", async () => {
+    const eachProductId = await run(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+        "en",
+      );
+      await tx.execute(sql`update units set seed_key = 'each' where id = ${unit.id}`);
+      const catalogue = await createCatalogue(tx, { name: "Counted extras" });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        name: "Olive",
+        unitId: unit.id,
+        unitPrice: "0.30",
+        vatClass: "reduced",
+      });
+      return product.id;
+    });
+
+    const created = await run((tx) =>
+      createExtraList(
+        tx,
+        { name: "Sides", items: [{ productId: breads.rye }, { productId: eachProductId }] },
+        "en",
+      ),
+    );
+    const read = await run((tx) => getExtraList(tx, created.id));
+    expect(read.items.map((item) => [item.productId, item.portion])).toEqual([
+      [breads.rye, "1.000"],
+      [eachProductId, "1.000"],
+    ]);
+  });
+
+  // The dashboard's Extras editor gives every row it adds an id of its own, so "new" cannot mean
+  // "sent with no id".
+  const mlProduct = () =>
+    run(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "millilitre" }, precision: 0, abbreviation: { en: "ml" } },
+        "en",
+      );
+      await tx.execute(sql`update units set seed_key = 'ml' where id = ${unit.id}`);
+      const catalogue = await createCatalogue(tx, { name: "Poured extras" });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        name: "Olive oil",
+        unitId: unit.id,
+        unitPrice: "0.02",
+        vatClass: "reduced",
+      });
+      return product.id;
+    });
+
+  it("requires a portion for a new item sent with an id the list does not hold, on create", async () => {
+    const productId = await mlProduct();
+
+    const error = await refusal((tx) =>
+      createExtraList(
+        tx,
+        {
+          name: "Oils",
+          items: [
+            { id: UNKNOWN_ID, productId: breads.rye },
+            { id: SECOND_UNKNOWN_ID, productId },
+          ],
+        },
+        "en",
+      ),
+    );
+    expect(error).toMatchObject({
+      code: "extras.invalid",
+      params: { field: "items.1.portion" },
+    });
+  });
+
+  it("requires a portion for a new item sent with an id the list does not hold, on update", async () => {
+    const productId = await mlProduct();
+    const list = await run((tx) =>
+      createExtraList(tx, { name: "Oils", items: [{ productId: breads.rye }] }, "en"),
+    );
+
+    const error = await refusal((tx) =>
+      updateExtraList(
+        tx,
+        list.id,
+        {
+          name: "Oils",
+          items: [
+            { id: list.items[0]!.id, productId: breads.rye },
+            { id: UNKNOWN_ID, productId },
+          ],
+        },
+        "en",
+      ),
+    );
+    expect(error).toMatchObject({
+      code: "extras.invalid",
+      params: { field: "items.1.portion" },
+    });
+  });
+
+  it("requires a portion for a held id sent with a different product", async () => {
+    const productId = await mlProduct();
+    const list = await run((tx) =>
+      createExtraList(tx, { name: "Oils", items: [{ productId: breads.rye }] }, "en"),
+    );
+
+    const error = await refusal((tx) =>
+      updateExtraList(
+        tx,
+        list.id,
+        { name: "Oils", items: [{ id: list.items[0]!.id, productId }] },
+        "en",
+      ),
+    );
+    expect(error).toMatchObject({
+      code: "extras.invalid",
+      params: { field: "items.0.portion" },
+    });
+  });
+
+  // What the kept item's portion becomes is the open point in W75c's backlog entry.
+  it("takes no portion for a held id sent with the same product", async () => {
+    const productId = await mlProduct();
+    const list = await run((tx) =>
+      createExtraList(tx, { name: "Oils", items: [{ productId, portion: "30" }] }, "en"),
+    );
+
+    await run((tx) =>
+      updateExtraList(
+        tx,
+        list.id,
+        { name: "Oils", items: [{ id: list.items[0]!.id, productId }] },
+        "en",
+      ),
+    );
+    const read = await run((tx) => getExtraList(tx, list.id));
+    expect(read.items.map((item) => [item.id, item.productId])).toEqual([
+      [list.items[0]!.id, productId],
+    ]);
+  });
+
+  // The item sent with no id keeps the check from returning before it reads any unit, so the
+  // id-carrying items' units must be read too.
+  it("takes no portion for an Each extra sent with an id the list does not hold, and stores one", async () => {
+    const list = await run((tx) =>
+      createExtraList(
+        tx,
+        {
+          name: "Sides",
+          items: [{ id: UNKNOWN_ID, productId: breads.rye }, { productId: breads.sourdough }],
+        },
+        "en",
+      ),
+    );
+    await run((tx) =>
+      updateExtraList(
+        tx,
+        list.id,
+        {
+          name: "Sides",
+          items: [
+            { id: UNKNOWN_ID, productId: breads.rye },
+            { id: SECOND_UNKNOWN_ID, productId: breads.focaccia },
+            { productId: breads.sourdough },
+          ],
+        },
+        "en",
+      ),
+    );
+    const read = await run((tx) => getExtraList(tx, list.id));
+    expect(read.items.map((item) => [item.productId, item.portion])).toEqual([
+      [breads.rye, "1.000"],
+      [breads.focaccia, "1.000"],
+      [breads.sourdough, "1.000"],
+    ]);
+    expect(read.items.slice(0, 2).map((item) => item.id)).toEqual([UNKNOWN_ID, SECOND_UNKNOWN_ID]);
+  });
+
+  it("refuses another list's item id before asking for its portion", async () => {
+    const productId = await mlProduct();
+    const other = await run((tx) => createExtraList(tx, breadList(), "en"));
+    const mine = await run((tx) =>
+      createExtraList(tx, { name: "Oils", items: [{ productId: breads.rye }] }, "en"),
+    );
+
+    const error = await refusal((tx) =>
+      updateExtraList(
+        tx,
+        mine.id,
+        { name: "Oils", items: [{ id: other.items[1]!.id, productId }] },
+        "en",
+      ),
+    );
+    expect(error).toMatchObject({
+      code: "extras.invalid",
+      params: { field: "items.0.id" },
+    });
+  });
+
   it("refuses a non-one portion for an Each extra", async () => {
     const error = await refusal((tx) =>
       createExtraList(

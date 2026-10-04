@@ -445,7 +445,7 @@ describe("readOfferedModifiers", () => {
           kitchenName: "DRK",
           minPicks: 0,
           maxPicks: 1,
-          items: [{ productId: f.wine125 }],
+          items: [{ productId: f.wine125, portion: "1" }],
         },
         "en",
       );

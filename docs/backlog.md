@@ -1226,7 +1226,8 @@ Left OPEN from its review, for the owner to decide: (1) the Products list decide
 the product's unit is in the venue's saved unit list, the Extras editor by the unit's id, so the two
 can disagree (for example before the unit list has loaded) — aligning them changes the Products
 screen; (2) the handle-on-the-first-line alignment applied to the Extras list only — DONE by W75b, below; (3) the editor refuses a blank Portion for every unit
-but Each while the server accepts none for a whole unit with no scale link (ml) and stores 1.
+but Each while the server accepts none for a whole unit with no scale link (ml) and stores 1 — DONE
+by W75c, below.
 
 **Every reorderable table puts its drag handle on the first line of a tall row (W75b, owner
 2026-10-04) — DONE (#1201).** The shared reorder table styles (`packages/ui/src/reorder-table.ts`) now line
@@ -1242,6 +1243,32 @@ Extras editor and Prep stations screen each have a test with a wrapping name. Th
 and the section member list had their own centring rules: the section member list's is removed, and
 the option list form's is replaced by the top alignment. See `docs/developers/design-system.md`,
 tables.
+
+**The server refuses a new Extras item with no Portion for every unit but Each (W75c, owner
+2026-10-04) — DONE.** `assertPortionPrecision` (`packages/catalogue/src/extras.ts`) used to refuse a
+missing portion only for an item sent with no id whose unit had decimals or a scale link. So an item
+sent with an id, whatever its unit, and an item sent with no id for ml or a venue's own whole unit,
+were saved with no portion and stored as 1. It now refuses a new item with no portion as
+`extras.invalid` naming `items.<n>.portion`, unless the product is Each: it has no stored unit, or
+its stored unit was seeded as `each`. An item is new when it is sent with no id, with an id the list
+does not hold (the dashboard's Extras editor gives every row it adds an id of its own), or with an id
+the list holds for a different product. An Each item still takes none and stores 1. An id that
+belongs to another list is refused on `items.<n>.id` before the portion check runs, so it keeps that
+refusal. Tests in `packages/catalogue/src/extras.test.ts` cover the seeded ml unit, a venue's own
+whole unit, both kinds of Each, items sent with an id the list does not hold, on create and on
+update, and an id the list holds sent with a different product. An item sent with an id the list
+holds for the same product and no portion is still accepted; a test holds that it is accepted, not
+what portion it then has. An item sent with a portion is checked as before. Two catalogue test files
+whose lists offered products on a venue's own whole unit now send a portion of 1.
+Left OPEN, found while building it and not in its scope: an item the list already holds that is sent
+again under its id, for the same product and WITHOUT a portion, loses its saved one. Tried with a
+throwaway test: a kg item saved at `0.050`, then `updateExtraList` with `{ id, productId }` and no
+portion, read back `1.000`, because `assertPortionPrecision` does not refuse such an item and
+`writeItems` re-inserts every item with `item.portion ?? "1"`; tried again on 2026-10-05 after the
+different-product change, with an ml item saved at `30`, read back `1.000`. The dashboard's Extras
+editor was not checked for whether it always resends the saved portion. Next step, if the owner
+wants it: refuse such an item when its product is not Each, or keep the portion saved under that id,
+which is for the same product.
 
 **A folded Customer-facing names section shows every language's name, inherited ones in italic
 (W77, owner 2026-10-04) — DONE (#1197).** The owner, on an Extras list: _"missing the summary of the values
@@ -1772,7 +1799,7 @@ W53 changes the filed display surfaces.
   product's portion is one and the form asks for none; _2026-10-04 (W75): the list editor now asks
   for a portion for EVERY unit but Each, so whole grams, millilitres and a venue's own units too;
   the server still accepts a new item of a whole unit with no hardware link (ml, say) without one,
-  and stores 1._
+  and stores 1._ _2026-10-05 (W75c): the server now refuses that too._
 - each pick adds one portion: three picks of 50 g are 150 g, and a dish × 2 doubles that, as the
   count does today;
 - the item's **Price is per portion**: blank, it is the portion × the product's unit price (50 g ×
