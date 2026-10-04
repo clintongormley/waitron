@@ -18,12 +18,14 @@ import {
 import type { ServiceMode, ZoneMenuState, ZoneOffers } from "@waitron/module";
 import { AppError, type LocationId } from "@waitron/shared";
 import {
+  departmentSalePolicies,
   departments,
   departmentHours,
   deviceZoneDefaults,
   orderServiceContexts,
   workingLineContexts,
   zoneMenus,
+  zoneSalePolicies,
   zoneServicePolicies,
 } from "./schema/service.js";
 import "./errors.js";
@@ -190,6 +192,7 @@ export async function createDepartment(
       defaultServiceMode: departments.defaultServiceMode,
       active: departments.active,
     });
+  await tx.insert(departmentSalePolicies).values({ departmentId: row!.id });
   return { ...row!, defaultServiceMode: row!.defaultServiceMode as ServiceMode };
 }
 
@@ -370,6 +373,10 @@ export async function configureZone(
       target: [zoneServicePolicies.zoneId],
       set: { departmentId: input.departmentId, serviceMode: input.serviceMode ?? null },
     });
+  await tx
+    .insert(zoneSalePolicies)
+    .values({ zoneId: input.zoneId })
+    .onConflictDoNothing({ target: zoneSalePolicies.zoneId });
 }
 
 export async function allowMenuInZone(

@@ -18,6 +18,76 @@ beforeAll(() => {
 });
 
 describe("VENUE_SERVICE_PROVISIONING", () => {
+  it("names the default department after the venue", async () => {
+    await seedTenant(db);
+    const [location] = await db
+      .insert(locations)
+      .values({
+        name: "La Plaza",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Restaurante",
+      })
+      .returning({ id: locations.id });
+    const locationId = brandLocationId(location!.id);
+    const node = { locationId, nodeId: await seedNode(db, locationId) };
+
+    await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
+
+    const rows = await db.execute<{ name: string; trading_name: string }>(sql`
+      select name, trading_name from departments where location_id = ${locationId}`);
+    expect(rows.rows).toEqual([{ name: "La Plaza", trading_name: "La Plaza" }]);
+  });
+
+  it("seeds quick-sale and receipt defaults without a zone override", async () => {
+    await seedTenant(db);
+    const [location] = await db
+      .insert(locations)
+      .values({
+        name: "Corner Kitchen",
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Hospitality",
+      })
+      .returning({ id: locations.id });
+    const locationId = brandLocationId(location!.id);
+    const node = { locationId, nodeId: await seedNode(db, locationId) };
+
+    await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
+
+    const department = await db.execute<{
+      paid_when: string;
+      collection_number: string;
+      receipt_print_mode: string;
+      print_trading_name: number;
+    }>(sql`
+      select paid_when, collection_number, receipt_print_mode, print_trading_name
+      from department_sale_policies
+      where department_id = (
+        select id from departments where location_id = ${locationId} and is_default = 1
+      )`);
+    expect(department.rows).toEqual([
+      {
+        paid_when: "prepay",
+        collection_number: "none",
+        receipt_print_mode: "auto",
+        print_trading_name: 1,
+      },
+    ]);
+    const zone = await db.execute<{
+      paid_when: string | null;
+      collection_number: string | null;
+      receipt_print_mode: string | null;
+    }>(sql`
+      select paid_when, collection_number, receipt_print_mode
+      from zone_sale_policies
+      where zone_id = (
+        select zone_id from zone_service_policies
+        where location_id = ${locationId} and is_counter_default = 1
+      )`);
+    expect(zone.rows).toEqual([
+      { paid_when: null, collection_number: null, receipt_print_mode: null },
+    ]);
+  });
+
   it("seeds one counter policy idempotently without resetting authored mode", async () => {
     await seedTenant(db);
     const [location] = await db

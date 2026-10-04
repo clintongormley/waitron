@@ -1,13 +1,23 @@
 import { and, eq, sql } from "drizzle-orm";
 import { floorZones, locations } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
-import { departments, zoneMenus, zoneServicePolicies } from "./schema/service.js";
+import {
+  departmentSalePolicies,
+  departments,
+  zoneMenus,
+  zoneSalePolicies,
+  zoneServicePolicies,
+} from "./schema/service.js";
 import { serviceSettings } from "./schema/settings.js";
 
 export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary: "Create the default department, counter zone and service settings",
     async run(tx, node) {
+      const location = await tx
+        .select({ name: locations.name, catalogueId: locations.catalogueId })
+        .from(locations)
+        .where(eq(locations.id, node.locationId));
       // Through the insert builder: `id` and `created_at` are `$defaultFn` generators, which only
       // the builder runs. Read-then-insert is safe because a seed runs inside `withTransaction`,
       // which holds the file's write lock for its whole body.
@@ -23,13 +33,17 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
             .insert(departments)
             .values({
               locationId: node.locationId,
-              name: "Venue",
-              tradingName: "Venue",
+              name: location[0]!.name,
+              tradingName: location[0]!.name,
               defaultServiceMode: "prepay",
               isDefault: true,
             })
             .returning({ id: departments.id })
         )[0]!.id;
+      await tx
+        .insert(departmentSalePolicies)
+        .values({ departmentId })
+        .onConflictDoNothing({ target: departmentSalePolicies.departmentId });
 
       const existing = await tx
         .select({ zoneId: zoneServicePolicies.zoneId })
@@ -76,12 +90,12 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           ),
         )
         .limit(1);
-      const menu = await tx
-        .select({ catalogueId: locations.catalogueId })
-        .from(locations)
-        .where(eq(locations.id, node.locationId));
       const zoneId = policy[0]!.zoneId;
-      const menuId = menu[0]!.catalogueId;
+      await tx
+        .insert(zoneSalePolicies)
+        .values({ zoneId })
+        .onConflictDoNothing({ target: zoneSalePolicies.zoneId });
+      const menuId = location[0]!.catalogueId;
       if (menuId !== null) {
         await tx
           .insert(zoneMenus)

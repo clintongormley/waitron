@@ -911,6 +911,57 @@ describe("routing outcomes and menu readiness", () => {
 });
 
 describe("departments", () => {
+  it("gives a newly configured zone blank quick-sale and receipt overrides", async () => {
+    const locationId = brandLocationId(await seedLocation("Zone policy defaults"));
+    const zoneId = await seedZone(locationId, "Terrace");
+    await scoped(async (tx) => {
+      const department = await createDepartment(
+        tx,
+        { locationId },
+        {
+          name: "Restaurant",
+          defaultServiceMode: "prepay",
+        },
+      );
+      await configureZone(tx, { locationId }, { zoneId, departmentId: department.id });
+    });
+
+    const policies = await db.execute<{
+      paid_when: string | null;
+      collection_number: string | null;
+      receipt_print_mode: string | null;
+    }>(sql`
+      select paid_when, collection_number, receipt_print_mode
+      from zone_sale_policies where zone_id = ${zoneId}`);
+    expect(policies.rows).toEqual([
+      { paid_when: null, collection_number: null, receipt_print_mode: null },
+    ]);
+  });
+
+  it("gives a newly created department the quick-sale and receipt defaults", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("New department policies")) };
+    const department = await scoped((tx) =>
+      createDepartment(tx, cfg, { name: "Terrace", defaultServiceMode: "prepay" }),
+    );
+
+    const policies = await db.execute<{
+      paid_when: string;
+      collection_number: string;
+      receipt_print_mode: string;
+      print_trading_name: number;
+    }>(sql`
+      select paid_when, collection_number, receipt_print_mode, print_trading_name
+      from department_sale_policies where department_id = ${department.id}`);
+    expect(policies.rows).toEqual([
+      {
+        paid_when: "prepay",
+        collection_number: "none",
+        receipt_print_mode: "auto",
+        print_trading_name: 1,
+      },
+    ]);
+  });
+
   it("refuses hours and deactivation for a department outside this venue, and an empty set clears the hours", async () => {
     const here = { locationId: brandLocationId(await seedLocation("Venue")) };
     const there = { locationId: brandLocationId(await seedLocation("Second venue")) };

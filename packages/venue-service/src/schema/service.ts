@@ -6,6 +6,8 @@ import {
   catalogues,
   count,
   devices,
+  enumCheck,
+  enumType,
   flag,
   floorZones,
   id,
@@ -14,6 +16,7 @@ import {
   locations,
   newId,
   nowIso,
+  sales,
   table,
   timeOfDay,
   tsString,
@@ -102,6 +105,73 @@ export const zoneServicePolicies = table(
       "zone_service_policies_mode_ck",
       sql`${t.serviceMode} is null or ${t.serviceMode} in ('table_tab','prepay','invoice_first','ticket_then_pay')`,
     ),
+  ],
+);
+
+const paidWhen = enumType(["prepay", "ticket_then_pay"]);
+const collectionNumber = enumType(["none", "numbered"]);
+const receiptMode = enumType(["auto", "on_request", "never"]);
+
+export const departmentSalePolicies = table(
+  "department_sale_policies",
+  {
+    departmentId: id("department_id").primaryKey(),
+    paidWhen: paidWhen("paid_when").notNull().default("prepay"),
+    collectionNumber: collectionNumber("collection_number").notNull().default("none"),
+    receiptPrintMode: receiptMode("receipt_print_mode").notNull().default("auto"),
+    printTradingName: flag("print_trading_name").notNull().default(true),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.departmentId],
+      foreignColumns: [departments.id],
+      name: "department_sale_policies_department_fk",
+    }),
+    check("department_sale_policies_paid_when_ck", enumCheck(t.paidWhen)),
+    check("department_sale_policies_collection_number_ck", enumCheck(t.collectionNumber)),
+    check("department_sale_policies_receipt_mode_ck", enumCheck(t.receiptPrintMode)),
+  ],
+);
+
+export const zoneSalePolicies = table(
+  "zone_sale_policies",
+  {
+    zoneId: id("zone_id").primaryKey(),
+    paidWhen: paidWhen("paid_when"),
+    collectionNumber: collectionNumber("collection_number"),
+    receiptPrintMode: receiptMode("receipt_print_mode"),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.zoneId],
+      foreignColumns: [zoneServicePolicies.zoneId],
+      name: "zone_sale_policies_zone_fk",
+    }),
+    check("zone_sale_policies_paid_when_ck", enumCheck(t.paidWhen)),
+    check("zone_sale_policies_collection_number_ck", enumCheck(t.collectionNumber)),
+    check("zone_sale_policies_receipt_mode_ck", enumCheck(t.receiptPrintMode)),
+  ],
+);
+
+export const saleReceiptHeaders = table(
+  "sale_receipt_headers",
+  {
+    saleId: id("sale_id").primaryKey(),
+    departmentId: id("department_id"),
+    tradingName: label("trading_name").notNull(),
+    printTradingName: flag("print_trading_name").notNull(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.saleId],
+      foreignColumns: [sales.id],
+      name: "sale_receipt_headers_sale_fk",
+    }),
+    foreignKey({
+      columns: [t.departmentId],
+      foreignColumns: [departments.id],
+      name: "sale_receipt_headers_department_fk",
+    }),
   ],
 );
 

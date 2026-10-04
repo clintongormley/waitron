@@ -34,10 +34,15 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
     ]);
   });
 
-  it("classifies each owned table once as replicated state", () => {
+  it("classifies each owned table once, with only issued receipt headers in the ledger", () => {
     const tables = VENUE_SERVICE_CLASSIFICATION.map((entry) => entry.table);
     expect(new Set(tables).size).toBe(tables.length);
-    expect(VENUE_SERVICE_CLASSIFICATION.every((entry) => entry.class === "state")).toBe(true);
+    expect(
+      VENUE_SERVICE_CLASSIFICATION.filter((entry) => entry.class !== "state").map((entry) => [
+        entry.table,
+        entry.class,
+      ]),
+    ).toEqual([["sale_receipt_headers", "ledger"]]);
     expect(VENUE_SERVICE_CLASSIFICATION.every((entry) => entry.reason.trim().length > 0)).toBe(
       true,
     );
