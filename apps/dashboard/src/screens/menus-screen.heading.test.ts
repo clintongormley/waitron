@@ -355,10 +355,17 @@ describe("the menu editor's heading", () => {
     );
   });
 
-  // The Structure tab's list panel, which Task 4 of W88 replaces, still widens the page for such a
-  // word on its own, so this holds the heading alone.
   it("breaks a menu name in one word longer than the phone is wide inside the heading", async () => {
     const el = await onPhone(`Terraza${"brunch".repeat(12)}`);
+    const tree = q<HTMLElementTagNameMap["dashboard-menu-structure-table"]>(
+      el,
+      "dashboard-menu-structure-table",
+    )!;
+    await tree.updateComplete;
+    await tree.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-data-table",
+    )!.updateComplete;
+    expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     const heading = q(el, "h1")!;
     expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth);
     expect(heading.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
