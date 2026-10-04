@@ -79,6 +79,84 @@ describe("folder selection routes", () => {
     expect((await send(app, "GET", `/management-api/categories/${child}`)).status).toBe(404);
   });
 
+  it.each(["move_up", "delete"] as const)(
+    "summarises and deletes (%s) only the empty one of three top-level categories named Mains",
+    async (contents) => {
+      const app = mountApp();
+      const empty = await folder(app, "Mains");
+      const withActive = await folder(app, "Mains");
+      const withInactive = await folder(app, "Mains");
+      const menu = await createCatalogueVia(app, "Mains menu");
+      const make = async (name: string, categoryId: string) => {
+        const created = await send(app, "POST", "/management-api/products", {
+          body: {
+            catalogueId: menu,
+            categoryId,
+            name,
+            pricingUnit: "each",
+            unitPrice: "2",
+            vatClass: "general",
+          },
+        });
+        expect(created.status).toBe(201);
+        return ((await created.json()) as { id: string }).id;
+      };
+      const steak = await make("Steak", withActive);
+      const stew = await make("Stew", withInactive);
+      expect(
+        (
+          await send(app, "POST", "/management-api/folders/delete", {
+            body: { productIds: [stew], categoryIds: [], contents: "move_up" },
+          })
+        ).status,
+      ).toBe(204);
+      const products = async () =>
+        (
+          (await (await send(app, "GET", "/management-api/products")).json()) as {
+            id: string;
+            active: boolean;
+            primaryCategoryId: string | null;
+          }[]
+        )
+          .filter(({ id }) => id === steak || id === stew)
+          .map(({ id, active, primaryCategoryId }) => ({ id, active, primaryCategoryId }))
+          .sort((a, b) => a.id.localeCompare(b.id));
+      const before = await products();
+      expect(before).toEqual(
+        [
+          { id: steak, active: true, primaryCategoryId: withActive },
+          { id: stew, active: false, primaryCategoryId: withInactive },
+        ].sort((a, b) => a.id.localeCompare(b.id)),
+      );
+
+      const summary = await send(app, "GET", `/management-api/folders/summary?id=${empty}`);
+      expect(await summary.json()).toEqual([
+        { id: empty, folders: 0, products: 0, activeProducts: 0, routes: 0 },
+      ]);
+      expect(
+        (
+          await send(app, "POST", "/management-api/folders/delete", {
+            body: { productIds: [], categoryIds: [empty], contents },
+          })
+        ).status,
+      ).toBe(204);
+
+      const left = (await (await send(app, "GET", "/management-api/categories")).json()) as {
+        id: string;
+        name: string;
+        parentId: string | null;
+      }[];
+      expect(left.map(({ id, name, parentId }) => ({ id, name, parentId }))).toEqual(
+        expect.arrayContaining([
+          { id: withActive, name: "Mains", parentId: null },
+          { id: withInactive, name: "Mains", parentId: null },
+        ]),
+      );
+      expect(left.some(({ id }) => id === empty)).toBe(false);
+      expect(await products()).toEqual(before);
+    },
+  );
+
   it("answers a cycle with 409 and leaves the selected product where it was", async () => {
     const app = mountApp();
     const parent = await folder(app, "Drinks");
