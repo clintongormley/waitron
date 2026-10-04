@@ -66,7 +66,7 @@ function api(): DashboardApi {
 }
 
 describe.each(["light", "dark"] as const)("menu editor heading (%s)", (theme) => {
-  it("accessible path, name and Unpublished changes link beside the in-panel breadcrumb", async () => {
+  it("accessible path, name and Unpublished changes link above the Structure tree", async () => {
     history.replaceState(null, "", "/manage/menus/menu/menu-lunch/view/structure");
     const { el, host } = await mountWidget<MenusScreen>(
       "dashboard-menus-screen",
@@ -76,7 +76,7 @@ describe.each(["light", "dark"] as const)("menu editor heading (%s)", (theme) =>
     const root = el.shadowRoot!;
     await vi.waitFor(() => {
       expect(root.querySelector('[data-test="status-changes"]')).not.toBeNull();
-      expect(root.querySelector('[data-test="breadcrumb"]')).not.toBeNull();
+      expect(root.querySelector("dashboard-menu-structure-table")).not.toBeNull();
     });
     expect(root.querySelector('[data-test="menu-breadcrumb"] a')).not.toBeNull();
     await expectNoA11yViolations(host);

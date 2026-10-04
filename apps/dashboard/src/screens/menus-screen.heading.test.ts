@@ -212,18 +212,21 @@ describe("the menu editor's heading", () => {
 
   it("adds no other heading naming the menu, and names its landmark unlike any other", async () => {
     const el = await mount();
-    // The in-panel breadcrumb is still on the Structure tab, so the names are compared with it there.
-    expect(q(el, '[data-test="breadcrumb"]')).not.toBeNull();
+    await vi.waitFor(() => expect(q(el, "dashboard-menu-structure-table")).not.toBeNull());
     const tabs = q(el, "wt-tabs")!;
     const outside = deepAll(el.shadowRoot!, "h1, h2, h3, h4, h5, h6, [role='heading']").filter(
       (heading) => !tabs.contains(heading),
     );
     expect(outside.filter((heading) => text(heading) === "Lunch Menu")).toHaveLength(1);
     const name = trail(el).getAttribute("aria-label");
-    const others = deepAll(el.shadowRoot!, "nav, [role='navigation']")
-      .filter((landmark) => landmark !== trail(el))
-      .map((landmark) => landmark.getAttribute("aria-label"));
-    expect(others.length).toBeGreaterThan(0);
+    expect(name).toBeTruthy();
+    // The path is the page's one navigation landmark, and nothing else that is named (the tree's
+    // table, the tabs) carries its name.
+    expect(deepAll(el.shadowRoot!, "nav, [role='navigation']")).toEqual([trail(el)]);
+    const others = deepAll(el.shadowRoot!, "[aria-label]")
+      .filter((named) => named !== trail(el))
+      .map((named) => named.getAttribute("aria-label"));
+    expect(others).toContain(t("menus.tree_heading"));
     expect(others).not.toContain(name);
   });
 
