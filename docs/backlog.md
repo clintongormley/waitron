@@ -883,7 +883,7 @@ nothing changed there. The empty case still shows the toolbar when the table has
 Left open: the Payments screen's readers table gets no button, because "Add reader" sits beside
 each connected provider (none, one or several), so there is no single Add to put there, and the
 list is pre-filtered by status; and the menu prices table on a menu's Prices tab gets none either,
-because its rows come from "Add several products" on the Structure tab, shown for whichever menu or
+because its rows come from "Add products" on the Structure tab, shown for whichever menu or
 section is open. Found while building it, and fixed in the same change: on the
 Departments and zones screen, adding a department, hours or a zone's menu from the top Add button left
 keyboard focus on the page, because the screen tried to focus the button while it was still
@@ -2718,6 +2718,15 @@ goes in a menu beside the table heading, while Menus, Staff and Units put a text
 heading row's trailing edge; the doc only names the exceptions, and whether the rule itself changes
 is the owner's call. And the row-highlight tests focus only the row's own button, so nothing tests
 that a row highlights while another control in it, such as its Actions menu, has focus.
+
+**Add products picker selects all listed — DONE (W81, owner 2026-10-04).** The Structure tab's
+"Add several products" button now reads "Add products" ("Añadir productos"). The picker's list has
+a header row whose checkbox lines up with the products' own, labelled "Select all listed" and named
+for screen readers "Select all listed products". It chooses or clears only the products the
+category and search filters list, shows checked, unchecked or mixed from those alone, and leaves
+chosen products a filter hides chosen; Add still adds every chosen product. It is greyed out while
+the picker is busy or nothing matches the filters, and not drawn when there are no products or the
+section already holds them all.
 
 **Filtered table headings stay put — DONE (W64, owner 2026-10-04).** The conditional funnel button
 used to increase a header's height and width when its filter became active. A filtered heading now
