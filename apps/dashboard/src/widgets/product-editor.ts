@@ -1201,10 +1201,12 @@ export class ProductEditor extends LitElement {
           { value: EACH_CHOICE, label: each },
           ...this.units.map((unit) => ({ value: unit.id, label: this.unitLabel(unit) })),
         ]}
+        ?disabled=${this.suspended}
         .value=${this.draft.unitId ?? EACH_CHOICE}
         error=${this.error("unit")}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
+          if (this.suspended) return;
           const value = event.detail.value;
           this.change("unitId", value === EACH_CHOICE ? null : value);
           this.closeUnits();
@@ -1291,7 +1293,9 @@ export class ProductEditor extends LitElement {
         ?required=${parent === null}
         ?disabled=${this.suspended}
         .value=${amount}
-        .error=${this.error("unit-price") || (parent === null ? this.error("unit") : "")}
+        .error=${[this.error("unit-price"), parent === null ? this.error("unit") : ""]
+          .filter((message) => message !== "")
+          .join(" ")}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
           this.change("unitPrice", event.detail.value);

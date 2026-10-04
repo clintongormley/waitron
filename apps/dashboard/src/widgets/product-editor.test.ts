@@ -292,7 +292,7 @@ it("uses the shared compact nutritional picker without a reviewed switch", async
 });
 
 /** Runs `body` with the test frame at a desktop width, where the variants table keeps its price
- * column and the unit dropdown in that column's heading. */
+ * column and the unit button in that column's heading. */
 async function atDesktopWidth(body: () => Promise<void>): Promise<void> {
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -322,8 +322,8 @@ it("puts the variant pricing unit chooser in the table header, not below the tab
   });
 });
 
-// A phone hides the variants table's price column and the unit dropdown in its heading, so the
-// price field's own unit button has to reach everything that dropdown offered.
+// A phone hides the variants table's price column and the unit button in its heading; the price
+// field's own unit button opens the same chooser.
 it("changes a product's unit from the price field when the table's heading dropdown is hidden", async () => {
   const litre = { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } };
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
@@ -447,8 +447,7 @@ it("shuts the chooser from its Close button without changing the unit, putting f
   expect(reachedScreen).not.toHaveBeenCalled();
 });
 
-// Opened by a real press, as a person opens it: Chromium groups a dialog opened without a user
-// action with the one beneath it, so one Escape would close both (see catalogue-screen.test.ts, C74).
+// Opened by a real press, as catalogue-screen.test.ts's unit-form Escape case is (C74).
 it("shuts only the chooser on Escape, leaving the unit and the editor as they were", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -590,6 +589,58 @@ it("opens the chooser showing a refused unit, and keeps the refusal on the price
   await chooseOption(combobox(el, "unit")!, kg.id);
   await el.updateComplete;
   expect(priceInput(el).error).toBe("");
+});
+
+it("shows a refused unit beside the price's own error on the price field once the chooser is shut", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit, kg],
+    taxChoices: reduced,
+  });
+  save(el);
+  el.fieldErrors = { unit: "That unit is gone" };
+  await el.updateComplete;
+  expect(unitChooser(el).open).toBe(true);
+  unitChooser(el).querySelector<HTMLElement>("[data-test=close-unit-chooser]")!.click();
+  await el.updateComplete;
+  expect(unitChooser(el).open).toBe(false);
+  expect(priceInput(el).error).toBe("That unit is gone");
+  await input(el, "unit-price", "");
+  const price = priceInput(el);
+  expect(price.error).toBe(`${t("editor.price_invalid")} That unit is gone`);
+  await price.updateComplete;
+  expect(price.shadowRoot!.querySelector("[data-error]")!.textContent).toBe(
+    `${t("editor.price_invalid")} That unit is gone`,
+  );
+  // Both stand under the price field, so the sentence above Save only points at it.
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  await input(el, "unit-price", "4.50");
+  expect(priceInput(el).error).toBe("That unit is gone");
+});
+
+it("locks the chooser's unit dropdown while the editor is saving, so a choice then changes nothing", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit, kg],
+    taxChoices: reduced,
+  });
+  await openUnits(el);
+  expect(sharedField(el, "wt-combobox", "unit").disabled).toBe(false);
+  el.busy = true;
+  await el.updateComplete;
+  const box = sharedField(el, "wt-combobox", "unit");
+  expect(box.disabled).toBe(true);
+  await chooseOption(box, kg.id);
+  await el.updateComplete;
+  expect(el.currentValue.unitId).toBe(unit.id);
+  expect(unitChooser(el).open).toBe(true);
+  el.busy = false;
+  await el.updateComplete;
+  expect(sharedField(el, "wt-combobox", "unit").disabled).toBe(false);
 });
 
 it("never leaves the unit chooser over a page whose editor the screen has closed", async () => {
@@ -3578,8 +3629,8 @@ it.each(
       }
       const available = table.shadowRoot!.querySelectorAll("thead th")[3]!;
       expect(linesOf(available, t("editor.available")), "the Available heading").toBe(1);
-      // The heading's unit dropdown goes with the price column. The unit stays one tap away on the
-      // price field above the table, whose unit button changes the same unit.
+      // The heading's unit button goes with the price column; the price field's unit button above
+      // the table opens the same chooser.
       const unitSelect = table.shadowRoot!.querySelector('[data-test="pricing-unit"]')!;
       expect(unitSelect.getClientRects()).toHaveLength(0);
       const unitButton = el
