@@ -238,14 +238,30 @@ function q(el: MenusScreen, selector: string): HTMLElement {
   return el.shadowRoot!.querySelector<HTMLElement>(selector)!;
 }
 
+/** The shadow root holding the rows of the menu's tree. */
+function treeRows(el: MenusScreen): ShadowRoot {
+  return q(el, "dashboard-menu-structure-table").shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!;
+}
+
 /** Opens Lunch's Drinks for editing, and waits for its wider use. */
 async function editDrinks(el: MenusScreen): Promise<void> {
-  const tree = q(el, "dashboard-menu-structure-tree");
-  tree.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-m-drinks"]')!.click();
+  await vi.waitFor(() =>
+    treeRows(el).querySelector<HTMLElement>('tr[data-row-key="m-drinks"] .row-activate')!.click(),
+  );
   await vi.waitFor(() => {
-    if (el.shadowRoot!.querySelector("#list-heading")?.textContent !== "Drinks")
+    if (!treeRows(el).querySelector('tr[data-row-key="m-drinks"] [aria-current="true"]'))
       throw new Error("list");
   });
+}
+
+/** Opens a row's ⋮ in the tree and chooses `action` in it. */
+async function rowAction(el: MenusScreen, key: string, action: string): Promise<void> {
+  treeRows(el)
+    .querySelector<HTMLElementTagNameMap["wt-row-actions"]>(`[data-test="actions-${key}"]`)!
+    .show();
+  treeRows(el).querySelector<HTMLElement>(`[data-test="${action}-${key}"]`)!.click();
+  await el.updateComplete;
 }
 
 describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
@@ -278,11 +294,11 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
 
   it("accessible expanded owned section being edited", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
-    const tree = q(el, "dashboard-menu-structure-tree");
-    tree.shadowRoot!.querySelector<HTMLElement>('[data-test="toggle-m-drinks"]')!.click();
-    tree.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-m-drinks"]')!.click();
+    await vi.waitFor(() =>
+      treeRows(el).querySelector<HTMLElement>('tr[data-row-key="m-drinks"] .row-activate')!.click(),
+    );
     await vi.waitFor(() => {
-      if (el.shadowRoot!.querySelector("#list-heading")?.textContent !== "Drinks")
+      if (!treeRows(el).querySelector('tr[data-row-key="m-drinks"] [aria-current="true"]'))
         throw new Error("list");
     });
     await expectNoA11yViolations(host);
@@ -291,8 +307,7 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
   it("accessible include-menu picker", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
     await editDrinks(el);
-    q(el, '[data-test="include-menu"]').click();
-    await el.updateComplete;
+    await rowAction(el, "m-drinks", "include-menu");
     await expectNoA11yViolations(host);
   });
 
@@ -301,8 +316,7 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     async (refused) => {
       const { el, host } = await mount("populated", theme, LUNCH);
       await editDrinks(el);
-      q(el, '[data-test="new-section"]').click();
-      await el.updateComplete;
+      await rowAction(el, "m-drinks", "new-section");
       if (refused) {
         q(el, '[data-test="section-form"]')
           .shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!
@@ -427,11 +441,8 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
 
   it("accessible add-products picker", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
-    const tree = q(el, "dashboard-menu-structure-tree");
-    tree.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-m-drinks"]')!.click();
-    await el.updateComplete;
-    q(el, '[data-test="open-add-products"]').click();
-    await el.updateComplete;
+    await editDrinks(el);
+    await rowAction(el, "m-drinks", "open-add-products");
     await expectNoA11yViolations(host);
   });
 });

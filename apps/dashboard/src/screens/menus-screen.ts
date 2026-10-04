@@ -21,7 +21,8 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { memberName } from "../widgets/member-list-editor.js";
-import "../widgets/menu-structure-tree.js";
+import "../widgets/menu-structure-table.js";
+import type { StructureAddAction } from "../widgets/menu-structure-table.js";
 import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
 import "../widgets/home-layout-editor.js";
@@ -219,10 +220,10 @@ function withOrder(
 }
 
 /**
- * The menus, and one menu's editor. Its Structure tab edits one list at a time, the menu's own top
- * level or a section reached from it, and each change to that list is its own request, sent in
- * order through one queue, because a move leaves the list's focus on the row. Its Prices tab lists
- * each product the menu reaches and edits what the menu charges for it.
+ * The menus, and one menu's editor. Its Structure tab shows the menu as one tree, each list edited
+ * from its own row, and each change is its own request, sent in order through one queue, because a
+ * move leaves focus on the row. Its Prices tab lists each product the menu reaches and edits what
+ * the menu charges for it.
  */
 @customElement("dashboard-menus-screen")
 export class MenusScreen extends LitElement {
@@ -249,10 +250,6 @@ export class MenusScreen extends LitElement {
       h1 {
         margin: 0 0 var(--wt-space-4);
         font-size: var(--wt-font-size-xl);
-      }
-      h2 {
-        margin: 0;
-        font-size: var(--wt-font-size-lg);
       }
       .header {
         display: flex;
@@ -301,46 +298,15 @@ export class MenusScreen extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
-      .structure {
-        display: grid;
-        gap: var(--wt-space-6);
-        grid-template-columns: repeat(
-          auto-fit,
-          minmax(min(100%, calc(var(--wt-tap-min) * 7)), 1fr)
-        );
-        align-items: start;
-      }
-      .panel,
       .fields {
         display: grid;
         gap: var(--wt-space-3);
         min-width: 0;
       }
-      .breadcrumb ol {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-1);
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .breadcrumb li {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-        overflow-wrap: anywhere;
-      }
-      .breadcrumb [aria-current] {
-        font-weight: var(--wt-font-weight-bold);
-        padding-inline: var(--wt-space-2);
-      }
       .sep,
-      .note,
       .help {
         color: var(--wt-color-text-muted);
       }
-      .note,
       .help,
       .error {
         margin: 0;
@@ -623,14 +589,14 @@ export class MenusScreen extends LitElement {
   readonly #probes = new Map<"narrow" | "wide", Element>();
   #rows: MenuRow[] = [];
   #sectionNames = new Map<string, string>();
-  /** The nodes along {@link path}, one per member id. */
-  #trail: MenuStructureNode[] = [];
+  /** The list {@link path} names. */
   #listId: string | null = null;
-  #listMembers: SectionMember[] = [];
-  #inSection: string[] = [];
   #onMenu: string[] = [];
-  #memberProducts: Product[] = [];
+  /** The products the add-products window's own list already holds, which it does not offer. */
+  #pickerHeld: string[] = [];
   #addable: Product[] = [];
+  /** The tree row whose ⋮ gets focus back once nothing is out; `ready` once its window closed. */
+  #focusReturn: { menuId: string; key: string; ready: boolean } | null = null;
   /** What a home page tile may point at: the active products and the sections the structure
    * reaches. The server checks reach by membership alone; an inactive product is not offered. */
   #tileProducts: { id: string; name: string }[] = [];
@@ -649,6 +615,7 @@ export class MenusScreen extends LitElement {
   /** A narrow list has no status column to sort by, so a status sort gives way, visibly, to the
    * name order. */
   protected override updated(changed: PropertyValues): void {
+    this.#returnFocus();
     if (!changed.has("layout") || this.layout !== "narrow") return;
     const table = this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
       'wt-data-table[data-test="menus"]',
@@ -675,10 +642,11 @@ export class MenusScreen extends LitElement {
       const reached = reachable(this.structure?.nodes ?? []);
       this.#onMenu = reached.products;
     }
-    if (changed.has("products") || changed.has("structure") || changed.has("path")) {
-      const held = new Set(this.#inSection);
-      this.#memberProducts = this.products.filter(
-        (product) => product.active || held.has(product.id),
+    if (changed.has("structure") || changed.has("addingProducts")) {
+      const target = this.addingProducts;
+      const nodes = target ? (placesOf(this.structure, target.listId)[0] ?? []) : [];
+      this.#pickerHeld = nodes.flatMap(({ ref }) =>
+        ref.kind === "product" ? [ref.productId] : [],
       );
     }
     if (changed.has("products")) this.#addable = this.products.filter((product) => product.active);
@@ -712,16 +680,7 @@ export class MenusScreen extends LitElement {
   #resolvePath(): void {
     const trail = trailOf(this.structure, this.path);
     if (trail.length < this.path.length) this.path = this.path.slice(0, trail.length);
-    this.#trail = trail;
     this.#listId = listIdOf(this.structure, trail);
-    const nodes =
-      trail.length === 0 ? (this.structure?.nodes ?? []) : (trail.at(-1)!.children ?? []);
-    this.#listMembers = nodes.map(({ memberId, ref }, position) => ({
-      id: memberId,
-      position,
-      ref,
-    }));
-    this.#inSection = nodes.flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : []));
   }
 
   /** Whether the target's path, followed as far as the menu on screen still has it, ends at the
@@ -778,12 +737,15 @@ export class MenusScreen extends LitElement {
     return true;
   }
 
-  #here(): ListTarget {
+  /** The list the tree row at `path` holds: the menu's top level for `[]`. */
+  #targetAt(path: string[]): ListTarget {
+    const trail = trailOf(this.structure, path);
+    const last = trail.at(-1);
     return {
       menuId: this.menuId!,
-      path: this.path,
-      listId: this.#listId!,
-      name: this.#listName(),
+      path,
+      listId: listIdOf(this.structure, trail)!,
+      name: last ? this.#nodeName(last) : this.#menuName(),
     };
   }
 
@@ -1047,11 +1009,6 @@ export class MenusScreen extends LitElement {
     return memberName(node.ref, NO_NAMES, this.#sectionNames);
   }
 
-  #listName(): string {
-    const last = this.#trail.at(-1);
-    return last ? this.#nodeName(last) : this.#menuName();
-  }
-
   // ── Menus ────────────────────────────────────────────────────────────────────────────────────
 
   override disconnectedCallback(): void {
@@ -1187,9 +1144,9 @@ export class MenusScreen extends LitElement {
 
   // ── The list being edited ────────────────────────────────────────────────────────────────────
 
-  /** Adds and removes hold `busy`, which disables the list until the menu is read again. */
-  #listWrite(write: (listId: string) => Promise<unknown>): void {
-    const target = this.#here();
+  /** Adds and removes hold `busy`, which disables the tree until the menu is read again. */
+  #listWrite(path: string[], write: (listId: string) => Promise<unknown>): void {
+    const target = this.#targetAt(path);
     const { listId } = target;
     this.memberError = null;
     this.busy = true;
@@ -1208,8 +1165,8 @@ export class MenusScreen extends LitElement {
   }
 
   /** Not `busy`: that would disable the handle the keyboard user is on and drop their focus. */
-  #move(memberId: string, to: number): void {
-    const target = this.#here();
+  #move(path: string[], memberId: string, to: number): void {
+    const target = this.#targetAt(path);
     const { listId } = target;
     const moves = this.#moveBatches.get(listId) ?? { answered: [], out: 0 };
     this.#moveBatches.set(listId, moves);
@@ -1255,22 +1212,49 @@ export class MenusScreen extends LitElement {
     );
   }
 
-  #openSection(sectionId: string): void {
-    const member = this.#listMembers.find(
-      ({ ref }) => ref.kind === "section" && ref.sectionId === sectionId,
-    );
-    if (member) this.#edit([...this.path, member.id]);
-  }
-
   #edit(path: string[]): void {
     this.path = path;
     this.memberError = null;
   }
 
-  #openNewSection(): void {
-    this.creatingSection = this.#here();
-    this.editingSection = null;
-    this.newSectionErrors = {};
+  /** Opens an add's window on the list the tree row at `path` holds, which becomes current. */
+  #openAdd(action: StructureAddAction, path: string[]): void {
+    this.#edit(path);
+    this.#returnFocusTo(path);
+    const target = this.#targetAt(path);
+    if (action === "new-section") {
+      this.creatingSection = target;
+      this.editingSection = null;
+      this.newSectionErrors = {};
+    } else if (action === "include-menu") {
+      this.includingMenu = target;
+      this.includedRoot = "";
+      this.includeError = "";
+    } else {
+      this.addingProducts = target;
+      this.addProductsError = null;
+    }
+  }
+
+  #returnFocusTo(path: string[], ready = false): void {
+    this.#focusReturn = { menuId: this.menuId!, key: path.join("/") || "root", ready };
+  }
+
+  /** A window's close is reported a task after the native dialog has handed focus back to the menu
+   * item it was opened from, which by then sits in a closed popover. */
+  #windowClosed(): void {
+    if (this.#focusReturn) this.#focusReturn = { ...this.#focusReturn, ready: true };
+    this.requestUpdate();
+  }
+
+  /** Waits for the write out to be read back: the tree's rows are not keyed, so a ⋮ focused
+   * before the read lands can end up on another row. */
+  #returnFocus(): void {
+    const target = this.#focusReturn;
+    if (!target?.ready || this.busy) return;
+    this.#focusReturn = null;
+    if (target.menuId === this.menuId)
+      this.renderRoot.querySelector("dashboard-menu-structure-table")?.focusRowMenu(target.key);
   }
 
   #saveSection(input: SectionInput): void {
@@ -1736,6 +1720,8 @@ export class MenusScreen extends LitElement {
       /** The message above Save, and whether a field the form finds wrong holds it. */
       errors?: { blocked: boolean; bottom: string };
       close: () => void;
+      /** Told whenever the dialog has closed, however it was closed. */
+      closed?: () => void;
     } & (
       | {
           save: string;
@@ -1757,6 +1743,7 @@ export class MenusScreen extends LitElement {
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         if (!this.busy) options.close();
+        options.closed?.();
       }}
     >
       ${options.open ? options.body : nothing}
@@ -1917,110 +1904,6 @@ export class MenusScreen extends LitElement {
       : nothing;
   }
 
-  #renderBreadcrumb() {
-    const crumbs = [this.#menuName(), ...this.#trail.map((node) => this.#nodeName(node))];
-    const last = crumbs.length - 1;
-    return html`<nav class="breadcrumb" aria-label=${t("menus.breadcrumb")} data-test="breadcrumb">
-      <ol>
-        ${crumbs.map((name, index) =>
-          index === last
-            ? html`<li>
-                <span aria-current="location" data-test=${`crumb-${index}`}>${name}</span>
-              </li>`
-            : html`<li>
-                <wt-button
-                  variant="ghost"
-                  data-test=${`crumb-${index}`}
-                  @click=${() => this.#edit(this.path.slice(0, index))}
-                  >${name}</wt-button
-                >
-                <span class="sep" aria-hidden="true">›</span>
-              </li>`,
-        )}
-      </ol>
-    </nav>`;
-  }
-
-  #renderListEditor() {
-    const listName = this.#listName();
-    return html`<section class="panel" aria-labelledby="list-heading">
-      ${this.#renderBreadcrumb()}
-      <h2 id="list-heading">${listName}</h2>
-      <p class="help">${t("sections.members_saved_note")}</p>
-      <dashboard-member-list-editor
-        .members=${this.#listMembers}
-        .products=${this.#memberProducts}
-        .nodes=${this.#trail.at(-1)?.children ?? this.structure?.nodes ?? []}
-        .busy=${this.busy}
-        label=${t("sections.members_label").replace("{name}", listName)}
-        listName=${listName}
-        @wt-member-add=${(event: CustomEvent<{ ref: MemberRef }>) => {
-          event.stopPropagation();
-          const { ref } = event.detail;
-          this.#listWrite((id) => this.api.addSectionMember(id, ref));
-        }}
-        @wt-member-remove=${(event: CustomEvent<{ memberId: string }>) => {
-          event.stopPropagation();
-          const { memberId } = event.detail;
-          this.#listWrite((id) => this.api.removeSectionMember(id, memberId));
-        }}
-        @wt-member-move=${(event: CustomEvent<{ memberId: string; to: number }>) => {
-          event.stopPropagation();
-          this.#move(event.detail.memberId, event.detail.to);
-        }}
-        @wt-member-edit=${(event: CustomEvent<{ sectionId: string }>) => {
-          event.stopPropagation();
-          this.editingSection =
-            this.sections.find((section) => section.id === event.detail.sectionId) ?? null;
-          this.newSectionErrors = {};
-        }}
-        @wt-member-delete=${(event: CustomEvent<{ sectionId: string }>) => {
-          event.stopPropagation();
-          this.deletingSection =
-            this.sections.find((section) => section.id === event.detail.sectionId) ?? null;
-          this.deleteSectionError = "";
-        }}
-        @wt-member-open=${(event: CustomEvent<{ sectionId: string }>) => {
-          event.stopPropagation();
-          this.#openSection(event.detail.sectionId);
-        }}
-      ></dashboard-member-list-editor>
-    </section>`;
-  }
-
-  #renderListActions() {
-    return html`<div slot="actions">
-      <wt-button
-        data-test="new-section"
-        variant="secondary"
-        .disabled=${this.busy}
-        @click=${() => this.#openNewSection()}
-        >${t("menus.new_section")}</wt-button
-      >
-      <wt-button
-        data-test="include-menu"
-        variant="secondary"
-        .disabled=${this.busy}
-        @click=${() => {
-          this.includingMenu = this.#here();
-          this.includedRoot = "";
-          this.includeError = "";
-        }}
-        >${t("menus.include_menu")}</wt-button
-      >
-      <wt-button
-        data-test="open-add-products"
-        variant="secondary"
-        .disabled=${this.busy}
-        @click=${() => {
-          this.addProductsError = null;
-          this.addingProducts = this.#here();
-        }}
-        >${t("sections.add_products")}</wt-button
-      >
-    </div>`;
-  }
-
   #renderStructure() {
     const structure = this.structure;
     const error = this.structureError
@@ -2044,22 +1927,50 @@ export class MenusScreen extends LitElement {
       }`;
     return html`${error}
       ${(structure.includedBy ?? []).length ? html`<p data-test="included-by">${t("menus.included_in")}: ${structure.includedBy.map((menu, index) => html`${index ? ", " : ""}<a href=${`/manage/menus/menu/${menu.id}/view/structure`}>${menu.name}${this.statuses?.[menu.id]?.clashes ? ` (${this.statuses[menu.id]!.clashes} ${t(this.statuses[menu.id]!.clashes === 1 ? "menus.clash" : "menus.clashes")})` : ""}</a>`)}</p>` : nothing}
-      <div class="structure">
-        <section class="panel" aria-labelledby="tree-heading">
-          <h2 id="tree-heading">${t("menus.tree_heading")}</h2>
-          <dashboard-menu-structure-tree
-            .nodes=${structure.nodes}
-            .products=${this.products}
-            .current=${this.path}
-            label=${this.#menuName()}
-            @wt-structure-edit=${(event: CustomEvent<{ path: string[] }>) => {
-              event.stopPropagation();
-              this.#edit(event.detail.path);
-            }}
-          ></dashboard-menu-structure-tree>
-        </section>
-        ${this.#renderListEditor()}
-      </div>`;
+      <dashboard-menu-structure-table
+        .nodes=${structure.nodes}
+        .products=${this.products}
+        .current=${this.path}
+        .busy=${this.busy}
+        menuName=${this.#menuName()}
+        @wt-structure-edit=${(event: CustomEvent<{ path: string[] }>) => {
+          event.stopPropagation();
+          this.#edit(event.detail.path);
+        }}
+        @wt-structure-add=${(
+          event: CustomEvent<{ action: StructureAddAction; path: string[] }>,
+        ) => {
+          event.stopPropagation();
+          this.#openAdd(event.detail.action, event.detail.path);
+        }}
+        @wt-member-remove=${(event: CustomEvent<{ path: string[]; memberId: string }>) => {
+          event.stopPropagation();
+          const { path, memberId } = event.detail;
+          this.#returnFocusTo(path, true);
+          this.#listWrite(path, (id) => this.api.removeSectionMember(id, memberId));
+        }}
+        @wt-member-move=${(
+          event: CustomEvent<{ path: string[]; memberId: string; to: number }>,
+        ) => {
+          event.stopPropagation();
+          const { path, memberId, to } = event.detail;
+          this.#move(path, memberId, to);
+        }}
+        @wt-member-edit=${(event: CustomEvent<{ sectionId: string; path: string[] }>) => {
+          event.stopPropagation();
+          this.#returnFocusTo(event.detail.path);
+          this.editingSection =
+            this.sections.find((section) => section.id === event.detail.sectionId) ?? null;
+          this.newSectionErrors = {};
+        }}
+        @wt-member-delete=${(event: CustomEvent<{ sectionId: string; path: string[] }>) => {
+          event.stopPropagation();
+          this.#returnFocusTo(event.detail.path);
+          this.deletingSection =
+            this.sections.find((section) => section.id === event.detail.sectionId) ?? null;
+          this.deleteSectionError = "";
+        }}
+      ></dashboard-menu-structure-table>`;
   }
 
   #renderPrices() {
@@ -2331,6 +2242,11 @@ export class MenusScreen extends LitElement {
         .value=${this.editingSection}
         .fieldErrors=${this.newSectionErrors}
         heading=${this.editingSection ? t("menus.edit_section") : t("menus.new_section_heading").replace("{list}", this.creatingSection?.name ?? "")}
+        @wt-close=${{
+          // The form stops its dialog's close, so it is caught on its way in.
+          handleEvent: () => this.#windowClosed(),
+          capture: true,
+        }}
         @wt-submit=${(event: CustomEvent<SectionInput>) => {
           event.stopPropagation();
           this.#saveSection(event.detail);
@@ -2371,6 +2287,7 @@ export class MenusScreen extends LitElement {
         close: () => {
           this.includingMenu = null;
         },
+        closed: () => this.#windowClosed(),
       })}
       ${this.#formModal({
         test: "delete-section",
@@ -2403,6 +2320,7 @@ export class MenusScreen extends LitElement {
         close: () => {
           this.deletingSection = null;
         },
+        closed: () => this.#windowClosed(),
         submit: () => void this.#deleteSection(),
       })}`;
   }
@@ -2440,6 +2358,7 @@ export class MenusScreen extends LitElement {
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         if (!this.busy) this.addingProducts = null;
+        this.#windowClosed();
       }}
     >
       ${
@@ -2454,7 +2373,7 @@ export class MenusScreen extends LitElement {
               <dashboard-section-add-products
                 .products=${this.#addable}
                 .categories=${this.categories}
-                .inSection=${target.listId === this.#listId ? this.#inSection : []}
+                .inSection=${this.#pickerHeld}
                 .onMenu=${target.menuId === this.menuId ? this.#onMenu : null}
                 .busy=${this.busy}
                 @wt-add-products=${(event: CustomEvent<{ productIds: string[] }>) => {
@@ -2510,7 +2429,6 @@ export class MenusScreen extends LitElement {
           this.#url.write({ view: event.detail.value });
         }}
       >
-        ${this.view === "structure" && this.structure !== null ? this.#renderListActions() : nothing}
         <div slot="structure">${this.#renderStructure()}</div>
         <div slot="prices" class="prices">${this.#renderPrices()}</div>
         <div slot="home" class="home">${this.#renderHome()}</div>

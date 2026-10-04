@@ -1859,8 +1859,6 @@ export const en = {
   "sections.internal_name_help":
     "Staff see this name. Customers see the customer-facing name, when there is one.",
   "sections.customer_names": "Customer-facing names",
-  "sections.members_saved_note": "Changes to this list are saved straight away.",
-  "sections.members_label": "Items in {name}",
   "sections.add_products": "Add products",
   "sections.add_products_heading": "Add products to {name}",
   "sections.copy_name": "{name} (copy)",
@@ -1962,7 +1960,6 @@ export const en = {
   "menus.structure_empty": "Nothing is on this menu yet.",
   "menus.structure_loading": "Loading the menu…",
   "menus.structure_error": "This menu could not be loaded.",
-  "menus.breadcrumb": "Where you are",
   "menus.expand": "Show what is in {name}",
   "menus.collapse": "Hide what is in {name}",
   "menus.new_section": "New section here",
@@ -4027,8 +4024,6 @@ export const es: Record<StringKey, string> = {
   "sections.internal_name_help":
     "El personal ve este nombre. Los clientes ven el nombre para el cliente, si lo hay.",
   "sections.customer_names": "Nombres para el cliente",
-  "sections.members_saved_note": "Los cambios en esta lista se guardan al momento.",
-  "sections.members_label": "Elementos de {name}",
   "sections.add_products": "Añadir productos",
   "sections.add_products_heading": "Añadir productos a {name}",
   "sections.copy_name": "{name} (copia)",
@@ -4130,7 +4125,6 @@ export const es: Record<StringKey, string> = {
   "menus.structure_empty": "Todavía no hay nada en esta carta.",
   "menus.structure_loading": "Cargando la carta…",
   "menus.structure_error": "No se pudo cargar esta carta.",
-  "menus.breadcrumb": "Dónde estás",
   "menus.expand": "Mostrar lo que hay en {name}",
   "menus.collapse": "Ocultar lo que hay en {name}",
   "menus.new_section": "Nueva sección aquí",
