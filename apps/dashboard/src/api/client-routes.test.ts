@@ -31,6 +31,17 @@ function callsOf(fetchImpl: ReturnType<typeof vi.fn>): Call[] {
 }
 
 describe("DashboardApi routes", () => {
+  it("reads venue departments for the receipt preview without changing their active state", async () => {
+    const departments = [
+      { id: "deli", name: "Deli", active: true },
+      { id: "closed", name: "Closed", active: false },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ departments, zones: [] }));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getVenueDepartments()).toEqual(departments);
+    expect(callsOf(fetchImpl)).toEqual([["/management-api/venue-service", "GET", undefined]]);
+  });
+
   it("reads pending pretend reader payments and sends a decision", async () => {
     const fetchImpl = vi
       .fn()

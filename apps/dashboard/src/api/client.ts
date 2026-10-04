@@ -2202,6 +2202,13 @@ export class DashboardApi {
     return this.#request<{ receipt: ReceiptConfig }>("/management-api/receipt", "GET");
   }
 
+  async getVenueDepartments(): Promise<{ id: string; name: string; active: boolean }[]> {
+    const venue = await this.#request<{
+      departments: { id: string; name: string; active: boolean }[];
+    }>("/management-api/venue-service", "GET");
+    return venue.departments;
+  }
+
   putReceipt(receipt: ReceiptConfig): Promise<void> {
     return this.#request<void>("/management-api/receipt", "PUT", { receipt });
   }

@@ -320,6 +320,7 @@ export const en = {
   "receipts.operation_description_hint":
     "Sent to the tax agency with every sale; not printed on the receipt",
   "receipts.preview": "Preview",
+  "receipts.preview_for": "Preview for",
   "receipts.preview_paper": "Receipt preview",
   "receipts.preview_error": "The preview could not be updated.",
   "receipts.not_printed": "Sent to the tax agency (not printed)",
@@ -2468,6 +2469,7 @@ export const es: Record<StringKey, string> = {
   "receipts.operation_description_hint":
     "Se envía a Hacienda con cada venta; no se imprime en el recibo",
   "receipts.preview": "Vista previa",
+  "receipts.preview_for": "Vista previa para",
   "receipts.preview_paper": "Vista previa del recibo",
   "receipts.preview_error": "No se ha podido actualizar la vista previa.",
   "receipts.not_printed": "Se envía a Hacienda (no se imprime)",
