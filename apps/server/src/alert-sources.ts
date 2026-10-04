@@ -8,6 +8,7 @@ import type { AlertSource, OngoingAlert } from "@waitron/module";
 import {
   type CardProviderContribution,
   cardProviderById,
+  DEMO_READER_ID,
   type CardProviderRuntimeDeps,
   cardReaders,
 } from "@waitron/payments";
@@ -396,7 +397,7 @@ export function batteryAlertSource(deps: {
           name: cardReaders.name,
         })
         .from(cardReaders)
-        .where(eq(cardReaders.active, true));
+        .where(and(eq(cardReaders.active, true), ne(cardReaders.id, DEMO_READER_ID)));
       // Provider calls, not queries on `tx`, so they may run concurrently.
       const percents = await Promise.all(
         readers.map((r) =>

@@ -69,7 +69,7 @@ export {
 } from "./resolutions.js";
 export type { NewPaymentResolution } from "./resolutions.js";
 export { MANUAL_PROVIDER, recordManualCardPayment, recordManualRefund } from "./manual.js";
-export { SimulatorPaymentProvider } from "./simulator.js";
+export { SimulatorPaymentProvider, DEMO_READER_ID, DEMO_READER_REF } from "./simulator.js";
 export { refundLookupOf } from "./provider.js";
 export type { ManualCardPaymentParams, ManualCardPaymentResult } from "./manual.js";
 export { PAYMENTS_ALERTS } from "./alerts.js";

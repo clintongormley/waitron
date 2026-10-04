@@ -579,6 +579,12 @@ export const en = {
   "nav.servers": "Servers",
   "nav.email_inbox": "Email inbox",
   "demo_printer.title": "Demo printer",
+  "demo_reader.title": "Card reader",
+  "demo_reader.explanation":
+    "Card payments sent from the till appear here. Choose what the reader does.",
+  "demo_reader.empty": "No card payment is waiting at the reader.",
+  "demo_reader.approve": "Approve",
+  "demo_reader.decline": "Decline",
   "demo_printer.explanation": "Printed receipts, kitchen tickets and drawer openings appear here.",
   "demo_printer.refresh": "Refresh printed jobs",
   "demo_printer.empty": "Nothing has printed yet.",
@@ -2716,6 +2722,12 @@ export const es: Record<StringKey, string> = {
   "nav.servers": "Servidores",
   "nav.email_inbox": "Bandeja de correo",
   "demo_printer.title": "Impresora de demostración",
+  "demo_reader.title": "Lector de tarjetas",
+  "demo_reader.explanation":
+    "Aquí aparecen los pagos con tarjeta enviados desde el terminal. Elige cómo responde el lector.",
+  "demo_reader.empty": "No hay ningún pago esperando en el lector.",
+  "demo_reader.approve": "Aprobar",
+  "demo_reader.decline": "Rechazar",
   "demo_printer.explanation":
     "Aquí aparecen los recibos, comandas de cocina y aperturas del cajón.",
   "demo_printer.refresh": "Actualizar trabajos impresos",

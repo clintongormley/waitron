@@ -36,6 +36,8 @@ export const en = {
   "tender.card": "Card",
   "tender.card_ref": "Operation number (optional)",
   "card.simulation_result": "Test payment result",
+  "card.instant_simulator": "Instant simulator",
+  "card.demo_reader": "Demo card reader",
   "card.simulation_help": "No card will be charged. Choose the result for this test payment.",
   "card.simulation_captured": "Approve",
   "card.simulation_declined": "Decline",
@@ -1008,6 +1010,8 @@ export const es: Record<StringKey, string> = {
   "tender.card": "Tarjeta",
   "tender.card_ref": "Número de operación (opcional)",
   "card.simulation_result": "Resultado del pago de prueba",
+  "card.instant_simulator": "Simulador inmediato",
+  "card.demo_reader": "Lector de demostración",
   "card.simulation_help":
     "No se cobrará ninguna tarjeta. Elige el resultado de este pago de prueba.",
   "card.simulation_captured": "Aprobar",

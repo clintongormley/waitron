@@ -954,6 +954,123 @@ describe("till-tender-pay", () => {
       expect(collect).toHaveBeenCalledWith({ simulationOutcome: "declined" });
     });
 
+    it("offers the pretend reader beside the instant simulator and clears it on Cancel", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const readerId = "00000000-0000-4000-8000-000000000247";
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "simulator",
+        activeReaders: [{ id: readerId, name: "Demo card reader", provider: "simulator" }],
+      });
+      const collected = vi.fn();
+      const cancelled = vi.fn();
+      el.addEventListener("collect-card", (event) => collected((event as CustomEvent).detail));
+      el.addEventListener("cancel-demo-reader", cancelled);
+
+      expect(el.shadowRoot!.textContent).toContain("No card will be charged");
+      click(el, ".change-reader");
+      await el.updateComplete;
+      el.shadowRoot!.querySelector("till-reader-picker")!.dispatchEvent(
+        new CustomEvent("reader-chosen", {
+          detail: { readerId },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+      expect(el.shadowRoot!.textContent).toContain("Demo card reader");
+      expect(el.shadowRoot!.querySelector("[data-test=simulation-declined]")).toBeNull();
+
+      click(el, ".pay-card");
+      await el.updateComplete;
+      expect(collected).toHaveBeenCalledWith({ readerId });
+      click(el, ".cancel");
+      expect(cancelled).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows the selected pretend reader in Spanish", async () => {
+      const previous = currentLocale();
+      setLocale("es-ES");
+      try {
+        const store = new WorkingOrderStore();
+        store.addProduct(cafe, "1");
+        const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+          store,
+          cardProvider: "simulator",
+          activeReaders: [{ id: "demo", name: "Demo card reader", provider: "simulator" }],
+        });
+        click(el, ".change-reader");
+        await el.updateComplete;
+        el.shadowRoot!.querySelector("till-reader-picker")!.dispatchEvent(
+          new CustomEvent("reader-chosen", {
+            detail: { readerId: "demo" },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector(".reader-name")?.textContent).toContain(
+          "Lector de demostración",
+        );
+      } finally {
+        setLocale(previous);
+      }
+    });
+
+    it("returns from the pretend reader to the plain simulator", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const readerId = "00000000-0000-4000-8000-000000000247";
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "simulator",
+        activeReaders: [{ id: readerId, name: "Demo card reader", provider: "simulator" }],
+      });
+      click(el, ".change-reader");
+      await el.updateComplete;
+      el.shadowRoot!.querySelector("till-reader-picker")!.dispatchEvent(
+        new CustomEvent("reader-chosen", {
+          detail: { readerId },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+      click(el, ".change-reader");
+      await el.updateComplete;
+      const picker = el.shadowRoot!.querySelector("till-reader-picker") as HTMLElement & {
+        plainSimulator: boolean;
+      };
+      expect(picker.plainSimulator).toBe(true);
+      picker.dispatchEvent(
+        new CustomEvent("reader-chosen", {
+          detail: { readerId: null },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("[data-test=simulation-declined]")).not.toBeNull();
+      const collected = vi.fn();
+      el.addEventListener("collect-card", (event) => collected((event as CustomEvent).detail));
+      click(el, ".pay-card");
+      expect(collected).toHaveBeenCalledWith({ simulationOutcome: "captured" });
+    });
+
+    it("does not label a real reader as the instant simulator when no default is set", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+        activeReaders: [{ id: "reader-1", name: "Front counter", provider: "stripe_terminal" }],
+      });
+
+      expect(el.shadowRoot!.textContent).not.toContain(t("card.instant_simulator"));
+    });
+
     it("with cardProvider 'none' (default), Card stays the #62 manual path — no collecting state", async () => {
       const store = new WorkingOrderStore();
       store.addProduct(cafe, "1"); // total 1.50

@@ -2,7 +2,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
 import { AppError, centsToDecimal, isAppError } from "@waitron/shared";
 import {
   billPaymentRefunds,
@@ -18,6 +18,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   cardProviderById,
   cardReaders,
+  DEMO_READER_ID,
   deviceCardReaders,
   findPaymentByBillPayment,
   payments,
@@ -301,7 +302,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     // transactions with the provider call between them, so its decision is taken on a row it no
     // longer holds.
     const [reader] = await tx.select().from(cardReaders).where(readerWhere(id));
-    if (reader === undefined) throw new AppError("reader.not_found", { id });
+    if (reader === undefined || id === DEMO_READER_ID)
+      throw new AppError("reader.not_found", { id });
     return reader;
   };
 
@@ -495,6 +497,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             unpairedAt: cardReaders.unpairedAt,
           })
           .from(cardReaders)
+          .where(ne(cardReaders.id, DEMO_READER_ID))
           .orderBy(cardReaders.name),
         counts: await tx
           .select({
@@ -575,7 +578,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .select({ provider: cardReaders.provider, providerRef: cardReaders.providerRef })
           .from(cardReaders)
           .where(eq(cardReaders.id, readerId));
-        if (row === undefined) throw new AppError("reader.not_found", { id: readerId });
+        if (row === undefined || readerId === DEMO_READER_ID)
+          throw new AppError("reader.not_found", { id: readerId });
         return row;
       });
       const seat = cardProviderById(deps.providers, reader.provider);
@@ -647,7 +651,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .select({ id: cardReaders.id })
           .from(cardReaders)
           .where(and(eq(cardReaders.id, readerId), eq(cardReaders.active, true)));
-        if (reader === undefined) throw new AppError("reader.not_found", { id: readerId });
+        if (reader === undefined || readerId === DEMO_READER_ID)
+          throw new AppError("reader.not_found", { id: readerId });
         await tx
           .insert(deviceCardReaders)
           .values({ deviceId, readerId })

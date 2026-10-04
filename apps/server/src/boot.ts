@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { Hono } from "hono";
 import {
   installChangeFeed,
@@ -38,7 +38,10 @@ import { runDue } from "@waitron/scheduler";
 import type { TickResult } from "@waitron/scheduler";
 import { StripeReconciler } from "@waitron/payments-stripe";
 import {
+  DEMO_READER_ID,
+  DEMO_READER_REF,
   SimulatorPaymentProvider,
+  cardReaders,
   type CardProviderContribution,
   type CardProviderRuntimeDeps,
   type PaymentProvider,
@@ -329,8 +332,33 @@ export async function buildCardProvider(
   db: Database,
   onboardingIntent?: OnboardingIntent,
   paymentTestProviders = false,
+  paymentsEnabled = true,
 ): Promise<PaymentProvider | undefined> {
-  if (onboardingIntent === "demo" || (onboardingIntent === "prepare" && !paymentTestProviders)) {
+  if (!paymentsEnabled) return undefined;
+  const simulated =
+    onboardingIntent === "demo" || (onboardingIntent === "prepare" && !paymentTestProviders);
+  await withTransaction(db, async (tx) => {
+    const [existing] = await tx
+      .select({ id: cardReaders.id, active: cardReaders.active })
+      .from(cardReaders)
+      .where(eq(cardReaders.id, DEMO_READER_ID));
+    if (existing === undefined) {
+      if (simulated) {
+        await tx.insert(cardReaders).values({
+          id: DEMO_READER_ID,
+          provider: "simulator",
+          providerRef: DEMO_READER_REF,
+          name: "Demo card reader",
+        });
+      }
+    } else if (existing.active !== simulated) {
+      await tx
+        .update(cardReaders)
+        .set({ active: simulated, disabledAt: simulated ? null : new Date().toISOString() })
+        .where(eq(cardReaders.id, DEMO_READER_ID));
+    }
+  });
+  if (simulated) {
     return new SimulatorPaymentProvider(db);
   }
   return undefined;
@@ -1363,6 +1391,7 @@ async function bootServer(
     db,
     config.onboardingIntent,
     config.paymentTestProviders,
+    setsToMigrate.some((module) => module.name === "payments"),
   );
   // One pool, shared by the pay route and the payments management surface below, so a reader added
   // or a credential rotated there evicts the exact provider the next sale uses.

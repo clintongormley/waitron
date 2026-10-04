@@ -413,6 +413,8 @@ export interface IntegratedPayRequest {
   allowOffline?: boolean;
   /** Test result selected by the practice UI. Only a server-mounted simulator may receive it. */
   simulationOutcome?: "captured" | "declined";
+  /** One pretend-reader attempt, shared with its cancellation request. */
+  demoAttemptId?: string;
 }
 
 /**
@@ -1037,6 +1039,7 @@ async function payIntegrated(
       ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
       allowOffline: req.allowOffline,
       simulationOutcome: req.simulationOutcome,
+      demoAttemptId: req.demoAttemptId,
     });
   } catch (error) {
     await releasePaymentAttempt(deps, req.id, attemptAt);

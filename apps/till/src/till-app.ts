@@ -1583,6 +1583,7 @@ export class TillApp extends LitElement {
   @state() private cardAttemptsOver = 0;
   /** Card attempts started and not yet ended; {@link cardAttemptsOver} moves when this returns to 0. */
   #cardAttemptsRunning = 0;
+  readonly #cancelledDemoReaderOrders = new Set<string>();
   /**
    * Single-flight guard: two chained fiscal records for one purchase cannot be repaired. Set
    * synchronously before the first await of {@link TillApp.#onConfirmPayment}, so a second
@@ -2595,6 +2596,13 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const detail = (event as CustomEvent<CollectCardDetail>).detail;
     const id = this.#store.id;
+    this.#cancelledDemoReaderOrders.delete(id);
+    const demoAttemptId = this.activeReaders.some(
+      (reader) => reader.id === detail.readerId && reader.provider === "simulator",
+    )
+      ? crypto.randomUUID()
+      : undefined;
+    if (demoAttemptId !== undefined) this.#demoAttempt = { orderId: id, attemptId: demoAttemptId };
     const lines = this.#currentSaleLines();
     const label = this.#store.label;
     const sendsToKitchen = this.#paySendsToKitchen();
@@ -2610,6 +2618,7 @@ export class TillApp extends LitElement {
     try {
       if (!(await this.#syncIfDirty(id, lines, label))) return;
       if (session !== this.#operatorSession) return;
+      if (this.#cancelledDemoReaderOrders.has(id)) return;
       reachedFiscal = true;
       const out: PayOutcome = await this.api.pay({
         id,
@@ -2621,6 +2630,7 @@ export class TillApp extends LitElement {
           : { simulationOutcome: detail.simulationOutcome }),
         // Omitted, the server uses the paying device's default reader.
         ...(detail.readerId === undefined ? {} : { readerId: detail.readerId }),
+        ...(demoAttemptId === undefined ? {} : { demoAttemptId }),
       });
       if (session !== this.#operatorSession) return;
       if (out.outcome === "captured") {
@@ -2632,7 +2642,7 @@ export class TillApp extends LitElement {
         if (session !== this.#operatorSession) return;
         await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");
       } else {
-        this.cardOutcome = out.outcome;
+        if (!this.#cancelledDemoReaderOrders.has(id)) this.cardOutcome = out.outcome;
       }
     } catch (error) {
       // The terminal may already have captured before the fiscal record was refused (`finalizeCapture`,
@@ -2660,6 +2670,7 @@ export class TillApp extends LitElement {
                 : counterError(error, "sale.error");
       paidMeanwhile = isPaymentsReceived(error);
     } finally {
+      if (this.#demoAttempt?.attemptId === demoAttemptId) this.#demoAttempt = undefined;
       this.submitting = false;
     }
     if (session !== this.#operatorSession) return;
@@ -2672,6 +2683,23 @@ export class TillApp extends LitElement {
       session === this.#operatorSession
     )
       await this.#collectCard(event, true);
+  }
+
+  #demoAttempt?: { orderId: string; attemptId: string };
+
+  async #onCancelDemoReader(): Promise<void> {
+    if (this.cardProvider !== "simulator") return;
+    const id = this.#store.id;
+    const attemptId = this.#demoAttempt?.orderId === id ? this.#demoAttempt.attemptId : undefined;
+    if (attemptId === undefined) return;
+    this.#cancelledDemoReaderOrders.add(id);
+    try {
+      if (!(await this.api.cancelDemoReaderPayment(id, attemptId)))
+        this.#cancelledDemoReaderOrders.delete(id);
+    } catch (error) {
+      this.#cancelledDemoReaderOrders.delete(id);
+      this.errorKey = counterError(error, "sale.unconfirmed");
+    }
   }
 
   #basketPaidInPartFor?: {
@@ -7378,6 +7406,7 @@ export class TillApp extends LitElement {
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
         @confirm-payment=${(event: Event) => void this.#onConfirmPayment(event)}
         @collect-card=${(event: Event) => void this.#onCollectCard(event)}
+        @cancel-demo-reader=${() => void this.#onCancelDemoReader()}
         @check-before-tender=${(event: Event) => this.#onCheckBeforeTender(event)}
         @place-order=${() => void this.#onPlaceOrder()}
         @collect-order=${(event: Event) => void this.#onCollectOrder(event)}

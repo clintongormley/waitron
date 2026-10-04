@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { getCredential, loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
-import { cardReaders, type CardProviderContribution } from "@waitron/payments";
+import { DEMO_READER_ID, cardReaders, type CardProviderContribution } from "@waitron/payments";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -341,6 +341,41 @@ describe("providers list", () => {
 });
 
 describe("device default reader", () => {
+  it("keeps the demo reader out of ordinary reader management", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    const device = await seedDevice(venue);
+    await suite.db.insert(cardReaders).values({
+      id: DEMO_READER_ID,
+      provider: "simulator",
+      providerRef: "waitron-demo-reader",
+      name: "Demo reader",
+    });
+
+    const listed = await send(app, "GET", "/management-api/payments/readers", {
+      cookie: venue.managerCookie,
+    });
+    expect(await listed.json()).toEqual([]);
+
+    const assigned = await send(app, "PUT", `/management-api/payments/devices/${device}/reader`, {
+      cookie: venue.managerCookie,
+      body: { readerId: DEMO_READER_ID },
+    });
+    expect((await assigned.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "reader.not_found" },
+    });
+    const status = await send(
+      app,
+      "GET",
+      `/management-api/payments/readers/${DEMO_READER_ID}/status`,
+      {
+        cookie: venue.managerCookie,
+      },
+    );
+    expect((await status.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "reader.not_found" },
+    });
+  });
   it("sets, reads back and clears a device's default reader", async () => {
     const venue = await seedVenue();
     const app = mountApp(venue);

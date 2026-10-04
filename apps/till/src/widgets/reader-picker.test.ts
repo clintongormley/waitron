@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillReaderPicker } from "./reader-picker.js";
 import type { ReaderOption } from "./reader-picker.js";
@@ -51,6 +51,34 @@ describe("till-reader-picker", () => {
     el.addEventListener("reader-chosen", (e) => spy((e as CustomEvent).detail));
     click(el, "[data-test=reader-r1]");
     expect(spy).toHaveBeenCalledWith({ readerId: "r1" });
+  });
+
+  it("offers the instant simulator when a pretend reader is available", async () => {
+    const { el } = await mountWidget<TillReaderPicker>("till-reader-picker", {
+      readers: [{ id: "demo", name: "Demo card reader", provider: "simulator" }],
+      plainSimulator: true,
+    });
+    const chosen = vi.fn();
+    el.addEventListener("reader-chosen", (event) => chosen((event as CustomEvent).detail));
+
+    expect(el.shadowRoot!.textContent).toContain(t("card.instant_simulator"));
+    click(el, "[data-test=reader-instant]");
+    expect(chosen).toHaveBeenCalledWith({ readerId: null });
+  });
+
+  it("names the pretend reader in the till's Spanish locale", async () => {
+    const previous = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el } = await mountWidget<TillReaderPicker>("till-reader-picker", {
+        readers: [{ id: "demo", name: "Demo card reader", provider: "simulator" }],
+        plainSimulator: true,
+      });
+      expect(el.shadowRoot!.textContent).toContain("Lector de demostración");
+      expect(el.shadowRoot!.textContent).not.toContain("Demo card reader");
+    } finally {
+      setLocale(previous);
+    }
   });
 
   it("marks the currently-selected reader via aria-checked", async () => {
