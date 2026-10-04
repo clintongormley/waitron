@@ -149,6 +149,46 @@ describe.each(["light", "dark"] as const)("extra list form (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
+  it("renders a mixed list's fixed 1 and its required, refused Portion field accessibly", async () => {
+    const each = {
+      id: "00000000-0000-0000-0000-000000000001",
+      name: { es: "Unidad" },
+      precision: 0,
+      abbreviation: { es: "ud" },
+    };
+    const { el, host } = await mountWidget<ExtraListForm>(
+      "dashboard-extra-list-form",
+      {
+        open: true,
+        languages: { defaultLanguage: "en", languages: ["en", "es"] },
+        products: [
+          { ...product(BACON, "Bacon", "1.50"), unitId: each.id, unit: each },
+          {
+            ...product(EGG, "Fried egg", "0.80"),
+            unitId: "unit-ml",
+            unit: { id: "unit-ml", name: { es: "Mililitro" }, precision: 0, abbreviation: {} },
+          },
+        ],
+        value: {
+          ...addons,
+          items: [
+            { ...addons.items[0]!, portion: "1.000" },
+            { ...addons.items[1]!, portion: "" },
+          ],
+        },
+      },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('[data-test="item-0-portion-fixed"]')).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="item-1-portion"]')!
+        .error,
+    ).not.toBe("");
+    await expectNoA11yViolations(host);
+  });
+
   it("renders a listed product with an Active variant, marked on its row, and the picker open on a greyed product, accessibly", async () => {
     const wine = {
       ...product(GONE, "Wine", "3.00"),
