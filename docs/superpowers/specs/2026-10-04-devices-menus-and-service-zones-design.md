@@ -22,7 +22,7 @@ without gaining access to the deli's orders.
 | Service zone | Where an order is served, its effective service settings and overrides of the department's default menus |
 | Device profile | The department and zones a device may serve, login eligibility, permitted actions and screens, equipment lists and defaults |
 | Device | Its approved profiles, active profile, current equipment and station/watcher selection |
-| Staff session | The current zone and manual menu selection, within the active profile's permissions |
+| Operator's browsing state on the device | The current zone and menu selection, retained across the same person's login and screen changes within the active profile's permissions |
 | Menu version | A fixed edition of a menu, activated immediately or by scheduled publication |
 
 A department is a separate operation; a different menu alone does not require one. An upstairs
@@ -68,6 +68,17 @@ The calendar is shared with opening hours; there is no separate menu holiday cal
 The device remembers the waiter's last selected zone until somebody else logs in. It does not
 need a separate permanent personal zone preference. A profile supplies the starting zone for a
 new operator. Opening an existing table's order uses the order's zone.
+
+**Owner clarification, 2026-10-04:** every zone change selects the destination zone's current
+default menu. Returning to a zone you left also selects its current default; there is no saved
+manual menu choice per zone. Switching screens without changing zone keeps your last chosen menu,
+as does logging back into the same device and zone when nobody else has logged in between.
+Another person's login resets this browsing state to the profile's starting zone and its current
+default menu.
+
+For example, Anna selects Cocktails on the terrace. Opening another screen and returning, or
+logging back in after the handheld locks, keeps Cocktails if the zone has not changed. Switching
+to the bar and back to the terrace selects the terrace's current default instead.
 
 A screen following the default changes menus between orders when a period changes. It leaves an
 open order or a manually selected menu undisturbed. Existing ordered lines retain their recorded
@@ -225,7 +236,9 @@ The implementation plans must require failing behavioural tests before each chan
 - Two zones following the same period boundary, one inheriting and one overriding the menu;
   all-day gaps, a weekend and a special date; breakfast still orderable after its default ends.
 - A screen following defaults changing between orders, with an open order and a manual selection
-  retained; a new operator receiving the profile's starting zone.
+  retained while staying in the same zone; screen changes and the same person's login retaining
+  their last chosen menu; switching away and back selecting the zone's current default rather than
+  restoring that manual choice; a new operator receiving the profile's starting zone and default.
 - Several queued editions activating in order, refusing backwards activation, and requiring an
   explicit decision when immediate publication overtakes queued editions.
 - A restaurant ordering from the deli menu while direct access to deli orders and zones is refused;
@@ -249,13 +262,15 @@ These make the agreed rules precise; they are proposals, not additional owner de
   latest edition whose activation time has passed, without exposing overdue editions in sequence.
 - **Time:** use the venue time zone; periods include their start and exclude their end. Reject
   overlapping periods. Overnight periods belong to the day on which they start, matching A261.
-  Reject a publication's nonexistent daylight-saving time and require an explicit choice for an
-  ambiguous one. No special-date override means the normal week; an explicitly empty timetable
-  uses the all-day default. Resolve zone choices against stable period identities, not row order.
-- **Menu browsing:** remember manual menu selection per zone during the operator's session. Offer
-  Follow default to resume automatic switching. A same-person unlock retains this state; another
-  operator's login resets it. A menu removed from department availability ceases to be selectable
-  for new lines; existing recorded lines are retained.
+  For a publication entered during a clock change, explain when the chosen local time does not
+  occur and ask for another time, or when it occurs twice and ask which occurrence to use.
+  For example, if a clock jumps from 02:00 to 03:00, 02:30 does not occur; if it moves back from
+  03:00 to 02:00, 02:30 occurs twice. These examples illustrate the proposed validation, not
+  a particular venue's clock-change dates. No special-date override means the normal week; an
+  explicitly empty timetable uses the all-day default. Resolve zone choices against stable period
+  identities, not row order.
+- **Removed menus:** a menu removed from department availability ceases to be selectable for new
+  lines; existing recorded lines are retained. Browsing retention follows the owner's rule in §2.
 - **Login mode:** profiles choose named staff login or a shared operational display, a starting
   screen and an inactivity-lock setting. A shared display has only its configured station/watcher
   actions, with no unnamed ordering, payment or drawer access.
