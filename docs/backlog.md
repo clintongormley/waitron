@@ -3096,7 +3096,7 @@ with the same comparison, not in the dashboard). The rest of the dashboard sorts
 way. _2026-10-05 (W85a): a product's variants now keep the product's own order, below; the
 decimal-weight point no longer applies to them._
 
-**Products: a product's variants are listed in the product's own order — DONE (W85a, owner
+**Products: a product's variants are listed in the product's own order — DONE (W85a, #1207, owner
 2026-10-05: "that would be ideal").** This replaces W85's name order, so W85's decimal-weight
 point no longer applies to a product's variants; the number-aware name sort elsewhere still puts
 "0,5 kg" before "0,25 kg". The Products list no longer sorts a product's variants: it draws them in the
