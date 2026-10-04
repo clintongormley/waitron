@@ -437,6 +437,39 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  test("Customise dialog during a pointer drag", async () => {
+    const el = await chooserTable();
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLButtonElement>(".columns-trigger")!);
+    const panel = el.shadowRoot!.querySelector<HTMLElement>(".columns-panel")!;
+    const source = panel.querySelector<HTMLButtonElement>('[data-reorder="status"]')!;
+    const destination = panel.querySelector<HTMLElement>('[data-column-row="id"]')!;
+    const start = source.getBoundingClientRect();
+    const end = destination.getBoundingClientRect();
+    source.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        pointerId: 12,
+        button: 0,
+        clientX: start.left + start.width / 2,
+        clientY: start.top + start.height / 2,
+      }),
+    );
+    try {
+      document.dispatchEvent(
+        new PointerEvent("pointermove", {
+          pointerId: 12,
+          clientX: end.left + end.width / 2,
+          clientY: end.top + end.height / 2,
+        }),
+      );
+      await el.updateComplete;
+      expect(panel.querySelector(".column-drag-preview")).not.toBeNull();
+      expect(destination.hasAttribute("data-drop-target")).toBe(true);
+      await expectNoA11yViolations(host);
+    } finally {
+      document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 12 }));
+    }
+  });
+
   test("a tree's toolbar with Expand all and slotted controls", async () => {
     type TreeRow = { id: string; parent: string | null; name: string };
     const el = (await mountThemed(

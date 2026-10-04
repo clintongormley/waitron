@@ -416,6 +416,25 @@ export class WtDataTable<Row = unknown> extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
+      .column-choice[data-drop-target] {
+        background: var(--wt-color-surface-lifted);
+        outline: var(--wt-focus-ring);
+        outline-offset: calc(-1 * var(--wt-focus-offset));
+      }
+
+      .column-drag-preview {
+        position: fixed;
+        z-index: 1;
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface-lifted);
+        color: var(--wt-color-text);
+        box-shadow: var(--wt-shadow-2);
+      }
+
       [data-reorder] {
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
@@ -621,6 +640,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @state() private columnChoices: Record<string, boolean> = {};
   @state() private columnOrder: string[] = [];
   @state() private columnMoveAnnouncement = "";
+  @state() private columnDragPreview: {
+    key: string;
+    x: number;
+    y: number;
+    target: string | null;
+  } | null = null;
   @state() private chooserOpen = false;
   @query(".columns-trigger") private chooserTrigger!: HTMLButtonElement;
   @query(".columns-panel") private chooserPanel!: HTMLElement;
@@ -875,6 +900,24 @@ export class WtDataTable<Row = unknown> extends LitElement {
       drag.active = true;
       holdPageCursor();
     }
+    const target = [...this.chooserPanel.querySelectorAll<HTMLElement>("[data-column-row]")].find(
+      (row) => {
+        const box = row.getBoundingClientRect();
+        return (
+          row.querySelector("[data-reorder]") &&
+          event.clientX >= box.left &&
+          event.clientX < box.right &&
+          event.clientY >= box.top &&
+          event.clientY < box.bottom
+        );
+      },
+    );
+    this.columnDragPreview = {
+      key: drag.key,
+      x: event.clientX,
+      y: event.clientY,
+      target: target?.dataset.columnRow ?? null,
+    };
   };
 
   readonly #dropColumnDrag = (event: PointerEvent): void => {
@@ -911,6 +954,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   #endColumnDrag(): void {
     if (this.#columnDrag?.active) releasePageCursor();
     this.#columnDrag = null;
+    this.columnDragPreview = null;
     document.removeEventListener("pointermove", this.#moveColumnDrag);
     document.removeEventListener("pointerup", this.#dropColumnDrag);
     document.removeEventListener("pointercancel", this.#cancelColumnDrag);
@@ -1765,6 +1809,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 data-column-row=${column.key}
                 ?data-fixed=${fixed}
                 ?data-unchoosable=${column.choosable === undefined}
+                ?data-drop-target=${this.columnDragPreview?.target === column.key}
               >
                 ${
                   fixed
@@ -1808,6 +1853,17 @@ export class WtDataTable<Row = unknown> extends LitElement {
             },
           )}
         </div>
+        ${
+          this.columnDragPreview
+            ? html`<div
+                class="column-drag-preview"
+                aria-hidden="true"
+                style=${`left: ${this.columnDragPreview.x}px; top: ${this.columnDragPreview.y}px`}
+              >
+                ${this.columns.find((column) => column.key === this.columnDragPreview?.key)?.label}
+              </div>`
+            : nothing
+        }
         <div class="column-move-status" role="status" aria-live="polite">
           ${this.columnMoveAnnouncement}
         </div>

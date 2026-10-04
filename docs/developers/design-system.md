@@ -637,7 +637,9 @@ leaves the column out forgets that "all" was chosen.
 A table with `choosable` columns draws a Customise columns icon button at the toolbar's trailing
 end. Its dialog lists every column in table order with an eye control. The first column and any
 `pinned: "end"` column are fixed, with no drag handle and a disabled eye. Other columns move by
-pointer drag or by the handle's arrow keys. The dialog's Restore defaults button resets order and
+pointer drag or by the handle's arrow keys. While a pointer drags a column, its name follows the
+pointer and the row it can land on is highlighted. The preview and highlight disappear when the
+drag ends or the dialog closes. The dialog's Restore defaults button resets order and
 visibility. Escape closes it and returns focus to the trigger. The first column remains shown, and
 the last visible movable column cannot be hidden. A hidden column keeps its filter in the Filters
 panel, which keeps narrowing rows, and search still reads it; it stops sorting the rows while
