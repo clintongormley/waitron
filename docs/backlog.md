@@ -1190,10 +1190,16 @@ stay through an Options list editor's Cancel and save (`catalogue-screen.test.ts
 button, or to its menu when the menu's Edit opened the list. On the Modifiers page an Extras row
 now opens like an Options row, with Used by opening only its popup. Left as it was: the focus ring
 of a row's button shows only along the row's top edge, in both tables, as on the shared table.
-Left OPEN from its review, not tested: the product editor's unit form and Courses window hand focus
-back without waiting for their dialog to finish closing — the shape W71 had to fix for the list
-editors in `catalogue-screen.ts`, where focus otherwise landed nowhere. Next step: a focus-return
-test for each, as W71's list cases do; fix only if it fails.
+Its review's open question, the product editor's unit form and Courses window, was settled by W71f
+(branch `fix/unit-form-courses-focus-return`): `catalogue-screen.test.ts` now checks that focus goes
+back to Add unit after the unit form's Cancel and Escape, to the price's unit button after its save,
+and to the course box after the Courses window's Done and Escape, each with focus first put
+somewhere else so only the screen's hand-back can reach the target. The unit form's Cancel and
+Escape cases failed — Add unit was still drawn disabled when the hand-back ran, and after Escape
+focus was lost even when Add unit was opened with a real click — so `#returnChildFocus` now waits
+for the unit form as it does for the list forms. The Courses window passed unchanged; with its
+hand-back removed only the new cases failed, as opening it from the course box puts focus on the box
+first.
 
 **The Extras editor shows Portion beside Price, and a fixed 1 for a product sold by the unit
 (W75, owner 2026-10-04) — DONE (#1194).** In `apps/dashboard/src/widgets/extra-list-form.ts` Portion is a
