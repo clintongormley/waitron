@@ -4204,8 +4204,11 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **A till is a device (A238) — BUILT on branch `a238-till-is-a-device`, its pull request
-  awaiting the owner's review and a venue reset (2026-10-04).** The `tills` table is gone; every
+- **A till is a device (A238) — DONE: landed as #1164 (main `065354d26`, 2026-10-04); every
+  venue needs a reset.** Follow-ups queued 2026-10-04: W56 (the Sales screen's section title reads
+  "Tender by device") and W57 (the two hand-run operator scripts record sales under a source of their
+  own, not "Demo data"). Deferred in the PR: three refactors of sign-in-adjacent code, and renaming
+  the `seedTill` test fixtures. The `tills` table is gone; every
   record names its source (usually the device; otherwise the dashboard or a named background job)
   and, for a device, the device; a device's profile decides whether it takes cash (`take-cash`) and
   opens the drawer (`open-cash-drawer`), and lists the receipt and payment slip printers its devices
@@ -4220,7 +4223,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   2026-10-03).** Piece 2 of A238. Each top-up or removal of cash from a till device's drawer is a
   recorded entry: who, how much, why, when (topping up change, paying a supplier, a waiter handing
   in float cash). The entries replace the two typed totals the daily close takes today (opening float
-  and payouts, `packages/reporting/src/record-daily-close.ts`). Needs A238 (built, not yet landed).
+  and payouts, `packages/reporting/src/record-daily-close.ts`). Needs A238 (landed as #1164).
   No screen collects cash
   counts yet; this is where one belongs.
 
@@ -4231,7 +4234,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   cash goes into that till's drawer as an A239 entry; the daily close lists any float still open.
   Cash taken on a handheld whose profile allows cash, with no float, is counted against the
   handheld until then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs
-  A238 (built, not yet landed) and A239.
+  A238 (landed as #1164) and A239.
 
 - **A pretend printer in Demo mode (A241) — DONE in W37.** Demo and Preparation provide a printer
   for receipts, kitchen tickets and separate drawer openings. A manager can open its page from the
