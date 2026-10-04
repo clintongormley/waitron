@@ -1084,7 +1084,7 @@ drawing: the 44px tap height (Google's drawing is 40px; its text allows scaling)
 width and `wt-button`'s corner radius. Checked in Chromium only (the vitest browser suites and
 screenshots); Firefox and Safari not looked at.
 
-**The login card drops its logo, and a session-expired notice is drawn as a warning (W103, owner
+**The login card drops its logo, and a session-expired notice is drawn as an error (W103, owner
 2026-10-04) — DONE.** The owner, on a login screenshot: _"Remove the waitron logo from the login
 box, and make the 'your session has expired' more prominent eg in red."_ No step of
 `apps/dashboard/src/screens/login-screen.ts`, nor the account set-up and password-reset page, draws

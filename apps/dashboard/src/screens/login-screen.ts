@@ -59,7 +59,7 @@ interface CompletedLogin {
 }
 
 /** Notices that report a failure; any other notice, such as a completed reset, stays plain. */
-const WARNING_NOTICES: ReadonlySet<string> = new Set([
+const FAILURE_NOTICES: ReadonlySet<string> = new Set([
   "management_session.expired",
   "person.suspended",
 ]);
@@ -116,7 +116,7 @@ export class LoginScreen extends LitElement {
       .notice {
         color: var(--wt-color-text);
       }
-      .notice[data-tone="warning"] {
+      .notice[data-tone="error"] {
         color: var(--wt-color-danger);
         font-weight: var(--wt-font-weight-bold);
         border: 1px solid var(--wt-color-danger);
@@ -1219,7 +1219,7 @@ export class LoginScreen extends LitElement {
             ? html`<p
                 class="notice"
                 role="status"
-                data-tone=${WARNING_NOTICES.has(this.noticeCode) ? "warning" : nothing}
+                data-tone=${FAILURE_NOTICES.has(this.noticeCode) ? "error" : nothing}
               >
                 ${codeMessage(this.noticeCode)}
               </p>`

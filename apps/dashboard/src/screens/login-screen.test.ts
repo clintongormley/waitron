@@ -3043,12 +3043,12 @@ describe("login-screen: the sign-in card", () => {
   );
 
   const themes = ["light", "dark"] as const;
-  const warningNotices = ["management_session.expired", "person.suspended"].flatMap((code) =>
+  const failureNotices = ["management_session.expired", "person.suspended"].flatMap((code) =>
     themes.map((theme) => [code, theme] as const),
   );
 
-  it.each(warningNotices)(
-    "draws the %s notice as a warning, first in the card and above the heading (%s theme)",
+  it.each(failureNotices)(
+    "draws the %s notice as an error, first in the card and above the heading (%s theme)",
     async (code, theme) => {
       const { el } = await mountWidget<LoginScreen>(
         "dashboard-login-screen",
@@ -3060,7 +3060,7 @@ describe("login-screen: the sign-in card", () => {
       const notice = screen.querySelector<HTMLElement>(".notice")!;
       expect(notice.textContent!.trim()).toBe(codeMessage(code));
       expect(notice.getAttribute("role")).toBe("status");
-      expect(notice.dataset.tone).toBe("warning");
+      expect(notice.dataset.tone).toBe("error");
       expect(screen.firstElementChild).toBe(notice);
       expect(
         notice.compareDocumentPosition(screen.querySelector("h1")!) &
@@ -3085,7 +3085,7 @@ describe("login-screen: the sign-in card", () => {
   );
 
   it.each(themes)(
-    "draws the password-reset-complete notice as plain text, not as a warning (%s theme)",
+    "draws the password-reset-complete notice as plain text, not as an error (%s theme)",
     async (theme) => {
       const api = stubApi({
         completeAccountAction: vi.fn().mockResolvedValue({ personId: "p1", authenticated: false }),

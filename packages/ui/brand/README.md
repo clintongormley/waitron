@@ -49,10 +49,7 @@ it imports `waitron-lockup.svg` as-is through a `?raw` import and repaints its t
 by position — the first `<g>` (the waiter) with `--wt-color-primary`, the last (the word) with
 `--wt-color-text`. That is the order `build-icons.mjs` writes them in, so the wizard depends on it
 staying that way; the paint cases in `apps/setup/src/setup-app.test.ts` find each group by the ink
-this file gives it, so a reordered file fails them. The dashboard's sign-in card
-(`apps/dashboard/src/screens/login-screen.ts`) imports and repaints the lockup the same way, so it
-depends on that order too; its paint cases in `apps/dashboard/src/screens/login-screen.test.ts` find
-the groups by ink in the same way.
+this file gives it, so a reordered file fails them.
 
 ## Why an .ico and a PNG as well as the SVG
 
