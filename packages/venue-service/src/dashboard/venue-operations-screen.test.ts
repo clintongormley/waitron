@@ -478,6 +478,47 @@ describe("venue operations screen", () => {
     expect(rows[2].textContent).toContain("On request");
   });
 
+  it("mutes an inherited zone value while leaving its own override prominent", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        salePolicies: {
+          departments: [
+            {
+              departmentId: "d1",
+              paidWhen: "prepay",
+              collectionNumber: "numbered",
+              receiptPrintMode: "auto",
+              printTradingName: true,
+            },
+          ],
+          zones: [
+            {
+              zoneId: "z1",
+              paidWhen: "ticket_then_pay",
+              collectionNumber: null,
+              receiptPrintMode: null,
+              effective: {
+                paidWhen: "ticket_then_pay",
+                collectionNumber: "numbered",
+                receiptPrintMode: "auto",
+                printTradingName: true,
+              },
+            },
+          ],
+        },
+      }),
+    } as unknown as VenueServiceApi);
+    const zoneRow = table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')[1]!;
+    const paid = zoneRow.querySelector<HTMLElement>('[data-test="edit-paid"]')!;
+    const collection = zoneRow.querySelector<HTMLElement>('[data-test="edit-collection"]')!;
+    const receipt = zoneRow.querySelector<HTMLElement>('[data-test="edit-receipt"]')!;
+    expect(collection.textContent).toContain("Numbered");
+    expect(receipt.textContent).toContain("Always");
+    expect(getComputedStyle(collection).color).toBe(getComputedStyle(receipt).color);
+    expect(getComputedStyle(collection).color).not.toBe(getComputedStyle(paid).color);
+  });
+
   it("changes paid timing on a department and lets a zone inherit it again", async () => {
     let departmentPaidWhen: "prepay" | "ticket_then_pay" = "prepay";
     let zonePaidWhen: "prepay" | "ticket_then_pay" | null = "ticket_then_pay";

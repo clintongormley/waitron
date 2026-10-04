@@ -95,6 +95,9 @@ export class VenueOperationsScreen extends LitElement {
         padding: 0;
         text-decoration: underline;
       }
+      wt-data-table::part(inherited-value) {
+        color: var(--wt-color-text-muted);
+      }
       wt-data-table::part(zone-readiness) {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
@@ -812,7 +815,7 @@ export class VenueOperationsScreen extends LitElement {
           if (this.paidEditor !== key) {
             return html`<button
               type="button"
-              part="edit-paid"
+              part=${row.kind === "zone" && stored == null ? "edit-paid inherited-value" : "edit-paid"}
               data-test="edit-paid"
               aria-label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.paid")}, ${effectiveLabel}`}
               @click=${() => (this.paidEditor = key)}
@@ -885,7 +888,7 @@ export class VenueOperationsScreen extends LitElement {
           if (this.collectionEditor !== key)
             return html`<button
               type="button"
-              part="edit-collection"
+              part=${row.kind === "zone" && stored == null ? "edit-collection inherited-value" : "edit-collection"}
               data-test="edit-collection"
               aria-label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.collection_number")}, ${effectiveLabel}`}
               @click=${() => (this.collectionEditor = key)}
@@ -975,7 +978,7 @@ export class VenueOperationsScreen extends LitElement {
           if (this.receiptEditor !== key)
             return html`<button
               type="button"
-              part="edit-receipt"
+              part=${row.kind === "zone" && stored == null ? "edit-receipt inherited-value" : "edit-receipt"}
               data-test="edit-receipt"
               aria-label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.receipt")}, ${effectiveLabel}`}
               @click=${() => (this.receiptEditor = key)}
