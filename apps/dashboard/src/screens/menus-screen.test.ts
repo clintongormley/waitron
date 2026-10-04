@@ -1259,6 +1259,33 @@ describe("the menus list's Changes column", () => {
     });
   });
 
+  it("opens nothing from a click on the Changes cell's blank space beside its link", async () => {
+    await at([1280, 900], "en-GB", async () => {
+      const opens = opened();
+      const el = await listed(mixed());
+      const cell = changesCell(el, "menu-lunch");
+      const box = cell.getBoundingClientRect();
+      const anchor = link(el, "menu-lunch")!;
+      const changes = anchor.getBoundingClientRect();
+      expect(changes.right).toBeLessThan(box.right - 2);
+      // The cell's padding corner, and the padding past the link's end on its line.
+      const points = [
+        { x: 2, y: 2 },
+        { x: (changes.right + box.right) / 2 - box.x, y: changes.top + changes.height / 2 - box.y },
+      ];
+      for (const position of points) {
+        const label = JSON.stringify(position);
+        const hit = table(el).shadowRoot.elementFromPoint(box.x + position.x, box.y + position.y);
+        expect(anchor.contains(hit), label).toBe(false);
+        // Forced, so a row activator lying over the point takes the click rather than stalling it.
+        await userEvent.click(cell, { position, force: true });
+        await el.updateComplete;
+        expect(location.pathname, label).toBe("/manage/menus");
+      }
+      expect(opens()).toEqual([]);
+    });
+  });
+
   it("opens the Preview tab from Enter on the focused link", async () => {
     const opens = opened();
     const el = await listed(mixed());

@@ -1591,6 +1591,7 @@ export class MenusScreen extends LitElement {
               key: "changes",
               label: t("menus.changes"),
               choosable: "shown" as const,
+              activatesRow: false as const,
               cell: (menu: MenuRow) => this.#changesCell(menu),
             },
           ]),
