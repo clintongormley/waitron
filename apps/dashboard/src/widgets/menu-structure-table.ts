@@ -375,9 +375,13 @@ export class MenuStructureTable extends LitElement {
     this.#pointer = { x: event.clientX, y: event.clientY };
     const starting = !drag.active;
     if (starting) {
+      const row = this.#member(drag.key);
+      if (!row) {
+        this.#finishDrag();
+        return;
+      }
       drag.active = true;
       holdPageCursor();
-      const row = this.#member(drag.key)!;
       this.ghost = {
         label: row.name,
         image:
@@ -407,11 +411,9 @@ export class MenuStructureTable extends LitElement {
     if (!drag.active || event.type !== "pointerup") return;
     blockClickAfterDrag(false);
     const row = this.#member(drag.key);
-    if (target === undefined || row === undefined || this.busy) return;
-    this.#move(
-      row,
-      this.#siblingRows(row).findIndex((sibling) => sibling.key === target),
-    );
+    if (row === undefined || this.busy) return;
+    const to = this.#siblingRows(row).findIndex((sibling) => sibling.key === target);
+    if (to >= 0) this.#move(row, to);
   };
 
   readonly #dragKey = (event: KeyboardEvent): void => {
@@ -638,8 +640,7 @@ export class MenuStructureTable extends LitElement {
       variant=${variant}
       data-test=${test}
       .disabled=${this.busy}
-      @click=${(event: Event) => {
-        event.stopPropagation();
+      @click=${() => {
         if (!this.busy) act();
       }}
       >${label}</wt-button

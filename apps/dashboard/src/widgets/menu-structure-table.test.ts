@@ -1146,3 +1146,89 @@ it("sends nothing when released straight after a refresh removed the dragged mem
   pointer(nameAt(el, "m-fav"), "pointerup");
   expect(moves).toEqual([]);
 });
+
+it("starts no drag, and throws nothing, when a refresh removes a pressed member before it moves", async () => {
+  const el = await mount();
+  const moves = listen(el, "wt-member-move");
+  const errors: string[] = [];
+  const onError = (event: ErrorEvent) => {
+    errors.push(event.message);
+    event.preventDefault();
+  };
+  window.addEventListener("error", onError);
+  try {
+    pointer(grip(el, "m-burger"), "pointerdown");
+    el.nodes = [drinksNode("m-drinks"), favourites()];
+    await settle(el);
+    pointer(nameAt(el, "m-fav"), "pointermove");
+    await settle(el);
+    expect(errors).toEqual([]);
+    expect(document.body.style.cursor).not.toBe("grabbing");
+    expect(ghost(el)).toBeNull();
+    expect(marked(el, "dragging")).toEqual([]);
+    pointer(nameAt(el, "m-fav"), "pointerup");
+    expect(moves).toEqual([]);
+  } finally {
+    window.removeEventListener("error", onError);
+  }
+});
+
+it("sends nothing when released after a refresh removed the sibling it would have moved beside", async () => {
+  const el = await mount();
+  const moves = listen(el, "wt-member-move");
+  pointer(grip(el, "m-burger"), "pointerdown");
+  pointer(grip(el, "m-burger"), "pointermove", nameAt(el, "m-fav"));
+  await settle(el);
+  expect(marked(el, "drop-gap-after")).toEqual(["m-fav"]);
+  el.nodes = [productNode("m-burger", "p-burger"), drinksNode("m-drinks")];
+  await settle(el);
+  pointer(grip(el, "m-burger"), "pointerup", nameAt(el, "m-drinks"));
+  await settle(el);
+  expect(moves).toEqual([]);
+  expect(document.body.style.cursor).not.toBe("grabbing");
+  expect(shown(el)).toEqual(["root", "m-burger", "m-drinks"]);
+});
+
+function popupOpen(el: MenuStructureTable, key: string): boolean {
+  return inTable(el, `[data-test="actions-${CSS.escape(key)}"]`)!
+    .shadowRoot!.querySelector("[popover]")!
+    .matches(":popover-open");
+}
+
+async function openMenu(el: MenuStructureTable, key: string): Promise<void> {
+  inTable<HTMLElementTagNameMap["wt-row-actions"]>(
+    el,
+    `[data-test="actions-${CSS.escape(key)}"]`,
+  )!.show();
+  await settle(el);
+  expect(popupOpen(el, key), key).toBe(true);
+}
+
+it("closes a row's menu after an action is chosen, and the choice opens or closes no row", async () => {
+  const el = await mount({ nodes: [...lunchNodes(), wines()] });
+  await toggle(el, "m-drinks");
+  const removes = listen(el, "wt-member-remove");
+  const adds = listen(el, "wt-structure-add");
+
+  await openMenu(el, "m-drinks/m-lemonade");
+  item(el, "remove-m-drinks/m-lemonade").click();
+  await settle(el);
+  expect(popupOpen(el, "m-drinks/m-lemonade")).toBe(false);
+
+  await openMenu(el, "included-wine");
+  item(el, "remove-included-wine").click();
+  await settle(el);
+  expect(popupOpen(el, "included-wine")).toBe(false);
+  expect(removes).toEqual([
+    { path: ["m-drinks"], memberId: "m-lemonade" },
+    { path: [], memberId: "included-wine" },
+  ]);
+
+  await openMenu(el, "m-drinks");
+  item(el, "new-section-m-drinks").click();
+  await settle(el);
+  expect(popupOpen(el, "m-drinks")).toBe(false);
+  expect(adds).toEqual([{ action: "new-section", path: ["m-drinks"] }]);
+  expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("true");
+  expect(row(el, "included-wine")!.getAttribute("aria-expanded")).toBe("false");
+});

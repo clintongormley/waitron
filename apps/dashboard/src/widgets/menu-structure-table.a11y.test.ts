@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { MenuStructureTable } from "./menu-structure-table.js";
@@ -55,7 +55,21 @@ const nodes: MenuStructureNode[] = [
   ),
 ];
 
-const states = ["closed", "open", "current", "menu open", "busy"] as const;
+const states = [
+  "closed",
+  "open",
+  "current",
+  "menu open",
+  "root menu open",
+  "included menu open",
+  "busy",
+] as const;
+
+const MENU_OF: Partial<Record<(typeof states)[number], string>> = {
+  "menu open": "actions-m-drinks",
+  "root menu open": "actions-root",
+  "included menu open": "actions-included-wine",
+};
 
 describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) => {
   it.each(states)("renders %s accessibly", async (state) => {
@@ -79,13 +93,14 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
         await table.updateComplete;
       }
     }
-    if (state === "menu open") {
-      const menu = inTable('[data-test="actions-m-drinks"]') as HTMLElement & {
-        show(): void;
-        updateComplete: Promise<unknown>;
-      };
+    const menuTest = MENU_OF[state];
+    if (menuTest) {
+      const menu = inTable(`[data-test="${menuTest}"]`) as HTMLElementTagNameMap["wt-row-actions"];
       await menu.updateComplete;
       menu.show();
+      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+      if (state === "included menu open")
+        expect(menu.querySelector('a[part="menu-link"]')).not.toBeNull();
     }
     await expectNoA11yViolations(host);
   });
