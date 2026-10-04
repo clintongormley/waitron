@@ -11,6 +11,7 @@ import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 
+registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
 afterEach(() => setLocale("es"));
 // The table remembers its sort and filter choices in sessionStorage under waitron.products.table, so
@@ -1819,7 +1820,6 @@ describe("the product list as a tree", () => {
   });
 
   it("draws large folder icons on root, nested and new category rows and on a category drag", async () => {
-    registerIcons(DASHBOARD_ICONS);
     const { el, root } = await mountTree();
     await openRow(el, "folder:d");
     el.nameDraft = { kind: "create", parentId: "d" };
