@@ -1925,7 +1925,7 @@ it("starts a new product Public", async () => {
   expect(submit.mock.calls[0]![0].detail.value.ordering).toBe("public");
 });
 
-it("says what each ordering choice means, Staff only working like Public until guests can order, in English and in Spanish", async () => {
+it("describes Staff only ordering briefly in English and Spanish", async () => {
   const mount = () =>
     mountWidget<ProductEditor>("dashboard-product-editor", {
       open: true,
@@ -1940,10 +1940,7 @@ it("says what each ordering choice means, Staff only working like Public until g
     expect(sharedField(el, "wt-combobox", "ordering").label).toBe("Standalone ordering");
     expect(await orderingTexts(el)).toEqual([
       ["Public", "Can be ordered on its own."],
-      [
-        "Staff only",
-        "Only staff can order it on its own. Until guests can order for themselves, this works like Public.",
-      ],
+      ["Staff only", "Only staff can order it on its own."],
       ["Not sold separately", "Only as an extra on another dish."],
     ]);
     cleanupWidgets();
@@ -1952,10 +1949,7 @@ it("says what each ordering choice means, Staff only working like Public until g
     expect(sharedField(spanish, "wt-combobox", "ordering").label).toBe("Pedido por separado");
     expect(await orderingTexts(spanish)).toEqual([
       ["Público", "Se puede pedir por sí solo."],
-      [
-        "Solo personal",
-        "Solo el personal puede pedirlo por sí solo. Mientras los clientes no puedan pedir por su cuenta, funciona igual que Público.",
-      ],
+      ["Solo personal", "Solo el personal puede pedirlo por sí solo."],
       ["No se vende por separado", "Solo como extra de otro plato."],
     ]);
   } finally {
