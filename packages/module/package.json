@@ -18,11 +18,11 @@
     "@waitron/server-kit": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
-    "hono": "^4.13.9",
+    "hono": "^4.13.12",
     "semver": "^7.7.0"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.6.3",
     "@types/semver": "^7.7.0",
     "@vitest/coverage-v8": "^4.1.11",
     "typescript": "^7.0.0",

@@ -33,7 +33,7 @@
     "drizzle-orm": "^0.45.3"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.6.3",
     "@vitest/coverage-v8": "^4.1.11",
     "@waitron/core": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",

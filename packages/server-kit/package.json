@@ -18,11 +18,11 @@
   },
   "dependencies": {
     "@waitron/shared": "workspace:*",
-    "hono": "^4.13.9",
+    "hono": "^4.13.12",
     "node-forge": "^1.3.1"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.6.3",
     "@types/node-forge": "^1.3.0",
     "@vitest/coverage-v8": "^4.1.11",
     "typescript": "^7.0.0",
