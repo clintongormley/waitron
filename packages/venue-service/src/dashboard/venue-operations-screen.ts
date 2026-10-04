@@ -136,6 +136,7 @@ export class VenueOperationsScreen extends LitElement {
   /** Save has been pressed in the open editor, so it re-checks its fields on every change. */
   @state() private attempted = false;
   @state() private busy = false;
+  @state() private printTradingNameDrafts: Record<string, boolean> = {};
   @state() private view: View = "status";
   @state() private editor?: Editor;
   @state() private zoneId = "";
@@ -543,7 +544,10 @@ export class VenueOperationsScreen extends LitElement {
         label: t("venue.print_it"),
         cell: (row) => {
           if (row.kind !== "department") return nothing;
-          const checked = policyFor(row)?.printTradingName ?? false;
+          const checked =
+            this.printTradingNameDrafts[row.department.id] ??
+            policyFor(row)?.printTradingName ??
+            false;
           return html`<wt-switch
             name="printTradingName"
             label=${t("venue.print_it")}
@@ -551,13 +555,20 @@ export class VenueOperationsScreen extends LitElement {
             .disabled=${this.busy}
             @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
               event.stopPropagation();
-              void this.#save(() =>
-                this.api.setDepartmentSalePolicyField(
+              this.printTradingNameDrafts = {
+                ...this.printTradingNameDrafts,
+                [row.department.id]: event.detail.checked,
+              };
+              void this.#save(async () => {
+                await this.api.setDepartmentSalePolicyField(
                   row.department.id,
                   "printTradingName",
                   event.detail.checked,
-                ),
-              );
+                );
+                const drafts = { ...this.printTradingNameDrafts };
+                delete drafts[row.department.id];
+                this.printTradingNameDrafts = drafts;
+              });
             }}
           ></wt-switch>`;
         },

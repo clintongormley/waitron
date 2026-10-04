@@ -345,6 +345,45 @@ describe("venue operations screen", () => {
     );
   });
 
+  it("keeps a refused receipt trading-name choice visible", async () => {
+    let printTradingName = false;
+    const save = vi.fn(async (_departmentId: string, _field: string, value: boolean) => {
+      if (save.mock.calls.length === 1) throw new Error("offline");
+      printTradingName = value;
+    });
+    const load = vi.fn(async () => ({
+      ...model,
+      departments: [model.departments[0]],
+      salePolicies: {
+        departments: [
+          {
+            departmentId: "d1",
+            paidWhen: "prepay" as const,
+            collectionNumber: "none" as const,
+            receiptPrintMode: "auto" as const,
+            printTradingName,
+          },
+        ],
+        zones: [],
+      },
+    }));
+    const el = await mount({
+      load,
+      setDepartmentSalePolicyField: save,
+    } as unknown as VenueServiceApi);
+    const switchInput = () =>
+      table(el, "policy-tree")
+        .shadowRoot!.querySelector<HTMLElement>('wt-switch[name="printTradingName"]')!
+        .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    switchInput().click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+    await vi.waitFor(() =>
+      expect(find(el, '[data-test="page-alert"]')?.textContent).toContain("could not be saved"),
+    );
+    expect(switchInput().checked).toBe(true);
+    expect(printTradingName).toBe(false);
+  });
+
   it("puts each tab's available Add actions beside the tablist", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
