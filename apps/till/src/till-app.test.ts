@@ -3042,6 +3042,19 @@ describe("till-app", () => {
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=open-drawer]")).toBeNull();
   });
 
+  it("a device whose profile does not take cash offers no Cash on the counter's pay card", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, capabilities: ["print-receipt"] }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await flush(el);
+
+    const pay = tenderPay(el);
+    expect(pay.shadowRoot!.querySelector(".pay")).toBeNull();
+    expect(pay.shadowRoot!.querySelector(".cash-at-till")).not.toBeNull();
+  });
+
   it("too many wrong override PINs keep the dialog open, telling the operator to wait", async () => {
     const openDrawer = vi
       .fn()
@@ -12382,6 +12395,76 @@ describe("the device's printers, switched from the header", () => {
     const dialog = printersDialog(el)!;
     expect(dialog.error).toEqual({ code: "server.internal" });
     expect(dialog.paymentSlip).toEqual({ current: "S1", choices: [S1, S2] });
+  });
+
+  it("shows the latest switch's answer when an earlier switch answers after it", async () => {
+    const answers: ((value: unknown) => void)[] = [];
+    const setDevicePrinters = vi.fn(() => new Promise((resolve) => answers.push(resolve)));
+    const el = await openPrinters({ setDevicePrinters });
+
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    await flush(el);
+    answers[1]!({ receiptPrinterId: "P2", paymentSlipPrinterId: "S1" });
+    await flush(el);
+    answers[0]!({ receiptPrinterId: "P1", paymentSlipPrinterId: "S1" });
+    await flush(el);
+
+    expect(printersDialog(el)!.receipt).toEqual({ current: "P2", choices: [P1, P2] });
+  });
+
+  it("shows no refusal of an earlier switch that answers after the latest one succeeded", async () => {
+    const answers: { resolve: (value: unknown) => void; reject: (error: unknown) => void }[] = [];
+    const setDevicePrinters = vi.fn(
+      () => new Promise((resolve, reject) => answers.push({ resolve, reject })),
+    );
+    const el = await openPrinters({ setDevicePrinters });
+
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    await flush(el);
+    answers[1]!.resolve({ receiptPrinterId: "P2", paymentSlipPrinterId: "S1" });
+    await flush(el);
+    answers[0]!.reject({ field: "receiptPrinterId", code: "device.binding_invalid", status: 400 });
+    await flush(el);
+
+    expect(printersDialog(el)!.error).toBeNull();
+    expect(printersDialog(el)!.receipt).toEqual({ current: "P2", choices: [P1, P2] });
+  });
+
+  it("keeps a retried pick shown, with the refusal, until the retry answers", async () => {
+    let answer!: (value: unknown) => void;
+    const refusal = { field: "receiptPrinterId", code: "device.binding_invalid", status: 400 };
+    const setDevicePrinters = vi
+      .fn()
+      .mockRejectedValueOnce(refusal)
+      .mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const el = await openPrinters({ setDevicePrinters });
+    const receiptBox = () =>
+      printersDialog(el)!.shadowRoot!.querySelector<WtCombobox>(
+        'wt-combobox[name="receiptPrinterId"]',
+      )!;
+
+    await chooseOption(receiptBox(), "P2");
+    await flush(el);
+    expect(printersDialog(el)!.error).toEqual({
+      code: "device.binding_invalid",
+      field: "receiptPrinterId",
+    });
+    await chooseOption(receiptBox(), "P2");
+    await flush(el);
+
+    expect(setDevicePrinters).toHaveBeenCalledTimes(2);
+    expect(receiptBox().value).toBe("P2");
+    expect(printersDialog(el)!.error).toEqual({
+      code: "device.binding_invalid",
+      field: "receiptPrinterId",
+    });
+
+    answer({ receiptPrinterId: "P2", paymentSlipPrinterId: "S1" });
+    await flush(el);
+    expect(printersDialog(el)!.error).toBeNull();
+    expect(receiptBox().value).toBe("P2");
   });
 
   it("closes the dialog when the operator logs out", async () => {

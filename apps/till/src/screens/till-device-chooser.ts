@@ -9,15 +9,16 @@ import "./till-enrol-screen.js";
 import type { DevDeviceList, TillApi } from "../api/client.js";
 
 /**
- * The dev-only device front door, shown when the host runs in dev mode AND this tab has not yet adopted
- * a device. The adopted id lives in THIS TAB's `sessionStorage` ({@link setDevDeviceId}) and rides every
- * request as the `x-waitron-dev-device` header the server trusts in dev mode, so one browser can run a
- * different device in each tab.
+ * The dev-only device front door, shown when the host runs in dev mode AND this tab has not yet
+ * adopted a device. The adopted id lives in THIS TAB's `sessionStorage` ({@link setDevDeviceId}) and
+ * rides every request as the `x-waitron-dev-device` header the server trusts in dev mode, so one
+ * browser can run a different device in each tab.
  *
- * "Set up a new device" embeds the {@link TillEnrolScreen}; in devMode the server auto-accepts that knock
- * with the venue's default `till` profile, so it can only mint a `till`, and the name of a device still
- * active is refused with `device.name_taken`. Acceptable for a dev tool: `dev-setup` also seeds a phone-portrait handheld and a kitchen display, so
- * the chooser lists those without minting them.
+ * "Set up a new device" embeds the {@link TillEnrolScreen}; in devMode the server auto-accepts that
+ * knock with the venue's default `till` profile, so it can only mint a `till`, and the name of a
+ * device still active is refused with `device.name_taken`. Acceptable for a dev tool: `dev-setup`
+ * also seeds a phone-portrait handheld and a kitchen display, so the chooser lists those without
+ * minting them.
  *
  * Its own chrome is DELIBERATELY plain English literals, not `t()` keys: no venue ever sees this tool.
  */

@@ -1507,6 +1507,8 @@ export class TillApp extends LitElement {
   };
   @state() private printersOpen = false;
   @state() private printersError: { code: string; field?: string } | null = null;
+  /** Counts printer switches, so only the latest one's answer is shown. */
+  #printersSwitch = 0;
   /** `GET /api/device/me` as last read, which the printers dialog falls back to. */
   #heldIdentity?: DeviceIdentity;
   /** The open cancel, give-away or discount dialog, with what the server last answered it. */
@@ -3526,17 +3528,22 @@ export class TillApp extends LitElement {
     this.printersOpen = true;
   }
 
+  /** A refusal stays shown until the next answer: clearing it first re-renders the list, dropping
+   * the retried pick while the request is in flight. */
   async #onPrintersChange(event: CustomEvent<PrintersChangeDetail>): Promise<void> {
-    this.printersError = null;
+    const attempt = ++this.#printersSwitch;
     try {
       const stored = await this.api.setDevicePrinters(event.detail);
+      if (attempt !== this.#printersSwitch) return;
       if (this.#heldIdentity !== undefined)
         this.#heldIdentity = { ...this.#heldIdentity, ...stored };
+      this.printersError = null;
       this.devicePrinters = {
         receipt: { ...this.devicePrinters.receipt, current: stored.receiptPrinterId },
         paymentSlip: { ...this.devicePrinters.paymentSlip, current: stored.paymentSlipPrinterId },
       };
     } catch (error) {
+      if (attempt !== this.#printersSwitch) return;
       const { code, field } = error as { code?: unknown; field?: unknown };
       this.printersError = {
         code: typeof code === "string" ? code : "server.internal",

@@ -52,7 +52,6 @@ describe("till-device-chooser", () => {
           id: "d2",
           kind: "kds_station",
           label: "Pass screen",
-
           stationId: "s1",
           active: true,
         },
