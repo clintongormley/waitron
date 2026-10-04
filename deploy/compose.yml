@@ -77,7 +77,7 @@ services:
   # Production starts the small service too because Compose is installed before onboarding selects a
   # mode, but the application never falls back to it for a live installation.
   mailpit:
-    image: axllent/mailpit:v1.31.2
+    image: axllent/mailpit:v1.31.3
     restart: unless-stopped
     networks:
       - internal
