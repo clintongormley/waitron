@@ -2679,6 +2679,10 @@ The fixed first and pinned end columns are listed but cannot move or hide. Drag 
 reorder the others; Restore defaults resets order and visibility. The table remembers choices when it
 has a `viewKey`. Clicking a column heading still sorts it.
 
+**Column drag feedback in Customise — DONE (W63, owner 2026-10-04).** During a pointer drag, a
+floating copy of the column name follows the pointer and the destination row is highlighted. Both
+clear when the drag ends or the dialog closes; keyboard reordering and saved order still work.
+
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through
 that teaches a new user what to set up and in what order — devices, printers, device profiles, and

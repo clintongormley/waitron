@@ -3254,6 +3254,46 @@ test("dragging a column handle moves it to the pointed movable row", async () =>
   expect(headers(el)).toEqual(["Name", "Extra", "Count"]);
 });
 
+test("a dragged column follows the pointer and shows its drop destination", async () => {
+  const columns = [choosable[0]!, choosable[1]!, { ...choosable[2]!, choosable: "shown" as const }];
+  const el = await table({ columns });
+  await userEvent.click(trigger(el));
+  const source = panel(el).querySelector<HTMLButtonElement>('[data-reorder="extra"]')!;
+  const destination = panel(el).querySelector<HTMLElement>('[data-column-row="count"]')!;
+  const start = source.getBoundingClientRect();
+  const end = destination.getBoundingClientRect();
+  const x = end.left + end.width / 2;
+  const y = end.top + end.height / 2;
+  source.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      pointerId: 11,
+      button: 0,
+      clientX: start.left + start.width / 2,
+      clientY: start.top + start.height / 2,
+    }),
+  );
+  document.dispatchEvent(
+    new PointerEvent("pointermove", { pointerId: 11, clientX: x, clientY: y }),
+  );
+  await el.updateComplete;
+  const preview = panel(el).querySelector<HTMLElement>(".column-drag-preview");
+  expect(preview?.textContent?.trim()).toBe("Extra");
+  expect(preview?.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(destination.hasAttribute("data-drop-target")).toBe(true);
+  const before = preview!.getBoundingClientRect();
+  document.dispatchEvent(
+    new PointerEvent("pointermove", { pointerId: 11, clientX: x + 12, clientY: y + 8 }),
+  );
+  await el.updateComplete;
+  const after = preview!.getBoundingClientRect();
+  expect(after.left - before.left).toBeCloseTo(12, 0);
+  expect(after.top - before.top).toBeCloseTo(8, 0);
+  document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 11 }));
+  await el.updateComplete;
+  expect(panel(el).querySelector(".column-drag-preview")).toBeNull();
+  expect(destination.hasAttribute("data-drop-target")).toBe(false);
+});
+
 test("a secondary pointer cannot start a column drag", async () => {
   const columns = [choosable[0]!, choosable[1]!, { ...choosable[2]!, choosable: "shown" as const }];
   const el = await table({ columns });
