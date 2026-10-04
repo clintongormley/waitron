@@ -1,6 +1,6 @@
 import { html } from "lit";
 import { currentContentLanguages, type SummaryField } from "@waitron/ui";
-import { formatMoney } from "@waitron/shared";
+import { formatMoney, resolveContentText } from "@waitron/shared";
 import { MAX_MODIFIER_INTEGER, isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { currentLocale, t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -36,13 +36,32 @@ export const priceText = (value: string) =>
 export const priceSearchText = (shown: string, raw: readonly string[]) =>
   [shown, shown.replace(/\u00a0/g, " "), ...raw].join(" ");
 
+/** A language's own text in `value`, read as the customer-facing resolver reads a request for the
+ * language's plain code: that code first, then its regional keys such as `en-GB`. "" when the
+ * language has none. `locale` must be a plain code, here and in `withLanguageText`. */
+export const languageText = (value: Readonly<Record<string, string>>, locale: string) =>
+  resolveContentText(value, locale, locale);
+
+/** `value` with `locale`'s text set to `text` under its plain code, every regional key of that
+ * language dropped so none outlives the edit; other languages' keys are kept as stored. */
+export function withLanguageText(
+  value: Readonly<Record<string, string>>,
+  locale: string,
+  text: string,
+): Record<string, string> {
+  const others = Object.entries(value).filter(
+    ([key]) => key !== locale && !key.startsWith(`${locale}-`),
+  );
+  return { ...Object.fromEntries(others), [locale]: text };
+}
+
 /** Each language's text after its upper-case code, blank ones left out. */
 export function namesLine(
   locales: readonly string[],
   text: Record<string, string>,
 ): { label: string; value: string }[] {
   return locales.flatMap((locale) => {
-    const value = text[locale]?.trim();
+    const value = languageText(text, locale).trim();
     return value ? [{ label: locale.toUpperCase(), value }] : [];
   });
 }
@@ -57,7 +76,7 @@ export function effectiveNamesLine(
   staffName: string,
 ): SummaryField[] {
   return locales.flatMap((locale) => {
-    const own = text[locale]?.trim();
+    const own = languageText(text, locale).trim();
     if (own) return [{ label: locale.toUpperCase(), value: own }];
     const inherited = defaultLanguageHint(text, locale, defaultLanguage) || staffName.trim();
     return inherited ? [{ label: locale.toUpperCase(), value: inherited, placeholder: true }] : [];
@@ -167,7 +186,7 @@ export function defaultLanguageHint(
   defaultLanguage: string | undefined,
 ): string {
   if (defaultLanguage === undefined || locale === defaultLanguage) return "";
-  return value[defaultLanguage]?.trim() ?? "";
+  return languageText(value, defaultLanguage).trim();
 }
 
 /**
@@ -190,8 +209,8 @@ export function optionalTextFields(
       context,
       `${key}-${locale}`,
       `${label} (${locale})`,
-      value[locale] ?? "",
-      (text) => change({ ...value, [locale]: text }),
+      languageText(value, locale),
+      (text) => change(withLanguageText(value, locale, text)),
       false,
       defaultLanguageHint(value, locale, defaultLanguage) || placeholder,
     ),

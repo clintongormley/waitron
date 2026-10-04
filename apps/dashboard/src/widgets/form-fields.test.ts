@@ -152,6 +152,13 @@ describe("namesLine", () => {
     expect(namesLine(["es", "en"], { es: "", en: " " })).toEqual([]);
     expect(namesLine(["es", "en"], {})).toEqual([]);
   });
+
+  it("lists a language whose name is stored under a regional code", () => {
+    expect(namesLine(["es", "en"], { "es-ES": "Pan", "en-GB": "Bread" })).toEqual([
+      { label: "ES", value: "Pan" },
+      { label: "EN", value: "Bread" },
+    ]);
+  });
 });
 
 describe("effectiveNamesLine", () => {
@@ -240,6 +247,21 @@ describe("effectiveNamesLine", () => {
   it("is empty when every name and the staff name are blank", () => {
     expect(effectiveNamesLine(["es", "en"], { es: "", en: " " }, "es", "  ")).toEqual([]);
     expect(effectiveNamesLine(["es", "en"], {}, "es", "")).toEqual([]);
+  });
+
+  it("shows a language's regional name as its own, and a regional default-language name as the fallback", () => {
+    expect(
+      effectiveNamesLine(
+        ["es", "en", "ca"],
+        { "en-GB": "Make it yours", "es-ES": "Añádele algo" },
+        "es",
+        "Extras",
+      ),
+    ).toEqual([
+      { label: "ES", value: "Añádele algo" },
+      { label: "EN", value: "Make it yours" },
+      { label: "CA", value: "Añádele algo", placeholder: true },
+    ]);
   });
 });
 
@@ -418,6 +440,52 @@ describe("optionalTextFields", () => {
     ]);
     expect(changeFrom(inputs[0]!, { value: "Pan" })).toBe(false);
     expect(change).toHaveBeenCalledExactlyOnceWith({ en: "Bread", es: "Pan" });
+  });
+
+  const stored = { "en-GB": "Bread", "en-US": "Bread roll", "es-ES": "Pan", "pt-BR": "Pão" };
+
+  it("shows each language's name stored under a regional code", async () => {
+    const inputs = await renderAll<WtInput>(
+      optionalTextFields(
+        context({ locales: ["es", "en", "ca"] }),
+        "customer",
+        "Menu name",
+        stored,
+        () => {},
+        "Pan staff",
+        "es",
+      ),
+      "wt-input",
+    );
+    expect(inputs.map((input) => [input.name, input.value, input.placeholder])).toEqual([
+      ["customer-es", "Pan", "Pan staff"],
+      ["customer-en", "Bread", "Pan"],
+      ["customer-ca", "", "Pan"],
+    ]);
+  });
+
+  it("prefers a language's plain code over its regional ones", async () => {
+    const inputs = await renderAll<WtInput>(
+      optionalTextFields(
+        context(),
+        "customer",
+        "Menu name",
+        { en: "Loaf", "en-GB": "Bread" },
+        () => {},
+      ),
+      "wt-input",
+    );
+    expect(inputs.map((input) => input.value)).toEqual(["", "Loaf"]);
+  });
+
+  it("saves an edited language under its plain code alone, keeping every other language's keys as stored", async () => {
+    const change = vi.fn();
+    const inputs = await renderAll<WtInput>(
+      optionalTextFields(context(), "customer", "Menu name", stored, change),
+      "wt-input",
+    );
+    changeFrom(inputs[1]!, { value: "Loaf" });
+    expect(change).toHaveBeenCalledExactlyOnceWith({ "es-ES": "Pan", "pt-BR": "Pão", en: "Loaf" });
   });
 });
 

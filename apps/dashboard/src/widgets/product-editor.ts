@@ -29,6 +29,7 @@ import { EACH_CHOICE } from "./variant-table.js";
 import { categoryPathField, categoryPathText } from "./classification-fields.js";
 import {
   defaultLanguageHint,
+  languageText,
   namesLine,
   nonBlankNames,
   optionalTextFields,
@@ -36,6 +37,7 @@ import {
   priceText,
   switchField,
   textField,
+  withLanguageText,
   type FieldContext,
 } from "./form-fields.js";
 import type { CategorySummary, DashboardApi } from "../api/client.js";
@@ -144,7 +146,8 @@ export function productEditorTranslationField(
   },
   language: string,
 ): string | null {
-  const missing = (text: LocalizedText | null) => text !== null && !(text[language] ?? "").trim();
+  const missing = (text: LocalizedText | null) =>
+    text !== null && !languageText(text, language).trim();
   if (missing(value.customerName)) return `customer-name-${language}`;
   const index = value.variants.findIndex(
     (variant) => variant.active && missing(variant.customerName),
@@ -996,7 +999,7 @@ export class ProductEditor extends LitElement {
     const text = value ?? {};
     if (!namesLine(this.locales, text).length) return none;
     return this.locales
-      .map((locale) => `${locale.toUpperCase()}: ${text[locale]?.trim() || none}`)
+      .map((locale) => `${locale.toUpperCase()}: ${languageText(text, locale).trim() || none}`)
       .join(SUMMARY_SEPARATOR);
   }
 
@@ -1044,9 +1047,9 @@ export class ProductEditor extends LitElement {
         ? this.draft.description
         : this.inherited.description;
     const descriptionHint = (locale: string) => {
-      if (!hintSource || (this.draft.description?.[locale] ?? "").trim()) return "";
-      return hintSource[locale]?.trim()
-        ? hintSource[locale]
+      if (!hintSource || languageText(this.draft.description ?? {}, locale).trim()) return "";
+      return languageText(hintSource, locale).trim()
+        ? languageText(hintSource, locale)
         : defaultLanguageHint(hintSource, locale, this.language);
     };
     const summary = [
@@ -1081,14 +1084,14 @@ export class ProductEditor extends LitElement {
             name=${`description-${locale}`}
             label=${`${t("editor.description")} (${locale})`}
             placeholder=${descriptionHint(locale)}
-            .value=${this.draft.description?.[locale] ?? ""}
+            .value=${languageText(this.draft.description ?? {}, locale)}
             error=${this.error(`description-${locale}`)}
             @wt-change=${(event: CustomEvent<{ value: string }>) => {
               event.stopPropagation();
-              this.change("description", {
-                ...this.draft.description,
-                [locale]: event.detail.value,
-              });
+              this.change(
+                "description",
+                withLanguageText(this.draft.description ?? {}, locale, event.detail.value),
+              );
             }}
           ></wt-textarea>`;
         })}
