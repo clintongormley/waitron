@@ -359,8 +359,10 @@ describe("alert routes", () => {
   });
 });
 
-// A card-provider seat whose only live method reports a flat 5% battery.
-function stubCardProvider(): CardProviderContribution {
+// A card-provider seat whose only live method reports a 5% battery by default.
+function stubCardProvider(
+  status: () => Promise<ReaderStatus> = async () => ({ online: true, batteryPercent: 5 }),
+): CardProviderContribution {
   const unused = (): never => {
     throw new Error("stubCardProvider: this method is not used by the battery source");
   };
@@ -376,7 +378,7 @@ function stubCardProvider(): CardProviderContribution {
       list: unused,
       add: unused,
       remove: unused,
-      status: async (): Promise<ReaderStatus> => ({ online: true, batteryPercent: 5 }),
+      status,
     },
   };
 }
@@ -454,6 +456,82 @@ const liveGet = (app: Hono, cookie: string) =>
   });
 
 describe("ongoing alert sources through the route", () => {
+  it("answers with battery unavailable while a provider status remains held", async () => {
+    const v = await seedVenue();
+    await seedLowReader();
+    await raise(v, "payment.offline_forward_declined");
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => (entered = resolve));
+    let release!: (status: ReaderStatus) => void;
+    const held = new Promise<ReaderStatus>((resolve) => (release = resolve));
+    const source = batteryAlertSource({
+      providers: [
+        stubCardProvider(async () => {
+          entered();
+          return held;
+        }),
+      ],
+      runtimeDeps: cardRuntimeDeps,
+      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+    });
+    const app = appFor(createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [source] }));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const result: { body?: { alerts: { code: string; area: string }[] } } = {};
+      const read = Promise.resolve(get(app, "/management-api/alerts", v.manager)).then(
+        async (res) => {
+          result.body = (await res.json()) as typeof result.body;
+        },
+      );
+      await started;
+      await vi.advanceTimersByTimeAsync(50_000);
+      expect(result.body?.alerts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: "payment.offline_forward_declined" }),
+          expect.objectContaining({ code: "alert.source_unavailable", area: "card_reader" }),
+        ]),
+      );
+      await read;
+    } finally {
+      release({ online: true, batteryPercent: 5 });
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a low-battery reading when a provider status takes 39 seconds", async () => {
+    const v = await seedVenue();
+    await seedLowReader();
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => (entered = resolve));
+    const source = batteryAlertSource({
+      providers: [
+        stubCardProvider(async () => {
+          entered();
+          await new Promise((resolve) => setTimeout(resolve, 39_000));
+          return { online: true, batteryPercent: 5 };
+        }),
+      ],
+      runtimeDeps: cardRuntimeDeps,
+      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const app = appFor(createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [source] }));
+      const read = Promise.resolve(get(app, "/management-api/alerts", v.manager));
+      await started;
+      await vi.advanceTimersByTimeAsync(39_000);
+      const body = (await (await read).json()) as { alerts: { code: string; params: unknown }[] };
+      expect(body.alerts).toContainEqual(
+        expect.objectContaining({
+          code: "reader.battery_low",
+          params: { reader: "Datafono", percent: 5 },
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reports a SumUp reader's low battery through its real credential read", async () => {
     const v = await seedVenue();
     const ring = loadKeyRing({
