@@ -40,6 +40,7 @@ export class KitchenScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) readOnly = false;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -130,23 +131,20 @@ export class KitchenScreen extends LitElement {
     return html`
       <section data-test="courses-panel">
         <h2 class="panel-title">${t("kitchen.courses_title")}</h2>
-        <dashboard-course-list .api=${this.api}></dashboard-course-list>
+        <dashboard-course-list .api=${this.api} .readOnly=${this.readOnly}></dashboard-course-list>
       </section>
 
       <section class="bump" role="group" aria-label=${t("kitchen.bump_mode")}>
         <span class="panel-title">${t("kitchen.bump_mode")}</span>
         <div class="bump-options">
-          ${this.#bumpOption("line", t("kitchen.bump_line"))}
-          ${this.#bumpOption("ticket", t("kitchen.bump_ticket"))}
+          ${this.readOnly ? (this.bumpMode === "line" ? t("kitchen.bump_line") : t("kitchen.bump_ticket")) : html`${this.#bumpOption("line", t("kitchen.bump_line"))}${this.#bumpOption("ticket", t("kitchen.bump_ticket"))}`}
         </div>
       </section>
 
       <section class="bump" role="group" aria-label=${t("kitchen.fire_mode")}>
         <span class="panel-title">${t("kitchen.fire_mode")}</span>
         <div class="bump-options">
-          ${this.#fireOption("waiter", t("kitchen.fire_waiter"))}
-          ${this.#fireOption("kitchen", t("kitchen.fire_kitchen"))}
-          ${this.#fireOption("expo", t("kitchen.fire_expo"))}
+          ${this.readOnly ? t(this.fireControl === "waiter" ? "kitchen.fire_waiter" : this.fireControl === "kitchen" ? "kitchen.fire_kitchen" : "kitchen.fire_expo") : html`${this.#fireOption("waiter", t("kitchen.fire_waiter"))}${this.#fireOption("kitchen", t("kitchen.fire_kitchen"))}${this.#fireOption("expo", t("kitchen.fire_expo"))}`}
         </div>
       </section>
 

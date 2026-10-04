@@ -47,7 +47,8 @@ export interface DashboardSettingsPanel {
   /** Core panels count as 0 and come first on a tie. */
   order?: number;
   requiresPermission: string;
-  create(ctx: DashboardModuleContext): DashboardScreenHandle;
+  readPermission?: string;
+  create(ctx: DashboardModuleContext): { render(readOnly?: boolean): TemplateResult };
 }
 
 /** One module's dashboard contribution: its identity, its first screen's placement and factory, any

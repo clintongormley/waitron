@@ -160,7 +160,7 @@ describe("service-status config CRUD (venue.configure)", () => {
     ).toBe("management.request_invalid");
   });
 
-  it("gates every verb on venue.configure — a staff-role session is refused (authorization.not_permitted)", async () => {
+  it("refuses a staff-role session on status reads and writes (authorization.not_permitted)", async () => {
     const staffSession = await seedSession("staff");
     expect(
       await codeOf(() =>

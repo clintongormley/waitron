@@ -42,6 +42,10 @@ export class ServiceStatusScreen extends LitElement {
         align-items: flex-end;
         flex-wrap: wrap;
       }
+      .read-row {
+        display: grid;
+        gap: var(--wt-space-2);
+      }
       .new {
         display: flex;
         gap: var(--wt-space-3);
@@ -57,6 +61,7 @@ export class ServiceStatusScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) readOnly = false;
   readonly #statusesDrafts = new DraftRows<EditableStatus>();
   readonly #queries = new DashboardQueries(
     this,
@@ -178,6 +183,18 @@ export class ServiceStatusScreen extends LitElement {
   }
 
   #renderRow(s: EditableStatus): TemplateResult {
+    if (this.readOnly) {
+      return html`<li data-test="row-${s.id}">
+        <wt-card>
+          <div class="read-row">
+            <strong>${s.label}</strong>
+            <span>${t("status.color")}: ${s.color}</span>
+            <span>${t("status.display_order")}: ${s.displayOrder}</span>
+            <span>${s.active ? t("status.active") : t("status.inactive")}</span>
+          </div>
+        </wt-card>
+      </li>`;
+    }
     return html`<li data-test="row-${s.id}">
       <wt-card>
         <div class="row">
@@ -249,31 +266,34 @@ export class ServiceStatusScreen extends LitElement {
         ${this.statuses.map((s) => this.#renderRow(s))}
       </ol>
 
-      <div class="new">
-        <wt-input
-          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add]"))}
-          label=${t("status.new_label")}
-          data-test="new-label"
-          .value=${this.newLabel}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewLabel(e)}
-        ></wt-input>
-        <wt-input
-          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add]"))}
-          type="color"
-          label=${t("status.new_color")}
-          data-test="new-color"
-          .value=${this.newColor}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewColor(e)}
-        ></wt-input>
-        <wt-button
-          variant="primary"
-          data-test="add"
-          ?disabled=${this.submitting}
-          @click=${() => void this.#create()}
-          >${t("action.create")}</wt-button
-        >
-      </div>
-
+      ${
+        this.readOnly
+          ? nothing
+          : html`<div class="new">
+              <wt-input
+                @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add]"))}
+                label=${t("status.new_label")}
+                data-test="new-label"
+                .value=${this.newLabel}
+                @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewLabel(e)}
+              ></wt-input>
+              <wt-input
+                @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=add]"))}
+                type="color"
+                label=${t("status.new_color")}
+                data-test="new-color"
+                .value=${this.newColor}
+                @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewColor(e)}
+              ></wt-input>
+              <wt-button
+                variant="primary"
+                data-test="add"
+                ?disabled=${this.submitting}
+                @click=${() => void this.#create()}
+                >${t("action.create")}</wt-button
+              >
+            </div>`
+      }
       ${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
     `;
   }

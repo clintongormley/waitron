@@ -25,6 +25,7 @@ const model: VenueServiceSettingsView = {
 async function mount(
   api: VenueServiceApi,
   subject: "kitchen" | "tables" = "kitchen",
+  readOnly = false,
 ): Promise<ServiceSettingsPanel> {
   const host = document.createElement("div");
   applyTokens(host);
@@ -33,10 +34,33 @@ async function mount(
   const el = document.createElement("dashboard-venue-service-settings") as ServiceSettingsPanel;
   el.api = api;
   el.subject = subject;
+  el.readOnly = readOnly;
   host.appendChild(el);
   await settle(el);
   return el;
 }
+
+it("shows both settings panels to a read-only viewer with every control disabled", async () => {
+  const api = {
+    loadSettingsReadOnly: vi.fn().mockResolvedValue(model),
+    saveSettings: vi.fn(),
+    saveClearingWorkflow: vi.fn(),
+  } as unknown as VenueServiceApi;
+  const kitchen = await mount(api, "kitchen", true);
+  const tables = await mount(api, "tables", true);
+  expect(api.loadSettingsReadOnly).toHaveBeenCalledTimes(2);
+  expect(kitchen.shadowRoot!.querySelector('[data-test="kitchen-changes"]')).not.toBeNull();
+  expect(tables.shadowRoot!.querySelector('[data-test="clearing-settings"]')).not.toBeNull();
+  for (const panel of [kitchen, tables]) {
+    for (const control of panel.shadowRoot!.querySelectorAll<HTMLElement & { disabled: boolean }>(
+      "wt-switch, wt-combobox",
+    )) {
+      expect(control.disabled).toBe(true);
+    }
+  }
+  expect(api.saveSettings).not.toHaveBeenCalled();
+  expect(api.saveClearingWorkflow).not.toHaveBeenCalled();
+});
 
 async function settle(el: ServiceSettingsPanel) {
   await el.updateComplete;

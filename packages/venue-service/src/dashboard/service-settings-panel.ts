@@ -48,6 +48,7 @@ export class ServiceSettingsPanel extends LitElement {
   ];
   @property({ attribute: false }) api!: VenueServiceApi;
   @property() subject: "kitchen" | "tables" = "kitchen";
+  @property({ attribute: false }) readOnly = false;
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
@@ -79,7 +80,7 @@ export class ServiceSettingsPanel extends LitElement {
           read: () => {
             const api = initial ? this.api : (this.api.background ?? this.api);
             initial = false;
-            return api.loadSettings();
+            return this.readOnly ? api.loadSettingsReadOnly() : api.loadSettings();
           },
         },
         (value) => {
@@ -98,7 +99,7 @@ export class ServiceSettingsPanel extends LitElement {
     write: () => Promise<void>,
     stored: Partial<VenueServiceSettingsView>,
   ): Promise<void> {
-    if (this.busy) return;
+    if (this.busy || this.readOnly) return;
     this.busy = true;
     this.fieldErrors = {};
     try {
@@ -125,9 +126,10 @@ export class ServiceSettingsPanel extends LitElement {
       name=${name}
       label=${label}
       .checked=${live(checked)}
-      .disabled=${this.busy}
+      .disabled=${this.busy || this.readOnly}
       @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
         event.stopPropagation();
+        if (this.readOnly) return;
         save(event.detail.checked);
       }}
     ></wt-switch>`;
@@ -207,10 +209,11 @@ export class ServiceSettingsPanel extends LitElement {
         })),
       ]}
       .value=${live(shown)}
-      ?disabled=${this.busy}
+      ?disabled=${this.busy || this.readOnly}
       error=${this.fieldErrors.releaseReminderMinutes ?? ""}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
+        if (this.readOnly) return;
         const value = event.detail.value;
         if (value === shown) return;
         const releaseReminderMinutes = value === "" ? null : Number(value);
@@ -238,10 +241,11 @@ export class ServiceSettingsPanel extends LitElement {
         label: t(`venue.kitchen_ticket_grouping.${choice}`),
       }))}
       .value=${live(stored)}
-      ?disabled=${this.busy}
+      ?disabled=${this.busy || this.readOnly}
       error=${this.fieldErrors.kitchenTicketGrouping ?? ""}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
+        if (this.readOnly) return;
         if (event.detail.value === stored) return;
         const kitchenTicketGrouping = event.detail.value as KitchenTicketGrouping;
         void this.#save(

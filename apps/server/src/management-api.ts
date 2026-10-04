@@ -391,6 +391,17 @@ function withVenueAuth<T>(
   });
 }
 
+function withVenueReadAuth<T>(
+  deps: ManagementApiDeps,
+  sessionId: string,
+  fn: (tx: Transaction) => Promise<T>,
+): Promise<T> {
+  return withTransaction(deps.db, async (tx) => {
+    await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.view" });
+    return fn(tx);
+  });
+}
+
 /** Runs `fn` in one transaction after confirming the session holds `layout.configure` and that
  * device profile `id` exists, which the catalogue's home-layout reads and writes do not check. */
 function withLayoutProfile<T>(
@@ -1430,7 +1441,6 @@ export function mountManagementApi(
   );
 
   // ── Service statuses ──
-  // Each status verb authorizes `venue.configure` itself.
   app.post("/management-api/service-statuses", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1930,7 +1940,7 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const mode = await withVenueAuth(deps, sessionId, (tx) => getBumpMode(tx, cfg));
+      const mode = await withVenueReadAuth(deps, sessionId, (tx) => getBumpMode(tx, cfg));
       return c.json({ mode });
     }),
   );
@@ -1973,7 +1983,7 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const courses = await withVenueAuth(deps, sessionId, (tx) => listCourses(tx, cfg));
+      const courses = await withVenueReadAuth(deps, sessionId, (tx) => listCourses(tx, cfg));
       return c.json(courses);
     }),
   );
@@ -2068,7 +2078,7 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const mode = await withVenueAuth(deps, sessionId, (tx) => getFireControl(tx, cfg));
+      const mode = await withVenueReadAuth(deps, sessionId, (tx) => getFireControl(tx, cfg));
       return c.json({ mode });
     }),
   );

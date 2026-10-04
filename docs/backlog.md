@@ -4918,12 +4918,14 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   open, including advisor questions Q21, Q14, Q27 and Q22.
   Its §4 day types and §5 placement are revised by A261.
 - **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — SPEC
-  APPROVED; step 1 built, awaiting PR** ([plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
+  APPROVED; step 1 implemented, later steps open** ([plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
   The sidebar's Venue operations group; Venue settings with one tab per group
   (Receipts moves there); Departments and zones as one table edited in place; Prep stations as one
   tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
   special dates, a calendar and public holidays; Printing rules and the cash drawer policy deleted.
   Eight build steps, each its own queue item.
+  Step 1 gathers Receipts, Tables and Kitchen settings into tabs; supervisors can read Tables and
+  Kitchen, while writes remain manager-only (owner amendment, 2026-10-04).
   [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
   states and signals a table has that Waitron sets itself (today Free, Occupied, Reserved from a

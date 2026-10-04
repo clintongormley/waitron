@@ -39,6 +39,7 @@ const LOCALE = "es-ES";
 const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
+const SUPERVISOR_EMAIL = "supervisor@x.com";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -97,7 +98,11 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
   // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn`
   // generators, which a raw SQL insert never reaches.
   const { managerId, staffId } = await withTransaction(suite.db, async (tx) => {
-    const seed = async (displayName: string, email: string, role: "manager" | "staff") => {
+    const seed = async (
+      displayName: string,
+      email: string,
+      role: "manager" | "staff" | "supervisor",
+    ) => {
       const [person] = await tx
         .insert(persons)
         .values({
@@ -110,6 +115,7 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
         .returning({ id: persons.id });
       return person!.id;
     };
+    await seed("The Supervisor", SUPERVISOR_EMAIL, "supervisor");
     return {
       managerId: await seed("The Manager", MANAGER_EMAIL, "manager"),
       staffId: await seed("The Clerk", STAFF_EMAIL, "staff"),
@@ -163,6 +169,7 @@ let app: Hono;
 let venue: VenueResult;
 let managerCookie: string;
 let staffCookie: string;
+let supervisorCookie: string;
 const json = { "content-type": "application/json" };
 
 beforeAll(async () => {
@@ -171,6 +178,7 @@ beforeAll(async () => {
   app = mountApp(venue);
   managerCookie = await login(app, MANAGER_EMAIL);
   staffCookie = await login(app, STAFF_EMAIL);
+  supervisorCookie = await login(app, SUPERVISOR_EMAIL);
 });
 
 async function req(path: string, init: RequestInit, cookie?: string): Promise<Response> {
@@ -179,6 +187,24 @@ async function req(path: string, init: RequestInit, cookie?: string): Promise<Re
     headers: { ...json, ...(cookie ? { cookie } : {}), ...init.headers },
   });
 }
+
+it("lets a supervisor read Tables and Kitchen settings while refusing edits", async () => {
+  for (const path of ["/service-statuses", "/bump-mode", "/courses", "/fire-control"]) {
+    const response = await req(path, { method: "GET" }, supervisorCookie);
+    expect(response.status, path).toBe(200);
+  }
+  for (const [path, method, body] of [
+    ["/service-statuses", "POST", { label: unique("Denied"), color: "#fff" }],
+    ["/bump-mode", "PUT", { mode: "ticket" }],
+    ["/courses", "POST", { name: unique("Denied") }],
+    ["/fire-control", "PUT", { mode: "expo" }],
+  ] as const) {
+    const response = await req(path, { method, body: JSON.stringify(body) }, supervisorCookie);
+    expect(response.status, path).toBe(403);
+    expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  }
+  expect((await req("/service-statuses", { method: "GET" }, managerCookie)).status).toBe(200);
+});
 
 async function createZone(name: string): Promise<string> {
   const res = await req(

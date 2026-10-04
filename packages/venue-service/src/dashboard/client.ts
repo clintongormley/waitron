@@ -123,6 +123,10 @@ export class VenueServiceApi {
     };
   }
 
+  loadSettingsReadOnly(): Promise<VenueServiceSettingsView> {
+    return this.#read<VenueServiceSettingsView>("/management-api/venue-service/settings");
+  }
+
   createDepartment(input: {
     name: string;
     tradingName: string;

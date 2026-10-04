@@ -250,7 +250,7 @@ const UNLISTED_SCREENS: ScreenRule[] = [
 type CoreSettingsPanel = AccessRule & {
   key: string;
   tab: VenueSettingsTab;
-  render(api: DashboardApi): TemplateResult;
+  render(api: DashboardApi, canConfigure: boolean): TemplateResult;
 };
 
 const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
@@ -263,13 +263,20 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
   {
     key: "statuses",
     tab: "tables",
-    render: (api) =>
-      html`<dashboard-service-status-screen .api=${api}></dashboard-service-status-screen>`,
+    render: (api, canConfigure) =>
+      html`<dashboard-service-status-screen
+        .api=${api}
+        .readOnly=${!canConfigure}
+      ></dashboard-service-status-screen>`,
   },
   {
     key: "kitchen",
     tab: "kitchen",
-    render: (api) => html`<dashboard-kitchen-screen .api=${api}></dashboard-kitchen-screen>`,
+    render: (api, canConfigure) =>
+      html`<dashboard-kitchen-screen
+        .api=${api}
+        .readOnly=${!canConfigure}
+      ></dashboard-kitchen-screen>`,
   },
 ];
 
@@ -650,7 +657,10 @@ export class DashboardApp extends LitElement {
     { screen: DashboardScreenPlacement; handle: DashboardScreenHandle }
   >();
   #navGroups = new Map<NavGroupId, DashboardScreenPlacement[]>();
-  #activePanels: { panel: DashboardSettingsPanel; handle: DashboardScreenHandle }[] = [];
+  #activePanels: {
+    panel: DashboardSettingsPanel;
+    handle: ReturnType<DashboardSettingsPanel["create"]>;
+  }[] = [];
 
   #sessionPermissions: string[] = [];
 
@@ -1470,15 +1480,20 @@ export class DashboardApp extends LitElement {
       key: panel.key,
       tab: panel.tab,
       order: 0,
-      render: () => panel.render(this.api),
+      render: () => panel.render(this.api, this.#sessionPermissions.includes("venue.configure")),
     }));
     const modules = this.#activePanels
-      .filter(({ panel }) => this.#sessionPermissions.includes(panel.requiresPermission))
+      .filter(
+        ({ panel }) =>
+          this.#sessionPermissions.includes(panel.requiresPermission) ||
+          (panel.readPermission !== undefined &&
+            this.#sessionPermissions.includes(panel.readPermission)),
+      )
       .map(({ panel, handle }) => ({
         key: panel.id,
         tab: panel.tab as VenueSettingsTab,
         order: panel.order ?? 0,
-        render: () => handle.render(),
+        render: () => handle.render(!this.#sessionPermissions.includes(panel.requiresPermission)),
       }));
     return [...core, ...modules].sort((a, b) => a.order - b.order);
   }

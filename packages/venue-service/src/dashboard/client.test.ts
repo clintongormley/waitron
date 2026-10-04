@@ -11,6 +11,21 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("VenueServiceApi", () => {
+  it("loads a supervisor's settings from the settings-only route", async () => {
+    const settings = {
+      settings: { editSentLines: true },
+      kitchenTicketGrouping: "combined",
+      printHeldWork: false,
+      releaseReminderMinutes: 10,
+      clearingWorkflow: false,
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(settings));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    expect(await api.loadSettingsReadOnly()).toEqual(settings);
+    expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
+      ["/management-api/venue-service/settings", "GET"],
+    ]);
+  });
   it("stores whether tables need clearing after Finish table", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));

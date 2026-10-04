@@ -91,6 +91,7 @@ export class CourseList extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) readOnly = false;
   @state() private courses: Course[] = [];
   @state() private edit: Edit | null = null;
   @state() private errorKey: string | null = null;
@@ -371,6 +372,10 @@ export class CourseList extends LitElement {
   }
 
   #table(adding: Edit | null): TemplateResult {
+    if (this.readOnly)
+      return html`<ul>
+        ${this.courses.map((course) => html`<li data-course=${course.id}>${course.name}</li>`)}
+      </ul>`;
     return html`<div
       class="table-wrap"
       tabindex="0"
@@ -409,22 +414,26 @@ export class CourseList extends LitElement {
 
   override render(): TemplateResult {
     const adding = this.edit?.id === NEW ? this.edit : null;
-    return html`${this.#reorder.liveRegion()}
-      ${
-        this.courses.length === 0 && adding === null
-          ? html`<p class="empty" data-test="empty">${t("kitchen.no_courses")}</p>`
-          : this.#table(adding)
-      }
-      ${
-        this.errorKey
-          ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
-          : nothing
-      }
-      <div class="add">
-        <wt-button variant="secondary" data-test="add-course" @click=${() => void this.#add()}
-          >${t("kitchen.add_course")}</wt-button
-        >
-      </div>`;
+    return html`${this.readOnly ? nothing : this.#reorder.liveRegion()}
+    ${
+      this.courses.length === 0 && adding === null
+        ? html`<p class="empty" data-test="empty">${t("kitchen.no_courses")}</p>`
+        : this.#table(adding)
+    }
+    ${
+      this.errorKey
+        ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
+        : nothing
+    }
+    ${
+      this.readOnly
+        ? nothing
+        : html`<div class="add">
+            <wt-button variant="secondary" data-test="add-course" @click=${() => void this.#add()}
+              >${t("kitchen.add_course")}</wt-button
+            >
+          </div>`
+    }`;
   }
 }
 

@@ -13,6 +13,7 @@ export const PERMISSIONS = [
   // Assigning or removing the admin role changes who can control every permission. Admin only.
   "person.admin",
   "layout.configure",
+  "venue.view",
   "venue.configure",
   "system.manage",
   "schedule.manage",
@@ -48,6 +49,7 @@ const SUPERVISOR: ReadonlySet<Permission> = new Set([
   "sale.rectify",
   "cash.drawer",
   "report.view",
+  "venue.view",
 ]);
 const MANAGER: ReadonlySet<Permission> = new Set([
   ...SUPERVISOR,

@@ -420,6 +420,23 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
+    app.get("/management-api/venue-service/settings", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const settings = await withTransaction(ctx.db, async (tx) => {
+          await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.view" });
+          return {
+            settings: { editSentLines: await readEditSentLines(tx) },
+            kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
+            printHeldWork: await readPrintHeldWork(tx),
+            releaseReminderMinutes: await readReleaseReminderMinutes(tx),
+            clearingWorkflow: await readClearingWorkflow(tx),
+          };
+        });
+        return c.json(settings);
+      }),
+    );
+
     app.put("/management-api/venue-service/settings", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);

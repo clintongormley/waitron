@@ -2318,6 +2318,85 @@ describe("dashboard-app", () => {
     expect(location.pathname).toBe("/manage/venue-settings/view/tables");
   });
 
+  it("shows a supervisor Tables and Kitchen settings without edit controls", async () => {
+    const supervisor = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        role: "supervisor",
+        permissions: ["venue.view"],
+        modules: [],
+      }),
+      listStatuses: vi.fn().mockResolvedValue([
+        {
+          id: "s1",
+          label: "Ready",
+          color: "#abc",
+          displayOrder: 0,
+          active: true,
+          createdAt: "2026-10-01T00:00:00Z",
+        },
+      ]),
+      listCourses: vi
+        .fn()
+        .mockResolvedValue([{ id: "c1", name: "Starters", displayOrder: 0, active: true }]),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: supervisor });
+    await flush(el);
+    navVenueSettings(el)!.click();
+    await flush(el);
+    const settings = venueSettings(el)!;
+    const statuses = settings.shadowRoot!.querySelector<HTMLElement>(
+      "dashboard-service-status-screen",
+    )!;
+    await vi.waitFor(() =>
+      expect(statuses.shadowRoot!.querySelector("[data-test=row-s1]")).not.toBeNull(),
+    );
+    expect(statuses.shadowRoot!.querySelector("[data-test=row-s1]")!.textContent).toContain(
+      "Ready",
+    );
+    expect(statuses.shadowRoot!.querySelector("[data-test=row-s1]")!.textContent).toContain("#abc");
+    expect(statuses.shadowRoot!.querySelector("[data-test=row-s1]")!.textContent).toContain("0");
+    expect(statuses.shadowRoot!.querySelector("[data-test=new-label]")).toBeNull();
+    expect(statuses.shadowRoot!.querySelector("[data-test=save-s1]")).toBeNull();
+    const tabs = settings.shadowRoot!.querySelector<HTMLElement>("wt-tabs")!;
+    tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "kitchen" } }));
+    await flush(el);
+    const kitchen = settings.shadowRoot!.querySelector<HTMLElement>("dashboard-kitchen-screen")!;
+    await vi.waitFor(() =>
+      expect(kitchen.shadowRoot!.querySelector("dashboard-course-list")).not.toBeNull(),
+    );
+    expect(kitchen.shadowRoot!.querySelector("[data-test=bump-line]")).toBeNull();
+    expect(kitchen.shadowRoot!.querySelector("[data-test=fire-waiter]")).toBeNull();
+    const courses = kitchen.shadowRoot!.querySelector<HTMLElement>("dashboard-course-list")!;
+    await vi.waitFor(() => expect(courses.shadowRoot!.textContent).toContain("Starters"));
+    expect(courses.shadowRoot!.querySelector("[data-test=add-course]")).toBeNull();
+    expect(courses.shadowRoot!.querySelector("[data-test=name-c1]")).toBeNull();
+  });
+
+  it("includes venue-service settings panels for a supervisor as read-only", async () => {
+    const supervisor = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        role: "supervisor",
+        permissions: ["venue.view"],
+        modules: ["venue-service"],
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: supervisor });
+    await flush(el);
+    navVenueSettings(el)!.click();
+    await flush(el);
+    const settings = venueSettings(el)!;
+    const panels = settings.shadowRoot!.querySelectorAll<HTMLElement & { readOnly: boolean }>(
+      "dashboard-venue-service-settings",
+    );
+    expect(panels).toHaveLength(2);
+    expect([...panels].map((panel) => [panel.getAttribute("subject"), panel.readOnly])).toEqual([
+      ["tables", true],
+      ["kitchen", true],
+    ]);
+  });
+
   it("hides the diagnostics nav from a supervisor and shows it to a manager", async () => {
     const supervisor = stubApi({
       getMe: vi.fn().mockResolvedValue({

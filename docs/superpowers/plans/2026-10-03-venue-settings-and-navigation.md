@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-03-venue-operations-design.md` — §2 (sidebar), §3 (Venue settings), §5 (Receipts), §11 step 1. Everything else in the spec is a later step and out of scope here.
 
+**2026-10-04 owner amendment:** Supervisors read the Tables and Kitchen panels without edit controls. The four read routes use one `venue.view` permission; writes still use `venue.configure`. This replaces the original no-permission-change constraint below for those routes.
+
 ## Decisions (the driver's defaults — the owner may strike any of them)
 
 1. **Sidebar order:** Overview (no header), Reporting, Service, Products and menus, **Venue operations** (new), Team, Purchasing, Settings. Service keeps only Bookings (a module) for now; Live floor is a later spec. Venue operations holds, in order: **Departments and zones** (today's venue-service `venue-operations` screen, renamed in the sidebar), **Floor plan** (core `floor`, moved from Service), **Prep stations** (module, moved from Service), **Venue settings** (new). Hours (spec §7) arrives in step 5 and will slot between Departments and zones and Floor plan. Statuses, Kitchen, Receipts and Adjustment reasons leave the sidebar. A group with no page this session may open draws no header (today it would draw an empty header — checked: `#shownNav` returns `pages: []` and `#nav` draws the header for it).
