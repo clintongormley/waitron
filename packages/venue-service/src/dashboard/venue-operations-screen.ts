@@ -1727,7 +1727,8 @@ export class VenueOperationsScreen extends LitElement {
       ${this.#pageAlert()}
       ${
         this.model
-          ? html`<wt-tabs
+          ? html`${this.#policyTree()}
+              <wt-tabs
                 label=${t("venue.title")}
                 .value=${this.view}
                 .items=${[
@@ -1742,7 +1743,7 @@ export class VenueOperationsScreen extends LitElement {
                 <div slot="departments">${this.#departments()}</div>
                 <div slot="zones">${this.#zones()}</div>
               </wt-tabs>
-              ${this.#policyTree()} ${this.#modal()}`
+              ${this.#modal()}`
           : nothing
       }`;
   }

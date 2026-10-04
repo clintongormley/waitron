@@ -205,6 +205,15 @@ describe("venue operations screen", () => {
     expect(tree.shadowRoot!.textContent).toContain("Dining room");
   });
 
+  it("places the unified policy tree before the remaining legacy controls", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree");
+    const legacy = el.shadowRoot!.querySelector("wt-tabs")!;
+    expect(tree.compareDocumentPosition(legacy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("opens a new department from the policy tree's top action", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
@@ -3150,7 +3159,9 @@ describe("the venue tables at phone width", () => {
         } as unknown as VenueServiceApi);
         await selectTab(el, tab);
         if (open) await action(el, open);
-        expectRowMenusOnScreen(table(el, name), rows);
+        const list = table(el, name);
+        list.scrollIntoView({ block: "center" });
+        expectRowMenusOnScreen(list, rows);
       } finally {
         await page.viewport(width, height);
       }
