@@ -2220,11 +2220,14 @@ export class DashboardApi {
     receipt: ReceiptConfig,
     paperWidth?: PrintPaperWidth,
     language?: string,
+    departmentId?: string,
   ): Promise<ReceiptPreview> {
     const width = paperWidth === undefined ? "" : `&paperWidth=${encodeURIComponent(paperWidth)}`;
     const drawnIn = language === undefined ? "" : `&language=${encodeURIComponent(language)}`;
+    const department =
+      departmentId === undefined ? "" : `&departmentId=${encodeURIComponent(departmentId)}`;
     return this.#request<ReceiptPreview>(
-      `/management-api/receipt-preview?receipt=${encodeURIComponent(JSON.stringify(receipt))}${width}${drawnIn}`,
+      `/management-api/receipt-preview?receipt=${encodeURIComponent(JSON.stringify(receipt))}${width}${drawnIn}${department}`,
       "GET",
     );
   }

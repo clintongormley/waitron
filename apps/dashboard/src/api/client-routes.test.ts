@@ -359,6 +359,19 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("asks for the selected department's receipt preview without saving that choice", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ preview: {} }));
+    const api = new DashboardApi("", fetchImpl);
+    await api.previewReceipt({}, undefined, undefined, "aa000000-0000-4000-8000-000000000001");
+    expect(callsOf(fetchImpl)).toEqual([
+      [
+        "/management-api/receipt-preview?receipt=%7B%7D&departmentId=aa000000-0000-4000-8000-000000000001",
+        "GET",
+        undefined,
+      ],
+    ]);
+  });
+
   it("reads and saves the location's receipt language", async () => {
     const answer = {
       language: "ca-ES",
