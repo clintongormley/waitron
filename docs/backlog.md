@@ -1253,6 +1253,13 @@ unit, or its stored unit was seeded as `each` — and an Each item still takes n
 Tests in `packages/catalogue/src/extras.test.ts` cover the seeded ml unit, a venue's own whole unit,
 and both kinds of Each. An item already on the list is checked as before. Two catalogue test files
 whose lists offered products on a venue's own whole unit now send a portion of 1.
+Left OPEN, found while building it and not in its scope: an item already on a list that is sent
+again WITHOUT a portion loses its saved one. Tried with a throwaway test: a kg item saved at
+`0.050`, then `updateExtraList` with `{ id, productId }` and no portion, read back `1.000`, because
+`assertPortionPrecision` skips a kept item with no portion and `writeItems` re-inserts every item
+with `item.portion ?? "1"`. The dashboard's Extras editor was not checked for whether it always
+resends the saved portion. Next step, if the owner wants it: refuse a kept non-Each item with no
+portion, or keep its saved one.
 
 **A folded Customer-facing names section shows every language's name, inherited ones in italic
 (W77, owner 2026-10-04) — DONE (#1197).** The owner, on an Extras list: _"missing the summary of the values
