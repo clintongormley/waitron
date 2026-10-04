@@ -2001,7 +2001,7 @@ their spacing.
 and following content over about a second. Reduced-motion preferences and validation errors reveal
 fields immediately; repeated clicks reverse the motion from its current height.
 
-**The pricing unit is chosen in a dialog (W66, owner 2026-10-04) — DONE.** The owner, on Product
+**The pricing unit is chosen in a dialog (W66, owner 2026-10-04) — DONE (#1188).** The owner, on Product
 editor screenshots: _"the unit selector should open in a modal, it's not obvious that the field gets
 added after clicking the 'per g' button, also there is no way to dismiss it like you would have in a
 modal"_. The price field's unit button, and on a product with variants the unit button in the
@@ -2009,6 +2009,14 @@ variants table's Price heading, open one Pricing unit dialog holding the unit dr
 Close and Escape shut it without changing the unit, choosing a unit shuts it, and focus goes back to
 the button that opened it. A refused unit opens it once, and the refusal stays on the price field
 once it is shut. Detail: design-system.md, the `wt-price-input` note under the product editor.
+Left open by #1188's review, none started: (1) one kind of unit refusal reads "The server rejected
+this value…", and on the price field after a price message "this value" reads as the price — a
+unit-specific sentence needs the owner's wording; (2) the price field's own unit button does not
+announce that it opens a dialog (`aria-haspopup`), while the heading's button does — needs an option on
+the shared `wt-price-input`; (3) `EACH_CHOICE` is still exported from `variant-table.ts` though only
+the product editor uses it; (4) the test title "…when the table's heading dropdown is hidden" still
+says dropdown for what is now a button; (5) the product editor's VAT dropdown is not disabled while
+saving (same on `main` before W66, not checked further).
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).** The owner: _"the Kitchen name, and
