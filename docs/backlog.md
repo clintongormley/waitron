@@ -1425,7 +1425,7 @@ there is no copy to keep in step.
 plan [2026-10-02-products-category-tree.md](superpowers/plans/2026-10-02-products-category-tree.md).
 The tree's folder icons use the larger shared icon size on the root, category, new-category and drag-preview rows (W61).
 
-**Deleting a category warns about exactly what will go (W74, owner 2026-10-04) — DONE.** The owner
+**Deleting a category warns about exactly what will go (W74, owner 2026-10-04) — DONE (#1196).** The owner
 deleted an empty "Mains", one of three top-level categories with that name, and was warned about
 another Mains's product. A reproduction on a running stack found the server always counted and
 deleted the right category; the dashboard was at fault. Fixed:
