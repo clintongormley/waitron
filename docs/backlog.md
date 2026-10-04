@@ -4234,7 +4234,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 - **A pretend connected card reader in Demo mode (A247) — DONE in W38.** Demo and Preparation
   offer a pretend reader beside the instant simulator. The till waits for its decision, while a
   manager opens Card reader from the Demo bar to approve or decline the amount. Cancel on the till
-  clears the pending payment. Live offers neither the reader nor its page.
+  clears the pending payment. Live offers neither the reader nor its page. If demos use multiple
+  tills at once, add a till label to each pending amount so the manager can choose the right one;
+  the current page shows amounts alone.
 
 - **The rest of the Printing rules screen (A242) — SETTLED by A261 (owner, 2026-10-03).** The page
   is deleted: kitchen ticket printers move to Prep stations, the receipt print mode to Departments
