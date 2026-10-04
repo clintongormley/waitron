@@ -3897,6 +3897,34 @@ test("a hidden column stops sorting the rows, and showing it again restores its 
   expect(rowText(el)).toEqual(["Ada10xa", "Bea2xb"]);
 });
 
+test("hiding and showing columns in the Customise dialog keeps the sort column and direction", async () => {
+  const el = await table({ columns: choosable, sortKey: "count", sortDirection: "descending" });
+  const eyeToggle = (key: string) => chooserBox(el, key).closest("label")!;
+  const sortedHeader = () => el.shadowRoot!.querySelector('th[aria-sort="descending"] [data-sort]');
+  await userEvent.click(trigger(el));
+
+  await userEvent.click(eyeToggle("extra"));
+  expect(headers(el)).toEqual(["Name", "Count▼", "Extra"]);
+  expect(rowText(el)).toEqual(["Ada10xa", "Bea2xb"]);
+  await userEvent.click(eyeToggle("extra"));
+  expect(headers(el)).toEqual(["Name", "Count▼"]);
+  expect(rowText(el)).toEqual(["Ada10", "Bea2"]);
+  expect(el.sortKey).toBe("count");
+  expect(el.sortDirection).toBe("descending");
+  expect(sortedHeader()?.getAttribute("data-sort")).toBe("count");
+
+  await userEvent.click(eyeToggle("extra"));
+  await userEvent.click(eyeToggle("count"));
+  expect(headers(el)).toEqual(["Name", "Extra"]);
+  expect(rowText(el)).toEqual(["Beaxb", "Adaxa"]);
+  expect(el.sortKey).toBe("count");
+  expect(el.sortDirection).toBe("descending");
+  await userEvent.click(eyeToggle("count"));
+  expect(headers(el)).toEqual(["Name", "Count▼", "Extra"]);
+  expect(rowText(el)).toEqual(["Ada10xa", "Bea2xb"]);
+  expect(sortedHeader()?.getAttribute("data-sort")).toBe("count");
+});
+
 test("the fixed first column keeps sorting a tree's siblings", async () => {
   const cols: DataTableColumn<TreeRow>[] = [
     choosableTree[0]!,
