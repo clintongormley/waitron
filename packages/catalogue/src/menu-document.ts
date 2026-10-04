@@ -714,10 +714,9 @@ function extrasTerms(offer: FrozenOffer) {
     entry.kind === "extras"
       ? {
           ...entry,
-          items: entry.items.map(({ productId, price, maxQuantity, preselected }) => ({
+          items: entry.items.map(({ productId, price, preselected }) => ({
             productId,
             price,
-            maxQuantity,
             preselected,
           })),
         }

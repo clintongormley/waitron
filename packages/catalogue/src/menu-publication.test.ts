@@ -833,6 +833,39 @@ describe("menuStatus", () => {
       ).not.toHaveProperty("alsoOn");
     });
 
+    it("keeps separate item-limit changes for two lists in one menu", async () => {
+      const f = await menusFixture(fx.db);
+      const lunchOnly = await app(async (tx) => {
+        const list = await createExtraList(
+          tx,
+          {
+            name: "Soup extras",
+            minPicks: 0,
+            maxPicks: 2,
+            items: [{ productId: f.extraLemon, price: "0.40" }],
+          },
+          "en",
+        );
+        await writeProductModifiers(tx, f.soup, [{ kind: "extras", id: list.id }]);
+        return list.id;
+      });
+      await publish(f.lunch);
+      await publish(f.dinner);
+      await fx.db
+        .update(extraListItems)
+        .set({ maxQuantity: null })
+        .where(eq(extraListItems.productId, f.extraLemon));
+
+      const changes = (await app((tx) => previewMenu(tx, f.lunch))).changes.filter(
+        (change) => change.kind === "extra_max_quantity_changed",
+      );
+      expect(changes).toEqual([
+        expect.objectContaining({ listId: f.extrasList, alsoOn: ["Dinner Menu"] }),
+        expect.objectContaining({ listId: lunchOnly }),
+      ]);
+      expect(changes.find((change) => change.listId === lunchOnly)).not.toHaveProperty("alsoOn");
+    });
+
     it("flags both for Extra lemon deleted, naming the product and each dish's extras", async () => {
       const f = await published();
       await app((tx) => deactivateProduct(tx, f.extraLemon));

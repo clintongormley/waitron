@@ -1028,11 +1028,7 @@ describe("diffMenuDocuments", () => {
         and(eq(extraListItems.listId, f.extrasList), eq(extraListItems.productId, f.extraLemon)),
       );
     const unlimited = await build(f.dinner);
-    expect(
-      diffMenuDocuments(limited, unlimited).filter(
-        (change) => change.kind === "extra_max_quantity_changed",
-      ),
-    ).toEqual([
+    expect(diffMenuDocuments(limited, unlimited)).toEqual([
       {
         kind: "extra_max_quantity_changed",
         productId: f.extraLemon,
@@ -1044,11 +1040,7 @@ describe("diffMenuDocuments", () => {
         source: "shared_product",
       },
     ]);
-    expect(
-      diffMenuDocuments(unlimited, limited).filter(
-        (change) => change.kind === "extra_max_quantity_changed",
-      ),
-    ).toEqual([
+    expect(diffMenuDocuments(unlimited, limited)).toEqual([
       {
         kind: "extra_max_quantity_changed",
         productId: f.extraLemon,
