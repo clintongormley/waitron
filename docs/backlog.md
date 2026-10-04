@@ -2693,6 +2693,13 @@ has a `viewKey`. Clicking a column heading still sorts it.
 floating copy of the column name follows the pointer and the destination row is highlighted. Both
 clear when the drag ends or the dialog closes; keyboard reordering and saved order still work.
 
+**Filtered table headings stay put — DONE (W64, owner 2026-10-04).** The conditional funnel button
+used to increase a header's height and width when its filter became active. A filtered heading now
+uses an inset coloured line and an accessible filtered label; the Filters toolbar button opens the
+panel. The table keeps its measured column widths when a filter narrows rows and when it clears,
+then sizes them anew when the table's container, rows or column choices change. This supersedes
+W39's funnel mark.
+
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through
 that teaches a new user what to set up and in what order — devices, printers, device profiles, and

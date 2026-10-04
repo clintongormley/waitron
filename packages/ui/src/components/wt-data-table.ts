@@ -11,7 +11,6 @@ import "./wt-button.js";
 import "./wt-dialog.js";
 
 registerIcons({
-  "table-filter": "M1.5 3h13L9.5 8.5v3.5l-3 1.5v-5Z",
   "table-customise":
     "M1 2h11v1H2v3h9v1H2v3h6v1H1z M5 3h1v7H5z M12 9l.5 1 1-.2.6 1-.7.8.7.8-.6 1-1-.2-.5 1h-1l-.5-1-1 .2-.6-1 .7-.8-.7-.8.6-1 1 .2.5-1z M11.5 11a.5.5 0 1 0 1 0 .5.5 0 0 0-1 0",
   "column-grip": "M5 2h2v2H5z M9 2h2v2H9z M5 7h2v2H5z M9 7h2v2H9z M5 12h2v2H5z M9 12h2v2H9z",
@@ -84,6 +83,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
         background: var(--wt-color-surface);
       }
 
+      table[data-locked-columns] {
+        table-layout: fixed;
+      }
+
+      table[data-locked-columns] td {
+        overflow-wrap: anywhere;
+      }
+
       th,
       td {
         padding: var(--wt-space-3);
@@ -96,6 +103,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
+      }
+
+      th[data-filtered] {
+        box-shadow: inset 0 calc(-1 * var(--wt-field-line-width-active)) 0 var(--wt-color-primary);
       }
 
       th[data-align="end"],
@@ -203,23 +214,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .indicator {
         width: var(--wt-font-size-md);
         text-align: center;
-      }
-
-      .filter-mark {
-        display: inline-flex;
-        align-items: center;
-        min-width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2);
-        border: 0;
-        background: transparent;
-        color: var(--wt-color-primary);
-        cursor: pointer;
-      }
-
-      .filter-mark:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
       }
 
       th.select,
@@ -632,6 +626,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * choice filters rows only while its column offers it (see #activeFilter), and #judgeFilters
    * removes one its column's options no longer include. */
   @state() private filterSelections: Record<string, string> = {};
+  /** A filter must not let disappearing or returning rows resize the headings. */
+  private filterColumnWidths: number[] | null = null;
+  private filterHostWidth: number | null = null;
+  #resizeFrame: number | null = null;
   @state() private filtersOpen = false;
   @query(".filters-trigger") private filtersTrigger!: HTMLButtonElement;
   @query(".filters-panel") private filtersPanel!: HTMLElement;
@@ -657,6 +655,21 @@ export class WtDataTable<Row = unknown> extends LitElement {
   readonly #scrollObserver = new ResizeObserver((entries) => {
     for (const { contentRect } of entries)
       this.toggleAttribute("narrow", contentRect.width <= NARROW_TREE_WIDTH);
+  });
+  readonly #hostResizeObserver = new ResizeObserver(([entry]) => {
+    if (
+      this.filterColumnWidths &&
+      this.filterHostWidth !== null &&
+      entry &&
+      Math.abs(entry.contentRect.width - this.filterHostWidth) > 0.5
+    ) {
+      this.#releaseColumnWidths();
+      if (this.#resizeFrame !== null) return;
+      this.#resizeFrame = requestAnimationFrame(() => {
+        this.#resizeFrame = null;
+        if (this.isConnected) this.requestUpdate();
+      });
+    }
   });
   #observedScroll: Element | null = null;
   #remembered: Set<string> | null = null;
@@ -693,6 +706,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     window.addEventListener("resize", this.#resizeFilters);
+    if (this.filterColumnWidths) this.#hostResizeObserver.observe(this);
     if (this.hasUpdated) this.#observeScroll();
   }
 
@@ -700,6 +714,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
     super.disconnectedCallback();
     this.#endColumnDrag();
     window.removeEventListener("resize", this.#resizeFilters);
+    this.#hostResizeObserver.disconnect();
+    if (this.#resizeFrame !== null) cancelAnimationFrame(this.#resizeFrame);
+    this.#resizeFrame = null;
     this.#scrollObserver.disconnect();
     this.#observedScroll = null;
   }
@@ -710,6 +727,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("rows") || changed.has("columns") || changed.has("selectable"))
+      this.#releaseColumnWidths();
     if (
       this.rows.length === 0 ||
       this.loading ||
@@ -787,6 +806,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Replaces the column choices with the ones stored under this key; anything unreadable is a
    * first visit. */
   #restoreColumns(viewKey: string): void {
+    this.#releaseColumnWidths();
     let parsed: unknown;
     try {
       parsed = JSON.parse(localStorage.getItem(`${viewKey}:columns`) ?? "null");
@@ -862,6 +882,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const from = movable.findIndex((column) => column.key === key);
     const to = from + delta;
     if (from < 0 || to < 0 || to >= movable.length) return;
+    this.#releaseColumnWidths();
     const [moving] = movable.splice(from, 1);
     movable.splice(to, 0, moving!);
     this.columnOrder = movable.map((column) => column.key);
@@ -961,6 +982,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #restoreColumnDefaults(): void {
+    this.#releaseColumnWidths();
     this.columnChoices = {};
     this.columnOrder = [];
     this.columnMoveAnnouncement = "";
@@ -982,6 +1004,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #chooseColumn(key: string, shown: boolean): void {
+    this.#releaseColumnWidths();
     this.columnChoices = { ...this.columnChoices, [key]: shown };
     if (this.viewKey) {
       try {
@@ -1065,10 +1088,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
         this.filterSelections[column.key] === "")
     )
       return;
+    const widths = this.filterColumnWidths ?? this.#currentColumnWidths();
     const next = { ...this.filterSelections };
     if (value === "" && column.filter?.initial === undefined) delete next[column.key];
     else next[column.key] = value;
     this.filterSelections = next;
+    this.filterColumnWidths = widths;
+    if (widths) this.#hostResizeObserver.observe(this);
     this.#persistView();
     this.dispatchEvent(
       new CustomEvent("wt-filter-change", {
@@ -1080,6 +1106,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #clearAllFilters(): void {
+    const widths = this.filterColumnWidths ?? this.#currentColumnWidths();
     const next = Object.fromEntries(
       this.columns
         .filter((column) => column.filter?.initial !== undefined)
@@ -1091,6 +1118,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
     )
       return;
     this.filterSelections = next;
+    this.filterColumnWidths = widths;
+    if (widths) this.#hostResizeObserver.observe(this);
     this.#persistView();
     this.dispatchEvent(
       new CustomEvent("wt-filter-change", {
@@ -1099,6 +1128,20 @@ export class WtDataTable<Row = unknown> extends LitElement {
         composed: true,
       }),
     );
+  }
+
+  #currentColumnWidths(): number[] | null {
+    const headers = this.shadowRoot?.querySelectorAll("thead th");
+    if (headers?.length) this.filterHostWidth = this.getBoundingClientRect().width;
+    return headers?.length
+      ? [...headers].map((header) => header.getBoundingClientRect().width)
+      : null;
+  }
+
+  #releaseColumnWidths(): void {
+    this.filterColumnWidths = null;
+    this.filterHostWidth = null;
+    this.#hostResizeObserver.disconnect();
   }
 
   #positionFilters(): void {
@@ -1509,6 +1552,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 data-align=${column.align ?? "start"}
                 data-pinned=${column.pinned ?? nothing}
                 data-actions=${column.key === "actions" ? "" : nothing}
+                data-filtered=${column.filter && this.#activeFilter(column) !== "" ? "" : nothing}
+                aria-label=${
+                  column.filter && this.#activeFilter(column) !== ""
+                    ? `${column.label}: ${this.filteredColumnLabel}`
+                    : nothing
+                }
                 aria-sort=${
                   column.sortValue === undefined
                     ? nothing
@@ -1538,27 +1587,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
                           }</span
                         >
                       </button>`
-                }
-                ${
-                  column.filter && this.#activeFilter(column) !== ""
-                    ? html`<button
-                        type="button"
-                        class="filter-mark"
-                        data-filter-mark=${column.key}
-                        aria-label=${`${column.filter.label}: ${this.filteredColumnLabel}`}
-                        @click=${() => {
-                          if (!this.filtersPanel.matches(":popover-open")) this.#toggleFilters();
-                          this.filtersPanel
-                            .querySelector<HTMLElement>(
-                              `[data-section="${CSS.escape(column.key)}"] .table-filter`,
-                            )
-                            ?.shadowRoot?.querySelector<HTMLElement>(".trigger")
-                            ?.focus();
-                        }}
-                      >
-                        <wt-icon name="table-filter"></wt-icon>
-                      </button>`
-                    : nothing
                 }
               </th>
             `,
@@ -1901,6 +1929,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
         <div class="empty"><p class="message" role="status">${this.noMatchesMessage}</p></div>`;
 
     const shown = this.#shownColumns();
+    const widths =
+      this.filterColumnWidths?.length === shown.length + Number(this.selectable)
+        ? this.filterColumnWidths
+        : null;
+    const lockedWidth = widths?.reduce((sum, width) => sum + width, 0);
     const sortColumn = this.#sortColumn(shown);
     if (!isTree) {
       const sorted = this.#sortedRows(visible, sortColumn);
@@ -1910,7 +1943,17 @@ export class WtDataTable<Row = unknown> extends LitElement {
       return html`
         ${this.#renderToolbar()}
         <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
-          <table>
+          <table
+            data-locked-columns=${widths ? "" : nothing}
+            style=${lockedWidth === undefined ? nothing : `width: ${lockedWidth}px`}
+          >
+            ${
+              widths
+                ? html`<colgroup>
+                    ${widths.map((width) => html`<col style=${`width: ${width}px`} />`)}
+                  </colgroup>`
+                : nothing
+            }
             ${this.#renderHead(visibleKeys, shown)}
             <tbody>
               ${sorted.map((row, index) => {
@@ -1964,7 +2007,18 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return html`
       ${this.#renderToolbar()}
       <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
-        <table role="treegrid">
+        <table
+          role="treegrid"
+          data-locked-columns=${widths ? "" : nothing}
+          style=${lockedWidth === undefined ? nothing : `width: ${lockedWidth}px`}
+        >
+          ${
+            widths
+              ? html`<colgroup>
+                  ${widths.map((width) => html`<col style=${`width: ${width}px`} />`)}
+                </colgroup>`
+              : nothing
+          }
           ${this.#renderHead(visibleKeys, shown)}
           <tbody role="rowgroup">
             ${entries.map(({ row, key, depth, hasChildren }) => {
