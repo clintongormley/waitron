@@ -1671,13 +1671,15 @@ line triggers dropped by the rebuild. `sale_lines` is append-only, and this migr
 rows through a new table before its append-only triggers are reinstalled.
 
 **Department menu timetables and queued publication (A204, owner 2026-10-02; refined
-2026-10-04) — DESIGN RECORDED, written spec awaiting review; not implemented.** Departments own
-the available-menu list and the only timetable; zones override defaults within its shared periods.
+2026-10-04) — SPEC APPROVED; implementation plans queued in lane B; not implemented.**
+Departments own the available-menu list and the only timetable; zones override defaults within its shared periods.
 An all-day default covers gaps; normal weeks and special dates share A261's calendar. Staff may
 still order from breakfast after it stops being the default. Several future menu editions can be
 queued, always moving forwards; an immediate publication that overtakes queued editions requires
 explicit cancellation or replacement.
-[Spec](superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md), §§2–3 and the proposed details in §9.
+[Spec](superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md), §§2–3 and the approved details in §9;
+[department-menu plan](superpowers/plans/2026-10-04-department-menus-and-timetable.md);
+[publication plan](superpowers/plans/2026-10-04-forward-only-menu-publication.md).
 
 **The product editor, tidied: eleven changes from one walk-through (A209 to A219, owner
 2026-10-02) — OPEN.** The owner, on six screenshots of "Edit product" for "Cured beef cecina (per
@@ -4954,14 +4956,17 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   controls temporarily in the new screen while the newer profile and department-menu work follows.
   [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED;
-  profile access queued in lane D; not implemented.** Profiles bind departmental access, permitted
-  zones, staff eligibility, actions, screens and equipment choices. Devices switch among approved
-  profiles and select equipment and station/watcher bindings; drawers are independent of receipt
+  profile access and transfers queued in lane D, equipment queued in lane E; not implemented.**
+  Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
+  equipment choices. Devices switch among approved profiles and select equipment and
+  station/watcher bindings; drawers are independent of receipt
   printers. Portable equipment supports scan takeover and confirmed dropdown takeover, with busy
   payment terminals protected. Tab transfers require acceptance at a shared departmental receiving
   profile; existing preparation and pickup instructions stay unchanged. Menu work is A204 above.
   [Spec](superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md);
-  [profile access and switching plan](superpowers/plans/2026-10-04-device-profile-access-and-switching.md).
+  [profile access and switching plan](superpowers/plans/2026-10-04-device-profile-access-and-switching.md);
+  [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md);
+  [departmental transfer plan](superpowers/plans/2026-10-04-departmental-tab-transfers.md).
   §10 names the A238/A254/A261 decisions the approved design revises. A261 step 2 keeps its
   existing zone-menu and device-default-zone controls as an interim path; the newer work replaces them.
 - **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
