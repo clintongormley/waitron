@@ -18,21 +18,21 @@ describe("DASHBOARD_MODULES honesty", () => {
     expect(DASHBOARD_MODULES.map((c) => c.module)).toContain("bookings");
   });
 
-  it("registers the adjustment reasons screen for managers of adjustments", () => {
+  it("puts the adjustment reasons on Venue settings for managers of adjustments", () => {
     const adjustments = DASHBOARD_MODULES.find((c) => c.module === "adjustments");
-    expect(adjustments?.screen.requiresPermission).toBe("adjustment.manage");
+    expect(
+      adjustments?.settingsPanels?.map((panel) => [panel.tab, panel.requiresPermission]),
+    ).toEqual([["adjustment-reasons", "adjustment.manage"]]);
   });
 
   it("registers the adjustment report in the reports group for anyone who may view reports", () => {
     const adjustments = DASHBOARD_MODULES.find((c) => c.module === "adjustments");
-    expect(adjustments?.moreScreens?.map((more) => more.screen)).toEqual([
-      {
-        id: "adjustment-report",
-        navLabelKey: "nav.adjustment_report",
-        group: "reports",
-        requiresPermission: "report.view",
-      },
-    ]);
+    expect(adjustments?.screen).toEqual({
+      id: "adjustment-report",
+      navLabelKey: "nav.adjustment_report",
+      group: "reports",
+      requiresPermission: "report.view",
+    });
   });
 });
 

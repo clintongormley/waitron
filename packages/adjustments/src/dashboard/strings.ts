@@ -9,7 +9,6 @@ import {
 // Registers its catalogue and code messages at load, so importing `t` is enough to resolve them.
 
 const en = {
-  "nav.adjustment_reasons": "Adjustment reasons",
   "adjustments.title": "Adjustment reasons",
   "adjustments.intro":
     "The reasons staff choose when they cancel an item, give it away or discount it, and the limits each reason carries.",
@@ -155,7 +154,6 @@ const en = {
 } as const;
 
 const es: Record<keyof typeof en, string> = {
-  "nav.adjustment_reasons": "Motivos de ajuste",
   "adjustments.title": "Motivos de ajuste",
   "adjustments.intro":
     "Los motivos que elige el personal al anular un artículo, no cobrarlo o descontarlo, y los límites de cada motivo.",

@@ -8,36 +8,31 @@ import "./adjustment-report-screen.js";
 export const ADJUSTMENTS_DASHBOARD: DashboardContribution = {
   module: "adjustments",
   screen: {
-    id: "adjustment-reasons",
-    navLabelKey: "nav.adjustment_reasons",
-    group: "service",
-    requiresPermission: "adjustment.manage",
+    id: "adjustment-report",
+    navLabelKey: "nav.adjustment_report",
+    group: "reports",
+    requiresPermission: "report.view",
   },
   strings: ADJUSTMENTS_STRINGS,
   create(ctx) {
     const api = new AdjustmentsApi(ctx.request, ctx.liveData);
     return {
       render: () =>
-        html`<dashboard-adjustment-reasons-screen
-          .api=${api}
-        ></dashboard-adjustment-reasons-screen>`,
+        html`<dashboard-adjustment-report-screen .api=${api}></dashboard-adjustment-report-screen>`,
     };
   },
-  moreScreens: [
+  settingsPanels: [
     {
-      screen: {
-        id: "adjustment-report",
-        navLabelKey: "nav.adjustment_report",
-        group: "reports",
-        requiresPermission: "report.view",
-      },
+      id: "adjustment-reasons",
+      tab: "adjustment-reasons",
+      requiresPermission: "adjustment.manage",
       create(ctx) {
         const api = new AdjustmentsApi(ctx.request, ctx.liveData);
         return {
           render: () =>
-            html`<dashboard-adjustment-report-screen
+            html`<dashboard-adjustment-reasons-screen
               .api=${api}
-            ></dashboard-adjustment-report-screen>`,
+            ></dashboard-adjustment-reasons-screen>`,
         };
       },
     },

@@ -63,6 +63,12 @@ import type { AlertView, DashboardApi, PersonSummary } from "./api/client.js";
 import type { WtInput } from "@waitron/ui";
 
 const stubRequest: DashboardRequest = async () => [] as never;
+const adjustmentsRequest: DashboardRequest = async (path, method, body, options) =>
+  path.startsWith("/management-api/adjustments/reasons")
+    ? ({ reasons: [] } as never)
+    : path === "/management-api/adjustments/settings"
+      ? ({ maxBillDiscountBp: null } as never)
+      : stubRequest(path, method, body, options);
 
 const people: PersonSummary[] = [
   {
@@ -1716,6 +1722,50 @@ describe("dashboard-app", () => {
       expect(location.pathname).toBe("/manage/overview");
     },
   );
+
+  it("treats the retired address /manage/adjustment-reasons as an unknown screen", async () => {
+    history.replaceState(null, "", "/manage/adjustment-reasons");
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        modules: ["bookings", "adjustments"],
+        permissions: ["booking.manage", "adjustment.manage", "report.view"],
+      }),
+      liveData: new LiveData(),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api,
+      request: adjustmentsRequest,
+    });
+    await flush(el);
+    expect(overview(el)).not.toBeNull();
+    expect(location.pathname).toBe("/manage/overview");
+  });
+
+  it("shows Adjustment reasons as a Venue settings tab to a manager of adjustments, and not in the nav", async () => {
+    history.replaceState(null, "", "/manage/venue-settings/view/adjustment-reasons");
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        modules: ["bookings", "adjustments"],
+        permissions: ["booking.manage", "adjustment.manage", "report.view"],
+      }),
+      liveData: new LiveData(),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api,
+      request: adjustmentsRequest,
+    });
+    await flush(el);
+    expect(navItem(el, "adjustment-reasons")).toBeNull();
+    expect(navItem(el, "adjustment-report")).not.toBeNull();
+    expect(
+      venueSettings(el)!.shadowRoot!.querySelector(
+        '[slot="adjustment-reasons"] dashboard-adjustment-reasons-screen',
+      ),
+    ).not.toBeNull();
+    expect(location.pathname).toBe("/manage/venue-settings/view/adjustment-reasons");
+  });
 
   it("navigates to the devices screen", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });

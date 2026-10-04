@@ -12,16 +12,28 @@ afterEach(() => {
 });
 
 describe("ADJUSTMENTS_DASHBOARD", () => {
-  it("mounts the reasons screen in the service group for managers of adjustments", () => {
+  it("puts the reasons on Venue settings for managers of adjustments, and only the report in the nav", () => {
     expect(ADJUSTMENTS_DASHBOARD.module).toBe("adjustments");
     expect(ADJUSTMENTS_DASHBOARD.screen).toEqual({
-      id: "adjustment-reasons",
-      navLabelKey: "nav.adjustment_reasons",
-      group: "service",
-      requiresPermission: "adjustment.manage",
+      id: "adjustment-report",
+      navLabelKey: "nav.adjustment_report",
+      group: "reports",
+      requiresPermission: "report.view",
     });
-    expect(ADJUSTMENTS_DASHBOARD.strings.en["nav.adjustment_reasons"]).toBe("Adjustment reasons");
-    expect(ADJUSTMENTS_DASHBOARD.strings.es["nav.adjustment_reasons"]).toBe("Motivos de ajuste");
+    expect(ADJUSTMENTS_DASHBOARD.moreScreens).toBeUndefined();
+    expect(
+      ADJUSTMENTS_DASHBOARD.settingsPanels!.map(({ id, tab, requiresPermission }) => ({
+        id,
+        tab,
+        requiresPermission,
+      })),
+    ).toEqual([
+      {
+        id: "adjustment-reasons",
+        tab: "adjustment-reasons",
+        requiresPermission: "adjustment.manage",
+      },
+    ]);
   });
 
   it("gives the module's own refusals a sentence of their own in English and Spanish", () => {
@@ -39,7 +51,7 @@ describe("ADJUSTMENTS_DASHBOARD", () => {
     }
   });
 
-  it("create() renders the screen on the context's request and live data", async () => {
+  it("the reasons panel renders on the context's request and live data", async () => {
     const fetchImpl = vi.fn(() =>
       Promise.resolve({
         ok: true,
@@ -48,7 +60,7 @@ describe("ADJUSTMENTS_DASHBOARD", () => {
       } as Response),
     );
     const liveData = new LiveData();
-    const handle = ADJUSTMENTS_DASHBOARD.create({
+    const handle = ADJUSTMENTS_DASHBOARD.settingsPanels![0]!.create({
       request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
       liveData,
     });
@@ -81,7 +93,7 @@ describe("ADJUSTMENTS_DASHBOARD", () => {
       } as Response),
     );
     const liveData = new LiveData();
-    const report = ADJUSTMENTS_DASHBOARD.moreScreens![0]!;
+    const report = ADJUSTMENTS_DASHBOARD;
     expect(report.screen.navLabelKey).toBe("nav.adjustment_report");
     expect(ADJUSTMENTS_DASHBOARD.strings.en["nav.adjustment_report"]).toBe("Adjustment report");
     expect(ADJUSTMENTS_DASHBOARD.strings.es["nav.adjustment_report"]).toBe("Informe de ajustes");
