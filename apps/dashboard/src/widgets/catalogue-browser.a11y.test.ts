@@ -176,4 +176,66 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
       await expectNoA11yViolations(host);
     },
   );
+
+  it.each([
+    ["routed", false],
+    ["unreadable", true],
+  ] as const)("renders categories' Made at %s accessibly", async (_state, failed) => {
+    const { el, host } = await mountWidget<CatalogueBrowser>(
+      "dashboard-catalogue-browser",
+      {
+        products: PRODUCTS,
+        api: {} as DashboardApi,
+        categories: [
+          { id: "d", name: "Drinks", parentId: null },
+          { id: "b", name: "Beer", parentId: "d" },
+          { id: "f", name: "Food", parentId: null },
+        ],
+        routingFailed: failed,
+        routing: failed
+          ? null
+          : {
+              stationTimes: [],
+              todayEnds: null,
+              clockReadable: true,
+              claims: [
+                {
+                  categoryId: "d",
+                  target: { kind: "station", stationId: "bar" },
+                  stationOff: false,
+                },
+              ],
+              exceptions: [
+                {
+                  id: "e1",
+                  position: 0,
+                  zoneId: null,
+                  categoryId: null,
+                  productId: "cola",
+                  target: { kind: "station", stationId: "kitchen" },
+                  neverMatches: false,
+                  stationOff: false,
+                },
+              ],
+              unassigned: { folders: [], products: [] },
+              defaultStationId: "kitchen",
+              stations: [
+                { id: "bar", name: "Bar", active: true },
+                { id: "kitchen", name: "Kitchen", active: true },
+              ],
+            },
+      },
+      theme,
+    );
+    const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+    await list.updateComplete;
+    const table = list.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table
+      .shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="folder:d"] .row-activate')!
+      .click();
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelector('[part~="maker-detail"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 });

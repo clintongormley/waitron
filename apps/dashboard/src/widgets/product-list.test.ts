@@ -1371,6 +1371,49 @@ it("keeps touch scrolling on the name cell and starts a drag from its grip", asy
 
 describe("the product list at phone width", () => {
   it.each(["en-GB", "es-ES"])(
+    "keeps a category's made-at link and its detail clear of pinned actions after scrolling at 390 px (%s)",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+          categories: [drinks],
+          folderMadeAt: new Map<string, FolderMadeAt>([
+            [
+              "d",
+              {
+                maker: { kind: "no_replacement", stationName: "Downstairs cocktail bar" },
+                source: { kind: "inherited", name: "Bebidas-y-cocteles-de-la-casa" },
+                someElsewhere: true,
+              },
+            ],
+          ]),
+        });
+        const root = await tableRoot(el);
+        const scroll = root.querySelector<HTMLElement>(".scroll")!;
+        const cell = cellUnder(root, "folder:d", t("product.made_at"));
+        scroll.scrollLeft = cell.offsetLeft;
+        const actions = root.querySelector<HTMLElement>(
+          'tr[data-row-key="folder:d"] td[data-pinned="end"]',
+        )!;
+        for (const part of [
+          cell.querySelector("a")!,
+          cell.querySelector('[part~="maker-detail"]')!,
+        ]) {
+          const box = part.getBoundingClientRect();
+          expect(box.left).toBeGreaterThanOrEqual(scroll.getBoundingClientRect().left);
+          expect(box.right).toBeLessThanOrEqual(actions.getBoundingClientRect().left);
+        }
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
+  it.each(["en-GB", "es-ES"])(
     "keeps the full made-at link clear of pinned actions after scrolling at 390 px (%s)",
     async (locale) => {
       const width = window.innerWidth,
