@@ -4943,6 +4943,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   [Step 1, PR #1166](https://github.com/clintongormley/waitron/pull/1166) gathers Receipts,
   Tables and Kitchen settings into tabs; supervisors can read Tables and Kitchen, while writes
   remain manager-only (owner amendment, 2026-10-04).
+  [Step 2 plan](superpowers/plans/2026-10-04-departments-and-zones.md) is ready for owner review;
+  the Departments and zones build has not started.
   [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
   states and signals a table has that Waitron sets itself (today Free, Occupied, Reserved from a
