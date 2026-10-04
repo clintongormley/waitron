@@ -4,9 +4,9 @@
 > following the lane's runbook and the repository's current review rules. Use checkbox steps to
 > record progress. The owner selected queue execution; this session does not implement the work.
 
-**Status:** proposed plan for review, 2026-10-04. The owner approved the revised design. This
-plan replaces the 2026-10-03 task list once approved; it does not inherit that list's blanket
-permission to change assertions or its obsolete review instructions.
+**Status:** approved by the owner, 2026-10-04. This plan replaces the 2026-10-03 task list; it
+does not inherit that list's blanket permission to change assertions or its obsolete review
+instructions.
 
 **Goal:** prevent fiscal identity reuse, support administrator-led recovery without internet,
 and give operators an evidence-preserving route through rejected or conflicting submissions.
@@ -419,9 +419,9 @@ the adapter stays unavailable until the service contract is fulfilled, while pap
 
 - The owner chose the queue for implementation. Keep W41s in lane E unless explicitly moved;
   point it at this plan and the approved spec. Do not restart the obsolete task list.
-- While this plan awaits review, the queue entry remains `needs-owner-review`. After approval,
-  create separate dependent items for the tasks above, including the Task 0 contract checkpoint
-  and Task 1 library work. Do not silently broaden a lane's repository or fiscal-core permissions.
+- The approved plan releases W41s for queue execution. Create separate dependent items for the
+  tasks above, including the Task 0 contract checkpoint and Task 1 library work. Do not silently
+  broaden a lane's repository or fiscal-core permissions.
 - A build gate and a production-enablement gate are separate. When an adviser answer is pending,
   work another eligible item; do not park the whole project or silently choose a legal remedy.
 - Product implementation and probes have not run in the planning session. Completion requires
