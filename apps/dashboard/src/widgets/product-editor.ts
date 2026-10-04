@@ -322,6 +322,42 @@ export class ProductEditor extends LitElement {
       td:nth-child(2) {
         max-width: var(--wt-cell-name-max-width);
       }
+      /* The row's button lies over the whole row; the handle and the row menu are lifted above it
+         so they keep their own clicks, and a dragged row above them, because the reorder
+         controller's own lift of 1 would tie with them. */
+      tbody tr {
+        position: relative;
+      }
+      tbody tr:not([data-dragging]):hover td,
+      tbody tr:not([data-dragging]):focus-within td {
+        background: var(--wt-color-bg);
+      }
+      .row-activate {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+        z-index: 0;
+      }
+      .row-activate:disabled {
+        cursor: default;
+      }
+      .row-activate:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+      td :is(.handle, wt-row-actions) {
+        position: relative;
+        z-index: 1;
+      }
+      tbody tr[data-dragging] {
+        z-index: 2;
+      }
     `,
   ];
   @property({ type: Boolean }) open = false;
@@ -351,6 +387,8 @@ export class ProductEditor extends LitElement {
   @state() private unitPickerOpen = false;
   /** Which button opened the unit chooser, where focus goes back once it shuts. */
   #unitOpener: "price" | "heading" = "price";
+  /** The attached row, and which of its controls, that asked for the list editor now open. */
+  #relatedOpener: { key: string; via: "row" | "menu" } | null = null;
   @state() private unitUsage: ExtraOfferUsage[] = [];
   @state() private unitUsageUnavailable = false;
   #unitUsageGeneration = 0;
@@ -687,6 +725,7 @@ export class ProductEditor extends LitElement {
   private related(event: Event, kind: ProductChildKind) {
     event.stopPropagation();
     if (this.suspended) return;
+    this.#relatedOpener = null;
     this.dispatchEvent(
       new CustomEvent("wt-create-related", { detail: { kind }, bubbles: true, composed: true }),
     );
@@ -706,9 +745,10 @@ export class ProductEditor extends LitElement {
   clearCourse(): void {
     this.change("courseId", null);
   }
-  /** Both kinds of modifier list are added from the ONE combobox, so both return focus there. A
-   * unit goes back to Add unit while the chooser is still open, and to the chooser's opener once a
-   * new unit has been chosen and the chooser shut. */
+  /** A modifier list edited from an attached row returns focus to that row: to its button, or to
+   * its menu when the menu's Edit opened the list. A new list, or one whose row is gone, returns
+   * it to the combobox both kinds are added from. A unit goes back to Add unit while the chooser is
+   * still open, and to the chooser's opener once a new unit has been chosen and the chooser shut. */
   returnRelatedFocus(kind: ProductChildKind): void {
     if (kind === "unit" && !this.unitPickerOpen) {
       void this.returnUnitFocus();
@@ -717,6 +757,20 @@ export class ProductEditor extends LitElement {
     if (kind === "courses") {
       this.shadowRoot!.querySelector<HTMLElement>("[name=product-course]")?.focus();
       return;
+    }
+    if (kind === "extras" || kind === "options") {
+      const opener = this.#relatedOpener;
+      this.#relatedOpener = null;
+      const row = [
+        ...this.shadowRoot!.querySelectorAll<HTMLElement>("tr[data-test=attached-modifier]"),
+      ].find((tr) => tr.dataset.modifier === opener?.key);
+      const target = row?.querySelector<HTMLElement>(
+        opener?.via === "row" ? ".row-activate" : "wt-row-actions",
+      );
+      if (target) {
+        target.focus();
+        return;
+      }
     }
     const control = kind === "extras" || kind === "options" ? "modifier" : kind;
     this.shadowRoot!.querySelector<HTMLElement>(`[data-test=add-${control}]`)?.focus();
@@ -1474,13 +1528,38 @@ export class ProductEditor extends LitElement {
     return kindLabel(this.modifierListName(ref), ref.kind);
   }
 
+  private editRelated(ref: ProductModifierRef, via: "row" | "menu"): void {
+    if (this.suspended) return;
+    this.#relatedOpener = { key: modifierKey(ref), via };
+    this.dispatchEvent(
+      new CustomEvent("wt-edit-related", {
+        detail: { kind: ref.kind, id: ref.id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   private renderModifierRow(ref: ProductModifierRef) {
     const key = modifierKey(ref);
     const name = this.modifierListName(ref);
     const kind = t(KIND_TITLE[ref.kind]);
     return html`<tr data-test="attached-modifier" data-modifier=${key}>
       <td>${this.#reorder.handle(key)}</td>
-      <td data-test="modifier-name">${name}</td>
+      <td data-test="modifier-name">
+        <button
+          type="button"
+          class="row-activate"
+          data-test=${`open-modifier-${key}`}
+          aria-label=${`${t("action.edit")}: ${name}${SUMMARY_SEPARATOR}${kind}`}
+          .disabled=${this.suspended}
+          @click=${(event: Event) => {
+            event.stopPropagation();
+            this.editRelated(ref, "row");
+          }}
+        ></button
+        >${name}
+      </td>
       <td data-test="modifier-kind">${kind}</td>
       <td>
         <wt-row-actions
@@ -1492,14 +1571,7 @@ export class ProductEditor extends LitElement {
             .disabled=${this.suspended}
             @click=${(event: Event) => {
               event.stopPropagation();
-              if (this.suspended) return;
-              this.dispatchEvent(
-                new CustomEvent("wt-edit-related", {
-                  detail: { kind: ref.kind, id: ref.id },
-                  bubbles: true,
-                  composed: true,
-                }),
-              );
+              this.editRelated(ref, "menu");
             }}
             >${t("action.edit")}</wt-button
           ><wt-button

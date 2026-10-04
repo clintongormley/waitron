@@ -429,7 +429,7 @@ export class ModifiersScreen extends LitElement {
         key: "usedBy",
         label: t("modifiers.used_by"),
         choosable: "shown",
-        activatesRow: kind === "options" ? false : undefined,
+        activatesRow: false,
         searchValue: (list) => this.#usageText(list),
         sortValue: (list) => list.usage.products,
         cell: (list) => this.#usageCell(kind, list),
@@ -613,7 +613,7 @@ export class ModifiersScreen extends LitElement {
       .rows=${this.#lists(kind)}
       .columns=${this.#columns(kind)}
       .rowKey=${(list: ModifierList) => list.id}
-      .rowClick=${kind === "options" ? (list: ModifierList) => this.#edit(kind, list) : undefined}
+      .rowClick=${(list: ModifierList) => this.#edit(kind, list)}
       .rowClickLabel=${(list: ModifierList) => `${t("action.edit")}: ${list.name}`}
       .emptyMessage=${t(`${kind}.empty`)}
       >${this.#lists(kind).length === 0 ? this.#renderAdd(kind, "empty-action") : nothing}</wt-data-table

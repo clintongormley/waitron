@@ -469,6 +469,13 @@ also applies to pinned columns. Without it, a control in a clickable row's cell 
 a click on it reaches that control and not the row: the Menus list's name button opens its menu once,
 by its own click (the "opens its menu once" cases in `apps/dashboard/src/screens/menus-screen.test.ts`).
 
+The product editor's Modifiers table is a plain table, not a `wt-data-table`, and its rows open
+too: a transparent `.row-activate` button lies over each attached list's row, so a click on the
+name or on blank space, or Enter or Space on that button, sends the same `wt-edit-related` as the
+row menu's Edit. The drag handle and the row menu are lifted above it and keep their own actions,
+and a hovered row, or one holding focus, paints `--wt-color-bg`. Guard: the "attached row" cases in
+`apps/dashboard/src/widgets/product-editor.test.ts`.
+
 `wt-button shape="round"` renders a circular button of exactly `--wt-tap-min` diameter, meant for
 one icon with its own `aria-label` rather than a text label — the round "Add" button beside a table
 heading, for one. It replaces the button's own padding and border radius; it does not change what

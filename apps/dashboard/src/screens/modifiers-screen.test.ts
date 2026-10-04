@@ -847,6 +847,131 @@ it("keeps an unused options list's Used by cell outside row activation", async (
   expect(optionForm(el).open).toBe(false);
 });
 
+it("opens an extras editor from its row while Used by opens only the products popup", async () => {
+  const el = await mount();
+  const extras = table(el, "extra-lists");
+  await extras.updateComplete;
+  const row = extras.shadowRoot.querySelector<HTMLElement>('tbody tr[data-row-key="e1"]')!;
+  await userEvent.click(row.querySelector<HTMLElement>(".row-activate")!, {
+    position: { x: 2, y: 2 },
+  });
+  await el.updateComplete;
+  expect(extraForm(el).open).toBe(true);
+  expect(extraForm(el).value).toEqual(extraList);
+  extraForm(el).dispatchEvent(new CustomEvent("wt-cancel", { bubbles: true, composed: true }));
+  await el.updateComplete;
+
+  // A real pointer press at the items cell's middle; `force` skips Playwright's check that the cell
+  // itself is topmost, so the browser's own hit test decides what the press reaches.
+  await userEvent.click(row.querySelector<HTMLElement>("td:nth-child(2)")!, { force: true });
+  await el.updateComplete;
+  expect(extraForm(el).open).toBe(true);
+  expect(extraForm(el).value).toEqual(extraList);
+  extraForm(el).dispatchEvent(new CustomEvent("wt-cancel", { bubbles: true, composed: true }));
+  await el.updateComplete;
+
+  const usedBy = row.querySelector<HTMLElement>("td:nth-child(3)")!;
+  await userEvent.click(usedBy, { position: { x: 2, y: 2 } });
+  await el.updateComplete;
+  expect(extraForm(el).open).toBe(false);
+  expect(detailModal(el).open).toBe(false);
+  await userEvent.click(usedBy.querySelector<HTMLElement>('[data-test="used-by-extra-e1"]')!);
+  await el.updateComplete;
+  expect(detailModal(el).open).toBe(true);
+  expect(extraForm(el).open).toBe(false);
+});
+
+it("keeps an unused extras list's Used by cell outside row activation", async () => {
+  const el = await mount(
+    api({
+      listExtraLists: vi.fn().mockResolvedValue([{ ...extraList, usage: { products: 0 } }]),
+    }),
+  );
+  const extras = table(el, "extra-lists");
+  await extras.updateComplete;
+  const usedBy = extras.shadowRoot.querySelector<HTMLElement>(
+    'tbody tr[data-row-key="e1"] td:nth-child(3)',
+  )!;
+  expect(usedBy.textContent?.trim()).toBe(t("modifiers.not_used"));
+  const box = usedBy.getBoundingClientRect();
+  expect(extras.shadowRoot.elementFromPoint(box.x + 2, box.y + 2)).toBe(usedBy);
+  await userEvent.click(usedBy, { position: { x: 2, y: 2 } });
+  expect(extraForm(el).open).toBe(false);
+});
+
+describe.each([
+  ["extras", "extra-lists", "e1", "extra", extraForm, extraList],
+  ["options", "option-lists", "o1", "option", optionForm, optionList],
+] as const)("a %s row", (tab, tableId, id, row, formOf, list) => {
+  async function rowOf(el: ModifiersScreen): Promise<{ found: Table; row: HTMLElement }> {
+    await selectTab(el, tab);
+    const found = table(el, tableId);
+    await found.updateComplete;
+    return {
+      found,
+      row: found.shadowRoot.querySelector<HTMLElement>(`tbody tr[data-row-key="${id}"]`)!,
+    };
+  }
+
+  it.each(["{Enter}", " "])("opens its editor from the keyboard (%s)", async (key) => {
+    const el = await mount();
+    const { row: tr } = await rowOf(el);
+    const activator = tr.querySelector<HTMLElement>(".row-activate")!;
+    expect(activator.getAttribute("aria-label")).toBe(`${t("action.edit")}: ${list.name}`);
+    activator.focus();
+    await userEvent.keyboard(key);
+    await el.updateComplete;
+    expect(formOf(el).open).toBe(true);
+    expect(formOf(el).value).toEqual(list);
+  });
+
+  it("hands focus back to its row after its editor is cancelled", async () => {
+    const el = await mount();
+    const { found, row: tr } = await rowOf(el);
+    const activator = tr.querySelector<HTMLElement>(".row-activate")!;
+    activator.focus();
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    const form = formOf(el);
+    expect(form.open).toBe(true);
+    form.dispatchEvent(new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }));
+    await vi.waitFor(() => expect(form.open).toBe(false));
+    await afterDialogCloses(el);
+    expect(found.shadowRoot.activeElement).toBe(activator);
+  });
+
+  it("keeps its row menu's own actions: the menu and Delete open no editor", async () => {
+    const el = await mount();
+    const { row: tr } = await rowOf(el);
+    const menu = tr.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-row-actions",
+    )!;
+    await userEvent.click(menu.shadowRoot!.querySelector<HTMLElement>("button")!);
+    await menu.updateComplete;
+    expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    expect(formOf(el).open).toBe(false);
+    await userEvent.click(tr.querySelector<HTMLElement>(`[data-test="delete-${row}-${id}"]`)!);
+    await el.updateComplete;
+    expect(deleteDialog(el).open).toBe(true);
+    expect(formOf(el).open).toBe(false);
+  });
+
+  it("keeps its row menu's Edit opening the editor once", async () => {
+    const el = await mount();
+    const { row: tr } = await rowOf(el);
+    const menu = tr.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-row-actions",
+    )!;
+    await userEvent.click(menu.shadowRoot!.querySelector<HTMLElement>("button")!);
+    await menu.updateComplete;
+    await userEvent.click(tr.querySelector<HTMLElement>(`[data-test="edit-${row}-${id}"]`)!);
+    await el.updateComplete;
+    expect(formOf(el).open).toBe(true);
+    expect(formOf(el).value).toEqual(list);
+    expect(deleteDialog(el).open).toBe(false);
+  });
+});
+
 it("marks Delete as dangerous in an options row menu", async () => {
   const el = await mount();
   await selectTab(el, "options");
