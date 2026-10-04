@@ -3,8 +3,8 @@
 -- rebuild has dropped, and a trigger ON a rebuilt table would be dropped with it silently, so every
 -- such trigger this set writes goes here and comes back in
 -- `0080_money_records_recreate_triggers.sql`.
--- The append-only pairs on `sales` and `unpaid_departures` are not this set's: the rebuild drops
--- them, and `applyMigrations` installs them again once the set has migrated.
+-- The append-only pairs on `sales` and `unpaid_departures` are not written by these migrations: the
+-- rebuild drops them, and `applyMigrations` installs them again once the set has migrated.
 DROP TRIGGER bill_payments_guard_update;
 --> statement-breakpoint
 DROP TRIGGER bill_payments_no_delete;

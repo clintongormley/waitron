@@ -26,8 +26,8 @@ export interface CoreServices {
 }
 
 /**
- * `nodeId` is read only inside `core.seatTable`, which boot binds, so it never enters `cfg`. The tab
- * it opens records the `dashboard` as its origin.
+ * `nodeId` is read only inside `core.seatTable`, which boot binds, so it never enters `cfg`. The
+ * tab it opens records the `dashboard` as its origin.
  */
 export interface ModuleRouteContext {
   db: Database;

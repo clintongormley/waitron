@@ -1507,8 +1507,9 @@ export class TillApp extends LitElement {
   };
   @state() private printersOpen = false;
   @state() private printersError: { code: string; field?: string } | null = null;
-  /** Counts printer switches, so only the latest one's answer is shown. */
+  /** Numbers printer switches, so an answer older than the one already shown is dropped. */
   #printersSwitch = 0;
+  #printersShown = 0;
   /** `GET /api/device/me` as last read, which the printers dialog falls back to. */
   #heldIdentity?: DeviceIdentity;
   /** The open cancel, give-away or discount dialog, with what the server last answered it. */
@@ -3534,7 +3535,8 @@ export class TillApp extends LitElement {
     const attempt = ++this.#printersSwitch;
     try {
       const stored = await this.api.setDevicePrinters(event.detail);
-      if (attempt !== this.#printersSwitch) return;
+      if (attempt <= this.#printersShown) return;
+      this.#printersShown = attempt;
       if (this.#heldIdentity !== undefined)
         this.#heldIdentity = { ...this.#heldIdentity, ...stored };
       this.printersError = null;
@@ -3543,7 +3545,8 @@ export class TillApp extends LitElement {
         paymentSlip: { ...this.devicePrinters.paymentSlip, current: stored.paymentSlipPrinterId },
       };
     } catch (error) {
-      if (attempt !== this.#printersSwitch) return;
+      if (attempt <= this.#printersShown) return;
+      this.#printersShown = attempt;
       const { code, field } = error as { code?: unknown; field?: unknown };
       this.printersError = {
         code: typeof code === "string" ? code : "server.internal",
