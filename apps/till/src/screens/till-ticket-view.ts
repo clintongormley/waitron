@@ -459,6 +459,13 @@ export class TillTicketView extends LitElement {
             : nothing
         }
         <header class="issuer">
+          ${
+            r.receiptHeader?.printTradingName &&
+            r.receiptHeader.tradingName.trim() &&
+            r.receiptHeader.tradingName.trim() !== issuer.venueName.trim()
+              ? html`<p class="venue">${r.receiptHeader.tradingName.trim()}</p>`
+              : nothing
+          }
           <p class="venue">${issuer.venueName}</p>
           ${
             this.receipt?.headerSubtitle

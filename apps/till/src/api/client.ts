@@ -817,6 +817,7 @@ export type TenderBlock =
 export interface TillSaleResult {
   /** Issuer identity stored with the filed invoice; immediate issuance responses may omit it. */
   issuer?: { venueName: string; nif: string };
+  receiptHeader?: { tradingName: string; printTradingName: boolean };
   /** The table/operator label and venue order number printed on every document as its grouping key. */
   orderLabel: string | null;
   orderNumber: number;

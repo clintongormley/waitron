@@ -92,6 +92,19 @@ describe("till-ticket-view", () => {
     expect(t).not.toContain("B12345678");
   });
 
+  it("shows the filed trading name above the legal issuer when it was printed", async () => {
+    const { el } = await mount({
+      issuer: { venueName: "Filed Venue SL", nif: "B87654321" },
+      receiptHeader: { tradingName: "Terrace Bar", printTradingName: true },
+    });
+    const header = el.shadowRoot!.querySelector(".issuer")!;
+    expect([...header.querySelectorAll("p")].map((row) => row.textContent!.trim())).toEqual([
+      "Terrace Bar",
+      "Filed Venue SL",
+      "NIF: B87654321",
+    ]);
+  });
+
   it("prints the invoice number + series and the formatted issue date (art. 7.1.a, 7.1.b)", async () => {
     const { el } = await mount();
     const expectedDate = new Intl.DateTimeFormat("es-ES", {

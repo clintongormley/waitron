@@ -193,6 +193,7 @@ export interface BillTenderRefund {
 
 export interface TillSaleResult {
   issuer?: { venueName: string; nif: string };
+  receiptHeader?: { tradingName: string; printTradingName: boolean };
   /** The language the sale was filed in (`sales.locale`). */
   locale: string;
   orderLabel: string | null;
@@ -636,6 +637,7 @@ export async function readSettledTicket(
 
   return {
     ...(await readReceiptOrder(tx, cfg, workingOrderId)),
+    receiptHeader: (await VENUE_SERVICE.readSaleReceiptHeader(tx, issued.saleId)) ?? undefined,
     locale: issued.locale,
     invoiceNumber: formatInvoiceNumber(issued.code, issued.number),
     // So a replay's `issuedAt` reads identically to the original's `fiscal.issuedAt.toISOString()`.
@@ -784,6 +786,7 @@ async function fileImmediateSale(
   // `FiscalRecordRef` is regime-opaque, so the "A/1" is read back from the sale row and its series.
   const ticket: TillSaleResult = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),
+    receiptHeader: (await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId)) ?? undefined,
     ...(await readReceiptOrder(tx, cfg, workingOrderId)),
     locale: language.locale,
     invoiceNumber: await readInvoiceNumber(tx, saleId),
