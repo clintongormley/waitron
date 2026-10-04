@@ -351,6 +351,22 @@ export class MenusScreen extends LitElement {
         display: block;
         padding-inline: var(--wt-space-4);
       }
+      /* The list's cells start at their top, where the name button and the row menu are a tap target
+         tall with their text centred, so the state's first line is centred on that height too. */
+      wt-data-table:not(.narrow)::part(status) {
+        display: block;
+        padding-block-start: calc((var(--wt-tap-min) - 1lh) / 2);
+      }
+      wt-data-table::part(changes-link) {
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--wt-tap-min);
+        color: var(--wt-color-primary);
+      }
+      wt-data-table::part(changes-link):focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
       /* The name and its status take the list's width less room for the row menu's column, and
          wrap inside it: the table itself never narrows a column below its content. */
       wt-data-table.narrow::part(name),
@@ -938,10 +954,10 @@ export class MenusScreen extends LitElement {
     if (!isTab(this.#url.read("view"))) this.#url.write({ view: TABS[0] }, true);
   }
 
-  #open(menuId: string): void {
+  #open(menuId: string, view: Tab = TABS[0]): void {
     this.#select(menuId);
-    this.#showView(TABS[0]);
-    this.#url.write({ dashboard: "menus", menu: menuId, view: TABS[0] });
+    this.#showView(view);
+    this.#url.write({ dashboard: "menus", menu: menuId, view });
   }
 
   #backToList(): void {
@@ -1493,11 +1509,14 @@ export class MenusScreen extends LitElement {
   #statusCell(menu: MenuRow) {
     const test = `status-${menu.id}`;
     if (typeof menu.status === "string")
-      return html`<span part="muted" data-test=${test}
+      return html`<span part="status muted" data-test=${test}
         >${t(menu.status === "loading" ? "menus.status_loading" : "menus.status_error")}</span
       >`;
-    const { label, live } = statusWords(menu.status);
-    return html`<span data-test=${test}
+    // The list's Status says what is live; a changed menu's drafts have the Changes column.
+    const { label, live } = statusWords(
+      menu.status.state === "changed" ? { ...menu.status, state: "current" } : menu.status,
+    );
+    return html`<span part="status" data-test=${test}
       >${label}${menu.status.clashes ? html` <span part="clash">${menu.status.clashes} ${t(menu.status.clashes === 1 ? "menus.clash" : "menus.clashes")}</span>` : nothing}${
         live === null
           ? nothing
@@ -1506,8 +1525,30 @@ export class MenusScreen extends LitElement {
     >`;
   }
 
-  /** On a narrow list the status moves under the name and its own column goes, as the variants
-   * table does with its prices (docs/developers/design-system.md). */
+  /** Only a menu with a live version can have changes to it; one never published has none. */
+  #changesCell(menu: MenuRow) {
+    if (typeof menu.status === "string" || menu.status.state !== "changed") return nothing;
+    const label = t("menus.changes_link");
+    return html`<a
+      part="changes-link"
+      data-test=${`changes-${menu.id}`}
+      href=${`/manage/menus/menu/${encodeURIComponent(menu.id)}/view/preview`}
+      aria-label=${`${label}: ${menu.name}`}
+      @click=${(event: MouseEvent) => this.#openPreview(event, menu.id)}
+      >${label}</a
+    >`;
+  }
+
+  /** A held modifier key keeps the browser's own handling, such as opening a new tab. */
+  #openPreview(event: MouseEvent, menuId: string): void {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
+      return;
+    event.preventDefault();
+    this.#open(menuId, "preview");
+  }
+
+  /** On a narrow list the status and the changes link move under the name and their columns go, as
+   * the variants table does with its prices (docs/developers/design-system.md). */
   #buildColumns(narrow: boolean): DataTableColumn<MenuRow>[] {
     const name = (menu: MenuRow) =>
       html`<wt-button
@@ -1525,7 +1566,12 @@ export class MenusScreen extends LitElement {
         sortValue: (menu) => menu.name,
         searchValue: (menu) => menu.name,
         cell: narrow
-          ? (menu) => html`${name(menu)} <span part="stacked">${this.#statusCell(menu)}</span>`
+          ? (menu) => {
+              const changes = this.#changesCell(menu);
+              return html`${name(menu)}
+                <span part="stacked">${this.#statusCell(menu)}</span>
+                ${changes === nothing ? nothing : html`<span part="stacked">${changes}</span>`}`;
+            }
           : name,
       },
       ...(narrow
@@ -1540,6 +1586,12 @@ export class MenusScreen extends LitElement {
                   typeof menu.status === "string" ? menu.status : menu.status.state,
                 ),
               cell: (menu: MenuRow) => this.#statusCell(menu),
+            },
+            {
+              key: "changes",
+              label: t("menus.changes"),
+              choosable: "shown" as const,
+              cell: (menu: MenuRow) => this.#changesCell(menu),
             },
           ]),
       {
@@ -1718,7 +1770,8 @@ export class MenusScreen extends LitElement {
                 data-test="menus"
                 class=${this.narrow ? "narrow" : ""}
                 aria-label=${t("menus.title")}
-                viewKey="waitron.menus.table"
+                top-aligned
+                viewKey="waitron.menus.list.table"
                 customiseColumnsLabel=${t("table.customise_columns")}
                 customiseLabel=${t("table.customise")}
                 restoreColumnsLabel=${t("table.restore_columns")}
