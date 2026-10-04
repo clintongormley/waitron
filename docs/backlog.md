@@ -1218,10 +1218,10 @@ but Each while the server accepts none for a whole unit with no scale link (ml) 
 (W77, owner 2026-10-04) — DONE.** The owner, on an Extras list: _"missing the summary of the values
 (even though they're inherited, not filled in currently)"_. The closed line of the Extras and
 Options list forms' names sections now names every content language in order: its own name, or
-else, in italic, the name it falls back to — the default language's name, then the list's staff
-name — the same text the open field hints (`effectiveNamesLine`,
-`apps/dashboard/src/widgets/form-fields.ts`). A language with nothing to fall back to (a new list
-with no name yet) is left out. Display only: blank fields stay blank and what is saved is unchanged.
+else, in italic, what the open field hints while empty — the default language's name, then the
+list's staff name (`effectiveNamesLine`, `apps/dashboard/src/widgets/form-fields.ts`). A language
+with nothing to fall back to (a new list with no name yet) is left out. Display only: blank fields
+stay blank and what is saved is unchanged.
 Audited: the only other folded section holding customer-facing names is the Product editor's
 Descriptors section, whose Name row says "None specified" for a blank language by A211's decision;
 left as it is (asked of the owner, 2026-10-04).
@@ -1557,7 +1557,8 @@ DONE (#1076).** The owner: _"when rendering the names block "EN Medium, pink in 
 rosado por dentro · Kitchen AL PUNTO", add a colon after each field: "EN: Medium, pink in the middle
 · ES: Al punto, rosado por dentro · Kitchen: AL PUNTO", and maybe make the field names bold"_. The
 line is built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`), used by the options
-list and extras list forms (the option form stopped folding its names with A170). **Decided (owner, 2026-10-02, choosing B of three mockups,
+list and extras list forms (the option form stopped folding its names with A170).
+_(2026-10-04: now `effectiveNamesLine`, W77.)_ **Decided (owner, 2026-10-02, choosing B of three mockups,
 "although C is good too"):** "EN:", "ES:" and "Kitchen:" (Spanish "Cocina:") in bold, the values
 in the summary's usual muted text. (C, the field names in full-strength text rather than bold, was
 the runner-up.) Bold needs markup, and `wt-disclosure` takes its `summary` as a plain string; give

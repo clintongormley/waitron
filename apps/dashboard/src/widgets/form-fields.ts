@@ -36,8 +36,7 @@ export const priceText = (value: string) =>
 export const priceSearchText = (shown: string, raw: readonly string[]) =>
   [shown, shown.replace(/\u00a0/g, " "), ...raw].join(" ");
 
-/** Each language's text after its upper-case code, blank ones left out: a folded names section's
- * closed line as `wt-disclosure`'s `summaryFields`. */
+/** Each language's text after its upper-case code, blank ones left out. */
 export function namesLine(
   locales: readonly string[],
   text: Record<string, string>,
@@ -48,9 +47,9 @@ export function namesLine(
   });
 }
 
-/** {@link namesLine} with every blank language shown as the name it falls back to, marked as a
- * placeholder: the default language's text, then `staffName`, as {@link optionalTextFields} hints it.
- * A language with nothing to fall back to is left out. */
+/** Each language's text after its upper-case code; a blank one shows, marked as a placeholder,
+ * what {@link optionalTextFields} hints for it — the default language's text, then `staffName`. A
+ * language with nothing to show is left out. */
 export function effectiveNamesLine(
   locales: readonly string[],
   text: Record<string, string>,
