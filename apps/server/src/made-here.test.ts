@@ -215,12 +215,7 @@ describe("device made-here stations", () => {
   it("shows a made-here weighted extra's saved physical amount and unit", async () => {
     const venue = await setupVenue(suite.db);
     const drinkId = await withTransaction(suite.db, async (tx) => {
-      const deviceId = await deviceAt(
-        tx,
-        venue.cfg.locationId,
-        venue.cfg.tillId,
-        venue.defaultStationId,
-      );
+      const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
       const drink = await rawLine(tx, orderId, venue.cafeId, 1);

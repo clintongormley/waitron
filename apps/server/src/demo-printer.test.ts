@@ -2,17 +2,19 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
+  deviceProfilePrinters,
+  devices,
   kitchenStations,
   locations,
   printAgents,
   printJobs,
   printers,
   stationPrinters,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { readProfilePrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import {
   configureDemoPrinter,
@@ -22,22 +24,42 @@ import {
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-async function venue(): Promise<{ locationId: string; tillId: string }> {
+async function venue(): Promise<{ locationId: string; deviceId: string; profileId: string }> {
   await seedTenant(suite.db);
   const [location] = await suite.db
     .insert(locations)
     .values({ name: "Bar", invoiceLocales: ["en-GB"], operationDescription: "Restaurant sale" })
     .returning({ id: locations.id });
-  const [till] = await suite.db
-    .insert(tills)
-    .values({ locationId: location!.id, name: "Counter" })
-    .returning({ id: tills.id });
-  return { locationId: location!.id, tillId: till!.id };
+  const { deviceId, profileId } = await seedDevice(suite.db, {
+    locationId: location!.id,
+    label: "Counter",
+  });
+  return { locationId: location!.id, deviceId, profileId };
+}
+
+async function realPrinter(locationId: string, name: string): Promise<string> {
+  const [row] = await suite.db
+    .insert(printers)
+    .values({ locationId, name, transport: "usb", localKey: name.toUpperCase() })
+    .returning({ id: printers.id });
+  return row!.id;
+}
+
+async function devicePrinters(deviceId: string) {
+  const [row] = await suite.db
+    .select({ receipt: devices.receiptPrinterId, paymentSlip: devices.paymentSlipPrinterId })
+    .from(devices)
+    .where(eq(devices.id, deviceId));
+  return row;
+}
+
+function profileLists(profileId: string) {
+  return withTransaction(suite.db, (tx) => readProfilePrinterLists(tx, profileId));
 }
 
 describe("the Demo printer", () => {
   it("delivers its receipt and drawer jobs without claiming an unrelated printer's job", async () => {
-    const { locationId, tillId } = await venue();
+    const { locationId, deviceId, profileId } = await venue();
     const demo = await configureDemoPrinter(suite.db, locationId, true);
     expect(demo).not.toBeNull();
     const otherId = await withTransaction(suite.db, async (tx) => {
@@ -70,15 +92,18 @@ describe("the Demo printer", () => {
       { printerId: demo!.printerId, kind: "drawer", status: "done" },
     ]);
     expect(jobs.find((job) => job.printerId === otherId)?.status).toBe("queued");
-    const [till] = await suite.db
-      .select({ printerId: tills.receiptPrinterId })
-      .from(tills)
-      .where(eq(tills.id, tillId));
-    expect(till?.printerId).toBe(demo!.printerId);
+    expect(await devicePrinters(deviceId)).toEqual({
+      receipt: demo!.printerId,
+      paymentSlip: demo!.printerId,
+    });
+    expect(await profileLists(profileId)).toEqual({
+      receiptPrinterIds: [demo!.printerId],
+      paymentSlipPrinterIds: [demo!.printerId],
+    });
   });
 
   it("deactivates the pretend printer in Live mode and cannot claim its waiting jobs", async () => {
-    const { locationId, tillId } = await venue();
+    const { locationId, deviceId, profileId } = await venue();
     const [station] = await suite.db
       .insert(kitchenStations)
       .values({ locationId, name: "Grill" })
@@ -100,11 +125,17 @@ describe("the Demo printer", () => {
       .from(printers)
       .where(eq(printers.id, demo!.printerId));
     expect(printer?.active).toBe(false);
-    const [till] = await suite.db
-      .select({ printerId: tills.receiptPrinterId })
-      .from(tills)
-      .where(eq(tills.id, tillId));
-    expect(till?.printerId).toBeNull();
+    expect(await devicePrinters(deviceId)).toEqual({ receipt: null, paymentSlip: null });
+    expect(await profileLists(profileId)).toEqual({
+      receiptPrinterIds: [],
+      paymentSlipPrinterIds: [],
+    });
+    expect(
+      await suite.db
+        .select()
+        .from(deviceProfilePrinters)
+        .where(eq(deviceProfilePrinters.printerId, demo!.printerId)),
+    ).toEqual([]);
     expect(
       await suite.db
         .select()
@@ -113,6 +144,59 @@ describe("the Demo printer", () => {
     ).toEqual([]);
     const [job] = await suite.db.select({ status: printJobs.status }).from(printJobs);
     expect(job?.status).toBe("queued");
+  });
+
+  it("adds itself after a profile's real printers, leaving held printers and revoked devices alone", async () => {
+    const { locationId, deviceId, profileId } = await venue();
+    const bar = await realPrinter(locationId, "Bar");
+    await withTransaction(suite.db, (tx) =>
+      setProfilePrinterLists(tx, profileId, {
+        receiptPrinterIds: [bar],
+        paymentSlipPrinterIds: [bar],
+      }),
+    );
+    await suite.db
+      .update(devices)
+      .set({ receiptPrinterId: bar, paymentSlipPrinterId: bar })
+      .where(eq(devices.id, deviceId));
+    const { deviceId: revokedId } = await seedDevice(suite.db, { locationId, profileId });
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, revokedId));
+
+    await configureDemoPrinter(suite.db, locationId, true);
+    // Every boot in Demo runs it again.
+    const demo = await configureDemoPrinter(suite.db, locationId, true);
+
+    expect(await devicePrinters(deviceId)).toEqual({ receipt: bar, paymentSlip: bar });
+    expect(await devicePrinters(revokedId)).toEqual({ receipt: null, paymentSlip: null });
+    expect(await profileLists(profileId)).toEqual({
+      receiptPrinterIds: [bar, demo!.printerId],
+      paymentSlipPrinterIds: [bar, demo!.printerId],
+    });
+  });
+
+  it("moves a device off it in Live mode to the first printer still listed", async () => {
+    const { locationId, deviceId, profileId } = await venue();
+    const bar = await realPrinter(locationId, "Bar");
+    // Listed after the device paired, so the device still holds none.
+    await withTransaction(suite.db, (tx) =>
+      setProfilePrinterLists(tx, profileId, {
+        receiptPrinterIds: [bar],
+        paymentSlipPrinterIds: [bar],
+      }),
+    );
+    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    expect(await devicePrinters(deviceId)).toEqual({
+      receipt: demo!.printerId,
+      paymentSlip: demo!.printerId,
+    });
+
+    await configureDemoPrinter(suite.db, locationId, false);
+
+    expect(await devicePrinters(deviceId)).toEqual({ receipt: bar, paymentSlip: bar });
+    expect(await profileLists(profileId)).toEqual({
+      receiptPrinterIds: [bar],
+      paymentSlipPrinterIds: [bar],
+    });
   });
 
   it("uses its own inactive agent even when a real agent has the same display name", async () => {
