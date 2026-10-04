@@ -1214,6 +1214,18 @@ screen; (2) the handle-on-the-first-line alignment applies to the Extras list on
 reorderable tables still centre their handles; (3) the editor refuses a blank Portion for every unit
 but Each while the server accepts none for a whole unit with no scale link (ml) and stores 1.
 
+**A folded Customer-facing names section shows every language's name, inherited ones in italic
+(W77, owner 2026-10-04) — DONE.** The owner, on an Extras list: _"missing the summary of the values
+(even though they're inherited, not filled in currently)"_. The closed line of the Extras and
+Options list forms' names sections now names every content language in order: its own name, or
+else, in italic, the name it falls back to — the default language's name, then the list's staff
+name — the same text the open field hints (`effectiveNamesLine`,
+`apps/dashboard/src/widgets/form-fields.ts`). A language with nothing to fall back to (a new list
+with no name yet) is left out. Display only: blank fields stay blank and what is saved is unchanged.
+Audited: the only other folded section holding customer-facing names is the Product editor's
+Descriptors section, whose Name row says "None specified" for a blank language by A211's decision;
+left as it is (asked of the owner, 2026-10-04).
+
 **Clicking a product's row on the Products screen opens it (A205) — DONE in A208.**
 
 **The dashboard recovers by itself when the server comes back after a restart (A206, owner
@@ -1883,6 +1895,7 @@ themes and both languages.
 (`editor.allergens_none`, `editor.diet_none`) where the closed line says "None specified". At 390
 wide a two-field line can wrap inside a value ("Dietary preferences: None" / "specified"). The
 options list and extras list forms' names sections still leave a blank name out (`namesLine`).
+_(2026-10-04: no longer — W77 shows the name each blank one falls back to.)_
 Whether the Pricing fold should also name an empty base price or VAT is a question for the owner.
 
 **An Add course button beside the course dropdown (A212) — DONE (#1087).** The owner:
