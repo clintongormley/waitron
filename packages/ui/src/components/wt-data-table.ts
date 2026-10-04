@@ -53,6 +53,18 @@ type SortDirection = "ascending" | "descending";
  * `--wt-space-4` and stops deepening after four levels. */
 const NARROW_TREE_WIDTH = 440;
 
+/** A key function for `repeat`, which needs keys unique where `rowKey` may repeat one: rows that
+ * share a key are told apart by which occurrence they are. */
+function repeatKeys(keys: readonly string[]): (_item: unknown, index: number) => string {
+  const seen = new Map<string, number>();
+  const unique = keys.map((key) => {
+    const occurrence = seen.get(key) ?? 0;
+    seen.set(key, occurrence + 1);
+    return `${occurrence}:${key}`;
+  });
+  return (_item, index) => unique[index]!;
+}
+
 @customElement("wt-data-table")
 export class WtDataTable<Row = unknown> extends LitElement {
   static override styles = [
@@ -2057,6 +2069,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const sortColumn = this.#sortColumn(shown);
     if (!isTree) {
       const sorted = this.#sortedRows(visible, sortColumn);
+      const rowKeys = sorted.map((row, index) => this.rowKey(row, index));
       const visibleKeys = sorted.flatMap((row, index) =>
         this.rowSelectable(row) ? [this.rowKey(row, index)] : [],
       );
@@ -2076,8 +2089,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
             }
             ${this.#renderHead(visibleKeys, shown)}
             <tbody>
-              ${sorted.map((row, index) => {
-                const key = this.rowKey(row, index);
+              ${repeat(sorted, repeatKeys(rowKeys), (row, index) => {
+                const key = rowKeys[index]!;
                 return html`
                   <tr
                     data-row-key=${key}
@@ -2141,101 +2154,105 @@ export class WtDataTable<Row = unknown> extends LitElement {
           }
           ${this.#renderHead(visibleKeys, shown)}
           <tbody role="rowgroup">
-            ${entries.map(({ row, key, depth, hasChildren }) => {
-              const collapsible = this.rowCollapsible(row);
-              const held = heldOpen.has(key);
-              const expanded = !collapsible || !this.collapsed.has(key) || held;
-              const cellContext = { ancestorOnly: ancestorOnly.has(key) };
-              const branch = hasChildren && collapsible && !held;
-              const mode = this.rowActivation?.(row) ?? "click";
-              const toggles = mode === "toggle" && branch;
-              const clicks = mode === "click" && this.rowClick !== undefined;
-              const toggleLabel = this.rowToggleLabel
-                ? this.rowToggleLabel(row, expanded)
-                : expanded
-                  ? this.collapseLabel
-                  : this.expandLabel;
-              const joined = depth > 0 && this.rowJoinsParent(row);
-              const activate = toggles
-                ? () => this.#toggle(key)
-                : clicks
-                  ? () => this.rowClick!(row)
-                  : undefined;
-              return html`<tr
-                data-row-key=${key}
-                role="row"
-                class=${classMap({ clickable: activate !== undefined, joined })}
-                aria-level=${depth + 1}
-                aria-expanded=${hasChildren ? String(expanded) : nothing}
-              >
-                ${this.#renderSelectCell(key, row, true)}
-                ${shown.map(
-                  (column, ci) =>
-                    html`<td
-                      role="gridcell"
-                      data-align=${column.align ?? "start"}
-                      data-pinned=${column.pinned ?? nothing}
-                      data-actions=${column.key === "actions" ? "" : nothing}
-                      data-row-activate=${column.activatesRow === false ? "false" : nothing}
-                      @click=${
-                        column.pinned && column.activatesRow !== false && activate !== undefined
-                          ? (event: Event) => {
-                              if (event.target === event.currentTarget) activate();
-                            }
-                          : nothing
-                      }
-                    >
-                      ${
-                        ci === 0
-                          ? html`${
-                                toggles
-                                  ? html`<button
-                                      class="row-activate"
-                                      aria-label=${toggleLabel}
-                                      aria-expanded=${String(expanded)}
-                                      @click=${(event: Event) => {
-                                        event.stopPropagation();
-                                        this.#toggle(key);
-                                      }}
-                                    ></button>`
-                                  : clicks
+            ${repeat(
+              entries,
+              repeatKeys(entries.map(({ key }) => key)),
+              ({ row, key, depth, hasChildren }) => {
+                const collapsible = this.rowCollapsible(row);
+                const held = heldOpen.has(key);
+                const expanded = !collapsible || !this.collapsed.has(key) || held;
+                const cellContext = { ancestorOnly: ancestorOnly.has(key) };
+                const branch = hasChildren && collapsible && !held;
+                const mode = this.rowActivation?.(row) ?? "click";
+                const toggles = mode === "toggle" && branch;
+                const clicks = mode === "click" && this.rowClick !== undefined;
+                const toggleLabel = this.rowToggleLabel
+                  ? this.rowToggleLabel(row, expanded)
+                  : expanded
+                    ? this.collapseLabel
+                    : this.expandLabel;
+                const joined = depth > 0 && this.rowJoinsParent(row);
+                const activate = toggles
+                  ? () => this.#toggle(key)
+                  : clicks
+                    ? () => this.rowClick!(row)
+                    : undefined;
+                return html`<tr
+                  data-row-key=${key}
+                  role="row"
+                  class=${classMap({ clickable: activate !== undefined, joined })}
+                  aria-level=${depth + 1}
+                  aria-expanded=${hasChildren ? String(expanded) : nothing}
+                >
+                  ${this.#renderSelectCell(key, row, true)}
+                  ${shown.map(
+                    (column, ci) =>
+                      html`<td
+                        role="gridcell"
+                        data-align=${column.align ?? "start"}
+                        data-pinned=${column.pinned ?? nothing}
+                        data-actions=${column.key === "actions" ? "" : nothing}
+                        data-row-activate=${column.activatesRow === false ? "false" : nothing}
+                        @click=${
+                          column.pinned && column.activatesRow !== false && activate !== undefined
+                            ? (event: Event) => {
+                                if (event.target === event.currentTarget) activate();
+                              }
+                            : nothing
+                        }
+                      >
+                        ${
+                          ci === 0
+                            ? html`${
+                                  toggles
                                     ? html`<button
                                         class="row-activate"
-                                        aria-label=${this.rowClickLabel(row)}
-                                        @click=${() => this.rowClick!(row)}
+                                        aria-label=${toggleLabel}
+                                        aria-expanded=${String(expanded)}
+                                        @click=${(event: Event) => {
+                                          event.stopPropagation();
+                                          this.#toggle(key);
+                                        }}
                                       ></button>`
-                                    : nothing
-                              }<span
-                                class="tree-cell"
-                                style=${`--tree-depth: ${joined ? depth - 1 : depth}`}
-                              >
-                                ${
-                                  !branch
-                                    ? html`<span class="tree-spacer"></span>`
-                                    : toggles
-                                      ? html`<span class="tree-arrow" aria-hidden="true"
-                                          >${expanded ? "▾" : "▸"}</span
-                                        >`
-                                      : html`<button
-                                          class="tree-toggle"
-                                          part="tree-toggle"
-                                          aria-label=${toggleLabel}
-                                          @click=${(event: Event) => {
-                                            event.stopPropagation();
-                                            this.#toggle(key);
-                                          }}
-                                        >
-                                          ${expanded ? "▾" : "▸"}
-                                        </button>`
-                                }
-                                ${column.cell(row, cellContext)}
-                              </span>`
-                          : column.cell(row, cellContext)
-                      }
-                    </td>`,
-                )}
-              </tr>`;
-            })}
+                                    : clicks
+                                      ? html`<button
+                                          class="row-activate"
+                                          aria-label=${this.rowClickLabel(row)}
+                                          @click=${() => this.rowClick!(row)}
+                                        ></button>`
+                                      : nothing
+                                }<span
+                                  class="tree-cell"
+                                  style=${`--tree-depth: ${joined ? depth - 1 : depth}`}
+                                >
+                                  ${
+                                    !branch
+                                      ? html`<span class="tree-spacer"></span>`
+                                      : toggles
+                                        ? html`<span class="tree-arrow" aria-hidden="true"
+                                            >${expanded ? "▾" : "▸"}</span
+                                          >`
+                                        : html`<button
+                                            class="tree-toggle"
+                                            part="tree-toggle"
+                                            aria-label=${toggleLabel}
+                                            @click=${(event: Event) => {
+                                              event.stopPropagation();
+                                              this.#toggle(key);
+                                            }}
+                                          >
+                                            ${expanded ? "▾" : "▸"}
+                                          </button>`
+                                  }
+                                  ${column.cell(row, cellContext)}
+                                </span>`
+                            : column.cell(row, cellContext)
+                        }
+                      </td>`,
+                  )}
+                </tr>`;
+              },
+            )}
           </tbody>
         </table>
       </div>
