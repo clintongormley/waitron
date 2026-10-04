@@ -344,6 +344,8 @@ async function placeTable(shop: Shop): Promise<void> {
         ${department.rows[0]!.department_id}, 'table_tab', null
       )`);
     await tx.execute(sql`
+      insert into zone_sale_policies (zone_id) values (${zone.id})`);
+    await tx.execute(sql`
       insert into zone_menus (zone_id, menu_id)
       values (${zone.id}, ${shop.menuId})`);
     await tx.execute(sql`

@@ -2561,6 +2561,12 @@ it("files an extras pick and an options answer through cash checkout and reprint
     await tx.execute(
       sql`update locations set receipt_print_mode='never' where id=${cfg.locationId}`,
     );
+    await tx.execute(sql`
+      update department_sale_policies set receipt_print_mode='never'
+      where department_id in (
+        select department_id from zone_service_policies
+        where location_id=${cfg.locationId} and is_counter_default
+      )`);
     return printer.id;
   });
   const workingOrderId = randomUUID();

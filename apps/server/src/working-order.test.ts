@@ -233,6 +233,11 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
         (location_id, zone_id, department_id, default_menu_id, is_counter_default)
       values (${locationId}, ${zoneId}, ${departmentId}, null, true)`);
       await tx.execute(sql`
+      insert into department_sale_policies (department_id, paid_when)
+      values (${departmentId}, ${orderFlow === "ticket_then_pay" ? "ticket_then_pay" : "prepay"})`);
+      await tx.execute(sql`
+      insert into zone_sale_policies (zone_id) values (${zoneId})`);
+      await tx.execute(sql`
       insert into zone_menus (zone_id, menu_id, display_order)
       values
         (${zoneId}, ${cat.id}, 0),
@@ -744,6 +749,37 @@ describe("parkOrder", () => {
         department_name: "Restaurant",
       },
     ]);
+  });
+
+  it("freezes a quick order's zone payment timing when it opens", async () => {
+    const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
+    await db.execute(sql`
+      update zone_sale_policies set paid_when = 'ticket_then_pay' where zone_id = ${zoneId}`);
+
+    const first = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id: first,
+      zoneId,
+      lines: [{ menuItemId: premiumCafeOfferId, quantity: "1" }],
+    });
+    await db.execute(sql`
+      update zone_sale_policies set paid_when = 'prepay' where zone_id = ${zoneId}`);
+    const second = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id: second,
+      zoneId,
+      lines: [{ menuItemId: premiumCafeOfferId, quantity: "1" }],
+    });
+
+    const contexts = await db.execute<{ working_order_id: string; service_mode: string }>(sql`
+      select working_order_id, service_mode from order_service_contexts
+      where working_order_id in (${first}, ${second})`);
+    expect(new Map(contexts.rows.map((row) => [row.working_order_id, row.service_mode]))).toEqual(
+      new Map([
+        [first, "ticket_then_pay"],
+        [second, "prepay"],
+      ]),
+    );
   });
 
   it("loads one zone-offer snapshot for a basket with repeated offers", async () => {

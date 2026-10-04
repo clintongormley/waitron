@@ -221,6 +221,10 @@ const suite = useVenueDb({
           (location_id, zone_id, department_id, default_menu_id, is_counter_default)
         values (${loc!.id}, ${zone!.id}, ${department!.id}, null, true)`);
         await tx.execute(sql`
+        insert into department_sale_policies (department_id) values (${department!.id})`);
+        await tx.execute(sql`
+        insert into zone_sale_policies (zone_id) values (${zone!.id})`);
+        await tx.execute(sql`
         insert into zone_menus (zone_id, menu_id)
         values (${zone!.id}, ${cat.id})`);
         await tx.execute(sql`

@@ -931,12 +931,16 @@ export async function recordOrderServiceContext(
   zoneId: string,
 ): Promise<void> {
   const context = await resolveZoneContext(tx, cfg, zoneId);
+  const serviceMode =
+    context.serviceMode === "table_tab" || context.serviceMode === "invoice_first"
+      ? context.serviceMode
+      : (await resolveSalePolicy(tx, cfg, zoneId)).paidWhen;
   await tx.insert(orderServiceContexts).values({
     workingOrderId,
     locationId: cfg.locationId,
     zoneId: context.zoneId,
     departmentId: context.departmentId,
-    serviceMode: context.serviceMode,
+    serviceMode,
   });
 }
 
