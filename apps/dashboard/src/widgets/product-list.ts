@@ -10,7 +10,7 @@ import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t, currentLocale } from "../i18n/t.js";
 import { allergenState, allergenStateName, vatClassName } from "../i18n/domain.js";
-import { categoryPath, categoryWithDescendants } from "./category-form.js";
+import { byLabel, categoryPath, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
 import {
   holdPageCursor,
@@ -697,13 +697,15 @@ export class ProductList extends LitElement {
           product,
           variant: null,
         },
-        ...product.variants.map((variant): ProductRow => ({
-          kind: "product",
-          key: `${product.id}:${variant.id}`,
-          parentKey: product.id,
-          product,
-          variant,
-        })),
+        ...[...product.variants]
+          .sort((a, b) => byLabel(a.name, b.name))
+          .map((variant): ProductRow => ({
+            kind: "product",
+            key: `${product.id}:${variant.id}`,
+            parentKey: product.id,
+            product,
+            variant,
+          })),
       ]),
     ];
   }
@@ -1231,6 +1233,7 @@ export class ProductList extends LitElement {
         .rowGroup=${(row: ListRow) => (row.kind === "product" ? 1 : 0)}
         .rowCollapsible=${(row: ListRow) => row.kind !== "root"}
         .rowJoinsParent=${(row: ListRow) => row.kind === "product" && row.variant !== null}
+        .rowKeepsChildOrder=${(row: ListRow) => row.kind === "product" && row.variant === null}
         .expandAllIncludes=${(row: ListRow) => row.kind === "folder"}
         .rowActivation=${(row: ListRow) =>
           row.kind === "folder" && !this.#renaming(row.folder.id)
