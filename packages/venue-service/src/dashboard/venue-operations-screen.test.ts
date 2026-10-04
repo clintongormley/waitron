@@ -196,6 +196,26 @@ async function changesHeardOutside(act: () => Promise<void>): Promise<number> {
 }
 
 describe("venue operations screen", () => {
+  it("shows a zone's readiness problem beneath that zone in the policy table", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        readiness: [{ code: "zone.menu_missing", zoneId: "z1", zoneName: "Dining room" }],
+      }),
+    } as unknown as VenueServiceApi);
+    const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
+    const zone = rows.find((row) => row.textContent?.includes("Dining room"));
+    expect(zone).toBeDefined();
+    expect(zone!.querySelector('[data-test="zone-readiness"]')?.textContent).toContain(
+      "needs a default menu",
+    );
+    expect(
+      rows
+        .filter((row) => row !== zone)
+        .every((row) => row.querySelector('[data-test="zone-readiness"]') === null),
+    ).toBe(true);
+  });
+
   it("renames a department from its table cell", async () => {
     const updateDepartment = vi.fn().mockResolvedValue(undefined);
     const el = await mount({

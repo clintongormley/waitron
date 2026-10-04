@@ -94,6 +94,10 @@ export class VenueOperationsScreen extends LitElement {
         padding: 0;
         text-decoration: underline;
       }
+      wt-data-table::part(zone-readiness) {
+        color: var(--wt-color-danger);
+        font-size: var(--wt-font-size-sm);
+      }
       .toolbar {
         display: flex;
         align-items: center;
@@ -553,7 +557,15 @@ export class VenueOperationsScreen extends LitElement {
         key: "name",
         label: t("venue.name"),
         cell: (row) => {
-          if (row.kind !== "department") return row.zone.name;
+          if (row.kind !== "department")
+            return html`${row.zone.name}${model.readiness
+              .filter((issue) => "zoneId" in issue && issue.zoneId === row.zone.id)
+              .map(
+                (issue) =>
+                  html`<div part="zone-readiness" data-test="zone-readiness">
+                    ${this.#readinessMessage(issue)}
+                  </div>`,
+              )}`;
           const displayName =
             departments.length === 1 ? t("venue.every_zone") : row.department.name;
           if (this.departmentNameEditor !== row.department.id)
