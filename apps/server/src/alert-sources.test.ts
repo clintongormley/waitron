@@ -857,6 +857,39 @@ async function readBattery(source: AlertSource, now = NOW) {
 }
 
 describe("batteryAlertSource", () => {
+  it("fails the source when a reader names an unregistered provider", async () => {
+    await seedTenant(batterySuite.db);
+    await seedReader({ providerRef: "unregistered", name: "Terrace" });
+    const source = batteryAlertSource({
+      providers: [],
+      runtimeDeps: stubRuntimeDeps(batterySuite.db),
+      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+    });
+
+    await expect(readBattery(source)).rejects.toThrow();
+  });
+
+  it("clears its deadline when a cache seat throws before status reads start", async () => {
+    await seedTenant(batterySuite.db);
+    await seedReader({ providerRef: "reader", name: "Terrace" });
+    const source = batteryAlertSource({
+      providers: [stubProvider({ battery: () => 5, calls: { n: 0 } })],
+      runtimeDeps: stubRuntimeDeps(batterySuite.db),
+      cache: {
+        get() {
+          throw new Error("cache seat failed");
+        },
+      },
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await expect(readBattery(source)).rejects.toThrow("cache seat failed");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps a prompt low-battery warning beside a held reader and names the unavailable reader", async () => {
     await seedTenant(batterySuite.db);
     const lowId = await seedReader({ providerRef: "low", name: "Counter" });
@@ -893,6 +926,9 @@ describe("batteryAlertSource", () => {
             key: `reader.status_unavailable:${heldId}`,
             code: "reader.status_unavailable",
             params: { reader: "Terrace" },
+            severity: "warning",
+            since: null,
+            screen: "payments",
           }),
         ]),
       );

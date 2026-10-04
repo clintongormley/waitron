@@ -404,24 +404,24 @@ export function batteryAlertSource(deps: {
       const deadline = new Promise<void>((resolve) => {
         timer = setTimeout(resolve, BATTERY_CHECK_LIMIT_MS);
       });
-      // One deadline bounds the whole batch while each reader retains its own result.
-      const pending = readers.map((r) =>
-        Promise.race([
-          deps.cache
-            .get(r.id, async () => {
-              const seat = cardProviderById(deps.providers, r.provider);
-              const status = await seat.readers.status(deps.runtimeDeps(), r.ref);
-              return status.batteryPercent ?? null;
-            })
-            .then(
-              (percent) => ({ kind: "reading" as const, percent }),
-              () => ({ kind: "unavailable" as const }),
-            ),
-          deadline.then(() => ({ kind: "unavailable" as const })),
-        ]),
-      );
-      let results: Awaited<(typeof pending)[number]>[];
+      let results: ({ kind: "reading"; percent: number | null } | { kind: "unavailable" })[];
       try {
+        // One deadline bounds the whole batch while each reader retains its own result.
+        const pending = readers.map((r) => {
+          const seat = cardProviderById(deps.providers, r.provider);
+          return Promise.race([
+            deps.cache
+              .get(r.id, async () => {
+                const status = await seat.readers.status(deps.runtimeDeps(), r.ref);
+                return status.batteryPercent ?? null;
+              })
+              .then(
+                (percent) => ({ kind: "reading" as const, percent }),
+                () => ({ kind: "unavailable" as const }),
+              ),
+            deadline.then(() => ({ kind: "unavailable" as const })),
+          ]);
+        });
         results = await Promise.all(pending);
       } finally {
         clearTimeout(timer);
