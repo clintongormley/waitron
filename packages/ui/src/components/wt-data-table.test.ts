@@ -1811,7 +1811,7 @@ test.each([390, 1280])("filtering preserves header geometry at %i px", async (wi
     const el = await tableS({
       rows: [
         { id: "1", name: "Ada", status: "active" },
-        { id: "2", name: "Bea", status: "closed" },
+        { id: "2", name: "A much longer product name", status: "closed" },
       ],
       columns: [
         { key: "name", label: "Name", cell: (row) => row.name },
@@ -1923,6 +1923,93 @@ test.each([390, 1280])(
     }
   },
 );
+
+test("a filtered table follows its container when the viewport narrows", async () => {
+  const previousWidth = window.innerWidth;
+  const previousHeight = window.innerHeight;
+  try {
+    await page.viewport(1280, 800);
+    const el = await tableS({ columns: withStatus });
+    const root = el.shadowRoot!;
+    await chooseOption(root.querySelector<WtCombobox>('[data-filter="status"]')!, "active");
+    await el.updateComplete;
+    await page.viewport(390, 800);
+    const scroll = root.querySelector<HTMLElement>(".scroll")!;
+    await vi.waitFor(() =>
+      expect(scroll.querySelector("table")!.clientWidth).toBeLessThanOrEqual(
+        scroll.clientWidth + 1,
+      ),
+    );
+  } finally {
+    await page.viewport(previousWidth, previousHeight);
+  }
+});
+
+test("a filtered table sizes a replacement Customise column from its own heading", async () => {
+  const status = { ...withStatus[1]!, choosable: "shown" as const };
+  const el = await tableS({
+    columns: [
+      withStatus[0]!,
+      status,
+      {
+        key: "note",
+        label: "VeryLongColumnHeadingThatCannotWrap",
+        cell: () => "note",
+        choosable: "hidden",
+      },
+    ],
+  });
+  await chooseOption(el.shadowRoot!.querySelector<WtCombobox>('[data-filter="status"]')!, "active");
+  await el.updateComplete;
+  await choose(el, "note");
+  await choose(el, "status");
+  const heading = [...el.shadowRoot!.querySelectorAll<HTMLElement>("thead th")].find((cell) =>
+    cell.textContent!.includes("VeryLongColumnHeadingThatCannotWrap"),
+  )!;
+  expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth);
+});
+
+test("a filtered table sizes a reordered Customise column from its own heading", async () => {
+  const el = await tableS({
+    columns: [
+      withStatus[0]!,
+      { ...withStatus[1]!, choosable: "shown" },
+      {
+        key: "note",
+        label: "VeryLongColumnHeadingThatCannotWrap",
+        cell: () => "note",
+        choosable: "shown",
+      },
+    ],
+  });
+  await chooseOption(el.shadowRoot!.querySelector<WtCombobox>('[data-filter="status"]')!, "active");
+  await el.updateComplete;
+  await userEvent.click(trigger(el));
+  panel(el).querySelector<HTMLButtonElement>('[data-reorder="note"]')!.focus();
+  await userEvent.keyboard("{ArrowUp}");
+  await el.updateComplete;
+  const heading = el.shadowRoot!.querySelector<HTMLElement>("thead th:nth-child(2)")!;
+  expect(heading.textContent).toContain("VeryLongColumnHeadingThatCannotWrap");
+  expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth);
+});
+
+test("a returning unbreakable value stays inside its locked cell", async () => {
+  const status = withStatus[1]!;
+  const el = await tableS({
+    rows: [
+      { id: "1", name: "Ada", status: "active" },
+      { id: "2", name: "averylongunbrokenskucode000001", status: "off" },
+    ],
+    columns: [withStatus[0]!, { ...status, filter: { ...status.filter!, initial: "active" } }],
+  });
+  await clickFilterRow(
+    el.shadowRoot!.querySelector<WtCombobox>('[data-filter="status"]')!,
+    "Any status",
+  );
+  await el.updateComplete;
+  const cell = el.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="2"] td')!;
+  expect(cell.scrollWidth).toBeLessThanOrEqual(cell.clientWidth);
+});
 
 test("the Filters panel closes from its own button and returns focus to its trigger", async () => {
   const el = await tableS({ columns: withStatus });

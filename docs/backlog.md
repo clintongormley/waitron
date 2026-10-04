@@ -2703,7 +2703,8 @@ clear when the drag ends or the dialog closes; keyboard reordering and saved ord
 used to increase a header's height and width when its filter became active. A filtered heading now
 uses an inset coloured line and an accessible filtered label; the Filters toolbar button opens the
 panel. The table keeps its measured column widths when a filter narrows rows and when it clears,
-then sizes them anew when the source columns or rows change. This supersedes W39's funnel mark.
+then sizes them anew when the table's container, rows or column choices change. This supersedes
+W39's funnel mark.
 
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through
