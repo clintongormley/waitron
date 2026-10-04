@@ -6,7 +6,25 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import {
+  holdPageCursor,
+  pointerElementsAt,
+  releasePageCursor,
+} from "@waitron/ui/src/reorder-table.js";
 import { memberKindLabel, memberName } from "./member-list-editor.js";
+import {
+  blockClickAfterDrag,
+  clearDragMarks,
+  dragGhost,
+  lastShownRow,
+  markDragging,
+  markGap,
+  placeDragGhost,
+  shownRow,
+  treeDragStyles,
+  type DragGhost,
+  type DropGap,
+} from "./tree-drag.js";
 import type { MenuStructureNode, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
@@ -53,6 +71,7 @@ const samePath = (next: string[], previous: string[] | undefined): boolean =>
 export class MenuStructureTable extends LitElement {
   static override styles = [
     baseStyles,
+    treeDragStyles,
     css`
       :host {
         display: block;
@@ -200,6 +219,16 @@ export class MenuStructureTable extends LitElement {
   /** The rows are not keyed, so a move leaves focus on whichever grip now sits where it was. */
   #refocus: string | null = null;
   @state() private announcement = "";
+  #drag: { pointerId: number; key: string; x: number; y: number; active: boolean } | null = null;
+  /** The sibling's key a release would move the dragged member to, while one is offered. */
+  #target: string | undefined = undefined;
+  #pointer = { x: 0, y: 0 };
+  @state() private ghost: DragGhost | null = null;
+
+  override disconnectedCallback(): void {
+    if (this.#drag) this.#finishDrag();
+    super.disconnectedCallback();
+  }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("products")) {
@@ -228,6 +257,7 @@ export class MenuStructureTable extends LitElement {
       hostUpdated: () => {
         this.#checkCurrentShown();
         this.#restoreFocus();
+        if (this.#drag?.active) this.#paint();
       },
     });
   }
@@ -287,11 +317,135 @@ export class MenuStructureTable extends LitElement {
       ?.focus();
   }
 
-  /** The member ids of the list holding the row, in the order shown. */
-  #siblings(row: MemberRow): string[] {
-    return [...this.#rowByKey.values()].flatMap((other) =>
-      other.kind === "member" && other.parentKey === row.parentKey ? [other.node.memberId] : [],
+  #siblingRows(row: MemberRow): MemberRow[] {
+    return [...this.#rowByKey.values()].filter(
+      (other): other is MemberRow => other.kind === "member" && other.parentKey === row.parentKey,
     );
+  }
+
+  #siblings(row: MemberRow): string[] {
+    return this.#siblingRows(row).map((other) => other.node.memberId);
+  }
+
+  #member(key: string): MemberRow | undefined {
+    const row = this.#rowByKey.get(key);
+    return row?.kind === "member" ? row : undefined;
+  }
+
+  #gripDown(event: PointerEvent, row: MemberRow): void {
+    if (this.#drag || this.busy || event.button !== 0) return;
+    // Keep the press from selecting text or starting the browser's own drag.
+    event.preventDefault();
+    this.#drag = {
+      pointerId: event.pointerId,
+      key: row.key,
+      x: event.clientX,
+      y: event.clientY,
+      active: false,
+    };
+    document.addEventListener("pointermove", this.#moveDrag);
+    document.addEventListener("pointerup", this.#endDrag);
+    document.addEventListener("pointercancel", this.#endDrag);
+    document.addEventListener("keydown", this.#dragKey, true);
+  }
+
+  readonly #moveDrag = (event: PointerEvent): void => {
+    const drag = this.#drag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (!drag.active && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 5) return;
+    event.preventDefault();
+    this.#pointer = { x: event.clientX, y: event.clientY };
+    const starting = !drag.active;
+    if (starting) {
+      drag.active = true;
+      holdPageCursor();
+      const row = this.#member(drag.key)!;
+      this.ghost = {
+        label: row.name,
+        image:
+          row.node.ref.kind === "product"
+            ? (this.#productById.get(row.node.ref.productId)?.image ?? null)
+            : null,
+        folder: row.node.ref.kind === "section",
+      };
+      void this.updateComplete.then(() => placeDragGhost(this.renderRoot, this.#pointer));
+    }
+    placeDragGhost(this.renderRoot, this.#pointer);
+    const over = pointerElementsAt(event.clientX, event.clientY).find(
+      (item): item is HTMLElement =>
+        item instanceof HTMLElement && item.matches("tr[data-row-key]"),
+    )?.dataset.rowKey;
+    const target = over === undefined ? undefined : this.#targetFor(drag.key, over);
+    if (!starting && target === this.#target) return;
+    this.#target = target;
+    this.#paint();
+  };
+
+  readonly #endDrag = (event: PointerEvent): void => {
+    const drag = this.#drag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const target = this.#target;
+    this.#finishDrag();
+    if (!drag.active || event.type !== "pointerup") return;
+    blockClickAfterDrag(false);
+    const row = this.#member(drag.key);
+    if (target === undefined || row === undefined || this.busy) return;
+    this.#move(
+      row,
+      this.#siblingRows(row).findIndex((sibling) => sibling.key === target),
+    );
+  };
+
+  readonly #dragKey = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape" || !this.#drag?.active) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.#finishDrag();
+    blockClickAfterDrag(true);
+  };
+
+  #finishDrag(): void {
+    const drag = this.#drag;
+    document.removeEventListener("pointermove", this.#moveDrag);
+    document.removeEventListener("pointerup", this.#endDrag);
+    document.removeEventListener("pointercancel", this.#endDrag);
+    document.removeEventListener("keydown", this.#dragKey, true);
+    this.#drag = null;
+    this.#target = undefined;
+    this.ghost = null;
+    if (drag?.active) releasePageCursor();
+    this.#paint();
+  }
+
+  /** A member moves only within its own list, so the row under the pointer stands for the sibling
+   * whose branch holds it. Keys are compared by whole member ids: `m-fav` does not hold
+   * `m-fav-drinks`. */
+  #targetFor(dragged: string, over: string): string | undefined {
+    const row = this.#member(dragged);
+    if (!row) return undefined;
+    const target = this.#siblingRows(row).find(
+      (sibling) => over === sibling.key || over.startsWith(`${sibling.key}/`),
+    );
+    return target === undefined || target.key === dragged ? undefined : target.key;
+  }
+
+  #paint(): void {
+    const root = this.#table()!.shadowRoot!;
+    clearDragMarks(root);
+    const drag = this.#drag;
+    if (!drag?.active) return;
+    markDragging(shownRow(root, drag.key));
+    const gap = this.#gap(drag.key);
+    if (gap) markGap(root, gap);
+  }
+
+  #gap(dragged: string): DropGap | undefined {
+    const row = this.#member(dragged);
+    if (this.#target === undefined || !row) return undefined;
+    const keys = this.#siblingRows(row).map((sibling) => sibling.key);
+    if (keys.indexOf(this.#target) < keys.indexOf(dragged))
+      return { key: this.#target, side: "before" };
+    return { key: lastShownRow(this.#table()!.shadowRoot!, this.#target), side: "after" };
   }
 
   #move(row: MemberRow, to: number): void {
@@ -430,6 +584,7 @@ export class MenuStructureTable extends LitElement {
           aria-label=${`${t("members.reorder")}: ${name}`}
           ?disabled=${this.busy}
           @keydown=${(event: KeyboardEvent) => this.#gripKey(event, row)}
+          @pointerdown=${(event: PointerEvent) => this.#gripDown(event, row)}
         >
           <wt-icon name="grip"></wt-icon>
         </button>`;
@@ -575,7 +730,8 @@ export class MenuStructureTable extends LitElement {
         .rowParent=${(row: Row) => row.parentKey}
         @wt-expand-change=${this.#expandChange}
       ></wt-data-table>
-      <div role="status" aria-live="polite" class="reorder-status">${this.announcement}</div>`;
+      <div role="status" aria-live="polite" class="reorder-status">${this.announcement}</div>
+      ${dragGhost(this.ghost)}`;
   }
 }
 

@@ -689,3 +689,349 @@ it("moves nothing by key while busy", async () => {
   expect(moves).toEqual([]);
   expect(shown(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
 });
+
+/** Sends a pointer event from `target`, placed over `over` (by default the target itself). */
+function pointer(
+  target: Element,
+  type: string,
+  over: Element = target,
+  init: PointerEventInit = {},
+): PointerEvent {
+  const box = over.getBoundingClientRect();
+  const event = new PointerEvent(type, {
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+    pointerId: 1,
+    clientX: box.x + 8,
+    clientY: box.y + box.height / 2,
+    ...init,
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
+/** Where a pointer over the row lands: its name. */
+function nameAt(el: MenuStructureTable, key: string): HTMLElement {
+  return row(el, key)!.querySelector<HTMLElement>('[data-test="name"], [data-test="root-name"]')!;
+}
+
+/** The rows with `part` on themselves or one of their cells. */
+function marked(el: MenuStructureTable, part: string): string[] {
+  return [
+    ...new Set(all(el, `[part~="${part}"]`).map((mark) => mark.closest("tr")!.dataset.rowKey!)),
+  ];
+}
+
+function ghost(el: MenuStructureTable): HTMLElement | null {
+  return el.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-ghost"]');
+}
+
+it("drags a member below a sibling, marking it, with a ghost and a gap, and sends one move on release", async () => {
+  const el = await mount();
+  await toggle(el, "m-fav");
+  const moves = listen(el, "wt-member-move");
+  const from = grip(el, "m-burger");
+  expect(pointer(from, "pointerdown").defaultPrevented).toBe(true);
+  expect(pointer(from, "pointermove", nameAt(el, "m-drinks")).defaultPrevented).toBe(true);
+  const last = pointer(from, "pointermove", nameAt(el, "m-fav"));
+  await settle(el);
+  expect(moves).toEqual([]);
+  expect(row(el, "m-burger")!.part.contains("dragging")).toBe(true);
+  expect(row(el, "m-burger")!.getAttribute("aria-disabled")).toBe("true");
+  expect(ghost(el)!.textContent!.trim()).toBe("Burger");
+  const placed = new DOMMatrixReadOnly(ghost(el)!.style.transform);
+  expect(placed.e).toBeCloseTo(last.clientX, 1);
+  expect(placed.f).toBeCloseTo(last.clientY, 1);
+  expect(marked(el, "drop-gap-after")).toEqual(["m-fav/m-fav-drinks"]);
+  expect(marked(el, "drop-gap-before")).toEqual([]);
+  const gapCell = row(el, "m-fav/m-fav-drinks")!.querySelector("td")!;
+  expect(getComputedStyle(gapCell).borderBottomStyle).toBe("dashed");
+
+  pointer(from, "pointerup", nameAt(el, "m-fav"));
+  await settle(el);
+  expect(moves).toEqual([{ path: [], memberId: "m-burger", to: 2 }]);
+  expect(shown(el)).toEqual([
+    "root",
+    "m-drinks",
+    "m-fav",
+    "m-fav/m-fav-lemonade",
+    "m-fav/m-fav-drinks",
+    "m-burger",
+  ]);
+  expect(marked(el, "dragging")).toEqual([]);
+  expect(row(el, "m-burger")!.hasAttribute("aria-disabled")).toBe(false);
+  expect(marked(el, "drop-gap-after")).toEqual([]);
+  expect(ghost(el)).toBeNull();
+});
+
+it("shows the gap before the sibling when dragging upwards", async () => {
+  const el = await mount();
+  const moves = listen(el, "wt-member-move");
+  const from = grip(el, "m-fav");
+  pointer(from, "pointerdown");
+  pointer(from, "pointermove", nameAt(el, "m-burger"));
+  await settle(el);
+  expect(marked(el, "drop-gap-before")).toEqual(["m-burger"]);
+  expect(marked(el, "drop-gap-after")).toEqual([]);
+  pointer(from, "pointerup", nameAt(el, "m-burger"));
+  expect(moves).toEqual([{ path: [], memberId: "m-fav", to: 0 }]);
+});
+
+it("offers no gap over a row outside the dragged member's own list, and a release there sends nothing", async () => {
+  const el = await mount();
+  await toggle(el, "m-drinks");
+  await toggle(el, "m-fav");
+  const moves = listen(el, "wt-member-move");
+  const from = grip(el, "m-drinks/m-lager");
+  pointer(from, "pointerdown");
+  pointer(from, "pointermove", nameAt(el, "m-drinks/m-lemonade"));
+  await settle(el);
+  expect(marked(el, "drop-gap-after")).toEqual(["m-drinks/m-lemonade"]);
+  for (const key of ["m-fav/m-fav-lemonade", "m-burger", "m-drinks", "root"]) {
+    pointer(from, "pointermove", nameAt(el, key));
+    await settle(el);
+    expect([...marked(el, "drop-gap-after"), ...marked(el, "drop-gap-before")], key).toEqual([]);
+  }
+  pointer(from, "pointerup", nameAt(el, "root"));
+  await settle(el);
+  expect(moves).toEqual([]);
+  expect(shown(el).filter((key) => key.startsWith("m-drinks/"))).toEqual([
+    "m-drinks/m-lager",
+    "m-drinks/m-beer",
+    "m-drinks/m-lemonade",
+  ]);
+});
+
+it("cancels a drag on Escape, sending nothing, and the click that ends it toggles nothing", async () => {
+  const el = await mount();
+  const moves = listen(el, "wt-member-move");
+  const from = grip(el, "m-burger");
+  pointer(from, "pointerdown");
+  pointer(from, "pointermove", nameAt(el, "m-drinks"));
+  await settle(el);
+  expect(marked(el, "dragging")).toEqual(["m-burger"]);
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift", bubbles: true }));
+  await settle(el);
+  expect(marked(el, "dragging")).toEqual(["m-burger"]);
+  document.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+  );
+  await settle(el);
+  expect(marked(el, "dragging")).toEqual([]);
+  expect(marked(el, "drop-gap-after")).toEqual([]);
+  expect(ghost(el)).toBeNull();
+  // A person lets go of the button a moment after Esc, never within the same task.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  pointer(from, "pointerup", nameAt(el, "m-drinks"));
+  row(el, "m-drinks")!
+    .querySelector(".row-activate")!
+    .dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }));
+  await settle(el);
+  expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("false");
+  expect(moves).toEqual([]);
+});
+
+it("toggles nothing with the click a release sends", async () => {
+  const el = await mount();
+  const from = grip(el, "m-burger");
+  pointer(from, "pointerdown");
+  pointer(from, "pointermove", nameAt(el, "m-drinks"));
+  pointer(from, "pointerup", nameAt(el, "m-drinks"));
+  row(el, "m-drinks")!
+    .querySelector(".row-activate")!
+    .dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }));
+  await settle(el);
+  expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("false");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await toggle(el, "m-drinks");
+  expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("true");
+});
+
+it("sends nothing when the pointer is cancelled", async () => {
+  const el = await mount();
+  const moves = listen(el, "wt-member-move");
+  const from = grip(el, "m-burger");
+  pointer(from, "pointerdown");
+  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  pointer(from, "pointercancel", nameAt(el, "m-fav"));
+  await settle(el);
+  expect(moves).toEqual([]);
+  expect(marked(el, "dragging")).toEqual([]);
+  expect(ghost(el)).toBeNull();
+});
+
+it("sends nothing when a drag is released where it started", async () => {
+  const el = await mount();
+  const moves = listen(el, "wt-member-move");
+  const from = grip(el, "m-burger");
+  pointer(from, "pointerdown");
+  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  pointer(from, "pointermove", nameAt(el, "m-burger"));
+  await settle(el);
+  expect([...marked(el, "drop-gap-after"), ...marked(el, "drop-gap-before")]).toEqual([]);
+  pointer(from, "pointerup", nameAt(el, "m-burger"));
+  expect(moves).toEqual([]);
+});
+
+it("maps a row to the sibling holding it by whole member ids, not by a shared prefix", async () => {
+  const el = await mount({
+    nodes: [
+      productNode("m-burger", "p-burger"),
+      { ...favourites(), children: [productNode("m-fav-lemonade", "p-lemonade")] },
+      drinksNode("m-fav-drinks"),
+    ],
+  });
+  await toggle(el, "m-fav-drinks");
+  const moves = listen(el, "wt-member-move");
+  const from = grip(el, "m-burger");
+  pointer(from, "pointerdown");
+  pointer(from, "pointermove", nameAt(el, "m-fav-drinks/m-lager"));
+  await settle(el);
+  expect(marked(el, "drop-gap-after")).toEqual(["m-fav-drinks/m-lemonade"]);
+  pointer(from, "pointerup", nameAt(el, "m-fav-drinks/m-lager"));
+  expect(moves).toEqual([{ path: [], memberId: "m-burger", to: 2 }]);
+});
+
+it("has no grip on the menu's own row", async () => {
+  const el = await mount();
+  expect(row(el, "root")!.querySelector('[part~="drag-grip"], [part~="grip-space"]')).toBeNull();
+});
+
+it("starts no drag while busy or from a button other than the main one", async () => {
+  const el = await mount({ busy: true });
+  const moves = listen(el, "wt-member-move");
+  const from = grip(el, "m-burger");
+  pointer(from, "pointerdown");
+  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  await settle(el);
+  expect(marked(el, "dragging")).toEqual([]);
+  pointer(from, "pointerup", nameAt(el, "m-fav"));
+
+  el.busy = false;
+  await settle(el);
+  pointer(from, "pointerdown", from, { button: 2 });
+  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  await settle(el);
+  expect(marked(el, "dragging")).toEqual([]);
+  pointer(from, "pointerup", nameAt(el, "m-fav"));
+  expect(moves).toEqual([]);
+});
+
+it("sends nothing from a drag released after the tree turned busy", async () => {
+  const el = await mount();
+  const moves = listen(el, "wt-member-move");
+  const from = grip(el, "m-burger");
+  pointer(from, "pointerdown");
+  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  el.busy = true;
+  await settle(el);
+  pointer(from, "pointerup", nameAt(el, "m-fav"));
+  expect(moves).toEqual([]);
+});
+
+it("hands the page's cursor back when removed mid-drag", async () => {
+  const el = await mount();
+  const from = grip(el, "m-burger");
+  pointer(from, "pointerdown");
+  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  expect(document.body.style.cursor).toBe("grabbing");
+  el.remove();
+  expect(document.body.style.cursor).not.toBe("grabbing");
+});
+
+it("starts no drag for a press that barely moves, and leaves the click after it alone", async () => {
+  const el = await mount();
+  const from = grip(el, "m-burger");
+  const box = from.getBoundingClientRect();
+  pointer(from, "pointerdown");
+  pointer(from, "pointermove", from, { clientX: box.x + 10, clientY: box.y + box.height / 2 + 2 });
+  await settle(el);
+  expect(marked(el, "dragging")).toEqual([]);
+  expect(ghost(el)).toBeNull();
+  pointer(from, "pointerup");
+  await toggle(el, "m-drinks");
+  expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("true");
+});
+
+it("follows only the pointer that started the drag", async () => {
+  const el = await mount();
+  const moves = listen(el, "wt-member-move");
+  const from = grip(el, "m-burger");
+  pointer(from, "pointerdown");
+  pointer(from, "pointermove", nameAt(el, "m-fav"), { pointerId: 2 });
+  await settle(el);
+  expect(marked(el, "dragging")).toEqual([]);
+  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  pointer(from, "pointerup", nameAt(el, "m-fav"), { pointerId: 2 });
+  await settle(el);
+  expect(marked(el, "dragging")).toEqual(["m-burger"]);
+  expect(moves).toEqual([]);
+  pointer(from, "pointerup", nameAt(el, "m-fav"));
+  expect(moves).toEqual([{ path: [], memberId: "m-burger", to: 2 }]);
+});
+
+it("keeps the marks on the right rows when a refresh redraws the tree mid-drag", async () => {
+  const el = await mount();
+  const from = grip(el, "m-burger");
+  pointer(from, "pointerdown");
+  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  await settle(el);
+  el.nodes = [favourites(), productNode("m-burger", "p-burger"), drinksNode("m-drinks")];
+  await settle(el);
+  expect(marked(el, "dragging")).toEqual(["m-burger"]);
+  // Favourites is now above Burger, so the gap is before it.
+  expect(marked(el, "drop-gap-before")).toEqual(["m-fav"]);
+  expect(marked(el, "drop-gap-after")).toEqual([]);
+  pointer(from, "pointercancel");
+});
+
+it("offers no gap while the pointer is over no row", async () => {
+  const el = await mount();
+  const moves = listen(el, "wt-member-move");
+  const from = grip(el, "m-burger");
+  pointer(from, "pointerdown");
+  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  await settle(el);
+  expect(marked(el, "drop-gap-after")).toEqual(["m-fav"]);
+  const below = table(el).getBoundingClientRect().bottom + 40;
+  expect(below).toBeLessThan(window.innerHeight);
+  pointer(from, "pointermove", from, { clientY: below });
+  await settle(el);
+  expect(marked(el, "drop-gap-after")).toEqual([]);
+  expect(marked(el, "dragging")).toEqual(["m-burger"]);
+  pointer(from, "pointerup", from, { clientY: below });
+  expect(moves).toEqual([]);
+});
+
+it("sends nothing for a drag whose member a refresh removed", async () => {
+  const el = await mount();
+  const moves = listen(el, "wt-member-move");
+  const from = grip(el, "m-burger");
+  pointer(from, "pointerdown");
+  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  await settle(el);
+  el.nodes = [drinksNode("m-drinks"), favourites()];
+  await settle(el);
+  expect(marked(el, "drop-gap-after")).toEqual([]);
+  // Burger's grip has left the page, so the pointer's events now come from the row under it.
+  expect(from.isConnected).toBe(false);
+  pointer(nameAt(el, "m-fav"), "pointermove");
+  await settle(el);
+  expect([...marked(el, "drop-gap-after"), ...marked(el, "drop-gap-before")]).toEqual([]);
+  pointer(nameAt(el, "m-fav"), "pointerup");
+  expect(moves).toEqual([]);
+});
+
+it("sends nothing when released straight after a refresh removed the dragged member", async () => {
+  const el = await mount();
+  const moves = listen(el, "wt-member-move");
+  const from = grip(el, "m-burger");
+  pointer(from, "pointerdown");
+  pointer(from, "pointermove", nameAt(el, "m-fav"));
+  await settle(el);
+  el.nodes = [drinksNode("m-drinks"), favourites()];
+  await settle(el);
+  pointer(nameAt(el, "m-fav"), "pointerup");
+  expect(moves).toEqual([]);
+});

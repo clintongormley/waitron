@@ -89,4 +89,52 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
     }
     await expectNoA11yViolations(host);
   });
+
+  it("renders accessibly mid-drag, with the dragged row faded, the ghost and the gap", async () => {
+    const { el, host } = await mountWidget<MenuStructureTable>(
+      "dashboard-menu-structure-table",
+      { nodes, products, menuName: "Lunch Menu", current: ["m-drinks"] },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    for (let round = 0; round < 3; round++) await table.updateComplete;
+    const at = (target: Element, type: string, over: Element = target) => {
+      const box = over.getBoundingClientRect();
+      target.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          composed: true,
+          pointerId: 1,
+          clientX: box.x + 8,
+          clientY: box.y + box.height / 2,
+        }),
+      );
+    };
+    const grip = table.shadowRoot!.querySelector('[data-test="drag-m-burger"]')!;
+    const over = table.shadowRoot!.querySelector('tr[data-row-key="m-drinks"] [data-test="name"]')!;
+    at(grip, "pointerdown");
+    at(grip, "pointermove", over);
+    await el.updateComplete;
+    await table.updateComplete;
+    await expectNoA11yViolations(host);
+    at(grip, "pointercancel", over);
+  });
+
+  it("renders accessibly after a move by key, with its announcement", async () => {
+    const { el, host } = await mountWidget<MenuStructureTable>(
+      "dashboard-menu-structure-table",
+      { nodes, products, menuName: "Lunch Menu" },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    for (let round = 0; round < 3; round++) await table.updateComplete;
+    table
+      .shadowRoot!.querySelector('[data-test="drag-m-burger"]')!
+      .dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }),
+      );
+    await el.updateComplete;
+    await table.updateComplete;
+    await expectNoA11yViolations(host);
+  });
 });
