@@ -205,6 +205,21 @@ describe("venue operations screen", () => {
     expect(tree.shadowRoot!.textContent).toContain("Dining room");
   });
 
+  it("opens a new department from the policy tree's top action", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree");
+    const add = el.shadowRoot!.querySelector<HTMLElement>(
+      '[data-test="policy-tree-actions"] [data-test="new-department"]',
+    );
+    expect(add).not.toBeNull();
+    expect(add!.compareDocumentPosition(tree) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    add!.click();
+    await settle(el);
+    expect(modal(el)?.getAttribute("heading")).toBe("Add department");
+  });
+
   it("renames a zone from its policy-tree cell", async () => {
     const updateZone = vi.fn().mockResolvedValue(undefined);
     const el = await mount({

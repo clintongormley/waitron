@@ -1092,21 +1092,27 @@ export class VenueOperationsScreen extends LitElement {
               ]),
       },
     ];
-    return html`<wt-data-table
-      data-test="policy-tree"
-      viewKey="waitron.venue.policy-tree"
-      aria-label=${t("venue.title")}
-      .rows=${rows}
-      .columns=${columns}
-      .rowKey=${(row: PolicyRow) =>
-        row.kind === "department" ? `department-${row.department.id}` : `zone-${row.zone.id}`}
-      .rowParent=${(row: PolicyRow) =>
-        row.kind === "department" ? null : `department-${row.departmentId}`}
-      .rowCollapsible=${() => false}
-      .rowActivation=${() => "none" as const}
-      .emptyMessage=${t("venue.no_departments")}
-      .noMatchesMessage=${tableNoMatches()}
-    ></wt-data-table>`;
+    return html`<section>
+      <div class="toolbar" data-test="policy-tree-actions">
+        <h2>${t("venue.title")}</h2>
+        ${this.#tabAction(this.#addDepartment())}
+      </div>
+      <wt-data-table
+        data-test="policy-tree"
+        viewKey="waitron.venue.policy-tree"
+        aria-label=${t("venue.title")}
+        .rows=${rows}
+        .columns=${columns}
+        .rowKey=${(row: PolicyRow) =>
+          row.kind === "department" ? `department-${row.department.id}` : `zone-${row.zone.id}`}
+        .rowParent=${(row: PolicyRow) =>
+          row.kind === "department" ? null : `department-${row.departmentId}`}
+        .rowCollapsible=${() => false}
+        .rowActivation=${() => "none" as const}
+        .emptyMessage=${t("venue.no_departments")}
+        .noMatchesMessage=${tableNoMatches()}
+      ></wt-data-table>
+    </section>`;
   }
 
   #departments() {
