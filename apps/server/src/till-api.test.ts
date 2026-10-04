@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   canvases,
@@ -55,10 +55,10 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import type { PaymentProvider } from "@waitron/payments";
+import { cardReaders, type PaymentProvider } from "@waitron/payments";
 import type { Logger, LogLevel } from "./logger.js";
 import { createTable } from "./tables.js";
-import { mountTillApi, run } from "./till-api.js";
+import { mountTillApi, resolveCardCollector, run } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { revokedDeviceSessionCookie, seedSessionDevice } from "./testing/session-device.js";
@@ -1372,6 +1372,65 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     const res = await app.request("/api/till");
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ cardProvider: "simulator" });
+  });
+
+  it("offers the pretend reader only when the local simulator is selected", async () => {
+    const simulator = new Hono();
+    mountTillApi(
+      simulator,
+      { ...deps(suite.db), cardProvider: { provider: "simulator" } as PaymentProvider },
+      collect([]),
+    );
+    const live = new Hono();
+    mountTillApi(live, deps(suite.db), collect([]));
+
+    const demoBody = await (await simulator.request("/api/till")).json();
+    const liveBody = await (await live.request("/api/till")).json();
+    expect(demoBody.activeReaders).toContainEqual({
+      id: "00000000-0000-4000-8000-000000000247",
+      name: "Demo card reader",
+      provider: "simulator",
+    });
+    expect(liveBody.activeReaders).not.toContainEqual(
+      expect.objectContaining({ id: "00000000-0000-4000-8000-000000000247" }),
+    );
+  });
+
+  it("sends the pretend reader choice to the simulator and refuses another reader in Demo", async () => {
+    const simulator = { provider: "simulator" } as PaymentProvider;
+    const practice = { ...deps(suite.db), cardProvider: simulator };
+
+    expect(
+      await resolveCardCollector(practice, undefined, "00000000-0000-4000-8000-000000000247"),
+    ).toEqual({
+      provider: simulator,
+      reader: {
+        id: "00000000-0000-4000-8000-000000000247",
+        providerRef: "waitron-demo-reader",
+      },
+    });
+    await expect(resolveCardCollector(practice, undefined, randomUUID())).rejects.toMatchObject({
+      code: "reader.not_found",
+    });
+  });
+
+  it("refuses the pretend reader on a Live box even if a row carries its id", async () => {
+    const id = "00000000-0000-4000-8000-000000000247";
+    await withTransaction(suite.db, (tx) =>
+      tx.insert(cardReaders).values({
+        id,
+        provider: "stripe",
+        providerRef: "stray-demo-reader",
+        name: "Stray reader",
+      }),
+    );
+    try {
+      await expect(resolveCardCollector(deps(suite.db), undefined, id)).rejects.toMatchObject({
+        code: "reader.not_found",
+      });
+    } finally {
+      await withTransaction(suite.db, (tx) => tx.delete(cardReaders).where(eq(cardReaders.id, id)));
+    }
   });
 
   it("GET /api/till echoes a non-default bump_mode from the location, proving it reads the column", async () => {

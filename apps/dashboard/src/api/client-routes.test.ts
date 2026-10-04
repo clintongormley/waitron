@@ -31,6 +31,23 @@ function callsOf(fetchImpl: ReturnType<typeof vi.fn>): Call[] {
 }
 
 describe("DashboardApi routes", () => {
+  it("reads pending pretend reader payments and sends a decision", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ payments: [{ id: "payment-1", amount: "12.34" }] }))
+      .mockResolvedValueOnce(jsonResponse({ decided: true }));
+    const api = new DashboardApi("", fetchImpl);
+
+    expect(await api.listDemoReaderPayments()).toEqual({
+      payments: [{ id: "payment-1", amount: "12.34" }],
+    });
+    await api.decideDemoReaderPayment("payment-1", "declined");
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/demo-reader/payments", "GET", undefined],
+      ["/management-api/demo-reader/payments/payment-1/decision", "POST", { outcome: "declined" }],
+    ]);
+  });
+
   it("offers no route that names tills", () => {
     const methods = Object.getOwnPropertyNames(DashboardApi.prototype);
     expect(methods.filter((name) => /tills/i.test(name))).toEqual([]);

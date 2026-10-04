@@ -989,6 +989,32 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
     expect(asked[0]!.card).toEqual({ entry: "reader", simulationOutcome: "declined" });
   });
 
+  it("sends a bill payment to the pretend reader without a browser-chosen result", async () => {
+    const readerId = "00000000-0000-4000-8000-000000000247";
+    const el = await card({
+      cardReader: "simulator",
+      readers: [{ id: readerId, name: "Demo card reader", provider: "simulator" }],
+    });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+
+    await pick(el, "reader", readerId);
+    expect(root(el).querySelector('input[name="simulation"]')).toBeNull();
+    await click(el, "[data-pay-continue]");
+
+    expect(asked[0]!.card).toEqual({ entry: "reader", readerId });
+  });
+
+  it("names the pretend reader in Spanish on a bill", async () => {
+    setLocale("es-ES");
+    const el = await card({
+      cardReader: "simulator",
+      readers: [{ id: "demo", name: "Demo card reader", provider: "simulator" }],
+    });
+    expect(
+      text(root(el).querySelector('input[name="reader"][value="demo"]')?.closest("label") ?? null),
+    ).toBe("Lector de demostración");
+  });
+
   it("says to present the card while the reader is being asked", async () => {
     const el = await card({ cardReader: "stripe_terminal" });
     await previewed(el, {

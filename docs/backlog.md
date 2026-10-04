@@ -4231,12 +4231,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Demo bar beside Email inbox and see the printed jobs newest first. Live deactivates the pretend
   printer and does not serve the page.
 
-- **A pretend connected card reader in Demo mode (A247) — OPEN, queued as lane A's W38 (owner,
-  2026-10-03).** Today the till's pay dialog carries its own Approve/Decline choice and the card
-  simulator (`SimulatorPaymentProvider`, `packages/payments/src/simulator.ts`) answers at once, so a
-  demo never shows what a connected reader does: the till sends the amount and waits while the
-  customer pays on the reader. Add a pretend reader with its own page, linked from the Demo bar
-  (A246), where the amount appears and the payment is approved or declined.
+- **A pretend connected card reader in Demo mode (A247) — DONE in W38.** Demo and Preparation
+  offer a pretend reader beside the instant simulator. The till waits for its decision, while a
+  manager opens Card reader from the Demo bar to approve or decline the amount. Cancel on the till
+  clears the pending payment. Live offers neither the reader nor its page.
 
 - **The rest of the Printing rules screen (A242) — SETTLED by A261 (owner, 2026-10-03).** The page
   is deleted: kitchen ticket printers move to Prep stations, the receipt print mode to Departments

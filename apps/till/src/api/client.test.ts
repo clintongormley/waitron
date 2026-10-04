@@ -135,6 +135,20 @@ describe("TillApi", () => {
     expect(out).toEqual({ outcome: "captured", ticket });
   });
 
+  it("cancels a pending pretend reader payment for the current order", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ cancelled: true }));
+    const api = new TillApi("", fetchStub);
+
+    expect(await api.cancelDemoReaderPayment("order-1", "attempt-1")).toBe(true);
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/demo-reader/cancel",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ workingOrderId: "order-1", attemptId: "attempt-1" }),
+      }),
+    );
+  });
+
   it("pay returns a non-captured outcome verbatim, with no ticket (declined — a card terminal has no exceptional/error shape, CLAUDE.md §5)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ outcome: "declined" }));
     const api = new TillApi("", fetchStub);

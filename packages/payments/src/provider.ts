@@ -47,6 +47,8 @@ export interface CollectParams {
   /** A local simulator result selected by the practice UI. The server only forwards this field to
    * the simulator; real payment adapters never receive a browser-selected outcome. */
   simulationOutcome?: "captured" | "declined";
+  /** Identifies one pretend-reader attempt so a cancel arriving before collect still belongs to it. */
+  demoAttemptId?: string;
   /** The bill payment this charge is for, absent for a charge of the whole order. Every provider
    * writes it on the first `payments` row it writes for the charge, which is how a pending bill
    * payment is found again from the provider's row after a crash. */

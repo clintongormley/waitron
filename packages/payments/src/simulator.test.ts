@@ -90,7 +90,87 @@ describe("SimulatorPaymentProvider", () => {
     });
   });
 
-  it("resolvePending is all-zeros (synchronous collect leaves nothing attempting)", async () => {
+  it("waits for the pretend reader's approval before recording a capture", async () => {
+    const { provider, params } = await setup();
+    const collecting = provider.collect({ ...params, readerRef: "waitron-demo-reader" });
+    const pending = provider.pendingDemoReaderPayments();
+
+    expect(pending).toMatchObject([{ amount: "10.00" }]);
+    expect((await suite.db.execute(sql`select count(*) as n from payments`)).rows[0]).toEqual({
+      n: 0,
+    });
+
+    provider.decideDemoReaderPayment(pending[0]!.id, "captured");
+    await expect(collecting).resolves.toMatchObject({ state: "captured", amount: "10.00" });
+    expect(provider.pendingDemoReaderPayments()).toEqual([]);
+  });
+
+  it("reports a pretend reader decline through the normal failed payment result", async () => {
+    const { provider, params } = await setup();
+    const collecting = provider.collect({ ...params, readerRef: "waitron-demo-reader" });
+    const [pending] = provider.pendingDemoReaderPayments();
+
+    provider.decideDemoReaderPayment(pending!.id, "declined");
+
+    await expect(collecting).resolves.toMatchObject({ state: "failed", settledAt: null });
+    expect(provider.pendingDemoReaderPayments()).toEqual([]);
+  });
+
+  it("clears a pretend reader when its paying device cancels", async () => {
+    const { provider, params } = await setup();
+    const collecting = provider.collect({ ...params, readerRef: "waitron-demo-reader" });
+    const [pending] = provider.pendingDemoReaderPayments();
+
+    expect(provider.cancelDemoReaderPayment(params.workingOrderId, params.origin.deviceId)).toBe(
+      true,
+    );
+    expect(provider.pendingDemoReaderPayments()).toEqual([]);
+    expect(provider.decideDemoReaderPayment(pending!.id, "captured")).toBe(false);
+    await expect(collecting).resolves.toMatchObject({ state: "failed" });
+  });
+
+  it("honours cancellation received before the pretend collect reaches the provider", async () => {
+    const { provider, params } = await setup();
+    const attemptId = "00000000-0000-4000-8000-000000000248";
+
+    expect(
+      provider.cancelDemoReaderPayment(params.workingOrderId, params.origin.deviceId, attemptId),
+    ).toBe(true);
+    await expect(
+      provider.collect({ ...params, readerRef: "waitron-demo-reader", demoAttemptId: attemptId }),
+    ).resolves.toMatchObject({ state: "failed" });
+    expect(provider.pendingDemoReaderPayments()).toEqual([]);
+    const next = provider.collect({
+      ...params,
+      readerRef: "waitron-demo-reader",
+      demoAttemptId: "next",
+    });
+    expect(provider.pendingDemoReaderPayments()).toHaveLength(1);
+    provider.decideDemoReaderPayment(provider.pendingDemoReaderPayments()[0]!.id, "captured");
+    await expect(next).resolves.toMatchObject({ state: "captured" });
+  });
+
+  it("does not cancel a later pretend reader attempt with an earlier attempt's token", async () => {
+    const { provider, params } = await setup();
+    const collecting = provider.collect({
+      ...params,
+      readerRef: "waitron-demo-reader",
+      demoAttemptId: "00000000-0000-4000-8000-000000000249",
+    });
+
+    expect(
+      provider.cancelDemoReaderPayment(
+        params.workingOrderId,
+        params.origin.deviceId,
+        "00000000-0000-4000-8000-000000000248",
+      ),
+    ).toBe(false);
+    expect(provider.pendingDemoReaderPayments()).toHaveLength(1);
+    provider.decideDemoReaderPayment(provider.pendingDemoReaderPayments()[0]!.id, "captured");
+    await expect(collecting).resolves.toMatchObject({ state: "captured" });
+  });
+
+  it("has no provider-side payment attempt for resolvePending to forward", async () => {
     const { provider } = await setup();
     await expect(provider.resolvePending(new Date())).resolves.toEqual({
       nextDueAt: null,

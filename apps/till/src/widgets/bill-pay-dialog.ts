@@ -507,7 +507,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #readerEntry(): CardEntry {
-    if (this.cardReader === "simulator")
+    if (this.cardReader === "simulator" && this.chosenReaderId === undefined)
       return { entry: "reader", simulationOutcome: this.simulationOutcome };
     return this.chosenReaderId === undefined
       ? { entry: "reader" }
@@ -1039,22 +1039,35 @@ export class TillBillPayDialog extends LitElement {
 
   /** The practice simulator's result, or the reader when the venue has more than one. */
   #readerFields(): TemplateResult | typeof nothing {
-    if (this.cardReader === "simulator")
-      return html`<fieldset class="choice" data-pay-simulation ?disabled=${this.busy}>
-        <legend>${t("card.simulation_result")}</legend>
-        <p class="muted">${t("card.simulation_help")}</p>
-        <div class="options">
-          ${(["captured", "declined"] as const).map((outcome) =>
-            this.#radio(
-              "simulation",
-              outcome,
-              t(outcome === "captured" ? "card.simulation_captured" : "card.simulation_declined"),
-              this.simulationOutcome === outcome,
-              () => (this.simulationOutcome = outcome),
-            ),
-          )}
-        </div>
-      </fieldset>`;
+    if (this.cardReader === "simulator") {
+      const demoReaders = this.readers.filter((reader) => reader.provider === "simulator");
+      return html`${
+        demoReaders.length === 0
+          ? nothing
+          : html`<fieldset class="choice" data-pay-reader ?disabled=${this.busy}>
+              <legend>${t("bill_pay.reader")}</legend>
+              <div class="options">
+                ${this.#radio(
+                  "reader",
+                  "instant",
+                  t("card.instant_simulator"),
+                  this.chosenReaderId === undefined,
+                  () => (this.chosenReaderId = undefined),
+                )}
+                ${demoReaders.map((reader) =>
+                  this.#radio(
+                    "reader",
+                    reader.id,
+                    t("card.demo_reader"),
+                    this.chosenReaderId === reader.id,
+                    () => (this.chosenReaderId = reader.id),
+                  ),
+                )}
+              </div>
+            </fieldset>`
+      }
+      ${this.chosenReaderId === undefined ? this.#simulationFields() : nothing}`;
+    }
     if (this.readers.length < 2) return nothing;
     const shown = this.chosenReaderId ?? this.defaultReaderId;
     return html`<fieldset class="choice" data-pay-reader ?disabled=${this.busy}>
@@ -1067,6 +1080,24 @@ export class TillBillPayDialog extends LitElement {
             reader.name,
             shown === reader.id,
             () => (this.chosenReaderId = reader.id),
+          ),
+        )}
+      </div>
+    </fieldset>`;
+  }
+
+  #simulationFields(): TemplateResult {
+    return html`<fieldset class="choice" data-pay-simulation ?disabled=${this.busy}>
+      <legend>${t("card.simulation_result")}</legend>
+      <p class="muted">${t("card.simulation_help")}</p>
+      <div class="options">
+        ${(["captured", "declined"] as const).map((outcome) =>
+          this.#radio(
+            "simulation",
+            outcome,
+            t(outcome === "captured" ? "card.simulation_captured" : "card.simulation_declined"),
+            this.simulationOutcome === outcome,
+            () => (this.simulationOutcome = outcome),
           ),
         )}
       </div>

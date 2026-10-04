@@ -410,6 +410,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [cafe] }),
     recordSale: vi.fn().mockResolvedValue(saleResult),
     pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult }),
+    cancelDemoReaderPayment: vi.fn().mockResolvedValue(true),
     parkOrder: vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 }),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
@@ -6492,6 +6493,48 @@ describe("till-app", () => {
       await flush(el);
 
       expect(pay).toHaveBeenCalledWith(expect.objectContaining({ simulationOutcome: "declined" }));
+    });
+
+    it("cancels the pretend reader on the server and does not show its late decline", async () => {
+      let settlePay: (outcome: PayOutcome) => void = () => undefined;
+      const pay = vi.fn(
+        (_request: { demoAttemptId?: string }) =>
+          new Promise<PayOutcome>((resolve) => (settlePay = resolve)),
+      );
+      const cancelDemoReaderPayment = vi.fn(async () => {
+        settlePay({ outcome: "declined" });
+        return true;
+      });
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          cardProvider: "simulator",
+          activeReaders: [
+            {
+              id: "00000000-0000-4000-8000-000000000247",
+              name: "Demo card reader",
+              provider: "simulator",
+            },
+          ],
+          capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+        }),
+        pay,
+        cancelDemoReaderPayment,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await flush(el);
+      const orderId = c.store.id;
+
+      emit(c, "collect-card", { readerId: "00000000-0000-4000-8000-000000000247" });
+      await vi.waitFor(() => expect(pay).toHaveBeenCalledOnce());
+      emit(c, "cancel-demo-reader");
+      await flush(el);
+
+      const payAttemptId = pay.mock.calls[0]?.[0]?.demoAttemptId;
+      expect(payAttemptId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(cancelDemoReaderPayment).toHaveBeenCalledWith(orderId, payAttemptId);
+      expect(tenderPay(el).shadowRoot!.querySelector(".card-outcome")).toBeNull();
     });
 
     it("pays over the integrated terminal with the mapped lines(+tip+allowOffline), then shows the ticket", async () => {

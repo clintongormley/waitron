@@ -295,7 +295,9 @@ export class TillTenderPay extends LitElement {
         ...(this.cardProvider === "stripe_on_device" && this.allowOffline
           ? { allowOffline: true }
           : {}),
-        ...(this.cardProvider === "simulator" ? { simulationOutcome: this.simulationOutcome } : {}),
+        ...(this.cardProvider === "simulator" && this.chosenReaderId === undefined
+          ? { simulationOutcome: this.simulationOutcome }
+          : {}),
         ...(this.chosenReaderId === undefined ? {} : { readerId: this.chosenReaderId }),
       });
     });
@@ -329,13 +331,15 @@ export class TillTenderPay extends LitElement {
     this.allowOffline = (event as CustomEvent<{ checked: boolean }>).detail.checked;
   }
 
-  /** The manual path and the simulator have no real reader to pick an ALTERNATIVE to. */
+  /** The manual path has no connected reader to pick. */
   get #readerPickerAvailable(): boolean {
-    return (
-      this.cardProvider !== "none" &&
-      this.cardProvider !== "simulator" &&
-      this.activeReaders.length > 0
-    );
+    return this.cardProvider !== "none" && this.#pickableReaders.length > 0;
+  }
+
+  get #pickableReaders(): TillActiveReader[] {
+    return this.cardProvider === "simulator"
+      ? this.activeReaders.filter((reader) => reader.provider === "simulator")
+      : this.activeReaders;
   }
 
   get #displayedReader(): TillActiveReader | undefined {
@@ -348,7 +352,8 @@ export class TillTenderPay extends LitElement {
   }
 
   #onReaderChosen(event: Event): void {
-    this.chosenReaderId = (event as CustomEvent<{ readerId: string }>).detail.readerId;
+    this.chosenReaderId =
+      (event as CustomEvent<{ readerId: string | null }>).detail.readerId ?? undefined;
     this.pickingReader = false;
   }
 
@@ -385,12 +390,17 @@ export class TillTenderPay extends LitElement {
     );
   }
 
-  /**
-   * Cancel from the `"collecting"` spinner is a CLIENT-SIDE ABORT ONLY: `PaymentProvider` has no
-   * `cancel` method (`packages/payments/src/provider.ts`), so the in-flight `POST /api/pay` keeps
-   * running to its own outcome. Switch tender leaves `cardOutcome` untouched; see `willUpdate`.
-   */
+  /** Real provider collects continue after leaving this spinner; the pretend reader sends a
+   * cancellation so its page drops the pending amount. */
   #cancel(): void {
+    if (
+      this.view === "collecting" &&
+      this.activeReaders.some(
+        (reader) => reader.id === this.chosenReaderId && reader.provider === "simulator",
+      )
+    ) {
+      this.dispatchEvent(new CustomEvent("cancel-demo-reader", { bubbles: true, composed: true }));
+    }
     this.selected = undefined;
     this.entry = "";
     this.labelEntry = "";
@@ -505,8 +515,9 @@ export class TillTenderPay extends LitElement {
   #renderReaderPicker() {
     if (!this.pickingReader) return nothing;
     return html`<till-reader-picker
-      .readers=${this.activeReaders}
+      .readers=${this.#pickableReaders}
       .selectedReaderId=${this.chosenReaderId ?? this.defaultReaderId}
+      .plainSimulator=${this.cardProvider === "simulator"}
       @reader-chosen=${(event: Event) => this.#onReaderChosen(event)}
       @reader-picker-cancel=${() => this.#onReaderPickerCancel()}
     ></till-reader-picker>`;
@@ -600,7 +611,17 @@ export class TillTenderPay extends LitElement {
     const reader = this.#displayedReader;
     return html`
       <div class="reader-control">
-        ${reader === undefined ? nothing : html`<p class="reader-name">${reader.name}</p>`}
+        ${
+          reader === undefined && this.cardProvider !== "simulator"
+            ? nothing
+            : html`<p class="reader-name">
+                ${
+                  reader?.provider === "simulator"
+                    ? t("card.demo_reader")
+                    : (reader?.name ?? t("card.instant_simulator"))
+                }
+              </p>`
+        }
         <wt-button
           class="change-reader"
           variant="secondary"
@@ -624,7 +645,7 @@ export class TillTenderPay extends LitElement {
       <div class="card-extras">
         ${this.#renderReaderControl()}
         ${
-          this.cardProvider === "simulator"
+          this.cardProvider === "simulator" && this.chosenReaderId === undefined
             ? html`<div
                 class="simulation-options"
                 role="group"

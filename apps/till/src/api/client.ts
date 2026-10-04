@@ -161,13 +161,12 @@ export interface TillCourse {
 
 /**
  * One ACTIVE card reader as the boot payload carries it; `id` is what `POST /api/pay`'s `readerId`
- * names. `provider` is narrower than {@link TillInfo.cardProvider}: a device-local mode has no reader
- * ROW to list.
+ * names. The practice simulator has one virtual reader in Demo or Preparation.
  */
 export interface TillActiveReader {
   id: string;
   name: string;
-  provider: "stripe_terminal" | "sumup_cloud";
+  provider: "stripe_terminal" | "sumup_cloud" | "simulator";
 }
 
 /** One `GET /api/staff` roster entry — no PIN, role or status. */
@@ -2007,11 +2006,20 @@ export class TillApi {
     allowOffline?: boolean;
     simulationOutcome?: "captured" | "declined";
     readerId?: string;
+    demoAttemptId?: string;
   }): Promise<PayOutcome> {
     return this.#request<PayOutcome>("/api/pay", "POST", {
       ...req,
       zoneId: req.zoneId ?? this.#serviceZoneId,
     });
+  }
+
+  async cancelDemoReaderPayment(workingOrderId: string, attemptId: string): Promise<boolean> {
+    const result = await this.#request<{ cancelled: boolean }>("/api/demo-reader/cancel", "POST", {
+      workingOrderId,
+      attemptId,
+    });
+    return result.cancelled;
   }
 
   /**

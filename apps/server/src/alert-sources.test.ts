@@ -17,6 +17,7 @@ import type { AlertSource } from "@waitron/module";
 import type { StreamStatus, StreamView } from "@waitron/stream";
 import {
   cardReaders,
+  DEMO_READER_ID,
   type CardProviderContribution,
   type CardProviderRuntimeDeps,
   PAYMENTS_MIGRATIONS,
@@ -856,6 +857,24 @@ async function readBattery(source: AlertSource, now = NOW) {
 }
 
 describe("batteryAlertSource", () => {
+  it("does not ask a real provider for the pretend reader's battery", async () => {
+    await seedTenant(batterySuite.db);
+    await batterySuite.db.insert(cardReaders).values({
+      id: DEMO_READER_ID,
+      provider: "simulator",
+      providerRef: "waitron-demo-reader",
+      name: "Demo reader",
+    });
+    const calls = { n: 0 };
+    const source = batteryAlertSource({
+      providers: [stubProvider({ battery: () => undefined, calls })],
+      runtimeDeps: stubRuntimeDeps(batterySuite.db),
+      cache: createTtlCache<number | null>({ ttlMs: 60_000, now: () => NOW }),
+    });
+
+    await expect(readBattery(source)).resolves.toEqual([]);
+    expect(calls.n).toBe(0);
+  });
   it("warns at the warning floor, errors at the error floor, and is silent above or absent", async () => {
     await seedTenant(batterySuite.db);
     const at25 = await seedReader({ providerRef: "p25", name: "R25" });
