@@ -35,8 +35,10 @@ import {
   parties,
   partyTables,
   floorZones,
+  invoiceSeries,
   kitchenStations,
   locations,
+  sales,
   watchers,
   watcherZones,
   withTransaction,
@@ -1344,6 +1346,95 @@ async function seedSellingVenue() {
 }
 
 type SellingVenue = Awaited<ReturnType<typeof seedSellingVenue>>;
+
+describe("retired and moved zones", () => {
+  it("keeps an existing order and sale after their department is removed", async () => {
+    const venue = await seedSellingVenue();
+    const { orderId, saleId } = await scoped(async (tx) => {
+      const id = await openOrder(tx, venue, 91);
+      await recordOrderServiceContext(tx, venue.cfg, id, venue.barZone);
+      const [series] = await tx
+        .insert(invoiceSeries)
+        .values({ nodeId: venue.nodeId, code: `T${randomUUID().slice(0, 6)}` })
+        .returning({ id: invoiceSeries.id });
+      const [sale] = await tx
+        .insert(sales)
+        .values({
+          source: "readiness_test",
+          seriesId: series!.id,
+          nodeId: venue.nodeId,
+          invoiceNumber: 1,
+          issuedAt: new Date().toISOString(),
+          issuedOffsetMinutes: 0,
+          total: 0,
+          vatBreakdown: [],
+          locale: "en-GB",
+          invoiceLocales: ["en-GB"],
+          fiscalBackend: "none",
+          fiscalState: "not_applicable",
+          workingOrderId: id,
+        })
+        .returning({ id: sales.id });
+      return { orderId: id, saleId: sale!.id };
+    });
+
+    await scoped((tx) => deactivateDepartment(tx, venue.cfg, venue.barId));
+
+    await expect(scoped((tx) => getOrderServiceContext(tx, venue.cfg, orderId))).resolves.toEqual({
+      zoneId: venue.barZone,
+      departmentId: venue.barId,
+      serviceMode: "prepay",
+    });
+    expect(
+      (
+        await db
+          .select({ workingOrderId: sales.workingOrderId })
+          .from(sales)
+          .where(eq(sales.id, saleId))
+      )[0],
+    ).toEqual({ workingOrderId: orderId });
+  });
+
+  it("moves a zone between departments without changing its tables or menu", async () => {
+    const venue = await seedSellingVenue();
+    const [table] = await db
+      .insert(diningTables)
+      .values({
+        locationId: venue.cfg.locationId,
+        label: "B3",
+        zoneId: venue.barZone,
+      })
+      .returning({ id: diningTables.id });
+
+    await scoped((tx) =>
+      configureZone(tx, venue.cfg, {
+        zoneId: venue.barZone,
+        departmentId: venue.restaurantId,
+      }),
+    );
+
+    expect(await scoped((tx) => listServiceZones(tx, venue.cfg))).toContainEqual(
+      expect.objectContaining({ id: venue.barZone, departmentId: venue.restaurantId }),
+    );
+    expect(
+      (
+        await db
+          .select({ zoneId: diningTables.zoneId, active: diningTables.active })
+          .from(diningTables)
+          .where(eq(diningTables.id, table!.id))
+      )[0],
+    ).toEqual({
+      zoneId: venue.barZone,
+      active: true,
+    });
+    expect(
+      await db
+        .select({ menuId: zoneMenus.menuId })
+        .from(zoneMenus)
+        .where(eq(zoneMenus.zoneId, venue.barZone)),
+    ).toEqual([{ menuId: venue.menuId }]);
+  });
+});
 
 async function openOrder(tx: Transaction, venue: SellingVenue, orderNumber: number) {
   const id = randomUUID();
