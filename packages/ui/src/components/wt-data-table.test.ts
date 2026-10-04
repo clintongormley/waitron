@@ -4714,6 +4714,42 @@ test("lines each tree row's name up with the text beside it, with a toggle or wi
   }
 });
 
+test("starts every body cell's content at its top with `topAligned`, the pinned cell included, and on the baseline without it", async () => {
+  const tallColumns: DataTableColumn<Row>[] = [
+    { key: "name", label: "Name", cell: (row) => html`<span data-test="short">${row.name}</span>` },
+    {
+      key: "count",
+      label: "Count",
+      cell: () =>
+        html`<span data-test="tall" style="display: inline-block; padding-top: 60px">Low</span>`,
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      pinned: "end",
+      cell: () => html`<span data-test="pinned">Edit</span>`,
+    },
+  ];
+  const offsets = (el: WtDataTable<Row>) => {
+    const row = el.shadowRoot!.querySelector('tbody tr[data-row-key="a"]')!;
+    const top = row.getBoundingClientRect().top;
+    return ["short", "pinned"].map(
+      (test) => row.querySelector(`[data-test="${test}"]`)!.getBoundingClientRect().top - top,
+    );
+  };
+  const plain = await table({ columns: tallColumns });
+  const padding = parseFloat(getComputedStyle(plain.shadowRoot!.querySelector("td")!).paddingTop);
+  expect(plain.hasAttribute("top-aligned")).toBe(false);
+  for (const offset of offsets(plain)) expect(offset).toBeGreaterThan(padding + 40);
+  cleanup();
+
+  const top = await table({ columns: tallColumns, topAligned: true });
+  expect(top.hasAttribute("top-aligned")).toBe(true);
+  for (const cell of top.shadowRoot!.querySelectorAll("tbody td"))
+    expect(getComputedStyle(cell).verticalAlign).toBe("top");
+  for (const offset of offsets(top)) expect(offset).toBeLessThanOrEqual(padding + 2);
+});
+
 async function emptyTable(props: Partial<WtDataTable<Row>> = {}): Promise<WtDataTable<Row>> {
   const el = (await mount(
     `<wt-data-table aria-label="Users"
@@ -5362,7 +5398,7 @@ test("a real pointer click on a wt-button in a clickable row's first cell reache
   expect(opened).toEqual([]);
 });
 
-/** A table whose only movable column cannot be hidden by the last-visible rule, as the Menus list's. */
+/** A table whose only movable column cannot be hidden by the last-visible rule. */
 const oneMovable: DataTableColumn<Row>[] = [
   { key: "name", label: "Name", cell: (row) => row.name },
   { key: "count", label: "Count", cell: (row) => row.count, choosable: "shown" },

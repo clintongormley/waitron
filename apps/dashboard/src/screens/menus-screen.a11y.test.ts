@@ -366,6 +366,20 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
+  it("accessible menus list with Lunch's changes link under its state in Status, 700px wide", async () => {
+    const frame = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(700, 900);
+    onTestFinished(() => page.viewport(frame.width, frame.height));
+    const { el, host } = await mount("populated", theme, "/manage/menus");
+    const table = q(el, '[data-test="menus"]');
+    await vi.waitFor(() => {
+      expect(table.shadowRoot!.querySelectorAll("thead th")).toHaveLength(3);
+      const link = table.shadowRoot!.querySelector('[data-test="changes-menu-lunch"]');
+      expect(link?.closest("td")?.cellIndex).toBe(1);
+    });
+    await expectNoA11yViolations(host);
+  });
+
   async function mountHome(width: number) {
     const frame = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(width, 900);
@@ -420,4 +434,30 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
+});
+
+// Light only: the dark theme's link blue is below the text minimum on a highlighted row, a token
+// problem left open in docs/backlog.md (W87).
+it("accessible Unpublished changes link on a focused, highlighted list row (light)", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 900);
+  onTestFinished(() => page.viewport(width, height));
+  const { el, host } = await mount("populated", "light", "/manage/menus");
+  const table = q(el, 'wt-data-table[data-test="menus"]');
+  const row = () => table.shadowRoot!.querySelector('tr[data-row-key="menu-lunch"]')!;
+  await vi.waitFor(() =>
+    expect(row().querySelector('[data-test="changes-menu-lunch"]')).not.toBeNull(),
+  );
+  const probe = document.createElement("div");
+  probe.style.background = getComputedStyle(host).getPropertyValue("--wt-color-surface-lifted");
+  host.append(probe);
+  const lifted = getComputedStyle(probe).backgroundColor;
+  probe.remove();
+  const cell = row().querySelector('[data-test="changes-menu-lunch"]')!.closest("td")!;
+  const resting = getComputedStyle(cell).backgroundColor;
+  expect(resting).not.toBe(lifted);
+  row().querySelector<HTMLButtonElement>(".row-activate")!.focus();
+  expect(getComputedStyle(cell).backgroundColor).toBe(lifted);
+  await expectNoA11yViolations(host);
 });

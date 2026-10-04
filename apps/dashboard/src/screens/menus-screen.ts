@@ -72,6 +72,8 @@ interface MenuRow extends CatalogueSummary {
   status: MenuStatus | "loading" | "failed";
 }
 
+type ListLayout = "narrow" | "middle" | "wide";
+
 /** Sorted by status, the menus needing a publish come first. */
 const STATUS_ORDER = ["unpublished", "changed", "current", "loading", "failed"];
 
@@ -333,11 +335,17 @@ export class MenusScreen extends LitElement {
       .list {
         container-type: inline-size;
       }
-      .narrow-probe {
+      .narrow-probe,
+      .wide-probe {
         display: none;
       }
       @container (max-width: 30rem) {
         .narrow-probe {
+          display: block;
+        }
+      }
+      @container (min-width: 50rem) {
+        .wide-probe {
           display: block;
         }
       }
@@ -351,11 +359,43 @@ export class MenusScreen extends LitElement {
         display: block;
         padding-inline: var(--wt-space-4);
       }
-      /* The name and its status take the list's width less room for the row menu's column, and
-         wrap inside it: the table itself never narrows a column below its content. */
+      /* The list's cells start at their top, where the name button and the row menu are a tap target
+         tall with their text centred, so the state's first line is centred on that height too. */
+      wt-data-table:not(.narrow)::part(status) {
+        display: block;
+        padding-block-start: calc((var(--wt-tap-min) - 1lh) / 2);
+      }
+      wt-data-table::part(changes-link) {
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--wt-tap-min);
+        color: var(--wt-color-primary-text);
+      }
+      wt-data-table::part(changes-link):focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+      /* The table itself never narrows a column below its content, so a long name wraps only
+         within a width set here. On a narrow list the name and its status take the list's width
+         less room for the row menu's column. */
       wt-data-table.narrow::part(name),
       wt-data-table.narrow::part(stacked) {
         max-width: calc(100cqi - 3 * var(--wt-tap-min));
+      }
+      /* The middle and wide name widths are set by container queries on the list's width, like
+         the probes', rather than by the layout the probes choose, so they already apply in the
+         frame before the probes are read. Between the narrow and the wide layouts, the name leaves
+         room for the row menu and for the changes link under the state in Status. */
+      @container (30rem < width < 50rem) {
+        wt-data-table::part(name) {
+          max-width: calc(100cqi - 3 * var(--wt-tap-min) - 8.5rem);
+        }
+      }
+      /* A wide list leaves room for Status, Changes and the row menu. */
+      @container (min-width: 50rem) {
+        wt-data-table::part(name) {
+          max-width: calc(100cqi - 30rem);
+        }
       }
     `,
   ];
@@ -419,9 +459,10 @@ export class MenusScreen extends LitElement {
   @state() private previewError = false;
   /** The menus whose publish is out. Replaced, never mutated, so a change re-renders. */
   @state() private publishing: ReadonlySet<string> = new Set();
-  /** The list is 30rem wide or less (the probe's container query), so each status sits under its
-   * menu's name. */
-  @state() private narrow = false;
+  /** From the probes' container queries: "narrow" at 30rem or less, where each status sits under
+   * its menu's name; "wide" from 50rem, where the changes link has a column of its own; "middle"
+   * between, where the link sits under the status. */
+  @state() private layout: ListLayout = "wide";
   @state() private publishResult: PublishResult | null = null;
 
   /** Null while closed; `id` is null while creating. */
@@ -529,9 +570,13 @@ export class MenusScreen extends LitElement {
 
   /** Built once: `dashboard-app.ts` renders each screen under `keyed(currentLocale(), …)`, so a
    * language change builds a new screen. */
-  readonly #columns: DataTableColumn<MenuRow>[] = this.#buildColumns(false);
-  readonly #narrowColumns: DataTableColumn<MenuRow>[] = this.#buildColumns(true);
+  readonly #columns: Record<ListLayout, DataTableColumn<MenuRow>[]> = {
+    narrow: this.#buildColumns("narrow"),
+    middle: this.#buildColumns("middle"),
+    wide: this.#buildColumns("wide"),
+  };
   #listSize: ResizeObserver | null = null;
+  readonly #probes = new Map<"narrow" | "wide", Element>();
   #rows: MenuRow[] = [];
   #sectionNames = new Map<string, string>();
   /** The nodes along {@link path}, one per member id. */
@@ -560,7 +605,7 @@ export class MenusScreen extends LitElement {
   /** A narrow list has no status column to sort by, so a status sort gives way, visibly, to the
    * name order. */
   protected override updated(changed: PropertyValues): void {
-    if (!changed.has("narrow") || !this.narrow) return;
+    if (!changed.has("layout") || this.layout !== "narrow") return;
     const table = this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
       'wt-data-table[data-test="menus"]',
     );
@@ -938,10 +983,10 @@ export class MenusScreen extends LitElement {
     if (!isTab(this.#url.read("view"))) this.#url.write({ view: TABS[0] }, true);
   }
 
-  #open(menuId: string): void {
+  #open(menuId: string, view: Tab = TABS[0]): void {
     this.#select(menuId);
-    this.#showView(TABS[0]);
-    this.#url.write({ dashboard: "menus", menu: menuId, view: TABS[0] });
+    this.#showView(view);
+    this.#url.write({ dashboard: "menus", menu: menuId, view });
   }
 
   #backToList(): void {
@@ -1493,11 +1538,14 @@ export class MenusScreen extends LitElement {
   #statusCell(menu: MenuRow) {
     const test = `status-${menu.id}`;
     if (typeof menu.status === "string")
-      return html`<span part="muted" data-test=${test}
+      return html`<span part="status muted" data-test=${test}
         >${t(menu.status === "loading" ? "menus.status_loading" : "menus.status_error")}</span
       >`;
-    const { label, live } = statusWords(menu.status);
-    return html`<span data-test=${test}
+    // The list's Status says what is live; a changed menu's drafts have the changes link.
+    const { label, live } = statusWords(
+      menu.status.state === "changed" ? { ...menu.status, state: "current" } : menu.status,
+    );
+    return html`<span part="status" data-test=${test}
       >${label}${menu.status.clashes ? html` <span part="clash">${menu.status.clashes} ${t(menu.status.clashes === 1 ? "menus.clash" : "menus.clashes")}</span>` : nothing}${
         live === null
           ? nothing
@@ -1506,9 +1554,33 @@ export class MenusScreen extends LitElement {
     >`;
   }
 
-  /** On a narrow list the status moves under the name and its own column goes, as the variants
-   * table does with its prices (docs/developers/design-system.md). */
-  #buildColumns(narrow: boolean): DataTableColumn<MenuRow>[] {
+  /** Only a menu with a live version can have changes to it; one never published has none. */
+  #changesCell(menu: MenuRow) {
+    if (typeof menu.status === "string" || menu.status.state !== "changed") return nothing;
+    const label = t("menus.changes_link");
+    return html`<a
+      part="changes-link"
+      data-test=${`changes-${menu.id}`}
+      href=${`/manage/menus/menu/${encodeURIComponent(menu.id)}/view/preview`}
+      aria-label=${`${label}: ${menu.name}`}
+      @click=${(event: MouseEvent) => this.#openPreview(event, menu.id)}
+      >${label}</a
+    >`;
+  }
+
+  /** A held modifier key keeps the browser's own handling, such as opening a new tab. */
+  #openPreview(event: MouseEvent, menuId: string): void {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
+      return;
+    event.preventDefault();
+    this.#open(menuId, "preview");
+  }
+
+  /** On a narrow list the status and the changes link move under the name and their columns go, as
+   * the variants table does with its prices (docs/developers/design-system.md); between narrow and
+   * wide the link moves under the status and its column goes. */
+  #buildColumns(layout: ListLayout): DataTableColumn<MenuRow>[] {
+    const narrow = layout === "narrow";
     const name = (menu: MenuRow) =>
       html`<wt-button
         variant="ghost"
@@ -1525,7 +1597,12 @@ export class MenusScreen extends LitElement {
         sortValue: (menu) => menu.name,
         searchValue: (menu) => menu.name,
         cell: narrow
-          ? (menu) => html`${name(menu)} <span part="stacked">${this.#statusCell(menu)}</span>`
+          ? (menu) => {
+              const changes = this.#changesCell(menu);
+              return html`${name(menu)}
+                <span part="stacked">${this.#statusCell(menu)}</span>
+                ${changes === nothing ? nothing : html`<span part="stacked">${changes}</span>`}`;
+            }
           : name,
       },
       ...(narrow
@@ -1539,8 +1616,22 @@ export class MenusScreen extends LitElement {
                 STATUS_ORDER.indexOf(
                   typeof menu.status === "string" ? menu.status : menu.status.state,
                 ),
-              cell: (menu: MenuRow) => this.#statusCell(menu),
+              cell:
+                layout === "middle"
+                  ? (menu: MenuRow) => html`${this.#statusCell(menu)}${this.#changesCell(menu)}`
+                  : (menu: MenuRow) => this.#statusCell(menu),
             },
+            ...(layout === "middle"
+              ? []
+              : [
+                  {
+                    key: "changes",
+                    label: t("menus.changes"),
+                    choosable: "shown" as const,
+                    activatesRow: false as const,
+                    cell: (menu: MenuRow) => this.#changesCell(menu),
+                  },
+                ]),
           ]),
       {
         key: "actions",
@@ -1677,17 +1768,26 @@ export class MenusScreen extends LitElement {
     ></dashboard-section-details-form>`;
   }
 
-  /** The probe is observed rather than the list: the probe's width follows the list's container,
+  /** The probes are observed rather than the list: a probe's width follows the list's container,
    * not the table's contents. */
-  #observeProbe = (probe: Element | undefined): void => {
-    this.#listSize?.disconnect();
-    this.#listSize = null;
+  #observeNarrowProbe = (probe: Element | undefined): void => this.#observeProbe("narrow", probe);
+  #observeWideProbe = (probe: Element | undefined): void => this.#observeProbe("wide", probe);
+
+  #observeProbe(kind: "narrow" | "wide", probe: Element | undefined): void {
+    const before = this.#probes.get(kind);
+    if (before !== undefined) this.#listSize?.unobserve(before);
+    this.#probes.delete(kind);
     if (probe === undefined) return;
-    this.#listSize = new ResizeObserver(() => {
-      this.narrow = getComputedStyle(probe).display !== "none";
+    this.#probes.set(kind, probe);
+    this.#listSize ??= new ResizeObserver(() => {
+      const shown = (which: "narrow" | "wide") => {
+        const found = this.#probes.get(which);
+        return found !== undefined && getComputedStyle(found).display !== "none";
+      };
+      this.layout = shown("narrow") ? "narrow" : shown("wide") ? "wide" : "middle";
     });
     this.#listSize.observe(probe);
-  };
+  }
 
   #renderAddMenu(slot?: "empty-action") {
     return html`<wt-button
@@ -1712,13 +1812,15 @@ export class MenusScreen extends LitElement {
       ${
         loaded
           ? html`<div class="list">
-              <span class="narrow-probe" aria-hidden="true" ${ref(this.#observeProbe)}></span>
+              <span class="narrow-probe" aria-hidden="true" ${ref(this.#observeNarrowProbe)}></span>
+              <span class="wide-probe" aria-hidden="true" ${ref(this.#observeWideProbe)}></span>
               <wt-data-table
                 noMatchesMessage=${tableNoMatches()}
                 data-test="menus"
-                class=${this.narrow ? "narrow" : ""}
+                class=${this.layout}
                 aria-label=${t("menus.title")}
-                viewKey="waitron.menus.table"
+                top-aligned
+                viewKey="waitron.menus.list.table"
                 customiseColumnsLabel=${t("table.customise_columns")}
                 customiseLabel=${t("table.customise")}
                 restoreColumnsLabel=${t("table.restore_columns")}
@@ -1732,7 +1834,7 @@ export class MenusScreen extends LitElement {
                 sortKey="name"
                 sortDirection="ascending"
                 .rows=${this.#rows}
-                .columns=${this.narrow ? this.#narrowColumns : this.#columns}
+                .columns=${this.#columns[this.layout]}
                 .rowKey=${(menu: MenuRow) => menu.id}
                 .rowClick=${(menu: MenuRow) => this.#open(menu.id)}
                 .rowClickLabel=${(menu: MenuRow) => `${t("menus.open")}: ${menu.name}`}

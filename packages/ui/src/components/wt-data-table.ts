@@ -130,6 +130,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
         vertical-align: baseline;
       }
 
+      :host([top-aligned]) td {
+        vertical-align: top;
+      }
+
       th {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -687,6 +691,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * stays above it. The box fills the block size a bounded flex container gives the table, but is
    * never shorter than its minimum; given no such container, it is that minimum. */
   @property({ type: Boolean, reflect: true, attribute: "sticky-header" }) stickyHeader = false;
+  /** Starts every body cell's content at the cell's top rather than lining cells up by their
+   * first line's baseline. */
+  @property({ type: Boolean, reflect: true, attribute: "top-aligned" }) topAligned = false;
   @state() private searchText = "";
   /** Every filter choice, chosen or restored, keyed by column key; an absent key means the column's
    * `initial` option, or "all" when it has none, and "" is "all" chosen over an `initial` one. A
