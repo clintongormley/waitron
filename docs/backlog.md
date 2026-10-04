@@ -1433,16 +1433,22 @@ deleted the right category; the dashboard was at fault. Fixed:
   It stayed open, and once the empty category was deleted and the list redrawn, the open menu
   belonged to the next category, so a second click deleted or summarised that one.
 - `wt-data-table` keeps each row's page elements with that row's data when rows are added, removed
-  or reordered, in the plain table and the tree, so an open menu can no longer end up acting on
-  another row. Rows that share a key are still all drawn.
+  or reordered, in the plain table and the tree, so an open menu stays with its row — where each
+  row's `rowKey` is unique to it. Rows that share a key are still all drawn, and are told apart by
+  which occurrence of the key they are (`repeatKeys`), so a row added ahead with the same key takes
+  over the elements of the row it displaces. A table that sets no `rowKey` keys rows by their
+  position.
 - The "Delete it too" choice counts only active products (a new `activeProducts` in each
-  category's summary); a deactivated product is already out of the list and only moves up.
+  category's summary); a deactivated product is already out of the list, unless the Status filter
+  is set to show inactive products, and only moves up.
   Whether a category is deleted at once without the dialog is unchanged, so one holding only
   deactivated products still asks.
 - The dialog lists each category it will delete by its full path, with "(2 of 3)" where several
   share a path, in the order the list draws them.
-- Pressing Delete in the dialog reads the categories' contents again; if what was shown has changed,
-  nothing is deleted and the dialog shows the new counts with a message saying so.
+- Pressing Delete in the dialog reads the categories' contents again; if the numbers of
+  subcategories, active products or routing rules differ from those shown (`#unchanged` in
+  `apps/dashboard/src/widgets/catalogue-browser.ts`), nothing is deleted and the dialog shows the
+  new counts with a message saying so.
 
 Still open from W74:
 - **A short window remains** between that second read and the delete, in which a change is not
