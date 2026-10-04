@@ -1212,6 +1212,37 @@ it("requires a move destination, excludes selected folders and descendants, and 
   await vi.waitFor(() => expect(dialog(el)).toBeNull());
   expect(count(el)).toBe("0 selected");
 });
+it("lists move destinations by full path in label order, after the top level, leaving out the moved subtree", async () => {
+  const el = await mountBrowser({
+    categories: [
+      folder("s", "Starters", null),
+      folder("dm", "Mains", "dn"),
+      folder("lm", "Mains", "l"),
+      folder("m10", "Menu 10", null),
+      folder("x", "Specials", null),
+      folder("xc", "Chef", "x"),
+      folder("l", "Lunch", null),
+      folder("dn", "Dinner", null),
+      folder("m2", "Menu 2", null),
+      folder("ds", "desserts", null),
+      folder("ac", "Accompaniments", null),
+    ],
+  });
+  await selectKeys(el, ["folder:x"]);
+  await press(el, "move");
+  expect(el.shadowRoot!.querySelector("wt-combobox")!.options).toEqual([
+    { value: "top", label: "All products (top level)" },
+    { value: "ac", label: "Accompaniments" },
+    { value: "ds", label: "desserts" },
+    { value: "dn", label: "Dinner" },
+    { value: "dm", label: "Dinner / Mains" },
+    { value: "l", label: "Lunch" },
+    { value: "lm", label: "Lunch / Mains" },
+    { value: "m2", label: "Menu 2" },
+    { value: "m10", label: "Menu 10" },
+    { value: "s", label: "Starters" },
+  ]);
+});
 it("moves products to the explicitly chosen top level", async () => {
   const el = await mountBrowser();
   await selectKeys(el, ["bread"]);
