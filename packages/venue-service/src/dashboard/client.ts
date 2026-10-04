@@ -8,6 +8,9 @@ export interface Department {
   defaultServiceMode: ServiceMode;
   active: boolean;
 }
+export interface DepartmentRemovalImpact {
+  zones: { id: string; name: string; activeTableCount: number }[];
+}
 export interface ServiceZone {
   id: string;
   name: string;
@@ -170,6 +173,10 @@ export class VenueServiceApi {
 
   deactivateDepartment(departmentId: string): Promise<void> {
     return this.request(`/management-api/venue-service/departments/${departmentId}`, "DELETE");
+  }
+
+  departmentRemovalImpact(departmentId: string): Promise<DepartmentRemovalImpact> {
+    return this.#read(`/management-api/venue-service/departments/${departmentId}/removal-impact`);
   }
 
   replaceHours(departmentId: string, hours: Omit<HoursInterval, "departmentId">[]): Promise<void> {

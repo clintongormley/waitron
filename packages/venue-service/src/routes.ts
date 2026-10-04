@@ -74,7 +74,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "department.not_found": 404,
   "department.last_active": 409,
   "zone.table_in_use": 409,
-  "department.has_active_zones": 409,
   "service_zone.not_found": 404,
   "catalogue.not_found": 404,
   "route.subject_not_found": 404,

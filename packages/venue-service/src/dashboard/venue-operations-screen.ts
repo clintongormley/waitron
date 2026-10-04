@@ -15,6 +15,7 @@ import {
 } from "@waitron/ui";
 import type {
   Department,
+  DepartmentRemovalImpact,
   FloorZone,
   HoursInterval,
   ServiceMode,
@@ -23,6 +24,12 @@ import type {
   VenueServiceView,
 } from "./client.js";
 import { t } from "./strings.js";
+
+const format = (key: Parameters<typeof t>[0], values: Record<string, string>) =>
+  Object.entries(values).reduce(
+    (value, [name, replacement]) => value.replaceAll(`{${name}}`, replacement),
+    t(key) as string,
+  );
 
 const MODES: ServiceMode[] = ["table_tab", "prepay", "invoice_first", "ticket_then_pay"];
 const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
@@ -33,7 +40,12 @@ type Editor =
   | { kind: "hours"; row?: HoursInterval; index?: number }
   | { kind: "zone"; row: FloorZone }
   | { kind: "assignment"; zoneId: string; menuId?: string }
-  | { kind: "delete"; name: string; action: () => Promise<unknown> };
+  | {
+      kind: "delete";
+      name: string;
+      action: () => Promise<unknown>;
+      impact?: DepartmentRemovalImpact;
+    };
 type Action = { key: string; label: string; run: () => void; disabled?: boolean };
 /** `check` reads the fields and returns a message per invalid one; `save` runs only once `check`
  * returns none. */
@@ -220,7 +232,7 @@ export class VenueOperationsScreen extends LitElement {
       }
       await this.#load();
     } catch (error) {
-      if (editor === undefined) this.actionError = this.#refusal(codeOf(error ?? {}));
+      if (editor === undefined) this.actionError = this.#refusal(codeOf(error ?? {}), error);
       else this.#refused(error, fields);
     } finally {
       this.busy = false;
@@ -228,10 +240,14 @@ export class VenueOperationsScreen extends LitElement {
     // Every Add button is disabled while busy, and focus does not take on a disabled one.
     if (closed) this.#returnFocus();
   }
-  #refusal(code: string): string {
-    return code === "department.has_active_zones"
-      ? t("venue.department_has_zones")
-      : t("venue.save_error");
+  #refusal(code: string, error?: unknown): string {
+    if (code === "department.last_active") return t("venue.department_last_active");
+    if (code === "zone.table_in_use") {
+      const tableName = (error as { params?: { tableName?: unknown } } | undefined)?.params
+        ?.tableName;
+      if (typeof tableName === "string") return format("venue.table_in_use", { table: tableName });
+    }
+    return t("venue.save_error");
   }
   #refused(error: unknown, { fields = {}, codes = {} }: ServerFields): void {
     const code = codeOf(error ?? {});
@@ -248,7 +264,7 @@ export class VenueOperationsScreen extends LitElement {
       this.refusedFields = { [control]: t("venue.field_refused") };
       this.#focusInvalid();
     } else {
-      this.editorError = this.#refusal(code);
+      this.editorError = this.#refusal(code, error);
     }
   }
   /** The screen's shadow root also holds the lists, so only the editor is searched. */
@@ -433,6 +449,19 @@ export class VenueOperationsScreen extends LitElement {
   #confirm(name: string, action: () => Promise<unknown>): void {
     this.#open({ kind: "delete", name, action });
   }
+  async #confirmDepartment(row: Department): Promise<void> {
+    try {
+      const impact = await this.api.departmentRemovalImpact(row.id);
+      this.#open({
+        kind: "delete",
+        name: row.name,
+        action: () => this.api.deactivateDepartment(row.id),
+        impact,
+      });
+    } catch (error) {
+      this.actionError = this.#refusal(codeOf(error ?? {}), error);
+    }
+  }
   #readinessMessage(issue: VenueReadinessIssue): string {
     switch (issue.code) {
       case "venue.department_missing":
@@ -521,7 +550,7 @@ export class VenueOperationsScreen extends LitElement {
                   key: `deactivate-department-${row.id}`,
                   label: t("venue.deactivate_department"),
                   disabled: !row.active,
-                  run: () => this.#confirm(row.name, () => this.api.deactivateDepartment(row.id)),
+                  run: () => void this.#confirmDepartment(row),
                 },
               ]),
           },
@@ -920,7 +949,14 @@ export class VenueOperationsScreen extends LitElement {
       case "delete":
         return {
           heading: t("venue.confirm_remove"),
-          body: html`<p>${editor.name}</p>`,
+          body: html`<p>${editor.name}</p>
+            ${editor.impact?.zones.map(
+              (zone) =>
+                html`<p>
+                  ${zone.name}:
+                  ${format("venue.active_tables", { count: String(zone.activeTableCount) })}
+                </p>`,
+            )}`,
           check: () => ({}),
           save: () => {
             void this.#save(editor.action);

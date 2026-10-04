@@ -191,8 +191,9 @@ const en = {
   "prep.test_error": "The route could not be checked.",
   "prep.exception_condition": "Choose a folder or product, a service zone, or both",
   "prep.exception_target_required": "Choose where this is made.",
-  "venue.department_has_zones":
-    "Move its active service zones to another department before deactivating this department.",
+  "venue.department_last_active": "You cannot remove the last active department.",
+  "venue.table_in_use": "Table {table} has an open tab. Close it before removing this department.",
+  "venue.active_tables": "{count} active tables",
   "venue.status": "Status",
   "venue.active": "Active",
   "venue.inactive": "Inactive",
@@ -499,8 +500,10 @@ const es: Record<keyof typeof en, string> = {
   "prep.test_error": "No se pudo comprobar la ruta.",
   "prep.exception_condition": "Elige una carpeta o producto, una zona de servicio, o ambos",
   "prep.exception_target_required": "Elige dónde se prepara.",
-  "venue.department_has_zones":
-    "Mueve sus zonas de servicio activas a otro departamento antes de desactivar este departamento.",
+  "venue.department_last_active": "No puedes eliminar el último departamento activo.",
+  "venue.table_in_use":
+    "La mesa {table} tiene una cuenta abierta. Ciérrala antes de eliminar este departamento.",
+  "venue.active_tables": "{count} mesas activas",
   "venue.status": "Estado",
   "venue.active": "Activo",
   "venue.inactive": "Inactivo",

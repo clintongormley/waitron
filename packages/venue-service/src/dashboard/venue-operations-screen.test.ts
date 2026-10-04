@@ -610,6 +610,7 @@ describe("venue operations screen", () => {
   it("deactivates a department that has no active zones", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(model),
+      departmentRemovalImpact: vi.fn().mockResolvedValue({ zones: [] }),
       deactivateDepartment: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
@@ -627,6 +628,7 @@ describe("venue operations screen", () => {
     });
     const api = {
       load: vi.fn().mockResolvedValue(model),
+      departmentRemovalImpact: vi.fn().mockResolvedValue({ zones: [] }),
       deactivateDepartment: vi.fn().mockReturnValue(pending),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
@@ -937,16 +939,39 @@ it("ignores change events from controls inside a tab panel", async () => {
   expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("zones");
 });
 
-it("explains why a department with active zones cannot be deactivated", async () => {
+it("names the zones and active tables before removing a department", async () => {
   const api = {
     load: vi.fn().mockResolvedValue(model),
-    deactivateDepartment: vi.fn().mockRejectedValue({ code: "department.has_active_zones" }),
+    departmentRemovalImpact: vi.fn().mockResolvedValue({
+      zones: [{ id: "z1", name: "Dining room", activeTableCount: 2 }],
+    }),
+    deactivateDepartment: vi.fn().mockResolvedValue(undefined),
+  } as unknown as VenueServiceApi;
+  const el = await mount(api);
+  await selectTab(el, "departments");
+  await action(el, "deactivate-department-d1");
+  expect(await bottom(el)).toBe("");
+  expect(modal(el)?.textContent).toContain("Dining room");
+  expect(modal(el)?.textContent).toContain("2 active tables");
+  expect(api.deactivateDepartment).not.toHaveBeenCalled();
+  await action(el, "save-editor");
+  expect(api.deactivateDepartment).toHaveBeenCalledWith("d1");
+});
+
+it.each([
+  [{ code: "zone.table_in_use", params: { tableName: "Window 4" } }, "Window 4"],
+  [{ code: "department.last_active" }, "last active department"],
+])("keeps the removal modal open with a named refusal", async (refusal, expected) => {
+  const api = {
+    load: vi.fn().mockResolvedValue(model),
+    departmentRemovalImpact: vi.fn().mockResolvedValue({ zones: [] }),
+    deactivateDepartment: vi.fn().mockRejectedValue(refusal),
   } as unknown as VenueServiceApi;
   const el = await mount(api);
   await selectTab(el, "departments");
   await action(el, "deactivate-department-d1");
   await action(el, "save-editor");
-  expect(await bottom(el)).toContain("Move its active service zones");
+  expect(await bottom(el)).toContain(expected);
   expect(pageAlert(el)).toBe("");
   expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
 });
@@ -1583,6 +1608,7 @@ it("says a refused list action at the top of the screen, with no editor open", a
 it("shows the general save error when a write is refused without a reason", async () => {
   const api = {
     load: vi.fn().mockResolvedValue(model),
+    departmentRemovalImpact: vi.fn().mockResolvedValue({ zones: [] }),
     deactivateDepartment: vi.fn().mockRejectedValue(undefined),
   } as unknown as VenueServiceApi;
   const el = await mount(api);
@@ -1615,6 +1641,7 @@ describe("the editor's keyboard", () => {
     let finish!: () => void;
     const api = {
       load: vi.fn().mockResolvedValue(model),
+      departmentRemovalImpact: vi.fn().mockResolvedValue({ zones: [] }),
       deactivateDepartment: vi.fn().mockReturnValue(
         new Promise<void>((resolve) => {
           finish = resolve;
