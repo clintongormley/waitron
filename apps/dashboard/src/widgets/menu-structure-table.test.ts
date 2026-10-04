@@ -594,7 +594,12 @@ it("moves a member a place with the arrow keys on its grip, shown at once and an
   await settle(el);
   expect(moves.at(-1)).toEqual({ path: [], memberId: "m-burger", to: 1 });
   expect(announced(el)).toBe(reordered("Burger", 2, 3));
-  expect(moves).toHaveLength(3);
+  await userEvent.keyboard("{ArrowUp}");
+  await settle(el);
+  expect(moves.at(-1)).toEqual({ path: [], memberId: "m-burger", to: 0 });
+  expect(shown(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
+  expect(announced(el)).toBe(reordered("Burger", 1, 3));
+  expect(moves).toHaveLength(4);
 });
 
 it("sends nothing for ArrowUp on the first member or ArrowDown on the last", async () => {
