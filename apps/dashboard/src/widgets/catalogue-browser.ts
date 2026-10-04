@@ -69,6 +69,9 @@ export class CatalogueBrowser extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
+      .deleting {
+        overflow-wrap: anywhere;
+      }
       wt-input {
         flex: 1 1 calc(var(--wt-tap-min) * 7);
         min-width: min(100%, calc(var(--wt-tap-min) * 7));
@@ -272,6 +275,38 @@ export class CatalogueBrowser extends LitElement {
       String(count),
     );
   }
+  /** Each category's path, numbered where others share it in the order the list draws them: depth
+   * first, with siblings in `categories` order, which is how the table breaks a tie in its sort. */
+  #namedPaths(ids: readonly string[]): string[] {
+    const known = new Set(this.categories.map(({ id }) => id));
+    const children = new Map<string | null, CategorySummary[]>();
+    for (const category of this.categories) {
+      const parent =
+        category.parentId !== null && known.has(category.parentId) ? category.parentId : null;
+      (children.get(parent) ?? children.set(parent, []).get(parent)!).push(category);
+    }
+    const sharing = new Map<string, string[]>();
+    const pathOf = new Map<string, string>();
+    const walk = (parentId: string | null): void => {
+      for (const category of children.get(parentId) ?? []) {
+        if (pathOf.has(category.id)) continue;
+        const path = categoryPath(category, this.categories);
+        pathOf.set(category.id, path);
+        (sharing.get(path) ?? sharing.set(path, []).get(path)!).push(category.id);
+        walk(category.id);
+      }
+    };
+    walk(null);
+    return ids.map((id) => {
+      const path = pathOf.get(id) ?? "";
+      const same = sharing.get(path) ?? [];
+      if (same.length < 2) return path;
+      return t("folders.path_ordinal")
+        .replace("{path}", path)
+        .replace("{n}", String(same.indexOf(id) + 1))
+        .replace("{count}", String(same.length));
+    });
+  }
   #operationDialog() {
     if (!this.operation) return nothing;
     const selection = this.operationSelection;
@@ -341,6 +376,14 @@ export class CatalogueBrowser extends LitElement {
               ></wt-combobox>`
             : html`
                 ${selection.productIds.length ? html`<p>${selection.productIds.length === 1 ? t("product.delete_warning") : t("folders.delete_products_body")}</p>` : nothing}
+                ${
+                  selection.categoryIds.length
+                    ? html`<p>${t("folders.deleting")}</p>
+                        <ul class="deleting" data-test="deleting">
+                          ${this.#namedPaths(selection.categoryIds).map((name) => html`<li>${name}</li>`)}
+                        </ul>`
+                    : nothing
+                }
                 ${this.summaryLoading ? html`<wt-spinner></wt-spinner>` : nothing}
                 ${
                   selection.categoryIds.length && !this.summaryLoading && !this.summaryFailed

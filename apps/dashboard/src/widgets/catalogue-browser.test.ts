@@ -1211,6 +1211,61 @@ it("shows folder contents and routes, defaults to moving up, and sends delete ch
     ),
   );
 });
+it.each([
+  ["en-GB", ["Mains (2 of 3)", "Drinks / Beer"]],
+  ["es", ["Mains (2 de 3)", "Drinks / Beer"]],
+] as const)(
+  "names each category it would delete by its path, numbering one whose path others share (%s)",
+  async (locale, names) => {
+    setLocale(locale);
+    const el = await mountBrowser({
+      categories: [
+        folder("m1", "Mains", null),
+        folder("d", "Drinks", null),
+        folder("m2", "Mains", null),
+        folder("b", "Beer", "d"),
+        folder("m3", "Mains", null),
+      ],
+      products: [product("steak", "Steak", "m2")],
+    });
+    vi.mocked(el.api.summariseFolders).mockResolvedValue([
+      { id: "m2", folders: 0, products: 1, activeProducts: 1, routes: 0 },
+      { id: "b", folders: 0, products: 0, activeProducts: 0, routes: 0 },
+    ]);
+    await toggleCategory(el, "d");
+    await selectKeys(el, ["folder:m2", "folder:b"]);
+    await press(el, "delete");
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    expect(
+      [...el.shadowRoot!.querySelectorAll('[data-test="deleting"] li')].map((item) =>
+        item.textContent!.trim(),
+      ),
+    ).toEqual(names);
+  },
+);
+it("numbers categories sharing a path in the order the list draws them, each under its own parent", async () => {
+  const el = await mountBrowser({
+    categories: [
+      folder("f1", "Food", null),
+      folder("f2", "Food", null),
+      folder("x", "Mains", "f2"),
+      folder("y", "Mains", "f1"),
+    ],
+    products: [],
+  });
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "x", folders: 0, products: 1, activeProducts: 1, routes: 0 },
+  ]);
+  await toggleCategory(el, "f1");
+  await toggleCategory(el, "f2");
+  expect(await rowKeys(el)).toEqual(["folder:f1", "folder:y", "folder:f2", "folder:x"]);
+  await selectKeys(el, ["folder:x"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  expect(el.shadowRoot!.querySelector('[data-test="deleting"] li')!.textContent!.trim()).toBe(
+    "Food / Mains (2 of 2)",
+  );
+});
 it("asks before deleting a category holding only inactive products, and counts none of them as deleted", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.summariseFolders).mockResolvedValue([

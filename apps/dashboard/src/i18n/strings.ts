@@ -100,6 +100,8 @@ export const en = {
     "This makes the products inactive: the till stops selling them and they leave this list until you choose to show inactive products. You can restore them, and their past sales are kept.",
   "folders.delete_heading": "Delete {count} items?",
   "folders.delete_heading_one": "Delete 1 item?",
+  "folders.deleting": "Categories to delete:",
+  "folders.path_ordinal": "{path} ({n} of {count})",
   "folders.contents_question": "What happens to what is inside?",
   "folders.contents_move_up": "Move it up to the parent category",
   "folders.contents_delete":
@@ -2247,6 +2249,8 @@ export const es: Record<StringKey, string> = {
     "Esto desactiva los productos: la caja deja de venderlos y salen de esta lista hasta que elijas mostrar los productos inactivos. Puedes restaurarlos, y sus ventas anteriores se conservan.",
   "folders.delete_heading": "¿Eliminar {count} elementos?",
   "folders.delete_heading_one": "¿Eliminar 1 elemento?",
+  "folders.deleting": "Categorías que se eliminarán:",
+  "folders.path_ordinal": "{path} ({n} de {count})",
   "folders.contents_question": "¿Qué pasa con lo que contienen?",
   "folders.contents_move_up": "Subirlo a la categoría superior",
   "folders.contents_delete":
