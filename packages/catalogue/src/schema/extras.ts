@@ -40,7 +40,7 @@ export const extraListItems = table(
     listId: id("list_id").notNull(),
     productId: id("product_id").notNull(),
     sort: count("sort").notNull().default(0),
-    maxQuantity: count("max_quantity").notNull().default(1),
+    maxQuantity: count("max_quantity").default(1),
     preselected: flag("preselected").notNull().default(false),
     price: money("price"),
     portion: quantity("portion").notNull().default(1000),

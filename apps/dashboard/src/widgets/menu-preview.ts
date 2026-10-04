@@ -330,6 +330,13 @@ export class MenuPreviewPanel extends LitElement {
           to: `${change.to.portion} ${unit(change.to.abbreviation)}`.trim(),
         });
       }
+      case "extra_max_quantity_changed":
+        return fill("menu_preview.extra_max_quantity_changed", {
+          list: change.listName,
+          name: change.name,
+          from: change.from === null ? t("menu_preview.no_limit") : String(change.from),
+          to: change.to === null ? t("menu_preview.no_limit") : String(change.to),
+        });
       case "section_added":
         return this.#at(
           "menu_preview.section_added",

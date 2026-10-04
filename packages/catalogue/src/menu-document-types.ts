@@ -161,6 +161,15 @@ export type MenuChange = {
       to: { portion: string; abbreviation: Record<string, string> };
     }
   | {
+      kind: "extra_max_quantity_changed";
+      productId: string;
+      name: string;
+      listId: string;
+      listName: string;
+      from: number | null;
+      to: number | null;
+    }
+  | {
       kind: "section_added" | "section_removed";
       sectionId: string;
       name: string;

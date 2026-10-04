@@ -79,6 +79,17 @@ const sauces: ExtraList = {
 };
 
 describe("extra list authoring contract", () => {
+  it("defaults an absent item maximum to one and preserves an explicit null", () => {
+    const parsed = parseExtraListInput({
+      ...breadsBody,
+      items: [
+        { ...sourdough, maxQuantity: undefined },
+        { ...rye, maxQuantity: null },
+      ],
+    });
+    expect(parsed.items.map((item) => item.maxQuantity)).toEqual([1, null]);
+  });
+
   it("keeps a positive three-place portion for a weighed extra", () => {
     const parsed = parseExtraListInput({
       ...breadsBody,
@@ -300,14 +311,9 @@ describe("extra list authoring contract", () => {
     ).toThrowError(
       expect.objectContaining({ code: "extras.invalid", params: { field: "items.0.preselected" } }),
     );
-    expect(() =>
-      parseExtraListInput({ ...breadsBody, items: [{ ...sourdough, maxQuantity: null }] }),
-    ).toThrowError(
-      expect.objectContaining({ code: "extras.invalid", params: { field: "items.0.maxQuantity" } }),
-    );
   });
 
-  // `maxPicks` is the deliberate exception and is pinned here so the rule above is not read as
+  // `maxPicks` is an exception and is pinned here so the rule above is not read as
   // covering it: null MEANS uncapped, a value rather than a missing one
   // (`extra-contract.ts`, `row.maxPicks == null ? null : …`).
   it("keeps an explicit null maxPicks, because there null is the value", () => {
@@ -409,6 +415,20 @@ describe("extra selections at order time", () => {
     ).toThrowError(
       expect.objectContaining({ code: "extras.limit_exceeded", params: { extraListId: breadsId } }),
     );
+  });
+
+  it("accepts repeated picks when the offered item has no quantity limit", () => {
+    const uncapped = breads({
+      minPicks: 0,
+      maxPicks: null,
+      items: [{ ...sourdough, maxQuantity: null }, { ...rye }],
+    });
+    expect(
+      validateExtraSelections(
+        [uncapped],
+        [{ listId: breadsId, picks: [{ productId: sourdoughProductId, quantity: 7 }] }],
+      ),
+    ).toEqual([{ listId: breadsId, picks: [{ productId: sourdoughProductId, quantity: 7 }] }]);
   });
 
   it("refuses an order-time quantity above the contract's shared ceiling, as a shape fault", () => {

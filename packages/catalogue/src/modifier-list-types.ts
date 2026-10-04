@@ -49,8 +49,8 @@ export interface ExtraListItem {
   productId: string;
   /** Amount supplied by one pick, in the product's effective unit. */
   portion?: string;
-  /** Per-dish cap for this product; at least 1, where 1 means "one or none". */
-  maxQuantity: number;
+  /** Per-dish cap for this product; null leaves the item uncapped. */
+  maxQuantity: number | null;
   preselected: boolean;
   /** A GROSS (VAT-inclusive) two-place decimal string per portion. null derives it from the
    * product's effective unit price and the portion; see `resolveExtraPrice` in extras.ts. */

@@ -160,7 +160,11 @@ export function parseExtraListInput(value: unknown): ExtraListInput {
         ? {}
         : { portion: extraPortion(item.portion, `${field}.portion`) }),
       maxQuantity:
-        item.maxQuantity === undefined ? 1 : whole(item.maxQuantity, `${field}.maxQuantity`, 1),
+        item.maxQuantity === undefined
+          ? 1
+          : item.maxQuantity === null
+            ? null
+            : whole(item.maxQuantity, `${field}.maxQuantity`, 1),
       preselected: bool(item.preselected, `${field}.preselected`, false),
       price: extraPrice(item.price, `${field}.price`),
     };
@@ -265,7 +269,7 @@ export function validateExtraSelections(
     for (const item of list.items) {
       const quantity = picked.get(item.productId);
       if (quantity === undefined) continue;
-      if (quantity > item.maxQuantity) {
+      if (item.maxQuantity !== null && quantity > item.maxQuantity) {
         throw new AppError("extras.limit_exceeded", { extraListId: list.id });
       }
       total += quantity;

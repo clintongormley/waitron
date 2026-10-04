@@ -14,8 +14,10 @@ Use **Extras** for things a diner adds to a dish. Each entry on an extras list n
 have already created, and takes that product's names, tax treatment, allergens, dietary labels and
 picture from it — you never retype them here. A product that has Active variants cannot be an
 entry, because it is sold only as one of its variants. What you set on the entry is the terms of the
-offer: **Maximum quantity**, how many of it one dish may take (at least one, so 1 means "one or
-none"); **Preselected**, whether it starts chosen; and **Price per portion**, what one pick costs.
+offer: **Maximum quantity**, how many of it one dish may take (1 means "one or none");
+**Preselected**, whether it starts chosen; and **Price per portion**, what one pick costs.
+Press − from 2 to 1 and then to an empty box to remove the item's limit. The ∞ placeholder marks
+that empty value. The list's **Maximum choices** still limits the total picks when you set one.
 For a weighed or fractional product, also enter the **Portion** that one pick adds, in the product's
 own unit. A product counted as Each adds one, so it needs no portion field. An entered price replaces
 the product's price for that portion: 1.50 means 1.50 per pick. Leave the price blank and Waitron

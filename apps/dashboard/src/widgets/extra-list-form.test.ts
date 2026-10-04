@@ -245,6 +245,23 @@ it("submits an edit under the ids it was given, keeping the fields it did not to
   ]);
 });
 
+it("clears an item's maximum from two through one to no limit and submits null", async () => {
+  const { el, host } = await mount({ value: addons });
+  const submitted = record(host);
+  const stepper = field<HTMLElementTagNameMap["wt-number-stepper"]>(el, "item-0-max-quantity");
+  const decrease = stepper.shadowRoot!.querySelector<HTMLButtonElement>('[data-step="-1"]')!;
+  decrease.click();
+  await el.updateComplete;
+  expect(stepper.value).toBe("1");
+  decrease.click();
+  await el.updateComplete;
+  expect(stepper.value).toBe("");
+  expect(stepper.shadowRoot!.querySelector("input")!.placeholder).toBe("∞");
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]!.items[0]!.maxQuantity).toBeNull();
+});
+
 it("shows each row's product by its STAFF name, not the customer-facing or kitchen one", async () => {
   const { el } = await mount({ value: addons });
 
@@ -1334,9 +1351,11 @@ it.each([
       const table = el.shadowRoot!.querySelector("table")!.getBoundingClientRect();
       expect(text.left, `${frame}px in ${locale}`).toBeGreaterThanOrEqual(table.left);
       expect(text.right, `${frame}px in ${locale}`).toBeLessThanOrEqual(table.right);
-      const required = el.shadowRoot!.querySelectorAll("thead th")[2]!.querySelector(".required")!;
+      const quantity = el
+        .shadowRoot!.querySelectorAll("thead th")[2]!
+        .querySelector(".quantity-heading")!;
       expect(text.left, `after Maximum quantity at ${frame}px in ${locale}`).toBeGreaterThanOrEqual(
-        required.getBoundingClientRect().right,
+        quantity.getBoundingClientRect().right,
       );
     } finally {
       setLocale("en");
@@ -1729,19 +1748,16 @@ it("reads a product with no unit as sold by the each, as the product editor does
   expect(unit("item-2-price")).toBe("");
 });
 
-it("marks the Maximum quantity heading as required, the way a drawn label is marked", async () => {
-  const { el, host } = await mount({ value: addons });
-  host.style.setProperty("--wt-color-danger", "rgb(1, 2, 3)");
+it("marks Maximum quantity as optional when an item can have no limit", async () => {
+  const { el } = await mount({ value: addons });
   const heading = [...el.shadowRoot!.querySelectorAll("thead th")][2]!;
   const marker = heading.querySelector<HTMLElement>("[data-required]");
 
-  expect(marker?.textContent).toBe("*");
-  expect(marker?.getAttribute("aria-hidden")).toBe("true");
-  expect(getComputedStyle(marker!).color).toBe("rgb(1, 2, 3)");
-  expect(heading.textContent!.replace("*", "").trim()).toBe(t("extras.max_quantity"));
+  expect(marker).toBeNull();
+  expect(heading.textContent!.trim()).toBe(t("extras.max_quantity"));
   expect(
     field<HTMLElementTagNameMap["wt-number-stepper"]>(el, "item-0-max-quantity").required,
-  ).toBe(true);
+  ).toBe(false);
 });
 
 const GRAM = {

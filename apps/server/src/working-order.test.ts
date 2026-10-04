@@ -372,7 +372,7 @@ async function addExtraList(
     price?: string | null;
     unitPrice?: string;
     vatClass?: "general" | "reduced" | "super_reduced" | "zero";
-    maxQuantity?: number;
+    maxQuantity?: number | null;
     minPicks?: number;
     maxPicks?: number | null;
     active?: boolean;
@@ -400,7 +400,7 @@ async function addExtraList(
       items: [
         {
           productId: offered.id,
-          maxQuantity: opts.maxQuantity ?? 1,
+          maxQuantity: opts.maxQuantity === undefined ? 1 : opts.maxQuantity,
           preselected: false,
           price: opts.price === undefined ? "0.50" : opts.price,
         },
@@ -6269,13 +6269,13 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
     catalogueId: string,
     dishId: string,
     name: string,
-    opts: { maxPicks?: number | null; maxQuantity?: number } = {},
+    opts: { maxPicks?: number | null; maxQuantity?: number | null } = {},
   ): Promise<{ listId: string; productId: string }> {
     return addExtraList(tx, catalogueId, dishId, name, {
       price: "0.50",
       vatClass: "reduced",
       maxPicks: opts.maxPicks === undefined ? null : opts.maxPicks,
-      maxQuantity: opts.maxQuantity ?? 1,
+      maxQuantity: opts.maxQuantity === undefined ? 1 : opts.maxQuantity,
     });
   }
 
@@ -6389,6 +6389,29 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
         code: "extras.limit_exceeded",
         params: { extraListId: shot.listId },
       });
+    });
+  });
+
+  it("sells three picks from an item with no quantity limit", async () => {
+    const { cfg, cafeId, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      const shot = await addQtyExtra(tx, catalogueId, cafeId, "Extra shot", {
+        maxPicks: null,
+        maxQuantity: null,
+      });
+      const id = randomUUID();
+      await createOfferedOrder(tx, cfg, id, [
+        {
+          productId: cafeId,
+          quantity: "1",
+          extras: [{ listId: shot.listId, picks: [{ productId: shot.productId, quantity: 3 }] }],
+        },
+      ]);
+      const children = await tx
+        .select({ quantity: workingOrderLines.quantity, lineTotal: workingOrderLines.lineTotal })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id));
+      expect(children.at(-1)).toEqual({ quantity: 3000, lineTotal: 150 });
     });
   });
 
