@@ -821,7 +821,7 @@ export class ProductList extends LitElement {
               () => maker.stationName ?? t("product.nowhere"),
             )
           : maker.kind === "station"
-            ? (maker.stationName ?? t("product.nowhere"))
+            ? maker.stationName
             : t("product.nowhere");
     const detail = [
       source === null

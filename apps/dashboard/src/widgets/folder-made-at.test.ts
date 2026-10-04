@@ -313,3 +313,23 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
     expect(result.get("food")?.someElsewhere).toBe(false);
   });
 });
+
+describe("folderMadeAt — names it cannot find", () => {
+  it("names no switched-off station when the routing model does not list it", () => {
+    const result = madeAt(routing({ claims: [claim("drinks", station("ghost"))] }));
+    expect(result.get("drinks")?.maker).toEqual({ kind: "no_replacement", stationName: null });
+  });
+
+  it("names no category for a claim on a parent the category list does not hold", () => {
+    const result = folderMadeAt(
+      routing({ claims: [claim("missing", station("bar"))] }),
+      [folder("orphan", "Orphan", "missing")],
+      [product("cola", "elsewhere")],
+    );
+    expect(result.get("orphan")).toEqual({
+      maker: { kind: "station", stationName: "Bar" },
+      source: { kind: "inherited", name: null },
+      someElsewhere: false,
+    });
+  });
+});

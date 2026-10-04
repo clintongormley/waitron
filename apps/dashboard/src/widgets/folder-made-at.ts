@@ -8,7 +8,7 @@ import {
 import type { CategorySummary, Product } from "../api/client.js";
 
 export type FolderMaker =
-  | { kind: "station"; stationName: string | null }
+  | { kind: "station"; stationName: string }
   | { kind: "no_preparation" }
   | { kind: "no_replacement"; stationName: string | null }
   | { kind: "nowhere" };
@@ -108,7 +108,8 @@ export function folderMadeAt(
     const { route, decidedBy } = choice;
     const maker: FolderMaker =
       route?.kind === "station"
-        ? { kind: "station", stationName: stationNames.get(route.stationId) ?? null }
+        ? // A route reaches only an active station, and every active one is in routing.stations.
+          { kind: "station", stationName: stationNames.get(route.stationId)! }
         : route?.kind === "no_preparation"
           ? { kind: "no_preparation" }
           : choice.noReplacement
