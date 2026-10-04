@@ -117,6 +117,8 @@ export const en = {
   "folders.no_routing_rule": "No kitchen routing rule covers this category",
   "folders.summary_error":
     "What these categories hold could not be read, so they cannot be deleted yet.",
+  "folders.summary_changed":
+    "What these categories hold has changed since this opened. Check the new counts and confirm again.",
   "folders.all_products": "All products",
   "folders.search": "Search products and categories",
   "folders.name": "Category name",
@@ -2265,6 +2267,8 @@ export const es: Record<StringKey, string> = {
   "folders.no_routing_rule": "Ninguna regla de envío a cocina cubre esta categoría",
   "folders.summary_error":
     "No se pudo leer lo que contienen estas categorías, así que aún no se pueden eliminar.",
+  "folders.summary_changed":
+    "Lo que contienen estas categorías ha cambiado desde que se abrió. Revisa las nuevas cifras y vuelve a confirmar.",
   "folders.all_products": "Todos los productos",
   "folders.search": "Buscar productos y categorías",
   "folders.name": "Nombre de la categoría",

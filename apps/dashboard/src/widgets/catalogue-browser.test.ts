@@ -1279,6 +1279,92 @@ it("asks before deleting a category holding only inactive products, and counts n
   );
   expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
 });
+it("reads the contents again at Delete and, when they changed, shows the new counts instead of deleting", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders)
+    .mockResolvedValueOnce([{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1 }])
+    .mockResolvedValue([{ id: "d", folders: 2, products: 3, activeProducts: 3, routes: 1 }]);
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 category and 2 products"));
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+      "What these categories hold has changed since this opened. Check the new counts and confirm again.",
+    ),
+  );
+  expect(el.shadowRoot!.textContent).toContain("2 categories and 3 products");
+  expect(dialog(el)).not.toBeNull();
+  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  expect(el.api.summariseFolders).toHaveBeenNthCalledWith(2, ["d"]);
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: [], categoryIds: ["d"] },
+      "move_up",
+    ),
+  );
+  expect(el.api.summariseFolders).toHaveBeenCalledTimes(3);
+});
+it.each([
+  ["folders", { folders: 2 }, false],
+  ["activeProducts", { activeProducts: 1 }, false],
+  ["routes", { routes: 0 }, false],
+  ["products", { products: 3 }, true],
+] as const)(
+  "at Delete, a change in %s alone is checked against what the dialog showed",
+  async (_field, change, deletes) => {
+    const el = await mountBrowser();
+    const shown = { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1 };
+    vi.mocked(el.api.summariseFolders)
+      .mockResolvedValueOnce([shown])
+      .mockResolvedValue([{ ...shown, ...change }]);
+    await selectKeys(el, ["folder:d"]);
+    await press(el, "delete");
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    await press(el, "confirm");
+    await vi.waitFor(() => expect(el.api.summariseFolders).toHaveBeenCalledTimes(2));
+    if (deletes) await vi.waitFor(() => expect(el.api.deleteCatalogueItems).toHaveBeenCalledOnce());
+    else {
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+          en["folders.summary_changed"],
+        ),
+      );
+      expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+    }
+  },
+);
+it("deletes nothing when a category is gone by the time Delete is pressed", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders)
+    .mockResolvedValueOnce([{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1 }])
+    .mockRejectedValue({ code: "category.not_found", params: { categoryId: "d" } });
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 category and 2 products"));
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+      codeMessage("category.not_found"),
+    ),
+  );
+  expect(dialog(el)).not.toBeNull();
+  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+});
+it("deletes nothing when the second read leaves a category out", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders)
+    .mockResolvedValueOnce([{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1 }])
+    .mockResolvedValue([]);
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  await press(el, "confirm");
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull());
+  expect(dialog(el)).not.toBeNull();
+  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+});
 it("deletes a folder through its own row action", async () => {
   const el = await mountBrowser();
   (await tableOf(el))

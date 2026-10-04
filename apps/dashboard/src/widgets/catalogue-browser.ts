@@ -242,7 +242,8 @@ export class CatalogueBrowser extends LitElement {
       this.summaryLoading = false;
     }
   }
-  async #confirm(operation = this.operation): Promise<void> {
+  /** `shown` marks a confirmation from the dialog, whose counts are read again before deleting. */
+  async #confirm(operation = this.operation, shown = false): Promise<void> {
     if (
       this.operationBusy ||
       this.summaryLoading ||
@@ -259,7 +260,11 @@ export class CatalogueBrowser extends LitElement {
           this.operationSelection,
           this.destination === "top" ? null : this.destination,
         );
-      else await this.api.deleteCatalogueItems(this.operationSelection, this.contents);
+      else {
+        if (shown && this.operationSelection.categoryIds.length && !(await this.#unchanged()))
+          return;
+        await this.api.deleteCatalogueItems(this.operationSelection, this.contents);
+      }
       this.operation = null;
       this.selected = [];
     } catch (error) {
@@ -268,6 +273,26 @@ export class CatalogueBrowser extends LitElement {
     } finally {
       this.operationBusy = false;
     }
+  }
+  /** When what the dialog showed has changed, shows the new counts instead. */
+  async #unchanged(): Promise<boolean> {
+    const ids = this.operationSelection.categoryIds;
+    const read = await this.api.summariseFolders(ids);
+    const fresh = ids.map((id) => read.find((summary) => summary.id === id));
+    if (fresh.some((summary) => summary === undefined)) throw new Error("incomplete summary");
+    const same = fresh.every((summary, index) => {
+      const shown = this.summaries[index];
+      return (
+        shown !== undefined &&
+        summary!.folders === shown.folders &&
+        summary!.activeProducts === shown.activeProducts &&
+        summary!.routes === shown.routes
+      );
+    });
+    if (same) return true;
+    this.summaries = fresh as FolderSummary[];
+    this.operationError = t("folders.summary_changed");
+    return false;
   }
   #plural(key: Parameters<typeof t>[0], count: number): string {
     return t(count === 1 ? (`${key}_one` as Parameters<typeof t>[0]) : key).replace(
@@ -357,7 +382,7 @@ export class CatalogueBrowser extends LitElement {
       <form
         @submit=${(event: Event) => {
           event.preventDefault();
-          void this.#confirm();
+          void this.#confirm(this.operation, true);
         }}
       >
         ${
@@ -430,7 +455,7 @@ export class CatalogueBrowser extends LitElement {
           variant=${this.operation === "delete" ? "danger" : "primary"}
           .loading=${this.operationBusy}
           .disabled=${this.operationBusy || this.summaryLoading || this.summaryFailed || (this.operation === "move" && !this.destination)}
-          @click=${() => void this.#confirm()}
+          @click=${() => void this.#confirm(this.operation, true)}
           >${t(this.operation === "delete" ? "action.delete" : "folders.move")}</wt-button
         >
       </wt-form-actions>
