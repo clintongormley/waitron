@@ -1264,13 +1264,17 @@ that a 5% provider response produces `reader.battery_low`. Its red run returned
 `alert.source_unavailable`; its green run returned the low-battery alert. The battery source still
 uses its five-minute cache, covered by `apps/server/src/alert-sources.test.ts`.
 
-**The alerts list's battery check can outlast its browser read limit (A258 follow-up — OPEN,
-unqueued).** `listAlerts` (`apps/dashboard/src/api/client.ts`) uses the default 30-second GET
-limit, while the server's battery source awaits the provider without its own deadline. The
-run-it review held a provider response open: the alerts requests stayed pending until it was
-released, although a separate database write completed immediately. The existing A255 entry
-above records why a Stripe reader read can take longer than 30 seconds. Decide a read limit for
-the alerts list and a server-side bound for its battery check without holding the write lock.
+**The alerts list's battery check has its own deadline (A258 follow-up — DONE, W58).**
+The server gives the battery source 25 seconds: SumUp's single HTTP request has a 20-second
+limit (`packages/payments-sumup/src/sumup-client.ts`), while Stripe's retries can run much
+longer (`packages/payments-stripe/src/card-provider.ts`). A stalled source produces one
+`alert.source_unavailable` for card readers while the other alerts still arrive. The browser
+allows 40 seconds for `listAlerts`, leaving time for the server's bounded check and the rest of
+the response. The held-provider route case in `apps/server/src/alerts-api.test.ts` checks the
+response and a concurrent database write; the browser cases in
+`apps/dashboard/src/api/client.test.ts` check both sides of its limit. A provider call that
+ignores cancellation may continue after the server has answered; the source's five-minute cache
+shares that in-flight call with reads during its lifetime.
 
 **A timed-out card-reader status read now says so without ending pairing (A259, found by W18c's
 run-it review, 2026-10-03) — DONE (W46).** The SumUp pairing dialog keeps its created reader and

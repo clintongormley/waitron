@@ -374,6 +374,8 @@ export function stationOutputAlertSource(deps: {
 export const BATTERY_WARN = 20;
 /** At or below this it is an error — the reader is close to dying at the till. */
 export const BATTERY_ERROR = 10;
+/** Longer than SumUp's single 20-second request, and bounded even when a provider never settles. */
+const BATTERY_CHECK_LIMIT_MS = 25_000;
 
 /**
  * The card-reader battery alert source. A reader whose provider reports no battery raises nothing.
@@ -399,7 +401,7 @@ export function batteryAlertSource(deps: {
         .from(cardReaders)
         .where(and(eq(cardReaders.active, true), ne(cardReaders.id, DEMO_READER_ID)));
       // Provider calls, not queries on `tx`, so they may run concurrently.
-      const percents = await Promise.all(
+      const pending = Promise.all(
         readers.map((r) =>
           deps.cache.get(r.id, async () => {
             // An unknown provider throws, failing the whole source rather than dropping the reader.
@@ -409,6 +411,19 @@ export function batteryAlertSource(deps: {
           }),
         ),
       );
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const deadline = new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("battery check timed out")),
+          BATTERY_CHECK_LIMIT_MS,
+        );
+      });
+      let percents: (number | null)[];
+      try {
+        percents = await Promise.race([pending, deadline]);
+      } finally {
+        clearTimeout(timer);
+      }
       const alerts: OngoingAlert[] = [];
       readers.forEach((r, i) => {
         const percent = percents[i]!;

@@ -1466,6 +1466,8 @@ export interface OrderDetailDto {
 /** Above three Stripe attempts that go silent for 80 s once connected (`defaultMakeStripe`, in
  * payments-stripe's card-provider.ts); a slow sender or a connection slow to open can take longer. */
 const CARD_PROVIDER_READ_LIMIT_MS = 250_000;
+/** Leaves the server's 25-second battery deadline room to finish the rest of the alerts read. */
+const ALERTS_READ_LIMIT_MS = 40_000;
 
 export class DashboardApi {
   readonly liveData = new LiveData();
@@ -3104,7 +3106,9 @@ export class DashboardApi {
   // ── Alerts ────────────────────────────────────────────────────────────────────────────────────
 
   listAlerts(): Promise<AlertsResponse> {
-    return this.#request<AlertsResponse>("/management-api/alerts", "GET");
+    return this.#request<AlertsResponse>("/management-api/alerts", "GET", undefined, {
+      timeLimitMs: ALERTS_READ_LIMIT_MS,
+    });
   }
 
   listHandledAlerts(): Promise<AlertsResponse> {

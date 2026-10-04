@@ -359,8 +359,10 @@ describe("alert routes", () => {
   });
 });
 
-// A card-provider seat whose only live method reports a flat 5% battery.
-function stubCardProvider(): CardProviderContribution {
+// A card-provider seat whose only live method reports a 5% battery by default.
+function stubCardProvider(
+  status: () => Promise<ReaderStatus> = async () => ({ online: true, batteryPercent: 5 }),
+): CardProviderContribution {
   const unused = (): never => {
     throw new Error("stubCardProvider: this method is not used by the battery source");
   };
@@ -376,7 +378,7 @@ function stubCardProvider(): CardProviderContribution {
       list: unused,
       add: unused,
       remove: unused,
-      status: async (): Promise<ReaderStatus> => ({ online: true, batteryPercent: 5 }),
+      status,
     },
   };
 }
@@ -454,6 +456,59 @@ const liveGet = (app: Hono, cookie: string) =>
   });
 
 describe("ongoing alert sources through the route", () => {
+  it("answers with battery unavailable while a provider status remains held", async () => {
+    const v = await seedVenue();
+    await seedLowReader();
+    await raise(v, "payment.offline_forward_declined");
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => (entered = resolve));
+    let release!: (status: ReaderStatus) => void;
+    const held = new Promise<ReaderStatus>((resolve) => (release = resolve));
+    const source = batteryAlertSource({
+      providers: [
+        stubCardProvider(async () => {
+          entered();
+          return held;
+        }),
+      ],
+      runtimeDeps: cardRuntimeDeps,
+      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+    });
+    const app = appFor(createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [source] }));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const result: { body?: { alerts: { code: string; area: string }[] } } = {};
+      const read = Promise.resolve(get(app, "/management-api/alerts", v.manager)).then(
+        async (res) => {
+          result.body = (await res.json()) as typeof result.body;
+        },
+      );
+      await started;
+      const write: { settled?: boolean; error?: unknown } = {};
+      void db
+        .update(cardReaders)
+        .set({ name: "Updated while provider waits" })
+        .then(
+          () => (write.settled = true),
+          (error: unknown) => (write.error = error),
+        );
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(write.settled).toBe(true);
+      expect(write.error).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(29_000);
+      expect(result.body?.alerts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: "payment.offline_forward_declined" }),
+          expect.objectContaining({ code: "alert.source_unavailable", area: "card_reader" }),
+        ]),
+      );
+      await read;
+    } finally {
+      release({ online: true, batteryPercent: 5 });
+      vi.useRealTimers();
+    }
+  });
+
   it("reports a SumUp reader's low battery through its real credential read", async () => {
     const v = await seedVenue();
     const ring = loadKeyRing({
