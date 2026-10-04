@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { setClaim } from "./routing-store.js";
 import { replaceStationHours, setStationToday } from "./station-times.js";
 import { Hono } from "hono";
@@ -33,6 +33,7 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { locationId, type LocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
+import { zoneServicePolicies } from "./schema/service.js";
 import { configureZone, createDepartment, resolveNewOrderZone } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
@@ -169,6 +170,121 @@ async function send(
 }
 
 describe("venue service management routes", () => {
+  it("creates a floor zone and assigns its department in one request", async () => {
+    const fx = await fixture();
+    const department = (await (
+      await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
+        name: "Terrace service",
+        defaultServiceMode: "prepay",
+      })
+    ).json()) as { id: string };
+
+    const response = await send(
+      fx.app,
+      "POST",
+      "/management-api/venue-service/zones",
+      fx.managerCookie,
+      { name: "Garden", departmentId: department.id },
+    );
+    expect(response.status).toBe(201);
+    const { id } = (await response.json()) as { id: string };
+    expect(await db.select().from(floorZones).where(eq(floorZones.id, id))).toMatchObject([
+      { locationId: fx.locationId, name: "Garden", active: true },
+    ]);
+    expect(
+      await db.select().from(zoneServicePolicies).where(eq(zoneServicePolicies.zoneId, id)),
+    ).toMatchObject([{ departmentId: department.id, serviceMode: null }]);
+  });
+
+  it("refuses a missing department without retaining a floor zone", async () => {
+    const fx = await fixture();
+    const response = await send(
+      fx.app,
+      "POST",
+      "/management-api/venue-service/zones",
+      fx.managerCookie,
+      { name: "Orphan garden", departmentId: crypto.randomUUID() },
+    );
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: "department.not_found" } });
+    expect(await db.select().from(floorZones).where(eq(floorZones.name, "Orphan garden"))).toEqual(
+      [],
+    );
+  });
+
+  it("refuses a blank zone name at the write boundary", async () => {
+    const fx = await fixture();
+    const department = (await (
+      await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
+        name: "Garden service",
+        defaultServiceMode: "prepay",
+      })
+    ).json()) as { id: string };
+    const response = await send(
+      fx.app,
+      "POST",
+      "/management-api/venue-service/zones",
+      fx.managerCookie,
+      { name: "   ", departmentId: department.id },
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "name" } },
+    });
+  });
+
+  it("reports a duplicate zone name and leaves its department assignment unchanged", async () => {
+    const fx = await fixture();
+    const department = (await (
+      await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
+        name: "Garden service",
+        defaultServiceMode: "prepay",
+      })
+    ).json()) as { id: string };
+    const response = await send(
+      fx.app,
+      "POST",
+      "/management-api/venue-service/zones",
+      fx.managerCookie,
+      { name: "Terrace", departmentId: department.id },
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "zone.name_taken" } });
+    expect(
+      await db.select().from(zoneServicePolicies).where(eq(zoneServicePolicies.zoneId, fx.zoneId)),
+    ).toEqual([]);
+  });
+
+  it("rolls back the floor zone when its department assignment fails", async () => {
+    const fx = await fixture();
+    const department = (await (
+      await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
+        name: "Garden service",
+        defaultServiceMode: "prepay",
+      })
+    ).json()) as { id: string };
+    await db.execute(sql`
+      create trigger refuse_garden_assignment before insert on zone_service_policies
+      when new.zone_id in (select id from floor_zones where name = 'Rollback garden')
+      begin select raise(abort, 'assignment refused'); end
+    `);
+    try {
+      const response = await send(
+        fx.app,
+        "POST",
+        "/management-api/venue-service/zones",
+        fx.managerCookie,
+        { name: "Rollback garden", departmentId: department.id },
+      );
+      expect(response.status).toBe(500);
+      expect(
+        await db.select().from(floorZones).where(eq(floorZones.name, "Rollback garden")),
+      ).toEqual([]);
+    } finally {
+      await db.execute(sql`drop trigger refuse_garden_assignment`);
+    }
+  });
+
   it("previews department removal with zone names and active table counts", async () => {
     const fx = await fixture();
     const department = (await (

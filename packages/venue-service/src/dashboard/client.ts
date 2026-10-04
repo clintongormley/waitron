@@ -192,6 +192,10 @@ export class VenueServiceApi {
     return this.request(`/management-api/venue-service/zones/${zoneId}`, "PUT", input);
   }
 
+  createZone(input: { name: string; departmentId: string }): Promise<{ id: string }> {
+    return this.request("/management-api/venue-service/zones", "POST", input);
+  }
+
   updateZone(zoneId: string, patch: { name: string }): Promise<void> {
     return this.request(`/management-api/zones/${zoneId}`, "PATCH", patch);
   }

@@ -16,6 +16,7 @@ import {
   allowMenuInZone,
   clearDeviceDefaultZone,
   configureZone,
+  createServiceZone,
   createDepartment,
   deactivateDepartment,
   departmentRemovalImpact,
@@ -75,6 +76,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "department.last_active": 409,
   "zone.table_in_use": 409,
   "service_zone.not_found": 404,
+  "zone.name_taken": 409,
   "catalogue.not_found": 404,
   "route.subject_not_found": 404,
   "route.not_found": 404,
@@ -628,6 +630,22 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           }),
         );
         return c.json(department, 201);
+      }),
+    );
+
+    app.post("/management-api/venue-service/zones", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const name = requireString(body.name, "name").trim();
+        if (name === "") throw new AppError("management.request_invalid", { field: "name" });
+        const zone = await gated(sessionId, (tx) =>
+          createServiceZone(tx, ctx.cfg, {
+            name,
+            departmentId: requireBodyUuid(body.departmentId, "departmentId"),
+          }),
+        );
+        return c.json(zone, 201);
       }),
     );
 

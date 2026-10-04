@@ -4,6 +4,7 @@ import {
   devices,
   diningTables,
   floorZones,
+  isUniqueViolation,
   kitchenStations,
   parties,
   partyTables,
@@ -463,6 +464,39 @@ export async function configureZone(
     .insert(zoneSalePolicies)
     .values({ zoneId: input.zoneId })
     .onConflictDoNothing({ target: zoneSalePolicies.zoneId });
+}
+
+/** Create the floor zone and its service assignment in the caller's one write transaction. */
+export async function createServiceZone(
+  tx: Transaction,
+  cfg: VenueScope,
+  input: { name: string; departmentId: string },
+): Promise<{ id: string }> {
+  const [department] = await tx
+    .select({ id: departments.id })
+    .from(departments)
+    .where(
+      and(
+        eq(departments.id, input.departmentId),
+        eq(departments.locationId, cfg.locationId),
+        eq(departments.active, true),
+      ),
+    );
+  if (department === undefined)
+    throw new AppError("department.not_found", { departmentId: input.departmentId });
+  let zoneId: string;
+  try {
+    const [zone] = await tx
+      .insert(floorZones)
+      .values({ locationId: cfg.locationId, name: input.name })
+      .returning({ id: floorZones.id });
+    zoneId = zone!.id;
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new AppError("zone.name_taken", { name: input.name });
+    throw error;
+  }
+  await configureZone(tx, cfg, { zoneId, departmentId: input.departmentId });
+  return { id: zoneId };
 }
 
 export async function allowMenuInZone(

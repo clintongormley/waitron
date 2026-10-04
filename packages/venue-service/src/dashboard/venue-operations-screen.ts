@@ -38,6 +38,7 @@ const VIEWS = ["status", "departments", "zones"] as const;
 type View = (typeof VIEWS)[number];
 type Editor =
   | { kind: "department"; row?: Department }
+  | { kind: "new-zone" }
   | { kind: "hours"; row?: HoursInterval; index?: number; departmentId?: string }
   | { kind: "zone"; row: FloorZone }
   | { kind: "assignment"; zoneId: string; menuId?: string }
@@ -458,6 +459,14 @@ export class VenueOperationsScreen extends LitElement {
       key: "new-department",
       label: t("venue.add_department"),
       run: () => this.#open({ kind: "department" }),
+    };
+  }
+  #addZone(): Action {
+    return {
+      key: "new-zone",
+      label: t("venue.add_zone"),
+      disabled: !this.model!.departments.some((department) => department.active),
+      run: () => this.#open({ kind: "new-zone" }),
     };
   }
   #addHours(): Action {
@@ -1111,7 +1120,7 @@ export class VenueOperationsScreen extends LitElement {
     return html`<section>
       <div class="toolbar" data-test="policy-tree-actions">
         <h2>${t("venue.title")}</h2>
-        ${this.#tabAction(this.#addDepartment())}
+        <div>${this.#tabAction(this.#addDepartment())} ${this.#tabAction(this.#addZone())}</div>
       </div>
       <wt-data-table
         data-test="policy-tree"
@@ -1459,6 +1468,34 @@ export class VenueOperationsScreen extends LitElement {
   #editorContent(editor: Editor): EditorContent {
     const model = this.model!;
     switch (editor.kind) {
+      case "new-zone":
+        return {
+          heading: t("venue.add_zone"),
+          body: html`${this.#input("new-zone-name", t("venue.zone_name"))}${this.#select(
+            "new-zone-department",
+            t("venue.department"),
+            model.departments.filter((department) => department.active),
+            undefined,
+            true,
+          )}`,
+          check: () => this.#required(["new-zone-name", "new-zone-department"]),
+          save: () => {
+            void this.#save(
+              () =>
+                this.api.createZone({
+                  name: this.#value("new-zone-name").trim(),
+                  departmentId: this.#value("new-zone-department"),
+                }),
+              {
+                fields: { name: "new-zone-name", departmentId: "new-zone-department" },
+                codes: {
+                  "zone.name_taken": "new-zone-name",
+                  "department.not_found": "new-zone-department",
+                },
+              },
+            );
+          },
+        };
       case "department":
         return {
           heading: t(editor.row ? "venue.edit_department" : "venue.add_department"),

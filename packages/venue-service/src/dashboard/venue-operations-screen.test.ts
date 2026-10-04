@@ -220,6 +220,30 @@ describe("venue operations screen", () => {
     expect(modal(el)?.getAttribute("heading")).toBe("Add department");
   });
 
+  it("creates a new zone under the chosen department from the policy tree", async () => {
+    const createZone = vi.fn().mockResolvedValue({ id: "z3" });
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      createZone,
+    } as unknown as VenueServiceApi);
+    const add = el.shadowRoot!.querySelector<HTMLElement>(
+      '[data-test="policy-tree-actions"] [data-test="new-zone"]',
+    );
+    expect(add).not.toBeNull();
+    add!.click();
+    await settle(el);
+    expect(modal(el)?.getAttribute("heading")).toBe("New zone");
+    expect(field(el, "new-zone-name").getAttribute("label")).toBe("Zone name");
+    await type(el, "new-zone-name", "Garden");
+    const department = field(el, "new-zone-department") as HTMLElement & { value: string };
+    department.value = "d2";
+    department.dispatchEvent(
+      new CustomEvent("wt-change", { bubbles: true, detail: { value: "d2" } }),
+    );
+    await action(el, "save-editor");
+    expect(createZone).toHaveBeenCalledWith({ name: "Garden", departmentId: "d2" });
+  });
+
   it("renames a zone from its policy-tree cell", async () => {
     const updateZone = vi.fn().mockResolvedValue(undefined);
     const el = await mount({
