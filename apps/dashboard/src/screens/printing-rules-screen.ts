@@ -9,18 +9,16 @@ import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { drawerPolicyName, printModeName } from "../i18n/domain.js";
+import { drawerPolicyName } from "../i18n/domain.js";
 import type {
   DashboardApi,
   DrawerOpenPolicy,
   LocationSummary,
   Printer,
-  ReceiptPrintMode,
   Station,
   Watcher,
 } from "../api/client.js";
 
-const PRINT_MODES: readonly ReceiptPrintMode[] = ["auto", "on_request", "never"];
 const DRAWER_POLICIES: readonly DrawerOpenPolicy[] = ["gated", "open"];
 
 @customElement("dashboard-printing-rules-screen")
@@ -91,7 +89,6 @@ export class PrintingRulesScreen extends LitElement {
   @state() private printerStations: Record<string, string[]> = {};
   @state() private locations: LocationSummary[] = [];
   // Location settings have no read route, so only successful writes establish a known value.
-  @state() private printModes: Record<string, ReceiptPrintMode> = {};
   @state() private drawerPolicies: Record<string, DrawerOpenPolicy> = {};
   @state() private errorKey: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
@@ -170,12 +167,6 @@ export class PrintingRulesScreen extends LitElement {
       this.saving = false;
     }
   }
-  async #setPrintMode(locationId: string, mode: ReceiptPrintMode): Promise<void> {
-    await this.#mutate(async () => {
-      await this.api.setReceiptPrintMode(locationId, mode);
-      this.printModes = { ...this.printModes, [locationId]: mode };
-    });
-  }
   async #setDrawerPolicy(locationId: string, policy: DrawerOpenPolicy): Promise<void> {
     await this.#mutate(async () => {
       await this.api.setDrawerOpenPolicy(locationId, policy);
@@ -247,37 +238,6 @@ export class PrintingRulesScreen extends LitElement {
       </wt-card>
     </li>`;
   }
-  #printModeOption(locationId: string, mode: ReceiptPrintMode): TemplateResult {
-    return html`<wt-button
-      variant=${this.printModes[locationId] === mode ? "primary" : "secondary"}
-      size="sm"
-      .disabled=${this.saving}
-      data-test="print-mode-${locationId}-${mode}"
-      @click=${() => void this.#setPrintMode(locationId, mode)}
-      >${printModeName(mode)}</wt-button
-    >`;
-  }
-
-  #renderPrintMode(loc: LocationSummary): TemplateResult {
-    return html`<li data-test="location-row-${loc.id}">
-      <wt-card>
-        <div class="row">
-          <div class="details">
-            <span class="label" data-test="location-name-${loc.id}">${loc.name}</span>
-          </div>
-          <div
-            class="mode-options"
-            role="group"
-            aria-label=${`${t("printers.print_mode")} ${loc.name}`}
-          >
-            ${this.printModes[loc.id] === undefined ? html`<p class="empty" data-test="print-mode-unknown-${loc.id}">${t("printing_rules.setting_unknown")}</p>` : nothing}
-            ${PRINT_MODES.map((mode) => this.#printModeOption(loc.id, mode))}
-          </div>
-        </div>
-      </wt-card>
-    </li>`;
-  }
-
   #drawerPolicyOption(locationId: string, policy: DrawerOpenPolicy): TemplateResult {
     return html`<wt-button
       variant=${this.drawerPolicies[locationId] === policy ? "primary" : "secondary"}
@@ -313,15 +273,6 @@ export class PrintingRulesScreen extends LitElement {
     return html`
       <section>
         <h2 class="panel-title">${t("printers.receipt_title")}</h2>
-
-        <h3 class="panel-title">${t("printers.print_mode_title")}</h3>
-        ${
-          this.locations.length === 0
-            ? html`<p class="empty" data-test="no-locations">${t("printers.no_locations")}</p>`
-            : html`<ol>
-                ${this.locations.map((loc) => this.#renderPrintMode(loc))}
-              </ol>`
-        }
 
         <h3 class="panel-title">${t("printers.drawer_policy_title")}</h3>
         ${

@@ -937,8 +937,6 @@ export interface StationPrinter {
 
 // ── Receipt-printer + print-mode configuration ───────────────────────────────────────────────────
 
-export type ReceiptPrintMode = "auto" | "on_request" | "never";
-
 export type DrawerOpenPolicy = "gated" | "open";
 
 // ── Reporting (sales & takings) types ────────────────────────────────────────────────────────────
@@ -2777,17 +2775,7 @@ export class DashboardApi {
     );
   }
 
-  // ── Receipt printer + print mode + drawer policy ───────────────────────────────────────────────
-
-  setReceiptPrintMode(locationId: string, mode: ReceiptPrintMode): Promise<void> {
-    return this.#request<void>(
-      `/management-api/locations/${locationId}/receipt-print-mode`,
-      "PATCH",
-      {
-        mode,
-      },
-    );
-  }
+  // ── Receipt printer + drawer policy ────────────────────────────────────────────────────────────
 
   setDrawerOpenPolicy(locationId: string, policy: DrawerOpenPolicy): Promise<void> {
     return this.#request<void>(

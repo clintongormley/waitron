@@ -115,7 +115,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     attachPrinterToStation: vi.fn().mockResolvedValue(undefined),
     detachPrinterFromStation: vi.fn().mockResolvedValue(undefined),
     getLocations: vi.fn().mockResolvedValue(locations),
-    setReceiptPrintMode: vi.fn().mockResolvedValue(undefined),
     setDrawerOpenPolicy: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
@@ -260,67 +259,18 @@ describe("printing rules", () => {
       expect(q(el, selector)).toBeNull();
     }
     expect(q(el, "[data-test=station-toggle-p1-s1]")).not.toBeNull();
-    expect(q(el, "[data-test=print-mode-loc-1-auto]")).not.toBeNull();
     expect(q(el, "[data-test=drawer-policy-loc-1-gated]")).not.toBeNull();
   });
 
-  it("renders a print-mode toggle per location and calls setReceiptPrintMode with the chosen mode", async () => {
+  it("keeps drawer policy here while receipt advice lives with departments and zones", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
       api,
     });
     await flush(el);
-    (api.getLocations as ReturnType<typeof vi.fn>).mockClear();
 
-    expect(q(el, "[data-test=print-mode-loc-1-auto]")).not.toBeNull();
-    expect(q(el, "[data-test=print-mode-loc-1-never]")).not.toBeNull();
-    q(el, "[data-test=print-mode-loc-1-on_request]")!.click();
-    await flush(el);
-
-    expect(api.setReceiptPrintMode).toHaveBeenCalledWith("loc-1", "on_request");
-    expect(api.getLocations).toHaveBeenCalledTimes(1);
-  });
-
-  it("reflects the picked print mode in the segmented control (primary variant), surviving the reload", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-    q(el, "[data-test=print-mode-loc-1-auto]")!.click();
-    await flush(el);
-    expect(q(el, "[data-test=print-mode-loc-1-auto]")!.getAttribute("variant")).toBe("primary");
-
-    q(el, "[data-test=print-mode-loc-1-never]")!.click();
-    await flush(el);
-    expect(q(el, "[data-test=print-mode-loc-1-never]")!.getAttribute("variant")).toBe("primary");
-    expect(q(el, "[data-test=print-mode-loc-1-auto]")!.getAttribute("variant")).toBe("secondary");
-  });
-
-  it("leaves the print-mode toggle on the PRIOR mode (not the failed value) and shows the banner when setReceiptPrintMode is rejected", async () => {
-    const api = stubApi({
-      setReceiptPrintMode: vi
-        .fn()
-        .mockResolvedValueOnce(undefined)
-        .mockRejectedValue({ code: "management.request_invalid" }),
-    });
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-    q(el, "[data-test=print-mode-loc-1-auto]")!.click();
-    await flush(el);
-    expect(q(el, "[data-test=print-mode-loc-1-auto]")!.getAttribute("variant")).toBe("primary");
-
-    q(el, "[data-test=print-mode-loc-1-never]")!.click();
-    await flush(el);
-
-    // The failed pick is not applied.
-    expect(q(el, "[data-test=print-mode-loc-1-auto]")!.getAttribute("variant")).toBe("primary");
-    expect(q(el, "[data-test=print-mode-loc-1-never]")!.getAttribute("variant")).toBe("secondary");
-    const banner = q(el, "[role=alert]")?.textContent;
-    expect(banner).toContain(codeMessage("management.request_invalid", "es-ES"));
-    expect(banner).not.toContain("management.request_invalid");
+    expect(q(el, "[data-test^=print-mode-]")).toBeNull();
+    expect(q(el, "[data-test=drawer-policy-loc-1-gated]")).not.toBeNull();
   });
 
   it("renders a drawer-policy toggle per location and calls setDrawerOpenPolicy with the chosen policy", async () => {
@@ -395,19 +345,17 @@ describe("printing rules", () => {
     });
     await flush(el);
 
-    expect(text(el, "[data-test=no-locations]")).toBe(t("printers.no_locations", "es-ES"));
+    expect(text(el, "[data-test=no-locations-drawer]")).toBe(t("printers.no_locations", "es-ES"));
   });
 
-  it("does not invent the location's current print or drawer settings", async () => {
+  it("does not invent the location's current drawer setting", async () => {
     const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
       api: stubApi(),
     });
     await flush(el);
-    expect(q(el, "[data-test=print-mode-loc-1-auto]")!.getAttribute("variant")).toBe("secondary");
     expect(q(el, "[data-test=drawer-policy-loc-1-gated]")!.getAttribute("variant")).toBe(
       "secondary",
     );
-    expect(q(el, "[data-test=print-mode-unknown-loc-1]")).toBeTruthy();
     expect(q(el, "[data-test=drawer-policy-unknown-loc-1]")).toBeTruthy();
   });
   it("offers watchers and saves a selected watcher", async () => {
@@ -595,29 +543,30 @@ it("ignores a second change while a save is still in flight", async () => {
   const pending = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const api = stubApi({ setReceiptPrintMode: vi.fn().mockReturnValueOnce(pending) });
+  const api = stubApi({ setDrawerOpenPolicy: vi.fn().mockReturnValueOnce(pending) });
   const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", { api });
-  await vi.waitFor(() => expect(q(el, "[data-test=print-mode-loc-1-never]")).not.toBeNull());
+  await vi.waitFor(() => expect(q(el, "[data-test=drawer-policy-loc-1-open]")).not.toBeNull());
 
-  q(el, "[data-test=print-mode-loc-1-never]")!.click();
-  q(el, "[data-test=print-mode-loc-1-auto]")!.click();
+  q(el, "[data-test=drawer-policy-loc-1-open]")!.click();
+  q(el, "[data-test=drawer-policy-loc-1-gated]")!.click();
 
-  expect(api.setReceiptPrintMode).toHaveBeenCalledTimes(1);
-  expect(api.setReceiptPrintMode).toHaveBeenCalledWith("loc-1", "never");
+  expect(api.setDrawerOpenPolicy).toHaveBeenCalledTimes(1);
+  expect(api.setDrawerOpenPolicy).toHaveBeenCalledWith("loc-1", "open");
   release();
   await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
   await vi.waitFor(() =>
     expect(
-      (q(el, "[data-test=print-mode-loc-1-auto]") as HTMLElement & { disabled: boolean }).disabled,
+      (q(el, "[data-test=drawer-policy-loc-1-gated]") as HTMLElement & { disabled: boolean })
+        .disabled,
     ).toBe(false),
   );
-  expect(api.setReceiptPrintMode).toHaveBeenCalledTimes(1);
+  expect(api.setDrawerOpenPolicy).toHaveBeenCalledTimes(1);
 });
 
 it("keeps a save's connection failure when the reads that failed beside it recover", async () => {
   const liveData = new LiveData();
   const api = Object.assign(
-    stubApi({ setReceiptPrintMode: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+    stubApi({ setDrawerOpenPolicy: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
     { liveData },
   );
   const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
@@ -630,8 +579,8 @@ it("keeps a save's connection failure when the reads that failed beside it recov
   await vi.waitFor(() =>
     expect(text(el, "[role=alert]")).toBe(codeMessage("connection.failed", "es-ES")),
   );
-  q(el, "[data-test=print-mode-loc-1-never]")!.click();
-  await vi.waitFor(() => expect(api.setReceiptPrintMode).toHaveBeenCalledTimes(1));
+  q(el, "[data-test=drawer-policy-loc-1-open]")!.click();
+  await vi.waitFor(() => expect(api.setDrawerOpenPolicy).toHaveBeenCalledTimes(1));
   await flush(el);
   const readsBefore = vi.mocked(api.listStations).mock.calls.length;
   liveData.refresh();
