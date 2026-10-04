@@ -655,6 +655,22 @@ test("tree mode nests children under parents in order", async () => {
   expect(keys).toEqual(["food", "break", "eggs", "drinks"]);
 });
 
+test("tree mode exposes the tree column's heading as the tree-heading part, which a flat table lacks", async () => {
+  const style = document.createElement("style");
+  style.textContent = "wt-data-table::part(tree-heading) { margin-inline-start: 30px; }";
+  document.head.append(style);
+  onTestFinished(() => style.remove());
+  const tree = await treeTable({
+    columns: [...treeColumns, { key: "n", label: "N", cell: () => "" }],
+  });
+  const parts = [...tree.shadowRoot!.querySelectorAll('thead [part~="tree-heading"]')];
+  expect(parts).toHaveLength(1);
+  expect(parts[0]!.querySelector('button[data-sort="name"]')).not.toBeNull();
+  expect(getComputedStyle(parts[0]!).marginInlineStart).toBe("30px");
+  const flat = await table();
+  expect(flat.shadowRoot!.querySelector('[part~="tree-heading"]')).toBeNull();
+});
+
 test("tree branches draw a larger disclosure arrow inside the existing touch target", async () => {
   const el = await treeTable();
   const toggle = el.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="food"] .tree-toggle')!;

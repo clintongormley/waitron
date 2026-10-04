@@ -1745,7 +1745,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
               : nothing
           }
           ${shown.map(
-            (column) => html`
+            (column, index) => html`
               <th
                 role="columnheader"
                 scope="col"
@@ -1766,7 +1766,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
                       : "none"
                 }
               >
-                ${
+                ${this.#treeHeading(
+                  index,
                   column.sortValue === undefined
                     ? column.label
                     : html`<button
@@ -1786,14 +1787,22 @@ export class WtDataTable<Row = unknown> extends LitElement {
                               : ""
                           }</span
                         >
-                      </button>`
-                }
+                      </button>`,
+                )}
               </th>
             `,
           )}
         </tr>
       </thead>
     `;
+  }
+
+  /** In a tree, the heading over the column that draws the tree, for a consumer to line up with
+   * what its rows draw there. */
+  #treeHeading(index: number, content: unknown) {
+    return index === 0 && this.rowParent
+      ? html`<span part="tree-heading">${content}</span>`
+      : content;
   }
 
   /** The per-row checkbox cell both rendering paths share; `role="gridcell"` only in tree mode,

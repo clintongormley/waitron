@@ -29,6 +29,10 @@ import {
 } from "@waitron/catalogue/src/product-ordering.js";
 
 export const ROOT_KEY = "root";
+
+const folderIcon = html`<span part="folder-frame"
+  ><wt-icon name="folder" size="lg"></wt-icon
+></span>`;
 /** How long a drag must rest on a closed category before it opens. */
 export const HOVER_OPEN_MS = 600;
 const DRAFT_KEY = "draft:new";
@@ -96,7 +100,16 @@ export class ProductList extends LitElement {
       wt-data-table::part(folder-cell) {
         display: flex;
         align-items: center;
-        gap: var(--wt-space-2);
+      }
+      wt-data-table::part(folder-frame) {
+        display: inline-flex;
+        flex: none;
+        justify-content: center;
+        width: var(--wt-tap-min);
+        margin-inline-end: var(--wt-space-3);
+      }
+      wt-data-table::part(tree-heading) {
+        margin-inline-start: calc(3 * var(--wt-tap-min) + var(--wt-space-3));
       }
       /* Inline, not flex: the table lines a row up by its cells' first baselines, and a flex row
          would give the cell the thumbnail's bottom edge as its baseline instead of the name's. */
@@ -148,7 +161,7 @@ export class ProductList extends LitElement {
         align-items: center;
         justify-content: center;
         vertical-align: middle;
-        min-width: var(--wt-tap-min);
+        width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
         padding: 0;
         border: 0;
@@ -159,7 +172,7 @@ export class ProductList extends LitElement {
         user-select: none;
         cursor: var(--reorder-drag-cursor, grab);
       }
-      /* A new category cannot be dragged, but its icon lines up with its siblings'. */
+      /* All products and a category being added cannot be dragged, but keep the grip's space. */
       wt-data-table::part(grip-space) {
         flex: none;
         width: var(--wt-tap-min);
@@ -187,6 +200,10 @@ export class ProductList extends LitElement {
         padding: 0 var(--wt-space-2);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-sm);
+      }
+      wt-data-table::part(count),
+      wt-data-table::part(unrouted-folder) {
+        margin-inline-start: var(--wt-space-2);
       }
       wt-data-table::part(unrouted-folder) {
         color: var(--wt-color-danger);
@@ -780,7 +797,11 @@ export class ProductList extends LitElement {
         label: t("product.name"),
         sortValue: (row) => row.variant?.name ?? row.product.name,
         searchValue: ({ product }) =>
-          [product.name, ...product.variants.map(({ name }) => name)].join(" "),
+          [
+            product.name,
+            ...product.variants.map(({ name }) => name),
+            this.#category(product.primaryCategoryId),
+          ].join(" "),
         cell: ({ product, variant }, { ancestorOnly }) =>
           variant
             ? html`<span part="variant-name">${variant.name}</span>`
@@ -810,14 +831,6 @@ export class ProductList extends LitElement {
                   ><strong>${product.name}</strong>${this.#variantCount(product)}</span
                 >
               </span>`,
-      },
-      {
-        key: "reporting-category",
-        choosable: "shown",
-        label: t("editor.main_category"),
-        // A variant is always in its product's category, which its product's row already shows.
-        cell: (row) => (row.variant ? nothing : this.#category(row.product.primaryCategoryId)),
-        searchValue: (row) => this.#category(row.product.primaryCategoryId),
       },
       {
         key: "made-at",
@@ -1012,15 +1025,14 @@ export class ProductList extends LitElement {
         if (row.kind === "draft")
           return column.key === "name"
             ? html`<span part="folder-cell"
-                ><span part="grip-space"></span
-                ><wt-icon name="folder" size="lg"></wt-icon>${this.#nameBox()}</span
+                ><span part="grip-space"></span>${folderIcon}${this.#nameBox()}</span
               >`
             : nothing;
         if (row.kind === "root") {
           if (column.key === "name")
             return html`<span part="folder-cell"
-              ><wt-icon name="folder" size="lg"></wt-icon
-              ><strong>${t("folders.all_products")}</strong
+              ><span part="grip-space"></span>${folderIcon}<strong
+                >${t("folders.all_products")}</strong
               ><span part="count" data-test="count-root">${this.#contents(null)}</span></span
             >`;
           if (column.key === "actions")
@@ -1042,7 +1054,7 @@ export class ProductList extends LitElement {
               aria-label=${`${t("folders.drag")}: ${folder.name}`}
             >
               <wt-icon name="grip"></wt-icon></button
-            ><wt-icon name="folder" size="lg"></wt-icon>${
+            >${folderIcon}${
               this.#renaming(folder.id) ? this.#nameBox() : html`<strong>${folder.name}</strong>`
             }<span part="count" data-test=${`count-${folder.id}`}>${this.#contents(folder.id)}</span
             >${
@@ -1110,10 +1122,8 @@ export class ProductList extends LitElement {
                 : row.kind === "root" || row.kind === "draft"
                   ? ""
                   : column.key === "name"
-                    ? row.folder.name
-                    : column.key === "reporting-category"
-                      ? this.#category(row.folder.parentId)
-                      : "",
+                    ? `${row.folder.name} ${this.#category(row.folder.parentId)}`
+                    : "",
           }
         : {}),
       ...(column.filter

@@ -1861,7 +1861,8 @@ effective category is always its product's, a variant's editor save naming a cat
 with `product.invalid` and otherwise clears what the row stores, and deleting a category clears it
 from any variant still holding it. The Add category button, `editor.add_category`, the catalogue
 screen's nested category create and the `dashboard-category-form` element went; the Products list
-leaves a variant's category cell empty without comparing.
+leaves a variant's category cell empty without comparing. _2026-10-04 (W84): the Main category
+column is gone._
 **Left open:**
 - No migration clears the categories variants already store, and none will be written (owner
   decision, 2026-10-03: no data-migration code before go-live, CLAUDE.md §3, and the dev venue is
@@ -2202,7 +2203,8 @@ rest with "—". **Built (mockup B):** a small, muted arrow; "2 variants" in mut
 product's name; opened variants on a `--wt-color-bg` band, lined up under the product's name, showing
 price, status, row menu and a main category only where it differs from the product's. `wt-data-table`
 gained `rowJoinsParent` and a `tree-toggle` part. _2026-10-03 (A209): a variant's category is now
-always its product's, so a variant's row leaves that cell empty._
+always its product's, so a variant's row leaves that cell empty._ _2026-10-04 (W84): the Main
+category column is gone._
 **Also check:** tried in the list widget on a test variant, not the owner's data: the arrow showed
 under a search, an ordering filter, for an Unavailable variant and for one with its own main
 category; it was missing only for a variant saved Inactive and for a product with no variant.
@@ -3001,6 +3003,24 @@ component — Select is a native `<button>` because `wt-button` does not pass `a
 above the table's 440px narrow-tree width); (4) the catalogue browser's phone layout switches on
 the window's width (`@media (max-width: 30rem)`), where the menus and modifiers screens use
 `@container (max-width: 30rem)`.
+
+**Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, owner
+2026-10-04).** The All products row, category rows, a category being added and product rows of the
+Products tree draw the same slots before the name — the arrow, a drag grip (a blank one on All
+products and on a category being added) and a folder icon, or a product's photo or its empty
+placeholder frame, one tap target each — so on those rows names step in by the table's indent per
+level whether the row is a category or a product, and the Name heading sits over the All products
+name (`wt-data-table` gained a `tree-heading` part for this). A variant's row draws no grip and no
+photo slot; its name is indented to start under its product's name. Before, at one level a
+category's name started 22px left of a product's (measured 2026-10-04 in a temporary test, not
+kept). The Main category column is removed from the table and its Customise list; its search text
+moved into the Name column's, so a category's name or path still finds its products and an empty
+category is found by its parent's path; a saved column choice or order that names the old column
+still applies to the other columns, and the old key is ignored. Seven existing test assertions that pinned the column changed, for the owner to
+review (listed in the PR). Now, a product whose category the dashboard's category list does not hold
+lists under All products with no "missing" marker; the database refuses a stored product naming a
+category that does not exist (`packages/db/src/schema/catalogue.ts:51`, a foreign key; not tried),
+so this is expected only while the dashboard's category list is behind.
 
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through

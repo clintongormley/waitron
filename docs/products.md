@@ -122,7 +122,7 @@ The products list keeps each product's variants folded away under it. A product 
 variants says how many under its name, such as **2 variants**, and the small arrow just before
 its drag handle opens them.
 Each variant's row shows its own name, the price it sells at, its status and its
-row menu; its main category is its product's, shown on the product's row. If a variant's VAT differs
+row menu. If a variant's VAT differs
 from its product's, the list notes it under the variant's price. A variant's row menu offers
 **Remove** or **Restore** there too, and an Inactive variant is listed once you change the
 **Status** filter from **Active**.
