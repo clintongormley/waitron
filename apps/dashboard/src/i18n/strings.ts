@@ -1979,6 +1979,7 @@ export const en = {
   "menus.menu_prefix": "Menu: {name}",
   "menus.edit_included": "Edit {name}",
   "menus.remove_included": "Remove from this menu",
+  "menus.read_only_here": "Read-only here",
 
   "menus.new_section_heading": "New section in {list}",
   "menus.section_not_added":
@@ -4146,6 +4147,7 @@ export const es: Record<StringKey, string> = {
   "menus.menu_prefix": "Menú: {name}",
   "menus.edit_included": "Editar {name}",
   "menus.remove_included": "Quitar de este menú",
+  "menus.read_only_here": "Solo lectura aquí",
 
   "menus.new_section_heading": "Nueva sección en {list}",
   "menus.section_not_added":
