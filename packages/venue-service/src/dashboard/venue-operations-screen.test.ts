@@ -345,6 +345,30 @@ describe("venue operations screen", () => {
     expect(tree.querySelector('wt-input[name="zoneName"]')).not.toBeNull();
   });
 
+  it("moves a zone to another department through its row menu", async () => {
+    const configureZone = vi.fn().mockResolvedValue(undefined);
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      configureZone,
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const move = tree.querySelector<HTMLElement>('[data-test="move-tree-zone-z1"]')!;
+    expect(move.textContent).toBe("Move to department");
+    move.closest("wt-row-actions")!.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+    move.click();
+    await settle(el);
+    const department = find(el, 'wt-combobox[name="zone-department-z1"]')! as HTMLElement & {
+      value: string;
+    };
+    expect(department.value).toBe("d1");
+    await chooseOption(department, "d2");
+    await action(el, "save-editor");
+    expect(configureZone).toHaveBeenCalledWith("z1", {
+      departmentId: "d2",
+      serviceMode: "prepay",
+    });
+  });
+
   it("confirms removal of a zone from its policy-tree row", async () => {
     const deactivateZone = vi.fn().mockResolvedValue(undefined);
     const el = await mount({

@@ -1067,6 +1067,15 @@ export class VenueOperationsScreen extends LitElement {
                     this.zoneNameEditor = row.zone.id;
                   },
                 },
+                ...(departments.length > 1
+                  ? [
+                      {
+                        key: `move-tree-zone-${row.zone.id}`,
+                        label: t("venue.move_to_department"),
+                        run: () => this.#open({ kind: "zone", row: row.zone }),
+                      },
+                    ]
+                  : []),
                 {
                   key: `remove-tree-zone-${row.zone.id}`,
                   label: t("venue.remove"),
