@@ -595,8 +595,9 @@ export class MenusScreen extends LitElement {
   /** The products the add-products window's own list already holds, which it does not offer. */
   #pickerHeld: string[] = [];
   #addable: Product[] = [];
-  /** The tree row whose ⋮ gets focus back once nothing is out; `ready` once its window closed. */
-  #focusReturn: { menuId: string; key: string; ready: boolean } | null = null;
+  /** The tree row whose ⋮ gets focus back once its window has closed and nothing is out. */
+  #focusReturn: { menuId: string; key: string } | null = null;
+  #windowShut = false;
   /** What a home page tile may point at: the active products and the sections the structure
    * reaches. The server checks reach by membership alone; an inactive product is not offered. */
   #tileProducts: { id: string; name: string }[] = [];
@@ -1236,14 +1237,15 @@ export class MenusScreen extends LitElement {
     }
   }
 
-  #returnFocusTo(path: string[], ready = false): void {
-    this.#focusReturn = { menuId: this.menuId!, key: path.join("/") || "root", ready };
+  #returnFocusTo(path: string[], shut = false): void {
+    this.#focusReturn = { menuId: this.menuId!, key: path.join("/") || "root" };
+    this.#windowShut = shut;
   }
 
   /** A window's close is reported a task after the native dialog has handed focus back to the menu
    * item it was opened from, which by then sits in a closed popover. */
   #windowClosed(): void {
-    if (this.#focusReturn) this.#focusReturn = { ...this.#focusReturn, ready: true };
+    this.#windowShut = true;
     this.requestUpdate();
   }
 
@@ -1251,7 +1253,7 @@ export class MenusScreen extends LitElement {
    * before the read lands can end up on another row. */
   #returnFocus(): void {
     const target = this.#focusReturn;
-    if (!target?.ready || this.busy) return;
+    if (!target || !this.#windowShut || this.busy) return;
     this.#focusReturn = null;
     if (target.menuId === this.menuId)
       this.renderRoot.querySelector("dashboard-menu-structure-table")?.focusRowMenu(target.key);

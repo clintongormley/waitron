@@ -3593,6 +3593,23 @@ describe("the Structure tree", () => {
     expect(focusedRowMenu(el)).toBe("m-fav");
   });
 
+  it("hands focus back from a second window, opened after the first one closed", async () => {
+    const el = await mountLunch();
+    await rowAction(el, "m-fav", "open-add-products");
+    inModal(el, "add-products", '[data-test="add-products-cancel"]').click();
+    await vi.waitFor(() => expect(modal(el, "add-products").open).toBe(false));
+    await afterDialogCloses(el);
+    await settleStructure(el);
+    expect(focusedRowMenu(el)).toBe("m-fav");
+    await rowAction(el, "m-drinks", "new-section");
+    await afterDialogCloses(el);
+    await settleStructure(el);
+    await closeSectionForm(el);
+    await afterDialogCloses(el);
+    await settleStructure(el);
+    expect(focusedRowMenu(el)).toBe("m-drinks");
+  });
+
   it("hands focus to the holding section's ⋮ after a removal", async () => {
     const client = api();
     const el = await mountLunch(client);
