@@ -9,14 +9,13 @@ import { codeMessage, codeOf, type DashboardRequest } from "@waitron/dashboard-k
 import { t } from "./strings.js";
 import { SumUpPaymentsClient } from "./client.js";
 
-/** The pairing code's lifetime — the countdown starts here and the poll gives up when it reaches zero. */
+/** The pairing code's lifetime; a status timeout leaves pairing unknown, so polling can outlast it. */
 export const PAIRING_LIFETIME_MS = 5 * 60 * 1000;
 /** How often the dialog re-reads the reader's status while a pairing is in flight. */
 export const PAIRING_POLL_MS = 2_000;
 
-/** The dialog's stage. `form` collects the name + code; `pairing` posts the code and then polls with
- * the countdown showing; `expired`/`failed` are the two end states of a pairing the server accepted,
- * each offering _try again_. */
+/** The dialog's stage. `form` collects the name + code; `pairing` posts the code and then polls;
+ * `expired`/`failed` offer _try again_ after a known result ends the attempt. */
 type Phase = "form" | "pairing" | "expired" | "failed";
 
 @customElement("sumup-add-reader")
@@ -258,9 +257,13 @@ export class SumUpAddReader extends LitElement {
               </p>`
             : ""
         }
-        <p class="countdown" data-test="countdown">
-          ${t("payments.sumup.pairing_time_left").replace("{time}", this.#formatRemaining())}
-        </p>
+        ${
+          this.remaining > 0
+            ? html`<p class="countdown" data-test="countdown">
+                ${t("payments.sumup.pairing_time_left").replace("{time}", this.#formatRemaining())}
+              </p>`
+            : ""
+        }
       `;
     }
     if (this.phase === "expired") {

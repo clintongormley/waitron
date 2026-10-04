@@ -1277,7 +1277,10 @@ polls again after `connection.timed_out`, showing the shared timeout wording; a 
 refusal still ends pairing and unpairs it. The Payments reader row and details show the timeout
 wording while other failures keep their existing unknown-status and no-details text. The red-first
 browser cases in `packages/payments-sumup/src/dashboard/sumup-add-reader.test.ts` and
-`apps/dashboard/src/screens/payments-screen.test.ts` separate those paths.
+`apps/dashboard/src/screens/payments-screen.test.ts` separate those paths. Repeated timeouts keep
+polling even after the pairing code's five-minute window because the reader may already have paired;
+the countdown disappears at zero, and only a known paired or processing status can finish or expire
+the attempt. A cancelled dialog still follows its existing orphan-cleanup path.
 
 **Several card readers' status reads at once can use up the browser's connections to the box
 (A260, found by W18c's review, 2026-10-03) — DONE (W18c #1145 and W48).** The readers table

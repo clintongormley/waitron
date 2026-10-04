@@ -1166,13 +1166,13 @@ describe("payments-screen remaining edges", () => {
     );
     await vi.waitFor(() =>
       expect(qCell(el, "[data-test=reader-status-r-1]")?.textContent).toBe(
-        codeMessage("connection.timed_out"),
+        "Waitron is taking too long to answer. Try again in a moment.",
       ),
     );
     qCell(el, "[data-test=details-r-1]")!.click();
     await el.updateComplete;
     expect(q(el, "[data-test=reader-editor]")?.textContent).toContain(
-      codeMessage("connection.timed_out"),
+      "Waitron is taking too long to answer. Try again in a moment.",
     );
   });
 
