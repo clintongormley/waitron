@@ -1196,7 +1196,7 @@ editors in `catalogue-screen.ts`, where focus otherwise landed nowhere. Next ste
 test for each, as W71's list cases do; fix only if it fails.
 
 **The Extras editor shows Portion beside Price, and a fixed 1 for a product sold by the unit
-(W75, owner 2026-10-04) — DONE.** In `apps/dashboard/src/widgets/extra-list-form.ts` Portion is a
+(W75, owner 2026-10-04) — DONE (#1194).** In `apps/dashboard/src/widgets/extra-list-form.ts` Portion is a
 column of its own between Preselected and Price, there even when every item is sold by the unit,
 and its heading carries the required star while any row asks for a portion. A product sold by the
 unit is told apart by its unit's id, `EACH_UNIT_ID` (moved to the browser-safe
@@ -1207,6 +1207,12 @@ editable, required Portion as soon as the product is added, before any save, whi
 "Portion appears only after reopening". A row switches between the two when its product's unit
 changes. The drag handle now sits on the first line of the product's name rather than the middle of
 a tall row. Open: the Price heading reads "Price per portion" also over a row sold by the unit.
+Left OPEN from its review, for the owner to decide: (1) the Products list decides "Each" by whether
+the product's unit is in the venue's saved unit list, the Extras editor by the unit's id, so the two
+can disagree (for example before the unit list has loaded) — aligning them changes the Products
+screen; (2) the handle-on-the-first-line alignment applies to the Extras list only, while the other
+reorderable tables still centre their handles; (3) the editor refuses a blank Portion for every unit
+but Each while the server accepts none for a whole unit with no scale link (ml) and stores 1.
 
 **Clicking a product's row on the Products screen opens it (A205) — DONE in A208.**
 
