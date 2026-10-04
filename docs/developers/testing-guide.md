@@ -140,7 +140,7 @@ not exist is refused at the first write, not at migrate time — so a clean migr
 have told you, and an existing `useVenueDb` call in the package is a place to start reading, not an
 answer. `packages/workforce/src/schema/schema-conformance.test.ts` is the worked example, and it
 states the reason for a two-set list in the comment beside it: core because the set's foreign keys
-point at its `locations`, `tills` and `nodes`, and identity because they point at its `persons`.
+point at its `locations`, `devices` and `nodes`, and identity because they point at its `persons`.
 That is the database those keys resolve in, not something the migration needs — the suite also
 passes with an empty list (measured 2026-09-23) — which is why each call site writes the reason
 down rather than just the list. A package's suites can apply MORE than its set's tables need,

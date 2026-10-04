@@ -817,7 +817,9 @@ this guard pass — that is the one wrong answer §2.1 rules out.
 _2026-09-24:_ five of the six keys were on identity tables that slice-2 Task 1b reclassified
 `state` (`sessions` to `persons` and `tills`; `management_sessions`, `totp_enrollments` and
 `google_oidc_states` to `persons`). Their keys were not restored; `docs/backlog.md` lists that as
-open under Task 1b.
+open under Task 1b. _2026-10-04 (A238):_ `tills` is gone; `sessions.device_id` now holds a
+`restrict` key to `devices`, and `sessions` still has none to `persons`
+(`packages/identity/src/schema/sessions.ts`).
 
 **What ties a `local` row to its node, and which ties are pinned.** A `local` table's reason says
 which of three ties it uses: a `node_id` column every read and write names (`node_roles`,
@@ -1405,6 +1407,20 @@ unchanged-column lists),
 `packages/db/drizzle/0064_line_locale_triggers_text_only.sql` (re-creates the two locale update
 triggers on `working_order_lines` to fire only when an update changes the name map each checks or
 moves the line),
+`packages/db/drizzle/0066_line_make_at_station_trigger.sql` (re-creates
+`working_order_lines_require_open_parent_update` with `make_at_station_id` in each of its three
+unchanged-column lists),
+`packages/db/drizzle/0072_device_binding_watcher_sql.sql` (re-creates the two device binding
+triggers so a kitchen display binds a station or a watcher),
+`packages/db/drizzle/0078_money_records_drop_triggers.sql` and
+`packages/db/drizzle/0080_money_records_recreate_triggers.sql` (the triggers around `0079`'s rebuild
+of `sales`, `bill_payments`, `bill_payment_refunds` and `unpaid_departures`),
+`packages/db/drizzle/0081_working_orders_drop_triggers.sql` and
+`packages/db/drizzle/0084_working_orders_recreate_triggers.sql` (the triggers around `0083`'s
+rebuild of `working_orders`),
+`packages/db/drizzle/0087_devices_drop_triggers.sql` and
+`packages/db/drizzle/0089_devices_recreate_triggers.sql` (the triggers around `0088`'s rebuild of
+`devices`),
 `packages/media/drizzle/0001_image_references.sql`,
 `packages/media/drizzle/0002_section_image_references.sql`,
 `packages/media/drizzle/0003_published_image_references.sql`,
@@ -1425,7 +1441,8 @@ moves the line),
 `0064_line_locale_triggers_text_only.sql`, media `0004_drop_category_image_triggers.sql`,
 `0006_recreate_section_image_triggers.sql` and `0007_recreate_product_image_triggers.sql`, and
 catalogue `0013_drop_category_image_triggers.sql`, `0018_sections_owned_prepare.sql` and
-`0021_sections_owned_restore.sql`)
+`0021_sections_owned_restore.sql`, and 2026-10-04 for core `0066`, `0072`, `0078`, `0080`, `0081`,
+`0084`, `0087` and `0089`)
 each of those files equalled the one before it once `id` and
 `prevId` were removed and keys sorted, except that `0042`'s `_meta.columns` no longer carried
 `0041`'s column rename, so the snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript
@@ -1527,6 +1544,42 @@ migrate failed with `no such column` (2026-09-27). #750 (commit 4a4ca65c9,
 and `0006` rebuilds `service_settings` to add the CHECK. #721 hit the same rebuild copy with a
 nullable column: "drizzle's single-step rebuild copied bill_payment_id FROM the old table". Read
 generated SQL before trusting it.
+
+The mechanism, read in `drizzle-kit` 0.31.11's `bin.cjs` on 2026-10-04: `SQLiteRecreateTableConvertor`
+(around line 25195) builds its `INSERT INTO __new_x (…) SELECT … FROM x` from the column list of the
+table in the NEW snapshot, so a column the same generation adds is selected from a table that lacks
+it. `sqliteCombineStatements` (around line 27546) turns a generation into a rebuild when it changes a
+column's type, default or nullability, drops or changes a foreign key, adds a foreign key to a
+column that is not new, changes a primary key, or adds or drops a unique or CHECK constraint, among
+others; in the generations A238 wrote, an added column with none of those beside it came out as
+`ALTER TABLE … ADD` (core `0075`, `0082`, `0085`). A238 paid for it a
+third time on 2026-10-03: its `incidents` generation that added `source` and `device_id` with their
+CHECKs wrote `SELECT … "source" … FROM incidents` and the core suite failed with
+`no such column: "source" - should this be a string literal in single-quotes?` (Task 9's report);
+core `0075` now adds the two columns and `0076` adds the CHECKs while it drops `till_id`. The engine
+half re-measured 2026-10-04 on `node:sqlite`, Node v26.7.0 (SQLite 3.53.4): an
+`INSERT INTO __new_incidents (…, "source") SELECT …, "source" FROM incidents` on an EMPTY
+`incidents` without that column threw that same message, and the control naming only the columns
+`incidents` has ran.
+
+## A generated table rebuild writes an expression index as a quoted column name
+
+`drizzle-kit` 0.31.11 re-creates a rebuilt table's indexes through `prepareSQLiteRecreateTable`
+(`bin.cjs`, around line 27400), which passes no `internal` record of which index columns are
+expressions, and `CreateSqliteIndexConvertor` (around line 25084) wraps every column it is not told
+is an expression in backticks. So an index over an expression, such as `incidents_open_dedup`'s
+`case when "device_id" is null then '' else "device_id" end`, comes back as a quoted column name;
+the plain create-index path passes `internal` and writes the expression as it is. A238's `incidents`
+rebuild wrote ``(`source`,`case when "device_id" is null then '' else "device_id" end`,…)`` and the
+migrate failed with `no such column: case when "device_id" …` (Task 9's report, 2026-10-03).
+Re-measured 2026-10-04 on `node:sqlite`, Node v26.7.0 (SQLite 3.53.4): `CREATE INDEX` over that
+expression in backticks threw `no such column: case when "till_id" is null then '' else "till_id"
+end` on a scratch table, and the same expression unquoted was accepted. What A238 did: the index
+leaves the schema for the generations that rebuild `incidents` (core `0075` drops it, `0076`
+rebuilds the table) and comes back alone in `0077_incident_origin_dedup.sql`, written correctly; a
+note at the index in `packages/db/src/schema/incidents.ts` says so. Any later change that rebuilds a
+table with an expression index needs the same three steps. A wrong index fails the migrate loudly,
+so nothing silent is at stake, only a round trip.
 
 ## `applyMigrations` refuses to report success on a short set
 

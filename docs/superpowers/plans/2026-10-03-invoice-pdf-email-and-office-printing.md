@@ -160,7 +160,7 @@
 
 **Do not change `printers` or `print_jobs`.** The design keeps page printers and their jobs out of them:
 
-- changing `printers`' fixed lists rebuilds a table that `devices`, `tills`, `drawer_opens`, `station_printers`, `watcher_printers` and `print_jobs` point at;
+- changing `printers`' fixed lists rebuilds a table that `devices`, `tills`, `drawer_opens`, `station_printers`, `watcher_printers` and `print_jobs` point at (_2026-10-04: superseded by A238, `docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`: `tills` is gone and `device_profile_printers` points at `printers` too_);
 - `print_jobs` delivers at least once and resends finished jobs.
 
 **Red first, agent:**

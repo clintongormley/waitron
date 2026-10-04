@@ -69,7 +69,8 @@ standalone on-prem primary, so the setup wizard (area 1) is no longer parked —
 listed under the backlog's Track A item A2. Walk areas 2–20 at the real box; area 19 (device
 management) carries the register-versus-device decision
 (`superpowers/specs/2026-09-05-register-and-device-model-decision.md`: keep both — register = the
-drawer, device = the screen; the no-migration half landed #269). A correction that needs a new table
+drawer, device = the screen; the no-migration half landed #269; _2026-10-03: superseded by A238 —
+a till is a device, `superpowers/specs/2026-10-03-till-is-a-device-design.md`_). A correction that needs a new table
 needs CLAUDE.md §3's classification line and nothing else.
 
 ## Walkthrough order & status

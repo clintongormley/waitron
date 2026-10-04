@@ -50,9 +50,9 @@ function fill(template: string, key: string, value: string): string {
 
 /**
  * A single day (`from === to`) shows the full daily close; a range shows a period roll-up of VAT and
- * top sellers only, because per-till cash-up does not roll up across days. A `from > to` range is left
- * for the server to reject. The category report follows either range, and is not asked for over a
- * backwards one, whose refusal the banner already shows.
+ * top sellers only, because the per-device cash-up does not roll up across days. A `from > to`
+ * range is left for the server to reject. The category report follows either range, and is not
+ * asked for over a backwards one, whose refusal the banner already shows.
  */
 @customElement("dashboard-sales-screen")
 export class SalesScreen extends LitElement {

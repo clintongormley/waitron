@@ -153,7 +153,7 @@ const suite = useVenueDb({
     nodeId = node!.id;
     // A SECOND node at the SAME location — no sales of its own. The venue-wide vs node-scoped test
     // below mounts report-api pointed at THIS node to prove the overview aggregates the other node's
-    // sale (venue-wide) while the per-till daily-close scoped to this node stays empty.
+    // sale (venue-wide) while the daily close scoped to this node stays empty.
     const [node2] = await db
       .insert(nodes)
       .values({ locationId, name: "Nodo 2" })
@@ -253,7 +253,7 @@ describe("mountReportApi — /reports/overview", () => {
     ]);
   });
 
-  it("overview is VENUE-WIDE (aggregates all nodes) while the per-till daily-close stays node-scoped", async () => {
+  it("overview is VENUE-WIDE (aggregates all nodes) while the daily close stays node-scoped", async () => {
     // Pointed at `secondNodeId`, a node with NO sales: the overview must still return the sale,
     // because it aggregates the whole venue rather than `cfg.nodeId`.
     const app = new Hono();
