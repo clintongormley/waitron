@@ -149,6 +149,8 @@ export class ExtraListForm extends LitElement {
       .quantity-heading {
         display: inline-block;
         max-width: var(--wt-stepper-field-width);
+        position: relative;
+        inset-inline-end: var(--wt-space-6);
       }
       /* The grip and the bin are each a tap-target-wide button that already centres its icon. */
       th:first-child,
