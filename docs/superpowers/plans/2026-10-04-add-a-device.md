@@ -18,11 +18,15 @@ primitives, Vitest (node for the server, real Chromium for the dashboard and til
 
 **Spec:** [docs/superpowers/specs/2026-10-04-add-a-device-design.md](../specs/2026-10-04-add-a-device-design.md)
 
-**Review:** the planning session checked the plan's code claims by grep on 2026-10-04 (it found and
-fixed three: `wt-notice` has no tone, `bottomMessage`/`refusal` are private to the Printers screen,
-and a flat `wt-data-table` has no per-row opt-out). The fresh-context plan-versus-spec review was
-cut off by the account's weekly limit before it reported, so it is still owed: run it before Task 1
-and fix the plan, not the code, for what it finds.
+**Review:** the planning session checked the plan's code claims by grep on 2026-10-04 and fixed
+three. A fresh-context Opus review against the spec and the code followed on 2026-10-05; it ran the
+plan's `pairing-mode.ts` and `pairing-hold.ts` code and tests in a scratch copy (all passed) and
+probed the release order, and found 3 blockers and 9 should-fix points, all fixed in this revision:
+existing tests missing from the granted list (now named), the release route discarding before the
+release, claims dropped inside a transaction that could roll back, the controller's missing
+`background` fallback, a wrong typecheck expectation, the Edit route re-checking unchanged printers,
+the per-device reader fetch, three dropped server checks, no way out of a failed hold, refusals not
+placed under their field, and `JOIN_TTL_MS`'s comment.
 
 ## Delivery: three pull requests
 
@@ -103,6 +107,13 @@ W104:
 - `apps/server/src/device.test.ts` — the accept call passing `choice` (setup).
 - `apps/server/src/join-api.test.ts` — "join approval binds a kitchen screen to its watcher…": its
   accept bodies send `choice`; it moves to check-then-accept with the same three assertions.
+- **Task 3 setups** (added after the 2026-10-05 plan review; setup and whole-shape pins only, no
+  existing value changes): a device request is now discarded whenever the window is shut, so these
+  open a hold first — `join-api.db.test.ts`'s list, challenge, deny and pending-cap groups;
+  `join-requests.test.ts`'s `readJoinStatus` cases (they also pass the holder as a new fifth
+  argument) and its `AcceptResult` import; `device.test.ts`'s status read expecting `"pending"`.
+  The device-list `toEqual` pins in `join-api.db.test.ts` and `join-e2e.test.ts` gain
+  `pairingBy: null`.
 - `apps/dashboard/src/api/client.test.ts` — the pairing-mode GET/POST/DELETE cases, the
   `renewPairingMode` case, and the device accept cases sending `choice`.
 - `apps/dashboard/src/screens/devices-screen.test.ts` — every pairing case: the window card, the
@@ -113,9 +124,25 @@ W104:
   dialog states and the stub's pairing methods.
 - `apps/dashboard/src/screens/printers-screen.test.ts` and `printers-screen.a11y.test.ts` — the
   `SHUT`/`OPEN` fixtures' `refusedRecently`, the stubs' `openPairingMode` / `renewPairingMode` /
-  `closePairingMode`, "opens pairing automatically and closes it with the agent modal", "puts Add
-  agent under the empty agent table's sentence…", and the window-loading cases around
-  `pairing-until` and `pairing-refused`.
+  `closePairingMode`, and these cases by name (each moves to `takePairingHold` /
+  `releasePairingHold` keeping its intent, unless marked):
+  - "opens pairing automatically and closes it with the agent modal"
+  - "puts Add agent under the empty agent table's sentence, opening the same pairing"
+  - "opens the window automatically and shows when it lapses"
+  - "shows an error banner when opening the window is rejected"
+  - "keeps pairing open, polls passively…" (renewal now by the controller, through `background`)
+  - "closes a pending pairing open…"
+  - "reports a failed pairing close after dismissing the modal" — DELETED: the controller ignores a
+    failed release, because a hold the server could not release lapses within 3 minutes anyway
+  - "does not open pairing when the screen leaves…"
+  - "retains the refused-request hint…" — DELETED with the refused count
+  - "ignores a previous opening's pairing failure…"
+  - "does not show a previous pairing deadline…"
+  - "opens pairing once when Add agent is pressed twice"
+  - "ignores Scan while an agent scan is still listening…" — its "a rescan opens the window again"
+    assertion goes: Scan no longer touches the window, the dialog's hold does
+  - "opens the window before the first pairing read arrives…"
+  - the a11y file's "renders the open pairing window accessibly" stub (`refusedRecently`).
 - `apps/till/src/i18n/codes.test.ts` — the `device.pairing_closed` wording (EN and ES).
 - Any test pinning `device.name_taken`'s dashboard wording (it changes: the name is now editable).
 
@@ -391,8 +418,11 @@ the `deps.pairingMode.noteRefused();` line in the knock route (and the comment s
 in `apps/server/src/print-api.ts` delete the same line in the agent knock. In `join-api.ts` the
 window routes are replaced in Task 2 — for this step make `GET /management-api/pairing-mode` return
 `{ open, openUntil }`, and delete the `POST`, `/renew` and `DELETE` window routes (Task 2 adds the
-hold routes). Run `pnpm --filter @waitron/server typecheck`; expected PASS once the test files Task 2
-and Task 3 rewrite are the only ones still failing at runtime.
+hold routes). `pnpm --filter @waitron/server typecheck` covers the test files too
+(`apps/server/tsconfig.json` includes `src`), so it FAILS here in `join-api.db.test.ts` (imports
+`PAIRING_WINDOW_MS`, calls `noteRefused`) and `device-api.test.ts` (calls `refusedRecently()`) until
+Task 2, and in `join-requests.test.ts` and `device.test.ts` until Task 3. Production files must
+typecheck: check that every remaining error is in a `.test.ts` file.
 
 - [ ] **Step 6: Commit**
 
@@ -494,8 +524,11 @@ describe("the join window's holds", () => {
 });
 ```
 
-Add a passive-renewal case modelled on the existing `/renew` case this describe replaced (it read
-the session's last-seen time before and after; keep that technique, pointed at the new path).
+Carry over, pointed at the new routes, the three checks the replaced describe held: the passive
+renewal case (it read the session's last-seen time before and after — keep that technique);
+"refuses renewal after the management session expires" (the server half of Review Focus 1); and
+"all window routes need a management session" (401 with no cookie). The staff case keeps its
+error-body assertion (`code` and `params.permission`), not only the status.
 
 - [ ] **Step 2: Run to see them fail**
 
@@ -568,7 +601,7 @@ Expected: the holds describe passes; device-accept cases still sending `choice` 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/server/src/join-api.ts apps/server/src/errors.ts apps/server/src/boot.ts apps/server/src/join-api.db.test.ts apps/server/src/device-api.test.ts apps/server/src/join-e2e.test.ts
+git add apps/server/src/join-api.ts apps/server/src/errors.ts apps/server/src/boot.ts apps/server/src/join-api.db.test.ts apps/server/src/join-api.test.ts apps/server/src/print-agent-e2e.test.ts apps/server/src/device-api.test.ts apps/server/src/join-e2e.test.ts
 git commit -s -m "Add routes that take, renew and release a hold on the join window"
 ```
 
@@ -590,8 +623,10 @@ git commit -s -m "Add routes that take, renew and release a hold on the join win
 
 ```ts
 // join-requests.ts
-export type DeviceRequestWindow = Pick<PairingMode, "openSince" | "orphanedClaims" | "dropClaim">;
-export async function discardLapsedDeviceRequests(tx: Transaction, cfg: TillConfig, window: DeviceRequestWindow): Promise<void>;
+export type DeviceRequestWindow = Pick<PairingMode, "openSince" | "orphanedClaims">;
+/** Returns the orphaned-claim request ids it deleted; the CALLER drops those claims after its
+ * transaction commits, so a rolled-back sweep leaves the claims for the next sweep. */
+export async function discardLapsedDeviceRequests(tx: Transaction, cfg: TillConfig, window: DeviceRequestWindow): Promise<string[]>;
 export async function checkDeviceJoinNumber(tx: Transaction, cfg: TillConfig, id: string, choice: string): Promise<{ ok: boolean }>;
 export async function acceptDeviceJoinRequest(
   tx: Transaction, cfg: TillConfig, id: string,
@@ -604,7 +639,7 @@ export function requireDeviceName(value: unknown): string; // trimmed; "" → ma
 ```
 
 HTTP (all `device.manage`):
-- `GET /management-api/join-requests?kind=device` → rows `{ id, kind, label, createdAt, pairingBy: { name: string; mine: boolean } | null }` (print-agent rows carry `pairingBy: null`).
+- `GET /management-api/join-requests?kind=device` → rows `{ id, kind, label, createdAt, pairingBy: { name: string; mine: boolean } | null }`. `kind=print_agent` rows are unchanged (no `pairingBy`). A claim writes no row, so other managers' lists learn of it at their next read (the live query's 60-second refetch, or any join-request change); a second manager who taps Pair first is refused `join_request.claimed`, shown in the Pair dialog.
 - `POST /management-api/device-join-requests/:id/check` body `{ choice: string; holdId: string }` → `204` | `400 device.join_mismatch` (request deleted) | `409 join_request.claimed` | `409 device.pairing_hold_lapsed`.
 - `POST /management-api/device-join-requests/:id/accept` body `{ name: string; profileId: string; stationId?: string|null; watcherId?: string|null }` → `200 { deviceId, name, formFactor }` | `409 join_request.unclaimed` | existing binding and name codes.
 - `POST /management-api/join-requests/:id/deny` on a device request another login has claimed → `409 join_request.claimed`; otherwise as today, and the claim is dropped.
@@ -655,6 +690,10 @@ Cases (each one `it`):
    take hold B; list → empty; `pendingCount()` 0.
 10. "keeps a print agent's request when the window shuts" — take a hold, knock with
     `kind: "print_agent"`, release; `pendingCount()` 1.
+11a. "approval after the claim's hold lapsed is refused" — build the holder with
+    `now: () => Date.now() + offset` (so its times stay comparable with the rows' real `created_at`);
+    take hold A, knock, check right with A; `offset += 2 * 60_000`; take hold B; `offset += 90_000`
+    (A has lapsed, B is live, the window never shut); accept → 409 `join_request.unclaimed`.
 11. "check needs a live hold" — check with `holdId: randomUUID()` → 409 `device.pairing_hold_lapsed`.
 12. "staff are refused check and accept with 403 before the id is judged".
 
@@ -670,28 +709,30 @@ Expected: FAIL — 404 on `/check`.
 - [ ] **Step 3: Implement `join-requests.ts`.** Add, after `sweepLapsed`:
 
 ```ts
-export type DeviceRequestWindow = Pick<PairingMode, "openSince" | "orphanedClaims" | "dropClaim">;
+export type DeviceRequestWindow = Pick<PairingMode, "openSince" | "orphanedClaims">;
 
 /**
  * A device asks only while the window is open, so a device request made before the window last
  * shut, or one whose claim's hold has ended, is discarded. Print-agent requests are left alone: an
  * agent told `not_approved` stops for good (`packages/print-agent/src/agent.ts`), A269.
+ *
+ * Returns the orphaned-claim ids it deleted. The caller drops those claims only after its
+ * transaction commits: dropped here, a rolled-back transaction would bring the row back unclaimed.
  */
 export async function discardLapsedDeviceRequests(
   tx: Transaction,
   cfg: TillConfig,
   window: DeviceRequestWindow,
-): Promise<void> {
+): Promise<string[]> {
   const since = window.openSince();
   const device = and(ownedBy(cfg), eq(joinRequests.kind, "device"));
   await tx
     .delete(joinRequests)
     .where(since === null ? device : and(device, lt(joinRequests.createdAt, since)));
   const orphaned = window.orphanedClaims();
-  if (orphaned.length > 0) {
+  if (orphaned.length > 0)
     await tx.delete(joinRequests).where(and(device, inArray(joinRequests.id, orphaned)));
-    for (const id of orphaned) window.dropClaim(id);
-  }
+  return orphaned;
 }
 
 /**
@@ -719,8 +760,12 @@ Change `acceptDeviceJoinRequest`: input `{ label, profileId, stationId?, watcher
 `{ deviceId: row.id, name: input.label, formFactor: binding.formFactor }`. Rewrite its header to
 say the number was checked earlier by `checkDeviceJoinNumber` and the route checks the claim.
 Delete the `AcceptResult` type. Give `readJoinStatus` a fifth parameter `window:
-DeviceRequestWindow` and call `discardLapsedDeviceRequests(tx, cfg, window)` after `sweepLapsed`.
-Import `inArray` from drizzle and `type PairingMode` from `./pairing-mode.js`.
+DeviceRequestWindow & Pick<PairingMode, "dropClaim">`; inside its transaction call
+`dropped = await discardLapsedDeviceRequests(tx, cfg, window)` after `sweepLapsed`, and after the
+transaction `for (const id of dropped) window.dropClaim(id)`. Import `inArray` from drizzle and
+`type PairingMode` from `./pairing-mode.js`. Rewrite `JOIN_TTL_MS`'s comment (it says "the same
+fifteen minutes as the pairing window", no longer true): it is now only an outer limit on a request
+whose window stays open.
 
 In `device.ts` add:
 
@@ -735,18 +780,45 @@ export function requireDeviceName(value: unknown): string {
 
 - [ ] **Step 4: Implement `join-api.ts`.** Add `"join_request.claimed": 409` and
 `"join_request.unclaimed": 409` to `STATUS` and both codes to `errors.ts`. Make both `gated` and
-`gatedByRowKind` run `await discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode)` as the
-first statement inside their transaction, and make `gated` hand its callback the authorising person:
-`fn: (tx: Transaction, personId: string) => Promise<T>` with
-`const { authorizedBy } = await authorizeManager(...); return fn(tx, authorizedBy);`.
+`gatedByRowKind` discard first and drop the orphaned claims only after the transaction commits, and
+make `gated` hand its callback the authorising person:
+
+```ts
+  const gated = async <T>(
+    sessionId: string,
+    permission: Permission,
+    fn: (tx: Transaction, personId: string) => Promise<T>,
+  ): Promise<T> => {
+    let dropped: string[] = [];
+    const result = await withTransaction(deps.db, async (tx) => {
+      dropped = await discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
+      const { authorizedBy } = await authorizeManager(tx, { managementSessionId: sessionId, permission });
+      return fn(tx, authorizedBy);
+    });
+    for (const id of dropped) deps.pairingMode.dropClaim(id);
+    return result;
+  };
+```
+
+(`gatedByRowKind` the same way.) The hold-release route from Task 2 changes so the discard runs
+AFTER the release — `gated` discards before its callback, when the released hold is still live:
+
+```ts
+      const dropped = await gated(sessionId, "device.manage", async (tx) => {
+        deps.pairingMode.release(holdId);
+        return discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
+      });
+      for (const id of dropped) deps.pairingMode.dropClaim(id);
+```
 
 The list route adds `pairingBy`:
 
 ```ts
 const sessionKey = hashSessionToken(sessionId);
 const rows = await gated(sessionId, PERMISSION_FOR[kind], (tx) => listPendingJoinRequests(tx, deps.cfg, kind));
-return c.json(rows.map((row) => {
-  const claim = row.kind === "device" ? deps.pairingMode.claimOf(row.id) : undefined;
+// Device rows only: an agent row keeps today's shape, so the print-agent list pins are untouched.
+return c.json(kind === "print_agent" ? rows : rows.map((row) => {
+  const claim = deps.pairingMode.claimOf(row.id);
   return { ...row, pairingBy: claim === undefined ? null : { name: claim.personName, mine: claim.sessionKey === sessionKey } };
 }));
 ```
@@ -771,7 +843,8 @@ Add the check route:
         const checked = await checkDeviceJoinNumber(tx, deps.cfg, id, choice);
         if (checked.ok) {
           const [person] = await tx.select({ name: persons.displayName }).from(persons).where(eq(persons.id, personId));
-          // Claimed inside the transaction: on a match nothing is written, so nothing can roll back.
+          // Claimed inside the transaction, so no other check can run between the match and the
+          // claim; the check itself writes nothing on a match.
           deps.pairingMode.claim(id, { holdId, sessionKey, personName: person?.name ?? "" });
         }
         return checked;
@@ -807,28 +880,39 @@ Import `hashSessionToken`, `persons` from `@waitron/identity` and `eq` from driz
 
 - [ ] **Step 5: Implement `device-api.ts` and the helper.** In the knock route, inside the
 transaction and before `createJoinRequest`, call
-`await discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode)`; in the dev auto-accept pass
+`dropped = await discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode)` and after the
+transaction `for (const id of dropped) deps.pairingMode.dropClaim(id)`; in the dev auto-accept pass
 `{ label: name, profileId: till.id }` (no `choice`). In `/api/device/join/status` pass
 `deps.pairingMode` as `readJoinStatus`'s window. In `testing/enrol.ts` call
 `acceptDeviceJoinRequest(tx, cfg, made.joinId, { label: input.name, profileId: input.profileId, stationId: input.stationId ?? null, watcherId: input.watcherId ?? null })`
 and return `{ deviceId: accepted.deviceId, token: made.token }` (the v8-ignored mismatch branch
 goes). Update the accept call in `device.test.ts` the same way (setup).
 
-- [ ] **Step 6: Update the remaining tests to check-then-accept** (granted list): `join-e2e.test.ts`
+- [ ] **Step 6: Give existing setups an open window.** A test that creates a device request and
+then calls a route or `readJoinStatus` now needs the window open, or the request is discarded
+(granted list, "Task 3 setups"): in `join-api.db.test.ts` the list, challenge, deny and pending-cap
+groups mount with a holder that has `open()` called; in `join-requests.test.ts` the `readJoinStatus`
+calls pass an opened holder as the fifth argument and the `AcceptResult` import goes; in
+`device.test.ts` the status read passes an opened holder; `join-api.test.ts` opens a hold and
+moves to check-then-accept. The `toEqual` pins of a device list in `join-api.db.test.ts` and
+`join-e2e.test.ts` gain `pairingBy: null` (a whole-shape pin gaining a key; every existing value
+unchanged).
+
+- [ ] **Step 7: Update the remaining tests to check-then-accept** (granted list): `join-e2e.test.ts`
 posts `/check` with the hold it took, then `/accept` with `name`; the wrong-number step posts
 `/check` with the wrong number and expects 400 and the device's status `not_approved`.
 `device-api.test.ts`'s dev auto-accept case keeps its assertions.
 
-- [ ] **Step 7: Run**
+- [ ] **Step 8: Run**
 
-Run: `pnpm --filter @waitron/server exec vitest run src/join-api.db.test.ts src/join-requests.test.ts src/join-e2e.test.ts src/device-api.test.ts src/device.test.ts src/pairing-mode.test.ts src/print-api.test.ts src/print-agent-e2e.test.ts`
+Run: `pnpm --filter @waitron/server exec vitest run src/join-api.db.test.ts src/join-api.test.ts src/join-requests.test.ts src/join-e2e.test.ts src/device-api.test.ts src/device.test.ts src/pairing-mode.test.ts src/print-api.test.ts src/print-agent-e2e.test.ts`
 Expected: PASS. Then `pnpm --filter @waitron/server typecheck` — PASS.
 
-- [ ] **Step 8: Prove the claim guard by deletion.** Delete the `claimOf(id)?.sessionKey !==` line
+- [ ] **Step 9: Prove the claim guard by deletion.** Delete the `claimOf(id)?.sessionKey !==` line
 in the accept route, run case 3 and case 4, see them fail, restore it. Write the experiment in the
 PR.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add apps/server/src
@@ -955,6 +1039,16 @@ describe("PairingHold", () => {
     expect(hold.holdId).toBeNull();
   });
 
+  it("a second start after the first finished releases the first hold", async () => {
+    const take = vi.fn().mockResolvedValueOnce({ holdId: "h1", openUntil: "x" }).mockResolvedValueOnce({ holdId: "h2", openUntil: "x" });
+    const api = fakeApi({ takePairingHold: take });
+    const hold = new PairingHold(() => api, () => {}, 60_000);
+    await hold.start();
+    await hold.start();
+    expect(api.releasePairingHold).toHaveBeenCalledWith("h1");
+    expect(hold.holdId).toBe("h2");
+  });
+
   it("reports a refused take as failed with its code", async () => {
     const api = fakeApi({ takePairingHold: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }) });
     const seen: [string, string | null][] = [];
@@ -1004,6 +1098,8 @@ export class PairingHold {
   }
 
   async start(): Promise<void> {
+    // A second start must not leak the first hold and its timer.
+    if (this.#holdId !== null || this.#timer !== undefined) this.stop();
     const epoch = ++this.#epoch;
     try {
       const { holdId } = await this.api().takePairingHold();
@@ -1033,7 +1129,9 @@ export class PairingHold {
     const holdId = this.#holdId;
     if (holdId === null) return;
     try {
-      await this.api().background.renewPairingHold(holdId);
+      // Test stubs have no `background`; the real client always does (printers-screen.ts does the same).
+      const api = this.api();
+      await (api.background ?? api).renewPairingHold(holdId);
     } catch (error) {
       const code = codeOf(error);
       if (epoch !== this.#epoch || !FINAL.has(code)) return;
@@ -1165,7 +1263,9 @@ Screen behaviour (spec §3):
   `armedDenyId`, `#onDeny`, `#deny`'s row button, `#openPairing`, `#closePairing`,
   `#renderJoinRequest` and the old `#renderAcceptDialog` go.
 - Opening: `addingDevice = true`, `void this.#hold.start()`, read `this.api.pairingMode()` once for
-  `deviceAddress`, then `this.qr = await toDataURL(address, { margin: 1, width: 192 })`.
+  `deviceAddress`, then `this.qr = await this.qrFor(address)`, where
+  `@property({ attribute: false }) qrFor = (text: string) => toDataURL(text, { margin: 1, width: 192 })`
+  lets a test see what the code encodes.
   Closing (Close button, Escape, leaving the screen in `disconnectedCallback`): `this.#hold.stop()`,
   clear `addedName`, close any Pair dialog after discarding its request (below).
 - The Add dialog (`wt-modal data-test="add-device-modal" heading=${t("devices.add_title")}`):
@@ -1173,7 +1273,9 @@ Screen behaviour (spec §3):
      `<p class="hint">` with `devices.add_hint` where `{address}` is
      `<code data-test="device-address">${address}</code>`.
   2. When `holdStatus === "lapsed"`, the `hold-lapsed` notice and `hold-restart` button (Task 4's
-     strings).
+     strings). When `holdStatus === "failed"` (the take was refused, or the login lapsed), the
+     same `hold-restart` button with the failure's `codeMessage` instead of `pairing.hold_lapsed`.
+     While there is no live hold (`this.#hold.holdId === null`) every Pair button is disabled.
   3. `addedName !== null` → `<p role="status" data-test="added-device">` with `devices.added`.
   4. A list of `pendingJoins` (live `joinRequests("device")` query, already watched): each row the
      request's label and, if `pairingBy !== null && !pairingBy.mine`, `<span data-test="being-paired-…">`
@@ -1187,8 +1289,9 @@ Screen behaviour (spec §3):
   - Opening from `pair-<id>`: if `pairingBy?.mine` go straight to `settings`, else fetch
     `joinChallenge(id)` and show `devices.join_match_prompt` and the three `size="lg"` number
     buttons (`data-choice`, `aria-label` `devices.join_choice_label`). A tap calls
-    `checkDeviceJoinNumber(id, { choice, holdId: this.#hold.holdId! })` with every number disabled
-    while it is in flight. `device.join_mismatch` → close the Pair dialog and set `addError` to it.
+    `checkDeviceJoinNumber(id, { choice, holdId })` (with `holdId = this.#hold.holdId`; if it is
+    null, show `codeMessage("device.pairing_hold_lapsed")` and send nothing) with every number
+    disabled while it is in flight. `device.join_mismatch` → close the Pair dialog and set `addError` to it.
     Any other refusal → bottom message in the Pair dialog. Success → `pairStep = "settings"`, name
     field pre-filled with the request's label.
   - Settings form: `wt-input name="name" required` (`devices.name`), `wt-combobox name="profileId"
@@ -1196,8 +1299,12 @@ Screen behaviour (spec §3):
     (`name="binding"`, required). Field errors follow the Forms contract, modelled on
     `printers-screen.ts`'s `#renderEditAgent` (`formAttempted`, `nameError`): blank name →
     `form.name_required` under Name; no profile → under Profile; kitchen screen with no binding →
-    `device.station_required`'s message under Shows. Refusals: `device.name_taken` → under Name;
-    `device.station_required` → under Shows; anything else → bottom message. Pair stays disabled
+    `device.station_required`'s message under Shows. Refusals go under the field they name
+    (CLAUDE.md §3, "by what the error CARRIES"): `device.name_taken` → Name;
+    `device.station_required`, `station.not_found`, `watcher.not_found` → Shows;
+    `device_profile.not_found` → Profile; `management.request_invalid` → the field its
+    `params.field` names (`name` → Name, `profileId` → Profile, `stationId`/`watcherId` → Shows);
+    anything else → bottom message. Pair stays disabled
     while a field is invalid or a submit is in flight.
   - Pair → `acceptDeviceJoinRequest(id, { name, profileId, stationId?/watcherId? })` → close the Pair
     dialog, `addedName = result.name`, and reload devices.
@@ -1210,8 +1317,9 @@ Screen behaviour (spec §3):
 `{ open: false, openUntil: null, deviceAddress: "https://waitron.local" }`. Cases:
 
 1. "Add a device takes a hold and shows the QR code and address" — click `open-add-device`;
-   `takePairingHold` called once; `device-address` text is `https://waitron.local`; `device-qr`'s
-   `src` starts with `data:image/png`.
+   `takePairingHold` called once; `device-address` text is `https://waitron.local`; a spy `qrFor`
+   was called with exactly `https://waitron.local` and `device-qr`'s `src` is what it returned. A
+   second case with the real `qrFor` checks the `src` starts with `data:image/png`.
 2. "closing the dialog releases the hold" — open, click Close → `releasePairingHold("h1")`.
 3. "leaving the screen releases the hold" — open, remove the element → `releasePairingHold("h1")`.
 4. "lists waiting devices with Pair and no Deny" — two requests; each has `pair-<id>`;
@@ -1236,13 +1344,20 @@ Screen behaviour (spec §3):
 12. "a lapsed hold shows the notice, and Start again takes a new hold" — the controller's renewal
     rejects `device.pairing_hold_lapsed`; fake only the interval timers
     (`vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] })`, so animation frames stay real —
-    CLAUDE.md §4) and advance 60 s → `hold-lapsed` shown; click `hold-restart` → `takePairingHold`
-    called twice in all.
+    CLAUDE.md §4) and advance 60 s → `hold-lapsed` shown and every Pair button disabled; click
+    `hold-restart` → `takePairingHold` called twice in all. The stub must answer through
+    `background` too, or set `background` to itself — the controller falls back to the API, but
+    say which the test relies on.
+13. "a refused take offers Start again" — `takePairingHold` rejects `connection.failed` → its
+    `codeMessage` and `hold-restart` shown; Pair disabled.
+14. "a refusal naming the station goes under Shows" — accept rejects `station.not_found` → the
+    Shows field's error, not the bottom message.
 
 In `devices-screen.a11y.test.ts` replace the "open pairing window" and accept-dialog states with:
-the Add dialog with two waiting rows (one being paired by someone else), the Pair dialog at the
-number step, and at the settings step with a Name error — each in both themes, as the file's other
-states are scanned.
+the Add dialog with two waiting rows (one being paired by someone else), the Add dialog with
+nothing waiting (spinner), the Add dialog with the lapsed notice, the Pair dialog at the number
+step, and at the settings step with a Name error — each in both themes, as the file's other states
+are scanned.
 
 - [ ] **Step 2: Run to see them fail**
 
@@ -1288,7 +1403,12 @@ Run: `pnpm --filter @waitron/dashboard exec vitest run src/screens/devices-scree
 Expected: PASS. Then `pnpm --filter @waitron/dashboard typecheck` — PASS.
 
 - [ ] **Step 5: Look at it.** Start the stack (`wa-wt demo <worktree-name>`), open Devices, Add a
-device, pair a device from a second browser (or a private window) through the QR address: check
+device. On the dev stack the QR address does not serve the till (the till runs on Vite, port 5190
+by default, and `WAITRON_TILL_APP_DIR` is set only in `deploy/Dockerfile`), so pair from a second
+browser or a private window opened at the till's dev address instead. Dev mode auto-accepts a
+knock (Global Constraints), so to walk the Pair steps run the stack with `WAITRON_ENV` other than
+`dev` or exercise them against the stubbed screen in the browser test harness; say in the PR which
+you did. Check
 the Add dialog, both Pair steps, a wrong number, and a name clash in light and dark at 1280 and 390
 px. Save screenshots to the lane's shots folder.
 
@@ -1364,11 +1484,13 @@ seats).
 Semantics, all in one `withTransaction`:
 1. Read the device; refuse unknown or `active = false` as `device.not_found`.
 2. `requireDeviceName(body.name)`; resolve the binding with `resolveDeviceBinding(tx, cfg, { profileId, stationId, watcherId })`.
-3. If the profile changed, start from `firstUsablePrinters(tx, profileId, locationId)`; then apply the
-   body's printers with `chooseDevicePrinter(tx, id, role, printerId)` after the profile update, so
-   each is checked against the NEW profile's lists, refusing `device.binding_invalid { field }`.
-   (Read `chooseDevicePrinter` first: if it reads the profile from the row, the profile update must
-   precede it in the same transaction.)
+3. If the profile changed, start from `firstUsablePrinters(tx, profileId, locationId)`. Then, after
+   the profile update (`chooseDevicePrinter` reads the profile from the device row,
+   `packages/layouts/src/device-printers.ts`), apply a body printer with
+   `chooseDevicePrinter(tx, id, role, printerId)` ONLY when it differs from what the row holds at
+   that point. `chooseDevicePrinter` accepts only active printers, and a device may still sit on a
+   listed printer since switched off: re-sending it unchanged would make every edit of that device
+   fail. A refused printer is `device.binding_invalid { field }`.
 4. Update `label`, `deviceProfileId`, `stationId`, `watcherId`; a `device.name_taken` from the
    unique index maps as `insertDevice` maps it (factor the try/catch in `device.ts` into
    `mapDeviceNameTaken(error)` and use it in both).
@@ -1376,19 +1498,24 @@ Semantics, all in one `withTransaction`:
    `management.request_invalid { field: "madeHereStationIds" }`).
 
 - [ ] **Step 1: Write the failing tests** (new describe `PATCH /management-api/devices/:id`):
-renames; "refuses a blank name on edit" (`field: "name"`); a clash with another active device →
+"renames a device whose receipt printer has since been switched off" (the unchanged printer is not
+re-checked); renames; "refuses a blank name on edit" (`field: "name"`); a clash with another active device →
 409 `device.name_taken`; "a name differing only by surrounding spaces clashes" (" Barra " against
 "Barra"); reuses a revoked device's name; refuses a revoked device → 404; changes the
 profile and moves the printers to the new profile's first (assert both columns) in the same
 request; refuses a printer not on the profile with `device.binding_invalid` and changes nothing
 (re-read the row: label unchanged — proves one transaction); kitchen profile without a binding →
-`device.station_required`; sets made-here stations; staff → 403. Delete the `assign-device-profile`
+`device.station_required`; sets made-here stations; a stored made-here station since disabled is
+refused as `setMadeHereStations` refuses it today (`apps/server/src/made-here.ts`) — the dialog must
+not send it (Task 8); staff → 403. Delete the `assign-device-profile`
 and `made-here` describes (granted list) after porting each of their behavioural assertions that
 still applies (the "keeps the device's chosen printers when reassigned to the profile it already
 has" case becomes "keeps the printers when the profile is unchanged").
 
 - [ ] **Step 2: Run to see them fail** — `pnpm --filter @waitron/server exec vitest run src/device-api.test.ts -t "PATCH"`; expected 404.
 - [ ] **Step 3: Implement** as specified above; delete the two old routes and their imports.
+`requireDeviceBinding` (`device.ts`) loses its only caller: delete it and its header comment, which
+names the deleted route.
 - [ ] **Step 4: Run** `pnpm --filter @waitron/server exec vitest run src/device-api.test.ts src/device.test.ts` — PASS; typecheck — PASS.
 - [ ] **Step 5: Prove the one transaction by deletion** — temporarily run the printer check in its
 own `withTransaction` after the label update has committed; the "changes nothing" case must fail
@@ -1429,9 +1556,14 @@ Behaviour (spec §5):
 - Edit dialog (`wt-modal`), fields in this order: Name (required), Profile (required, no "none"
   option), Shows (kitchen profiles, required), Receipt printer and Payment slip printer (options =
   the chosen profile's `receiptPrinterIds` / `paymentSlipPrinterIds` mapped to printers, plus "None";
-  changing the profile resets both to the first listed or None), Made here (checkboxes, hidden for a
-  kitchen screen as today), Default card reader (only when the reader read succeeded — the existing
-  `getDeviceReader` call answers 403 without `payments.manage`; on 403 hide the field).
+  changing the profile resets each to the first ACTIVE printer in the new profile's list, or None,
+  matching the server's `firstUsablePrinters`), Made here (checkboxes, hidden for a kitchen screen as
+  today; a stored station that is no longer active is left out of what Save sends, as the deleted
+  inline control did — carry over "omits a disabled stored station when saving…" as an Edit dialog
+  case), Default card reader (read with `getDeviceReader(id)` when the Edit dialog opens; on a 403,
+  hide the field). Delete the list watcher's per-device `getDeviceReader` fetch
+  (`devices-screen.ts`, inside the `listDevices` watch): it ran once per active device on every list
+  change, and W106's battery reports make list changes frequent.
 - Save: `updateDevice(...)`; on success, if the reader changed, `setDeviceReader(...)`. If that
   second call fails, keep the dialog open with the error under the reader field (the device changes
   are saved). Commented decision at the call: one line, "Saved separately: the reader belongs to
@@ -1630,7 +1762,7 @@ with `#battery?: { stop(): void }`, and `this.#battery?.stop()` at the top of th
 
 **Files:**
 - Modify: `apps/dashboard/src/api/client.ts` (`DeviceRow` gains the three fields)
-- Modify: `apps/dashboard/src/screens/devices-screen.ts` (a `battery` column after `profile`)
+- Modify: `apps/dashboard/src/screens/devices-screen.ts` (a `battery` column after `shows`)
 - Modify: `apps/dashboard/src/i18n/strings.ts`
 - Test: `apps/dashboard/src/screens/devices-screen.test.ts`, `devices-screen.a11y.test.ts`
 
@@ -1641,7 +1773,8 @@ defaulting to `() => new Date()` if the screen has none) is rendered with `part=
 the text `as of {time}`; a 9-minute-old report is not. a11y: the table with all three states, both
 themes.
 - [ ] **Step 2: Run to see them fail.**
-- [ ] **Step 3: Implement** the column (`key: "battery"`, `choosable: "shown"`,
+- [ ] **Step 3: Implement** the column, placed after Shows and before Status (spec §5's order:
+Name, Profile, Shows, Battery, Status, Last seen) (`key: "battery"`, `choosable: "shown"`,
 `sortValue: (d) => d.batteryLevel`), styling the stale state through `part="battery-stale"` in the
 table cell and `::part(battery-stale)` with `color: var(--wt-color-text-muted)`. Strings:
 `devices.column_battery` "Battery" / "Batería", `devices.battery_not_reported` "Not reported" / "Sin
