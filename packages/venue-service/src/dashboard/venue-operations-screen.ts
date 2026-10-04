@@ -47,6 +47,9 @@ type Editor =
       impact?: DepartmentRemovalImpact;
     };
 type Action = { key: string; label: string; run: () => void; disabled?: boolean };
+type PolicyRow =
+  | { kind: "department"; department: Department }
+  | { kind: "zone"; zone: FloorZone; departmentId: string };
 /** `check` reads the fields and returns a message per invalid one; `save` runs only once `check`
  * returns none. */
 type EditorContent = {
@@ -500,6 +503,54 @@ export class VenueOperationsScreen extends LitElement {
     </section>`;
   }
 
+  #policyTree() {
+    const model = this.model!;
+    const departments = model.departments.filter((department) => department.active);
+    const rows: PolicyRow[] = departments.flatMap((department) => [
+      { kind: "department" as const, department },
+      ...model.zones
+        .filter((zone) => zone.departmentId === department.id)
+        .flatMap((zone) => {
+          const floorZone = model.floorZones.find((row) => row.id === zone.id);
+          return floorZone && floorZone.active !== false
+            ? [{ kind: "zone" as const, zone: floorZone, departmentId: department.id }]
+            : [];
+        }),
+    ]);
+    const columns: DataTableColumn<PolicyRow>[] = [
+      {
+        key: "name",
+        label: t("venue.name"),
+        cell: (row) =>
+          row.kind === "department"
+            ? departments.length === 1
+              ? t("venue.every_zone")
+              : row.department.name
+            : row.zone.name,
+      },
+      {
+        key: "trading",
+        label: t("venue.trading_name"),
+        cell: (row) => (row.kind === "department" ? row.department.tradingName : nothing),
+      },
+    ];
+    return html`<wt-data-table
+      data-test="policy-tree"
+      viewKey="waitron.venue.policy-tree"
+      aria-label=${t("venue.title")}
+      .rows=${rows}
+      .columns=${columns}
+      .rowKey=${(row: PolicyRow) =>
+        row.kind === "department" ? `department-${row.department.id}` : `zone-${row.zone.id}`}
+      .rowParent=${(row: PolicyRow) =>
+        row.kind === "department" ? null : `department-${row.departmentId}`}
+      .rowCollapsible=${() => false}
+      .rowActivation=${() => "none" as const}
+      .emptyMessage=${t("venue.no_departments")}
+      .noMatchesMessage=${tableNoMatches()}
+    ></wt-data-table>`;
+  }
+
   #departments() {
     const model = this.model!;
     return html`<section>
@@ -631,6 +682,7 @@ export class VenueOperationsScreen extends LitElement {
         (row) => String(model.hours.indexOf(row)),
         this.#addHours(),
       )}
+      ${this.#policyTree()}
     </section>`;
   }
   #zones() {

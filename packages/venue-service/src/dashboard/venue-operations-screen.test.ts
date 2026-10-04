@@ -196,6 +196,49 @@ async function changesHeardOutside(act: () => Promise<void>): Promise<number> {
 }
 
 describe("venue operations screen", () => {
+  it("shows one department as Every zone with its zone beneath it", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        departments: [model.departments[0]],
+        salePolicies: {
+          departments: [
+            {
+              departmentId: "d1",
+              paidWhen: "prepay",
+              collectionNumber: "none",
+              receiptPrintMode: "auto",
+              printTradingName: true,
+            },
+          ],
+          zones: [
+            {
+              zoneId: "z1",
+              paidWhen: null,
+              collectionNumber: null,
+              receiptPrintMode: null,
+              effective: {
+                paidWhen: "prepay",
+                collectionNumber: "none",
+                receiptPrintMode: "auto",
+                printTradingName: true,
+              },
+            },
+          ],
+        },
+      }),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!.querySelector('[role="treegrid"]')!;
+    const rows = [...tree.querySelectorAll('tbody [role="row"]')];
+    expect(rows).toHaveLength(2);
+    expect(rows[0].getAttribute("aria-level")).toBe("1");
+    expect(rows[0].textContent).toContain("Every zone");
+    expect(rows[0].textContent).toContain("Casa Delgado");
+    expect(rows[1].getAttribute("aria-level")).toBe("2");
+    expect(rows[1].textContent).toContain("Dining room");
+    expect(rows[1].textContent).not.toContain("Casa Delgado");
+  });
+
   it("puts each tab's available Add actions beside the tablist", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
