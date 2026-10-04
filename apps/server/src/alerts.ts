@@ -1,5 +1,5 @@
 import { inArray } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { listHandledIncidents, listOpenIncidents, type TenantIncident } from "@waitron/core";
 import { persons } from "@waitron/identity";
 import type { Alert, AlertEventClaim, AlertSource } from "@waitron/module";
@@ -87,6 +87,18 @@ function compareOpen(a: Alert, b: Alert): number {
   return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
 }
 
+export function sortAndDeduplicateOpenAlerts(alerts: Alert[]): Alert[] {
+  const unavailable = new Set<string>();
+  return alerts
+    .filter((alert) => {
+      if (alert.code !== "alert.source_unavailable") return true;
+      if (unavailable.has(alert.key)) return false;
+      unavailable.add(alert.key);
+      return true;
+    })
+    .sort(compareOpen);
+}
+
 export async function readOpenAlerts(
   tx: Transaction,
   deps: AlertReadDeps,
@@ -100,7 +112,7 @@ export async function readOpenAlerts(
   // The synthetic is keyed by area, so two failed sources in one area would collide; show it once.
   const failedAreas = new Set<string>();
   for (const source of deps.registry.sources) {
-    if (!held.has(source.permission)) continue;
+    if (!held.has(source.permission) || source.readOutsideTransaction) continue;
     try {
       // A savepoint per source, so a failed source's own writes go with it rather than sitting in
       // the transaction every later source reads on. The source reads on the OUTER `tx`: the savepoint
@@ -125,7 +137,40 @@ export async function readOpenAlerts(
       });
     }
   }
-  return alerts.sort(compareOpen);
+  return sortAndDeduplicateOpenAlerts(alerts);
+}
+
+export async function readOutsideTransactionAlerts(
+  db: Database,
+  deps: AlertReadDeps,
+  held: ReadonlySet<string>,
+): Promise<Alert[]> {
+  const alerts: Alert[] = [];
+  const failedAreas = new Set<string>();
+  for (const source of deps.registry.sources) {
+    if (!held.has(source.permission) || !source.readOutsideTransaction) continue;
+    try {
+      const found = await source.read({ tx: db, now: deps.now });
+      for (const alert of found) alerts.push({ ...alert, kind: "ongoing", area: source.area });
+    } catch (error) {
+      deps.log("error", "alert.source_unavailable", {
+        area: source.area,
+        errorCode: codeOf(error),
+      });
+      if (failedAreas.has(source.area)) continue;
+      failedAreas.add(source.area);
+      alerts.push({
+        key: `alert.source_unavailable:${source.area}`,
+        kind: "ongoing",
+        code: "alert.source_unavailable",
+        params: { area: source.area },
+        severity: "error",
+        since: deps.now.toISOString(),
+        area: source.area,
+      });
+    }
+  }
+  return alerts;
 }
 
 export async function readHandledAlerts(

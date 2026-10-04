@@ -1251,37 +1251,26 @@ actions, which have no limit. The test-email reads (`GET /management-api/email` 
 `GET /management-api/email/message/:id`, `apps/server/src/email-inbox-api.ts`, lines 41 and 52) ask
 Mailpit over HTTP with no limit of their own (`apps/server/src/mailpit-client.ts`), but Mailpit is a
 container on the box itself (`deploy/compose.yml`, the `mailpit` service), not an outside service,
-so they keep 30 seconds. One read that would wait on a card provider, the alerts list, today fails
-before it reaches one (A258). The Payments screen asks at most two readers for their status at a
+so they keep 30 seconds. The alerts list now asks the card provider outside its transaction
+(A258). The Payments screen asks at most two readers for their status at a
 time in each browser tab (A260).
 
-**A low card-reader battery is never alerted: the alerts list asks the card provider inside a
-transaction, and the provider's key read is refused (A258, found while checking lane A's W18c,
-2026-10-03) — OPEN, unqueued.** The alerts list read (`GET /management-api/alerts`,
-`apps/server/src/alerts-api.ts`, lines 37 to 57) runs every alert source inside one
-`withTransaction`, each source in a nested one (`apps/server/src/alerts.ts`, line 108). The
-card-reader battery source (`batteryAlertSource`, `apps/server/src/alert-sources.ts`, line 381,
-given the real card providers in `apps/server/src/boot.ts`) asks each provider for a reader's
-status, and the provider reads its secret key in ANOTHER `withTransaction`
-(`packages/payments-sumup/src/card-provider.ts`, lines 55 to 57;
-`packages/payments-stripe/src/card-provider.ts`, `sealedSecretKey`, lines 102 to 104). The write
-queue refuses that second one: "write lock: a body asked for the lock it is already holding"
-(`packages/store/src/write-queue.ts`, lines 33 to 35). Measured on `main` at 2bcb4c617 with a
-throwaway experiment, not committed: with SumUp the alerts list shows `alert.source_unavailable` for
-the `card_reader` area (logged with `errorCode: unknown`) and makes no network call, so a SumUp
-reader's low battery is never alerted; with Stripe the refusal is caught (the `catch` in `status`
-that returns `{ online: false, unreachable: true }`, `card-provider.ts`, lines 230 to 231) and the
-reader reads as unreachable without Stripe being asked, which changes nothing visible because Stripe
-reports no battery. Control: the same status call outside a transaction reached the stubbed provider
-for both, and SumUp reported `batteryPercent: 5`. Not tested: the battery source's five-minute
-cache. History (`git log -S`): the battery source came in 4c9bf11cf (#371, 2026-09-15), the
-providers' key read in its own transaction in 91caf00d9 (#378), and the refusal of a nested lock
-request in aabdde6a8 (#489, the switch to SQLite). If it is fixed by moving the provider call out of
-the transaction, take care that the alerts read does not instead hold the write lock for the
-provider's whole wait, which for Stripe is about four minutes when every attempt goes silent once
-connected, and longer when Stripe sends data slowly or a connection is slow to open (A255); and the
-alerts list would then be a dashboard read waiting on an outside service, which needs a limit above
-that wait (A255).
+**A low SumUp reader battery now reaches the alerts list (A258 — DONE).**
+`GET /management-api/alerts` reads the session, incidents and database-only sources in its
+transaction, then calls the battery source after that transaction closes. The SumUp provider can
+read its sealed key in its own transaction before asking the provider. The route test
+`apps/server/src/alerts-api.test.ts` seeds a real sealed SumUp credential and a reader, then checks
+that a 5% provider response produces `reader.battery_low`. Its red run returned
+`alert.source_unavailable`; its green run returned the low-battery alert. The battery source still
+uses its five-minute cache, covered by `apps/server/src/alert-sources.test.ts`.
+
+**The alerts list's battery check can outlast its browser read limit (A258 follow-up — OPEN,
+unqueued).** `listAlerts` (`apps/dashboard/src/api/client.ts`) uses the default 30-second GET
+limit, while the server's battery source awaits the provider without its own deadline. The
+run-it review held a provider response open: the alerts requests stayed pending until it was
+released, although a separate database write completed immediately. The existing A255 entry
+above records why a Stripe reader read can take longer than 30 seconds. Decide a read limit for
+the alerts list and a server-side bound for its battery check without holding the write lock.
 
 **The two screens that read a card reader's status throw the error code away, so a timed-out status
 read is not reported as one (A259, found by W18c's run-it review, 2026-10-03) — OPEN, unqueued.**
