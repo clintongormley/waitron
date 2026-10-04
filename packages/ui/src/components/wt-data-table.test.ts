@@ -1783,26 +1783,146 @@ test("a hidden column's filter remains in the panel and clear all restores every
   expect(root.querySelector(".filters-trigger")!.textContent).not.toContain("1");
 });
 
-test("a filtered heading marks only its active column and focuses that panel section", async () => {
+test("a filtered heading identifies its active column without another control", async () => {
   const el = await tableS({
     columns: [withStatus[0]!, { ...withStatus[1]!, key: "other-status" }, withStatus[1]!],
   });
   const root = el.shadowRoot!;
-  expect(root.querySelector("[data-filter-mark]")).toBeNull();
+  expect(root.querySelector("th[data-filtered]")).toBeNull();
   await chooseOption(root.querySelector<WtCombobox>('[data-filter="status"]')!, "off");
   await el.updateComplete;
-  const mark = root.querySelector<HTMLButtonElement>('[data-filter-mark="status"]')!;
-  expect(mark.getAttribute("aria-label")).toBe("Filter by status: Filtered");
-  expect(
-    mark.querySelector("wt-icon")!.shadowRoot!.querySelector("path")!.getAttribute("d"),
-  ).toBeTruthy();
-  expect(root.querySelector('[data-filter-mark="name"]')).toBeNull();
-  mark.click();
+  const heading = [...root.querySelectorAll("thead th")].find((cell) =>
+    cell.hasAttribute("data-filtered"),
+  )!;
+  expect(heading.textContent!.trim()).toBe("Status");
+  expect(heading.getAttribute("aria-label")).toBe("Status: Filtered");
+  expect(root.querySelectorAll("th[data-filtered]")).toHaveLength(1);
+  expect(heading.querySelector("button")).toBeNull();
+  root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
   await el.updateComplete;
   expect(root.querySelector(".filters-panel")!.matches(":popover-open")).toBe(true);
-  const filter = root.querySelector<WtCombobox>('[data-section="status"] .table-filter')!;
-  expect(filter.shadowRoot!.activeElement).toBe(filter.shadowRoot!.querySelector(".trigger"));
 });
+
+test.each([390, 1280])("filtering preserves header geometry at %i px", async (width) => {
+  const previousWidth = window.innerWidth;
+  const previousHeight = window.innerHeight;
+  try {
+    await page.viewport(width, 800);
+    const el = await tableS({
+      rows: [
+        { id: "1", name: "Ada", status: "active" },
+        { id: "2", name: "Bea", status: "closed" },
+      ],
+      columns: [
+        { key: "name", label: "Name", cell: (row) => row.name },
+        {
+          key: "status",
+          label: "Status",
+          cell: () => "Ready",
+          filter: {
+            label: "Filter by status",
+            allLabel: "Any status",
+            value: (row) => row.status,
+            options: [
+              { value: "active", label: "Active" },
+              { value: "closed", label: "Closed" },
+            ],
+          },
+        },
+        { key: "actions", label: "Actions", cell: () => "Edit", pinned: "end" },
+      ],
+    });
+    const root = el.shadowRoot!;
+    const geometry = () => ({
+      headers: [...root.querySelectorAll("thead th")].map((cell) => {
+        const { x, y, width, height } = cell.getBoundingClientRect();
+        return { x, y, width, height };
+      }),
+      scrollWidth: root.querySelector<HTMLElement>(".scroll")!.scrollWidth,
+    });
+    const initial = geometry();
+    await chooseOption(root.querySelector<WtCombobox>('[data-filter="status"]')!, "active");
+    await el.updateComplete;
+    expect(geometry()).toEqual(initial);
+    await clickFilterRow(root.querySelector<WtCombobox>('[data-filter="status"]')!, "Any status");
+    await el.updateComplete;
+    expect(geometry()).toEqual(initial);
+  } finally {
+    await page.viewport(previousWidth, previousHeight);
+  }
+});
+
+test.each([390, 1280])("filtering out a wide row keeps column widths at %i px", async (width) => {
+  const previousWidth = window.innerWidth;
+  const previousHeight = window.innerHeight;
+  try {
+    await page.viewport(width, 800);
+    const el = await tableS({
+      rows: [
+        { id: "1", name: "Ada", status: "active" },
+        { id: "2", name: "A much longer product name", status: "closed" },
+      ],
+      columns: withStatus,
+    });
+    const root = el.shadowRoot!;
+    const widths = () =>
+      [...root.querySelectorAll("thead th")].map((cell) => cell.getBoundingClientRect().width);
+    const cells = [...root.querySelectorAll<HTMLElement>("tbody td")];
+    expect(cells.every((cell) => cell.scrollWidth <= cell.clientWidth + 1)).toBe(true);
+    const initial = widths();
+    await chooseOption(root.querySelector<WtCombobox>('[data-filter="status"]')!, "active");
+    await el.updateComplete;
+    expect(widths()).toEqual(initial);
+  } finally {
+    await page.viewport(previousWidth, previousHeight);
+  }
+});
+
+test("a changed column set is sized anew while a filter remains selected", async () => {
+  const el = await tableS({ columns: withStatus });
+  const root = el.shadowRoot!;
+  await chooseOption(root.querySelector<WtCombobox>('[data-filter="status"]')!, "active");
+  await el.updateComplete;
+  el.columns = [
+    withStatus[0]!,
+    { ...withStatus[1]!, label: "VeryLongColumnHeadingThatCannotWrap" },
+  ];
+  await el.updateComplete;
+  const heading = root.querySelector<HTMLElement>("thead th:nth-child(2)")!;
+  expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth);
+});
+
+test.each([390, 1280])(
+  "clearing an initial filter keeps header geometry at %i px",
+  async (width) => {
+    const previousWidth = window.innerWidth;
+    const previousHeight = window.innerHeight;
+    try {
+      await page.viewport(width, 800);
+      const status = withStatus[1]!;
+      const el = await tableS({
+        rows: [
+          { id: "1", name: "Ada", status: "active" },
+          { id: "2", name: "A much longer product name", status: "off" },
+        ],
+        columns: [withStatus[0]!, { ...status, filter: { ...status.filter!, initial: "active" } }],
+      });
+      const root = el.shadowRoot!;
+      const geometry = () => ({
+        widths: [...root.querySelectorAll("thead th")].map(
+          (cell) => cell.getBoundingClientRect().width,
+        ),
+        scrollWidth: root.querySelector<HTMLElement>(".scroll")!.scrollWidth,
+      });
+      const initial = geometry();
+      await clickFilterRow(root.querySelector<WtCombobox>('[data-filter="status"]')!, "Any status");
+      await el.updateComplete;
+      expect(geometry()).toEqual(initial);
+    } finally {
+      await page.viewport(previousWidth, previousHeight);
+    }
+  },
+);
 
 test("the Filters panel closes from its own button and returns focus to its trigger", async () => {
   const el = await tableS({ columns: withStatus });
@@ -2094,7 +2214,7 @@ test("Tab stays inside the full-screen Filters panel on a phone", async () => {
   }
 });
 
-test("the Filters panel and filtered heading mark paint from theme tokens", async () => {
+test("the Filters panel and filtered heading border paint from theme tokens", async () => {
   const status = withStatus[1]!;
   const el = await tableS({
     columns: [withStatus[0]!, { ...status, filter: { ...status.filter!, initial: "active" } }],
@@ -2105,11 +2225,11 @@ test("the Filters panel and filtered heading mark paint from theme tokens", asyn
   el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
   const root = el.shadowRoot!;
   const panel = root.querySelector<HTMLElement>(".filters-panel")!;
-  const mark = root.querySelector<HTMLElement>(".filter-mark")!;
+  const heading = root.querySelector<HTMLElement>("th[data-filtered]")!;
   const badge = root.querySelector<HTMLElement>(".filters-count")!;
   expect(getComputedStyle(panel).backgroundColor).toBe("rgb(12, 23, 34)");
   expect(getComputedStyle(panel).borderTopColor).toBe("rgb(45, 56, 67)");
-  expect(getComputedStyle(mark).color).toBe("rgb(78, 89, 100)");
+  expect(getComputedStyle(heading).boxShadow).toContain("rgb(78, 89, 100)");
   expect(getComputedStyle(badge).backgroundColor).toBe("rgb(78, 89, 100)");
 });
 
