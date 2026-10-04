@@ -1288,14 +1288,20 @@ unpairs the row when a poll is rejected"; `apps/dashboard/src/screens/payments-s
 code and show `codeMessage(code)`, and decide separately whether a timed-out poll should unpair.
 
 **Several card readers' status reads at once can use up the browser's connections to the box
-(A260, found by W18c's review, 2026-10-03) — DONE (#1145, lane A's W18c, owner's option (b)).** At most
-two of the readers table's status reads are in flight at once, shared by every Payments screen in
-one browser tab, including one closed while its reads still wait (`takeStatusSlot`,
-`apps/dashboard/src/screens/payments-screen.ts`). A load a refresh has replaced, and a closed
-screen's reads still waiting for a slot, give up through the status version number
+(A260, found by W18c's review, 2026-10-03) — DONE (W18c #1145 and W48).** The readers table
+holds at most two status reads across same-origin documents when Web Locks grants requests, with the
+original per-tab two-place limit when the API is unavailable or refuses a request (`takeStatusSlot`,
+`apps/dashboard/src/screens/payments-screen.ts`). In real Chromium, the W48 test held reads in two
+same-origin documents: four started before W48 and two after; removing a document while its reads
+were pending freed both places for the other document. When one document holds both places on a
+silent provider, another document cannot start a reader status request until one finishes or its
+250-second client limit expires (`CARD_PROVIDER_READ_LIMIT_MS`, `apps/dashboard/src/api/client.ts`).
+The W48 test does not measure a real silent provider or the box's HTTP/1.1 connection limit. A
+load a refresh has replaced, and a closed screen's reads still waiting for a slot, give up through
+the status version number
 (`disconnectedCallback` bumps it); a new load on a closed screen (an action that finishes after it
-closed) is stopped by the `isConnected` check in `#loadStatuses`. Limits: each tab has its own two,
-and the review measured three tabs of the real screen in headless Chromium against held HTTP/1.1
+closed) is stopped by the `isConnected` check in `#loadStatuses`. Before W48 each tab had its own two,
+and W18c's review measured three tabs of the real screen in headless Chromium against held HTTP/1.1
 responses: six status requests reached the server, and an unrelated read was still unanswered after
 3000 ms until one status request was released. The SumUp pairing dialog's status reads (`#pollTick`
 and `#unpairOrphan`, `packages/payments-sumup/src/dashboard/sumup-add-reader.ts`) are outside the
