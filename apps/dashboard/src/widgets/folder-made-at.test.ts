@@ -287,7 +287,7 @@ describe("folderMadeAt — whether the baseline holds for everything inside", ()
     expect(result.get("drinks")?.someElsewhere).toBe(true);
   });
 
-  it("does not qualify a station opened by hand today that keeps no hours, which nothing can close", () => {
+  it("does not qualify a station opened by hand today that keeps no hours", () => {
     const result = madeAt(
       routing({ ...barOnDrinks, stationTimes: [times("bar", { today: "open" })] }),
     );

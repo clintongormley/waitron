@@ -3058,12 +3058,12 @@ from — set on this category, from a named parent category, the default station
 that covers the category for every dish in every zone — and adds "some items made elsewhere" when
 the route is not a promise for everything inside: a product or zone exception sends a contained
 dish elsewhere, a subcategory routes somewhere else, or the station has opening hours or was
-opened or closed by hand today (the default station is always open, so it never gets this note).
+closed by hand today (the default station is always open, so it never gets this note).
 The route is worked out in the browser with the shared `chooseMaker`
 (`apps/dashboard/src/widgets/folder-made-at.ts`), as the server works out a product row's
 (`describeMakers`): no service zone, the time of day not applied, a switched-off station's fallback
 followed, inactive products left out. While routing has not loaded the cell stays blank; when the
-routing read fails it reads "Routing unavailable" (the catalogue screen now tells the two apart).
+routing read fails it reads "Kitchen routing unavailable" (the catalogue screen now tells the two apart).
 All products stays blank. Product rows are unchanged, and no existing test assertion changed; the
 catalogue screen suite's routing stub gained the `stationTimes`, `todayEnds` and `clockReadable`
 fields the real answer carries. Left open: (1) a PRODUCT row reads "Nowhere" whenever the
@@ -3072,11 +3072,20 @@ cell, where `maker === undefined` falls to `product.nowhere`) — the same blank
 problem this item fixed for categories, not fixed here. Judged from the code, not run: the first
 load waits for `listMadeAt` before it lists products, and a failed first read fails the whole
 load, so the gap is a product listed after the last good made-at read — a refresh still on its way
-or one that failed, which keeps the old answer; (2) a category's link is the same
+or one that failed, which keeps the old answer — and every inactive product, which the made-at read
+never lists, so its row always reads Nowhere when the Status filter shows it; (2) a category's link is the same
 `maker-link` as a product's, so the contrast concern and the missing `activatesRow: false` recorded
 under W87 apply to category rows too (there a click beside the link opens or closes the category;
-judged from the code, not run); (3) a person who may not read routing sees "Routing
-unavailable" on every category, because a refused read counts as a failed one.
+judged from the code, not run); (3) a person who may not read routing sees "Kitchen routing
+unavailable" on every category, because a refused read counts as a failed one; (4) judged from the
+code, not run: the category tree's red asterisk ("No kitchen routing rule covers this category",
+`#unroutedFolderIds` in `apps/dashboard/src/widgets/catalogue-browser.ts`) works the route out with
+no station timing, so it does not follow a switched-off station's fallback, while Made at does; a
+category claiming a switched-off station that has a fallback can show the asterisk and a station in
+Made at in the same row; (5) judged from the code, not run: a subcategory whose own claim routes
+elsewhere marks its parent "some items made elsewhere" even when that subcategory holds no
+products, so the note can claim items that do not exist yet; whether the words should change is
+the owner's call.
 
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through

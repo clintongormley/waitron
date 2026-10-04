@@ -279,7 +279,7 @@ it("leaves categories blank while routing loads, and says so when its read faile
   const el = await mountBrowser();
   expect(await madeAtText(el, "folder:d")).toBe("");
   el.routingFailed = true;
-  expect(await madeAtText(el, "folder:d")).toBe("Routing unavailable");
+  expect(await madeAtText(el, "folder:d")).toBe("Kitchen routing unavailable");
   expect(await madeAtText(el, ROOT_KEY)).toBe("");
 });
 

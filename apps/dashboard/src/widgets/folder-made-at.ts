@@ -22,8 +22,7 @@ export type FolderMakerSource =
 export interface FolderMadeAt {
   maker: FolderMaker;
   source: FolderMakerSource | null;
-  /** The baseline is not a promise for everything inside: an exception, a subcategory's claim or
-   * the station's opening times can send some of it elsewhere. */
+  /** The baseline is not a promise for everything inside. */
   someElsewhere: boolean;
 }
 

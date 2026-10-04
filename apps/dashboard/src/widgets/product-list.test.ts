@@ -2663,7 +2663,7 @@ describe("a category's Made at", () => {
   it("says routing could not be read, without a link, when its read failed", async () => {
     const { root } = await mountMadeAt([], { routingFailed: true });
     const cell = madeAtCell(root, "folder:d");
-    expect(cell.textContent!.trim()).toBe("Routing unavailable");
+    expect(cell.textContent!.trim()).toBe("Kitchen routing unavailable");
     expect(cell.querySelector("a")).toBeNull();
     expect(cell.querySelector('[part~="maker-detail"]')).not.toBeNull();
   });

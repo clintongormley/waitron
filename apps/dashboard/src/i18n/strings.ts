@@ -120,7 +120,7 @@ export const en = {
   "folders.made_at_default": "default station",
   "folders.made_at_exception": "by an exception",
   "folders.made_at_some_elsewhere": "some items made elsewhere",
-  "folders.made_at_unavailable": "Routing unavailable",
+  "folders.made_at_unavailable": "Kitchen routing unavailable",
   "folders.summary_error":
     "What these categories hold could not be read, so they cannot be deleted yet.",
   "folders.summary_changed":
