@@ -239,10 +239,18 @@ export class MenusScreen extends LitElement {
         margin: 0;
         font-size: var(--wt-font-size-lg);
       }
-      .page-actions {
+      .header {
         display: flex;
-        justify-content: flex-end;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-3);
         margin-bottom: var(--wt-space-4);
+      }
+      .header h1 {
+        margin: 0;
+      }
+      .header wt-button {
+        margin-inline-start: auto;
       }
       .back {
         margin-bottom: var(--wt-space-3);
@@ -1036,7 +1044,7 @@ export class MenusScreen extends LitElement {
     await this.updateComplete;
     // The empty table's Add menu is gone once the menu it made is listed.
     if (opener?.isConnected === false)
-      this.renderRoot.querySelector<HTMLElement>('.page-actions [data-test="add-menu"]')?.focus();
+      this.renderRoot.querySelector<HTMLElement>('.header [data-test="add-menu"]')?.focus();
     this.#followStatus(true);
   }
 
@@ -1695,36 +1703,43 @@ export class MenusScreen extends LitElement {
   }
 
   #renderList() {
-    return html`<h1>${t("menus.title")}</h1>
+    const loaded = !this.loading && !this.loadError;
+    return html`<div class="header">
+        <h1>${t("menus.title")}</h1>
+        ${loaded ? this.#renderAddMenu() : nothing}
+      </div>
       ${this.#renderLoadState()} ${this.#renderMemberError()}
       ${
-        !this.loading && !this.loadError
-          ? html`<div class="page-actions">${this.#renderAddMenu()}</div>
-              <div class="list">
-                <span class="narrow-probe" aria-hidden="true" ${ref(this.#observeProbe)}></span>
-                <wt-data-table
-                  noMatchesMessage=${tableNoMatches()}
-                  data-test="menus"
-                  class=${this.narrow ? "narrow" : ""}
-                  aria-label=${t("menus.title")}
-                  viewKey="waitron.menus.table"
-                  customiseColumnsLabel=${t("table.customise_columns")}
-                  customiseLabel=${t("table.customise")}
-                  restoreColumnsLabel=${t("table.restore_columns")}
-                  doneLabel=${t("table.done")}
-                  moveColumnLabel=${t("table.move_column")}
-                  showColumnLabel=${t("table.show_column")}
-                  hideColumnLabel=${t("table.hide_column")}
-                  columnPositionLabel=${t("table.column_position")}
-                  sortKey="name"
-                  sortDirection="ascending"
-                  .rows=${this.#rows}
-                  .columns=${this.narrow ? this.#narrowColumns : this.#columns}
-                  .rowKey=${(menu: MenuRow) => menu.id}
-                  .emptyMessage=${t("menus.empty")}
-                  >${this.#rows.length === 0 ? this.#renderAddMenu("empty-action") : nothing}</wt-data-table
-                >
-              </div>`
+        loaded
+          ? html`<div class="list">
+              <span class="narrow-probe" aria-hidden="true" ${ref(this.#observeProbe)}></span>
+              <wt-data-table
+                noMatchesMessage=${tableNoMatches()}
+                data-test="menus"
+                class=${this.narrow ? "narrow" : ""}
+                aria-label=${t("menus.title")}
+                viewKey="waitron.menus.table"
+                customiseColumnsLabel=${t("table.customise_columns")}
+                customiseLabel=${t("table.customise")}
+                restoreColumnsLabel=${t("table.restore_columns")}
+                doneLabel=${t("table.done")}
+                moveColumnLabel=${t("table.move_column")}
+                showColumnLabel=${t("table.show_column")}
+                hideColumnLabel=${t("table.hide_column")}
+                alwaysShownColumnLabel=${t("table.column_always_shown")}
+                lastShownColumnLabel=${t("table.column_last_shown")}
+                columnPositionLabel=${t("table.column_position")}
+                sortKey="name"
+                sortDirection="ascending"
+                .rows=${this.#rows}
+                .columns=${this.narrow ? this.#narrowColumns : this.#columns}
+                .rowKey=${(menu: MenuRow) => menu.id}
+                .rowClick=${(menu: MenuRow) => this.#open(menu.id)}
+                .rowClickLabel=${(menu: MenuRow) => `${t("menus.open")}: ${menu.name}`}
+                .emptyMessage=${t("menus.empty")}
+                >${this.#rows.length === 0 ? this.#renderAddMenu("empty-action") : nothing}</wt-data-table
+              >
+            </div>`
           : nothing
       }
       ${this.#renderMenuForm()}`;

@@ -1,6 +1,6 @@
 import { combinedFixture } from "../widgets/test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import {
   cleanupWidgets,
@@ -808,7 +808,7 @@ it("returns focus to the top Add menu after the first menu is made from the empt
   await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(false));
   await vi.waitFor(() => expect(button.isConnected).toBe(false));
   await afterDialogCloses(el);
-  expect(el.shadowRoot!.activeElement).toBe(q(el, '.page-actions [data-test="add-menu"]'));
+  expect(el.shadowRoot!.activeElement).toBe(q(el, '.header [data-test="add-menu"]'));
 });
 
 it("returns focus to the empty table's Add menu after Cancel", async () => {
@@ -823,6 +823,264 @@ it("returns focus to the empty table's Add menu after Cancel", async () => {
 it("draws no Add menu button in the menu table once menus exist", async () => {
   const el = await mount();
   expect(table(el).querySelector(":scope > [slot=empty-action]")).toBeNull();
+});
+
+/** The Add menu beside the page heading, as opposed to the one the empty table holds. */
+function headerAdd(el: MenusScreen): HTMLElement {
+  return q(el, '.header [data-test="add-menu"]')!;
+}
+
+/** Runs `body` at a viewport size and locale, putting both back afterwards. */
+async function at(
+  size: [number, number],
+  locale: string,
+  body: () => Promise<void>,
+): Promise<void> {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  const before = currentLocale();
+  try {
+    setLocale(locale);
+    await page.viewport(...size);
+    await body();
+  } finally {
+    setLocale(before);
+    await page.viewport(width, height);
+  }
+}
+
+describe("the menus list's heading row", () => {
+  it.each([
+    [[1280, 900], "en-GB"],
+    [[375, 812], "es-ES"],
+  ] as const)(
+    "puts Add menu in the heading's row at its trailing edge, above the table (%j, %s)",
+    async (size, locale) => {
+      await at([...size], locale, async () => {
+        const el = await mount();
+        await vi.waitFor(() => expect(headerAdd(el)).not.toBeNull());
+        const heading = q(el, "h1")!.getBoundingClientRect();
+        const add = headerAdd(el).getBoundingClientRect();
+        const list = table(el).getBoundingClientRect();
+        expect(text(headerAdd(el))).toBe(t("menus.add"));
+        expect(add.top).toBeLessThan(heading.bottom);
+        expect(add.bottom).toBeGreaterThan(heading.top);
+        expect(add.left).toBeGreaterThan(heading.right);
+        expect(add.right).toBeCloseTo(list.right, 0);
+        expect(add.bottom).toBeLessThanOrEqual(list.top);
+        expect(add.right).toBeLessThanOrEqual(window.innerWidth);
+        expect(q(el, ".page-actions")).toBeNull();
+      });
+    },
+  );
+
+  it("moves a long Add label under the heading at phone width, whole and at the trailing edge", async () => {
+    await at([320, 700], "es-ES", async () => {
+      const el = await mount();
+      await vi.waitFor(() => expect(headerAdd(el)).not.toBeNull());
+      const oneLine = headerAdd(el).getBoundingClientRect().height;
+      // Appended beside Lit's own text, which it must not replace. Too long to share the heading's
+      // line at 320 px, short enough for a line of its own.
+      headerAdd(el).append(" nueva de temporada");
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const add = headerAdd(el).getBoundingClientRect();
+      const heading = q(el, "h1")!.getBoundingClientRect();
+      const header = q(el, ".header")!.getBoundingClientRect();
+      expect(add.top).toBeGreaterThanOrEqual(heading.bottom);
+      expect(add.height).toBeCloseTo(oneLine, 0);
+      expect(add.right).toBeCloseTo(header.right, 0);
+      expect(add.right).toBeLessThanOrEqual(window.innerWidth);
+    });
+  });
+
+  it("still offers Add menu under the empty table's sentence, and in the heading's row", async () => {
+    const el = await mount(api({ listCatalogues: vi.fn().mockResolvedValue([]) }));
+    expect(table(el).querySelector(":scope > [slot=empty-action]")).not.toBeNull();
+    expect(headerAdd(el)).not.toBeNull();
+  });
+
+  it("returns focus to the heading's Add menu after a menu is made from it, and after Cancel", async () => {
+    const el = await mount(
+      api({ listCatalogues: vi.fn().mockResolvedValueOnce(menus).mockResolvedValue(menus) }),
+    );
+    headerAdd(el).focus();
+    headerAdd(el).click();
+    await el.updateComplete;
+    inModal(el, "menu-form", '[data-test="cancel"]').click();
+    await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(false));
+    await afterDialogCloses(el);
+    expect(el.shadowRoot!.activeElement).toBe(headerAdd(el));
+    headerAdd(el).click();
+    await el.updateComplete;
+    type(inModal(el, "menu-form", 'wt-input[name="name"]'), "Brunch");
+    await el.updateComplete;
+    inModal(el, "menu-form", '[data-test="menu-save"]').click();
+    await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(false));
+    await afterDialogCloses(el);
+    expect(el.shadowRoot!.activeElement).toBe(headerAdd(el));
+  });
+});
+
+describe("a menus list row", () => {
+  /** Counts the history entries opening a menu adds, so a double open shows as two. */
+  function countOpens(): () => string[] {
+    const pushed: string[] = [];
+    const real = history.pushState.bind(history);
+    vi.spyOn(history, "pushState").mockImplementation((state, unused, url) => {
+      pushed.push(String(url));
+      real(state, unused, url);
+    });
+    onTestFinished(() => vi.mocked(history.pushState).mockRestore());
+    return () => pushed.filter((url) => url.includes("/menu/"));
+  }
+
+  function row(el: MenusScreen, id: string): HTMLTableRowElement {
+    return table(el).shadowRoot.querySelector<HTMLTableRowElement>(`tr[data-row-key="${id}"]`)!;
+  }
+
+  async function liveRow(el: MenusScreen): Promise<HTMLTableRowElement> {
+    await vi.waitFor(() =>
+      expect(
+        text(row(el, "menu-dinner").querySelector('[data-test="status-menu-dinner"]')),
+      ).toContain(t("menu_status.current")),
+    );
+    return row(el, "menu-dinner");
+  }
+
+  it("opens its menu once from a click on its Status cell, as the name does", async () => {
+    await at([1280, 900], "en-GB", async () => {
+      const opens = countOpens();
+      const el = await mount();
+      const live = await liveRow(el);
+      expect(live.querySelectorAll("td")).toHaveLength(3);
+      // Forced, because the status text lies under the row's stretched button, which takes the click.
+      await userEvent.click(live.querySelector<HTMLElement>('[data-test="status-menu-dinner"]')!, {
+        force: true,
+      });
+      await vi.waitFor(() =>
+        expect(location.pathname).toBe("/manage/menus/menu/menu-dinner/view/structure"),
+      );
+      expect(opens()).toHaveLength(1);
+    });
+  });
+
+  it("opens its menu once from a real click on the name button", async () => {
+    const opens = countOpens();
+    const el = await mount();
+    await table(el).updateComplete;
+    await userEvent.click(
+      table(el).shadowRoot.querySelector<HTMLElement>('[data-test="open-menu-lunch"]')!,
+    );
+    await vi.waitFor(() => expect(location.pathname).toBe(LUNCH_PATH));
+    expect(opens()).toHaveLength(1);
+  });
+
+  it("names the row's own button by its action and menu, and opens once from Enter", async () => {
+    const opens = countOpens();
+    const el = await mount();
+    await table(el).updateComplete;
+    const activator = row(el, "menu-lunch").querySelector<HTMLButtonElement>(".row-activate")!;
+    expect(activator.getAttribute("aria-label")).toBe(`${t("menus.open")}: Lunch Menu`);
+    activator.focus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(location.pathname).toBe(LUNCH_PATH));
+    expect(opens()).toHaveLength(1);
+  });
+
+  it("keeps the row menu and the sort heading to themselves", async () => {
+    const opens = countOpens();
+    const el = await mount();
+    await table(el).updateComplete;
+    await userEvent.click(
+      table(el).shadowRoot.querySelector<HTMLElement>('button[data-sort="name"]')!,
+    );
+    const menu = row(el, "menu-lunch").querySelector<HTMLElement>("wt-row-actions")!;
+    await userEvent.click(menu.shadowRoot!.querySelector<HTMLElement>("button")!);
+    await userEvent.click(
+      table(el).shadowRoot.querySelector<HTMLElement>('[data-test="rename-menu-lunch"]')!,
+    );
+    await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(true));
+    expect(location.pathname).toBe("/manage/menus");
+    expect(opens()).toHaveLength(0);
+  });
+
+  it.each(["light", "dark"] as const)(
+    "highlights the whole of a hovered or focused Live row, its row menu's cell included (%s)",
+    (theme) => at([1280, 900], "en-GB", () => highlightsLiveRow(theme)),
+  );
+
+  async function highlightsLiveRow(theme: "light" | "dark"): Promise<void> {
+    const { el, host } = await mountWidget<MenusScreen>(
+      "dashboard-menus-screen",
+      { api: api() },
+      theme,
+    );
+    await vi.waitFor(() => expect(table(el)).not.toBeNull());
+    const live = await liveRow(el);
+    const cells = [...live.querySelectorAll<HTMLElement>("td")];
+    const lifted = getComputedStyle(host).getPropertyValue("--wt-color-surface-lifted").trim();
+    const probe = document.createElement("div");
+    probe.style.background = lifted;
+    host.append(probe);
+    const highlight = getComputedStyle(probe).backgroundColor;
+    const resting = getComputedStyle(cells.at(-1)!).backgroundColor;
+    expect(highlight).not.toBe(resting);
+    await userEvent.hover(cells[0]!);
+    for (const cell of cells) expect(getComputedStyle(cell).backgroundColor).toBe(highlight);
+    await commands.parkPointer();
+    for (const cell of cells) expect(getComputedStyle(cell).backgroundColor).not.toBe(highlight);
+    live.querySelector<HTMLButtonElement>(".row-activate")!.focus();
+    for (const cell of cells) expect(getComputedStyle(cell).backgroundColor).toBe(highlight);
+    expect(cells).toHaveLength(3);
+  }
+});
+
+describe("the menus list's columns", () => {
+  it.each([
+    [1280, 900],
+    [390, 844],
+  ] as const)("offers no Customise columns control (%i px)", async (width, height) => {
+    await at([width, height], "en-GB", async () => {
+      const el = await mount();
+      await vi.waitFor(async () => {
+        await table(el).updateComplete;
+        expect(table(el).shadowRoot.querySelectorAll("tbody tr")).toHaveLength(2);
+      });
+      expect(table(el).shadowRoot.querySelector(".columns-trigger")).toBeNull();
+      expect(table(el).shadowRoot.querySelector(".table-toolbar")).toBeNull();
+    });
+  });
+
+  it("keeps showing Status, and each phone row's state, after Status was saved as hidden", async () => {
+    localStorage.setItem("waitron.menus.table:columns", JSON.stringify({ status: false }));
+    await at([1280, 900], "en-GB", () => statusSavedHidden());
+  });
+
+  async function statusSavedHidden(): Promise<void> {
+    const el = await mount();
+    const heads = () =>
+      [...table(el).shadowRoot.querySelectorAll("thead th")].map((th) => text(th));
+    await vi.waitFor(async () => {
+      await table(el).updateComplete;
+      expect(heads()).toContain(t("menus.status"));
+    });
+    expect(table(el).shadowRoot.querySelector(".columns-trigger")).toBeNull();
+    await at([390, 844], "en-GB", async () => {
+      await vi.waitFor(async () => {
+        await table(el).updateComplete;
+        expect(heads()).not.toContain(t("menus.status"));
+      });
+      await vi.waitFor(() =>
+        expect(text(table(el).shadowRoot.querySelector('tr[data-row-key="menu-lunch"] td'))).toBe(
+          `Lunch Menu Unpublished changes Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)}`,
+        ),
+      );
+      expect(table(el).shadowRoot.querySelector(".columns-trigger")).toBeNull();
+    });
+    expect(JSON.parse(localStorage.getItem("waitron.menus.table:columns")!)).toEqual({
+      status: false,
+    });
+  }
 });
 
 it("creating a menu needs a name: an empty one is explained beside the field and above Save", async () => {
@@ -3249,7 +3507,7 @@ describe("publishing", () => {
     expect(client.getMenuStatus).not.toHaveBeenCalled();
   });
 
-  it("lists the status column with the fixed columns and keeps it shown as the last movable column", async () => {
+  it("lists the status column, with no column chooser for its one movable column", async () => {
     setLocale("es-ES");
     const el = await mount();
     const headerTexts = () =>
@@ -3259,25 +3517,8 @@ describe("publishing", () => {
       expect(headerTexts()).toContain(t("menus.status"));
     });
     const root = table(el).shadowRoot;
-    expect(root.querySelector(".columns-trigger")?.getAttribute("aria-label")).toBe(
-      t("table.customise_columns"),
-    );
-    expect(root.querySelector(".columns-trigger")?.getAttribute("aria-label")).toBe(
-      "Personalizar columnas",
-    );
-    const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
-    expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([
-      ["name", true],
-      ["status", true],
-      ["actions", true],
-    ]);
-    boxes[1]!.checked = false;
-    boxes[1]!.dispatchEvent(new Event("change"));
-    await table(el).updateComplete;
-    expect(headerTexts()).toContain(t("menus.status"));
-    expect(JSON.parse(localStorage.getItem("waitron.menus.table:columns")!)).toEqual({
-      status: false,
-    });
+    expect(root.querySelector(".columns-trigger")).toBeNull();
+    expect(root.querySelector("input[data-column]")).toBeNull();
   });
 
   it("shows each menu's state under its name on a phone-width list, with no status column", async () => {
