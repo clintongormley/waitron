@@ -2713,6 +2713,11 @@ list, whose Status is its only one, shows none. In the Customise dialog a column
 hidden says "Always shown" instead of drawing a greyed-out eye, fixed rows keep the drag handle's
 space so names line up, and the last shown column's greyed-out eye carries a visible "Keep at least
 one shown".
+Left open by W79 (#1186): `docs/developers/design-system.md` still says a list's Create action
+goes in a menu beside the table heading, while Menus, Staff and Units put a text Add button at the
+heading row's trailing edge; the doc only names the exceptions, and whether the rule itself changes
+is the owner's call. And the row-highlight tests focus only the row's own button, so nothing tests
+that a row highlights while another control in it, such as its Actions menu, has focus.
 
 **Filtered table headings stay put — DONE (W64, owner 2026-10-04).** The conditional funnel button
 used to increase a header's height and width when its filter became active. A filtered heading now
