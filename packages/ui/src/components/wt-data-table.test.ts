@@ -1728,7 +1728,7 @@ test("a filter on its initial choice counts in the panel badge and can be cleare
   await el.updateComplete;
   expect(root.querySelector(".filters-panel")!.matches(":popover-open")).toBe(true);
   expect(root.querySelector(".filters-panel h2")!.textContent).toBe("Filters");
-  await chooseOption(root.querySelector<WtCombobox>('[data-filter="status"]')!, "");
+  await clickFilterRow(root.querySelector<WtCombobox>('[data-filter="status"]')!, "Any status");
   await el.updateComplete;
   expect(trigger.textContent).not.toContain("1");
   expect(rowKeysS(el)).toEqual(["1", "2"]);
@@ -1745,10 +1745,10 @@ test("Filters shows plain named sections with choices always available and no pe
   expect(section.querySelector("details, summary, .filter-clear")).toBeNull();
   expect(section.textContent).not.toContain("(2)");
   const filter = section.querySelector<WtCombobox>("wt-combobox")!;
-  await chooseOption(filter, "active");
+  await clickFilterRow(filter, "Active");
   await el.updateComplete;
   expect(rowKeysS(el)).toEqual(["1"]);
-  await chooseOption(filter, "");
+  await clickFilterRow(filter, "Any status");
   await el.updateComplete;
   expect(rowKeysS(el)).toEqual(["1", "2"]);
 });
@@ -1947,7 +1947,10 @@ test("clear all removes a saved choice while its options are waiting", async () 
 test("a column's Any choice removes its saved choice while options are waiting", async () => {
   sessionStorage.setItem("test.filter-waiting", JSON.stringify({ filters: { status: "off" } }));
   const el = await tableS({ columns: statusOffering([]), viewKey: "test.filter-waiting" });
-  await chooseOption(el.shadowRoot!.querySelector<WtCombobox>('[data-filter="status"]')!, "");
+  await clickFilterRow(
+    el.shadowRoot!.querySelector<WtCombobox>('[data-filter="status"]')!,
+    "Any status",
+  );
   await el.updateComplete;
   expect(JSON.parse(sessionStorage.getItem("test.filter-waiting")!).filters).toEqual({});
   el.columns = withStatus;

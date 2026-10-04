@@ -598,8 +598,9 @@ filters in a panel beside the table at desktop width and across the viewport at 
 badge counts each filter whose current choice is not "all", including an `initial` choice. The
 panel lists every filtered column, including one that is hidden. Each section keeps its heading and
 choice control visible. Choose the column's "Any …" option to clear it; Clear all resets every filter. You
-can close the panel with its button, Escape or a press outside. A filtered column's heading shows
-a funnel button that opens its section. The panel's labels are supplied through
+can close the panel with its button, Escape or a press outside. Opening focuses the first choice.
+A filtered column's heading shows a funnel button that opens the panel and focuses that column's
+choice. The panel's labels are supplied through
 `filtersLabel`, `filteredColumnLabel`, `filtersClearAllLabel` and
 `filtersCloseLabel`.
 
