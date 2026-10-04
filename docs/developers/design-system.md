@@ -548,6 +548,16 @@ four start on one line, whether or not the state has a second line. Guards: the 
 `packages/ui/src/components/wt-data-table.test.ts` and the "at the row's top, on one line" cases in
 `apps/dashboard/src/screens/menus-screen.test.ts`, which measure three rows at 1280 px only.
 
+A reorderable table (`ReorderController.tableStyles`, `packages/ui/src/reorder-table.ts`) lines its
+body cells up the same way, so on a tall row the drag handle and every control beside it sit on the
+first line of the row's text, not in the row's middle (W75b, owner 2026-10-04). The Product editor's
+Modifiers table, the variant table and the Courses list hold one line of text beside controls a
+`--wt-tap-min` tall, so they start their cells at the top instead and push the text's first line down
+by half of `--wt-tap-min` less one line, as the Menus list does. Guards: the first-line cases in
+`packages/ui/src/reorder-table.test.ts` and in the tests of the Product editor, variant table,
+Courses list, option list, section member list and Extras list widgets; the prep stations screen has
+no case of its own.
+
 **The Menus list links a menu's unpublished changes beside its state.** Status says what is live:
 "Unpublished" for a menu never published, and "Published" with the live version and its time for
 one that has been, whether or not it has changes since. A menu with changes since its live version

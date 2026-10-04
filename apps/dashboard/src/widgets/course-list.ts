@@ -51,9 +51,11 @@ export class CourseList extends LitElement {
       /* Not the shared baseline, which lines the grip and row menu up with the name button's LAST
          line once the name wraps. The name pads its first line to the centre of a tap target
          instead, where the top-aligned grip and menu have theirs. */
-      tbody td,
-      tfoot td {
+      tbody td {
         vertical-align: top;
+      }
+      tfoot td {
+        vertical-align: middle;
       }
       td.handle-cell,
       td.actions-cell {

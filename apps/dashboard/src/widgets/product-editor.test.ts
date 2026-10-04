@@ -2986,10 +2986,8 @@ it("shows each class's rate in force today, and a fractional rate supplied by a 
   expect(options()[0]!.label).toBe("Fixture rate (2.5%)");
 });
 
-// Every cell in this table holds ONE line of text or one 44px-tall control, so a row only reads as a
-// row when all four sit on the same line. The shared table block top-aligns cells and re-centres the
-// handle alone, which is right for the two modifier-list FORMS — their cells stack labelled inputs —
-// and wrong here. Geometry is the only thing that can catch it; every attribute assertion passes either way.
+// A one-line row only reads as a row when its text and its 44px controls share one middle. Geometry
+// is the only thing that can catch it; every attribute assertion passes either way.
 it("keeps an attached row's name, type, grip and row menu on one line", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
