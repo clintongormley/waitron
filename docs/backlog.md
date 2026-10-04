@@ -2786,10 +2786,17 @@ choices under a new key, so a choice saved while Status was its only movable col
 Left open by W87: at widths between the phone layout and a wide desktop (about 700 px with a long
 menu name, seen in a screenshot) the four columns no longer fit and the list scrolls sideways under
 its pinned Actions column; the editor heading still reads "Unpublished changes · Live: version
-<n>", which W88 redesigns. In the dark theme the link's blue on a highlighted row measures 3.57:1
-(axe, on a focused row, 2026-10-04), below the 4.5:1 minimum for text, because `--wt-color-primary-text` is
-the same colour as `--wt-color-primary` there; the product list's maker link, in a table whose
-product rows open on a click, paints that same blue on the same row highlight.
+<n>", which W88 redesigns. In the dark theme the Unpublished changes link's blue on a highlighted
+(hovered or focused) row measured 3.57:1 with axe, below the 4.5:1 minimum for text. Moving the
+link to `--wt-color-primary-text` did not change that, because in the dark theme that token is the
+same colour (`#4c8dff`) as `--wt-color-primary`; in the light theme it now passes at 4.88:1. The
+product list's maker link (`apps/dashboard/src/widgets/product-list.ts`, part `maker-link`) paints
+`--wt-color-primary`, which on a highlighted row is the same colour pair measured at 3.87:1 in light
+and 3.57:1 in dark, though not measured on the product list itself. Its "Made at" column also does
+not set `activatesRow: false`, so, judging by the code (not run), a click beside a short station
+name opens the product editor, which the `activatesRow` rule in
+`docs/developers/design-system.md` forbids. Both predate this branch (5b725d672, ca89633f1) and
+are left for an item of their own.
 
 **Add products picker selects all listed — DONE (W81, owner 2026-10-04).** The Structure tab's
 "Add several products" button now reads "Add products" ("Añadir productos"). The picker's list has

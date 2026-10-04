@@ -440,8 +440,10 @@ it("accessible Unpublished changes link on a focused, highlighted list row (ligh
   host.append(probe);
   const lifted = getComputedStyle(probe).backgroundColor;
   probe.remove();
-  row().querySelector<HTMLButtonElement>(".row-activate")!.focus();
   const cell = row().querySelector('[data-test="changes-menu-lunch"]')!.closest("td")!;
+  const resting = getComputedStyle(cell).backgroundColor;
+  expect(resting).not.toBe(lifted);
+  row().querySelector<HTMLButtonElement>(".row-activate")!.focus();
   expect(getComputedStyle(cell).backgroundColor).toBe(lifted);
   await expectNoA11yViolations(host);
 });

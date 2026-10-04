@@ -1063,7 +1063,7 @@ describe("the menus list's columns", () => {
     },
   );
 
-  it("ignores a column choice saved under the list's previous key: Status, and each phone row's state, stay shown", async () => {
+  it("ignores a column choice saved under the list's previous key: Status, and the Lunch row's state on a phone, stay shown", async () => {
     localStorage.setItem("waitron.menus.table:columns", JSON.stringify({ status: false }));
     await at([1280, 900], "en-GB", () => statusSavedHidden());
   });
@@ -1278,6 +1278,7 @@ describe("the menus list's Changes column", () => {
         const label = JSON.stringify(position);
         const hit = table(el).shadowRoot.elementFromPoint(box.x + position.x, box.y + position.y);
         expect(anchor.contains(hit), label).toBe(false);
+        expect(cell.contains(hit), label).toBe(true);
         // Forced, so a row activator lying over the point takes the click rather than stalling it.
         await userEvent.click(cell, { position, force: true });
         await el.updateComplete;
@@ -3854,7 +3855,7 @@ describe("publishing", () => {
     expect(client.getMenuStatus).not.toHaveBeenCalled();
   });
 
-  it("lists the status and changes columns, with a column chooser", async () => {
+  it("lists the status column, with a column chooser offering status and changes", async () => {
     setLocale("es-ES");
     const el = await mount();
     const headerTexts = () =>
