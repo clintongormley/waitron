@@ -1232,12 +1232,16 @@ but Each while the server accepts none for a whole unit with no scale link (ml) 
 2026-10-04) — DONE.** The shared reorder table styles (`packages/ui/src/reorder-table.ts`) now line
 body cells up by the baseline, so the handle sits on the first line of the plain text beside it,
 such as a long, wrapping name, instead of the row's middle; the Extras editor's own rule for this went. The
-Product editor's Modifiers table, the variant table and the Courses list start their cells at the top
-and push the text down to the middle of a tap-target-tall first line, so on a one-line row the text
-and the controls still share one centre line (tested for the Product editor only). The Product
-editor, variant table, Courses list, option list form, section member list, Extras editor and Prep
-stations screen each have a test with a wrapping name. The option list form and the section member list had their own centring rules, now
-removed. See `docs/developers/design-system.md`, tables.
+Product editor's Modifiers table, the variant table, the Courses list and the option list form start
+their cells at the top and push the text down to the middle of a tap-target-tall first line, so on a
+one-line row the text and the controls still share one centre line (tested for the Product editor
+and the option list form only). The option list form moved off the baseline because its existing
+one-line test failed on CI's Linux Chromium, measuring the radio 1.5 px from the name where the test
+allows 1 px. The Product editor, variant table, Courses list, option list form, section member list,
+Extras editor and Prep stations screen each have a test with a wrapping name. The option list form
+and the section member list had their own centring rules: the section member list's is removed, and
+the option list form's is replaced by the top alignment. See `docs/developers/design-system.md`,
+tables.
 
 **A folded Customer-facing names section shows every language's name, inherited ones in italic
 (W77, owner 2026-10-04) — DONE (#1197).** The owner, on an Extras list: _"missing the summary of the values

@@ -88,6 +88,14 @@ export class OptionListForm extends LitElement {
       td:last-child {
         text-align: end;
       }
+      /* Not the shared baseline, under which CI's Linux Chromium drew the radio 1.5px off the name's
+         centre. The cells start at their top and the name button pads its first line to the centre
+         of a tap target, where the grip, radio and menu have their middles. Guard: the
+         wrapping-name row test in option-list-form.test.ts; the one-line row test still passed
+         locally with the padding removed, because the button's minimum height centres one line. */
+      tbody td {
+        vertical-align: top;
+      }
       tbody tr[data-label] {
         cursor: pointer;
       }
@@ -117,7 +125,7 @@ export class OptionListForm extends LitElement {
       .open-label {
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
-        padding: 0;
+        padding: calc((var(--wt-tap-min) - 1lh) / 2) 0;
         border: 0;
         background: transparent;
         color: inherit;
