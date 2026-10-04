@@ -791,11 +791,11 @@ owner 2026-10-01: "i think we should separate kitchen name from customer facing 
 (`apps/dashboard/src/widgets/option-list-form.ts`, `extra-list-form.ts`) the Kitchen name is a
 plain field, always shown, directly under Name (owner, 2026-10-01, mockup B). Only the
 customer-facing names fold, in a section headed "Customer-facing names" ("Nombres para el
-cliente"). Its closed line (`namesLine`, `apps/dashboard/src/widgets/form-fields.ts`) lists those
-names alone, and a refusal naming the kitchen name shows under the kitchen field without opening
-the section. The option window (`option-label-form.ts`, A170), the product editor
-(`product-editor.ts`) and the variant form (`variant-form.ts`) already kept the two apart and are
-unchanged.
+cliente"). Its closed line (`namesLine`, `apps/dashboard/src/widgets/form-fields.ts`; _2026-10-04:
+now `effectiveNamesLine`, W77_) lists those names alone, and a refusal naming the kitchen name
+shows under the kitchen field without opening the section. The option window
+(`option-label-form.ts`, A170), the product editor (`product-editor.ts`) and the variant form
+(`variant-form.ts`) already kept the two apart and are unchanged.
 
 **A name field's hint shows what a blank field will actually use (A172, owner 2026-10-01) — DONE (#1053).**
 Built in all five editors as the three bullets below ask, each hint following the field it copies
@@ -1596,7 +1596,8 @@ LOOK at it at phone width, where a long English description leaves little room f
 
 **Built:** `wt-disclosure` gained `summaryRows` (one row per field, each cut with an ellipsis after
 its own number of lines). `namesLine` returns name and value pairs, so the extras and options lists'
-line reads "**EN:** Make it yours · **ES:** Añádele algo". The Kitchen line's labels are the field's
+line reads "**EN:** Make it yours · **ES:** Añádele algo" _(2026-10-04: now `effectiveNamesLine`,
+W77)_. The Kitchen line's labels are the field's
 own "Kitchen name" ("Nombre de cocina") and a new short "Course" ("Curso"). In the Descriptors rows
 only "Name:" and "Description:" are bold; the language codes are plain text, as the decision above
 writes them. The photo is the thumbnail form of `dashboard-image-upload` (`thumbnail`), beside Name
