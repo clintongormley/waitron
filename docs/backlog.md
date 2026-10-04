@@ -2701,6 +2701,18 @@ has a `viewKey`. Clicking a column heading still sorts it.
 floating copy of the column name follows the pointer and the destination row is highlighted. Both
 clear when the drag ends or the dialog closes; keyboard reordering and saved order still work.
 
+**Menus list heading, rows and Customise rows — DONE (W79, owner 2026-10-04).** Add menu sits in
+the Menus heading's row at its trailing edge, moving under the heading on a phone when it does not
+fit; the empty list still offers it under its sentence, and focus returns to the heading's button
+after a menu is made from the empty list. A click anywhere on a menu's row opens it once, and the
+row's own button is named "Open: <menu>". Every table row that opens something now takes the lifted
+surface colour while hovered or keyboard-focused, pinned Actions cell included, because the raised
+colour it used was the same white as a resting row in the light theme. A table shows its Customise
+columns button only when it has two movable columns, so the Menus list, whose Status is its only
+one, shows none. In the Customise dialog a column that can never be hidden says "Always shown"
+instead of drawing a greyed-out eye, fixed rows keep the drag handle's space so names line up, and
+the last shown column's greyed-out eye carries a visible "Keep at least one shown".
+
 **Filtered table headings stay put — DONE (W64, owner 2026-10-04).** The conditional funnel button
 used to increase a header's height and width when its filter became active. A filtered heading now
 uses an inset coloured line and an accessible filtered label; the Filters toolbar button opens the
