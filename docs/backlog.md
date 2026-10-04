@@ -1226,10 +1226,11 @@ Left OPEN from its review, for the owner to decide: (1) the Products list decide
 the product's unit is in the venue's saved unit list, the Extras editor by the unit's id, so the two
 could disagree (for example before the unit list had loaded) — DONE by W75a: the Products list now
 uses `EACH_UNIT_ID` too, so a measured product shows its "/ kg" label even before the unit list
-loads. Still open from it: the list's `units` property is no longer read (removing it means deleting
-the setup line of three existing tests), and neither screen counts a stored unit seeded as `each`
-as Each, which `isEachUnit` (`packages/catalogue/src/units.ts`) does — only a server test helper
-seeds one today; (2) the handle-on-the-first-line alignment applied to the Extras list only — DONE by W75b, below; (3) the editor refuses a blank Portion for every unit
+loads. Still open from it: the list's `units` property is no longer read, though the Catalogue
+screen still passes it down through `apps/dashboard/src/widgets/catalogue-browser.ts` and existing
+tests set and assert it, so removing it changes existing tests. And neither screen counts a stored
+unit seeded as `each` as Each, which `isEachUnit` (`packages/catalogue/src/units.ts`) does; no code
+outside tests seeds one. (2) the handle-on-the-first-line alignment applied to the Extras list only — DONE by W75b, below; (3) the editor refuses a blank Portion for every unit
 but Each while the server accepts none for a whole unit with no scale link (ml) and stores 1 — DONE
 by W75c, below.
 
