@@ -101,7 +101,10 @@ a root row (`:39`, `ROOT_KEY = "root"` at `:31`, built at `:659`), drawn as a fo
 (`:1034`–`1040`, `#addItems` `:991`–`1009`). Categories carry a grip button (`part="drag-grip"`,
 `:1046`–`1052`) before their folder icon; a row that cannot be dragged keeps the grip's width with
 `part="grip-space"` (`:162`–`166`; the draft row uses it at `:1023`; the root row draws neither,
-`:1029`–`1033`). The ⋮ column is keyed `actions`, `pinned: "end"`
+`:1029`–`1033`) (2026-10-05: true at the plan's base, 4696d803d; W84 (#1199) later gave Products'
+root row `grip-space`, and W88 gave the Menus root the same — see W88's commit "Menus Structure
+tree: names line up at every level, as in the Products tree".)
+The ⋮ column is keyed `actions`, `pinned: "end"`
 (`:946`–`951`). The table is configured at `:1187`–`1258`: `initiallyCollapsed`, `rowCollapsible`
 refusing the root (`:1229`), `rowActivation` "toggle" for categories (`:1232`–`1237`),
 `rowToggleLabel` (`:1238`–`1244`), Expand all (`:1214`–`1215`). Its pointer drag (`:294`–`534`) marks
@@ -350,7 +353,10 @@ starts only after the owner answers question 1.
   `pinned: "end"`).
 - Name cell: on member rows, a grip button (`part="drag-grip"`, `data-test="drag-<key>"`) for owned
   rows, or `part="grip-space"` for rows inside an included menu, so names line up; the root row, like
-  Products' "All products" (`product-list.ts:1029`–`1033`), draws neither. Then a folder icon for the
+  Products' "All products" (`product-list.ts:1029`–`1033`), draws neither (2026-10-05: true at
+  the plan's base, 4696d803d; W84 (#1199) later gave Products' root row `grip-space`, and W88 gave
+  the Menus root the same — see W88's commit "Menus Structure tree: names line up at every level, as
+  in the Products tree".) Then a folder icon for the
   root, sections and included menus, or the product's thumbnail or placeholder (copy Products'
   parts); then the name. A member's name carries `data-test="name"` (staff name via `memberName`;
   `menus.menu_prefix` for an included menu). **The root's name carries `data-test="root-name"`, not

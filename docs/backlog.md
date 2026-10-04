@@ -3026,7 +3026,8 @@ chosen. The outline, the right-hand list panel with its own heading, note and bo
 picker, the path above that panel, and the three buttons beside the tabs are gone; Add products in a
 row's ⋮ replaces the bottom picker, and there is no single-product add in the tree. Members keep
 menu order, and a member moves within its own list by ArrowUp or ArrowDown on its grip, or by
-dragging the grip, with Products' ghost and gap. An included menu opens for browsing; nothing inside
+dragging the grip, with Products' ghost and gap. Names line up at every level, as in the Products
+tree. An included menu opens for browsing; nothing inside
 it has a grip or a ⋮, and its own row reads "Read-only here" with a link to that menu's own editor
 and "Remove from this menu". Opening a section, or choosing an add from its ⋮, makes it the current
 row (bold and underlined); a refusal about another list still names it. After a window closes,
@@ -3040,13 +3041,24 @@ real touch screen; a drag does not scroll the page near its edge (nor does Produ
 sideways scroll; the heading's height with "Checking…" or "Could not be checked" was not measured
 against the other states.
 
-**The Menus Structure tree: a folder's name starts left of a product's at the same level — OPEN
-(found 2026-10-05 by W88's look).** The tree copies the Products tree's Name cell as it was before W84
-(#1199): a section's folder icon is narrower than a product's photo frame, so at one level a
-section's name starts about 21 px left of a product's (measured on W88's 1280 px screenshots), and
-the root row draws no grip slot. W84 gave every Products row the same three slots before its name
-and a `tree-heading` part on `wt-data-table`; W88 was branched before W84 landed. Give the Menus tree
-the same slots.
+**The Menus Structure tree: a folder's name starts left of a product's at the same level — DONE
+(W88, found 2026-10-05 by W88's look).** Every row of the tree, the menu's own row included, now
+draws the Products tree's three slots before its name: the table's arrow, a grip or a blank space
+of the same width, and a folder icon in a photo-wide frame or the product's photo, or an empty
+frame of the same size when it has none. Names at one level start at one place, and the Name heading
+sits over the menu's name through the table's `tree-heading` part. W88 was branched before W84
+(#1199) gave the Products tree's All products row its grip space.
+
+**A Products drag does not notice when a refresh removes what it is dragging or where it is going —
+OPEN (found 2026-10-05 by W88's pre-merge review).** W88's review found the Menus tree's drag broke
+when a refresh removed the pressed item or the drop target mid-gesture, and W88 fixed that tree. The
+Products tree (`apps/dashboard/src/widgets/product-list.ts`, whose drag code predates W88) has milder
+versions of both, seen in a throwaway browser test, not kept: if the pressed product leaves before
+the drag starts, the drag still starts with an empty drag picture and a grabbing cursor, and
+announces a drag of a product no longer shown; if the target category leaves mid-drag, letting go
+still sends `drop-items` naming the deleted category. Not checked: what the server answers to that
+drop. Fix: check the dragged row still exists before the drag starts, and the target category still
+exists on release.
 
 **Unused editing code in the two widgets the Menus screen no longer edits with — OPEN (W88, owner
 default 2026-10-04: leave and record).** `dashboard-member-list-editor`
