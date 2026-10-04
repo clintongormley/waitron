@@ -701,7 +701,7 @@ describe("catalogue-screen", () => {
     expect(api.listOptionLists).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps the product's unsaved edits when its attached list's row opens the list editor", async () => {
+  it("keeps a typed name and price, and the attached list, when its attached list's row opens the list editor", async () => {
     const api = stubApi();
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
@@ -756,76 +756,113 @@ describe("catalogue-screen", () => {
   });
 
   describe("focus after the list editor opened from an attached row closes", () => {
-    async function openProduct(api: DashboardApi) {
+    // p1 carries only the options list, so the extras cases serve it an extras list instead.
+    const kinds = {
+      options: {
+        key: "options:opt-list-1",
+        form: "dashboard-option-list-form",
+        input: optionInput,
+        update: "updateOptionList",
+        id: "opt-list-1",
+      },
+      extras: {
+        key: "extras:ex-1",
+        form: "dashboard-extra-list-form",
+        input: extraInput,
+        update: "updateExtraList",
+        id: "ex-1",
+      },
+    } as const;
+    type Kind = keyof typeof kinds;
+    const apiFor = (kind: Kind): DashboardApi =>
+      kind === "options"
+        ? stubApi()
+        : stubApi({
+            getProductEditor: vi
+              .fn()
+              .mockResolvedValue({ ...value, modifiers: [{ kind: "extras", id: "ex-1" }] }),
+          });
+    async function openProduct(api: DashboardApi, kind: Kind) {
       const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
       await flush(el);
       emit(list(el), "edit-product", { productId: "p1" });
       await flush(el);
-      const form = el.shadowRoot!.querySelector("dashboard-option-list-form")!;
+      const form = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(kinds[kind].form)!;
       const row = editor(el).shadowRoot!.querySelector<HTMLElement>(
-        '[data-test=attached-modifier][data-modifier="options:opt-list-1"]',
+        `[data-test=attached-modifier][data-modifier="${kinds[kind].key}"]`,
       )!;
       return { el, form, row };
     }
     const activator = (row: HTMLElement) =>
-      row.querySelector<HTMLElement>('[data-test="open-modifier-options:opt-list-1"]')!;
+      row.querySelector<HTMLElement>(`[data-test="open-modifier-${row.dataset.modifier}"]`)!;
+    const closes = (kind: Kind) => [
+      (form: HTMLElement) => emit(form, "wt-cancel", {}),
+      (form: HTMLElement) => emit(form, "wt-submit", { value: kinds[kind].input }),
+    ];
 
-    // Safari does not focus a button it clicks, so there the browser's own return of focus when
-    // the list editor closes goes back to whatever had it before, not to the row.
-    it.each([
-      [
-        "Enter on the row",
-        async (row: HTMLElement) => {
-          activator(row).focus();
-          await userEvent.keyboard("{Enter}");
+    // The click case focuses the name field and calls `click()`, which leaves focus there, so only
+    // the screen's own hand-back can put focus on the row.
+    describe.each(["options", "extras"] as const)("an attached %s list", (kind) => {
+      it.each([
+        [
+          "Enter on the row",
+          async (row: HTMLElement) => {
+            activator(row).focus();
+            await userEvent.keyboard("{Enter}");
+          },
+        ],
+        [
+          "a click that leaves focus where it was",
+          async (row: HTMLElement, el: CatalogueScreen) => {
+            editor(el).shadowRoot!.querySelector<HTMLElement>('[name="name"]')!.focus();
+            activator(row).click();
+          },
+        ],
+      ])(
+        "goes back to the row after Cancel and after a save, when %s opened it",
+        async (_, open) => {
+          const api = apiFor(kind);
+          const { el, form, row } = await openProduct(api, kind);
+          for (const close of closes(kind)) {
+            await open(row, el);
+            await el.updateComplete;
+            expect(form.open).toBe(true);
+            close(form);
+            await flush(el);
+            await afterDialogCloses(el);
+            expect(form.open).toBe(false);
+            expect(editor(el).shadowRoot!.activeElement).toBe(activator(row));
+          }
+          expect(api[kinds[kind].update]).toHaveBeenCalledWith(kinds[kind].id, kinds[kind].input);
         },
-      ],
-      [
-        "a click that leaves focus where it was",
-        async (row: HTMLElement, el: CatalogueScreen) => {
-          editor(el).shadowRoot!.querySelector<HTMLElement>('[name="name"]')!.focus();
-          activator(row).click();
-        },
-      ],
-    ])("goes back to the row after Cancel and after a save, when %s opened it", async (_, open) => {
-      const api = stubApi();
-      const { el, form, row } = await openProduct(api);
-      for (const close of [
-        () => emit(form, "wt-cancel", {}),
-        () => emit(form, "wt-submit", { value: optionInput }),
-      ]) {
-        await open(row, el);
+      );
+    });
+
+    it("goes back to the row's menu after Cancel and after a save, when the menu's Edit opened it", async () => {
+      const api = apiFor("options");
+      const { el, form, row } = await openProduct(api, "options");
+      const menu = row.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+        "wt-row-actions",
+      )!;
+      for (const close of closes("options")) {
+        await userEvent.click(menu.shadowRoot!.querySelector<HTMLElement>("button")!);
+        await menu.updateComplete;
+        await userEvent.click(
+          row.querySelector<HTMLElement>('[data-test="edit-modifier-options:opt-list-1"]')!,
+        );
         await el.updateComplete;
         expect(form.open).toBe(true);
-        close();
+        close(form);
         await flush(el);
         await afterDialogCloses(el);
         expect(form.open).toBe(false);
-        expect(editor(el).shadowRoot!.activeElement).toBe(activator(row));
+        expect(editor(el).shadowRoot!.activeElement).toBe(menu);
       }
       expect(api.updateOptionList).toHaveBeenCalledWith("opt-list-1", optionInput);
     });
 
-    it("goes back to the row's menu after Cancel, when the menu's Edit opened it", async () => {
-      const { el, form, row } = await openProduct(stubApi());
-      const menu = row.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
-        "wt-row-actions",
-      )!;
-      await userEvent.click(menu.shadowRoot!.querySelector<HTMLElement>("button")!);
-      await menu.updateComplete;
-      await userEvent.click(
-        row.querySelector<HTMLElement>('[data-test="edit-modifier-options:opt-list-1"]')!,
-      );
-      await el.updateComplete;
-      expect(form.open).toBe(true);
-      emit(form, "wt-cancel", {});
-      await flush(el);
-      await afterDialogCloses(el);
-      expect(editor(el).shadowRoot!.activeElement).toBe(menu);
-    });
-
     it("goes to the Modifiers control after a new list's form is cancelled, though a row opened one before", async () => {
-      const { el, form, row } = await openProduct(stubApi());
+      const { el, form, row } = await openProduct(stubApi(), "options");
       activator(row).focus();
       await userEvent.keyboard("{Enter}");
       await el.updateComplete;
