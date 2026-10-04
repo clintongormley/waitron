@@ -1185,6 +1185,7 @@ export class ProductList extends LitElement {
         rememberExpanded
         searchOpensPath
         .stickyHeader=${this.stickyHeader}
+        leading-filters
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}

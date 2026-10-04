@@ -4,6 +4,7 @@ import { customElement, property, query, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles } from "../base-styles.js";
+import { iconButtonStyles, trackIconTooltip } from "../icon-button.js";
 import { holdPageCursor, releasePageCursor } from "../reorder-table.js";
 import { registerIcons } from "./wt-icon.js";
 import "./wt-combobox.js";
@@ -11,6 +12,7 @@ import "./wt-button.js";
 import "./wt-dialog.js";
 
 registerIcons({
+  "table-filter": "M1 2h14v1.5L10 9v5l-4 1.5V9L1 3.5z",
   "table-customise":
     "M1 2h11v1H2v3h9v1H2v3h6v1H1z M5 3h1v7H5z M12 9l.5 1 1-.2.6 1-.7.8.7.8-.6 1-1-.2-.5 1h-1l-.5-1-1 .2-.6-1 .7-.8-.7-.8.6-1 1 .2.5-1z M11.5 11a.5.5 0 1 0 1 0 .5.5 0 0 0-1 0",
   "column-grip": "M5 2h2v2H5z M9 2h2v2H9z M5 7h2v2H5z M9 7h2v2H9z M5 12h2v2H5z M9 12h2v2H9z",
@@ -64,6 +66,11 @@ function repeatKeys(keys: readonly string[]): (_item: unknown, index: number) =>
   });
   return (_item, index) => unique[index]!;
 }
+
+/** The host width, in px, from which `leadingFilters` opens its panel beside the rows rather than
+ * over the whole screen: the panel is seven `--wt-tap-min` steps wide, so at this width and above
+ * the rows beside it stay wider than NARROW_TREE_WIDTH at the default tokens. */
+const SIDE_FILTERS_WIDTH = 768;
 
 @customElement("wt-data-table")
 export class WtDataTable<Row = unknown> extends LitElement {
@@ -381,6 +388,31 @@ export class WtDataTable<Row = unknown> extends LitElement {
         border-radius: 0;
       }
 
+      .table-body {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--wt-space-3);
+      }
+
+      .table-body > :is(.scroll, .empty) {
+        flex: 1 1 0;
+        min-width: 0;
+      }
+
+      :host([sticky-header]) .table-body {
+        flex: 1 1 0;
+        align-items: stretch;
+        min-block-size: calc(var(--wt-tap-min) * 3);
+      }
+
+      .filters-panel[data-side] {
+        position: static;
+        flex: none;
+        width: calc(var(--wt-tap-min) * 7);
+        max-height: none;
+        box-shadow: none;
+      }
+
       .filter-section {
         border-bottom: 1px solid var(--wt-color-border);
         padding-block: var(--wt-space-2);
@@ -607,6 +639,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         padding-inline-start: calc(min(var(--tree-depth, 0), 4) * var(--wt-space-2));
       }
     `,
+    iconButtonStyles,
   ];
 
   @property({ attribute: false }) rows: readonly Row[] = [];
@@ -706,6 +739,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Starts every body cell's content at the cell's top rather than lining cells up by their
    * first line's baseline. */
   @property({ type: Boolean, reflect: true, attribute: "top-aligned" }) topAligned = false;
+  /** Draws Filters as an icon button at the toolbar's start, and opens its panel beside the rows at
+   * their leading side while the table is SIDE_FILTERS_WIDTH or wider, and over the whole screen
+   * while it is narrower. */
+  @property({ type: Boolean, reflect: true, attribute: "leading-filters" }) leadingFilters = false;
+  @state() private sideFilters = false;
   @state() private searchText = "";
   /** Every filter choice, chosen or restored, keyed by column key; an absent key means the column's
    * `initial` option, or "all" when it has none, and "" is "all" chosen over an `initial` one. A
@@ -742,28 +780,38 @@ export class WtDataTable<Row = unknown> extends LitElement {
     for (const { contentRect } of entries)
       this.toggleAttribute("narrow", contentRect.width <= NARROW_TREE_WIDTH);
   });
-  readonly #hostResizeObserver = new ResizeObserver(([entry]) => {
+  /** Watched while column widths are held or `leadingFilters` is set. Its effects wait a frame:
+   * run inside the callback, they make Chromium report "ResizeObserver loop completed with
+   * undelivered notifications". */
+  readonly #hostObserver = new ResizeObserver(([entry]) => {
+    this.#hostWidth = entry!.borderBoxSize[0]!.inlineSize;
     if (
       this.filterColumnWidths &&
       this.filterHostWidth !== null &&
-      entry &&
-      Math.abs(entry.contentRect.width - this.filterHostWidth) > 0.5
+      Math.abs(entry!.contentRect.width - this.filterHostWidth) > 0.5
     ) {
       this.#releaseColumnWidths();
-      if (this.#resizeFrame !== null) return;
-      this.#resizeFrame = requestAnimationFrame(() => {
-        this.#resizeFrame = null;
-        if (this.isConnected) this.requestUpdate();
-      });
+      this.#widthsReleased = true;
     }
+    if (this.#resizeFrame !== null) return;
+    this.#resizeFrame = requestAnimationFrame(() => {
+      this.#resizeFrame = null;
+      if (!this.isConnected) return;
+      if (this.leadingFilters) this.sideFilters = this.#hostWidth >= SIDE_FILTERS_WIDTH;
+      if (this.#widthsReleased) this.requestUpdate();
+      this.#widthsReleased = false;
+    });
   });
+  #hostWidth = 0;
+  #widthsReleased = false;
   #observedScroll: Element | null = null;
   /** Keeps a revealed or focused row clear of the headings held over the top of the box. */
   readonly #headObserver = new ResizeObserver(() => this.#padScroll());
   #observedHead: Element | null = null;
   #remembered: Set<string> | null = null;
   readonly #resizeFilters = (): void => {
-    if (this.filtersPanel?.matches(":popover-open")) this.#positionFilters();
+    if (!this.leadingFilters && this.filtersPanel?.matches(":popover-open"))
+      this.#positionFilters();
   };
 
   #rememberedOpen(): Set<string> {
@@ -808,10 +856,24 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#padScroll();
   }
 
+  #observeHost(): void {
+    if (this.leadingFilters || this.filterColumnWidths) this.#hostObserver.observe(this);
+    else this.#hostObserver.disconnect();
+  }
+
+  /** Below the side width the panel is a full-screen popover, shown once it is rendered as one. */
+  #placeLeadingFilters(): void {
+    const panel = this.leadingFilters ? this.filtersPanel : null;
+    if (!panel) return;
+    panel.toggleAttribute("data-fullscreen", !this.sideFilters);
+    if (this.filtersOpen && !this.sideFilters && !panel.matches(":popover-open"))
+      panel.showPopover();
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     window.addEventListener("resize", this.#resizeFilters);
-    if (this.filterColumnWidths) this.#hostResizeObserver.observe(this);
+    this.#observeHost();
     if (this.hasUpdated) {
       this.#observeScroll();
       this.#observeHead();
@@ -822,7 +884,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     super.disconnectedCallback();
     this.#endColumnDrag();
     window.removeEventListener("resize", this.#resizeFilters);
-    this.#hostResizeObserver.disconnect();
+    this.#hostObserver.disconnect();
     if (this.#resizeFrame !== null) cancelAnimationFrame(this.#resizeFrame);
     this.#resizeFrame = null;
     this.#scrollObserver.disconnect();
@@ -831,10 +893,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#observedHead = null;
   }
 
-  protected override updated(changed: PropertyValues<this>): void {
+  protected override updated(changed: PropertyValues): void {
     super.updated(changed);
     this.#observeScroll();
     this.#observeHead();
+    if (changed.has("leadingFilters")) this.#observeHost();
+    if (changed.has("filtersOpen") || changed.has("sideFilters") || changed.has("leadingFilters"))
+      this.#placeLeadingFilters();
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
@@ -1206,7 +1271,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     else next[column.key] = value;
     this.filterSelections = next;
     this.filterColumnWidths = widths;
-    if (widths) this.#hostResizeObserver.observe(this);
+    if (widths) this.#hostObserver.observe(this);
     this.#persistView();
     this.dispatchEvent(
       new CustomEvent("wt-filter-change", {
@@ -1231,7 +1296,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       return;
     this.filterSelections = next;
     this.filterColumnWidths = widths;
-    if (widths) this.#hostResizeObserver.observe(this);
+    if (widths) this.#hostObserver.observe(this);
     this.#persistView();
     this.dispatchEvent(
       new CustomEvent("wt-filter-change", {
@@ -1253,7 +1318,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   #releaseColumnWidths(): void {
     this.filterColumnWidths = null;
     this.filterHostWidth = null;
-    this.#hostResizeObserver.disconnect();
+    if (!this.leadingFilters) this.#hostObserver.disconnect();
   }
 
   #positionFilters(): void {
@@ -1270,17 +1335,39 @@ export class WtDataTable<Row = unknown> extends LitElement {
   #toggleFilters(event?: MouseEvent): void {
     event?.preventDefault();
     if (this.filtersPanel.matches(":popover-open")) {
-      this.filtersPanel.hidePopover();
-      this.filtersOpen = false;
+      this.#hideFilters();
       return;
     }
     this.filtersPanel.showPopover();
     this.filtersOpen = true;
+    this.#focusFirstFilter();
+    this.#positionFilters();
+  }
+
+  async #toggleLeadingFilters(event: MouseEvent): Promise<void> {
+    event.preventDefault();
+    if (this.filtersOpen) {
+      this.#hideFilters();
+      return;
+    }
+    this.sideFilters = this.getBoundingClientRect().width >= SIDE_FILTERS_WIDTH;
+    this.filtersOpen = true;
+    await this.updateComplete;
+    this.#focusFirstFilter();
+  }
+
+  /** Widths held for a choice made beside the rows would keep them at that narrower width. */
+  #hideFilters(): void {
+    if (this.filtersPanel.matches(":popover-open")) this.filtersPanel.hidePopover();
+    if (this.leadingFilters && this.sideFilters) this.#releaseColumnWidths();
+    this.filtersOpen = false;
+  }
+
+  #focusFirstFilter(): void {
     this.filtersPanel
       .querySelector<HTMLElement>(".filter-section .table-filter")
       ?.shadowRoot?.querySelector<HTMLElement>(".trigger")
       ?.focus();
-    this.#positionFilters();
   }
 
   #persistView(): void {
@@ -1768,6 +1855,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (!this.searchable && !hasFilters && !chooser && !start && !end && expandAll === nothing)
       return nothing;
     return html`<div class="table-toolbar">
+      ${this.leadingFilters && hasFilters ? this.#renderLeadingTrigger(activeCount) : nothing}
       <slot name="toolbar-start"></slot>
       ${
         this.searchable
@@ -1786,7 +1874,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
           : nothing
       }
       ${
-        hasFilters
+        hasFilters && !this.leadingFilters
           ? html`<button
                 type="button"
                 class="filters-trigger"
@@ -1798,103 +1886,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                   activeCount ? html`<span class="filters-count">${activeCount}</span>` : nothing
                 }
               </button>
-              <div
-                id="filters-panel"
-                class="filters-panel"
-                popover
-                role="group"
-                aria-label=${this.filtersLabel}
-                @toggle=${(event: ToggleEvent) => {
-                  this.filtersOpen = event.newState === "open";
-                }}
-                @keydown=${(event: KeyboardEvent) => {
-                  if (event.key === "Tab" && this.filtersPanel.hasAttribute("data-fullscreen")) {
-                    const first =
-                      this.filtersPanel.querySelector<HTMLButtonElement>(".filters-clear-all");
-                    const last = [
-                      ...this.filtersPanel.querySelectorAll<HTMLElement>(
-                        ".filter-section .table-filter",
-                      ),
-                    ]
-                      .at(-1)
-                      ?.shadowRoot?.querySelector<HTMLButtonElement>(".trigger");
-                    const origin = event.composedPath()[0];
-                    if (event.shiftKey && origin === first && last) {
-                      event.preventDefault();
-                      last.focus();
-                    } else if (!event.shiftKey && origin === last && first) {
-                      event.preventDefault();
-                      first.focus();
-                    }
-                  }
-                  if (
-                    event.key !== "Escape" ||
-                    event.defaultPrevented ||
-                    !this.filtersPanel.matches(":popover-open")
-                  )
-                    return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  this.filtersPanel.hidePopover();
-                  this.filtersOpen = false;
-                  this.filtersTrigger.focus();
-                }}
-              >
-                <h2>${this.filtersLabel}</h2>
-                <div class="filters-panel-header">
-                  <button type="button" class="filters-clear-all" @click=${this.#clearAllFilters}>
-                    ${this.filtersClearAllLabel}
-                  </button>
-                  <button
-                    type="button"
-                    class="filters-close"
-                    @click=${() => {
-                      this.filtersPanel.hidePopover();
-                      this.filtersOpen = false;
-                      this.filtersTrigger.focus();
-                    }}
-                  >
-                    ${this.filtersCloseLabel}
-                  </button>
-                </div>
-                <div class="table-filters">
-                  ${this.columns.map((column) => {
-                    const active = this.#activeFilter(column);
-                    return column.filter
-                      ? html`<div
-                          class="filter-section"
-                          data-section=${column.key}
-                          role="group"
-                          aria-label=${column.filter.label}
-                        >
-                          <h3>${column.filter.label}</h3>
-                          <wt-combobox
-                            class="table-filter"
-                            name=${`${column.key}-filter`}
-                            data-filter=${column.key}
-                            label=${column.filter.label}
-                            hide-label
-                            search="auto"
-                            placeholder=${column.filter.allLabel}
-                            show-empty-option
-                            stable-width
-                            searchPlaceholder=${this.filterSearchPlaceholder}
-                            noResultsLabel=${this.filterNoResultsLabel}
-                            .options=${[
-                              { value: "", label: column.filter.allLabel },
-                              ...column.filter.options,
-                            ]}
-                            .value=${active}
-                            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                              event.stopPropagation();
-                              this.#chooseFilter(column, event.detail.value);
-                            }}
-                          ></wt-combobox>
-                        </div>`
-                      : nothing;
-                  })}
-                </div>
-              </div>`
+              ${this.#renderFiltersPanel()}`
           : nothing
       }
       ${
@@ -1907,6 +1899,141 @@ export class WtDataTable<Row = unknown> extends LitElement {
           : nothing
       }
     </div>`;
+  }
+
+  #renderLeadingTrigger(activeCount: number) {
+    return html`<button
+      type="button"
+      class="filters-trigger icon-button"
+      aria-label=${this.filtersLabel}
+      aria-expanded=${this.filtersOpen}
+      aria-controls="filters-panel"
+      aria-describedby=${activeCount ? "filters-count" : nothing}
+      popovertarget="filters-panel"
+      @click=${this.#toggleLeadingFilters}
+      @pointerenter=${trackIconTooltip}
+      @pointerleave=${trackIconTooltip}
+      @focus=${trackIconTooltip}
+      @blur=${trackIconTooltip}
+    >
+      <wt-icon name="table-filter"></wt-icon>${
+        activeCount
+          ? html`<span class="filters-count" id="filters-count">${activeCount}</span>`
+          : nothing
+      }<span class="icon-tooltip" aria-hidden="true">${this.filtersLabel}</span>
+    </button>`;
+  }
+
+  #filtersKeydown(event: KeyboardEvent): void {
+    if (event.key === "Tab" && this.filtersPanel.hasAttribute("data-fullscreen")) {
+      const first = this.filtersPanel.querySelector<HTMLButtonElement>(".filters-clear-all");
+      const last = [
+        ...this.filtersPanel.querySelectorAll<HTMLElement>(".filter-section .table-filter"),
+      ]
+        .at(-1)
+        ?.shadowRoot?.querySelector<HTMLButtonElement>(".trigger");
+      const origin = event.composedPath()[0];
+      if (event.shiftKey && origin === first && last) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && origin === last && first) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    if (
+      event.key !== "Escape" ||
+      event.defaultPrevented ||
+      !(this.filtersPanel.matches(":popover-open") || (this.leadingFilters && this.filtersOpen))
+    )
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.#closeFilters();
+  }
+
+  #closeFilters(): void {
+    this.#hideFilters();
+    this.filtersTrigger.focus();
+  }
+
+  /** With `leadingFilters` one panel serves both widths: in the flow beside the rows, or a
+   * full-screen popover. Any close of the popover closes the filters; the close reported
+   * when the panel stops being a popover is ignored, because the panel stays open beside the
+   * rows. */
+  #renderFiltersPanel() {
+    const side = this.leadingFilters && this.sideFilters;
+    const opened = (event: ToggleEvent) => {
+      this.filtersOpen = event.newState === "open";
+    };
+    const placed = (event: ToggleEvent) => {
+      if ((event.currentTarget as HTMLElement).hasAttribute("popover")) opened(event);
+    };
+    return html`<div
+      id="filters-panel"
+      class="filters-panel"
+      popover=${side ? nothing : ""}
+      ?hidden=${side && !this.filtersOpen}
+      ?data-side=${side}
+      role="group"
+      aria-label=${this.filtersLabel}
+      @toggle=${this.leadingFilters ? nothing : opened}
+      @beforetoggle=${this.leadingFilters ? placed : nothing}
+      @keydown=${this.#filtersKeydown}
+    >
+      <h2>${this.filtersLabel}</h2>
+      <div class="filters-panel-header">
+        <button type="button" class="filters-clear-all" @click=${this.#clearAllFilters}>
+          ${this.filtersClearAllLabel}
+        </button>
+        <button type="button" class="filters-close" @click=${this.#closeFilters}>
+          ${this.filtersCloseLabel}
+        </button>
+      </div>
+      <div class="table-filters">
+        ${this.columns.map((column) => {
+          const active = this.#activeFilter(column);
+          return column.filter
+            ? html`<div
+                class="filter-section"
+                data-section=${column.key}
+                role="group"
+                aria-label=${column.filter.label}
+              >
+                <h3>${column.filter.label}</h3>
+                <wt-combobox
+                  class="table-filter"
+                  name=${`${column.key}-filter`}
+                  data-filter=${column.key}
+                  label=${column.filter.label}
+                  hide-label
+                  search="auto"
+                  placeholder=${column.filter.allLabel}
+                  show-empty-option
+                  stable-width
+                  searchPlaceholder=${this.filterSearchPlaceholder}
+                  noResultsLabel=${this.filterNoResultsLabel}
+                  .options=${[{ value: "", label: column.filter.allLabel }, ...column.filter.options]}
+                  .value=${active}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    this.#chooseFilter(column, event.detail.value);
+                  }}
+                ></wt-combobox>
+              </div>`
+            : nothing;
+        })}
+      </div>
+    </div>`;
+  }
+
+  /** Every branch with rows to filter draws this one template, so a choice that empties the rows
+   * or brings them back keeps the toolbar and the filters panel, and the focus inside them. */
+  #withToolbar(content: unknown) {
+    const side = this.leadingFilters && this.columns.some((column) => column.filter);
+    return html`${this.#renderToolbar()}${
+      side ? html`<div class="table-body">${this.#renderFiltersPanel()}${content}</div>` : content
+    }`;
   }
 
   /** Whether the chooser could change anything: a table opts in with a `choosable` column, and
@@ -2057,8 +2184,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const treeVisible = isTree ? this.#treeVisible(visible) : undefined;
     const renderedCount = isTree ? treeVisible!.rows.length : visible.length;
     if (renderedCount === 0)
-      return html`${this.#renderToolbar()}
-        <div class="empty"><p class="message" role="status">${this.noMatchesMessage}</p></div>`;
+      return this.#withToolbar(
+        html`<div class="empty">
+          <p class="message" role="status">${this.noMatchesMessage}</p>
+        </div>`,
+      );
 
     const shown = this.#shownColumns();
     const widths =
@@ -2073,9 +2203,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
       const visibleKeys = sorted.flatMap((row, index) =>
         this.rowSelectable(row) ? [this.rowKey(row, index)] : [],
       );
-      return html`
-        ${this.#renderToolbar()}
-        <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
+      return this.#withToolbar(
+        html`<div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
           <table
             data-locked-columns=${widths ? "" : nothing}
             style=${lockedWidth === undefined ? nothing : `width: ${lockedWidth}px`}
@@ -2130,16 +2259,15 @@ export class WtDataTable<Row = unknown> extends LitElement {
               })}
             </tbody>
           </table>
-        </div>
-      `;
+        </div>`,
+      );
     }
 
     const { rows: treeRows, ancestorOnly, heldOpen } = treeVisible!;
     const entries = this.#treeRows(treeRows, heldOpen, sortColumn);
     const visibleKeys = entries.filter(({ row }) => this.rowSelectable(row)).map(({ key }) => key);
-    return html`
-      ${this.#renderToolbar()}
-      <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
+    return this.#withToolbar(
+      html`<div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
         <table
           role="treegrid"
           data-locked-columns=${widths ? "" : nothing}
@@ -2255,8 +2383,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
             )}
           </tbody>
         </table>
-      </div>
-    `;
+      </div>`,
+    );
   }
 }
 

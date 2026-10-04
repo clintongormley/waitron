@@ -239,7 +239,8 @@ drag: keyboard users, and touch users who prefer it, use the same selection acti
 
 Searching or changing a filter clears the selection, so actions do not reach items you have hidden.
 Opening or closing a category keeps it, so a selection can span categories; a selected row inside a
-closed category is still selected. **Cancel** clears it and restores the ordinary toolbar. A Delete you already
+closed category is still selected. **Cancel** clears it and restores the ordinary toolbar, and so
+does pressing **Select** again. A Delete you already
 requested keeps its captured selection, including while the category summary is being read.
 
 **Delete** makes selected products Inactive. Their rows and previous sales remain, and you can
