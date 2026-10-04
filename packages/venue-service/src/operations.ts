@@ -455,6 +455,143 @@ export async function resolveZoneContext(
   };
 }
 
+type DepartmentSalePolicyRow = typeof departmentSalePolicies.$inferSelect;
+
+export interface EffectiveSalePolicy {
+  zoneId: string;
+  departmentId: string;
+  departmentName: string;
+  tradingName: string;
+  paidWhen: DepartmentSalePolicyRow["paidWhen"];
+  collectionNumber: DepartmentSalePolicyRow["collectionNumber"];
+  receiptPrintMode: DepartmentSalePolicyRow["receiptPrintMode"];
+  printTradingName: boolean;
+}
+
+export async function resolveSalePolicy(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+): Promise<EffectiveSalePolicy> {
+  const [row] = await tx
+    .select({
+      zoneId: zoneServicePolicies.zoneId,
+      departmentId: departments.id,
+      departmentName: departments.name,
+      tradingName: departments.tradingName,
+      departmentPaidWhen: departmentSalePolicies.paidWhen,
+      departmentCollectionNumber: departmentSalePolicies.collectionNumber,
+      departmentReceiptMode: departmentSalePolicies.receiptPrintMode,
+      printTradingName: departmentSalePolicies.printTradingName,
+      zonePaidWhen: zoneSalePolicies.paidWhen,
+      zoneCollectionNumber: zoneSalePolicies.collectionNumber,
+      zoneReceiptMode: zoneSalePolicies.receiptPrintMode,
+    })
+    .from(zoneServicePolicies)
+    .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
+    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+    .innerJoin(departmentSalePolicies, eq(departmentSalePolicies.departmentId, departments.id))
+    .innerJoin(zoneSalePolicies, eq(zoneSalePolicies.zoneId, zoneServicePolicies.zoneId))
+    .where(
+      and(
+        eq(zoneServicePolicies.locationId, cfg.locationId),
+        eq(zoneServicePolicies.zoneId, zoneId),
+        eq(floorZones.active, true),
+        eq(departments.active, true),
+      ),
+    );
+  if (row === undefined) throw new AppError("service_zone.not_found", { zoneId });
+  return {
+    zoneId: row.zoneId,
+    departmentId: row.departmentId,
+    departmentName: row.departmentName,
+    tradingName: row.tradingName,
+    paidWhen: row.zonePaidWhen ?? row.departmentPaidWhen,
+    collectionNumber: row.zoneCollectionNumber ?? row.departmentCollectionNumber,
+    receiptPrintMode: row.zoneReceiptMode ?? row.departmentReceiptMode,
+    printTradingName: row.printTradingName,
+  };
+}
+
+type DepartmentPolicyField = Pick<
+  DepartmentSalePolicyRow,
+  "paidWhen" | "collectionNumber" | "receiptPrintMode" | "printTradingName"
+>;
+type ZoneSalePolicyRow = typeof zoneSalePolicies.$inferSelect;
+type ZonePolicyField = Pick<
+  ZoneSalePolicyRow,
+  "paidWhen" | "collectionNumber" | "receiptPrintMode"
+>;
+
+export async function listSalePolicies(tx: Transaction, cfg: VenueScope) {
+  const activeDepartments = await listDepartments(tx, cfg);
+  const activeZones = await listServiceZones(tx, cfg);
+  const departmentIds = new Set(activeDepartments.map((department) => department.id));
+  const zoneIds = new Set(activeZones.map((zone) => zone.id));
+  const departmentRows = (await tx.select().from(departmentSalePolicies)).filter((row) =>
+    departmentIds.has(row.departmentId),
+  );
+  const zoneRows = (await tx.select().from(zoneSalePolicies)).filter((row) =>
+    zoneIds.has(row.zoneId),
+  );
+  const departmentsById = new Map(departmentRows.map((row) => [row.departmentId, row]));
+  const zonesById = new Map(zoneRows.map((row) => [row.zoneId, row]));
+  return {
+    departments: departmentRows,
+    zones: activeZones.map((zone) => {
+      const raw = zonesById.get(zone.id)!;
+      const inherited = departmentsById.get(zone.departmentId)!;
+      return {
+        ...raw,
+        effective: {
+          paidWhen: raw.paidWhen ?? inherited.paidWhen,
+          collectionNumber: raw.collectionNumber ?? inherited.collectionNumber,
+          receiptPrintMode: raw.receiptPrintMode ?? inherited.receiptPrintMode,
+          printTradingName: inherited.printTradingName,
+        },
+      };
+    }),
+  };
+}
+
+export async function setDepartmentSalePolicyField<K extends keyof DepartmentPolicyField>(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  field: K,
+  value: DepartmentPolicyField[K],
+): Promise<void> {
+  const [department] = await tx
+    .select({ id: departments.id })
+    .from(departments)
+    .where(
+      and(
+        eq(departments.id, departmentId),
+        eq(departments.locationId, cfg.locationId),
+        eq(departments.active, true),
+      ),
+    );
+  if (department === undefined) throw new AppError("department.not_found", { departmentId });
+  await tx
+    .update(departmentSalePolicies)
+    .set({ [field]: value })
+    .where(eq(departmentSalePolicies.departmentId, departmentId));
+}
+
+export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+  field: K,
+  value: ZonePolicyField[K],
+): Promise<void> {
+  await resolveSalePolicy(tx, cfg, zoneId);
+  await tx
+    .update(zoneSalePolicies)
+    .set({ [field]: value })
+    .where(eq(zoneSalePolicies.zoneId, zoneId));
+}
+
 /** The active menus each of the venue's zones may sell from, in each zone's order. */
 async function zoneMenuIdsByZone(tx: Transaction, cfg: VenueScope): Promise<Map<string, string[]>> {
   const byZone = new Map<string, string[]>();

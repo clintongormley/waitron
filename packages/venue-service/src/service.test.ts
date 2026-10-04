@@ -30,6 +30,7 @@ describe("VENUE_SERVICE", () => {
       "resolveExtraMakers",
       "resolveMakers",
       "resolveNewOrderZone",
+      "resolveSalePolicy",
       "resolveZoneContext",
       "retargetOrderContext",
       "routingAt",

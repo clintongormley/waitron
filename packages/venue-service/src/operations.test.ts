@@ -67,9 +67,12 @@ import {
   recordWorkingLineContexts,
   replaceDepartmentHours,
   resolveNewOrderZone,
+  resolveSalePolicy,
   resolveZoneContext,
   retargetOrderServiceContext,
   setDeviceDefaultZone,
+  setDepartmentSalePolicyField,
+  setZoneSalePolicyOverride,
   clearDeviceDefaultZone,
   listDeviceDefaultZones,
   menuState,
@@ -911,6 +914,69 @@ describe("routing outcomes and menu readiness", () => {
 });
 
 describe("departments", () => {
+  it("clears one zone override without changing another policy field", async () => {
+    const locationId = brandLocationId(await seedLocation("Cleared sale override"));
+    const zoneId = await seedZone(locationId, "Terrace");
+    const cfg = { locationId };
+    const department = await scoped(async (tx) => {
+      const row = await createDepartment(tx, cfg, {
+        name: "Restaurant",
+        defaultServiceMode: "prepay",
+      });
+      await configureZone(tx, cfg, { zoneId, departmentId: row.id });
+      return row;
+    });
+
+    await scoped(async (tx) => {
+      await setDepartmentSalePolicyField(tx, cfg, department.id, "receiptPrintMode", "on_request");
+      await setZoneSalePolicyOverride(tx, cfg, zoneId, "paidWhen", "ticket_then_pay");
+      await setZoneSalePolicyOverride(tx, cfg, zoneId, "receiptPrintMode", "never");
+      await setZoneSalePolicyOverride(tx, cfg, zoneId, "receiptPrintMode", null);
+      await expect(resolveSalePolicy(tx, cfg, zoneId)).resolves.toMatchObject({
+        paidWhen: "ticket_then_pay",
+        receiptPrintMode: "on_request",
+      });
+    });
+  });
+
+  it("inherits each sale policy field separately from the department", async () => {
+    const locationId = brandLocationId(await seedLocation("Inherited sale policy"));
+    const zoneId = await seedZone(locationId, "Terrace");
+    const department = await scoped(async (tx) => {
+      const row = await createDepartment(
+        tx,
+        { locationId },
+        {
+          name: "Restaurant",
+          tradingName: "Terrace Kitchen",
+          defaultServiceMode: "prepay",
+        },
+      );
+      await configureZone(tx, { locationId }, { zoneId, departmentId: row.id });
+      return row;
+    });
+    await db.execute(sql`
+      update department_sale_policies
+      set paid_when = 'ticket_then_pay', collection_number = 'numbered',
+          receipt_print_mode = 'on_request', print_trading_name = 0
+      where department_id = ${department.id}`);
+    await db.execute(sql`
+      update zone_sale_policies set receipt_print_mode = 'never' where zone_id = ${zoneId}`);
+
+    await scoped(async (tx) => {
+      await expect(resolveSalePolicy(tx, { locationId }, zoneId)).resolves.toEqual({
+        zoneId,
+        departmentId: department.id,
+        departmentName: "Restaurant",
+        tradingName: "Terrace Kitchen",
+        paidWhen: "ticket_then_pay",
+        collectionNumber: "numbered",
+        receiptPrintMode: "never",
+        printTradingName: false,
+      });
+    });
+  });
+
   it("gives a newly configured zone blank quick-sale and receipt overrides", async () => {
     const locationId = brandLocationId(await seedLocation("Zone policy defaults"));
     const zoneId = await seedZone(locationId, "Terrace");

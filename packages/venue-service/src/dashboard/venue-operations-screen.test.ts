@@ -57,6 +57,7 @@ const model: VenueServiceView = {
       serviceModeOverride: "prepay",
     },
   ],
+  salePolicies: { departments: [], zones: [] },
   hours: [{ departmentId: "d2", weekday: 1, opensAt: "09:00:00", closesAt: "18:00:00" }],
   zoneMenus: [{ zoneId: "z1", menuId: "m1", displayOrder: 0, isDefault: true }],
   menus: [

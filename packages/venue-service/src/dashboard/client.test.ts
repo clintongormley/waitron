@@ -11,6 +11,27 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("VenueServiceApi", () => {
+  it("writes one department field and clears one zone override", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    await api.setDepartmentSalePolicyField("d1", "receiptPrintMode", "on_request");
+    await api.setZoneSalePolicyOverride("z1", "paidWhen", null);
+    expect(
+      fetchImpl.mock.calls.map(([path, init]) => [
+        path,
+        init.method,
+        JSON.parse(init.body as string),
+      ]),
+    ).toEqual([
+      [
+        "/management-api/venue-service/departments/d1/sale-policy/receiptPrintMode",
+        "PATCH",
+        { value: "on_request" },
+      ],
+      ["/management-api/venue-service/zones/z1/sale-policy/paidWhen", "PATCH", { value: null }],
+    ]);
+  });
+
   it("loads a supervisor's settings from the settings-only route", async () => {
     const settings = {
       settings: { editSentLines: true },

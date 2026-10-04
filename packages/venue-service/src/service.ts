@@ -21,6 +21,7 @@ import {
   retargetOrderServiceContext,
   recordWorkingLineContexts,
   resolveNewOrderZone,
+  resolveSalePolicy,
   resolveZoneContext,
   menuState,
 } from "./operations.js";
@@ -46,6 +47,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   readLinesSoldInEach,
   listServiceZones,
   resolveZoneContext,
+  resolveSalePolicy,
   resolveMakers,
   resolveExtraMakers,
   routingAt,

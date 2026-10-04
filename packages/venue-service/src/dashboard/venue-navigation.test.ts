@@ -12,6 +12,7 @@ const model: VenueServiceView = {
   readiness: [],
   departments: [],
   zones: [],
+  salePolicies: { departments: [], zones: [] },
   deviceZones: [],
   hours: [],
   zoneMenus: [],

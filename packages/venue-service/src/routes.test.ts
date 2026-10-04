@@ -168,6 +168,121 @@ async function send(
 }
 
 describe("venue service management routes", () => {
+  it("reads inherited sale policy and edits one field with a clearable zone override", async () => {
+    const fx = await fixture();
+    const created = await send(
+      fx.app,
+      "POST",
+      "/management-api/venue-service/departments",
+      fx.managerCookie,
+      {
+        name: "Restaurant",
+        tradingName: "Dining Room",
+        defaultServiceMode: "prepay",
+      },
+    );
+    expect(created.status).toBe(201);
+    const department = (await created.json()) as { id: string };
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          `/management-api/venue-service/zones/${fx.zoneId}`,
+          fx.managerCookie,
+          {
+            departmentId: department.id,
+            serviceMode: null,
+          },
+        )
+      ).status,
+    ).toBe(204);
+
+    const departmentPath = `/management-api/venue-service/departments/${department.id}/sale-policy/receiptPrintMode`;
+    const zonePath = `/management-api/venue-service/zones/${fx.zoneId}/sale-policy/paidWhen`;
+    expect(
+      (await send(fx.app, "PATCH", departmentPath, fx.managerCookie, { value: "on_request" }))
+        .status,
+    ).toBe(204);
+    expect(
+      (await send(fx.app, "PATCH", zonePath, fx.managerCookie, { value: "ticket_then_pay" }))
+        .status,
+    ).toBe(204);
+    const read = async () =>
+      (
+        (await (
+          await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+        ).json()) as {
+          salePolicies: {
+            departments: { departmentId: string; receiptPrintMode: string }[];
+            zones: {
+              zoneId: string;
+              paidWhen: string | null;
+              effective: { paidWhen: string; receiptPrintMode: string };
+            }[];
+          };
+        }
+      ).salePolicies;
+    expect(await read()).toMatchObject({
+      departments: [{ departmentId: department.id, receiptPrintMode: "on_request" }],
+      zones: [
+        {
+          zoneId: fx.zoneId,
+          paidWhen: "ticket_then_pay",
+          effective: { paidWhen: "ticket_then_pay", receiptPrintMode: "on_request" },
+        },
+      ],
+    });
+    expect((await send(fx.app, "PATCH", zonePath, fx.managerCookie, { value: null })).status).toBe(
+      204,
+    );
+    expect((await read()).zones[0]).toMatchObject({
+      paidWhen: null,
+      effective: { paidWhen: "prepay" },
+    });
+  });
+
+  it("refuses invalid policy values, unauthorized writes and another venue's department", async () => {
+    const fx = await fixture();
+    const other = await fixture();
+    const created = await send(
+      fx.app,
+      "POST",
+      "/management-api/venue-service/departments",
+      fx.managerCookie,
+      {
+        name: "Restaurant",
+        tradingName: "Restaurant",
+        defaultServiceMode: "prepay",
+      },
+    );
+    const department = (await created.json()) as { id: string };
+    const path = `/management-api/venue-service/departments/${department.id}/sale-policy/paidWhen`;
+    for (const value of [null, 1, "invoice_first", "bad"]) {
+      const response = await send(fx.app, "PATCH", path, fx.managerCookie, { value });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "paidWhen" } },
+      });
+    }
+    const unknown = await send(
+      fx.app,
+      "PATCH",
+      `/management-api/venue-service/departments/${department.id}/sale-policy/unknown`,
+      fx.managerCookie,
+      { value: true },
+    );
+    expect(unknown.status).toBe(400);
+    expect(
+      (await send(fx.app, "PATCH", path, fx.staffCookie, { value: "ticket_then_pay" })).status,
+    ).toBe(403);
+    const foreign = await send(other.app, "PATCH", path, other.managerCookie, {
+      value: "ticket_then_pay",
+    });
+    expect(foreign.status).toBe(404);
+    expect(await foreign.json()).toMatchObject({ error: { code: "department.not_found" } });
+  });
+
   it("saves station hours and validates each interval", async () => {
     const fx = await fixture();
     const path = `/management-api/venue-service/stations/${fx.stationId}/hours`;

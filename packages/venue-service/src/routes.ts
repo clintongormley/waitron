@@ -19,13 +19,16 @@ import {
   createDepartment,
   deactivateDepartment,
   listDepartments,
+  listSalePolicies,
   listDepartmentHours,
   listDeviceDefaultZones,
   listServiceZones,
   listVenueReadiness,
   listZoneMenuAssignments,
   replaceDepartmentHours,
+  setDepartmentSalePolicyField,
   setDeviceDefaultZone,
+  setZoneSalePolicyOverride,
   updateDepartment,
 } from "./operations.js";
 import {
@@ -81,6 +84,21 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const run = createErrorBoundary(STATUS, "venue_service.failed");
 const MODES = new Set<ServiceMode>(["table_tab", "prepay", "invoice_first", "ticket_then_pay"]);
 const CLOCK_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const PAID_WHEN = new Set(["prepay", "ticket_then_pay"]);
+const COLLECTION_NUMBER = new Set(["none", "numbered"]);
+const RECEIPT_PRINT_MODE = new Set(["auto", "on_request", "never"]);
+
+function requireSalePolicyField(field: string, value: unknown, zone: boolean) {
+  if (zone && value === null && field !== "printTradingName") return null;
+  if (field === "paidWhen" && PAID_WHEN.has(value as string))
+    return value as "prepay" | "ticket_then_pay";
+  if (field === "collectionNumber" && COLLECTION_NUMBER.has(value as string))
+    return value as "none" | "numbered";
+  if (field === "receiptPrintMode" && RECEIPT_PRINT_MODE.has(value as string))
+    return value as "auto" | "on_request" | "never";
+  if (!zone && field === "printTradingName" && typeof value === "boolean") return value;
+  throw new AppError("management.request_invalid", { field });
+}
 
 function requireHours(
   body: Record<string, unknown>,
@@ -406,6 +424,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const result = await gated(sessionId, async (tx) => ({
           departments: await listDepartments(tx, ctx.cfg),
           zones: await listServiceZones(tx, ctx.cfg),
+          salePolicies: await listSalePolicies(tx, ctx.cfg),
           deviceZones: await listDeviceDefaultZones(tx, ctx.cfg),
           hours: await listDepartmentHours(tx, ctx.cfg),
           zoneMenus: await listZoneMenuAssignments(tx, ctx.cfg),
@@ -517,6 +536,51 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
+    app.patch("/management-api/venue-service/departments/:departmentId/sale-policy/:field", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
+        const field = c.req.param("field");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const value = requireSalePolicyField(field, body.value, false);
+        await gated(sessionId, async (tx) => {
+          if (field === "paidWhen")
+            await setDepartmentSalePolicyField(
+              tx,
+              ctx.cfg,
+              departmentId,
+              field,
+              value as "prepay" | "ticket_then_pay",
+            );
+          else if (field === "collectionNumber")
+            await setDepartmentSalePolicyField(
+              tx,
+              ctx.cfg,
+              departmentId,
+              field,
+              value as "none" | "numbered",
+            );
+          else if (field === "receiptPrintMode")
+            await setDepartmentSalePolicyField(
+              tx,
+              ctx.cfg,
+              departmentId,
+              field,
+              value as "auto" | "on_request" | "never",
+            );
+          else
+            await setDepartmentSalePolicyField(
+              tx,
+              ctx.cfg,
+              departmentId,
+              "printTradingName",
+              value as boolean,
+            );
+        });
+        return c.body(null, 204);
+      }),
+    );
+
     app.delete("/management-api/venue-service/departments/:departmentId", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
@@ -570,6 +634,43 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
                 : requireMode(body.serviceMode, "serviceMode"),
           }),
         );
+        return c.body(null, 204);
+      }),
+    );
+
+    app.patch("/management-api/venue-service/zones/:zoneId/sale-policy/:field", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
+        const field = c.req.param("field");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const value = requireSalePolicyField(field, body.value, true);
+        await gated(sessionId, async (tx) => {
+          if (field === "paidWhen")
+            await setZoneSalePolicyOverride(
+              tx,
+              ctx.cfg,
+              zoneId,
+              field,
+              value as "prepay" | "ticket_then_pay" | null,
+            );
+          else if (field === "collectionNumber")
+            await setZoneSalePolicyOverride(
+              tx,
+              ctx.cfg,
+              zoneId,
+              field,
+              value as "none" | "numbered" | null,
+            );
+          else
+            await setZoneSalePolicyOverride(
+              tx,
+              ctx.cfg,
+              zoneId,
+              "receiptPrintMode",
+              value as "auto" | "on_request" | "never" | null,
+            );
+        });
         return c.body(null, 204);
       }),
     );

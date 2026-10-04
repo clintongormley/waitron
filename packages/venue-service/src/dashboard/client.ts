@@ -28,6 +28,23 @@ export interface ZoneMenu {
   displayOrder: number;
   isDefault: boolean;
 }
+export type PaidWhen = "prepay" | "ticket_then_pay";
+export type CollectionNumber = "none" | "numbered";
+export type ReceiptPrintMode = "auto" | "on_request" | "never";
+export interface DepartmentSalePolicy {
+  departmentId: string;
+  paidWhen: PaidWhen;
+  collectionNumber: CollectionNumber;
+  receiptPrintMode: ReceiptPrintMode;
+  printTradingName: boolean;
+}
+export interface ZoneSalePolicy {
+  zoneId: string;
+  paidWhen: PaidWhen | null;
+  collectionNumber: CollectionNumber | null;
+  receiptPrintMode: ReceiptPrintMode | null;
+  effective: Omit<DepartmentSalePolicy, "departmentId">;
+}
 export type VenueReadinessIssue =
   | { code: "venue.default_station_missing" }
   | { code: "venue.department_missing" }
@@ -51,6 +68,7 @@ export interface FloorZone extends NamedRow {
 export interface VenueServiceModel {
   departments: Department[];
   zones: ServiceZone[];
+  salePolicies: { departments: DepartmentSalePolicy[]; zones: ZoneSalePolicy[] };
   deviceZones: { deviceId: string; zoneId: string }[];
   hours: HoursInterval[];
   zoneMenus: ZoneMenu[];
@@ -165,6 +183,30 @@ export class VenueServiceApi {
     input: { departmentId: string; serviceMode: ServiceMode | null },
   ): Promise<void> {
     return this.request(`/management-api/venue-service/zones/${zoneId}`, "PUT", input);
+  }
+
+  setDepartmentSalePolicyField<K extends keyof Omit<DepartmentSalePolicy, "departmentId">>(
+    departmentId: string,
+    field: K,
+    value: DepartmentSalePolicy[K],
+  ): Promise<void> {
+    return this.request(
+      `/management-api/venue-service/departments/${departmentId}/sale-policy/${field}`,
+      "PATCH",
+      { value },
+    );
+  }
+
+  setZoneSalePolicyOverride<K extends "paidWhen" | "collectionNumber" | "receiptPrintMode">(
+    zoneId: string,
+    field: K,
+    value: ZoneSalePolicy[K],
+  ): Promise<void> {
+    return this.request(
+      `/management-api/venue-service/zones/${zoneId}/sale-policy/${field}`,
+      "PATCH",
+      { value },
+    );
   }
 
   setDeviceDefaultZone(deviceId: string, zoneId: string): Promise<void> {
